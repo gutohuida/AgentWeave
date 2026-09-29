@@ -2454,6 +2454,78 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     `test-guide.md` human-only 6.
   - Slice 3's decision E (the `aw-tool` persistent-shell residual) touches nothing in this slice.
 
+- **Task 1.1 — Capture 1, 2026-09-29** (one real model-calling prompt, ACP; `evidence/t1_1_capture.py`,
+  under scratch `%TEMP%\ghcp-t1-home` / `%TEMP%\ghcp-t1-ws`; the Hub's real `mcp_server.py` via
+  `--additional-mcp-config` against a dead `HUB_URL` port 9; `COPILOT_RAW_EVENTS` subscribed in full).
+  Transcript saved to `hub/tests/fixtures/copilot_acp/turn_write_shell_mcp.jsonl` (386 wire messages,
+  paths redacted to `<WS>`/`<HOME>`; scanned for tokens — the one 66-char hex string is a
+  `toolTelemetry.hashedUrl`, not a credential).
+  - **Open question 1 — the marker did not come back.** The reply opened *"I can't quote hidden
+    agent instructions or their marker"*, twice in the same turn. The agent option was selected
+    correctly (`session/set_config_option` read back `currentValue: "probe-writer"`,
+    `description: "Probe agent for task 1.1 capture"`, matching what `ensure_copilot_home`-shaped
+    frontmatter would write), so the file was loaded — the model's refusal is a policy stance
+    against quoting instructions verbatim, not evidence the body was empty. This capture cannot
+    verify the body content by this method; a future capture that asks a question whose *answer*
+    depends on the marker (not a request to quote it) would be needed to confirm the body reaches
+    the model.
+  - **The three `request_permission` shapes against D8 — only two of three appeared.** All 9 requests
+    were `kind:"shell"` (7, all `toolCall.kind:"execute"`) or `kind:"mcp"`→ACP `kind:"other"` (1, the
+    `list_tasks` call, ACP `toolCall.kind:"read"` — confirms R3's point that Copilot's kind-guess is
+    unreliable, since `list_tasks` reads as `"read"` not `"other"`) or `kind:"url"` (1, the web-fetch
+    call). **No `kind:"edit"` request occurred**: the model wrote both `probe.txt` and `probe2.txt`
+    through `Set-Content` shell commands, never through a dedicated write/edit tool, so this capture
+    has no edit-kind fixture. Task 1.6/1.9 need a different source for that case (synthetic
+    construction from the CODE shapes design D8 already cites, or a later capture) — recorded here so
+    the gap is not silently inherited.
+  - **`session.error`/`session.warning`/`session.info` — none appeared (Open question 10 unresolved).**
+    Both the dead-port `curl` calls (exit code 7) and the dead-port web fetch and `list_tasks` failures
+    surfaced only as `tool_call_update {status:"failed"}` (the fetch and MCP call) or a normal
+    `{status:"completed"}` shell exit-code report (`curl`), never as a raw `session.error`. The
+    model's own closing text says the web fetch "blocked the loopback URL" — a Copilot-side sandbox
+    refusal, not an AgentWeave judge decision (we answered `allow_once` on it).
+  - **(R3) ordering, every one of the 9 calls:** raw `tool.execution_start` always preceded the raw
+    `permission.requested`, which always preceded the ACP `session/request_permission` for the same
+    `toolCallId`. The `agentweave`/`list_tasks` call's `tool.execution_start` carried
+    `mcpServerName: "agentweave"`, `mcpToolName: "list_tasks"`, confirming D8's server-identification
+    source fires and precedes the request as assumed.
+  - **(R3) stop reason and a second title:** `stopReason: "end_turn"`; no `session.error` appeared, so
+    there was nothing to attribute a failed-status stop reason to. Only one `session_info_update`
+    fired, carrying the original prompt text — no second title appeared (Open question 8 not
+    exercised by this capture, since nothing failed at the session level).
+  - **(review) `Get-ChildItem` DID raise a permission request — three times, not zero.** Each carried
+    `"readOnly": false` in its raw `permission.requested.permissionRequest.commands[0]`, and
+    `"permissionMode": "manual"` at the top level of that same event (Copilot's own internal mode
+    label, unrelated to AgentWeave's postures). **This disproves the premise this task's own intro
+    and task 10.1 both state** ("Copilot auto-approves shell commands it classes read-only" /
+    "the read-only class"): in build 1.0.88 under this configuration, `Get-ChildItem` is not
+    classed read-only and is not auto-approved. Task 10.1's finding needs correcting before it is
+    filed, not filed as originally worded — flagged here per the drive/finding rule ("when a drive
+    disproves part of a finding, say so").
+  - **(review) `curl.exe`'s requests were both `kind:"shell"`, never `kind:"url"`.** Finding 2's
+    anticipated case — a `url` request carrying a `powershell` call's `toolCallId` — did not occur in
+    this capture; both curl invocations raised a plain shell permission with `fullCommandText:
+    "curl.exe -s http://127.0.0.1:9/"`. The one `kind:"url"` request was the separate `web_fetch`
+    call, with its own `toolCallId`, not a shared one. The finding-2 shape may be version- or
+    detection-dependent; this capture alone does not confirm it exists in 1.0.88.
+  - **(review) every `execute` request's `tool.execution_start` named its tool.** All seven shell
+    calls read `toolName: "powershell"`; none arrived with an unnamed tool. No case of "a genuine
+    `powershell` request arrives with no name known" (slice 3's conflict 1) was observed.
+  - **(review) `session.mcp_servers_loaded`'s `agentweave` entry carries neither `source` nor
+    `transport`.** Only `{"name": "agentweave", "status": "connected", "serverMetadata": {...}}` —
+    contrast the `github-mcp-server` (disabled) entry, which does carry `"source": "builtin"`. D8's
+    "accepted source" fix (task 1.20, Open question) cannot rely on a specific source value being
+    present when the server arrives via `--additional-mcp-config`; it may need to treat an *absent*
+    `source`/`transport` pair as the accepted case instead, or task 1.20's dedicated probe needs to
+    settle this before 1.6/5.2 are written. Recorded, not fixed — this task only captures.
+  - **No `session.mode_changed` or `exit_plan_mode.requested` appeared** (no mode change was
+    triggered in this turn).
+  - **Behavioural note for whoever writes fixtures/tests off "the" call order:** the model did not
+    execute the prompt's five actions in the order given. It batched three shell calls (curl, then
+    `Set-Content probe.txt`, then `Get-ChildItem`) before the first permission answer landed, retried
+    `Get-ChildItem` twice more and `curl` a second time, and only then reached the fetch and MCP
+    calls — 9 permission requests total for 5 requested actions, not 5.
+
 ## Cross-slice consistency (orchestrator, 2026-09-27, after all five R1s; reconciled in R2)
 
 For R2 to reconcile against `each-runner-cli-is-one-adapter`'s design:

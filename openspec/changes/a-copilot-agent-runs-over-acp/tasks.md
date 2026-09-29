@@ -32,7 +32,16 @@
 
 Copilot Free plan: **two** model-calling prompts in this group, and no more. Every other probe is a slash command or a handshake. Run captures with `openspec/changes/a-copilot-agent-runs-over-acp/evidence/r1_probe.py` as the starting point. Always use a scratch `COPILOT_HOME` under `%TEMP%`, and point the MCP server's `HUB_URL` at a dead port, never `:8000`.
 
-- [ ] 1.1 **Capture 1 (1 prompt, ACP).** Set up a scratch workspace holding a custom agent file whose body carries the marker `AW-MARKER-5521`, and the Hub's real `mcp_server.py` from `--additional-mcp-config`. Subscribe to design D10's raw events (`COPILOT_RAW_EVENTS`, which since R3 includes `tool.execution_start`). Answer every `session/request_permission` with `allow_once`, **recording its params**. Send one prompt: *"Quote the marker in your agent instructions. Then create file probe.txt containing hi. Then run each of these shell commands separately: `Set-Content probe2.txt hi`, then `Get-ChildItem`, then `curl.exe -s http://127.0.0.1:<DEAD>/`. Then fetch `http://127.0.0.1:<DEAD>/` with your web fetch tool. Then call agentweave-list_tasks."* `<DEAD>` is the dead Hub port. (Review 2026-09-28, findings 1 and 2: R3's `echo done` is the class Copilot auto-approves, so it would have captured **no** `execute` request and 1.6 would have had no execute fixture. `Set-Content` writes, so Copilot must ask.)
+- [x] 1.1 **Capture 1 (1 prompt, ACP).** Set up a scratch workspace holding a custom agent file whose body carries the marker `AW-MARKER-5521`, and the Hub's real `mcp_server.py` from `--additional-mcp-config`. Subscribe to design D10's raw events (`COPILOT_RAW_EVENTS`, which since R3 includes `tool.execution_start`). Answer every `session/request_permission` with `allow_once`, **recording its params**. Send one prompt: *"Quote the marker in your agent instructions. Then create file probe.txt containing hi. Then run each of these shell commands separately: `Set-Content probe2.txt hi`, then `Get-ChildItem`, then `curl.exe -s http://127.0.0.1:<DEAD>/`. Then fetch `http://127.0.0.1:<DEAD>/` with your web fetch tool. Then call agentweave-list_tasks."* `<DEAD>` is the dead Hub port. (Review 2026-09-28, findings 1 and 2: R3's `echo done` is the class Copilot auto-approves, so it would have captured **no** `execute` request and 1.6 would have had no execute fixture. `Set-Content` writes, so Copilot must ask.)
+  - **Done 2026-09-29** (`evidence/t1_1_capture.py`, dead port 9, build 1.0.88): fixture saved,
+    386 wire messages, redacted, no token. Headline corrections: the marker did **not** come back
+    (policy refusal, not proof of an empty body); no `kind:"edit"` request occurred at all (both
+    writes went through `Set-Content` shell calls); `Get-ChildItem` **did** raise a permission
+    request three times (`readOnly:false`), disproving the "auto-approved read-only class" premise
+    this task and task 10.1 both stated; `curl.exe` raised only `kind:"shell"`, never finding 2's
+    anticipated `kind:"url"`; `session.mcp_servers_loaded`'s `agentweave` entry carries neither
+    `source` nor `transport`, unlike `github-mcp-server`'s `"source":"builtin"`. Full detail,
+    including the ordering and stop-reason sub-items, in the Round log
 
   Save the transcript, in wire order, to `hub/tests/fixtures/copilot_acp/turn_write_shell_mcp.jsonl`. Paths must be replaced by `<WS>`/`<HOME>`, and it must hold no token. Record in the Round log:
   - whether the marker came back (Open question 1);
