@@ -61,8 +61,13 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
     themselves, so D14's explicit-built-in-list fallback was not exercised (nothing to record
     beyond confirming the non-fallback path). See the Round log, "Task 1.2 — Capture 2,
     2026-09-29"
-- [ ] 1.3 `hub/tests/test_runners_api.py`: `POST /runners` with `cli: "copilot"` returns 201, and the row reads back. Today it fails with 422, the validator's refusal. Add a model-level test that inserts a `Runner(cli="copilot")` and commits; it fails today on `ck_runners_cli`
+- [x] 1.3 `hub/tests/test_runners_api.py`: `POST /runners` with `cli: "copilot"` returns 201, and the row reads back. Today it fails with 422, the validator's refusal. Add a model-level test that inserts a `Runner(cli="copilot")` and commits; it fails today on `ck_runners_cli`
   - Verify: `py -3.11 -m pytest hub/tests/test_runners_api.py -q -k copilot`
+  - **Done 2026-09-30:** both tests added, confirmed red on today's code —
+    `test_create_runner_with_copilot_cli_returns_201_and_reads_back` fails `422 != 201`
+    (`RunnerCreate.validate_cli` against `RUNNER_CLIS`); `test_copilot_runner_row_commits_at_the_model_level`
+    fails on `sqlite3.IntegrityError: CHECK constraint failed: ck_runners_cli`. The other 23 tests
+    in the file still pass. Section 2 (`RUNNER_CLIS`, the migration) turns these green.
 - [ ] 1.4 `hub/tests/test_runner_charter_models.py` (or the seeding test beside `db/engine.py`'s seeder): a zero-runner project is seeded with `claude`, `codex` and `copilot`. A project holding one runner gets nothing. Cover both seeders, `engine.py:_seed_default_runners` and `project_lifecycle._seed_new_project`
 - [ ] 1.5 `hub/tests/test_copilot_probe.py` (new): `resolve_copilot_executable` on a fake tree in `tmp_path`. Cover:
   - an npm `copilot.cmd` JS shim plus `node_modules/@github/copilot/node_modules/@github/copilot-win32-x64/copilot.exe` resolves to the `.exe`;

@@ -139,6 +139,47 @@ async def test_an_existing_runner_with_an_unrecognised_model_stays_readable_and_
     assert renamed.json()["model_unrecognised"] is True
 
 
+# ---------------------------------------------------------------------------
+# Copilot cli (task 1.3, a-copilot-agent-runs-over-acp) — fails today on 422 /
+# ck_runners_cli until section 2 widens RUNNER_CLIS and the constraint.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_runner_with_copilot_cli_returns_201_and_reads_back(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/projects/proj-test/runners",
+        json={"name": "Copilot", "cli": "copilot"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["cli"] == "copilot"
+
+    readback = await app.get(
+        f"/api/v1/projects/proj-test/runners/{data['id']}", headers=auth_headers
+    )
+    assert readback.status_code == 200
+    assert readback.json()["cli"] == "copilot"
+
+
+@pytest.mark.asyncio
+async def test_copilot_runner_row_commits_at_the_model_level(app, auth_headers):
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Runner
+
+    async with async_session_factory() as session:
+        session.add(
+            Runner(
+                id="runner-copilot-0001",
+                project_id="proj-test",
+                name="Copilot",
+                cli="copilot",
+            )
+        )
+        await session.commit()
+
+
 @pytest.mark.asyncio
 async def test_a_recognised_model_is_not_flagged(app, auth_headers):
     resp = await app.post(
