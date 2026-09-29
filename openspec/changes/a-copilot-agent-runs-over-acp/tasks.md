@@ -117,6 +117,24 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - (review, note 16) under `manual`, an unidentified MCP request → ASK_OPERATOR with label "an MCP tool Copilot did not identify", never the title;
   - (review, note 17) a `read` whose one path contains `", "` is judged whole as well as in pieces;
   - (review, conflict 2) under `workspace`, with slice 5's rule stubbed at step 3 to return ASK_OPERATOR for everything, an unidentified MCP request is still REJECT (step 1 answers it)
+  - **Partial 2026-09-30 (part 1/N, not yet checked):** `test_copilot_acp_decide.py` written,
+    covering the base D8 table (design.md:634-645) across all four postures for
+    execute/edit/read/fetch/mcp-own/mcp-foreign/mcp-unidentified/memory, plus the four
+    baseline bullets above ("PowerShell refused under `workspace`", "`agentweave` MCP allowed
+    under `manual`", "a foreign MCP server judged", "`memory` refused"). Confirmed red at
+    collection: `ModuleNotFoundError: No module named 'hub.copilot_acp'` (task 3.x adds the
+    module against this file, as 1.5's probe file does for `copilot_probe`). CODE-shaped params
+    used throughout rather than the 1.1 capture's, because 1.1 never raised a `kind:"edit"`
+    request (both file writes went through `Set-Content` shell calls) — recorded as a gap in
+    iteration 2's log; 1.9 needs a different source for that fixture case too. Left for a later
+    firing, unchecked: the `spec_turn=True` rows (bullets 1-2), R2/R3's MCP-identification edge
+    cases (bullets 6-9, 12, 16-17), review finding 2's shell-classified-`url` rows beyond plain
+    `web_fetch`/bypass, findings 5 and 6's load-time-condition rows, finding 1/slice 3's
+    `write_powershell`/`local_shell` shapes, and "the answer never being `allow_always`" (that
+    is the RPC-answering step's property, not `decide_permission`'s — tested alongside whichever
+    task covers that function). Also surfaced, not resolved here: design.md's `fetch` +
+    `requestSandboxBypass` row gives no `manual`/full-access cell, so this slice asserts only
+    `workspace`/`acceptEdits` for it.
 - [ ] 1.7 `hub/tests/test_permission_approver.py`: `_decide(..., workspace=W, hub_url=U)` judges against `W` and `U` when `os.environ` names other values. It fails today because the keywords do not exist
 - [ ] 1.8 `hub/tests/test_copilot_acp_mapper.py` (new): replay `evidence/acp4-turn-mcp-shell-1.0.88.log` and the 1.1 fixture, **in their recorded order**, through `CopilotEventMapper`. Assert:
   - one `text` event per contiguous message block;
