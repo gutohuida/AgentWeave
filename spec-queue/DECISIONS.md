@@ -875,6 +875,13 @@ recommended answers were taken as recommended unless noted below. The per-change
   `-> in_progress` may reach `completed` without completion evidence. Requiring evidence there
   deadlocks the ordinary path, and the residue is one attributable task per run, reviewed by someone
   else. Do not re-file.
+- DECIDED   F291-F273-run-facts  **An undelivered message says how its last attempt ended, read from
+  the run's own facts, never derived from the output stream alone** (B2 D11). F291: the run facts map
+  gains `error` (`RunFacts.error`, fitted to 500 characters), and the abandoned turn renders it beneath
+  the Hub's reason. F273's premise (the persisted status line is the only record of a run's outcome) is
+  obsolete — the run's row and the facts map already carry status and exit code — so the requirement is
+  amended to match what the code does; no product change for F273 itself. Built as
+  `an-undelivered-message-says-how-its-last-attempt-ended`.
 - DECIDED   B2-follow-ups  **The 2026-08-21 decision ("failed at once, no new vocabulary") stands for
   now.** Revisiting it, together with the reaper's no-runner case, is queued as `REQUESTS.md` R7 for
   its own spec loop. History rows naming their agent is R8.

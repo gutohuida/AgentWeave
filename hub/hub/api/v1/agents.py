@@ -58,6 +58,7 @@ from ...schemas.agents import (
     AgentTimelineEvent,
     ContextUsageCreate,
     RunFacts,
+    fit_run_error,
 )
 from ...schemas.common import RequestModel
 from ...schemas.messages import OPERATOR_SENDER
@@ -906,6 +907,7 @@ async def agent_timeline(
                 # workspace, and coalescing the first into the second would be the one mistake
                 # this column exists to prevent.
                 outside_workspace_writes=run.outside_workspace_writes,
+                error=fit_run_error(run.error),
             )
 
     return AgentTimeline(events=events, runs=runs)

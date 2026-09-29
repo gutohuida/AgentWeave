@@ -14,9 +14,11 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from hub.db.engine import async_session_factory
 from hub.db.models import AgentHeartbeat, EventLog, Run
+from hub.output_recording import record_agent_output as _real_record_agent_output
 
 # Phase 2 drives real runs through both spawn paths, and the fakes that make that possible already
 # exist. Imported rather than re-declared, as `test_agent_default_permission_mode.py` does.
@@ -688,3 +690,128 @@ async def test_the_truncation_keeps_the_newest_events_and_the_runs_they_name(app
     # events name, so an ordering that drops the newest events drops the newest runs' outcomes.
     assert "run-39" in body["runs"]
     assert body["runs"]["run-39"]["status"] == "completed"
+
+
+# ---------------------------------------------------------------------------
+# F273 pin (`an-undelivered-message-says-how-its-last-attempt-ended`, task 1.8).
+#
+# The status-line write at the finalize block's end (`agent_trigger.py:2806`) runs through
+# `_record_observation`, *after* the same block has already committed the run's terminal status
+# and exit code (`:2723`). A failure writing that line must not relabel a run that has already
+# ended and must not go unrecorded — these two tests pin that both halves hold, for the two
+# shapes `_record_observation` treats differently: a lock (retried, then dropped with a warning)
+# and anything else (propagates to the catch-all, logged, the terminal status untouched).
+# ---------------------------------------------------------------------------
+
+
+def _failing_status_write(exc_factory):
+    """A stand-in for `record_agent_output` that raises on the finalize block's own closing
+    status row only, and behaves exactly like the real function for every other call.
+
+    Matched on `payload["exit_code"]` rather than on `kind == "status"` alone: the stream
+    parser also writes a `kind="status"` row for a clean completion (`runner_parsing.py:356`,
+    the duplication `test_a_completed_claude_run_carries_the_pair...` pins), during the read
+    loop, before this run has reached a terminal status at all. Only the finalize block's row
+    (`agent_trigger.py:2806-2821`) carries the exit code in its payload.
+    """
+
+    async def wrapper(db, project_id, agent, *, kind=None, payload=None, **kwargs):
+        if kind == "status" and isinstance(payload, dict) and "exit_code" in payload:
+            raise exc_factory()
+        return await _real_record_agent_output(
+            db, project_id, agent, kind=kind, payload=payload, **kwargs
+        )
+
+    return wrapper
+
+
+@pytest.mark.asyncio
+async def test_a_status_line_that_cannot_be_written_leaves_a_lock_the_outcome_intact(
+    app, auth_headers, bind_runner, caplog
+):
+    """A lock on the status-line write is retried and then dropped, not raised — the run's
+    outcome and exit code are unaffected, and a warning names the run."""
+    agent = "phase8-lock"
+    await app.post(
+        f"{BASE}/session/sync",
+        json={"data": {"agents": {agent: {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    await bind_runner(agent, cli="claude")
+
+    fake_spawn = _fake_pty(
+        [
+            '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-p8-lock"}\n',
+        ]
+    )
+    failing_write = _failing_status_write(
+        lambda: OperationalError("stmt", {}, Exception("database is locked"))
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.api.v1.agent_trigger.record_agent_output", failing_write):
+                with caplog.at_level("WARNING"):
+                    trigger = await app.post(
+                        f"{BASE}/agent/trigger",
+                        json={"agent": agent, "message": "hi", "session_mode": "new"},
+                        headers=auth_headers,
+                    )
+                    run_id = trigger.json()["run_id"]
+                    await _await_background_run()
+
+    assert (await _run_row(run_id)).status == "completed", "the lock must not relabel the run"
+    assert (await _run_row(run_id)).exit_code == 0
+    assert any(
+        "Dropped" in record.message and run_id in record.message for record in caplog.records
+    ), "a warning names the run"
+
+    timeline_resp = await app.get(f"{BASE}/agents/{agent}/timeline", headers=auth_headers)
+    assert timeline_resp.status_code == 200, timeline_resp.text
+    facts = timeline_resp.json()["runs"][run_id]
+    assert facts["status"] == "completed"
+    assert facts["exit_code"] == 0
+
+
+@pytest.mark.asyncio
+async def test_a_status_line_write_that_raises_a_non_lock_error_also_leaves_the_outcome_intact(
+    app, auth_headers, bind_runner, caplog
+):
+    """A non-lock error on the status-line write propagates to the catch-all — logged naming the
+    run — but the run's terminal status was already committed before that write, so it is not
+    relabelled (`_record_run_failure_tail`'s guard: only a still-`running` row is touched)."""
+    agent = "phase8-nonlock"
+    await app.post(
+        f"{BASE}/session/sync",
+        json={"data": {"agents": {agent: {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    await bind_runner(agent, cli="claude")
+
+    fake_spawn = _fake_pty(
+        [
+            '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-p8-nl"}\n',
+        ]
+    )
+    failing_write = _failing_status_write(lambda: RuntimeError("disk is full"))
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.api.v1.agent_trigger.record_agent_output", failing_write):
+                with caplog.at_level("ERROR"):
+                    trigger = await app.post(
+                        f"{BASE}/agent/trigger",
+                        json={"agent": agent, "message": "hi", "session_mode": "new"},
+                        headers=auth_headers,
+                    )
+                    run_id = trigger.json()["run_id"]
+                    await _await_background_run()
+
+    assert (
+        await _run_row(run_id)
+    ).status == "completed", "already terminal before the write raised; not relabelled"
+    assert any(
+        run_id in record.message for record in caplog.records if record.levelname == "ERROR"
+    ), "an error log names the run"
+
+    timeline_resp = await app.get(f"{BASE}/agents/{agent}/timeline", headers=auth_headers)
+    assert timeline_resp.status_code == 200, timeline_resp.text
+    assert timeline_resp.json()["runs"][run_id]["status"] == "completed"

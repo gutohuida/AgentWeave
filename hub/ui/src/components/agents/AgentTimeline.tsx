@@ -269,6 +269,7 @@ export function AgentTimeline({
               agentName={agent.name}
               colorByName={colorByName}
               queued
+              lastAttempt={entry.run_id ? runs[entry.run_id] : undefined}
             />
           )
         }
@@ -847,6 +848,25 @@ function participantLabel(entry: TimelineEntry, agentName: string): { name: stri
   return { name: agentName, align: 'left' }
 }
 
+/** The line beneath an abandoned message's reason, naming how its last attempt ended (design D2).
+ *  `undefined` — no run to name (the scheduler's give-up, or a run with no facts yet) — and every
+ *  status but `failed`/`interrupted` render nothing: a turn that ran to any other terminal state
+ *  is not what "abandoned" means, and this line is not meant to classify that. */
+function lastAttemptLine(lastAttempt: AgentRunFacts | undefined): string | null {
+  if (!lastAttempt) return null
+  if (lastAttempt.status === 'failed') {
+    if (lastAttempt.error) return `Last attempt failed: ${lastAttempt.error}`
+    if (lastAttempt.exit_code !== null && lastAttempt.exit_code !== undefined) {
+      return `Last attempt failed (exit ${lastAttempt.exit_code})`
+    }
+    return 'Last attempt failed'
+  }
+  // No cause named: a Hub restart records `interrupted` today, and a Stop may record it later
+  // (design D2) — naming a cause here would be right for one of those and wrong for the other.
+  if (lastAttempt.status === 'interrupted') return 'Last attempt was interrupted'
+  return null
+}
+
 function MessageEntry({
   entry,
   agentName,
@@ -854,6 +874,7 @@ function MessageEntry({
   queued = false,
   onWithdraw,
   onRelease,
+  lastAttempt,
 }: {
   entry: TimelineEntry
   agentName: string
@@ -861,6 +882,7 @@ function MessageEntry({
   queued?: boolean
   onWithdraw?: (entryId: string) => void
   onRelease?: (entryId: string) => void
+  lastAttempt?: AgentRunFacts
 }) {
   const time = format(hubDate(entry.timestamp), 'HH:mm')
   const fullTime = format(hubDate(entry.timestamp), 'EEE d MMM, HH:mm:ss')
@@ -874,6 +896,12 @@ function MessageEntry({
   // fact: nothing is going to happen to it. Before this it was filtered out of the thread
   // entirely, so a dropped message and a delivered one looked the same here (F87).
   const abandoned = entry.delivery_state === 'abandoned'
+  const lastAttemptText = abandoned ? lastAttemptLine(lastAttempt) : null
+  const lastAttemptRow = lastAttemptText && (
+    <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+      {lastAttemptText}
+    </div>
+  )
   const wrapperStyle: React.CSSProperties = { opacity: queued ? 0.55 : 1 }
   const queuedTag = queued && (
     <span className="inline-flex items-center gap-[.35rem]">
@@ -975,6 +1003,7 @@ function MessageEntry({
           you
           {timestamp}
         </div>
+        {lastAttemptRow}
         <div
           className="timeline-bubble max-w-[82%] px-[13px] py-[10px] text-sm leading-[1.6] break-words"
           style={{
@@ -1029,6 +1058,7 @@ function MessageEntry({
         {queuedTag}
         {actions}
       </div>
+      {lastAttemptRow}
       <div className="break-words" style={{ color: 'var(--text)' }}>
         <MarkdownMessage content={entry.content} />
       </div>

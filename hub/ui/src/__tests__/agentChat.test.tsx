@@ -88,6 +88,14 @@ describe('eventTargetsAgent — chat live-update matching (previously: no SSE co
     expect(eventTargetsAgent('queue_entry_queued', { agent: 'codex' }, 'claude')).toBe(false)
   })
 
+  /** `an-undelivered-message-says-how-its-last-attempt-ended`, task 1.7. The scheduler's give-up
+   *  path has no run, so none of the run-terminal events below fire for it — this is the only
+   *  live refresh signal that path gets. */
+  it('matches queue_entry_abandoned, so a give-up without a run reaches an open conversation', () => {
+    expect(eventTargetsAgent('queue_entry_abandoned', { agent: 'claude' }, 'claude')).toBe(true)
+    expect(eventTargetsAgent('queue_entry_abandoned', { agent: 'codex' }, 'claude')).toBe(false)
+  })
+
   /**
    * F274, task 4.8. The chat response carries `runs` now, so a run row settling has to refetch
    * THIS query — nothing else will. An operator stop is the case with no cover at all:
