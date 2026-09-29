@@ -40,12 +40,19 @@ def _schemas():
 
 
 def _enum_for(schema, parameter):
-    """The declared enum for *parameter*, resolving a `$ref`/`anyOf` wrapper if present."""
+    """The declared enum for *parameter*, resolving a `$ref`/`anyOf` wrapper if present.
+
+    An `Optional[Literal[...]]` parameter (an `update_task`-style `status=None` default) renders
+    its enum inline inside an `anyOf` branch rather than behind a `$ref` — both are the schema
+    actually telling a client the valid values, so both are checked.
+    """
     prop = schema["properties"][parameter]
     if "enum" in prop:
         return prop["enum"]
     defs = schema.get("$defs", {})
     for candidate in (prop, *prop.get("anyOf", [])):
+        if "enum" in candidate:
+            return candidate["enum"]
         ref = candidate.get("$ref", "")
         if ref.startswith("#/$defs/"):
             target = defs.get(ref.split("/")[-1], {})
@@ -88,10 +95,13 @@ def test_alias_agrees_with_the_validator_it_mirrors(alias, runtime):
     assert sorted(typing.get_args(alias)) == sorted(runtime)
 
 
-def test_update_task_status_is_required_and_therefore_must_be_discoverable():
-    """`status` has no default, so a model must supply one of the states blind."""
+def test_update_task_status_is_optional_but_still_discoverable():
+    """`status` defaults to `None` (an-agent-updates-a-task-with-what-its-tool-carries) so an agent
+    linking a requirement need not restate it — including on a `blocked` task, where restating the
+    status at all is refused. It is still enumerated, so a model that does supply one is not
+    guessing blind."""
     schema = _schemas()["update_task"]
-    assert "status" in schema.get("required", [])
+    assert "status" not in schema.get("required", [])
     assert _enum_for(schema, "status") is not None
 
 

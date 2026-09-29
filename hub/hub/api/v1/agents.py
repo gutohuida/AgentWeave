@@ -1119,12 +1119,18 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="update_task",
-            args="task_id, status, notes=None",
+            args="task_id, status=None, notes=None, requirement_ids=None, spec_document=None",
             method="PATCH",
             path="/tasks/{task_id}",
-            fields=("status", "notes"),
+            fields=("status", "notes", "requirement_ids", "spec_document"),
             required=(),
-            text=f"status is required, one of {values(TaskStatus)}.",
+            text=(
+                f"move status (one of {values(TaskStatus)}), leave notes for whoever looks at "
+                "this task next, and link it to the requirements it serves with requirement_ids "
+                "(spec_document names which document to resolve them in, when that is "
+                "ambiguous). Omit a field to leave it alone. Who holds a task, its priority and "
+                "its description are the operator's."
+            ),
         ),
         _Operation(
             tool="ask_user",

@@ -1303,6 +1303,24 @@ async def update_task_for_actor(
             status_code=403,
             detail="A task's title is the operator's to set. An agent cannot rename a task.",
         )
+    if not actor.is_operator:
+        _operator_only_fields = {
+            field
+            for field in ("assignee", "priority", "description")
+            if field in body.model_fields_set
+        }
+        if _operator_only_fields:
+            # Refused before any write (design D1/D2a, an-agent-updates-a-task-with-what-its-
+            # tool-carries): who holds a task, its priority and its description are the operator's
+            # to set — an agent unassigning or self-assigning a task is the bypass F366 names.
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "An agent moves its task with status and notes, and links it to the "
+                    "requirements it serves with requirement_ids; who holds a task, its priority "
+                    "and its description are the operator's."
+                ),
+            )
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.

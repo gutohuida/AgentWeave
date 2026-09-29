@@ -167,7 +167,7 @@ def test_task_tools_use_agent_ledger_endpoints_without_assigner(hub):
     assert "agent=worker" in calls[1].full_url
     assert get_task("task-1")["id"] == "task-1"
     assert update_task("task-1", "completed")["status"] == "completed"
-    assert _body(calls[3]) == {"status": "completed", "notes": None}
+    assert _body(calls[3]) == {"status": "completed"}
 
 
 def test_update_task_forwards_notes_so_a_rejection_is_legible_on_the_task_itself(hub):
