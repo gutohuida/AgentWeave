@@ -649,7 +649,12 @@ def recall(observation_id: str) -> Dict[str, Any]:
 
 @mcp.tool()
 def request_agent(name: str, template: str, task: str) -> Dict[str, Any]:
-    """Request a new agent from a pre-approved template under the project agent budget."""
+    """Request a new agent, modelled on an existing open agent of this project.
+
+    `template` is that agent's exact name; the new agent takes its bound runner, charter and
+    runner configuration, under the project agent budget. It inherits no grant, no permission
+    posture, and no per-agent override — those stay the operator's to set on the new agent.
+    """
     return _hub_request(
         "POST", "/agents/request", {"name": name, "template": template, "task": task}
     )

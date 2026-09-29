@@ -8,7 +8,6 @@ rename must not restate `status`/`blocked_reason` and so must not be refused).
 Run: AW_HUB=... AW_KEY=... AW_PROJECT=... py -3.11 scripts/drive/d0929_f125_rename_task.py
 """
 
-import json
 import os
 import sys
 

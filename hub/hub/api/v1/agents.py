@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Literal, NamedTuple, Optional, Tuple, get_args
@@ -68,6 +69,7 @@ from ...task_transitions import LIVE_STATUSES
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+logger = logging.getLogger(__name__)
 
 _24H = timedelta(hours=24)
 # One derived set, shared with `checkpoints._LIVE_TASK_STATUSES`, which held the identical
@@ -1362,7 +1364,12 @@ def _operations() -> List[_Operation]:
             path="/agents/request",
             fields=("name", "template", "task"),
             required=("name", "template", "task"),
-            text="governed; subject to the project agent budget.",
+            text=(
+                "governed; subject to the project agent budget. `template` is the exact name "
+                "of an open agent of this project; the new agent takes that agent's bound "
+                "runner, charter and runner configuration, and none of its grants, posture or "
+                "per-agent overrides."
+            ),
         ),
         _Operation(
             tool="create_job",
@@ -2242,19 +2249,41 @@ async def request_agent(
             status_code=409, detail="Agent request run identity is invalid or stale"
         )
 
-    session_data = await _get_session_data(project_id, session) or {}
-    templates = session_data.get("agents", {}) or {}
-    template_config = templates.get(body.template)
-    if not isinstance(template_config, dict):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Agent template '{body.template}' is not pre-approved for this project",
-        )
-
     existing_rows = (
         (await session.execute(select(Agent).where(Agent.project_id == project_id))).scalars().all()
     )
-    existing_names = set(templates) | {row.name for row in existing_rows}
+    rows_by_name = {row.name: row for row in existing_rows}
+
+    template_row = rows_by_name.get(body.template)
+    if template_row is None:
+        open_names = sorted(row.name for row in existing_rows if row.lifecycle == "open")
+        shown = open_names[:10]
+        shown_text = ", ".join(shown) + ("…" if len(open_names) > len(shown) else "")
+        detail = (
+            f"No agent named '{body.template}' in this project to model a new agent on. "
+            f"Name one of: {shown_text}."
+            if shown
+            else (
+                f"No agent named '{body.template}' in this project to model a new agent on, "
+                "and this project has no open agent to name."
+            )
+        )
+        raise HTTPException(status_code=400, detail=detail)
+    if template_row.lifecycle == "archived":
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{body.template}' is archived; model the new agent on an open agent.",
+        )
+    if template_row.runner_id is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"'{body.template}' has no runner bound, so an agent modelled on it could "
+                "not run."
+            ),
+        )
+
+    existing_names = set(rows_by_name)
     if body.name in existing_names:
         raise HTTPException(status_code=409, detail=f"Agent '{body.name}' already exists")
 
@@ -2270,8 +2299,16 @@ async def request_agent(
             ),
         )
 
-    copied_config = dict(template_config)
-    copied_config.pop("principal", None)
+    from .agent_trigger import QUESTION_WAIT_ENV
+
+    copied_config = dict(template_row.config or {})
+    for key in ("principal", "yolo", "hub_client"):
+        copied_config.pop(key, None)
+    raw_env_vars = copied_config.get("env_vars")
+    if isinstance(raw_env_vars, dict):
+        copied_config["env_vars"] = {
+            key: value for key, value in raw_env_vars.items() if key != QUESTION_WAIT_ENV
+        }
     agent_row = Agent(
         id=f"agent-{short_id()}",
         project_id=project_id,
@@ -2279,6 +2316,8 @@ async def request_agent(
         contact_mode="watchdog-spawn",
         self_registered=False,
         config=copied_config,
+        runner_id=template_row.runner_id,
+        charter_id=template_row.charter_id,
         color_index=await next_color_index(session, project_id),
         created_by_run_id=source_run.id,
     )
@@ -2330,7 +2369,15 @@ async def request_agent(
 
     from ...turn_scheduler import schedule_agent
 
-    await schedule_agent(project_id, body.name)
+    try:
+        await schedule_agent(project_id, body.name)
+    except Exception:
+        logger.exception(
+            "request_agent: scheduling %s's first turn raised after the agent and its queue "
+            "entry were already committed; the entry stays queued until %s is next scheduled",
+            body.name,
+            body.name,
+        )
     return {**payload, "status": "queued"}
 
 

@@ -2,11 +2,23 @@
 
 import inspect
 import json
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select
 
-from hub.db.models import Agent, InboundQueueEntry, Project, ProjectSession, Run
+from hub.db.models import Agent, InboundQueueEntry, Project, ProjectSession, Run, Runner
+from hub.turn_scheduler import ScheduleResult
+
+
+def _no_spawn():
+    """`schedule_agent` made inert: a requested agent inherits its template's runner, so the
+    request route would otherwise start its first turn -- a real `claude` process wherever one is
+    on PATH. What is asserted is what the request wrote and answered, which is before that."""
+    return patch(
+        "hub.turn_scheduler.schedule_agent",
+        AsyncMock(return_value=ScheduleResult(waiting_reason=None, terminal_failure=False)),
+    )
 
 
 async def _tool_names() -> set[str]:
@@ -85,22 +97,38 @@ def test_runner_commands_inject_one_stdio_surface_for_claude_and_codex():
 
 @pytest.mark.asyncio
 async def test_request_agent_copies_preapproved_template_and_queues_work(app, auth_headers):
+    """The template is now an existing open Agent, not a `project_sessions` entry —
+    `request-agent-models-the-new-agent-on-one-the-operator-made` (F378)."""
     from hub.db.engine import async_session_factory
+
+    registered = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "worker-template", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert registered.status_code == 200, registered.text
+    configured = await app.patch(
+        "/api/v1/projects/proj-test/agents/worker-template",
+        json={"config": {"model": "haiku"}},
+        headers=auth_headers,
+    )
+    assert configured.status_code == 200, configured.text
+    runner = await app.post(
+        "/api/v1/projects/proj-test/runners",
+        json={"name": "worker-template-runner", "cli": "claude"},
+        headers=auth_headers,
+    )
+    assert runner.status_code == 201, runner.text
+    bound = await app.patch(
+        "/api/v1/projects/proj-test/agents/worker-template",
+        json={"runner_id": runner.json()["id"]},
+        headers=auth_headers,
+    )
+    assert bound.status_code == 200, bound.text
 
     async with async_session_factory() as session:
         project = await session.get(Project, "proj-test")
         project.agent_budget = 3
-        session_row = await session.get(ProjectSession, "proj-test")
-        session_data = {
-            "agents": {
-                "lead": {"runner": "claude", "principal": True},
-                "worker-template": {"runner": "claude", "model": "haiku"},
-            }
-        }
-        if session_row:
-            session_row.data = session_data
-        else:
-            session.add(ProjectSession(project_id="proj-test", data=session_data))
         session.add(
             Run(
                 id="run-source",
@@ -112,16 +140,17 @@ async def test_request_agent_copies_preapproved_template_and_queues_work(app, au
         )
         await session.commit()
 
-    response = await app.post(
-        "/api/v1/projects/proj-test/agents/request",
-        headers=auth_headers,
-        json={
-            "name": "worker-2",
-            "template": "worker-template",
-            "task": "Implement the queue consumer",
-            "run_id": "run-source",
-        },
-    )
+    with _no_spawn():
+        response = await app.post(
+            "/api/v1/projects/proj-test/agents/request",
+            headers=auth_headers,
+            json={
+                "name": "worker-2",
+                "template": "worker-template",
+                "task": "Implement the queue consumer",
+                "run_id": "run-source",
+            },
+        )
     assert response.status_code == 201, response.text
     assert response.json()["status"] == "queued"
 
@@ -146,15 +175,28 @@ async def test_request_agent_copies_preapproved_template_and_queues_work(app, au
 async def test_request_agent_refuses_to_exceed_project_budget(app, auth_headers):
     from hub.db.engine import async_session_factory
 
+    registered = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "template", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert registered.status_code == 200, registered.text
+    runner = await app.post(
+        "/api/v1/projects/proj-test/runners",
+        json={"name": "template-runner", "cli": "claude"},
+        headers=auth_headers,
+    )
+    assert runner.status_code == 201, runner.text
+    bound = await app.patch(
+        "/api/v1/projects/proj-test/agents/template",
+        json={"runner_id": runner.json()["id"]},
+        headers=auth_headers,
+    )
+    assert bound.status_code == 200, bound.text
+
     async with async_session_factory() as session:
         project = await session.get(Project, "proj-test")
         project.agent_budget = 1
-        session_row = await session.get(ProjectSession, "proj-test")
-        session_data = {"agents": {"lead": {"runner": "claude"}, "template": {"runner": "claude"}}}
-        if session_row:
-            session_row.data = session_data
-        else:
-            session.add(ProjectSession(project_id="proj-test", data=session_data))
         session.add(
             Run(
                 id="run-budget",
@@ -263,7 +305,20 @@ async def test_full_multi_agent_command_session_needs_no_tool_protocol_server(ap
         for agent_name in ("cli-lead", "cli-worker", "cli-template"):
             existing = await session.get(Agent, agent_name)
             if existing is None:
-                session.add(Agent(id=agent_name, project_id="proj-test", name=agent_name))
+                existing = Agent(id=agent_name, project_id="proj-test", name=agent_name)
+                session.add(existing)
+            if agent_name == "cli-template":
+                # `cli-template` is `request_agent`'s template below, which now requires a
+                # bound runner (`request-agent-models-the-new-agent-on-one-the-operator-made`,
+                # F378) — unrelated to this test's own `hub_client: "cli"` session config.
+                runner = Runner(
+                    id="runner-cli-template",
+                    project_id="proj-test",
+                    name="cli-template-runner",
+                    cli="claude",
+                )
+                session.add(runner)
+                existing.runner_id = runner.id
         session.add(
             Run(
                 id="run-cli-session",
@@ -328,16 +383,17 @@ async def test_full_multi_agent_command_session_needs_no_tool_protocol_server(ap
     )
     assert answer_poll.status_code == 200
 
-    requested = await app.post(
-        "/api/v1/projects/proj-test/agents/request",
-        headers=auth_headers,
-        json={
-            "name": "cli-worker-2",
-            "template": "cli-template",
-            "task": "Assist cli-worker",
-            "run_id": "run-cli-session",
-        },
-    )
+    with _no_spawn():
+        requested = await app.post(
+            "/api/v1/projects/proj-test/agents/request",
+            headers=auth_headers,
+            json={
+                "name": "cli-worker-2",
+                "template": "cli-template",
+                "task": "Assist cli-worker",
+                "run_id": "run-cli-session",
+            },
+        )
     assert requested.status_code == 201
     assert requested.json()["status"] == "queued"
 
