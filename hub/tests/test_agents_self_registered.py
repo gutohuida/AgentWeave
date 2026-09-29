@@ -786,5 +786,8 @@ async def test_the_two_routes_outside_a_run_keep_the_injected_tool_wording(app, 
         ("GET /agents/agent-context", fetched.json()["context"]),
     ):
         assert "`send_message(to_agent" in context, source
-        assert "prefixed `mcp__agentweave__`" in context, source
+        # No run and no runner means no grounds for the Claude-family full name, so both routes
+        # keep the bare names under the "may" wording
+        # (`2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`, D2/R3).
+        assert "a prefix such as `mcp__agentweave__`" in context, source
         assert "POST /api/v1/agent-actions/messages" not in context, source

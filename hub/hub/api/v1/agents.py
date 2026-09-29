@@ -49,6 +49,7 @@ from ...model_catalog import (
 )
 from ...output_recording import record_agent_output, record_context_usage
 from ...review_turn import ReviewContext, verdict_evidence_sentence
+from ...runner_commands import CLAUDE_FAMILY_RUNNERS
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -1486,9 +1487,14 @@ def _operations() -> List[_Operation]:
     ]
 
 
-def _mcp_lines(operation: _Operation) -> List[str]:
-    """The injected-tool rendering: the call an agent makes, and what its values mean."""
-    lines = [f"- `{operation.tool}({operation.args})` — {operation.text}"]
+def _mcp_lines(operation: _Operation, *, tool_prefix: str = "") -> List[str]:
+    """The injected-tool rendering: the call an agent makes, and what its values mean.
+
+    `tool_prefix` is the full callable name a Claude-family run's harness actually exposes
+    (`mcp__agentweave__`) — empty for every other renderer, which reproduces the bare name
+    exactly as before (`2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`).
+    """
+    lines = [f"- `{tool_prefix}{operation.tool}({operation.args})` — {operation.text}"]
     if operation.detail:
         lines.append(f"  {operation.detail}")
     return lines
@@ -1518,7 +1524,15 @@ def _http_lines(operation: _Operation) -> List[str]:
     return lines
 
 
-def _tool_surface_lines(*, has_peers: bool = True, access_path: str = "mcp") -> List[str]:
+_HOST_TOOLS_NOTE = (
+    "Your host also has tools with similar names — `SendMessage` continues a subagent you "
+    "started — which cannot reach AgentWeave agents or the operator."
+)
+
+
+def _tool_surface_lines(
+    *, has_peers: bool = True, access_path: str = "mcp", runner: Optional[str] = None
+) -> List[str]:
     """Describe every operation an agent can perform, in the idiom of its own access path.
 
     `access_path` defaults to `"mcp"`, which is what every caller rendered before
@@ -1550,11 +1564,27 @@ def _tool_surface_lines(*, has_peers: bool = True, access_path: str = "mcp") -> 
     this section, concluded *"the required `submit_spec_document` capability was not exposed in
     this session"*, and stopped without writing the document it had just spent three rounds
     designing. A silently incomplete inventory is worse than none, because the agent believes it.
+
+    `runner` is the Claude-family question, not the access-path one: a harness in
+    `CLAUDE_FAMILY_RUNNERS` is injected the server under the name `agentweave`
+    (`runner_commands._build_claude_command`), so its callable names are known
+    (`mcp__agentweave__<tool>`) and asserting the prefix is grounded — every other runner's MCP
+    naming is either different (Codex) or unmeasured, so it is told the harness only *may* prefix.
+    The host tool collision (`_HOST_TOOLS_NOTE`) is rendered for a Claude-family run regardless of
+    which form is used, because the run has the host's tools in its list either way (F139).
     """
     over_mcp = access_path == "mcp"
-    if over_mcp:
+    is_claude_family = runner in CLAUDE_FAMILY_RUNNERS
+    tool_prefix = "mcp__agentweave__" if (over_mcp and is_claude_family) else ""
+    if over_mcp and is_claude_family:
         preamble = (
-            "Names below are as injected; with an MCP surface they are prefixed "
+            "These are AgentWeave's tools, named below by their full callable names. Elsewhere "
+            "in these instructions a tool may be named by its short name (`ask_user`); call it "
+            "by the full name listed here."
+        )
+    elif over_mcp:
+        preamble = (
+            "Names below are as declared; your harness may show them with a prefix such as "
             "`mcp__agentweave__`."
         )
     else:
@@ -1571,8 +1601,11 @@ def _tool_surface_lines(*, has_peers: bool = True, access_path: str = "mcp") -> 
             "value you substitute. Requests and responses are JSON, and a refusal comes back as "
             "an HTTP status with a `detail` saying why."
         )
-    render = _mcp_lines if over_mcp else _http_lines
-    lines = ["## Your tools", "", preamble, ""]
+    render = (lambda op: _mcp_lines(op, tool_prefix=tool_prefix)) if over_mcp else _http_lines
+    lines = ["## Your tools", "", preamble]
+    if is_claude_family:
+        lines.append(_HOST_TOOLS_NOTE)
+    lines.append("")
     for operation in _operations():
         lines.extend(render(operation))
     lines.append("")
@@ -1635,6 +1668,7 @@ async def _render_hub_agent_context(
     task_id: Optional[str] = None,
     review: Optional[ReviewContext] = None,
     access_path: str = "mcp",
+    runner: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Render the canonical model-facing context for one agent.
 
@@ -2136,7 +2170,9 @@ async def _render_hub_agent_context(
             "their ordinary command equivalents. Inbound state is already supplied."
         )
         lines.append("")
-        lines.extend(_tool_surface_lines(has_peers=bool(peers), access_path=access_path))
+        lines.extend(
+            _tool_surface_lines(has_peers=bool(peers), access_path=access_path, runner=runner)
+        )
     else:
         lines.append("## Registration")
         lines.append("")

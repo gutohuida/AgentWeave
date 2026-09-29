@@ -369,6 +369,17 @@ def test_the_mcp_rendering_is_what_a_caller_that_says_nothing_gets():
     assert _tool_surface_lines() != _tool_surface_lines(access_path=HTTP_PATH)
 
 
+def test_the_claude_family_prefixed_rendering_names_the_same_tools(monkeypatch):
+    """Task 1.5 of `2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`: a
+    Claude-family run's rendering describes the same operations as every other caller's, just
+    under its full callable name. Strip the prefix before comparing, the way the reader mentally
+    does the reverse."""
+    text = "\n".join(_tool_surface_lines(runner="claude", access_path="mcp"))
+    prefixed = set(re.findall(r"`mcp__agentweave__(\w+)\(", text))
+    assert prefixed == _served() - set(UNDESCRIBED_TOOLS)
+    assert prefixed == _described()
+
+
 def _http_line_for(tool: str) -> str:
     """Every line the HTTP rendering writes about one operation, joined.
 

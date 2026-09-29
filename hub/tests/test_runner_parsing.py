@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from hub.runner_commands import UnsupportedRunnerError, build_command
+from hub.runner_commands import CLAUDE_FAMILY_RUNNERS, UnsupportedRunnerError, build_command
 from hub.runner_parsing import (
     parse_claude_line,
     parse_codex_line,
@@ -114,6 +114,19 @@ class TestBuildCommandClaude:
                 "-p",
                 "hi",
             ]
+
+    def test_claude_family_runners_are_exactly_the_ones_routed_to_the_claude_builder(self):
+        """Task 1.6 of `2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`:
+        the set `agents.py` uses to decide when a run is told its tools by their full callable
+        names must be the same set that actually gets the Claude CLI's `--mcp-config` invocation,
+        or the two drift and a run is either told a prefix it does not get, or not told one it
+        does."""
+        assert CLAUDE_FAMILY_RUNNERS == ("claude", "claude_proxy", "native")
+        for runner in CLAUDE_FAMILY_RUNNERS:
+            cmd = build_command(runner=runner, cli="claude", prompt="hi")
+            assert cmd[0] == "claude", f"{runner!r} did not route to the Claude builder"
+        with pytest.raises(UnsupportedRunnerError):
+            build_command(runner="opencode", cli="opencode", prompt="hi")
 
     def test_prompt_is_always_the_final_argument(self):
         cmd = build_command(

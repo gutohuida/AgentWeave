@@ -399,17 +399,23 @@ def spec_turn_notice(
     return "\n".join(lines)
 
 
-def access_path_notice(access_path: str) -> str:
+def access_path_notice(access_path: str, tool_prefix: str = "") -> str:
     """What the agent is told, at turn start, about how it reaches the capability plane.
 
     Two renderings of one fact, not a capability and a denial: the MCP branch names the tools,
     and the branch without MCP names the HTTP contract those tools adapt. Neither branch ever
     interpolates a credential — see the comment on the second branch.
+
+    `tool_prefix` names the tools by the same full callable name
+    `agents.py:_tool_surface_lines` uses for a Claude-family run whose access path is described as
+    MCP — empty everywhere else, which reproduces the previous, unprefixed sentence exactly
+    (`2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`, F139).
     """
     if access_path == "mcp":
         return (
             "[AgentWeave] Tool access: the `agentweave` MCP tools are available — call "
-            "send_message / create_task / update_task / ask_user directly."
+            f"{tool_prefix}send_message / {tool_prefix}create_task / {tool_prefix}update_task / "
+            f"{tool_prefix}ask_user directly."
         )
     # This branch names no CLI commands, and that part has not changed: it used to instruct
     # `agentweave msg send`, `task create`, `question ask` and `agent request`, and

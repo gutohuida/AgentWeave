@@ -125,6 +125,7 @@ from ...run_task_binding import (
     tasks_held_by_a_running_turn,
 )
 from ...runner_commands import (
+    CLAUDE_FAMILY_RUNNERS,
     OPERATOR_POSTURE,
     SUPPORTED_RUNNERS,
     UnsupportedRunnerError,
@@ -1142,6 +1143,10 @@ async def _trigger_agent_directly(
         # because an agent that does not know there is no repository proposes branches,
         # offers to commit, and reads a failed `git status` as a broken environment.
         isolation_unavailable=worktrees.is_writing_agent(config) and not project_is_repo,
+        # Which family the harness belongs to, so the tool list names each tool by its actual
+        # callable name where that name is known (`CLAUDE_FAMILY_RUNNERS`) rather than leaving
+        # the reader to apply a prefix that collides with a same-named host tool (F139).
+        runner=runner,
         # Which specification document the operator has open, when the message came from the
         # specification workspace. Deliberately here and not prepended to `message`: the message
         # is the durable record of what the operator said, and re-reading the conversation later
@@ -1169,8 +1174,13 @@ async def _trigger_agent_directly(
 
     # Task 4.5: tell the agent, at turn start, which access path is in use — never offer
     # one that isn't actually available in this environment. `access_path` was resolved above the
-    # context materialization, which needs the same value.
-    notices = [access_path_notice(described_path)]
+    # context materialization, which needs the same value. The prefix is grounded the same way the
+    # tool list's is: known only for a Claude-family run described as having the injected surface
+    # (F139).
+    notice_prefix = (
+        "mcp__agentweave__" if (described_path == "mcp" and runner in CLAUDE_FAMILY_RUNNERS) else ""
+    )
+    notices = [access_path_notice(described_path, tool_prefix=notice_prefix)]
     # F52: told once, up front, rather than discovered turn after turn by an agent that treats a
     # refused git command as work lost. `review_context is None` matches the condition `worktree`
     # is computed under below (a review checkout is read-only and never snapshotted); an agent with
