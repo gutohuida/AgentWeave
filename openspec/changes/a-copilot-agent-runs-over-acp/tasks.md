@@ -199,6 +199,30 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
     'hub.copilot_acp'`. Left for a later firing, unchecked: findings 5 and 6's
     load-time-condition rows, finding 1/slice 3's `write_powershell`/`local_shell` shapes, and
     "the answer never being `allow_always`".
+  - **Partial 2026-09-30 (part 5/N, not yet checked):** added `TestMcpForeignNameCollision` (2
+    tests) covering review finding 5, the naming bug itself: `_decide`'s own first statement
+    (`mcp_server.py:1557-1558`) allows any tool name starting `mcp__agentweave__` unconditionally,
+    and R3's foreign-MCP name, `mcp__<server>__<tool>`, collides with that prefix for a server
+    reporting exactly `agentweave` with a tool the Hub's server does not serve, and for a server
+    registered under the config key `agentweave__x` (whose buggy name,
+    `mcp__agentweave__x__<tool>`, also starts with the prefix — the plain-hyphen `agentweave-x`
+    case part 3/N's `TestMcpServerIdentification` already covers does not). Both new tests supply
+    `{"command": "Remove-Item ..\\..\\x"}` under `workspace` and assert REJECT, so they fail on
+    R3's `mcp__`-prefixed naming (which would unconditionally ALLOW) and pass only on the
+    `copilot-mcp:{server}/{tool}` naming design.md:643 actually specifies. Finding 6's true
+    load-time-condition row (the `session.mcp_servers_loaded` source+transport check) is left
+    **genuinely blocked**, not merely unattempted, and recorded as an open question rather than
+    guessed: design.md:572 states `decide_permission`'s complete keyword signature with no
+    parameter carrying this map, `CallFacts` is stated as exactly `(tool_name, mcp_server,
+    mcp_tool)` (design.md:576) with no room for a verification flag, and no CODE citation anywhere
+    in design.md shows a `servers=` keyword or a `ServerFacts`-shaped value actually reaching this
+    function — design.md:725-726 describes the `servers` map only as client-side bookkeeping "fed"
+    "like `calls`", never as a stated argument. This needs a review-round decision on the
+    parameter shape before a fixture can be written, not a guess in a test file. Still red at
+    collection: `ModuleNotFoundError: No module named 'hub.copilot_acp'`. Left for a later firing,
+    unchecked: finding 6's load-time-condition row (pending the signature decision above), finding
+    1/slice 3's `write_powershell`/`local_shell` shapes, and "the answer never being
+    `allow_always`".
 - [ ] 1.7 `hub/tests/test_permission_approver.py`: `_decide(..., workspace=W, hub_url=U)` judges against `W` and `U` when `os.environ` names other values. It fails today because the keywords do not exist
 - [ ] 1.8 `hub/tests/test_copilot_acp_mapper.py` (new): replay `evidence/acp4-turn-mcp-shell-1.0.88.log` and the 1.1 fixture, **in their recorded order**, through `CopilotEventMapper`. Assert:
   - one `text` event per contiguous message block;

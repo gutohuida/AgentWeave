@@ -46,10 +46,32 @@ not `web_fetch` (a `powershell` call, or an unknown/default id) is judged as she
 the run's own Hub URL passes; everything else refuses. Only `workspace` is exercised, per the
 task's own wording for this slice.
 
+Part 5 of N (review finding 5) adds `TestMcpForeignNameCollision` below: the naming bug itself,
+distinct from finding 6. R3 wrote the foreign-MCP name as `mcp__<server>__<tool>`, but `_decide`'s
+own first statement (`mcp_server.py:1557-1558`) allows *any* name starting `mcp__agentweave__`
+unconditionally — so a server reporting exactly `agentweave` with a tool the Hub's own server does
+not serve, or a server registered under the config key `agentweave__x` (whose buggy name,
+`mcp__agentweave__x__<tool>`, also starts with that prefix — a plain hyphen, `agentweave-x`, does
+not, which is why bullet 8's `TestMcpServerIdentification` case above does not already cover this),
+would have been allowed **whatever its arguments** on that naming. `decide_permission` must instead
+pass `_decide` the `copilot-mcp:{server}/{tool}` name (design.md:643), which carries no such prefix,
+so each case is written with a command that breaks out of the workspace and must REJECT — a test
+that fails on R3's `mcp__`-prefixed naming, not just one that passes on the fixed `copilot-mcp:`
+naming.
+
 Still deliberately NOT covered (left for a follow-up sub-task of 1.6):
-  - review findings 5 and 6's load-time-condition rows (the `agentweave` server's
-    `session.mcp_servers_loaded` source+transport check, and the `mcp__<server>__<tool>` name
-    `_decide` receives — a different mechanism than bullet 8's `calls`-population check above);
+  - review finding 6's true load-time-condition row (the `agentweave` server's
+    `session.mcp_servers_loaded` source+transport check) — genuinely blocked, not merely
+    unattempted: design.md:572 states `decide_permission`'s full keyword signature
+    (`posture, workspace, hub_url, calls, spec_turn=False`) with no parameter carrying this map,
+    `CallFacts` is stated as exactly `(tool_name, mcp_server, mcp_tool)` (design.md:576) with no
+    room for a verification flag, and no CODE citation anywhere in design.md shows a `servers=`
+    keyword or a `ServerFacts`-shaped value reaching this function — searched for all three.
+    design.md:725-726 describes the `servers` map only as something "fed" from spawn onward "like
+    `calls`", which is the client's own bookkeeping, not a stated argument to this pure function.
+    Writing a fixture here means guessing an unstated parameter shape, which is exactly what the
+    round discipline exists to catch before code, not paper over in a test. Recorded here and in
+    the night log as an open question for a review round, not guessed;
   - review finding 1/slice 3's `write_powershell`/`local_shell` execute-shape rows;
   - (review, note 16) the operator card's label text ("an MCP tool Copilot did not identify",
     never the title) — that is `RpcTransport.permission_card_label`'s output (D3, design.md:
@@ -638,4 +660,51 @@ class TestReadPathSplitting:
         outside = "C:\\Windows\\System32\\evil.txt"
         params = _params(kind="read", raw_input={"path": f"{inside}, {outside}"})
         result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path)
+        assert result["outcome"] == "REJECT"
+
+
+class TestMcpForeignNameCollision:
+    """(review, finding 5; design.md:643; tasks.md task 1.6, part 5/N.) `_decide`'s own first
+    statement (`mcp_server.py:1557-1558`) allows *any* tool name starting `mcp__agentweave__`
+    unconditionally, whatever its arguments. R3 wrote the foreign-MCP name it passes to `_decide`
+    as `mcp__<server>__<tool>` — which collides with that prefix for two server reports that are
+    not actually the Hub's own: `agentweave` reporting a tool the Hub's server does not serve, and
+    a server registered under the config key `agentweave__x` (whose buggy name,
+    `mcp__agentweave__x__<tool>`, also starts with `mcp__agentweave__`, unlike the plain hyphen
+    `agentweave-x` `TestMcpServerIdentification.test_a_lookalike_server_or_tool_is_judged_as_foreign`
+    already covers). `decide_permission` must instead pass `_decide` the `copilot-mcp:{server}/{tool}`
+    name (design.md:643), which carries no such prefix. Each test below supplies a command that
+    breaks out of the workspace, so it REJECTs on the correct `copilot-mcp:` naming and would
+    wrongly ALLOW on R3's `mcp__`-prefixed naming — written to fail on that code, not merely to
+    pass on the fixed one.
+    """
+
+    def test_agentweave_reporting_an_unserved_tool_is_still_judged_by_its_arguments(self, tmp_path):
+        params = _params(
+            tool_call_id="call_m7",
+            kind="other",
+            raw_input={"command": "Remove-Item ..\\..\\x"},
+        )
+        calls = {
+            "call_m7": CallFacts(
+                tool_name=None, mcp_server="agentweave", mcp_tool="not_a_real_tool"
+            )
+        }
+        result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path, calls)
+        assert result["outcome"] == "REJECT"
+
+    def test_agentweave_double_underscore_lookalike_server_is_still_judged_by_its_arguments(
+        self, tmp_path
+    ):
+        params = _params(
+            tool_call_id="call_m8",
+            kind="other",
+            raw_input={"command": "Remove-Item ..\\..\\x"},
+        )
+        calls = {
+            "call_m8": CallFacts(
+                tool_name=None, mcp_server="agentweave__x", mcp_tool="send_message"
+            )
+        }
+        result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path, calls)
         assert result["outcome"] == "REJECT"
