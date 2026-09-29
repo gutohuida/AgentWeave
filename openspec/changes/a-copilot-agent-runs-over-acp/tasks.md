@@ -183,6 +183,22 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
     later firing, unchecked: review finding 2's shell-classified-`url` rows beyond plain
     `web_fetch`/bypass, findings 5 and 6's load-time-condition rows, finding 1/slice 3's
     `write_powershell`/`local_shell` shapes, and "the answer never being `allow_always`".
+  - **Partial 2026-09-30 (part 4/N, not yet checked):** added `TestFetchAsShellText` (4 tests,
+    3 parametrizations) covering the rest of review finding 2's row (design.md:640). Read
+    design.md:640-641 and `_judge_url`/`_is_own_hub` (`mcp_server.py:1210-1266`) fresh, per the
+    standing instruction, not off part-1/N's summary. `web_fetch` and the sandbox-bypass row stay
+    part 1/N's `TestFetch`, unrepeated. New: a `powershell`-classified call's `https://example.com`
+    REJECTed under `workspace`; the same URL with the call's id absent from `calls` altogether
+    (`"url-permission"` and an arbitrary unrecognised id, parametrized) REJECTed the same way,
+    since either reads as an unidentified shell call rather than `web_fetch`; a URL naming the
+    run's own `hub_url` ALLOWed even with no `calls` entry — traced through `_judge_url` to
+    `_is_own_hub`'s scheme/host/port match, then `_judge_path`, which reads the URL text as the
+    relative path it spells and finds it inside the workspace root, exactly as design.md's "the
+    shell does not know it is a URL" note explains. Only `workspace` is exercised, matching this
+    slice's own scope. Still red at collection: `ModuleNotFoundError: No module named
+    'hub.copilot_acp'`. Left for a later firing, unchecked: findings 5 and 6's
+    load-time-condition rows, finding 1/slice 3's `write_powershell`/`local_shell` shapes, and
+    "the answer never being `allow_always`".
 - [ ] 1.7 `hub/tests/test_permission_approver.py`: `_decide(..., workspace=W, hub_url=U)` judges against `W` and `U` when `os.environ` names other values. It fails today because the keywords do not exist
 - [ ] 1.8 `hub/tests/test_copilot_acp_mapper.py` (new): replay `evidence/acp4-turn-mcp-shell-1.0.88.log` and the 1.1 fixture, **in their recorded order**, through `CopilotEventMapper`. Assert:
   - one `text` event per contiguous message block;

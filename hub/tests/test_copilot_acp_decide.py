@@ -41,9 +41,12 @@ Part 3 of N (tasks.md bullets 6-9, 12, 16-17) adds `TestMcpServerIdentification`
     directions a comma-bearing single filename can go instead, and says so rather than inventing
     an adversarial case.
 
+Part 4 of N (review finding 2) adds `TestFetchAsShellText` below: a `fetch` request whose call is
+not `web_fetch` (a `powershell` call, or an unknown/default id) is judged as shell text, so only
+the run's own Hub URL passes; everything else refuses. Only `workspace` is exercised, per the
+task's own wording for this slice.
+
 Still deliberately NOT covered (left for a follow-up sub-task of 1.6):
-  - review finding 2's `fetch`-vs-shell-classified-`url` rows in full (only the plain
-    `web_fetch`/bypass rows are covered here);
   - review findings 5 and 6's load-time-condition rows (the `agentweave` server's
     `session.mcp_servers_loaded` source+transport check, and the `mcp__<server>__<tool>` name
     `_decide` receives — a different mechanism than bullet 8's `calls`-population check above);
@@ -260,6 +263,44 @@ class TestFetch:
         for posture in (WORKSPACE_PERMISSION_MODE, ACCEPT_EDITS):
             result = _decide(params, posture, tmp_path, calls)
             assert result["outcome"] == "REJECT", posture
+
+
+class TestFetchAsShellText:
+    """design.md:640 -- (review, finding 2) a `fetch` request whose call is not `web_fetch` (a
+    shell, or unknown/unrecognised) is judged exactly as the shell text `_decide` would read:
+    only the run's own Hub passes; any other address is refused, the same way a network word in
+    a PowerShell command is. Only `workspace` is exercised here -- part 1/N's `TestFetch` already
+    covers the plain `web_fetch` and sandbox-bypass rows across postures.
+    """
+
+    def test_url_on_a_powershell_call_is_rejected_under_workspace(self, tmp_path):
+        params = _params(
+            tool_call_id="call_u1", kind="fetch", raw_input={"url": "https://example.com"}
+        )
+        calls = {"call_u1": CallFacts(tool_name="powershell", mcp_server=None, mcp_tool=None)}
+        result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path, calls)
+        assert result["outcome"] == "REJECT"
+
+    @pytest.mark.parametrize("tool_call_id", ["url-permission", "some-unrecognised-id"])
+    def test_url_with_unknown_or_default_id_is_judged_as_shell_text(self, tmp_path, tool_call_id):
+        """Neither id has a `calls` entry, so both are read as an unidentified call, never as
+        `web_fetch` -- the network address is refused for the same reason the identified
+        `powershell` call above is."""
+        params = _params(
+            tool_call_id=tool_call_id, kind="fetch", raw_input={"url": "https://example.com"}
+        )
+        result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path, calls={})
+        assert result["outcome"] == "REJECT"
+
+    def test_url_naming_the_runs_own_hub_is_allowed_even_read_as_shell_text(self, tmp_path):
+        """`_is_own_hub` (mcp_server.py:1210) matches the URL's scheme, host and port against
+        `hub_url`; the judge then reads the text as the relative path it spells (`_judge_url` ->
+        `_judge_path`), which lands inside the workspace root because it is not an absolute
+        filesystem path -- so it is allowed even though nothing here ever reads it as
+        `web_fetch`."""
+        params = _params(tool_call_id="url-permission", kind="fetch", raw_input={"url": HUB_URL})
+        result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path, calls={})
+        assert result["outcome"] == "ALLOW"
 
 
 class TestMcp:
