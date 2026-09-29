@@ -68,7 +68,15 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
     (`RunnerCreate.validate_cli` against `RUNNER_CLIS`); `test_copilot_runner_row_commits_at_the_model_level`
     fails on `sqlite3.IntegrityError: CHECK constraint failed: ck_runners_cli`. The other 23 tests
     in the file still pass. Section 2 (`RUNNER_CLIS`, the migration) turns these green.
-- [ ] 1.4 `hub/tests/test_runner_charter_models.py` (or the seeding test beside `db/engine.py`'s seeder): a zero-runner project is seeded with `claude`, `codex` and `copilot`. A project holding one runner gets nothing. Cover both seeders, `engine.py:_seed_default_runners` and `project_lifecycle._seed_new_project`
+- [x] 1.4 `hub/tests/test_runner_charter_models.py` (or the seeding test beside `db/engine.py`'s seeder): a zero-runner project is seeded with `claude`, `codex` and `copilot`. A project holding one runner gets nothing. Cover both seeders, `engine.py:_seed_default_runners` and `project_lifecycle._seed_new_project`
+  - **Done 2026-09-30:** two tests added to `test_runner_charter_models.py` —
+    `test_seed_default_runners_seeds_copilot_for_a_zero_runner_project` (a zero-runner project
+    seeds `{claude, codex, copilot}`; a project with one pre-existing runner gets nothing added,
+    confirmed via `engine._seed_default_runners` called directly) and
+    `test_seed_new_project_seeds_copilot_runner` (`ProjectLifecycleService._seed_new_project`
+    called directly on an uncommitted `Project`). Both confirmed red on today's code: each seeds
+    only `{claude, codex}` because `RUNNER_CLIS` doesn't include `"copilot"` yet (widened in
+    section 2). The file's other 7 tests still pass.
 - [ ] 1.5 `hub/tests/test_copilot_probe.py` (new): `resolve_copilot_executable` on a fake tree in `tmp_path`. Cover:
   - an npm `copilot.cmd` JS shim plus `node_modules/@github/copilot/node_modules/@github/copilot-win32-x64/copilot.exe` resolves to the `.exe`;
   - a shim with no platform package raises, with the looked-for path in the message;

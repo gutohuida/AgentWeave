@@ -68,6 +68,65 @@ async def test_runner_cli_is_constrained_to_claude_or_codex(app) -> None:
 
 
 @pytest.mark.asyncio
+async def test_seed_default_runners_seeds_copilot_for_a_zero_runner_project(app) -> None:
+    """`engine._seed_default_runners` must seed one runner per `RUNNER_CLIS` entry —
+    today that's claude and codex; once copilot joins RUNNER_CLIS this must seed it
+    too. A project that already holds a runner is left untouched."""
+    from hub.db.engine import _seed_default_runners
+
+    async with async_session_factory() as session:
+        session.add(Project(id="proj-seed-zero-runners", name="Zero Runner Project"))
+        session.add(Project(id="proj-seed-one-runner", name="One Runner Project"))
+        session.add(
+            Runner(
+                id="runner-preexisting",
+                project_id="proj-seed-one-runner",
+                name="Preexisting",
+                cli="claude",
+            )
+        )
+        await session.commit()
+
+        await _seed_default_runners(session)
+
+        zero_runner_clis = (
+            await session.execute(
+                sa.select(Runner.cli).where(Runner.project_id == "proj-seed-zero-runners")
+            )
+        ).scalars().all()
+        assert set(zero_runner_clis) == {"claude", "codex", "copilot"}
+
+        one_runner_clis = (
+            await session.execute(
+                sa.select(Runner.cli).where(Runner.project_id == "proj-seed-one-runner")
+            )
+        ).scalars().all()
+        assert one_runner_clis == ["claude"]
+
+
+@pytest.mark.asyncio
+async def test_seed_new_project_seeds_copilot_runner(app) -> None:
+    """`ProjectLifecycleService._seed_new_project` must also seed one runner per
+    `RUNNER_CLIS` entry — the app-open path, distinct from `engine._seed_default_runners`'s
+    startup path, and covered separately per task 1.4."""
+    from hub.project_lifecycle import ProjectLifecycleService
+
+    async with async_session_factory() as session:
+        project = Project(id="proj-seed-new-project", name="New Project")
+        session.add(project)
+
+        await ProjectLifecycleService(session)._seed_new_project(project)
+        await session.commit()
+
+        clis = (
+            await session.execute(
+                sa.select(Runner.cli).where(Runner.project_id == "proj-seed-new-project")
+            )
+        ).scalars().all()
+        assert set(clis) == {"claude", "codex", "copilot"}
+
+
+@pytest.mark.asyncio
 async def test_charter_model_round_trips_through_the_orm(app) -> None:
     async with async_session_factory() as session:
         session.add(Project(id="proj-charter-test", name="Charter Model Test"))
