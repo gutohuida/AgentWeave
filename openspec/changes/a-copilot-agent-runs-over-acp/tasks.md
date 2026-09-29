@@ -153,6 +153,36 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
     (bullets 6-9, 12, 16-17), review finding 2's shell-classified-`url` rows beyond plain
     `web_fetch`/bypass, findings 5 and 6's load-time-condition rows, finding 1/slice 3's
     `write_powershell`/`local_shell` shapes, and "the answer never being `allow_always`".
+  - **Partial 2026-09-30 (part 3/N, not yet checked):** added `TestMcpServerIdentification` (4
+    tests) and `TestReadPathSplitting` (3 tests) covering bullets 6-9, 12 and 17. Read design.md's
+    "Identifying the MCP server" and "calls holds open calls only" text (design.md:671-745) and the
+    read row (design.md:638) fresh rather than off the part-1/N summary, per the standing
+    instruction. Two things this re-derivation surfaced, not guessed:
+    `decide_permission` never sees *how* a `calls` entry was populated and never reads
+    `toolCall.title` (R3, design.md:676-687), so bullets 6, 7 and note 12 — each naming a
+    different upstream source feeding `calls` — collapse at this function's boundary into just two
+    shapes already exercised: a call id present in `calls` (bullet 6, same shape as part 1/N's
+    Hub-own-under-manual test) and one absent from it (bullet 7 and note 12, same shape as part
+    1/N's unidentified-server test, including REJECT under the full-access fallback per the
+    settled design.md:582-585 text — this file does not follow this bullet's own "but full access"
+    gloss, which predates that settled carve-out). Bullet 8 (`agentweave-x`, or `agentweave` with a
+    tool the Hub does not serve, judged foreign) got a new parametrized test under `acceptEdits`,
+    where the foreign row's REJECT is unconditional. Bullet 9 (a `read` with no path at all)
+    was already covered by part 1/N; no new test added for it. For bullet 17 (a `read` path
+    containing `", "` judged whole as well as in pieces), a real, differentiating fixture where
+    piece-only judging would disagree with whole-string judging could not be constructed from
+    actual Windows path semantics (verified against `_where` directly, not assumed): a real
+    absolute path's drive-and-directory prefix always survives in the first split piece, so
+    piece-only judging already answers correctly by itself. `TestReadPathSplitting` instead tests
+    both directions a comma-bearing single filename can go (inside → ALLOW, outside → REJECT) plus
+    the ordinary two-real-paths-joined case, and records the unresolved question rather than
+    inventing a fixture for it. Note 16 (the operator card's label text) is out of scope for
+    `decide_permission` — it belongs to `RpcTransport.permission_card_label` (D3,
+    design.md:778-781), a different function; noted in the test file's docstring, not tested here.
+    Still red at collection: `ModuleNotFoundError: No module named 'hub.copilot_acp'`. Left for a
+    later firing, unchecked: review finding 2's shell-classified-`url` rows beyond plain
+    `web_fetch`/bypass, findings 5 and 6's load-time-condition rows, finding 1/slice 3's
+    `write_powershell`/`local_shell` shapes, and "the answer never being `allow_always`".
 - [ ] 1.7 `hub/tests/test_permission_approver.py`: `_decide(..., workspace=W, hub_url=U)` judges against `W` and `U` when `os.environ` names other values. It fails today because the keywords do not exist
 - [ ] 1.8 `hub/tests/test_copilot_acp_mapper.py` (new): replay `evidence/acp4-turn-mcp-shell-1.0.88.log` and the 1.1 fixture, **in their recorded order**, through `CopilotEventMapper`. Assert:
   - one `text` event per contiguous message block;
