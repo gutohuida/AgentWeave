@@ -13,9 +13,11 @@ explicitly named baseline bullets ("a PowerShell command writing `..\\..\\x` ref
 `workspace`", "`agentweave` MCP allowed under `manual`", "a foreign MCP server judged",
 "`memory` refused"). `spec_turn=True` is never exercised here.
 
+Part 2 of N adds the `spec_turn=True` rows (tasks.md bullets 1-2; D9 item 1a, design.md:896-908;
+operator decision 2026-09-28, open question 13, option (c), design.md:666-669, 796-812):
+`TestSpecTurn` below.
+
 Deliberately NOT covered here (left for a follow-up sub-task of 1.6):
-  - the consistency-pass/open-question-13 `spec_turn=True` rows (D9 item 1a; full access
-    behaving as `workspace` for a spec turn);
   - R2/R3's MCP-server-identification edge cases (raw `tool.execution_start` vs. a foreign
     `tool_call` title, `agentweave-x`, the Hub-own load-time condition / `session.mcp_servers_loaded`
     source+transport check — reviews findings 5 and 6);
@@ -79,13 +81,14 @@ def _params(
     }
 
 
-def _decide(params, posture, workspace, calls=None):
+def _decide(params, posture, workspace, calls=None, spec_turn=False):
     return decide_permission(
         params,
         posture=posture,
         workspace=str(workspace),
         hub_url=HUB_URL,
         calls=calls or {},
+        spec_turn=spec_turn,
     )
 
 
@@ -331,6 +334,113 @@ class TestMemoryAndUnrecognised:
         params = _params(kind="memory", raw_input={})
         result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path)
         assert result["outcome"] == "ALLOW"
+
+
+class TestSpecTurn:
+    """design.md:896-908 (D9 item 1a) and design.md:666-669, 796-812 (operator decision
+    2026-09-28, open question 13, option (c)) — `spec_turn=True`."""
+
+    def test_edit_inside_workspace_is_rejected_under_every_posture_on_a_spec_turn(self, tmp_path):
+        """(bullet 1) Until slice 3 lands there is no step-3 allow, so every `edit` request is
+        REJECTed on a spec turn, in every posture — including full access, which never sets
+        `allow_all` on for a spec turn, and including `manual`, which never puts up a card for
+        it ('no card under `manual`')."""
+        target = str(tmp_path / "probe.txt")
+        params = _params(kind="edit", locations=[{"path": target}])
+        for posture in ALL_POSTURES:
+            result = _decide(params, posture, tmp_path, spec_turn=True)
+            assert result["outcome"] == "REJECT", posture
+
+    def test_edit_inside_workspace_keeps_its_postures_answer_when_not_a_spec_turn(self, tmp_path):
+        """The same request with `spec_turn=False` (the default) keeps each posture's ordinary
+        answer per the base table (design.md:637): ALLOW under `workspace`/`acceptEdits` and
+        full access, a card under `manual`."""
+        target = str(tmp_path / "probe.txt")
+        params = _params(kind="edit", locations=[{"path": target}])
+        for posture in (WORKSPACE_PERMISSION_MODE, ACCEPT_EDITS, FULL_ACCESS_PERMISSION_MODE):
+            result = _decide(params, posture, tmp_path)
+            assert result["outcome"] == "ALLOW", posture
+        result = _decide(params, MANUAL, tmp_path)
+        assert result["outcome"] == "ASK_OPERATOR"
+
+    @pytest.mark.parametrize(
+        "command,expected",
+        [
+            ("Remove-Item ..\\..\\x", "REJECT"),
+            ("Set-Content .\\x", "ALLOW"),
+        ],
+    )
+    def test_spec_turn_under_full_access_judges_powershell_as_workspace(
+        self, tmp_path, command, expected
+    ):
+        """(bullet 2) Under full access, a spec turn's non-`edit` requests are judged as
+        `workspace`, never ALLOW on full access's own account."""
+        params = _params(kind="execute", raw_input={"command": command})
+        result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path, spec_turn=True)
+        assert result["outcome"] == expected
+
+    def test_spec_turn_under_full_access_judges_a_foreign_mcp_server_as_workspace(self, tmp_path):
+        params = _params(
+            tool_call_id="call_m2",
+            kind="other",
+            raw_input={"path": "C:\\Windows\\System32\\secret.txt"},
+        )
+        calls = {
+            "call_m2": CallFacts(
+                tool_name=None, mcp_server="some-other-server", mcp_tool="read_file"
+            )
+        }
+        result = _decide(
+            params, FULL_ACCESS_PERMISSION_MODE, tmp_path, calls, spec_turn=True
+        )
+        assert result["outcome"] == "REJECT"
+
+    def test_spec_turn_under_full_access_rejects_an_unidentified_mcp_request(self, tmp_path):
+        params = _params(tool_call_id="call_m4", kind="other", raw_input={})
+        result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path, spec_turn=True)
+        assert result["outcome"] == "REJECT"
+
+    def test_spec_turn_under_full_access_rejects_memory(self, tmp_path):
+        params = _params(kind="memory", raw_input={})
+        result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path, spec_turn=True)
+        assert result["outcome"] == "REJECT"
+
+    @pytest.mark.parametrize(
+        "kind,raw_input",
+        [
+            ("execute", {"command": "Remove-Item ..\\..\\x"}),
+            ("memory", {}),
+        ],
+    )
+    def test_same_requests_are_allowed_under_full_access_when_not_a_spec_turn(
+        self, tmp_path, kind, raw_input
+    ):
+        params = _params(kind=kind, raw_input=raw_input)
+        result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path)
+        assert result["outcome"] == "ALLOW"
+
+    def test_foreign_mcp_is_allowed_but_unidentified_mcp_stays_rejected_under_full_access_off_a_spec_turn(
+        self, tmp_path
+    ):
+        """The unidentified-MCP request is `decide_permission`'s standing full-access REJECT
+        fallback (design.md:583-585) whether or not it is a spec turn; the foreign server is
+        not that fallback, so off a spec turn it gets full access's ordinary defensive ALLOW."""
+        foreign_params = _params(
+            tool_call_id="call_m2",
+            kind="other",
+            raw_input={"path": "C:\\Windows\\System32\\secret.txt"},
+        )
+        calls = {
+            "call_m2": CallFacts(
+                tool_name=None, mcp_server="some-other-server", mcp_tool="read_file"
+            )
+        }
+        result = _decide(foreign_params, FULL_ACCESS_PERMISSION_MODE, tmp_path, calls)
+        assert result["outcome"] == "ALLOW"
+
+        unidentified_params = _params(tool_call_id="call_m4", kind="other", raw_input={})
+        result = _decide(unidentified_params, FULL_ACCESS_PERMISSION_MODE, tmp_path)
+        assert result["outcome"] == "REJECT"
 
 
 class TestReason:

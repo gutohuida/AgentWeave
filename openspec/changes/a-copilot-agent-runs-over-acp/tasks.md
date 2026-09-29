@@ -135,6 +135,24 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
     task covers that function). Also surfaced, not resolved here: design.md's `fetch` +
     `requestSandboxBypass` row gives no `manual`/full-access cell, so this slice asserts only
     `workspace`/`acceptEdits` for it.
+  - **Partial 2026-09-30 (part 2/N, not yet checked):** added `TestSpecTurn` (8 tests) covering
+    bullets 1-2: an `edit` inside the workspace REJECTed under every posture on a spec turn,
+    including no card under `manual` and no `allow_all` under full access (D9 item 1a,
+    design.md:896-908), with the same request kept at its ordinary per-posture answer off a spec
+    turn; under full access with `spec_turn=True`, a PowerShell write outside/inside the
+    workspace judged as `workspace` (REJECT/ALLOW), a foreign MCP server likewise judged as
+    `workspace` (REJECT), and `memory` REJECTed (open question 13, option (c),
+    design.md:666-669, 796-812) — each paired with the same request off a spec turn, staying
+    full access's ordinary ALLOW. One exception recorded rather than assumed: the
+    unidentified-MCP request stays REJECT under full access **whether or not** it is a spec
+    turn, because that is `decide_permission`'s standing full-access fallback (design.md:583-585)
+    already covered by part 1/N's `test_mcp_request_with_no_identified_server_is_rejected_under_every_posture`,
+    not a spec-turn-specific rule — the task bullet's "same requests ... → ALLOW" clause does not
+    apply to that one row. Still red at collection: `ModuleNotFoundError: No module named
+    'hub.copilot_acp'`. Left for a later firing, unchecked: R2/R3's MCP-identification edge cases
+    (bullets 6-9, 12, 16-17), review finding 2's shell-classified-`url` rows beyond plain
+    `web_fetch`/bypass, findings 5 and 6's load-time-condition rows, finding 1/slice 3's
+    `write_powershell`/`local_shell` shapes, and "the answer never being `allow_always`".
 - [ ] 1.7 `hub/tests/test_permission_approver.py`: `_decide(..., workspace=W, hub_url=U)` judges against `W` and `U` when `os.environ` names other values. It fails today because the keywords do not exist
 - [ ] 1.8 `hub/tests/test_copilot_acp_mapper.py` (new): replay `evidence/acp4-turn-mcp-shell-1.0.88.log` and the 1.1 fixture, **in their recorded order**, through `CopilotEventMapper`. Assert:
   - one `text` event per contiguous message block;
