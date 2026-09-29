@@ -77,13 +77,22 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
     called directly on an uncommitted `Project`). Both confirmed red on today's code: each seeds
     only `{claude, codex}` because `RUNNER_CLIS` doesn't include `"copilot"` yet (widened in
     section 2). The file's other 7 tests still pass.
-- [ ] 1.5 `hub/tests/test_copilot_probe.py` (new): `resolve_copilot_executable` on a fake tree in `tmp_path`. Cover:
+- [x] 1.5 `hub/tests/test_copilot_probe.py` (new): `resolve_copilot_executable` on a fake tree in `tmp_path`. Cover:
   - an npm `copilot.cmd` JS shim plus `node_modules/@github/copilot/node_modules/@github/copilot-win32-x64/copilot.exe` resolves to the `.exe`;
   - a shim with no platform package raises, with the looked-for path in the message;
   - a native executable on `PATH` is used as-is;
   - a pinned override that is a `.cmd` is refused.
 
   Patch `shutil.which` and the platform. The test fails today because the module does not exist
+  - **Done 2026-09-30**: four tests added, patching `shutil.which` and
+    `hub.copilot_probe.platform.system`/`.machine`. Confirmed red: the whole file fails at
+    collection with `ModuleNotFoundError: No module named 'hub.copilot_probe'`, exactly as the
+    task states — no per-test behaviour is checked yet, only that the module doesn't exist.
+    `CopilotExecutableNotFound` (imported alongside `resolve_copilot_executable`) is asserted as
+    the raised type per design D2 ("`resolve_copilot_executable` raises `CopilotExecutableNotFound`,
+    a `FileNotFoundError`"); the "no platform package" case asserts the looked-for path
+    (`.../node_modules/@github/copilot/node_modules/@github/copilot-win32-x64/copilot.exe`)
+    appears in the exception message. Task 3.1 implements the module against this file.
 - [ ] 1.6 `hub/tests/test_copilot_acp_decide.py` (new): `decide_permission` over every row of design D8's table, for all four postures. Use the `request_permission` params captured in 1.1 for edit, execute and mcp, and CODE-shaped params for read, fetch, memory and an unknown kind. It must include:
   - (consistency pass 2026-09-28, design D9 item 1a) with `spec_turn=True`, an `edit` inside the workspace → REJECT under `workspace`, `acceptEdits`, `manual` and full access (no card under `manual`); with `spec_turn=False` the same request keeps its posture's answer;
   - (operator decision 2026-09-28, design open question 13, option (c)) with `spec_turn=True` under full access, every **non-`edit`** row is answered as the `workspace` column answers it, never ALLOW on full access's account: a PowerShell command writing `..\..\x` → REJECT, one writing `.\x` → ALLOW, a foreign MCP server judged as under `workspace`, an MCP request whose server is not identified → REJECT, `memory` → REJECT; the same requests with `spec_turn=False` under full access → ALLOW;
