@@ -2526,6 +2526,32 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     `Get-ChildItem` twice more and `curl` a second time, and only then reached the fetch and MCP
     calls — 9 permission requests total for 5 requested actions, not 5.
 
+- **Task 1.2 — Capture 2, 2026-09-29** (one real model-calling prompt, `-p`/oneshot; the group's
+  second and LAST Free-plan model prompt — task 1.1 spent the first, so this group is now closed
+  to further model calls). `evidence/t1_2_capture.py`, scratch `%TEMP%\ghcp-t1-2-home` /
+  `%TEMP%\ghcp-t1-2-ws`, build 1.0.88: `copilot.exe -p "Reply with the word ok" --output-format
+  json --no-auto-update --disable-builtin-mcps --no-custom-instructions --no-ask-user
+  --excluded-tools=builtin:*,mcp:*,custom:* --allow-all-tools`, RC 0. Stdout (16 wire messages, no
+  path or token present — `cwd` was never echoed into the JSON, so no `<WS>`/`<HOME>` redaction
+  was needed) saved to `hub/tests/fixtures/copilot_acp/oneshot_ok.jsonl`.
+  - **Which event carries the answer:** `assistant.message_start` opens it, `assistant.message_delta`
+    streams `"ok"`, and `assistant.message` (id `e5e14f3d-…`) finalizes it with `content:"ok"`,
+    `toolRequests:[]`.
+  - **Whether any tool was offered: no.** `session.info` (line 1) lists 16 tools as disabled by
+    the `--excluded-tools` value, and `session.usage_checkpoint`'s `promptCacheBreakState` entry
+    reports `tool_count:0`, `tools:[]` for the one model call. The source-qualified patterns
+    (`builtin:*,mcp:*,custom:*`) removed every tool by themselves — design D14's fallback (the
+    explicit built-in list, for when the source-qualified form does not clear everything) was
+    **not** exercised by this capture and remains unverified against a case where it would need to
+    fire.
+  - `evidence/help-config.txt` saved (`copilot help config`, no model call, 250 lines) for task 2.4.
+  - Model routed: `mai-code-1.1-flash` (`auto_v2`, `fallback:false`) — a different `mai-code`
+    variant than task 1.1's transcript reported, consistent with per-prompt auto-routing rather
+    than a per-session pin.
+  - This group's two allowed model-calling prompts are now both spent. Any further ACP or `-p`
+    capture needed by a later task in this change must either reuse these two fixtures or wait for
+    a fresh allowance — not run a third Free-plan prompt in this group.
+
 ## Cross-slice consistency (orchestrator, 2026-09-27, after all five R1s; reconciled in R2)
 
 For R2 to reconcile against `each-runner-cli-is-one-adapter`'s design:
