@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Task } from '@/api/tasks'
+import { ApiError } from '@/api/client'
 import { TaskDetailDrawer } from '@/components/tasks/TaskDetailDrawer'
 
 /**
@@ -21,6 +22,9 @@ import { TaskDetailDrawer } from '@/components/tasks/TaskDetailDrawer'
 // Mutable so one test (the portaled-menu regression below) can offer a transition without every
 // other test having to account for a status-transition menu it does not care about.
 let transitionsMap: Record<string, string[]> = {}
+// F125's rename mutation, stubbed so the drawer's own edit/save/cancel mechanics are what these
+// tests exercise, not a real network call (`tasksApi.test.tsx` covers the hook's request shape).
+let renameMutate = vi.fn()
 
 vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
@@ -38,6 +42,13 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     // and cannot be given a provider without changing what it is testing. Behaviour of the button
     // itself belongs to `taskLandingAction.test.tsx`, which does wrap one.
     useLandTask: () => ({ mutate: vi.fn(), isPending: false }),
+    // Overridden per-test via `renameMutate`/`renameOnError`/`renameOnSuccess` below (F125,
+    // `the-operator-can-rename-a-task`) — the drawer's title editor is what is under test here, not
+    // the hook's own request shape (that is `tasksApi.test.tsx`).
+    useRenameTask: () => ({
+      mutate: (vars: { id: string; title: string }, opts?: { onSuccess?: () => void; onError?: (e: unknown) => void }) =>
+        renameMutate(vars, opts),
+    }),
     // F203's history section, for the same reason as the hooks above: it is a real query, and the
     // click-outside test renders without a provider on purpose. What the section *shows* is
     // `taskTransitionHistory.test.tsx`.
@@ -96,6 +107,7 @@ function renderDrawer(task: Task | null, onClose: () => void, onOpenRequirement?
 afterEach(() => {
   cleanup()
   transitionsMap = {}
+  renameMutate = vi.fn()
 })
 
 describe('opening and closing the drawer', () => {
@@ -164,6 +176,61 @@ describe('opening and closing the drawer', () => {
     // input the selection opens, are both still there.
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByTestId('task-block-reason-task-1')).toBeInTheDocument()
+  })
+})
+
+describe('renaming a task (F125, the-operator-can-rename-a-task)', () => {
+  it('enters edit mode on click, and Enter calls useRenameTask with the new title', async () => {
+    renderDrawer(makeTask(), vi.fn())
+    await userEvent.click(screen.getByTestId('task-drawer-title-task-1'))
+    const input = screen.getByTestId('task-drawer-title-input-task-1')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'A better title{Enter}')
+
+    expect(renameMutate).toHaveBeenCalledTimes(1)
+    expect(renameMutate.mock.calls[0][0]).toEqual({ id: 'task-1', title: 'A better title' })
+  })
+
+  it('restores the old title on Escape, without calling useRenameTask', async () => {
+    renderDrawer(makeTask(), vi.fn())
+    await userEvent.click(screen.getByTestId('task-drawer-title-task-1'))
+    const input = screen.getByTestId('task-drawer-title-input-task-1')
+    await userEvent.type(input, ' more text{Escape}')
+
+    expect(renameMutate).not.toHaveBeenCalled()
+    expect(screen.getByTestId('task-drawer-title-task-1')).toHaveTextContent('Ship the thing')
+  })
+
+  it('saving a blocked task sends a PATCH body of exactly {title} — no status, no blocked_reason', async () => {
+    renderDrawer(makeTask({ status: 'blocked', blocked_reason: 'waiting on ops' }), vi.fn())
+    await userEvent.click(screen.getByTestId('task-drawer-title-task-1'))
+    const input = screen.getByTestId('task-drawer-title-input-task-1')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'Renamed while blocked{Enter}')
+
+    expect(renameMutate).toHaveBeenCalledTimes(1)
+    expect(renameMutate.mock.calls[0][0]).toEqual({
+      id: 'task-1',
+      title: 'Renamed while blocked',
+    })
+  })
+
+  it('a refused rename shows the route detail and restores the old title', async () => {
+    renameMutate = vi.fn((_vars, opts) =>
+      opts?.onError?.(
+        new ApiError(422, JSON.stringify({ detail: "A task's title cannot be blank." })),
+      ),
+    )
+    renderDrawer(makeTask(), vi.fn())
+    await userEvent.click(screen.getByTestId('task-drawer-title-task-1'))
+    const input = screen.getByTestId('task-drawer-title-input-task-1')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'x{Enter}')
+
+    expect(screen.getByText(/A task's title cannot be blank\./)).toBeInTheDocument()
+    // The failed edit stays in the input rather than being silently reverted — the operator's
+    // half-typed text is not thrown away by a refusal they still need to read and act on.
+    expect(input).toBeInTheDocument()
   })
 })
 

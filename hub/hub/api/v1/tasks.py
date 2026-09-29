@@ -1293,6 +1293,16 @@ async def update_task_for_actor(
             status_code=403,
             detail="A task's loop assignment is set at creation and cannot be changed afterwards.",
         )
+    if "title" in body.model_fields_set and not actor.is_operator:
+        # The operator's statement, like the description (design D2,
+        # the-operator-can-rename-a-task). Checked here, before any field is touched — not beside
+        # the `description` write below, which runs after the transition and the assignee write,
+        # where a refusal would rely on the uncommitted session being discarded rather than
+        # genuinely leaving the task unchanged.
+        raise HTTPException(
+            status_code=403,
+            detail="A task's title is the operator's to set. An agent cannot rename a task.",
+        )
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.
@@ -1409,6 +1419,10 @@ async def update_task_for_actor(
         task.priority = body.priority
     if body.description is not None:
         task.description = body.description
+    if "title" in body.model_fields_set:
+        # A rename is not a transition (design D3): no `task_transitions` row, and the title is
+        # not read as identity anywhere in the Hub, so nothing else needs to know it changed.
+        task.title = body.title
     if body.notes is not None:
         task.notes = body.notes
     if body.divergence_policy is not None or "escalation_agent" in body.model_fields_set:

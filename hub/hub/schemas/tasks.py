@@ -149,6 +149,12 @@ class TaskUpdate(RequestModel):
     # by name rather than by `extra="forbid"` silently swallowing it — see D14 for why this is
     # enforced in code and not a DB constraint (SQLite cannot drop one later).
     loop_id: Optional[str] = Field(default=None, max_length=64)
+    # The operator's handle on the work (F125, `the-operator-can-rename-a-task`). Blank and
+    # explicit `null` are both refused — a task cannot have no title — but an omitted `title`
+    # leaves it alone, carried by `model_fields_set` exactly as `assignee` above: pydantic does
+    # not validate an unset field against its default, so `validate_title` only runs when the
+    # caller actually sent the key.
+    title: Optional[str] = Field(default=None, max_length=256)
 
     # R5's rule — a hand-set block names what it is waiting for — **is not asserted here**, and
     # that is the whole of F201. As a `model_validator(mode="after")` it ran while FastAPI parsed
@@ -177,6 +183,13 @@ class TaskUpdate(RequestModel):
     @classmethod
     def normalise_escalation_agent(cls, v: Optional[str]) -> Optional[str]:
         return v.strip() or None if isinstance(v, str) else v
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or not v.strip():
+            raise ValueError("A task's title cannot be blank.")
+        return v.strip()
 
     @field_validator("assignee")
     @classmethod
