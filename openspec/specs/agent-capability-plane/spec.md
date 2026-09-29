@@ -320,69 +320,6 @@ is told.
 - **WHEN** the operator has stated which access path a run uses
 - **THEN** that statement decides the access path
 
-### Requirement: A turn that ends on an unasked question is surfaced to the operator
-
-The system SHALL durably record, and show the operator, any run that completes having produced a
-trailing question without opening a question of record.
-
-An agent that ends a turn on an unanswered question has stopped working and is waiting for an answer
-that cannot arrive, because nothing was ever asked. From the operator's side this is
-indistinguishable from a completed turn. Detection is the only available remedy: no provider
-protocol permits requiring that a turn end through a particular tool.
-
-#### Scenario: A completed run ends in a question and opened no question row
-
-- **WHEN** a run completes, its final assistant text ends in a question, and the run opened no
-  question of record
-- **THEN** a pending record of the unasked question is stored, carrying the agent, the run, the
-  conversation and the question text
-- **AND** an event is broadcast so the operator's view updates without a reload
-
-#### Scenario: The run asked properly
-
-- **WHEN** a run completes having opened a question of record
-- **THEN** no unasked-question record is created, regardless of how its final text ends
-
-#### Scenario: The run did not end in a question
-
-- **WHEN** a run completes and its final assistant text does not end in a question
-- **THEN** no unasked-question record is created
-
-#### Scenario: The turn is about to continue
-
-- **WHEN** a run completes ending in a question and the agent still has queued input
-- **THEN** no unasked-question record is created, because the next turn starts on its own
-
-#### Scenario: The run did not complete
-
-- **WHEN** a run ends in any status other than completed
-- **THEN** no unasked-question record is created
-
-### Requirement: The operator can convert an unasked question into a real one
-
-The system SHALL offer the operator, for each pending unasked question, an action that re-prompts the
-agent to ask that same question through the question tool, and an action that dismisses it.
-
-Answering the detected question directly is not possible: the turn has ended and no tool call is
-waiting on a value. Re-prompting is the only action that restores the intended flow.
-
-#### Scenario: The operator re-prompts the agent
-
-- **WHEN** the operator chooses to have the question asked properly
-- **THEN** the record moves out of pending
-- **AND** the agent is triggered with an instruction naming that question and requiring it be asked
-  through the question tool with its required structure
-
-#### Scenario: The operator dismisses it
-
-- **WHEN** the operator dismisses a pending unasked question
-- **THEN** the record moves out of pending and the operator is not shown it again
-
-#### Scenario: A record is acted on twice
-
-- **WHEN** an action is taken on a record that is no longer pending
-- **THEN** the request is refused rather than silently repeated
-
 ### Requirement: Operator-facing severity values are the ones the operator's view understands
 
 Events persisted for the operator's attention SHALL use the severity vocabulary the operator's views
@@ -1171,4 +1108,28 @@ will arrive as input rather than as a result of this call.
 - **WHEN** a refusal is returned for that state and no record was opened
 - **THEN** its body carries the code and no record identifier
 - **AND** the sentence names the state and tells the caller to raise it with the operator directly
+
+### Requirement: A message addressed to the operator is refused with where the operator reads
+
+A message an agent addresses to a reserved operator name SHALL be refused with a reason that states the operator is not a message recipient and names the ways an agent does reach the operator.
+
+The operator is not on the roster, and no agent can hold the names reserved for them, so such a
+message is never a mistyped peer. A refusal that says only "no agent by that name" leaves the agent to
+guess another name.
+
+The reason SHALL say that the agent's reply is what the operator reads in the conversation, that a
+result can be recorded on a task through its notes, and that a question needing the operator's answer
+goes through the question tool. The system SHALL NOT add any mechanism that reads an agent's text to
+decide it was addressed to the operator.
+
+#### Scenario: An agent addresses the operator
+
+- **WHEN** an agent sends a message whose recipient is a reserved operator name, in any letter case
+- **THEN** the message is refused and nothing is queued
+- **AND** the reason names the reply, the task notes and the question tool
+
+#### Scenario: A mistyped peer is still told it is unknown
+
+- **WHEN** an agent sends a message to a name that is neither an agent nor reserved
+- **THEN** the refusal says no agent by that name exists, as before
 

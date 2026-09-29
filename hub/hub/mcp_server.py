@@ -212,6 +212,10 @@ def send_message(
 ) -> Dict[str, Any]:
     """Send an attributable message through the recipient's durable inbound queue.
 
+    The operator is not a message recipient: what you write in your reply is what they read in
+    this conversation. Record a result on a task with update_task's notes; if you need their
+    answer before you can continue, call ask_user.
+
     Args:
         to_agent: Exact name of a registered agent in this project, as listed in your context.
         subject: Short summary line.

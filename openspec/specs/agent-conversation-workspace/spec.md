@@ -811,7 +811,7 @@ once expanded. The limit applies per project, since this view has no agent to ap
 
 ### Requirement: A conversation's attention state is visible in navigation
 
-Navigation SHALL show, for each listed conversation, whether it is running, waiting on the operator, or idle. A conversation is waiting on the operator when it holds a question that is unanswered and still being waited on, an undecided permission request, or an undismissed unasked-question flag.
+Navigation SHALL show, for each listed conversation, whether it is running, waiting on the operator, or idle. A conversation is waiting on the operator when it holds a question that is unanswered and still being waited on or an undecided permission request.
 
 The waiting state MUST be distinguishable from the running state, because a waiting run consumes
 its configured timeout while the operator is unaware of it.

@@ -1049,7 +1049,12 @@ def _operations() -> List[_Operation]:
                 "start_new_thread",
             ),
             required=("recipient", "content"),
-            text=f"message_type is one of {values(MessageType)}.",
+            text=(
+                f"message_type is one of {values(MessageType)}. The operator is not a message "
+                "recipient: your reply is what they read in this conversation; record a result "
+                "on a task with update_task's notes, or call ask_user if you need their answer "
+                "before you can continue."
+            ),
             http_note=(
                 "The recipient is `recipient` on the wire and the kind is `type`, not `to_agent` "
                 "and `message_type`."

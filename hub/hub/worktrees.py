@@ -138,6 +138,11 @@ def is_git_repo(path: Path) -> bool:
     return result.returncode == 0 and result.stdout.strip() == "true"
 
 
+def is_reserved_agent_name(name: str) -> bool:
+    """Whether *name* is a reserved name no agent can ever hold, checked case-insensitively."""
+    return name.lower() in _RESERVED_AGENT_NAMES
+
+
 def validate_agent_name(agent: str) -> None:
     """Reject names that cannot safely become both a path component and git ref suffix, and the
     names the Hub already gives someone who is not an agent."""

@@ -25,6 +25,7 @@ from ...schemas.common import SuccessResponse
 from ...schemas.messages import OPERATOR_SENDER, MessageCreate, MessageResponse
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
+from ...worktrees import is_reserved_agent_name
 
 router = APIRouter(prefix="/messages", tags=["messages"])
 
@@ -103,6 +104,31 @@ async def create_message_for_actor(
         msg.session_id = source_run.session_id
         msg.conversation_id = source_run.conversation_id
         source_conversation_id = source_run.conversation_id
+
+    if not by_operator and is_reserved_agent_name(body.recipient):
+        # The operator is never an agent row, so the lookup below always misses for these names —
+        # but that 404 reads like a typo. Say what actually works instead (F77): the operator's own
+        # sends (by_operator) keep today's answer, since this sentence is addressed to an agent.
+        await persist_event(
+            session,
+            project_id,
+            "agent_action_rejected",
+            {
+                "endpoint": "POST /messages",
+                "reason": "operator_not_a_recipient",
+                "recipient": body.recipient,
+            },
+            agent=event_agent,
+            severity="warn",
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "The operator is not a message recipient. What you write in your reply is what "
+                "they read in this conversation; record a result on a task with update_task's "
+                "notes; if you need their answer before you can continue, call ask_user."
+            ),
+        )
 
     recipient_row = (
         (
