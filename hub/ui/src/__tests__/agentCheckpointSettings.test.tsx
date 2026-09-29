@@ -143,6 +143,14 @@ describe('per-agent access grants', () => {
     expect(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/)).toBeChecked()
     expect(screen.getByLabelText(/Recall the observations behind them for claude-1/)).not.toBeChecked()
   })
+
+  it('states the read grant reaches every conversation, and does not claim a bound nothing sets', () => {
+    // F235: the grant is all-or-nothing across the project. Nothing can restrict a checkpoint's
+    // own visibility, so the hint must not suggest one exists.
+    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    expect(screen.getByText(/every conversation in this project/)).toBeInTheDocument()
+    expect(screen.queryByText(/visibility/)).not.toBeInTheDocument()
+  })
 })
 
 /**

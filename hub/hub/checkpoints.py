@@ -422,7 +422,6 @@ async def create_checkpoint(
     worker_invocation_id: Optional[str] = None,
     runner: Optional[str] = None,
     model: Optional[str] = None,
-    visibility: str = "project",
     loop: Optional[Loop] = None,
 ) -> Checkpoint:
     """Persist a checkpoint. The envelope is written whether or not a body exists.
@@ -451,7 +450,6 @@ async def create_checkpoint(
         agent=conversation.agent,
         trigger=trigger,
         status="ready" if written else "unwritten",
-        visibility=visibility,
         previous_checkpoint_id=anchor.id if anchor else None,
         # The first checkpoint founds the lineage and names it after itself.
         lineage_id=anchor.lineage_id if anchor else checkpoint_id,

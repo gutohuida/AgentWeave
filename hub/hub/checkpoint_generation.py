@@ -508,7 +508,6 @@ async def generate_checkpoint(
     runner_id: Optional[str] = None,
     notes: Optional[str] = None,
     probe: bool = True,
-    visibility: str = "project",
 ) -> Checkpoint:
     """Produce a checkpoint for *conversation*. Always returns a record.
 
@@ -592,7 +591,6 @@ async def generate_checkpoint(
         worker_invocation_id=result.invocation_id,
         runner=cli,
         model=model,
-        visibility=visibility,
         loop=loop,
     )
 

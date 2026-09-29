@@ -2,7 +2,8 @@
 
 Section 7 of 2026-08-07-conversation-handoff-rework.
 
-Effective access is capability ∩ visibility. The two grants are separate because **summary access
+The read grant is all-or-nothing across the project: no checkpoint can restrict itself, so the
+reader's grant is the whole answer (F235). The two grants are separate because **summary access
 is not transcript access**: a checkpoint is a bounded distillation, while recall returns another
 agent's recorded output verbatim — every path a tool printed, every fragment of a file it read.
 """
@@ -46,14 +47,13 @@ async def _conversation(db, conversation_id="conv-1", agent=OWNER):
     return conversation
 
 
-async def _checkpoint(db, conversation, visibility="private"):
+async def _checkpoint(db, conversation):
     return await create_checkpoint(
         db,
         conversation,
         trigger="operator",
         envelope=await compute_envelope(db, conversation),
         body="## Objective\n\nsomething",
-        visibility=visibility,
     )
 
 
@@ -76,7 +76,7 @@ async def test_an_agent_always_reads_its_own_checkpoints(app):
     async with async_session_factory() as db:
         owner = await _agent(db, OWNER)
         conversation = await _conversation(db)
-        checkpoint = await _checkpoint(db, conversation, visibility="private")
+        checkpoint = await _checkpoint(db, conversation)
 
     assert may_read_checkpoint(owner, checkpoint)
     assert may_recall(owner, checkpoint)
@@ -87,18 +87,7 @@ async def test_a_peer_without_the_grant_cannot_read_even_a_project_visible_check
     async with async_session_factory() as db:
         peer = await _agent(db, PEER)
         conversation = await _conversation(db)
-        checkpoint = await _checkpoint(db, conversation, visibility="project")
-
-    assert not may_read_checkpoint(peer, checkpoint)
-
-
-@pytest.mark.asyncio
-async def test_a_granted_peer_still_cannot_read_a_private_checkpoint(app):
-    """The intersection cuts both ways: a grant is not an override."""
-    async with async_session_factory() as db:
-        peer = await _agent(db, PEER, can_read_checkpoints=True)
-        conversation = await _conversation(db)
-        checkpoint = await _checkpoint(db, conversation, visibility="private")
+        checkpoint = await _checkpoint(db, conversation)
 
     assert not may_read_checkpoint(peer, checkpoint)
 
@@ -110,7 +99,7 @@ async def test_reading_a_checkpoint_does_not_confer_recall(app):
     async with async_session_factory() as db:
         peer = await _agent(db, PEER, can_read_checkpoints=True)
         conversation = await _conversation(db)
-        checkpoint = await _checkpoint(db, conversation, visibility="project")
+        checkpoint = await _checkpoint(db, conversation)
 
     assert may_read_checkpoint(peer, checkpoint)
     assert not may_recall(peer, checkpoint)
@@ -123,7 +112,7 @@ async def test_recall_without_read_is_not_a_back_door(app):
     async with async_session_factory() as db:
         peer = await _agent(db, PEER, can_recall=True)
         conversation = await _conversation(db)
-        checkpoint = await _checkpoint(db, conversation, visibility="project")
+        checkpoint = await _checkpoint(db, conversation)
 
     assert not may_recall(peer, checkpoint)
 
@@ -149,7 +138,7 @@ async def test_a_charter_cannot_widen_access(app):
         peer.charter_id = "charter-1"
         await db.commit()
         conversation = await _conversation(db)
-        checkpoint = await _checkpoint(db, conversation, visibility="project")
+        checkpoint = await _checkpoint(db, conversation)
 
     assert not may_read_checkpoint(peer, checkpoint)
     assert not may_recall(peer, checkpoint)
@@ -219,7 +208,7 @@ async def test_an_ungranted_peer_is_told_nothing_about_whether_the_id_exists(app
         await _agent(db, PEER, can_read_checkpoints=True)  # read, but not recall
         conversation = await _conversation(db)
         await _observed(db)
-        checkpoint = await _checkpoint(db, conversation, visibility="project")
+        checkpoint = await _checkpoint(db, conversation)
         checkpoint.citations = await build_citations(db, "conv-1", ["run-1"])
         await db.commit()
 
@@ -239,7 +228,7 @@ async def test_an_uncited_observation_is_not_reachable_even_by_a_granted_peer(ap
         await _agent(db, PEER, can_read_checkpoints=True, can_recall=True)
         conversation = await _conversation(db)
         await _observed(db)
-        checkpoint = await _checkpoint(db, conversation, visibility="project")
+        checkpoint = await _checkpoint(db, conversation)
         checkpoint.citations = []
         await db.commit()
 
@@ -258,7 +247,7 @@ async def test_the_tester_scenario_end_to_end(app):
             await _agent(db, peer)
             conversation = await _conversation(db, f"conv-{index}", agent=peer)
             await _observed(db, f"conv-{index}", f"run-{index}", agent=peer)
-            checkpoint = await _checkpoint(db, conversation, visibility="project")
+            checkpoint = await _checkpoint(db, conversation)
             checkpoint.citations = await build_citations(db, f"conv-{index}", [f"run-{index}"])
             checkpoints.append(checkpoint)
         await db.commit()
@@ -338,39 +327,14 @@ async def test_grants_are_settable_over_the_api_and_default_closed(app, auth_hea
     assert row.can_recall is False
 
 
-# ------------------------------------------------- the visibility the product actually produces
-
-
-@pytest.mark.asyncio
-async def test_a_checkpoint_the_product_makes_is_visible_to_the_project(app):
-    """F88. Every test above hands `create_checkpoint` a visibility; nothing in the product did.
-
-    `visibility` defaulted to `private`, no caller anywhere passed anything else, and there is no
-    route, tool or control that can change one — so the visibility half of `capability ∩
-    visibility` was closed for every checkpoint that has ever existed, and both reader grants were
-    conferrable and inert. Measured live on 2026-08-28: an agent holding `can_read_checkpoints`
-    and `can_recall` was refused a peer's cited observation.
-
-    The default asserted here is the one the spec describes — "a checkpoint MAY additionally
-    restrict itself" makes restriction the exception, not the birth state — and the system stays
-    closed by default because both reader grants still do.
-    """
-    async with async_session_factory() as db:
-        conversation = await _conversation(db)
-        checkpoint = await create_checkpoint(
-            db,
-            conversation,
-            trigger="operator",
-            envelope=await compute_envelope(db, conversation),
-            body=BODY,
-        )
-
-    assert checkpoint.visibility == "project"
+# ------------------------------------------------------------ the grant, unconfigured (F88, F235)
 
 
 @pytest.mark.asyncio
 async def test_a_granted_peer_reads_a_checkpoint_nobody_configured(app):
-    """The end-to-end the suite could not see: no explicit visibility anywhere in this test."""
+    """F88/F235 end to end: a checkpoint created with no visibility argument — there is no such
+    argument any more — is still reachable by a granted peer, because the grant is the whole
+    answer. `checkpoints.visibility` no longer exists; there is nothing left for it to restrict."""
     async with async_session_factory() as db:
         await _agent(db, OWNER)
         await _agent(db, PEER, can_read_checkpoints=True)
@@ -400,7 +364,7 @@ async def test_an_ungranted_peer_neither_lists_nor_opens_it(app):
         await _agent(db, OWNER)
         await _agent(db, PEER)
         conversation = await _conversation(db)
-        checkpoint = await _checkpoint(db, conversation, visibility="project")
+        checkpoint = await _checkpoint(db, conversation)
 
         assert await readable_checkpoints(db, PEER, PROJECT) == []
         with pytest.raises(AccessDeniedError) as real_id:
@@ -417,7 +381,7 @@ async def test_an_agent_lists_its_own_checkpoints_without_any_grant(app):
     async with async_session_factory() as db:
         await _agent(db, OWNER)
         conversation = await _conversation(db)
-        checkpoint = await _checkpoint(db, conversation, visibility="private")
+        checkpoint = await _checkpoint(db, conversation)
 
         listed = await readable_checkpoints(db, OWNER, PROJECT)
         opened = await read_checkpoint(db, OWNER, PROJECT, checkpoint.id)
@@ -456,8 +420,8 @@ async def test_the_agent_filter_narrows_and_cannot_widen(app):
         await _agent(db, PEER)
         owners = await _conversation(db, "conv-owner", agent=OWNER)
         peers = await _conversation(db, "conv-peer", agent=PEER)
-        mine = await _checkpoint(db, peers, visibility="project")
-        theirs = await _checkpoint(db, owners, visibility="project")
+        mine = await _checkpoint(db, peers)
+        theirs = await _checkpoint(db, owners)
 
         unfiltered = await readable_checkpoints(db, PEER, PROJECT)
         filtered = await readable_checkpoints(db, PEER, PROJECT, agent=OWNER)

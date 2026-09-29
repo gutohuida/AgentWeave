@@ -250,8 +250,10 @@ edit to a paragraph change what an agent can read.
 Authorisation SHALL be resolved from the identity bound to the running turn, and MUST NOT be
 accepted from a request body or header.
 
-A checkpoint MAY additionally restrict itself, in which case access requires both the reader's grant
-and the checkpoint's own visibility.
+The grant to read checkpoints SHALL reach every checkpoint in the project, from every conversation,
+and the operator's control for it SHALL say so. A checkpoint does not restrict itself: no surface
+could ever set such a restriction, and a control that described one told the operator the grant was
+narrower than it is.
 
 #### Scenario: A reader granted checkpoints is refused observations
 
@@ -269,6 +271,14 @@ and the checkpoint's own visibility.
 
 - **WHEN** a charter describes an agent as permitted to read other agents' work
 - **THEN** that description does not grant access
+
+#### Scenario: The grant reaches every conversation, and says so
+
+- **GIVEN** an agent granted permission to read checkpoints
+- **WHEN** another agent's checkpoint exists from a conversation the granted agent never took part in
+- **THEN** the granted agent can read it
+- **AND** the operator's control for the grant states that it reaches every conversation in the
+  project
 
 ### Requirement: Lineage is recorded and participation is derived
 

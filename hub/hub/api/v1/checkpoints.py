@@ -34,7 +34,6 @@ class CheckpointSummary(BaseModel):
     agent: str
     trigger: str
     status: str
-    visibility: str
     probe_status: Optional[str] = None
     probe_findings: Optional[list] = None
     previous_checkpoint_id: Optional[str] = None
@@ -56,7 +55,6 @@ class CheckpointSummary(BaseModel):
             agent=row.agent,
             trigger=row.trigger,
             status=row.status,
-            visibility=row.visibility,
             probe_status=row.probe_status,
             probe_findings=row.probe_findings,
             previous_checkpoint_id=row.previous_checkpoint_id,

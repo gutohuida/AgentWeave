@@ -221,6 +221,8 @@ async def test_the_route_refuses_a_second_cutover_and_the_list_says_where_it_wen
     listed = await app.get(f"{base}/conversations/conv-1/checkpoints", headers=auth_headers)
     [row] = [r for r in listed.json() if r["id"] == checkpoint_id]
     assert row["cut_over_to_conversation_id"] == successor_id
+    # F235: no checkpoint can restrict itself, so the route no longer carries a field for it.
+    assert "visibility" not in row
 
 
 @pytest.mark.asyncio
