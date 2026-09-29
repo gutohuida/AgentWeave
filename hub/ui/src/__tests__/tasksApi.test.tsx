@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 
-import { useTasks, useDocumentTasks, useTaskBoard } from '@/api/tasks'
+import { useTasks, useDocumentTasks, useTaskBoard, useRenameTask } from '@/api/tasks'
 import { useConfigStore } from '@/store/configStore'
 
 /**
@@ -111,6 +111,36 @@ describe('useDocumentTasks', () => {
     await new Promise((r) => setTimeout(r, 0))
 
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('useRenameTask', () => {
+  // F125, `the-operator-can-rename-a-task`, design D4: the PATCH body is exactly `{title}` — never
+  // `status`, which `useUpdateTask` always sends and which the route would restate on a `blocked`
+  // task without `blocked_reason`.
+  it('PATCHes exactly {title}, nothing else', async () => {
+    let seenUrl = ''
+    let seenMethod = ''
+    let seenBody: unknown = null
+    globalThis.fetch = ((url: string, init?: RequestInit) => {
+      seenUrl = url
+      seenMethod = String(init?.method)
+      seenBody = JSON.parse(String(init?.body))
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 'task-1', title: 'New name' }),
+      } as Response)
+    }) as typeof fetch
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const { result } = renderHook(() => useRenameTask(), { wrapper: wrapper(client) })
+    result.current.mutate({ id: 'task-1', title: 'New name' })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(seenUrl).toBe('http://hub.test/api/v1/projects/proj-1/tasks/task-1')
+    expect(seenMethod).toBe('PATCH')
+    expect(seenBody).toEqual({ title: 'New name' })
   })
 })
 

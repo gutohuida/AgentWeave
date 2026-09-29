@@ -201,6 +201,148 @@ describe('AgentTimeline', () => {
     expect(screen.queryByText('Discard')).not.toBeInTheDocument()
   })
 
+  it('says how the last attempt ended beneath an abandoned message, in the route\'s real order', () => {
+    // `an-undelivered-message-says-how-its-last-attempt-ended`, task 1.5. Real chat-route order:
+    // a delivered turn (run A), the abandoned entry (run R, failed), a delivered turn (run B).
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({ id: 'a-out', kind: 'agent_output', content: 'turn A reply', run_id: 'run-a' }),
+          entry({
+            id: 'ab-last',
+            kind: 'operator_input',
+            content: 'the message nobody ever received',
+            delivery_state: 'abandoned',
+            abandoned_reason: 'delivery failed 3 times; the Hub stopped retrying',
+            run_id: 'run-r',
+          }),
+          entry({ id: 'b-out', kind: 'agent_output', content: 'turn B reply', run_id: 'run-b' }),
+        ]}
+        roster={[agent]}
+        runs={{
+          'run-a': { status: 'completed', started_at: '2026-08-02T00:00:00Z' },
+          'run-b': { status: 'completed', started_at: '2026-08-02T00:00:10Z' },
+          'run-r': {
+            status: 'failed',
+            started_at: '2026-08-02T00:00:05Z',
+            error: '%1 is not a valid Win32 application.',
+          },
+        }}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText('turn A reply')).toBeInTheDocument()
+    expect(
+      screen.getByText('Last attempt failed: %1 is not a valid Win32 application.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('turn B reply')).toBeInTheDocument()
+    // Rendered once, in the abandoned message's own block — not on either turn.
+    expect(screen.queryAllByText(/Last attempt/)).toHaveLength(1)
+
+    const order = Array.from(document.body.querySelectorAll('body *'))
+      .map((el) => el.textContent)
+      .filter((t): t is string => Boolean(t))
+    const iA = order.findIndex((t) => t === 'turn A reply')
+    const iLast = order.findIndex((t) => t.startsWith('Last attempt failed'))
+    const iB = order.findIndex((t) => t === 'turn B reply')
+    expect(iA).toBeGreaterThanOrEqual(0)
+    expect(iLast).toBeGreaterThan(iA)
+    expect(iB).toBeGreaterThan(iLast)
+  })
+
+  it('reversing the fixture order breaks the DOM-order assertion (F190 rule)', () => {
+    // `groupIntoTurns` preserves arrival order, so feeding it out of the route's real order must
+    // fail the same ordering check the test above passes on.
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({ id: 'b-out', kind: 'agent_output', content: 'turn B reply', run_id: 'run-b' }),
+          entry({
+            id: 'ab-last',
+            kind: 'operator_input',
+            content: 'the message nobody ever received',
+            delivery_state: 'abandoned',
+            abandoned_reason: 'delivery failed 3 times; the Hub stopped retrying',
+            run_id: 'run-r',
+          }),
+          entry({ id: 'a-out', kind: 'agent_output', content: 'turn A reply', run_id: 'run-a' }),
+        ]}
+        roster={[agent]}
+        runs={{
+          'run-a': { status: 'completed', started_at: '2026-08-02T00:00:00Z' },
+          'run-b': { status: 'completed', started_at: '2026-08-02T00:00:10Z' },
+          'run-r': {
+            status: 'failed',
+            started_at: '2026-08-02T00:00:05Z',
+            error: '%1 is not a valid Win32 application.',
+          },
+        }}
+        isRunning={false}
+      />,
+    )
+    const order = Array.from(document.body.querySelectorAll('body *'))
+      .map((el) => el.textContent)
+      .filter((t): t is string => Boolean(t))
+    const iA = order.findIndex((t) => t === 'turn A reply')
+    const iLast = order.findIndex((t) => t.startsWith('Last attempt failed'))
+    const iB = order.findIndex((t) => t === 'turn B reply')
+    // With the reversed fixture, B now precedes the abandoned block, which precedes A — the
+    // opposite of the real-order assertion above.
+    expect(iB).toBeLessThan(iLast)
+    expect(iLast).toBeLessThan(iA)
+  })
+
+  it('names no attempt on an abandoned entry with no run (the scheduler\'s give-up)', () => {
+    // Task 1.6, control: unchanged behaviour — no run_id, no facts to look up, no line.
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'ab-none',
+            kind: 'operator_input',
+            content: 'never got a run at all',
+            delivery_state: 'abandoned',
+            abandoned_reason: 'the workspace is unavailable',
+            run_id: undefined,
+          }),
+        ]}
+        roster={[agent]}
+        runs={{}}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText('not delivered')).toBeInTheDocument()
+    expect(screen.getByText('the workspace is unavailable')).toBeInTheDocument()
+    expect(screen.queryByText(/Last attempt/)).not.toBeInTheDocument()
+  })
+
+  it('says only that the last attempt was interrupted, naming no cause', () => {
+    // Task 1.6b, design D2 fix: no "by a Hub restart" — a Stop may record `interrupted` too.
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'ab-int',
+            kind: 'operator_input',
+            content: 'dropped while the Hub was down',
+            delivery_state: 'abandoned',
+            abandoned_reason: 'delivery failed 3 times; the Hub stopped retrying',
+            run_id: 'run-int',
+          }),
+        ]}
+        roster={[agent]}
+        runs={{ 'run-int': { status: 'interrupted', started_at: '2026-08-02T00:00:00Z' } }}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText('Last attempt was interrupted')).toBeInTheDocument()
+    expect(screen.queryByText(/restart/i)).not.toBeInTheDocument()
+  })
+
   it('explains a hop-budget-suspended chain and offers to continue it', () => {
     const onDeliverNow = vi.fn()
     render(

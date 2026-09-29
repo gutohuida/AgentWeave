@@ -538,7 +538,6 @@ async def test_a_body_less_checkpoint_cannot_be_stored_as_ready(app):
                 agent=AGENT,
                 trigger="operator",
                 status="ready",
-                visibility="private",
                 lineage_id="ckpt-bad",
                 body=None,
             )
@@ -729,7 +728,6 @@ async def test_an_unknown_trigger_is_refused_by_the_database(app):
                 agent=AGENT,
                 trigger="whenever-i-feel-like-it",
                 status="unwritten",
-                visibility="private",
                 lineage_id="ckpt-bad",
             )
         )

@@ -1,8 +1,8 @@
 """Who may read a checkpoint, and who may recall the observations behind it.
 
-Two independent grants on the agent, both closed by default, intersected with the checkpoint's own
-visibility. Effective access is **capability ∩ visibility**: a permissive checkpoint does not let
-an ungranted agent read it, and a granted agent does not get to read a private one.
+Two independent grants on the agent, both closed by default. The read grant reaches every
+checkpoint in the project, from every conversation: no checkpoint can restrict itself, and no
+surface exists to set such a restriction, so the reader's grant is the whole answer.
 
 The two grants are separate because **summary access is not transcript access**. A checkpoint is
 a bounded, deliberate distillation. `recall` returns another agent's recorded output verbatim —
@@ -33,19 +33,16 @@ class AccessDeniedError(PermissionError):
 
 
 def may_read_checkpoint(reader: Optional[Agent], checkpoint: Checkpoint) -> bool:
-    """Capability ∩ visibility.
+    """The reader's grant, plus an agent's standing access to its own checkpoints.
 
-    An agent always reads its own checkpoints — `private` means "not shared with peers", not
-    "unreadable by the conversation it describes". Without that a cutover would hand a successor
-    a document its own agent is forbidden to open.
+    An agent always reads its own checkpoints. Otherwise the grant is all-or-nothing across the
+    project: `can_read_checkpoints` reaches every checkpoint, from every conversation.
     """
     if reader is None:
         return False
     if reader.name == checkpoint.agent:
         return True
-    if not reader.can_read_checkpoints:
-        return False
-    return checkpoint.visibility in ("project", "granted")
+    return reader.can_read_checkpoints
 
 
 def may_recall(reader: Optional[Agent], checkpoint: Checkpoint) -> bool:

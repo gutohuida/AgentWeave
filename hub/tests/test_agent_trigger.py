@@ -2981,6 +2981,14 @@ async def test_a_run_without_mcp_is_described_the_operations_it_can_actually_per
     # carried — injection is exactly what happened. Paired with the positives above, which are
     # what stops this passing against an empty context.
     assert "No AgentWeave tools are injected this turn" not in context
+    # `claude` is a Claude-family runner, so even on this first-run HTTP description the server
+    # is in fact injected and the host's own `SendMessage` is in the model's tool list — the
+    # F139 collision is available here too, so the disambiguating sentence is rendered although
+    # no MCP tool name is
+    # (`2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`, "The first
+    # run").
+    assert "SendMessage" in context
+    assert "mcp__agentweave__" not in context
 
     # The notice in the turn prompt agrees with the description in the same turn's context —
     # and neither asserts a tool surface, in either direction.
@@ -3023,20 +3031,33 @@ async def test_a_run_with_mcp_is_still_described_the_injected_tools(
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-mcp-1"}\n']
     )
+    captured_kwargs = {}
+    real_build_command = agent_trigger.build_command
+
+    def _capturing_build_command(**kwargs):
+        captured_kwargs.update(kwargs)
+        return real_build_command(**kwargs)
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
-            resp = await app.post(
-                "/api/v1/projects/proj-test/agent/trigger",
-                json={"agent": "mcpok-claude", "message": "hi", "session_mode": "new"},
-                headers=auth_headers,
-            )
-            assert resp.status_code == 200
-            await _await_background_run()
+            with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
+                resp = await app.post(
+                    "/api/v1/projects/proj-test/agent/trigger",
+                    json={"agent": "mcpok-claude", "message": "hi", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert resp.status_code == 200
+                await _await_background_run()
 
     assert seen["access_path"] == "mcp"
-    assert "`send_message(to_agent" in seen["context"]
+    # `claude` is a Claude-family runner and this run is described as having the injected
+    # surface, so it is told the tool's full callable name
+    # (`2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`), not the bare
+    # name a Claude harness would never actually resolve.
+    assert "`mcp__agentweave__send_message(to_agent" in seen["context"]
     assert "POST /api/v1/agent-actions/messages" not in seen["context"]
+    # The access-path notice (task 1.4a) names the tool the same way, in the turn prompt.
+    assert "mcp__agentweave__send_message" in captured_kwargs["prompt"]
 
 
 @pytest.mark.asyncio

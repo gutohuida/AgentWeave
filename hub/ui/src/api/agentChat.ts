@@ -287,6 +287,10 @@ const QUEUE_EVENT_TYPES = new Set([
   'queue_entry_withdrawn',
   'queue_entry_released',
   'queue_chain_suspended',
+  // The scheduler's give-up path has no run (`turn_scheduler.py`'s `_report_abandoned_entries`),
+  // so `RUN_TERMINAL_EVENT_TYPES` below never fires for it — this is the only refresh signal an
+  // abandonment without a run gets (`an-undelivered-message-says-how-its-last-attempt-ended`).
+  'queue_entry_abandoned',
 ])
 
 /** A run reaching a terminal status. These are here because the chat response carries `runs`
@@ -308,11 +312,13 @@ const QUEUE_EVENT_TYPES = new Set([
  *  that creates it — see `AgentTimeline`'s `anotherRunIsUnderway`), and the conversation-scoped
  *  response is unbounded, so an extra refetch of it is a real cost.
  *
- *  `run_interrupted` is here for completeness of "the row changed", not because it rescues the
- *  Hub-restart case: `reconcile_interrupted_runs()` is awaited inside the lifespan
- *  (`main.py:402`, before `yield`), so it broadcasts before uvicorn serves anything and no
- *  reconnecting client can be subscribed yet. That case is served by `useSSE`'s reconnect
- *  handler, which invalidates every query (`useSSE.ts:404-412`). */
+ *  `run_interrupted` is here for the case a subscribed client *can* see: any broadcast of it
+ *  while clients are connected (for example from a Stop, should
+ *  `stop-clears-a-run-an-earlier-hub-left-running` land) settles the `runs` map through this set.
+ *  It does not rescue the Hub-restart case: `reconcile_interrupted_runs()` is awaited inside the
+ *  lifespan (`main.py:402`, before `yield`), so that broadcast goes out before uvicorn serves
+ *  anything and no reconnecting client can be subscribed yet. That case is served by `useSSE`'s
+ *  reconnect handler, which invalidates every query (`useSSE.ts:404-412`). */
 const RUN_TERMINAL_EVENT_TYPES = new Set([
   'run_completed',
   'run_failed',

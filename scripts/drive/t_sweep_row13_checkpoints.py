@@ -471,13 +471,8 @@ note("checkpoint", CP_A)
 if isinstance(cp, dict):
     note("status/probe", f"{cp.get('status')} / {cp.get('probe_status')}")
     ok(
-        "the checkpoint is born `project`-visible — the repair F88 asked for",
-        cp.get("visibility") == "project",
-        repr(cp.get("visibility")),
-    )
-    ok(
-        "  ... and it says so to the operator, who has no way to change it",
-        "visibility" in cp,
+        "the grant, not the checkpoint, decides who reads it — F235's repair",
+        "visibility" not in cp,
         str(list(cp))[:200],
     )
     ok(

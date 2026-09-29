@@ -1759,3 +1759,17 @@ disappears is indistinguishable from one that was forgotten.
   and Grep still work: git refs can be read straight from `.git/refs/heads/<branch>`,
   `.git/refs/remotes/origin/<branch>` and `.git/packed-refs`. Retrying later worked; do not burn the
   10-in-a-row budget retrying the same call back to back.
+- **2026-09-29 — the `ai-digest` routine deletes untracked files a concurrent session creates in
+  this repo.** Its post-run guardrail (`~/.claude/routines/ai-digest/run.sh:130-138`) compares
+  `git status --porcelain` before and after its run and `rm -f`s every new `??` path, assuming it
+  made them. It removed an interactive session's new drive script mid-work. `agentweave-research`
+  has the same check but skips deletion on an `autonomous/*` branch; `ai-digest` does not. Until it
+  is guarded: when a scheduled routine runs (both fire at login and on schedule), stage a new file
+  right away (`git add -N` is enough to make it tracked), or re-check that it still exists before
+  committing.
+- **2026-09-29 — a test that calls a route which schedules a turn for an agent with a bound
+  `claude` runner starts a real `claude` process** wherever `claude` is on PATH, and can pass
+  locally for that reason alone (it failed with `claude` off PATH, as in CI). Make
+  `hub.turn_scheduler.schedule_agent` inert around such calls, and record `PtySession.spawn` to
+  check. Strip `claude` from PATH by removing every directory that holds `claude`/`claude.exe`/
+  `claude.cmd` and confirm with `which claude`; a substring grep of PATH misses `AppData/Roaming/npm`.

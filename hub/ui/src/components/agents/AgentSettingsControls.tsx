@@ -421,7 +421,7 @@ export function CheckpointGrantsSetting({ agent }: { agent: AgentSummary }) {
     {
       grant: 'can_read_checkpoints',
       label: 'Read other agents’ checkpoints',
-      hint: 'Summaries of where their conversations got to. Still bounded by each checkpoint’s own visibility.',
+      hint: 'Summaries of where their conversations got to, from every conversation in this project.',
     },
     {
       grant: 'can_recall',

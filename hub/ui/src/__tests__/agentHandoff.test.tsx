@@ -126,7 +126,6 @@ describe('agent conversation handoff', () => {
           agent: 'claude',
           trigger: 'operator',
           status: checkpointStatus,
-          visibility: 'private',
           lineage_id: 'ckpt-1',
         }), { status: 201 }))
       }
@@ -265,7 +264,6 @@ describe('agent conversation handoff', () => {
       agent: 'claude',
       trigger: 'context_pressure',
       status: 'ready',
-      visibility: 'private',
       lineage_id: 'ckpt-auto',
     }]
     const onSelectConversation = vi.fn()
@@ -292,8 +290,8 @@ describe('agent conversation handoff', () => {
 
   it('does not offer a checkpoint that is unwritten or failed', () => {
     offeredCheckpoints = [
-      { id: 'a', conversation_id: 'conv-old', agent: 'claude', trigger: 'context_pressure', status: 'unwritten', visibility: 'private', lineage_id: 'a' },
-      { id: 'b', conversation_id: 'conv-old', agent: 'claude', trigger: 'context_pressure', status: 'failed', visibility: 'private', lineage_id: 'b' },
+      { id: 'a', conversation_id: 'conv-old', agent: 'claude', trigger: 'context_pressure', status: 'unwritten', lineage_id: 'a' },
+      { id: 'b', conversation_id: 'conv-old', agent: 'claude', trigger: 'context_pressure', status: 'failed', lineage_id: 'b' },
     ]
     render(
       <ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />,

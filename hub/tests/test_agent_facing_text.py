@@ -168,6 +168,82 @@ class TestTurnPreamble:
         ):
             assert removed not in notice
 
+    def test_a_tool_prefix_names_every_tool_and_leaves_no_bare_mention(self):
+        """Task 1.4a of `2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`:
+        the access-path notice names the colliding tool `send_message` bare on every MCP run
+        today (F139), so a Claude-family run must get it fully qualified here too, not just in
+        the tool list."""
+        notice = access_path_notice("mcp", tool_prefix="mcp__agentweave__")
+        assert "mcp__agentweave__send_message" in notice
+        assert " send_message " not in notice
+
+    def test_no_prefix_reproduces_the_previous_wording_exactly(self):
+        assert access_path_notice("mcp", tool_prefix="") == access_path_notice("mcp")
+
+
+class TestClaudeRunToldFullNames:
+    """`2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names` (F139): a
+    Claude-runner agent told to "use the send_message tool" called the host's own `SendMessage`
+    instead, because the tool list named tools bare and left the reader to apply the prefix. A
+    Claude-family run whose access path is described as MCP is now told each tool by its actual
+    callable name, and warned once about the host tool with a similar name."""
+
+    def test_a_claude_run_over_mcp_gets_full_callable_names_and_the_host_tool_sentence(self):
+        from hub.api.v1.agents import _tool_surface_lines
+
+        text = "\n".join(_tool_surface_lines(runner="claude", access_path="mcp"))
+        assert "`mcp__agentweave__send_message(" in text
+        assert "`mcp__agentweave__record_evidence(" in text
+        assert "SendMessage" in text
+        assert "Names below are as injected" not in text
+
+    def test_a_first_claude_run_described_as_http_still_gets_the_host_tool_sentence(self):
+        """Task 1.1a, operator review 'The first run': the server is injected and the host's
+        `SendMessage` is in the model's tool list even when the run is described in the HTTP form
+        (a fresh agent's first spawn, before the harness has been observed honouring MCP) — so the
+        collision is available and the sentence is rendered anyway. No MCP tool is named, prefixed
+        or bare, because this rendering names operations, not tools to call."""
+        from hub.api.v1.agents import _tool_surface_lines
+
+        text = "\n".join(_tool_surface_lines(runner="claude", access_path="cli"))
+        assert "SendMessage" in text
+        assert "mcp__agentweave__" not in text
+
+    def test_a_first_codex_run_described_as_http_gets_neither(self):
+        from hub.api.v1.agents import _tool_surface_lines
+
+        text = "\n".join(_tool_surface_lines(runner="codex", access_path="cli"))
+        assert "SendMessage" not in text
+        assert "mcp__agentweave__" not in text
+
+    def test_a_non_claude_runner_over_mcp_keeps_bare_names_with_a_hedged_preamble(self):
+        """Task 1.2, operator review 'Non-Claude preamble': Codex's MCP naming is not measured
+        here, so the preamble says the harness *may* prefix rather than asserting that it does."""
+        from hub.api.v1.agents import _tool_surface_lines
+
+        text = "\n".join(_tool_surface_lines(runner="codex", access_path="mcp"))
+        assert "`send_message(" in text
+        assert "mcp__agentweave__send_message" not in text
+        assert "a prefix such as `mcp__agentweave__`" in text
+        assert "they are prefixed" not in text
+
+    def test_no_run_and_no_runner_keeps_bare_names_too(self):
+        """Control for `GET /agents/agent-context`, which passes no runner at all."""
+        from hub.api.v1.agents import _tool_surface_lines
+
+        text = "\n".join(_tool_surface_lines())
+        assert "`send_message(" in text
+        assert "`mcp__agentweave__send_message(" not in text
+
+    def test_the_prefixed_preamble_tells_the_reader_where_the_full_name_lives(self):
+        """Task 1.4b: elsewhere in the turn's instructions (~35 mentions across 7 modules per
+        `design.md`) a tool is still named bare; the reader is told those are references into
+        this list, not a second, differently-named surface."""
+        from hub.api.v1.agents import _tool_surface_lines
+
+        text = "\n".join(_tool_surface_lines(runner="claude", access_path="mcp"))
+        assert "call it by the full name listed here" in text
+
 
 def test_stalled_status_does_not_name_the_watchdog():
     assert "watchdog" not in STALLED_STATUS_MESSAGE.lower()

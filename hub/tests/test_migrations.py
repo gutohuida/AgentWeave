@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0110"
+HEAD_REVISION = "0111"
 
 
 # ---------------------------------------------------------------------------
@@ -2388,8 +2388,8 @@ def test_migration_0077_downgrade_then_upgrade_round_trips(tmp_path) -> None:
         )
         conn.execute(
             "INSERT INTO checkpoints (id, project_id, conversation_id, loop_id, agent, trigger, "
-            "status, visibility, lineage_id, created_at) VALUES ('cp-1', 'proj-1', 'conv-1', "
-            f"'loop-1', 'claude', 'operator', 'unwritten', 'private', 'cp-1', '{stamp}')"
+            "status, lineage_id, created_at) VALUES ('cp-1', 'proj-1', 'conv-1', "
+            f"'loop-1', 'claude', 'operator', 'unwritten', 'cp-1', '{stamp}')"
         )
         conn.commit()
 
@@ -3656,8 +3656,8 @@ def _database_at_0105(tmp_path, name: str) -> tuple:
 def _seed_checkpoint_0106(conn, checkpoint_id: str, conversation_id: str) -> None:
     conn.execute(
         "INSERT INTO checkpoints (id, project_id, conversation_id, agent, trigger, status, "
-        "visibility, lineage_id, body, created_at) VALUES (?, 'proj-1', ?, 'a1', "
-        "'context_pressure', 'ready', 'project', ?, 'b', '2026-01-01T00:00:00Z')",
+        "lineage_id, body, created_at) VALUES (?, 'proj-1', ?, 'a1', "
+        "'context_pressure', 'ready', ?, 'b', '2026-01-01T00:00:00Z')",
         (checkpoint_id, conversation_id, checkpoint_id),
     )
 
@@ -3970,3 +3970,229 @@ def test_migration_0110_adds_pending_agent_and_round_trips(tmp_path) -> None:
         with sqlite3.connect(db_file) as conn:
             assert "pending_agent" in {r[1] for r in conn.execute("PRAGMA table_info(loops)")}
             assert conn.execute("SELECT COUNT(*) FROM loops").fetchone()[0] == 1
+
+
+# ---------------------------------------------------------------------------------------------
+# 0111 -- the checkpoint grant says it reaches every checkpoint (F235): drop `visibility`
+# ---------------------------------------------------------------------------------------------
+
+
+async def _database_at_0110(db_url: str) -> None:
+    """Every table from the current models, with `checkpoints` rebuilt to revision 0110's real
+    shape: the `visibility` column, its check, and every other named constraint and index task
+    1.4 checks -- including B8's partial unique index, already landed as `0106`.
+
+    Built independently of `hub.db.models.Checkpoint`, which no longer declares `visibility` --
+    a fixture built from the code under change would not be testing anything."""
+    await _create_all_at(db_url)
+    engine = create_async_engine(db_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(sa.text("DROP TABLE checkpoints"))
+            metadata = sa.MetaData()
+            sa.Table(
+                "checkpoints",
+                metadata,
+                sa.Column("sequence", sa.Integer, autoincrement=True),
+                sa.Column("id", sa.String(64), nullable=False),
+                sa.Column("project_id", sa.String(64), nullable=False),
+                sa.Column("conversation_id", sa.String(64), nullable=False),
+                sa.Column("loop_id", sa.String(64), nullable=True),
+                sa.Column("agent", sa.String(64), nullable=False),
+                sa.Column("trigger", sa.String(32), nullable=False),
+                sa.Column("status", sa.String(16), nullable=False),
+                sa.Column("visibility", sa.String(16), nullable=False, server_default="project"),
+                sa.Column("previous_checkpoint_id", sa.String(64), nullable=True),
+                sa.Column("lineage_id", sa.String(64), nullable=False),
+                sa.Column("covers_from_run_id", sa.String(64), nullable=True),
+                sa.Column("covers_through_run_id", sa.String(64), nullable=True),
+                sa.Column("worker_invocation_id", sa.String(64), nullable=True),
+                sa.Column("runner", sa.String(32), nullable=True),
+                sa.Column("model", sa.String(256), nullable=True),
+                sa.Column("files_changed", sa.JSON(), nullable=True),
+                sa.Column("tasks", sa.JSON(), nullable=True),
+                sa.Column("open_questions", sa.JSON(), nullable=True),
+                sa.Column("permission_decisions", sa.JSON(), nullable=True),
+                sa.Column("runtime_overrides", sa.JSON(), nullable=True),
+                sa.Column("body", sa.Text(), nullable=True),
+                sa.Column("citations", sa.JSON(), nullable=True),
+                sa.Column("probe_status", sa.String(16), nullable=True),
+                sa.Column("probe_findings", sa.JSON(), nullable=True),
+                sa.Column("cut_over_to_conversation_id", sa.String(64), nullable=True),
+                sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+                sa.PrimaryKeyConstraint("sequence", name="pk_checkpoints"),
+                sa.UniqueConstraint("id", name="uq_checkpoints_id"),
+                sa.CheckConstraint(
+                    "trigger IN ('context_pressure', 'operator', 'delegation', 'run_failure', "
+                    "'task_completion')",
+                    name="ck_checkpoints_trigger",
+                ),
+                sa.CheckConstraint(
+                    "status IN ('ready', 'unwritten', 'failed')", name="ck_checkpoints_status"
+                ),
+                sa.CheckConstraint(
+                    "visibility IN ('private', 'project', 'granted')",
+                    name="ck_checkpoints_visibility",
+                ),
+                sa.CheckConstraint(
+                    "status <> 'ready' OR body IS NOT NULL",
+                    name="ck_checkpoints_ready_has_a_body",
+                ),
+                sa.Index("ix_checkpoints_conversation_created", "conversation_id", "created_at"),
+                sa.Index("ix_checkpoints_project_agent", "project_id", "agent"),
+                sa.Index(
+                    "ix_checkpoints_one_handover_per_conversation",
+                    "conversation_id",
+                    unique=True,
+                    sqlite_where=sa.text("cut_over_to_conversation_id IS NOT NULL"),
+                ),
+            )
+            await conn.run_sync(metadata.create_all)
+            await conn.execute(
+                sa.text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+            )
+            await conn.execute(sa.text("INSERT INTO alembic_version (version_num) VALUES ('0110')"))
+    finally:
+        await engine.dispose()
+
+
+def _checkpoints_ddl(db_file: Path) -> dict[str, str]:
+    """Every index and check constraint's own SQL, keyed by name -- byte-identical comparison
+    needs the exact text, not just presence."""
+    with sqlite3.connect(db_file) as conn:
+        table_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'checkpoints'"
+        ).fetchone()[0]
+        index_sql = {
+            row[0]: row[1]
+            for row in conn.execute(
+                "SELECT name, sql FROM sqlite_master WHERE type = 'index' "
+                "AND tbl_name = 'checkpoints' AND sql IS NOT NULL"
+            )
+        }
+    return {"table": table_sql, **index_sql}
+
+
+def test_migration_0111_drops_visibility_and_keeps_every_partial_index_byte_identical(
+    tmp_path,
+) -> None:
+    """F235, design D3. The rebuild `ALTER TABLE ... DROP COLUMN` cannot do on its own (SQLite
+    refuses while `ck_checkpoints_visibility` still names the column) must not lose B8's partial
+    unique index, and downgrade must restore it exactly the same way."""
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "drop_visibility.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_database_at_0110(db_url))
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(checkpoints)")}
+        assert "visibility" in columns
+    before_index_sql = _checkpoints_ddl(db_file).get("ix_checkpoints_one_handover_per_conversation")
+    assert before_index_sql is not None
+
+    _upgrade_to(db_url, "0111")
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(checkpoints)")}
+    assert "visibility" not in columns
+    after_up = _checkpoints_ddl(db_file)
+    assert after_up["ix_checkpoints_one_handover_per_conversation"] == before_index_sql
+    for name in (
+        "pk_checkpoints",
+        "uq_checkpoints_id",
+        "ck_checkpoints_trigger",
+        "ck_checkpoints_status",
+        "ck_checkpoints_ready_has_a_body",
+    ):
+        assert name in after_up["table"], after_up["table"]
+    assert "ck_checkpoints_visibility" not in after_up["table"]
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0110")
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(checkpoints)")}
+        row = conn.execute("SELECT visibility FROM checkpoints").fetchall()
+    assert "visibility" in columns
+    after_down = _checkpoints_ddl(db_file)
+    assert after_down["ix_checkpoints_one_handover_per_conversation"] == before_index_sql
+    for name in (
+        "pk_checkpoints",
+        "uq_checkpoints_id",
+        "ck_checkpoints_trigger",
+        "ck_checkpoints_status",
+        "ck_checkpoints_ready_has_a_body",
+        "ck_checkpoints_visibility",
+    ):
+        assert name in after_down["table"], after_down["table"]
+    assert row == [] or all(value == "project" for (value,) in row)
+
+
+def test_migration_0111_downgrade_server_default_is_project_not_privates_0044_default(
+    tmp_path,
+) -> None:
+    """Design D3: `0097` only ever rewrote row *values*; the column's server default stayed
+    `0044`'s `'private'` the whole time, and `'project'` was only ever the ORM-side default. A row
+    inserted by raw SQL after this downgrade should be born the same way every row the model ever
+    wrote was -- readable -- so the restored server default is `'project'`, deliberately not a
+    replay of `0044`."""
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "downgrade_default.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_database_at_0110(db_url))
+    _upgrade_to(db_url, "0111")
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0110")
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO checkpoints (sequence, id, project_id, conversation_id, agent, "
+            "trigger, status, previous_checkpoint_id, lineage_id, created_at) VALUES "
+            "(999, 'ckpt-raw', 'proj-x', 'conv-x', 'a', 'operator', 'unwritten', NULL, "
+            "'ckpt-raw', '2026-01-01T00:00:00Z')"
+        )
+        value = conn.execute("SELECT visibility FROM checkpoints WHERE id = 'ckpt-raw'").fetchone()[
+            0
+        ]
+    assert value == "project"
+
+
+def test_migration_0111_is_guarded_when_checkpoints_does_not_exist(tmp_path) -> None:
+    """An upgrade starting from an early revision reaches 0111 with only that revision's tables."""
+    db_file = tmp_path / "no_checkpoints_0111.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0110')")
+
+    _upgrade_to(db_url, "0111")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0111"
+
+
+def test_migration_0111_is_guarded_when_visibility_is_already_gone(tmp_path) -> None:
+    """The state `init_db`'s `create_all`-before-alembic order reaches when a fresh database is
+    built from today's model, which has no `visibility` column: the F329 parity test's reference
+    build never has the column to drop, so it does not exercise this migration's rebuild at all --
+    this test is what does."""
+    db_file = tmp_path / "already_gone_0111.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(checkpoints)")}
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
+            HEAD_REVISION
+        )
+    assert "visibility" not in columns

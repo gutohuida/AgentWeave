@@ -356,9 +356,11 @@ Measured on the operator's own project: agents met this refusal eight times and 
 of them. Its remedy, *"clear the assignee"*, is a field no agent tool carries and no control in the
 app sends. The action that works sat unnamed beside it.
 
-A refusal that tells an agent no agent *can* change a task's holder would be false. The agents'
-HTTP task route accepts an assignee today, though neither rendering of the agent's tool surface
-offers one. The refusal describes the surface the agent is given.
+No agent can change a task's holder, over either access path: the agents' task route refuses a
+holder from an agent's run before changing anything, as neither rendering of the agent's tool surface
+offers one. (Before F366 was closed that route accepted an assignee the tool never offered, and this
+paragraph warned that a refusal claiming otherwise would be false.) The refusal
+describes the surface the agent is given, and that surface is now the whole of what an agent can do.
 
 **A review dispatched by the operator and refused because the reviewer is the task's author SHALL
 name a remedy that exists for the task's status**: the landing action for a `completed` task, and
@@ -444,8 +446,14 @@ reviewer and sending the task to review is accepted rather than refused on the a
 
 #### Scenario: Naming a reviewer in the same request succeeds
 
-- **WHEN** one request sets the assignee to a different agent and the status to `under_review`
+- **WHEN** one request by the operator sets the assignee to a different agent and the status to `under_review`
 - **THEN** the request succeeds
+
+#### Scenario: An agent cannot name a reviewer in the same request
+
+- **WHEN** one request by an agent's run sets the assignee and the status to `under_review`
+- **THEN** the request is refused for naming a holder, before anything is changed
+- **AND** the task remains in its pre-request status
 
 #### Scenario: A task with no assignee may enter review
 
@@ -2725,4 +2733,43 @@ attempt created, so the board never holds half a decomposition the report does n
 - **GIVEN** a document approved twice, both reports recorded at the same instant
 - **WHEN** the operator reads the document
 - **THEN** the report returned is the one recorded second
+
+### Requirement: The operator can rename a task
+
+The operator SHALL be able to change a task's title after it is created, and an agent SHALL NOT.
+
+A title is the line the board and the task view show. It is written once at creation, often by an
+agent, and goes stale when the work moves; without a way to change it the only remedy is to replace
+the task, which discards its history.
+
+A title SHALL NOT be blank and SHALL keep the length bound it has at creation; a request that sets
+the title to nothing SHALL be refused as blank, while a request that does not mention the title
+SHALL leave it unchanged. Renaming SHALL NOT record a status transition, and SHALL NOT require
+restating the task's status: a task in any status, including a blocked one, can be renamed.
+
+An agent's rename SHALL be refused before anything in the same request is applied.
+
+#### Scenario: The operator renames a task
+
+- **WHEN** the operator changes a task's title
+- **THEN** the task shows the new title everywhere it is listed
+- **AND** its status and transition history are unchanged
+
+#### Scenario: A blank title is refused
+
+- **WHEN** the operator submits a title that is empty after trimming
+- **THEN** the change is refused and the title is unchanged
+
+#### Scenario: A blocked task can be renamed
+
+- **GIVEN** a task that is blocked
+- **WHEN** the operator changes its title from the task view
+- **THEN** the title changes
+- **AND** the task is still blocked, with its reason unchanged
+
+#### Scenario: An agent cannot rename a task
+
+- **WHEN** an agent's run submits a new title for a task, with or without a status
+- **THEN** the change is refused and the title is unchanged
+- **AND** no status the same request asked for is applied
 

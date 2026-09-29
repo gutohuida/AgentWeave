@@ -811,7 +811,7 @@ once expanded. The limit applies per project, since this view has no agent to ap
 
 ### Requirement: A conversation's attention state is visible in navigation
 
-Navigation SHALL show, for each listed conversation, whether it is running, waiting on the operator, or idle. A conversation is waiting on the operator when it holds a question that is unanswered and still being waited on, an undecided permission request, or an undismissed unasked-question flag.
+Navigation SHALL show, for each listed conversation, whether it is running, waiting on the operator, or idle. A conversation is waiting on the operator when it holds a question that is unanswered and still being waited on or an undecided permission request.
 
 The waiting state MUST be distinguishable from the running state, because a waiting run consumes
 its configured timeout while the operator is unaware of it.
@@ -2626,4 +2626,36 @@ so a check that fails must not take the answer away with it.
 - **WHEN** an agent's last delivery attempt was refused, and checking whether another agent holds the task's checkout fails
 - **THEN** the queue status still answers
 - **AND** it presents the refusal as what the last attempt was refused with
+
+### Requirement: An undelivered message SHALL say how its last attempt ended
+
+The conversation SHALL show, where the Hub gave up delivering a message and a run was the last attempt to deliver it, how that run ended and the error it recorded, with the message and the Hub's reason for giving up.
+
+The Hub keeps, on a message it gave up on, the run that last tried to deliver it. The conversation
+is served that run's facts. A run that failed before its process started writes no output, so
+without this the operator reads that delivery failed three times and not why, while the reason sits
+on the run's own row.
+
+The conversation SHALL learn that the Hub gave up on a message on every path that gives up, not only
+the one that ends a run.
+
+#### Scenario: A message whose runs failed to start says why
+
+- **GIVEN** an agent whose runtime fails to start
+- **WHEN** the operator's message is abandoned after its attempts fail
+- **THEN** the message shows that it was not delivered, with the Hub's reason
+- **AND** it shows that the last attempt failed, with the error that attempt
+  recorded
+
+#### Scenario: A message the Hub gave up on without a run shows only the Hub's reason
+
+- **WHEN** the Hub gives up on a message without starting any run for it
+- **THEN** the message shows that it was not delivered, with the Hub's reason
+- **AND** it names no attempt
+
+#### Scenario: Giving up without a run reaches an open conversation
+
+- **GIVEN** the operator has the conversation open
+- **WHEN** the Hub gives up on a message in it without starting a run
+- **THEN** the message is shown as not delivered without a reload
 

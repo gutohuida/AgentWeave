@@ -10,6 +10,7 @@ import {
   Task,
   useAllowedTransitions,
   useLandTask,
+  useRenameTask,
   useSetDivergenceHandling,
   useTaskIntegrationPreview,
   useUpdateTask,
@@ -186,10 +187,17 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   // Whether a reason is being collected, not what it says. The state holds the text, so an effect
   // depending on `blockingReason` itself would re-focus the input on every keystroke.
   const collectingBlockingReason = blockingReason !== null
+  // The draft text while the title is being edited; `null` means the title is not in edit mode.
+  // Kept separate from `task.title` so Escape can restore the pre-edit value without a round trip.
+  const [titleDraft, setTitleDraft] = useState<string | null>(null)
+  const [titleError, setTitleError] = useState<string | null>(null)
+  const titleInputRef = useRef<HTMLInputElement>(null)
+  const editingTitle = titleDraft !== null
 
   const { data: allowed } = useAllowedTransitions()
   const updateTask = useUpdateTask()
   const landTask = useLandTask()
+  const renameTask = useRenameTask()
   const setHandling = useSetDivergenceHandling()
   const { data: agents } = useAgents()
   const { data: specDocuments } = useSpecDocuments()
@@ -208,7 +216,18 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
     setBlockingReason(null)
     // The drawer instance outlives the task it shows; an advisory belongs to the task approved.
     setApprovalReport([])
+    setTitleDraft(null)
+    setTitleError(null)
   }, [task?.id])
+
+  // Same reasoning as the blocking-reason field just below: focus is applied here, once, rather
+  // than via `autoFocus`, which would race the drawer's own mount/focus handling.
+  useEffect(() => {
+    if (editingTitle) {
+      titleInputRef.current?.focus()
+      titleInputRef.current?.select()
+    }
+  }, [editingTitle])
 
   // The reason panel takes the keyboard itself when it appears. `autoFocus` used to do this and was
   // removed: the browser applies it on mount, the row menu's own focus restoration ran afterwards
@@ -270,7 +289,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={`task-drawer-title-${task.id}`}
+        aria-labelledby={`task-drawer-title-wrap-${task.id}`}
         data-testid={`task-drawer-${task.id}`}
         className="task-detail-dialog"
         style={{
@@ -294,10 +313,67 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         className="shrink-0 flex items-start justify-between gap-3 px-6 py-4"
         style={{ borderBottom: '1px solid var(--border)' }}
       >
-        <div className="min-w-0">
-          <h2 id={`task-drawer-title-${task.id}`} className="text-base font-semibold leading-snug" style={{ color: 'var(--text)' }}>
-            {task.title}
-          </h2>
+        <div className="min-w-0" id={`task-drawer-title-wrap-${task.id}`}>
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              data-testid={`task-drawer-title-input-${task.id}`}
+              className="text-base font-semibold leading-snug w-full bg-transparent outline-none"
+              style={{ color: 'var(--text)', borderBottom: '1px solid var(--border-hi)' }}
+              value={titleDraft ?? ''}
+              onChange={(event) => setTitleDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  const nextTitle = (titleDraft ?? '').trim()
+                  if (!nextTitle) {
+                    setTitleError("A task's title cannot be blank.")
+                    return
+                  }
+                  renameTask.mutate(
+                    { id: task.id, title: nextTitle },
+                    {
+                      onSuccess: () => {
+                        setTitleDraft(null)
+                        setTitleError(null)
+                      },
+                      // The route's own detail is shown as written (same reasoning as the status
+                      // refusal above); the old title stays on screen because the draft, not
+                      // `task.title`, is what the input renders.
+                      onError: (error) =>
+                        setTitleError(readableApiError(error, 'The Hub refused this rename.')),
+                    },
+                  )
+                } else if (event.key === 'Escape') {
+                  event.preventDefault()
+                  setTitleDraft(null)
+                  setTitleError(null)
+                }
+              }}
+              onBlur={() => {
+                setTitleDraft(null)
+                setTitleError(null)
+              }}
+            />
+          ) : (
+            <h2
+              data-testid={`task-drawer-title-${task.id}`}
+              className="text-base font-semibold leading-snug cursor-text"
+              style={{ color: 'var(--text)' }}
+              title="Click to rename"
+              onClick={() => {
+                setTitleError(null)
+                setTitleDraft(task.title)
+              }}
+            >
+              {task.title}
+            </h2>
+          )}
+          {titleError && (
+            <p className="text-[11px] mt-1" style={{ color: 'var(--amber)' }}>
+              {titleError}
+            </p>
+          )}
           <p className="text-[11px] mt-1 font-mono" style={{ color: 'var(--text-3)' }}>
             {task.id}
           </p>

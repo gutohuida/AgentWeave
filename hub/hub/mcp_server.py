@@ -212,6 +212,10 @@ def send_message(
 ) -> Dict[str, Any]:
     """Send an attributable message through the recipient's durable inbound queue.
 
+    The operator is not a message recipient: what you write in your reply is what they read in
+    this conversation. Record a result on a task with update_task's notes; if you need their
+    answer before you can continue, call ask_user.
+
     Args:
         to_agent: Exact name of a registered agent in this project, as listed in your context.
         subject: Short summary line.
@@ -341,20 +345,38 @@ def task_history(task_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def update_task(task_id: str, status: TaskStatus, notes: Optional[str] = None) -> Dict[str, Any]:
-    """Update a task's lifecycle status as the bound agent.
+def update_task(
+    task_id: str,
+    status: Optional[TaskStatus] = None,
+    notes: Optional[str] = None,
+    requirement_ids: Optional[List[str]] = None,
+    spec_document: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Update a task's lifecycle status, notes, or the requirements it serves.
 
     Args:
         task_id: The task's ID.
-        status: The new lifecycle status. One of "pending", "assigned", "in_progress",
-            "completed", "under_review", "revision_needed", "approved", "rejected".
+        status: The new lifecycle status, or omit to leave the status unchanged. One of "pending",
+            "assigned", "in_progress", "completed", "under_review", "revision_needed", "approved",
+            "rejected".
         notes: Why, in your own words - required reading for whoever looks at this task next.
             Moving a task to "revision_needed" or "rejected" without notes leaves the author with
             only a status change and no reason; a message to another agent does not appear on the
             task record itself. Overwrites the task's existing notes, so restate anything from a
             prior round that still matters.
+        requirement_ids: Requirement IDs this task serves, added to whatever it already serves.
+        spec_document: Which spec document to resolve requirement_ids in, when it is ambiguous.
     """
-    return _hub_request("PATCH", f"/tasks/{task_id}", {"status": status, "notes": notes})
+    body: Dict[str, Any] = {}
+    if status is not None:
+        body["status"] = status
+    if notes is not None:
+        body["notes"] = notes
+    if requirement_ids is not None:
+        body["requirement_ids"] = requirement_ids
+    if spec_document is not None:
+        body["spec_document"] = spec_document
+    return _hub_request("PATCH", f"/tasks/{task_id}", body)
 
 
 @mcp.tool()
@@ -627,7 +649,12 @@ def recall(observation_id: str) -> Dict[str, Any]:
 
 @mcp.tool()
 def request_agent(name: str, template: str, task: str) -> Dict[str, Any]:
-    """Request a new agent from a pre-approved template under the project agent budget."""
+    """Request a new agent, modelled on an existing open agent of this project.
+
+    `template` is that agent's exact name; the new agent takes its bound runner, charter and
+    runner configuration, under the project agent budget. It inherits no grant, no permission
+    posture, and no per-agent override — those stay the operator's to set on the new agent.
+    """
     return _hub_request(
         "POST", "/agents/request", {"name": name, "template": template, "task": task}
     )

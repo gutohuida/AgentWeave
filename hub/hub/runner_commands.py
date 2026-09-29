@@ -59,6 +59,12 @@ from .model_catalog import (
 # Removal: hub/tests/test_runner_parsing.py:104 builds commands for both names directly.
 SUPPORTED_RUNNERS = ("claude", "claude_proxy", "native", "codex")
 
+# The runners `build_command` routes to `_build_claude_command` (`:179` below) — declared once so
+# the prefix a Claude-family run is told its tools by (`agents.py:_tool_surface_lines`) cannot
+# drift from the set that actually gets the Claude CLI's MCP invocation
+# (`2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`).
+CLAUDE_FAMILY_RUNNERS = ("claude", "claude_proxy", "native")
+
 # The posture a non-yolo Claude run gets when the operator has chosen none.
 #
 # `manual` was used until 2026-08-06 and is unusable headlessly: it defers each decision to an
@@ -176,7 +182,7 @@ def build_command(
             control_args=control_args,
             restrict_spec_writes=restrict_spec_writes,
         )
-    if runner in ("claude", "claude_proxy", "native"):
+    if runner in CLAUDE_FAMILY_RUNNERS:
         return _build_claude_command(
             cli=cli,
             prompt=prompt,

@@ -33524,3 +33524,11 @@ Fix: order by insertion (`rowid`/id sequence), with `observed_at` only as displa
 `mcp_server._where` calls `os.path.realpath` on every path and path-like shell word before comparing it to the workspace (`hub/hub/mcp_server.py:1113-1133`). A model-written permission request naming an unreachable UNC path (an edit path, a `path` input, or one word of a command) blocks for ~21 s per word and opens an SMB connection to that host. Today this runs in the per-run MCP tool server, so the stall is per run; slice 2 moves `_decide` into the Hub process, where it would freeze every project (slice 2 now runs it via `asyncio.to_thread`). The path is refused in the end anyway, as outside the workspace.
 
 Fix: refuse `\`, `//`, `\?\` and `\.\` paths before `realpath`, so no network I/O happens. Test: a patched `realpath` that fails the test if called for a UNC path.
+
+## F465 (C) — archived agents keep counting against the agent budget, so a project at its budget can only raise it
+
+**Status:** open, filed 2026-09-29. Found by driving `request-agent-models-the-new-agent-on-one-the-operator-made` (task 3.2, second run) on the trial Hub: `request_agent` answered `409 Project agent budget exhausted (8/8)` for a project with **5 open and 3 archived** agents (measured read-only on the trial database), right after the drive had archived its own agents.
+
+`request_agent` counts every agent row, including archived ones, against `Project.agent_budget` (`hub/hub/api/v1/agents.py:2290-2298`, `existing_names = set(rows_by_name)`). The taken-name check counts archived rows on purpose, since a name is never reused (design D5 of that change). The budget reuses the same set, and nothing says the budget should count them too. The count predates the change: the old code counted the same rows. Agents cannot be deleted, only archived. So once a project reaches its budget, an agent can never again request one, however many are retired, unless the operator raises the budget. `agent-tool-surface` says only that the budget "SHALL be counted over the project's agents alone".
+
+Question for the operator: should the budget count **open** agents only (archiving frees a slot), or is it a lifetime cap on how many agents a project has ever had? Test either way: a project at its budget with one agent archived, then a request, asserting the chosen answer.

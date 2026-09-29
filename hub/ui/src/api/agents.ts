@@ -136,6 +136,7 @@ export interface AgentRunFacts {
   exit_code?: number | null
   started_at: string
   ended_at?: string | null
+  error?: string | null
 }
 
 /** The timeline response: the events, and the facts of the runs those events name.

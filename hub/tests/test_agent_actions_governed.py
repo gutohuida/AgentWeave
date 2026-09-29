@@ -1,5 +1,7 @@
 """Governed agent-request and scheduled-work capabilities."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from sqlalchemy import func, select
 
@@ -13,10 +15,10 @@ from hub.db.models import (
     Loop,
     PermissionRequest,
     Project,
-    ProjectSession,
     Run,
     Task,
 )
+from hub.turn_scheduler import ScheduleResult
 
 
 async def _actor(agent: str = "lead", run_id: str = "run-governed") -> dict[str, str]:
@@ -37,22 +39,27 @@ async def _actor(agent: str = "lead", run_id: str = "run-governed") -> dict[str,
 
 
 @pytest.mark.asyncio
-async def test_agent_request_uses_bound_requester_template_and_budget(app):
+async def test_agent_request_uses_bound_requester_template_and_budget(
+    app, auth_headers, bind_runner
+):
     headers = await _actor()
+    reg = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "worker-template", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert reg.status_code == 200, reg.text
+    patched = await app.patch(
+        "/api/v1/projects/proj-test/agents/worker-template",
+        json={"config": {"model": "small"}},
+        headers=auth_headers,
+    )
+    assert patched.status_code == 200, patched.text
+    await bind_runner("worker-template", cli="claude")
+
     async with async_session_factory() as session:
         project = await session.get(Project, "proj-test")
         project.agent_budget = 3
-        session.add(
-            ProjectSession(
-                project_id="proj-test",
-                data={
-                    "agents": {
-                        "lead": {"runner": "claude", "principal": True},
-                        "worker-template": {"runner": "manual", "model": "small"},
-                    }
-                },
-            )
-        )
         await session.commit()
 
     rejected = await app.post(
@@ -62,11 +69,17 @@ async def test_agent_request_uses_bound_requester_template_and_budget(app):
     )
     assert rejected.status_code == 422
 
-    response = await app.post(
-        "/api/v1/agent-actions/agents/request",
-        headers={**headers, "X-AgentWeave-Agent": "impostor"},
-        json={"name": "worker", "template": "worker-template", "task": "do work"},
-    )
+    # Inert scheduling: the requested agent inherits the template's runner, so the route would
+    # otherwise start a real `claude` turn wherever one is on PATH.
+    with patch(
+        "hub.turn_scheduler.schedule_agent",
+        AsyncMock(return_value=ScheduleResult(waiting_reason=None, terminal_failure=False)),
+    ):
+        response = await app.post(
+            "/api/v1/agent-actions/agents/request",
+            headers={**headers, "X-AgentWeave-Agent": "impostor"},
+            json={"name": "worker", "template": "worker-template", "task": "do work"},
+        )
     assert response.status_code == 201, response.text
     assert response.json()["requester"] == "lead"
 

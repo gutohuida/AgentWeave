@@ -796,6 +796,17 @@ R2 and R3 of `a-flow-is-configured-from-its-own-tab` and
 - The Opus review (`spec-queue/tracks/reviews/R1-2026-09-25.md`) returned APPROVE WITH FIXES on both.
   Every fix was applied, and both changes were APPROVED the same day (`APPROVALS.md` 2026-09-25).
 
+### 2026-09-24 — F378: what `request_agent` models a new agent on (recorded 2026-09-29)
+
+**DECIDED by the operator on 2026-09-24** in the B3 daily review
+(`spec-queue/tracks/reviews/B3-2026-09-24.md` §2); written here on 2026-09-29, when
+`request-agent-models-the-new-agent-on-one-the-operator-made` was implemented, to close its task 0.3.
+
+- DECIDED   F378-template  **A template is an existing open agent of the project**, named exactly
+  (not a registry, not deleting the tool). The new agent takes its runner, charter and config, less
+  `principal`, `yolo` and **`hub_client`** (operator: least authority) and less
+  `AW_QUESTION_TIMEOUT`; no grant, posture or per-agent override is copied.
+
 ### 2026-09-24 — two decisions already made, now written down
 
 **DECIDED by the operator; recorded 2026-09-24 in an interactive session** ("Record both"). Both
@@ -875,6 +886,13 @@ recommended answers were taken as recommended unless noted below. The per-change
   `-> in_progress` may reach `completed` without completion evidence. Requiring evidence there
   deadlocks the ordinary path, and the residue is one attributable task per run, reviewed by someone
   else. Do not re-file.
+- DECIDED   F291-F273-run-facts  **An undelivered message says how its last attempt ended, read from
+  the run's own facts, never derived from the output stream alone** (B2 D11). F291: the run facts map
+  gains `error` (`RunFacts.error`, fitted to 500 characters), and the abandoned turn renders it beneath
+  the Hub's reason. F273's premise (the persisted status line is the only record of a run's outcome) is
+  obsolete — the run's row and the facts map already carry status and exit code — so the requirement is
+  amended to match what the code does; no product change for F273 itself. Built as
+  `an-undelivered-message-says-how-its-last-attempt-ended`.
 - DECIDED   B2-follow-ups  **The 2026-08-21 decision ("failed at once, no new vocabulary") stands for
   now.** Revisiting it, together with the reaper's no-runner case, is queued as `REQUESTS.md` R7 for
   its own spec loop. History rows naming their agent is R8.

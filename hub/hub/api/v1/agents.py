@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Literal, NamedTuple, Optional, Tuple, get_args
@@ -49,6 +50,7 @@ from ...model_catalog import (
 )
 from ...output_recording import record_agent_output, record_context_usage
 from ...review_turn import ReviewContext, verdict_evidence_sentence
+from ...runner_commands import CLAUDE_FAMILY_RUNNERS
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -58,6 +60,7 @@ from ...schemas.agents import (
     AgentTimelineEvent,
     ContextUsageCreate,
     RunFacts,
+    fit_run_error,
 )
 from ...schemas.common import RequestModel
 from ...schemas.messages import OPERATOR_SENDER
@@ -66,6 +69,7 @@ from ...task_transitions import LIVE_STATUSES
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+logger = logging.getLogger(__name__)
 
 _24H = timedelta(hours=24)
 # One derived set, shared with `checkpoints._LIVE_TASK_STATUSES`, which held the identical
@@ -906,6 +910,7 @@ async def agent_timeline(
                 # workspace, and coalescing the first into the second would be the one mistake
                 # this column exists to prevent.
                 outside_workspace_writes=run.outside_workspace_writes,
+                error=fit_run_error(run.error),
             )
 
     return AgentTimeline(events=events, runs=runs)
@@ -1047,7 +1052,12 @@ def _operations() -> List[_Operation]:
                 "start_new_thread",
             ),
             required=("recipient", "content"),
-            text=f"message_type is one of {values(MessageType)}.",
+            text=(
+                f"message_type is one of {values(MessageType)}. The operator is not a message "
+                "recipient: your reply is what they read in this conversation; record a result "
+                "on a task with update_task's notes, or call ask_user if you need their answer "
+                "before you can continue."
+            ),
             http_note=(
                 "The recipient is `recipient` on the wire and the kind is `type`, not `to_agent` "
                 "and `message_type`."
@@ -1112,12 +1122,18 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="update_task",
-            args="task_id, status, notes=None",
+            args="task_id, status=None, notes=None, requirement_ids=None, spec_document=None",
             method="PATCH",
             path="/tasks/{task_id}",
-            fields=("status", "notes"),
+            fields=("status", "notes", "requirement_ids", "spec_document"),
             required=(),
-            text=f"status is required, one of {values(TaskStatus)}.",
+            text=(
+                f"move status (one of {values(TaskStatus)}), leave notes for whoever looks at "
+                "this task next, and link it to the requirements it serves with requirement_ids "
+                "(spec_document names which document to resolve them in, when that is "
+                "ambiguous). Omit a field to leave it alone. Who holds a task, its priority and "
+                "its description are the operator's."
+            ),
         ),
         _Operation(
             tool="ask_user",
@@ -1348,7 +1364,12 @@ def _operations() -> List[_Operation]:
             path="/agents/request",
             fields=("name", "template", "task"),
             required=("name", "template", "task"),
-            text="governed; subject to the project agent budget.",
+            text=(
+                "governed; subject to the project agent budget. `template` is the exact name "
+                "of an open agent of this project; the new agent takes that agent's bound "
+                "runner, charter and runner configuration, and none of its grants, posture or "
+                "per-agent overrides."
+            ),
         ),
         _Operation(
             tool="create_job",
@@ -1473,9 +1494,14 @@ def _operations() -> List[_Operation]:
     ]
 
 
-def _mcp_lines(operation: _Operation) -> List[str]:
-    """The injected-tool rendering: the call an agent makes, and what its values mean."""
-    lines = [f"- `{operation.tool}({operation.args})` — {operation.text}"]
+def _mcp_lines(operation: _Operation, *, tool_prefix: str = "") -> List[str]:
+    """The injected-tool rendering: the call an agent makes, and what its values mean.
+
+    `tool_prefix` is the full callable name a Claude-family run's harness actually exposes
+    (`mcp__agentweave__`) — empty for every other renderer, which reproduces the bare name
+    exactly as before (`2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`).
+    """
+    lines = [f"- `{tool_prefix}{operation.tool}({operation.args})` — {operation.text}"]
     if operation.detail:
         lines.append(f"  {operation.detail}")
     return lines
@@ -1505,7 +1531,15 @@ def _http_lines(operation: _Operation) -> List[str]:
     return lines
 
 
-def _tool_surface_lines(*, has_peers: bool = True, access_path: str = "mcp") -> List[str]:
+_HOST_TOOLS_NOTE = (
+    "Your host also has tools with similar names — `SendMessage` continues a subagent you "
+    "started — which cannot reach AgentWeave agents or the operator."
+)
+
+
+def _tool_surface_lines(
+    *, has_peers: bool = True, access_path: str = "mcp", runner: Optional[str] = None
+) -> List[str]:
     """Describe every operation an agent can perform, in the idiom of its own access path.
 
     `access_path` defaults to `"mcp"`, which is what every caller rendered before
@@ -1537,11 +1571,27 @@ def _tool_surface_lines(*, has_peers: bool = True, access_path: str = "mcp") -> 
     this section, concluded *"the required `submit_spec_document` capability was not exposed in
     this session"*, and stopped without writing the document it had just spent three rounds
     designing. A silently incomplete inventory is worse than none, because the agent believes it.
+
+    `runner` is the Claude-family question, not the access-path one: a harness in
+    `CLAUDE_FAMILY_RUNNERS` is injected the server under the name `agentweave`
+    (`runner_commands._build_claude_command`), so its callable names are known
+    (`mcp__agentweave__<tool>`) and asserting the prefix is grounded — every other runner's MCP
+    naming is either different (Codex) or unmeasured, so it is told the harness only *may* prefix.
+    The host tool collision (`_HOST_TOOLS_NOTE`) is rendered for a Claude-family run regardless of
+    which form is used, because the run has the host's tools in its list either way (F139).
     """
     over_mcp = access_path == "mcp"
-    if over_mcp:
+    is_claude_family = runner in CLAUDE_FAMILY_RUNNERS
+    tool_prefix = "mcp__agentweave__" if (over_mcp and is_claude_family) else ""
+    if over_mcp and is_claude_family:
         preamble = (
-            "Names below are as injected; with an MCP surface they are prefixed "
+            "These are AgentWeave's tools, named below by their full callable names. Elsewhere "
+            "in these instructions a tool may be named by its short name (`ask_user`); call it "
+            "by the full name listed here."
+        )
+    elif over_mcp:
+        preamble = (
+            "Names below are as declared; your harness may show them with a prefix such as "
             "`mcp__agentweave__`."
         )
     else:
@@ -1558,8 +1608,11 @@ def _tool_surface_lines(*, has_peers: bool = True, access_path: str = "mcp") -> 
             "value you substitute. Requests and responses are JSON, and a refusal comes back as "
             "an HTTP status with a `detail` saying why."
         )
-    render = _mcp_lines if over_mcp else _http_lines
-    lines = ["## Your tools", "", preamble, ""]
+    render = (lambda op: _mcp_lines(op, tool_prefix=tool_prefix)) if over_mcp else _http_lines
+    lines = ["## Your tools", "", preamble]
+    if is_claude_family:
+        lines.append(_HOST_TOOLS_NOTE)
+    lines.append("")
     for operation in _operations():
         lines.extend(render(operation))
     lines.append("")
@@ -1622,6 +1675,7 @@ async def _render_hub_agent_context(
     task_id: Optional[str] = None,
     review: Optional[ReviewContext] = None,
     access_path: str = "mcp",
+    runner: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Render the canonical model-facing context for one agent.
 
@@ -2123,7 +2177,9 @@ async def _render_hub_agent_context(
             "their ordinary command equivalents. Inbound state is already supplied."
         )
         lines.append("")
-        lines.extend(_tool_surface_lines(has_peers=bool(peers), access_path=access_path))
+        lines.extend(
+            _tool_surface_lines(has_peers=bool(peers), access_path=access_path, runner=runner)
+        )
     else:
         lines.append("## Registration")
         lines.append("")
@@ -2193,19 +2249,41 @@ async def request_agent(
             status_code=409, detail="Agent request run identity is invalid or stale"
         )
 
-    session_data = await _get_session_data(project_id, session) or {}
-    templates = session_data.get("agents", {}) or {}
-    template_config = templates.get(body.template)
-    if not isinstance(template_config, dict):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Agent template '{body.template}' is not pre-approved for this project",
-        )
-
     existing_rows = (
         (await session.execute(select(Agent).where(Agent.project_id == project_id))).scalars().all()
     )
-    existing_names = set(templates) | {row.name for row in existing_rows}
+    rows_by_name = {row.name: row for row in existing_rows}
+
+    template_row = rows_by_name.get(body.template)
+    if template_row is None:
+        open_names = sorted(row.name for row in existing_rows if row.lifecycle == "open")
+        shown = open_names[:10]
+        shown_text = ", ".join(shown) + ("…" if len(open_names) > len(shown) else "")
+        detail = (
+            f"No agent named '{body.template}' in this project to model a new agent on. "
+            f"Name one of: {shown_text}."
+            if shown
+            else (
+                f"No agent named '{body.template}' in this project to model a new agent on, "
+                "and this project has no open agent to name."
+            )
+        )
+        raise HTTPException(status_code=400, detail=detail)
+    if template_row.lifecycle == "archived":
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{body.template}' is archived; model the new agent on an open agent.",
+        )
+    if template_row.runner_id is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"'{body.template}' has no runner bound, so an agent modelled on it could "
+                "not run."
+            ),
+        )
+
+    existing_names = set(rows_by_name)
     if body.name in existing_names:
         raise HTTPException(status_code=409, detail=f"Agent '{body.name}' already exists")
 
@@ -2221,8 +2299,16 @@ async def request_agent(
             ),
         )
 
-    copied_config = dict(template_config)
-    copied_config.pop("principal", None)
+    from .agent_trigger import QUESTION_WAIT_ENV
+
+    copied_config = dict(template_row.config or {})
+    for key in ("principal", "yolo", "hub_client"):
+        copied_config.pop(key, None)
+    raw_env_vars = copied_config.get("env_vars")
+    if isinstance(raw_env_vars, dict):
+        copied_config["env_vars"] = {
+            key: value for key, value in raw_env_vars.items() if key != QUESTION_WAIT_ENV
+        }
     agent_row = Agent(
         id=f"agent-{short_id()}",
         project_id=project_id,
@@ -2230,6 +2316,8 @@ async def request_agent(
         contact_mode="watchdog-spawn",
         self_registered=False,
         config=copied_config,
+        runner_id=template_row.runner_id,
+        charter_id=template_row.charter_id,
         color_index=await next_color_index(session, project_id),
         created_by_run_id=source_run.id,
     )
@@ -2281,7 +2369,15 @@ async def request_agent(
 
     from ...turn_scheduler import schedule_agent
 
-    await schedule_agent(project_id, body.name)
+    try:
+        await schedule_agent(project_id, body.name)
+    except Exception:
+        logger.exception(
+            "request_agent: scheduling %s's first turn raised after the agent and its queue "
+            "entry were already committed; the entry stays queued until %s is next scheduled",
+            body.name,
+            body.name,
+        )
     return {**payload, "status": "queued"}
 
 

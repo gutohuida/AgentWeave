@@ -4,520 +4,136 @@
     "runner": "claude",
     "model": "opus",
     "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-27-daily",
+    "branch": "autonomous/2026-09-28-daily",
     "parent_branch": "master",
-    "parent_sha": "0c5f58e",
-    "stop_at": "2026-09-28T07:00:00+01:00",
+    "parent_sha": "688751f",
+    "stop_at": "2026-09-29T07:00:00+01:00",
     "iteration": 14,
-    "log_file": ".claude/autonomous/2026-09-27-night-log.md",
+    "log_file": ".claude/autonomous/2026-09-28-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
+    "current": "a-runner-that-cannot-collaborate-says-so-where-it-is-bound-impl",
+    "next_action": "Begin ORDER item 8 (a-runner-that-cannot-collaborate-says-so-where-it-is-bound-impl) via the openspec-apply-change skill. ORDER 7 was finished in an interactive session on 2026-09-29 (the machine was off from ~05:45 to 18:28, killing the firing that held it): verified, driven live, archived to openspec/changes/archive/2026-09-29-request-agent-models-the-new-agent-on-one-the-operator-made. Check `git status` first; a clean tree is expected. Change folders under openspec/changes/ carry no -impl suffix -- check the directory listing. If this change's folder is already gone, skip to ORDER 9 and log it. Drive before closing any task; never check off verification or archive boxes that were not run. LESSONS (carried forward): do not hand-sync a delta before `openspec archive --yes`. Strip `claude` from PATH by removing every directory that contains claude/claude.exe/claude.cmd and confirm with `which claude` -- a substring grep of PATH misses AppData/Roaming/npm. NEW LESSON (ORDER 7): a test that calls a route which schedules a turn for an agent with a bound claude runner starts a REAL claude process wherever claude is on PATH -- and then passes locally for that reason alone. Make `hub.turn_scheduler.schedule_agent` inert (AsyncMock returning ScheduleResult(waiting_reason=None, terminal_failure=False)) around such calls. Also: `_trigger_and_capture_build_command` keeps the LAST build_command call, and a turn ending re-drains every agent with queued input (F90), so pick the call by its context file when another agent has input queued.",
     "queue": [
         {
-            "id": "a-runner-choice-names-its-model-impl",
+            "id": "tree-gate",
             "status": "done",
-            "title": "Implement a-runner-choice-names-its-model",
-            "detail": "Done commit 2b91c92: runnerOptionLabel helper + wired into RunnerPicker and both ProjectSettingsPanel selects. Tests (1.1/1.1b/1.2/1.3) written to fail first then pass; hub/ui lint clean; full vitest 168 files/1723 tests green; UI bundle rebuilt and committed with source."
-        },
-        {
-            "id": "a-runner-choice-names-its-model-drive",
-            "status": "done",
-            "title": "Drive a-runner-choice-names-its-model",
-            "detail": "Done: trial Hub :8010 per tasks.md 3.1 (task names :8010 explicitly, not a fresh drive Hub). Two same-named Twin runners on two models render distinct D1-format labels in both Agent Settings and Project Settings; checkpoint-runner override collapses both to the override model as designed. No new finding -- FINDINGS.md 'a-runner-choice-names-its-model drive, 2026-09-27'."
-        },
-        {
-            "id": "a-runner-choice-names-its-model-archive",
-            "status": "done",
-            "title": "Archive a-runner-choice-names-its-model",
-            "detail": "Done commit ff961b1: openspec-archive-change moved the change to openspec/changes/archive/2026-09-28-a-runner-choice-names-its-model, synced its ADDED requirement into openspec/specs/runner-registry/spec.md (validated, 43/43 specs pass strict), and marked F268 'fixed 2b91c92' in FINDINGS.md. F268 was severity B, never on the severity-A index, so no index correction was owed."
-        },
-        {
-            "id": "an-estimate-that-misses-turns-says-so-impl",
-            "status": "done",
-            "title": "Implement an-estimate-that-misses-turns-says-so",
-            "detail": "Done commit 45e01b2. Also fixed F459: hub/tests full run caught a-runner-choice-names-its-model's unhandled second useModelCatalog() call site (CI red for 3 shas), bound its error in RunnerPicker. hub/tests 5086 passed/86 skipped; tests/ 553 passed/3 skipped; vitest 168 files/1725 tests; lint clean; bundle refreshed."
-        },
-        {
-            "id": "an-estimate-that-misses-turns-says-so-drive",
-            "status": "done",
-            "title": "Drive an-estimate-that-misses-turns-says-so",
-            "detail": "Done: trial Hub :8010 per tasks.md 3.1. Crashed a real run mid-flight and restarted the Hub to produce a genuine unavailable turn_usage row (F92 mechanism); GET /accounting reported unpriced_turns correctly at project and per-agent level. Budgets tab never rendered 'excludes N turns' because preferred_display.kind stays 'allowance' for claude runners (D2 as designed, not a bug) -- recorded as a design consequence in FINDINGS.md, no new finding."
-        },
-        {
-            "id": "an-estimate-that-misses-turns-says-so-archive",
-            "status": "done",
-            "title": "Archive an-estimate-that-misses-turns-says-so",
-            "detail": "Done commit 9ccdba5: archived to openspec/changes/archive/2026-09-28-an-estimate-that-misses-turns-says-so, its MODIFIED requirement synced into openspec/specs/usage-accounting/spec.md (43/43 specs pass strict), and F62 marked 'fixed 45e01b2' in FINDINGS.md. F62 is severity C, never on the severity-A index, so no index correction was owed."
-        },
-        {
-            "id": "a-model-alias-is-a-model-choice-impl",
-            "status": "done",
-            "title": "Implement a-model-alias-is-a-model-choice",
-            "detail": "Done commit 63d9f34: verified an inherited uncommitted diff already covered tasks.md sections 0-2 (ProviderDescriptor.model resolves aliases, worker/runner-registry gates agree, UI alias resolution/Latest group), completed the pending full-suite run task 2.5 was waiting on. Caught and fixed a real regression: hub/tests/test_worker.py still asserted the pre-D1 behaviour (haiku not declared); fixed to match D1. tests/ 553 passed/3 skipped; hub/tests/ 5094 passed/86 skipped (claude stripped from PATH); vitest 168 files/1731 tests; lint clean; UI bundle already matched current source."
-        },
-        {
-            "id": "a-model-alias-is-a-model-choice-drive",
-            "status": "done",
-            "title": "Drive a-model-alias-is-a-model-choice",
-            "detail": "Done: trial Hub :8010 per tasks.md 3.1 (task names :8010 explicitly). Created a runner on the 'haiku' alias, bound an agent, ran one real claude-haiku-4-5 turn (scripts/drive/d0928_alias_turn_usage.py). Confirmed live: turn_usage.model == 'claude-haiku-4-5-20251001' (full resolved id) while runners.model stayed 'haiku' after the run -- D1 holds end to end. No new finding; FINDINGS.md 'a-model-alias-is-a-model-choice drive, 2026-09-28'."
-        },
-        {
-            "id": "a-model-alias-is-a-model-choice-archive",
-            "status": "done",
-            "title": "Archive a-model-alias-is-a-model-choice",
-            "detail": "Done commit 8e75486: archived to openspec/changes/archive/2026-09-28-a-model-alias-is-a-model-choice, synced the ADDED model-catalog requirement (append) and the MODIFIED + ADDED runner-registry requirements (merge + append) into openspec/specs/ (43/43 specs strict, 45/45 changes strict), and marked F221 'fixed 63d9f34 (2026-09-27)' in FINDINGS.md. F221 is severity D, never on the open severity-A index, so no index correction was owed."
-        },
-        {
-            "id": "the-codex-models-offered-are-the-ones-its-cli-lists-impl",
-            "status": "done",
-            "title": "Implement the-codex-models-offered-are-the-ones-its-cli-lists",
-            "detail": "Done commit 3b3563a: verified an inherited uncommitted diff already covered tasks.md sections 0-2.4 (Codex models/default/source read from $CODEX_HOME/models_cache.json at runtime, literal CATALOG as fallback), completed task 2.5's full-suite gate. Caught and fixed a real, pre-existing CI regression unrelated to this change: F460 (B) -- two a-model-alias-is-a-model-choice tests never mocked hub.launchability.shutil.which, so they only passed with a real claude on PATH; CI had been red on them for 4 consecutive commits since 63d9f34. Fixed to match every sibling test. hub/tests/ (claude stripped from PATH) 5109 passed/86 skipped; tests/ 553 passed/3 skipped; ruff/black/mypy/eslint clean; UI bundle already matched source."
-        },
-        {
-            "id": "the-codex-models-offered-are-the-ones-its-cli-lists-drive",
-            "status": "done",
-            "title": "Drive the-codex-models-offered-are-the-ones-its-cli-lists",
-            "detail": "Done commit e94a4a3: trial Hub :8010 per tasks.md section 3 (task names :8010 explicitly). 3.1 GET /model-catalog listed gpt-5.6-terra/gpt-5.6-luna/gpt-5.5 with source.kind==cli_cache, client_version 0.146.0, verbatim. 3.2 POST /runners with an unrecognised Codex model answered 400; a SQL-seeded existing runner on that model read model_unrecognised: true. 3.3 New Runner's Codex source line read 'As listed by your installed Codex CLI (0.146.0, fetched 23 Sep)', verbatim. No new finding; new harness scripts/drive/d0928_codex_cache_source_line.py."
-        },
-        {
-            "id": "the-codex-models-offered-are-the-ones-its-cli-lists-archive",
-            "status": "done",
-            "title": "Archive the-codex-models-offered-are-the-ones-its-cli-lists",
-            "detail": "Done commit (this iteration): archived to openspec/changes/archive/2026-09-28-the-codex-models-offered-are-the-ones-its-cli-lists, synced its ADDED model-catalog requirement (append) into openspec/specs/model-catalog/spec.md (43/43 specs strict, 43/43 changes strict), and marked F267 and F174 'fixed 3b3563a' in FINDINGS.md (both severity B, never on the open severity-A index -- F299/F301/F325/F332/F352 -- so no index correction was owed)."
-        },
-        {
-            "id": "a-firing-is-counted-once-however-many-agents-it-starts-impl",
-            "status": "done",
-            "title": "Implement a-firing-is-counted-once-however-many-agents-it-starts",
-            "detail": "Done 5983d3f (interactive session 2026-09-28, finishing the night's uncommitted diff): hub/tests 5110 passed/86 skipped (claude off PATH); tests/ 553; vitest 1735; lint clean."
-        },
-        {
-            "id": "a-firing-is-counted-once-however-many-agents-it-starts-drive",
-            "status": "done",
-            "title": "Drive a-firing-is-counted-once-however-many-agents-it-starts",
-            "detail": "Done 5983d3f: fresh Hub :8051 (profile drive0928firing), two Haiku agents, one press -> run_count 1, two rows sharing fired_at. No new finding."
-        },
-        {
-            "id": "a-firing-is-counted-once-however-many-agents-it-starts-archive",
-            "status": "done",
-            "title": "Archive a-firing-is-counted-once-however-many-agents-it-starts",
-            "detail": "Done (interactive session): archived to openspec/changes/archive/2026-09-28-a-firing-is-counted-once-however-many-agents-it-starts, ADDED requirement appended to loop-firing-accountability (43/43 specs strict), F121 marked fixed 5983d3f (severity C, not on the A index)."
+            "title": "Read back the background pytest results from compose and gate on them"
         },
         {
             "id": "an-undelivered-message-says-how-its-last-attempt-ended-impl",
-            "status": "open",
-            "title": "Implement an-undelivered-message-says-how-its-last-attempt-ended",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "an-undelivered-message-says-how-its-last-attempt-ended-drive",
-            "status": "open",
-            "title": "Drive an-undelivered-message-says-how-its-last-attempt-ended",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "an-undelivered-message-says-how-its-last-attempt-ended-archive",
-            "status": "open",
-            "title": "Archive an-undelivered-message-says-how-its-last-attempt-ended",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "status": "done",
+            "title": "ORDER 1/23: implement via openspec-apply-change; drive before closing; archive if its last group finishes"
         },
         {
             "id": "the-checkpoint-grant-says-it-reaches-every-checkpoint-impl",
-            "status": "open",
-            "title": "Implement the-checkpoint-grant-says-it-reaches-every-checkpoint",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "the-checkpoint-grant-says-it-reaches-every-checkpoint-drive",
-            "status": "open",
-            "title": "Drive the-checkpoint-grant-says-it-reaches-every-checkpoint",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "the-checkpoint-grant-says-it-reaches-every-checkpoint-archive",
-            "status": "open",
-            "title": "Archive the-checkpoint-grant-says-it-reaches-every-checkpoint",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "status": "done",
+            "title": "ORDER 2/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "the-operator-can-rename-a-task-impl",
-            "status": "open",
-            "title": "Implement the-operator-can-rename-a-task",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "the-operator-can-rename-a-task-drive",
-            "status": "open",
-            "title": "Drive the-operator-can-rename-a-task",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "the-operator-can-rename-a-task-archive",
-            "status": "open",
-            "title": "Archive the-operator-can-rename-a-task",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "status": "done",
+            "title": "ORDER 3/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "a-message-to-the-operator-is-told-where-the-operator-reads-impl",
-            "status": "open",
-            "title": "Implement a-message-to-the-operator-is-told-where-the-operator-reads",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "a-message-to-the-operator-is-told-where-the-operator-reads-drive",
-            "status": "open",
-            "title": "Drive a-message-to-the-operator-is-told-where-the-operator-reads",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "a-message-to-the-operator-is-told-where-the-operator-reads-archive",
-            "status": "open",
-            "title": "Archive a-message-to-the-operator-is-told-where-the-operator-reads",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "status": "done",
+            "title": "ORDER 4/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "an-agent-updates-a-task-with-what-its-tool-carries-impl",
-            "status": "open",
-            "title": "Implement an-agent-updates-a-task-with-what-its-tool-carries",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "an-agent-updates-a-task-with-what-its-tool-carries-drive",
-            "status": "open",
-            "title": "Drive an-agent-updates-a-task-with-what-its-tool-carries",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "an-agent-updates-a-task-with-what-its-tool-carries-archive",
-            "status": "open",
-            "title": "Archive an-agent-updates-a-task-with-what-its-tool-carries",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "status": "done",
+            "title": "ORDER 5/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "a-claude-run-is-told-its-agentweave-tools-by-their-full-names-impl",
-            "status": "open",
-            "title": "Implement a-claude-run-is-told-its-agentweave-tools-by-their-full-names",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "a-claude-run-is-told-its-agentweave-tools-by-their-full-names-drive",
-            "status": "open",
-            "title": "Drive a-claude-run-is-told-its-agentweave-tools-by-their-full-names",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "a-claude-run-is-told-its-agentweave-tools-by-their-full-names-archive",
-            "status": "open",
-            "title": "Archive a-claude-run-is-told-its-agentweave-tools-by-their-full-names",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "status": "done",
+            "title": "ORDER 6/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "request-agent-models-the-new-agent-on-one-the-operator-made-impl",
-            "status": "open",
-            "title": "Implement request-agent-models-the-new-agent-on-one-the-operator-made",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "request-agent-models-the-new-agent-on-one-the-operator-made-drive",
-            "status": "open",
-            "title": "Drive request-agent-models-the-new-agent-on-one-the-operator-made",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "request-agent-models-the-new-agent-on-one-the-operator-made-archive",
-            "status": "open",
-            "title": "Archive request-agent-models-the-new-agent-on-one-the-operator-made",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "status": "done",
+            "title": "ORDER 7/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "a-runner-that-cannot-collaborate-says-so-where-it-is-bound-impl",
             "status": "open",
-            "title": "Implement a-runner-that-cannot-collaborate-says-so-where-it-is-bound",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "a-runner-that-cannot-collaborate-says-so-where-it-is-bound-drive",
-            "status": "open",
-            "title": "Drive a-runner-that-cannot-collaborate-says-so-where-it-is-bound",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "a-runner-that-cannot-collaborate-says-so-where-it-is-bound-archive",
-            "status": "open",
-            "title": "Archive a-runner-that-cannot-collaborate-says-so-where-it-is-bound",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 8/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "agents-no-longer-register-themselves-impl",
             "status": "open",
-            "title": "Implement agents-no-longer-register-themselves",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "agents-no-longer-register-themselves-drive",
-            "status": "open",
-            "title": "Drive agents-no-longer-register-themselves",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "agents-no-longer-register-themselves-archive",
-            "status": "open",
-            "title": "Archive agents-no-longer-register-themselves",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 9/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "a-loops-outstanding-mail-is-mail-not-yet-delivered-impl",
             "status": "open",
-            "title": "Implement a-loops-outstanding-mail-is-mail-not-yet-delivered",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "a-loops-outstanding-mail-is-mail-not-yet-delivered-drive",
-            "status": "open",
-            "title": "Drive a-loops-outstanding-mail-is-mail-not-yet-delivered",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "a-loops-outstanding-mail-is-mail-not-yet-delivered-archive",
-            "status": "open",
-            "title": "Archive a-loops-outstanding-mail-is-mail-not-yet-delivered",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 10/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "the-permissions-pill-shows-the-posture-the-run-gets-impl",
             "status": "open",
-            "title": "Implement the-permissions-pill-shows-the-posture-the-run-gets",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "the-permissions-pill-shows-the-posture-the-run-gets-drive",
-            "status": "open",
-            "title": "Drive the-permissions-pill-shows-the-posture-the-run-gets",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "the-permissions-pill-shows-the-posture-the-run-gets-archive",
-            "status": "open",
-            "title": "Archive the-permissions-pill-shows-the-posture-the-run-gets",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 11/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "an-ask-me-card-says-what-workspace-only-would-decide-impl",
             "status": "open",
-            "title": "Implement an-ask-me-card-says-what-workspace-only-would-decide",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "an-ask-me-card-says-what-workspace-only-would-decide-drive",
-            "status": "open",
-            "title": "Drive an-ask-me-card-says-what-workspace-only-would-decide",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "an-ask-me-card-says-what-workspace-only-would-decide-archive",
-            "status": "open",
-            "title": "Archive an-ask-me-card-says-what-workspace-only-would-decide",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 12/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "the-approval-preview-asks-the-gates-merge-question-impl",
             "status": "open",
-            "title": "Implement the-approval-preview-asks-the-gates-merge-question",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "the-approval-preview-asks-the-gates-merge-question-drive",
-            "status": "open",
-            "title": "Drive the-approval-preview-asks-the-gates-merge-question",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "the-approval-preview-asks-the-gates-merge-question-archive",
-            "status": "open",
-            "title": "Archive the-approval-preview-asks-the-gates-merge-question",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 13/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "isolation-does-not-change-under-held-work-impl",
             "status": "open",
-            "title": "Implement isolation-does-not-change-under-held-work",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "isolation-does-not-change-under-held-work-drive",
-            "status": "open",
-            "title": "Drive isolation-does-not-change-under-held-work",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "isolation-does-not-change-under-held-work-archive",
-            "status": "open",
-            "title": "Archive isolation-does-not-change-under-held-work",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 14/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "a-documents-rigor-history-and-retired-requirements-are-on-screen-impl",
             "status": "open",
-            "title": "Implement a-documents-rigor-history-and-retired-requirements-are-on-screen",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "a-documents-rigor-history-and-retired-requirements-are-on-screen-drive",
-            "status": "open",
-            "title": "Drive a-documents-rigor-history-and-retired-requirements-are-on-screen",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "a-documents-rigor-history-and-retired-requirements-are-on-screen-archive",
-            "status": "open",
-            "title": "Archive a-documents-rigor-history-and-retired-requirements-are-on-screen",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 15/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "a-pending-proposal-can-be-withdrawn-impl",
             "status": "open",
-            "title": "Implement a-pending-proposal-can-be-withdrawn",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "a-pending-proposal-can-be-withdrawn-drive",
-            "status": "open",
-            "title": "Drive a-pending-proposal-can-be-withdrawn",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "a-pending-proposal-can-be-withdrawn-archive",
-            "status": "open",
-            "title": "Archive a-pending-proposal-can-be-withdrawn",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 16/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "the-corpus-is-indexed-arranged-and-adopted-from-the-app-impl",
             "status": "open",
-            "title": "Implement the-corpus-is-indexed-arranged-and-adopted-from-the-app",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "the-corpus-is-indexed-arranged-and-adopted-from-the-app-drive",
-            "status": "open",
-            "title": "Drive the-corpus-is-indexed-arranged-and-adopted-from-the-app",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "the-corpus-is-indexed-arranged-and-adopted-from-the-app-archive",
-            "status": "open",
-            "title": "Archive the-corpus-is-indexed-arranged-and-adopted-from-the-app",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 17/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "a-specification-is-read-in-results-that-fit-impl",
             "status": "open",
-            "title": "Implement a-specification-is-read-in-results-that-fit",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "a-specification-is-read-in-results-that-fit-drive",
-            "status": "open",
-            "title": "Drive a-specification-is-read-in-results-that-fit",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "a-specification-is-read-in-results-that-fit-archive",
-            "status": "open",
-            "title": "Archive a-specification-is-read-in-results-that-fit",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 18/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "input-the-hub-accepted-is-answered-as-accepted-impl",
             "status": "open",
-            "title": "Implement input-the-hub-accepted-is-answered-as-accepted",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "input-the-hub-accepted-is-answered-as-accepted-drive",
-            "status": "open",
-            "title": "Drive input-the-hub-accepted-is-answered-as-accepted",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "input-the-hub-accepted-is-answered-as-accepted-archive",
-            "status": "open",
-            "title": "Archive input-the-hub-accepted-is-answered-as-accepted",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 19/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "charters-are-named-once-and-an-empty-one-says-so-impl",
             "status": "open",
-            "title": "Implement charters-are-named-once-and-an-empty-one-says-so",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "charters-are-named-once-and-an-empty-one-says-so-drive",
-            "status": "open",
-            "title": "Drive charters-are-named-once-and-an-empty-one-says-so",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "charters-are-named-once-and-an-empty-one-says-so-archive",
-            "status": "open",
-            "title": "Archive charters-are-named-once-and-an-empty-one-says-so",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 20/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "a-dialog-takes-the-keyboard-when-it-opens-impl",
             "status": "open",
-            "title": "Implement a-dialog-takes-the-keyboard-when-it-opens",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "a-dialog-takes-the-keyboard-when-it-opens-drive",
-            "status": "open",
-            "title": "Drive a-dialog-takes-the-keyboard-when-it-opens",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "a-dialog-takes-the-keyboard-when-it-opens-archive",
-            "status": "open",
-            "title": "Archive a-dialog-takes-the-keyboard-when-it-opens",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 21/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "the-app-window-keeps-the-operators-preferences-impl",
             "status": "open",
-            "title": "Implement the-app-window-keeps-the-operators-preferences",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "the-app-window-keeps-the-operators-preferences-drive",
-            "status": "open",
-            "title": "Drive the-app-window-keeps-the-operators-preferences",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "the-app-window-keeps-the-operators-preferences-archive",
-            "status": "open",
-            "title": "Archive the-app-window-keeps-the-operators-preferences",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 22/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         },
         {
             "id": "a-run-records-that-its-calls-were-allowed-impl",
             "status": "open",
-            "title": "Implement a-run-records-that-its-calls-were-allowed",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
-        },
-        {
-            "id": "a-run-records-that-its-calls-were-allowed-drive",
-            "status": "open",
-            "title": "Drive a-run-records-that-its-calls-were-allowed",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
-        },
-        {
-            "id": "a-run-records-that-its-calls-were-allowed-archive",
-            "status": "open",
-            "title": "Archive a-run-records-that-its-calls-were-allowed",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "title": "ORDER 23/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
         }
     ],
     "decisions_for_user": [],

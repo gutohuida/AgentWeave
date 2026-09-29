@@ -11,7 +11,6 @@ export interface Checkpoint {
   /** `ready` means a record exists, carries a written half, and passed its probes. It has never
    *  meant "the run stopped" — that was the defect this capability replaced. */
   status: 'ready' | 'unwritten' | 'failed'
-  visibility: 'private' | 'project' | 'granted'
   probe_status?: string | null
   probe_findings?: Array<{ dimension: string; missing: string[]; invented: string[] }> | null
   previous_checkpoint_id?: string | null

@@ -137,6 +137,22 @@ class AgentTimelineEvent(BaseModel):
     model_config = {"from_attributes": True}
 
 
+RUN_FACTS_ERROR_CHARS = 500
+
+
+def fit_run_error(error: Optional[str]) -> Optional[str]:
+    """Fit `Run.error` to `RunFacts.error`'s bound.
+
+    Fitted, not redacted: `str(exc)` is already broadcast unredacted as `run_failed.error`
+    (`_transport_failure_fields`), so redacting only here would make the two disagree. Truncation
+    stops an over-long value (a stack-free exception repr) from turning the route into a
+    response-validation 500 — the same reason `JobRun.error_summary` is fitted.
+    """
+    if not error:
+        return None
+    return error[:RUN_FACTS_ERROR_CHARS]
+
+
 class RunFacts(BaseModel):
     """What a run's own row records about how it went.
 
@@ -150,6 +166,10 @@ class RunFacts(BaseModel):
     exit_code: Optional[int] = None
     started_at: datetime
     ended_at: Optional[datetime] = None
+    # `Run.error`, fitted through `fit_run_error`. `None` where the run recorded none — a
+    # completed run carries no error, and a failed run that recorded none carries none either
+    # (`an-undelivered-message-says-how-its-last-attempt-ended`, D1).
+    error: Optional[str] = Field(default=None, max_length=RUN_FACTS_ERROR_CHARS)
     # What this run wrote outside its own workspace, `Run.outside_workspace_writes` verbatim
     # (task 4.7). Carried here so a reader has somewhere to read it: without this the column is
     # written on every run and served to nobody.

@@ -386,6 +386,24 @@ export function useUpdateTask() {
 }
 
 /**
+ * Rename a task's title in place.
+ *
+ * Separate from `useUpdateTask` because that hook takes `status` as required and always sends it —
+ * renaming a `blocked` task through it would restate `blocked` without `blocked_reason` and the
+ * route would refuse the whole PATCH. Follows the `useLandTask` precedent: a different act must not
+ * share the status mutation's pending state.
+ */
+export function useRenameTask() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      patchJson<Task>(`/api/v1/projects/${projectId}/tasks/${id}`, { title }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] }),
+  })
+}
+
+/**
  * Land completed work: release the author's hold, pass it through review, approve it — one call.
  *
  * Separate from `useUpdateTask` because it is not a status change the operator picks off the map.
