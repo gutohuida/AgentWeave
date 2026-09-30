@@ -81,9 +81,15 @@
   removed.
   Done 2026-09-30: eslint and tsc clean; `npx vitest run` 170 files, 1759 passed (was 169/1753: +2 files, -1 file, +9, -3 tests); `py -3.11 -m pytest hub/tests/test_surface_ceilings.py hub/tests/test_launchability.py hub/tests/test_dashboard_truth.py -q` 84 passed, no ceiling moved; ruff, black clean.
 - [ ] 3.2 Human-only check on `:8010`: see `test-guide.md`.
+  **Not done: deferred to the operator** (it is their judgement, step 1's "reads as something to act
+  on"). Its agent-drivable half was driven on a throwaway Hub instead (design D7, drive note): every
+  verdict transition of steps 1–2 held at the API. The rendered line was checked by component tests
+  only, not in a browser.
 
 ## 4. Close
 
-- [ ] 4.1 Foot F178 in `scripts/drive/FINDINGS.md` (runnable half by F179, 2026-09-23;
+- [x] 4.1 Foot F178 in `scripts/drive/FINDINGS.md` (runnable half by F179, 2026-09-23;
   collaboration half by this change).
-- [ ] 4.2 Sync the delta into `openspec/specs/runtime-diagnostics/spec.md` and archive.
+  Done 2026-09-30.
+- [x] 4.2 Sync the delta into `openspec/specs/runtime-diagnostics/spec.md` and archive.
+  Done 2026-09-30: the ADDED requirement applied by `openspec archive` (no `--skip-specs`); specs validate strict.

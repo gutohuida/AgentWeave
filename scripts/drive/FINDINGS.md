@@ -14727,7 +14727,7 @@ and model it used (`Run started (claude, claude-haiku-4-5-20251001)`).
 
 ## F178 (B) — the collaboration-readiness report the Hub computes on every call reaches no screen, and has not since 2026-08-08
 
-**Status:** open, and sharper than filed. Verified 2026-09-09: `useAgentLaunchability`
+**Status:** fixed 373df50 (collaboration half, `a-runner-that-cannot-collaborate-says-so-where-it-is-bound`, 2026-09-30) + F179's repair (runnable half, 2026-09-23). The runner picker in an agent's Execution settings now shows both verdicts; `AgentCard` is deleted. Was: open, and sharper than filed. Verified 2026-09-09: `useAgentLaunchability`
 (`hub/ui/src/api/agents.ts:376`) has **no non-test caller** anywhere in `hub/ui/src` -- its only
 consumers are three `__tests__` mocks. So the report reaches no screen, and three tests mock a hook
 no component renders. [classified 2026-09-09, D-2]
