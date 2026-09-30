@@ -139,9 +139,29 @@ class _FakeACPSession:
         the way the three other entry kinds are. `message`/`data` default to `None` if the entry
         omits them; a real response always carries `message` (JSON-RPC requires it) but this
         fake does not enforce that, since no case needs to test a malformed error.
+      - ``{"process_exited": True}`` -- part 14/N, case (n)'s second scenario: "a process that
+        exits after the prompt is written", not a JSON-RPC error at all -- the transport itself is
+        gone, so there is no `error` object to translate. Ends the in-flight `request()` call by
+        setting `self._running = False` and *raising* `self.process_ended_error(method)`, an
+        `AppServerError` (not `CopilotACPError`: no JSON-RPC `.code`/`.data` exists for a death
+        with no response), mirroring `test_codex_appserver_run_turn.py`'s `_FakeSession
+        .process_ended_error` -- same three composed facts (`exit_code`, `method`, `stderr_tail`),
+        same reason (every reader of `str(exc)` gets them without being changed, D12's docstring).
+        `run_turn` itself has no separate poll loop the way Codex's does (this file's module
+        docstring, above) -- draining happens inside one `request()` call -- so the fake, standing
+        in for `ACPProcess.request()`, is the only place this scenario can be raised from; the real
+        `ACPProcess` would detect the same condition on its own read loop hitting EOF.
     """
 
-    def __init__(self, script, *, on_notification=None, on_server_request=None):
+    def __init__(
+        self,
+        script,
+        *,
+        on_notification=None,
+        on_server_request=None,
+        stderr_tail="",
+        returncode=None,
+    ):
         self._script = list(script)
         self._on_notification = on_notification
         self._on_server_request = on_server_request
@@ -150,6 +170,11 @@ class _FakeACPSession:
         self.sent_responses = []
         self._running = True
         self.closed_with_force = None
+        # part 14/N: previously hardcoded "" (no case needed the plumbing); now configurable so a
+        # post-prompt failure's `TurnOutcome.stderr_tail` can be proven to carry it through,
+        # mirroring Codex's own fake (`test_codex_appserver_run_turn.py:26-36`).
+        self._stderr_tail = stderr_tail
+        self.returncode = returncode
 
     async def request(self, method, params, *, timeout=30.0):
         self.sent_requests.append((method, params))
@@ -162,6 +187,9 @@ class _FakeACPSession:
                 raise CopilotACPError(
                     err.get("message"), code=err.get("code"), data=err.get("data")
                 )
+            if "process_exited" in entry:
+                self._running = False
+                raise self.process_ended_error(method)
             if "notification" in entry:
                 if self._on_notification is None:
                     raise AssertionError(
@@ -190,7 +218,20 @@ class _FakeACPSession:
         return self._running
 
     def stderr_tail(self, limit=2000):
-        return ""
+        return self._stderr_tail
+
+    def process_ended_error(self, method):
+        # part 14/N: unlike Codex's fake (`process_ended_error(message, method=None)`, called by
+        # `codex_appserver.py`'s own poll loop with a message it already composed), this fake's
+        # only call site is its own `request()`, above, which has just the pending method name in
+        # hand -- so this composes the message itself, from that one fact, rather than taking one
+        # it can't supply.
+        return AppServerError(
+            f"copilot process ended before responding to {method}",
+            exit_code=self.returncode,
+            method=method,
+            stderr_tail=self._stderr_tail,
+        )
 
     async def close(self, force=False):
         self._running = False
@@ -2081,4 +2122,169 @@ class TestProcessTerminatedWithForceOnAFailedTurnToo:
             "D17 :1501-1503: a shell could be running by the time session/prompt has been "
             "sent, so a failure from this point on must close with force=True, exactly as a "
             "stop does -- not force=False as this file's pre-prompt failures do"
+        )
+
+
+def _session_established_script(*, tail_entry):
+    """The four waypoints every case in this file scripts before a turn can fail *after* the
+    prompt is written -- `initialize` / `session/new` / `session/set_config_option agent` /
+    `session/set_mode` -- exactly as `TestProcessTerminatedWithForceOnAFailedTurnToo` (part
+    13/N) scripts them, plus whichever single entry `tail_entry` is standing in for
+    `session/prompt` itself. Factored out here because this case's two scenarios differ in
+    nothing else."""
+    return [
+        {"response": INIT_RESPONSE},
+        {
+            "response": {
+                "sessionId": SESSION_ID,
+                "modes": {"currentModeId": AGENT_MODE_URI},
+                "configOptions": [_mode_option(), _agent_option(""), _allow_all_option()],
+            }
+        },
+        {
+            "response": {
+                "configOptions": [
+                    _mode_option(),
+                    _agent_option(AGENT_NAME),
+                    _allow_all_option("off"),
+                ]
+            }
+        },
+        {"response": {}},  # session/set_mode -- D8's posture step, unasserted here
+        tail_entry,
+    ]
+
+
+class TestPostPromptFailuresReturnFailedOutcomeNotRaise:
+    """Tasks.md 1.9(n): "a `session/prompt` answered with a JSON-RPC error, and separately a
+    process that exits after the prompt is written, each **return** `TurnOutcome(status="failed")`
+    with the error and `stderr_tail`, and raise nothing."
+
+    Design.md `:1207` ("**Returns** `TurnOutcome(status="failed", error=…, stderr_tail=…)`:
+    anything after [the prompt is written]. That covers a JSON-RPC error answering the prompt
+    …, process exit before the prompt resolves, a timeout, and an armed `session.error`")
+    confirms `stderr_tail` is a real field, not this file's own invention -- read fresh here
+    rather than assumed, since no earlier part in this file had asserted it (part 13/N's own
+    case (m) test checked only `outcome.status`, deliberately deferring the error/`stderr_tail`
+    shape to this case, `:2010-2011`). `codex_appserver.TurnOutcome.stderr_tail` (`:901`) is
+    `Optional[str] = None` with a doc-comment reason ("the only route by which the child's own
+    complaint reaches the operator") that applies identically here, so this file's own
+    `TurnOutcome` is read the same way: a field with a default, not a required one, consistent
+    with every earlier `TurnOutcome(session_id=.., status="completed", error=None)` equality
+    check in this file never having had to pass it.
+
+    Scenario 2 -- "a process that exits after the prompt is written" -- had no way to be
+    expressed by this file's harness before this part: `_FakeACPSession.is_running()` always
+    returned `True` until `close()` was called, and `request()` only ever returned, raised a
+    JSON-RPC `CopilotACPError`, or drained a notification/server_request -- none of which model
+    "the process is simply gone, no response is or ever will be coming". Extended the fake with
+    a fourth script-entry kind, `{"process_exited": True}` (documented in `_FakeACPSession`'s own
+    docstring, the same way part 2/N documented extending `_patch_spawn`): it sets
+    `self._running = False` and raises `self.process_ended_error(method)`, a new fake method
+    returning `codex_appserver.AppServerError` (not `CopilotACPError` -- there is no JSON-RPC
+    `.code`/`.data` for a death with no response at all), mirroring
+    `test_codex_appserver_run_turn.py`'s own `_FakeSession.process_ended_error`. Also gave the
+    fake a configurable `stderr_tail` constructor argument (previously hardcoded `""`, since no
+    earlier case needed the plumbing) so both scenarios below can prove it reaches
+    `TurnOutcome.stderr_tail` unchanged.
+    """
+
+    async def test_session_prompt_json_rpc_error_returns_failed_outcome_with_stderr_tail(
+        self, monkeypatch
+    ):
+        events = []
+        sessions_bound = []
+
+        script = _session_established_script(
+            tail_entry={
+                "error": {
+                    "code": -32603,
+                    "message": "Internal error",
+                    "data": {"detail": "synthetic post-prompt failure, not captured evidence"},
+                }
+            }  # session/prompt itself errors
+        )
+        fake = _FakeACPSession(script, stderr_tail="shell exited 1: file not found\n")
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Anything changed since I left?",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        assert outcome.status == "failed"
+        assert outcome.session_id == SESSION_ID, (
+            "the session was already bound (session/new succeeded) before session/prompt "
+            "failed -- a failure this late must not report the outcome as sessionless"
+        )
+        assert outcome.error is not None and "Internal error" in outcome.error, (
+            "the JSON-RPC error's own message must reach the caller through outcome.error, "
+            f"got {outcome.error!r}"
+        )
+        assert outcome.stderr_tail == "shell exited 1: file not found\n", (
+            "design.md:1207's stderr_tail must be the session's own tail, not dropped, "
+            f"got {outcome.stderr_tail!r}"
+        )
+
+    async def test_process_exit_after_prompt_written_returns_failed_outcome_not_raise(
+        self, monkeypatch
+    ):
+        events = []
+        sessions_bound = []
+
+        script = _session_established_script(tail_entry={"process_exited": True})
+        fake = _FakeACPSession(script, stderr_tail="powershell.exe: Access is denied.\n")
+        _patch_spawn(monkeypatch, fake)
+
+        # No pytest.raises: (n)'s own text is "raise nothing" for this scenario too, exactly as
+        # for the JSON-RPC-error one above -- a run_turn that let the fake's AppServerError
+        # propagate would fail this call itself, not just an assertion below.
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Anything changed since I left?",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        assert outcome.status == "failed"
+        assert outcome.session_id == SESSION_ID
+        assert outcome.error is not None and "session/prompt" in outcome.error, (
+            "the pending request's own method name must reach the caller through outcome.error "
+            f"(mirroring codex_appserver's own process-death message shape), got "
+            f"{outcome.error!r}"
+        )
+        assert (
+            outcome.stderr_tail == "powershell.exe: Access is denied.\n"
+        ), f"got {outcome.stderr_tail!r}"
+        assert fake.is_running() is False, (
+            "the fake's own process_exited entry already marks it dead -- run_turn must not "
+            "re-resurrect it, e.g. by unconditionally setting _running back to True somewhere"
         )
