@@ -71,10 +71,42 @@ diagnostic` is the `told_access_path == "mcp"` -> error half). So the bullet is 
 this part adds no test for it, and `tasks.md`'s sub-note below says so explicitly rather than
 silently dropping it.
 
-Left for a later part, and why: the subagent-error bullet (review, cross-slice) needs both a
-root-agent and a subagent-tagged `session.error`, neither present in either capture, and needs a
-fresh read of the `agentId`/`parentToolCallId` gating (design.md:1053-1062) this part did not
-touch.
+Part 5/N adds `TestSessionErrorRootVsSubagent`: a synthetic root `session.error` (no `agentId`
+anywhere) becomes an `error_event(code="copilot_session_error")`, never `text`; a subagent's
+(envelope `agentId`, tested separately from `data.parentToolCallId`) becomes a
+`diagnostic_event(code="copilot.subagent_error")` instead, also never `text`. Both variants use
+this slice's own direct classification rule (design.md:986-994's `Error:` match ->
+`error_event`, symmetric with the already-tested `Warning:`/`Info:` -> `diagnostic_event` rule),
+not slice 5's future different chunk-drop mechanism (design.md:1030-1034, explicitly "slice 5's
+to change"). Turn failure/success is deliberately not asserted: `on_raw_event`/`on_session_update`
+return `RunEvent` lists, never a `TurnOutcome`, and `codex_appserver.py`'s own `run_turn`
+(`:1150-1195`, checked directly) decides `status`/`error` from raw notification types inline, not
+from a mapper's returned events -- so whether Copilot's `run_turn` reads the mapper's `error` vs
+`diagnostic` split, or re-inspects the raw `session.error` itself, is task 1.9's
+(`test_copilot_acp_run_turn.py`) question. See that class's own docstring for the full reasoning.
+
+**Task 1.8 is not fully covered by this file yet, despite the part 4/N sub-note's closing claim.**
+Re-reading `tasks.md`'s own Assert list fresh while writing this part surfaced two bullets neither
+this part nor any earlier one addresses:
+
+- *"`session.model_change` to a different model emits one diagnostic"* -- `TestDiagnosticPayloadShape`'s
+  own docstring already flagged this as "left for a later part" back in part 3/N, but part 4/N's
+  docstring and the `next_action` that queued this part both dropped it from the running tally and
+  claimed the subagent-error bullet was the *only* one left. It is not: no test in this file
+  exercises `session.model_change`/`session.auto_mode_resolved`/`session.tools_updated` or the
+  model-substitution diagnostic (design.md:1096-1108) at all.
+- *"a replayed `user_message_chunk` before arming emits nothing"* -- likely resolvable the same
+  way the `agentweave`-server-status bullet was in part 4/N (out of this file's scope: arming is
+  `_on_armed_raw_event`'s gate, outside `CopilotEventMapper`, already established at
+  `TestMcpServerUnavailableDiagnostic`'s docstring above), *except* design.md:977 separately lists
+  `user_message_chunk` in the mapper's own "Dropped" set for `on_session_update` regardless of
+  arming -- which **is** mapper-testable and is not yet tested. Needs a fresh read before writing,
+  not this note's summary.
+
+Do not move to task 1.9 on the next firing without either closing both bullets here (part 6/N) or
+getting an operator/round decision that they are out of scope, recorded the same explicit way as
+the D8-vs-D10 resolution above -- not by dropping them from a tally silently, which is exactly how
+they were lost between part 3/N and part 4/N.
 """
 
 import json
@@ -585,3 +617,146 @@ class TestWarningInfoTextClassification:
         text_events = [e for e in events if e.kind == "text"]
         assert len(text_events) == 1
         assert text_events[0].content == "Warning: You are near your rate limit"
+
+
+class TestSessionErrorRootVsSubagent:
+    """Task 1.8 part 5/N, the last bullet on tasks.md's list: "a `session.error` whose envelope
+    carries `agentId` (and separately one whose `data` carries `parentToolCallId`) emits a
+    `copilot.subagent_error` diagnostic, its `Error:` echo is dropped, and the mapper does not
+    mark the turn failed; a root `session.error` still does" (review, cross-slice,
+    design.md:1040-1062, re-read fresh for this part per D10's review-finding-8 paragraph and
+    contract item 19, design.md:1832-1834).
+
+    Synthetic throughout -- neither capture has any `session.error` at all (checked directly
+    again for this part, same as every other synthetic class in this file).
+
+    **This slice's classification rule, not slice 5's future one.** design.md:986-994 gives this
+    slice's direct rule -- "An `Error:` match -> `error_event(code="copilot_session_error",
+    message=...)`" -- symmetric with the already-tested `Warning:`/`Info:` -> `diagnostic_event`
+    rule above (`TestWarningInfoTextClassification`): the raw `session.error` arrives first and
+    is remembered, unmatched; the matching `"Error: " + message` chunk is what turns into the
+    event, never surviving as `text`. Slice 5's *different*, chunk-level "dropped on arrival,
+    before accumulation, nothing held" mechanism (design.md:1030-1034) and its re-coding to
+    `copilot.<errorType>` are its own future change ("That is slice 5's to change" -- the same
+    paragraph says so directly) and are not this slice's rule; this class tests only what this
+    slice actually builds. The root/subagent split is the review finding layered on top: the
+    *same* match-and-classify mechanism, routed to `error_event` for a root `session.error` and
+    to `diagnostic_event(code="copilot.subagent_error")` for a subagent's, per design.md:1054-1057
+    ("its `Error:` echo is matched and dropped like a root one" -- read here as "classified the
+    same way", i.e. it does not stay `text` either, not literally discarded with no event, which
+    is what slice 5 alone changes to).
+
+    A subagent's `session.error` is identified by **any of three** signals (design.md:1054-1056,
+    SDK-cited): the envelope's own `agentId` (the third positional argument this file's other
+    raw-event tests already pass as `params`, e.g. `TestMcpServerUnavailableDiagnostic`), or
+    `data["agentId"]`, or `data["parentToolCallId"]`. Only the envelope-`agentId` and
+    `data.parentToolCallId` variants are tested below, matching the bullet's own two named cases
+    ("and separately one whose `data` carries `parentToolCallId`") -- `data.agentId` is the same
+    `data`-level check as `data.parentToolCallId` and is not re-tested separately.
+
+    **Turn failure is explicitly NOT asserted here.** "Ends the turn `TurnOutcome(status="failed",
+    ...)`" (design.md:1040-1043) names a `TurnOutcome`, a `run_turn`-level object
+    (`test_copilot_acp_run_turn.py`, task 1.9) this mapper-only file has no way to construct or
+    observe: `on_raw_event`/`on_session_update` return `RunEvent` lists, never a `TurnOutcome`.
+    What this file *can* prove, and does, is the fact task 1.9 would need to act on: the mapper
+    emits an `error`-kind event for a root `session.error` and never for a subagent's, which emits
+    a `diagnostic` instead -- the distinction `run_turn` would read to decide pass/fail. Whether
+    `run_turn` actually reads it that way, or instead re-inspects the raw `session.error`'s own
+    `agentId`/`data` directly (as `codex_appserver.py`'s `run_turn` decides `status`/`error` from
+    specific raw notification types inline, not from what a mapper returned -- checked directly,
+    `codex_appserver.py:1150-1195`), is task 1.9's question, not this file's to force an answer to.
+    """
+
+    @staticmethod
+    def _root_session_error(message: str) -> tuple:
+        data = {"errorType": "internal", "message": message}
+        params = {
+            "sessionId": "synthetic-session",
+            "type": "session.error",
+            "timestamp": "2026-09-30T00:00:04.000Z",
+            "data": data,
+        }
+        return "session.error", data, params
+
+    @staticmethod
+    def _subagent_session_error_via_envelope(message: str, agent_id: str) -> tuple:
+        data = {"errorType": "internal", "message": message}
+        params = {
+            "sessionId": "synthetic-session",
+            "type": "session.error",
+            "timestamp": "2026-09-30T00:00:05.000Z",
+            "agentId": agent_id,
+            "data": data,
+        }
+        return "session.error", data, params
+
+    @staticmethod
+    def _subagent_session_error_via_parent_tool_call(message: str, parent_call_id: str) -> tuple:
+        data = {
+            "errorType": "internal",
+            "message": message,
+            "parentToolCallId": parent_call_id,
+        }
+        params = {
+            "sessionId": "synthetic-session",
+            "type": "session.error",
+            "timestamp": "2026-09-30T00:00:06.000Z",
+            "data": data,
+        }
+        return "session.error", data, params
+
+    @staticmethod
+    def _error_echo_chunk(message: str) -> dict:
+        return {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {"type": "text", "text": f"Error: {message}"},
+        }
+
+    def test_root_session_error_becomes_an_error_event_not_text(self):
+        mapper = CopilotEventMapper()
+        type_, data, params = self._root_session_error("model call failed")
+        mapper.on_raw_event(type_, data, params)
+
+        events = mapper.on_session_update(self._error_echo_chunk("model call failed"))
+        events += mapper.flush()
+
+        assert not any(e.kind == "text" for e in events)
+        assert not any(e.kind == "diagnostic" for e in events)
+        errors = [e for e in events if e.kind == "error"]
+        assert len(errors) == 1
+        assert errors[0].payload["code"] == "copilot_session_error"
+        assert "model call failed" in errors[0].payload["message"]
+
+    def test_subagent_session_error_via_envelope_agent_id_becomes_diagnostic_not_error(self):
+        mapper = CopilotEventMapper()
+        type_, data, params = self._subagent_session_error_via_envelope(
+            "subagent tool crashed", "agent-explore-1"
+        )
+        mapper.on_raw_event(type_, data, params)
+
+        events = mapper.on_session_update(self._error_echo_chunk("subagent tool crashed"))
+        events += mapper.flush()
+
+        assert not any(e.kind == "text" for e in events)
+        assert not any(e.kind == "error" for e in events)
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        assert len(diagnostics) == 1
+        assert diagnostics[0].payload["code"] == "copilot.subagent_error"
+
+    def test_subagent_session_error_via_data_parent_tool_call_id_becomes_diagnostic_not_error(
+        self,
+    ):
+        mapper = CopilotEventMapper()
+        type_, data, params = self._subagent_session_error_via_parent_tool_call(
+            "code-review subagent crashed", "call_parent_1"
+        )
+        mapper.on_raw_event(type_, data, params)
+
+        events = mapper.on_session_update(self._error_echo_chunk("code-review subagent crashed"))
+        events += mapper.flush()
+
+        assert not any(e.kind == "text" for e in events)
+        assert not any(e.kind == "error" for e in events)
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        assert len(diagnostics) == 1
+        assert diagnostics[0].payload["code"] == "copilot.subagent_error"
