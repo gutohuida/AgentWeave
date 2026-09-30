@@ -9,7 +9,24 @@ a dirty tree.
 **Every firing, before `next_action`: read CI's verdict for the previous firing's pushed sha.** One
 `gh run list --branch <branch> --limit 5 --json headSha,conclusion,createdAt` call, no waiting — the
 previous push is normally 10-20 minutes old and concluded. Write the verdict in the iteration's first
-line. **If it is `failure`, fixing it replaces `next_action` for this firing** (read the failed
+line **as the literal word `gh` returned** (`success`, `failure`, `in_progress`, or "no run"). A line
+that names the sha and says the branch matched is not a verdict. Measured 2026-09-29 night: every
+firing wrote "CI verdict for the inherited sha …: branch/head matched STATE". None of them wrote
+the conclusion, so CI stayed red for 40 consecutive pushes and nothing noticed.
+
+**A commit must not turn CI red, and that includes on purpose.** A test written before its code
+lands in one of two guarded forms, never as a bare failure:
+- a whole file whose module does not exist yet opens with
+  `pytest.importorskip("hub.<module>", reason="… task <n> …")` before its imports. An
+  `ImportError` during collection stops the entire `hub-test` job, so every other test goes
+  unreported with it;
+- a test for behaviour an existing module does not have yet carries
+  `@pytest.mark.xfail(strict=True, raises=<the exact exception>, reason="… task <n> …; remove this
+  mark when it lands")`. `strict` makes it fail CI once it starts passing, and `raises` stops a
+  different failure from counting as the expected one.
+
+Taking a test task and its implementation together (see "Implementing") usually makes both
+unnecessary. **If it is `failure`, fixing it replaces `next_action` for this firing** (read the failed
 job's log with `gh run view <id> --log-failed`), whatever `next_action` says. Reading CI once at
 compose is not enough: measured 2026-09-22 night, the first build commit (`384254e`) turned the CLI
 matrix red and the window pushed **16 more commits onto it over five hours** without looking again.

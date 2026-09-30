@@ -6,6 +6,7 @@ a runner via PATCH /api/v1/projects/proj-test/agents/{name}.
 """
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 # ---------------------------------------------------------------------------
 # Seed
@@ -145,6 +146,11 @@ async def test_an_existing_runner_with_an_unrecognised_model_stays_readable_and_
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="a-copilot-agent-runs-over-acp: written ahead of task 2.1-2.2; remove this mark when it lands",
+)
 @pytest.mark.asyncio
 async def test_create_runner_with_copilot_cli_returns_201_and_reads_back(app, auth_headers):
     resp = await app.post(
@@ -163,6 +169,11 @@ async def test_create_runner_with_copilot_cli_returns_201_and_reads_back(app, au
     assert readback.json()["cli"] == "copilot"
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=IntegrityError,
+    reason="a-copilot-agent-runs-over-acp: written ahead of task 2.1-2.2; remove this mark when it lands",
+)
 @pytest.mark.asyncio
 async def test_copilot_runner_row_commits_at_the_model_level(app, auth_headers):
     from hub.db.engine import async_session_factory

@@ -135,6 +135,11 @@ def test_a_decision_is_reached_even_when_reporting_fails(workspace, monkeypatch)
 # names. Fails today: `_decide` takes no such keywords.
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=TypeError,
+    reason="a-copilot-agent-runs-over-acp: written ahead of task 5.1; remove this mark when it lands",
+)
 def test_decide_workspace_keyword_overrides_the_environment(tmp_path, monkeypatch):
     env_ws = tmp_path / "env-workspace"
     kw_ws = tmp_path / "kw-workspace"
@@ -155,6 +160,11 @@ def test_decide_workspace_keyword_overrides_the_environment(tmp_path, monkeypatc
     assert decision["allow"] is False
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=TypeError,
+    reason="a-copilot-agent-runs-over-acp: written ahead of task 5.1; remove this mark when it lands",
+)
 def test_decide_hub_url_keyword_overrides_the_environment_for_a_literal_url(tmp_path, monkeypatch):
     """The case only `_is_own_hub` decides: a literal URL word, not a `$HUB_URL`/`$env:HUB_URL`
     reference. `HUB_URL` names the wrong host in the environment; only the `hub_url` keyword names

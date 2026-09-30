@@ -67,6 +67,11 @@ async def test_runner_cli_is_constrained_to_claude_or_codex(app) -> None:
             await session.commit()
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="a-copilot-agent-runs-over-acp: written ahead of task 2.1-2.3; remove this mark when it lands",
+)
 @pytest.mark.asyncio
 async def test_seed_default_runners_seeds_copilot_for_a_zero_runner_project(app) -> None:
     """`engine._seed_default_runners` must seed one runner per `RUNNER_CLIS` entry —
@@ -90,20 +95,33 @@ async def test_seed_default_runners_seeds_copilot_for_a_zero_runner_project(app)
         await _seed_default_runners(session)
 
         zero_runner_clis = (
-            await session.execute(
-                sa.select(Runner.cli).where(Runner.project_id == "proj-seed-zero-runners")
+            (
+                await session.execute(
+                    sa.select(Runner.cli).where(Runner.project_id == "proj-seed-zero-runners")
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert set(zero_runner_clis) == {"claude", "codex", "copilot"}
 
         one_runner_clis = (
-            await session.execute(
-                sa.select(Runner.cli).where(Runner.project_id == "proj-seed-one-runner")
+            (
+                await session.execute(
+                    sa.select(Runner.cli).where(Runner.project_id == "proj-seed-one-runner")
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert one_runner_clis == ["claude"]
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="a-copilot-agent-runs-over-acp: written ahead of task 2.1-2.3; remove this mark when it lands",
+)
 @pytest.mark.asyncio
 async def test_seed_new_project_seeds_copilot_runner(app) -> None:
     """`ProjectLifecycleService._seed_new_project` must also seed one runner per
@@ -119,10 +137,14 @@ async def test_seed_new_project_seeds_copilot_runner(app) -> None:
         await session.commit()
 
         clis = (
-            await session.execute(
-                sa.select(Runner.cli).where(Runner.project_id == "proj-seed-new-project")
+            (
+                await session.execute(
+                    sa.select(Runner.cli).where(Runner.project_id == "proj-seed-new-project")
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert set(clis) == {"claude", "codex", "copilot"}
 
 

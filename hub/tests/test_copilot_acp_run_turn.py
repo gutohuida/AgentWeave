@@ -64,6 +64,14 @@ import time
 
 import pytest
 
+# Written ahead of its module (a-copilot-agent-runs-over-acp, task group 1). Until task 6.2-6.3
+# lands `hub.copilot_acp`, the whole file reports as skipped rather than failing collection; the skip
+# disappears by itself when the module exists.
+pytest.importorskip(
+    "hub.copilot_acp",
+    reason="hub.copilot_acp is not implemented yet (a-copilot-agent-runs-over-acp task 6.2-6.3)",
+)
+
 import hub.copilot_acp as copilot_acp
 from hub.codex_appserver import AppServerError
 from hub.copilot_acp import ACPProcess, CopilotACPError, TurnOutcome, run_turn

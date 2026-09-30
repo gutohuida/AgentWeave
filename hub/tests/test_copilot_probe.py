@@ -11,6 +11,14 @@ import shutil
 
 import pytest
 
+# Written ahead of its module (a-copilot-agent-runs-over-acp, task group 1). Until task 3.1
+# lands `hub.copilot_probe`, the whole file reports as skipped rather than failing collection; the skip
+# disappears by itself when the module exists.
+pytest.importorskip(
+    "hub.copilot_probe",
+    reason="hub.copilot_probe is not implemented yet (a-copilot-agent-runs-over-acp task 3.1)",
+)
+
 from hub.copilot_probe import CopilotExecutableNotFound, resolve_copilot_executable
 
 

@@ -130,6 +130,16 @@ invent a part 7/N.
 import json
 from pathlib import Path
 
+import pytest
+
+# Written ahead of its module (a-copilot-agent-runs-over-acp, task group 1). Until task 6.3
+# lands `hub.copilot_acp`, the whole file reports as skipped rather than failing collection; the skip
+# disappears by itself when the module exists.
+pytest.importorskip(
+    "hub.copilot_acp",
+    reason="hub.copilot_acp is not implemented yet (a-copilot-agent-runs-over-acp task 6.3)",
+)
+
 from hub.copilot_acp import CopilotEventMapper
 
 EVIDENCE_LOG = (
