@@ -648,7 +648,7 @@ async def test_a_conflicting_task_branch_refuses_approval(app, auth_headers, bui
     """5.3: the same refusal the evidence route gets, for the branch-tip route.
 
     The gate sees what will merge, which is one change rather than a second rule (design D8). Had
-    `_merge_situation` stayed on `integration_targets`, this approval would succeed, the merge
+    `merge_situation` stayed on `integration_targets`, this approval would succeed, the merge
     would fail afterwards, and the operator would meet the conflict in a record instead of in a
     refusal that names the file.
     """
@@ -681,7 +681,7 @@ async def test_a_conflicting_task_branch_refuses_approval(app, auth_headers, bui
 async def test_no_configured_main_branch_approves_exactly_as_before(
     app, auth_headers, builder, tmp_path
 ):
-    """5.4: `_merge_situation` returns `None` and nothing refuses.
+    """5.4: `merge_situation` returns `None` and nothing refuses.
 
     A project with no merge target chosen stays exactly as approvable as it was before any of this
     existed. The new resolver must not turn a supported project shape into a refusal.

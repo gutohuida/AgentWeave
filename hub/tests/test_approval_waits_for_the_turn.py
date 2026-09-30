@@ -437,7 +437,7 @@ async def test_a_project_where_integration_cannot_be_attempted_is_refused_the_sa
 ):
     """Task 3.9, and the interaction with `task-lifecycle-governance:720`.
 
-    `_merge_situation` returns `None` for a project with no configured main branch, so the two
+    `merge_situation` returns `None` for a project with no configured main branch, so the two
     repository-aware checks are silent there — each of their four preconditions is *a reason to not
     know, never a reason to refuse*. This check is not one of them and fires anyway: `approved` is
     a judgement that work is good, and judging work an agent has not finished producing is false

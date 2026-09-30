@@ -55,6 +55,12 @@ FAILED = "failed"
 # the world rather than an error: none of them means anything went wrong, and approval succeeds
 # through all of them.
 NO_MAIN_BRANCH = "this project has no main branch set — choose one in the project's settings"
+# The approval preview's answer when git itself failed (a timeout, or git missing): not "nothing to
+# merge", which would be false for a task that may well have a branch, and never a 500
+# (`the-approval-preview-asks-the-gates-merge-question`, D1).
+GIT_UNANSWERED = (
+    "the Hub could not ask git what approval would merge; approval asks again when pressed"
+)
 NOT_A_REPOSITORY = "this project is not a git repository, so there is nothing to merge"
 NOTHING_TO_MERGE = "no accepted evidence names a commit, so there is nothing to merge"
 # Both of these used to end "and the next approval will merge". By the time the operator reads one
@@ -413,7 +419,7 @@ async def evidence_governs(session: AsyncSession, task: Task) -> bool:
        deliberately includes evidence another task recorded against a shared requirement, a per-task
        branch tip could not carry that commit at all.
 
-    `session.get` rather than a `select`, deliberately: `_merge_situation` and `integrate_task` both
+    `session.get` rather than a `select`, deliberately: `merge_situation` and `integrate_task` both
     ask this within one approval and one session, so the PK get is answered from the identity map
     the second time and a `select` would not be.
     """

@@ -1,5 +1,6 @@
 """Task endpoints — POST/GET/GET{id}/PATCH."""
 
+import asyncio
 import re
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
@@ -1087,9 +1088,13 @@ async def task_integration_preview(
 
     So this answers the same question the merge itself will ask, from the same source
     (`task_integration.merge_targets` and `Project.main_branch`), and the drawer states the answer
-    beside the approve control. Deliberately read-only and deliberately **no conflict probe** —
-    that is `requirement_gate`'s job at the moment of approval, where a refusal can still stop it.
-    This is a sentence, not a second gate.
+    beside the approve control. It also asks the gate's conflict question, through the gate's own
+    `requirement_gate.merge_situation` and `task_integration.would_conflict` (F141): the gate
+    refuses a commit that would not merge cleanly, and the operator should know that before
+    pressing Approve, not only from a refusal nothing remembers. `git merge-tree --write-tree`
+    changes no branch, working tree or index, so asking is safe; the answer is recomputed each
+    time and never stored, so it cannot go stale after a rebase. This is still a sentence, not a
+    second gate: the preview refuses nothing.
 
     This docstring used to also promise "no git subprocess", and that half is retired deliberately
     (design D5). A task on a loop that declares its work needs no evidence has its merge target on
@@ -1100,7 +1105,7 @@ async def task_integration_preview(
     The extra cost is paid **only** where evidence does not govern the task, which is why the
     governance question is asked before the workspace is resolved: an ordinary task's drawer stays
     exactly as cheap as it was. And an unresolvable workspace is a *reason not to know* — no target
-    and a stated reason, never a 500 — the same posture `requirement_gate._merge_situation` takes
+    and a stated reason, never a 500 — the same posture `requirement_gate.merge_situation` takes
     for the same preconditions.
 
     `will_attempt_merge` is false with a stated `reason` for the ordinary cases — a project with no main
@@ -1112,7 +1117,7 @@ async def task_integration_preview(
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    from ... import project_workspace, task_integration
+    from ... import project_workspace, requirement_gate, task_integration
 
     project_row = await session.get(Project, project_id)
     main_branch = project_row.main_branch if project_row else None
@@ -1121,24 +1126,68 @@ async def task_integration_preview(
     empty_reason = (
         task_integration.NOTHING_TO_MERGE if governed else task_integration.NO_TASK_BRANCH
     )
-    try:
-        workspace = await project_workspace.resolve_project_workspace(session, project_id)
-    except Exception:  # noqa: BLE001 - not knowing is an answer here, a 500 is not
-        # Governed, the database still answers (observation order, no ancestry); ungoverned there is
-        # no answer without a repository.
-        targets = await task_integration.integration_targets(session, task) if governed else []
-    else:
-        targets = await task_integration.merge_targets(session, task, workspace.root)
 
+    # Every git call below is wrapped: `task_integration._git` raises on a timeout or a missing
+    # git, and not knowing is an answer here, a 500 is not (design D1, steps 1-2 and 5).
+    targets: list = []
+    conflicts: Optional[List[dict]] = None
+    git_failed = False
+    situation = None
+    try:
+        situation = await requirement_gate.merge_situation(session, task)
+        if situation is not None:
+            targets = list(situation.will_merge)
+            conflicts = []
+            for target in targets:
+                paths = await asyncio.to_thread(
+                    task_integration.would_conflict,
+                    situation.root,
+                    target.commit_sha,
+                    situation.main_branch,
+                )
+                if paths:
+                    conflicts.append(
+                        {
+                            "commit_sha": target.commit_sha,
+                            "source_branch": target.branch,
+                            "paths": paths,
+                        }
+                    )
+    except Exception:  # noqa: BLE001 - a git failure is stated below, never a 500
+        situation, conflicts, git_failed = None, None, True
+
+    if situation is None:
+        # No conflict answer: list what approval would merge without the probe. Governed, the
+        # database answers even after git failed; ungoverned, git is not asked a second time.
+        if governed:
+            targets = await task_integration.integration_targets(session, task)
+        elif not git_failed:
+            try:
+                workspace = await project_workspace.resolve_project_workspace(session, project_id)
+                targets = await task_integration.merge_targets(session, task, workspace.root)
+            except Exception:  # noqa: BLE001 - see above
+                targets, git_failed = [], True
+
+    count = "one commit" if len(targets) == 1 else f"{len(targets)} commits"
     if not main_branch:
         reason = task_integration.NO_MAIN_BRANCH
+    elif not targets and git_failed:
+        reason = task_integration.GIT_UNANSWERED
     elif not targets:
+        # Before the conflict sentences: nothing to merge has no conflicts, and must not read as
+        # "merges cleanly".
         reason = empty_reason
+    elif conflicts:
+        clauses = "; ".join(
+            f"{', '.join(c['paths'])} in commit {c['commit_sha'][:12]} conflict with {main_branch}"
+            for c in conflicts
+        )
+        reason = f"approval will be refused: {clauses}"
+    elif conflicts == []:
+        reason = f"approval will merge {count} into {main_branch}; it merges cleanly as of now"
     else:
-        # F156: this route runs no conflict probe, by design, so it cannot say the work *will*
-        # merge -- only that approval will try. It answered `will_merge: true` and an empty reason
-        # for a task the gate then refused twice over that exact commit.
-        count = "one commit" if len(targets) == 1 else f"{len(targets)} commits"
+        # F156: no conflict answer, so this cannot say the work *will* merge -- only that approval
+        # will try. It answered `will_merge: true` for a task the gate then refused over that commit.
         reason = (
             f"approval will merge {count} into {main_branch}; whether it merges cleanly "
             f"is checked at approval, which refuses if it does not"
@@ -1154,6 +1203,9 @@ async def task_integration_preview(
         # What this route can know: whether approval will *attempt* a merge (F156). The old name,
         # `will_merge`, overstated it; retired in UI-1 with the drawer that read it.
         "will_attempt_merge": attempts,
+        # What the gate's own probe answers now, per target that would not merge cleanly: `[]`
+        # merges cleanly, null where the question could not be asked (F141).
+        "conflicts": conflicts,
         "reason": reason,
     }
 

@@ -497,6 +497,9 @@ async def test_the_preview_names_the_commit_and_both_branches(app, auth_headers)
         "approval will merge one commit into master; whether it merges cleanly is "
         "checked at approval, which refuses if it does not"
     )
+    # No repository to ask, so no conflict answer: the hedge above stands, byte for byte
+    # (`the-approval-preview-asks-the-gates-merge-question`, control 1.4).
+    assert body.get("conflicts") is None
 
 
 @pytest.mark.asyncio

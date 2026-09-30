@@ -132,4 +132,55 @@ describe('the approve control states what approving writes (F9)', () => {
     renderDrawer(makeTask())
     expect(screen.queryByTestId('task-approval-writes-task-1')).toBeNull()
   })
+
+  // `the-approval-preview-asks-the-gates-merge-question` (F141): the preview runs the gate's probe,
+  // so a refusal it predicts is shown before Approve is pressed, in the refusal's own tone.
+  it('names the conflicting paths when approval will be refused', () => {
+    transitions = { under_review: ['approved', 'revision_needed'] }
+    preview = {
+      data: {
+        task_id: 'task-1',
+        main_branch: 'main',
+        targets: [{ commit_sha: 'cecbc88751eaff', source_branch: 'agentweave/builder' }],
+        will_attempt_merge: true,
+        conflicts: [
+          {
+            commit_sha: 'cecbc88751eaff',
+            source_branch: 'agentweave/builder',
+            paths: ['shared.txt', 'docs/notes.md'],
+          },
+        ],
+        reason: 'approval will be refused: shared.txt, docs/notes.md in commit cecbc88751ea conflict with main',
+      },
+    }
+    renderDrawer(makeTask())
+
+    const note = screen.getByTestId('task-approval-writes-task-1')
+    expect(note).toHaveTextContent('approval will be refused')
+    expect(note).toHaveTextContent('shared.txt')
+    expect(note).toHaveTextContent('docs/notes.md')
+    expect(note.getAttribute('style')).toContain('--red')
+    expect(note).not.toHaveTextContent('Approving writes to your repository')
+  })
+
+  it('keeps the existing note where no conflict was found, or none could be asked', () => {
+    transitions = { under_review: ['approved'] }
+    for (const conflicts of [[], null]) {
+      preview = {
+        data: {
+          task_id: 'task-1',
+          main_branch: 'main',
+          targets: [{ commit_sha: 'cecbc88751eaff', source_branch: 'agentweave/builder' }],
+          will_attempt_merge: true,
+          conflicts,
+          reason: 'approval will merge one commit into main; it merges cleanly as of now',
+        },
+      }
+      renderDrawer(makeTask())
+      const note = screen.getByTestId('task-approval-writes-task-1')
+      expect(note).toHaveTextContent('Approving writes to your repository')
+      expect(note.getAttribute('style')).toContain('--amber')
+      cleanup()
+    }
+  })
 })

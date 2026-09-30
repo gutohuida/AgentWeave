@@ -393,8 +393,13 @@ class _MergeSituation:
     will_merge: List[Any]
 
 
-async def _merge_situation(session: AsyncSession, task: Task) -> Optional["_MergeSituation"]:
-    """The four preconditions, or `None` where integration could not be attempted at all."""
+async def merge_situation(session: AsyncSession, task: Task) -> Optional["_MergeSituation"]:
+    """The four preconditions, or `None` where integration could not be attempted at all.
+
+    Public because the approval preview asks the same question, through this, before the operator
+    presses Approve (`the-approval-preview-asks-the-gates-merge-question`, D1). Its git calls
+    raise rather than answer `None`: here "unknown" must not read as "not checked -- approve"
+    (F424's repair belongs in the gate's checks, which refuse)."""
     from . import project_workspace, task_integration
     from .db.models import Project
 
@@ -433,7 +438,7 @@ async def _check_mergeable(
     approved at `sketch` would record an approval that silently integrates nothing.
 
     Approval must never be blocked by the *absence* of an integration, only by one that would fail —
-    so a task with nothing to merge produces nothing here, and `_merge_situation` has already
+    so a task with nothing to merge produces nothing here, and `merge_situation` has already
     returned `None` for every project where the question could not be asked.
     """
     from . import task_integration
@@ -554,7 +559,7 @@ async def _check_live_turn(
 ) -> None:
     """Refuse while a turn bound to this task is still running (F162).
 
-    **Deliberately not nested under `_merge_situation`**, unlike the two checks above it, and that
+    **Deliberately not nested under `merge_situation`**, unlike the two checks above it, and that
     is a departure from a principle this module states in words. `_MergeSituation`'s docstring says
     of its four preconditions that each is *"a reason to not know, never a reason to refuse ...
     because a refusal that fired where the merge would have been skipped anyway would block every
@@ -623,7 +628,7 @@ async def evaluate(
     # Both repository-aware checks, and both **above** the early return two statements down. That
     # return fires whenever no linked document is above `sketch`, which is every default project —
     # a check placed after it would be dead exactly where the defect it fixes lives.
-    situation = await _merge_situation(session, task)
+    situation = await merge_situation(session, task)
     if situation is not None:
         await _check_mergeable(session, task, refusal, situation)
         await _check_unaccepted(session, task, refusal, situation)

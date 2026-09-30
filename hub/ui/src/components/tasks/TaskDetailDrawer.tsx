@@ -60,6 +60,33 @@ function ApprovalWritesNote({ taskId, canApprove }: { taskId: string; canApprove
     )
   }
 
+  // F141: the preview asks the gate's own conflict question, so a refusal it predicts is said here,
+  // before Approve is pressed, in the refusal's tone, naming each path.
+  if (data.conflicts?.length) {
+    return (
+      <p
+        data-testid={`task-approval-writes-${taskId}`}
+        className="text-[11px] mt-2 px-2 py-1.5 rounded"
+        style={{
+          color: 'var(--red)',
+          background: 'color-mix(in srgb, var(--red) 10%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--red) 25%, transparent)',
+        }}
+      >
+        <Icon name="alert_triangle" size={12} /> The Hub: {data.reason}.{' '}
+        {data.conflicts.map((conflict) => (
+          <span key={conflict.commit_sha}>
+            {conflict.paths.map((path) => (
+              <code key={path} className="text-[11px] mr-1">
+                {path}
+              </code>
+            ))}
+          </span>
+        ))}
+      </p>
+    )
+  }
+
   return (
     <p
       data-testid={`task-approval-writes-${taskId}`}

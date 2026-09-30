@@ -224,6 +224,10 @@ export interface TaskIntegrationPreview {
   /** Whether approval will *try* a merge. Not whether it will succeed: that is checked at approval,
    *  which refuses a conflict (F156; the old name `will_merge` overstated it and is retired). */
   will_attempt_merge: boolean
+  /** What the gate's own conflict probe answers now: one entry per target that would not merge
+   *  cleanly, `[]` when all merge cleanly, null where the question could not be asked (F141). Absent
+   *  from a Hub older than the field, which reads the same as null. */
+  conflicts?: { commit_sha: string; source_branch: string | null; paths: string[] }[] | null
   /** Why nothing will be merged, or, when something will be tried, the Hub's sentence saying so. */
   reason: string
 }

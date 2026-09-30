@@ -177,3 +177,11 @@ Otherwise unchanged.
   fallback, no repeat git call, `GIT_UNANSWERED`, today's sentence order, real count); requirement
   reworded (branch, working tree, index) and extended (no false merge claim; a git failure is
   answered); tests 1.5b, 1.7, 1.8 added; F424 named.
+- **Verification round at IMPL, 2026-09-30** (master `68cc7f4`). The claims hold, with two shifts.
+  `a-footprint-names-the-line-of-work-its-commit-is-on` landed (2026-09-26), so the preview now calls
+  `merge_targets` for governed tasks as well, and that call sits outside the workspace wrap
+  (`tasks.py:1126-1131`): D1 step 2's wrapped listing covers both, and a governed task keeps the
+  database-only `integration_targets` after a git failure. And the gate now calls git off the event
+  loop (`asyncio.to_thread`, `requirement_gate.py:416-419`, `:441`), so the preview's probe does the
+  same. `_merge_situation` still has one call site (`:626`); F424 is still open.
+
