@@ -212,10 +212,38 @@ class TestSweep:
     def test_a_config_json_that_does_not_parse_is_removed(self):
         home = copilot_home_path("proj-abc123", "cop-1")
         home.mkdir(parents=True)
-        (home / "config.json").write_text("// JSONC\n{}", encoding="utf-8")
+        (home / "config.json").write_text("{not json", encoding="utf-8")
         result = _ensure()
         assert not (home / "config.json").exists()
         assert "config.json" in result.removed
+
+    def test_what_copilot_writes_on_its_first_launch_is_left_alone(self):
+        """Measured on 1.0.88 (group 11 drive): Copilot's first launch writes a JSONC
+        `config.json` holding `firstLaunchAt` and an empty `installed-plugins/`. Neither can decide
+        a permission, and sweeping them made every later turn report a repair."""
+        home = copilot_home_path("proj-abc123", "cop-1")
+        home.mkdir(parents=True)
+        (home / "installed-plugins").mkdir()
+        (home / "config.json").write_text(
+            "// User settings belong in settings.json.\n"
+            "// This file is managed automatically.\n"
+            '{\n  "firstLaunchAt": "2026-09-30T11:20:36.081Z"\n}\n',
+            encoding="utf-8",
+        )
+        assert _ensure().removed == ()
+        assert (home / "installed-plugins").is_dir()
+        assert "firstLaunchAt" in (home / "config.json").read_text(encoding="utf-8")
+
+    def test_a_jsonc_config_with_a_trust_key_loses_only_that_key(self):
+        home = copilot_home_path("proj-abc123", "cop-1")
+        home.mkdir(parents=True)
+        (home / "config.json").write_text(
+            '// managed\n{"trustedFolders": ["C:/"], "firstLaunchAt": "x"}\n', encoding="utf-8"
+        )
+        assert _ensure().removed == ("config.json (trustedFolders)",)
+        assert json.loads((home / "config.json").read_text(encoding="utf-8")) == {
+            "firstLaunchAt": "x"
+        }
 
     def test_a_clean_home_reports_nothing(self):
         _ensure()

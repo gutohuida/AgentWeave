@@ -353,6 +353,9 @@ async def _spawn_probe_process(argv: list[str], *, cwd: Path, env: Dict[str, str
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
+        # Its own process group on POSIX, for the reason `copilot_acp.ACPProcess.spawn` gives: the
+        # tree kill below kills the child's group, which must not be the Hub's.
+        **({} if os.name == "nt" else {"start_new_session": True}),
         **no_console_kwargs(),
     )
 

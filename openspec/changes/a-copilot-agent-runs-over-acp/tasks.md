@@ -440,8 +440,9 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
 
   Extend `modelCatalogFixture.ts` with the Copilot provider. Verify: `cd hub/ui && npx vitest run`
   - **Done 2026-09-30:** `__tests__/copilotRunnerUi.test.tsx` (provider mapping, the mark, `edit`/`delete`/`move` rows counted as writes and named from `locations`, a shell row not) and a CLI-options case in `runnersUi.test.tsx`; the fixture gains Copilot with Permissions default `workspace`. `npx vitest run`: 169 files, 1753 passed.
-- [ ] 1.20 **Probe (no model call; review 2026-09-28, finding 6).** Under a scratch `COPILOT_HOME`, in a scratch git repository holding `.mcp.json` and `.github/agents/<agent>.agent.md` whose `mcp-servers` both name a stand-in server `agentweave`, spawn `copilot.exe --acp` with the Hub's `--additional-mcp-config` (dead `HUB_URL`) and `COPILOT_ALLOW_ALL` unset. Run `initialize` (subscribing `session.mcp_servers_loaded`), `session/new`, select then deselect the agent, and `session/close`. Record in the Round log which `agentweave` loaded and with what `source`/`transport`, whether the repository agent's `mcp-servers` loaded at all in an untrusted folder, and whether deselecting it changed the loaded servers. The result fixes D8's accepted `source`
+- [x] 1.20 **Probe (no model call; review 2026-09-28, finding 6).** Under a scratch `COPILOT_HOME`, in a scratch git repository holding `.mcp.json` and `.github/agents/<agent>.agent.md` whose `mcp-servers` both name a stand-in server `agentweave`, spawn `copilot.exe --acp` with the Hub's `--additional-mcp-config` (dead `HUB_URL`) and `COPILOT_ALLOW_ALL` unset. Run `initialize` (subscribing `session.mcp_servers_loaded`), `session/new`, select then deselect the agent, and `session/close`. Record in the Round log which `agentweave` loaded and with what `source`/`transport`, whether the repository agent's `mcp-servers` loaded at all in an untrusted folder, and whether deselecting it changed the loaded servers. The result fixes D8's accepted `source`
 
+  - **Done 2026-09-30** (`evidence/t1_20_probe.py`, `t1_20_probe.log`, no model call): the repository agent loads in an untrusted folder with its own description, and select-then-deselect reads back `""`; no `session.mcp_servers_loaded` arrives before a prompt, so the accepted `source` is fixed from task 1.1's capture (absent accepted, `workspace`/`plugin` refused). Round log, "IMPL, 2026-09-30".
 ## 2. Registry, migration, seeding, catalog
 
 - [x] 2.1 `db/models.py`: `RUNNER_CLIS = ("claude", "codex", "copilot")`, and the `ck_runners_cli` constraint is written from `RUNNER_CLIS`, so the two cannot drift
@@ -535,10 +536,11 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - **Done 2026-09-30:** eslint clean, `tsc --noEmit` clean, vitest 1753 passed, `npm run build`, `refresh_ui_bundle.py`; source and bundle committed together.
 ## 10. Findings and docs
 
-- [ ] 10.1 Record in `spec-queue/` FINDINGS the appendix corrections from the Round log (R1: `--no-auto-update` version, `~/.agents/skills`, the MCP 30 s timeout; R2: an empty `--available-tools=` means no filter, project-level custom agents outrank `$COPILOT_HOME/agents`), so later slices do not inherit them. From the review (2026-09-28), also file:
+- [x] 10.1 Record in `spec-queue/` FINDINGS the appendix corrections from the Round log (R1: `--no-auto-update` version, `~/.agents/skills`, the MCP 30 s timeout; R2: an empty `--available-tools=` means no filter, project-level custom agents outrank `$COPILOT_HOME/agents`), so later slices do not inherit them. From the review (2026-09-28), also file:
   - Copilot auto-approves shell commands it classes read-only, so a Copilot run's Workspace only judges fewer commands than Claude's (parity measured, not assumed; cite 1.1's `Get-ChildItem` record);
   - `_decide` resolves UNC and device paths with `realpath` before refusing them, which blocks ~21 s per unreachable host and opens an SMB connection from whichever process judges; it should refuse `\\`, `//`, `\\?\` and `\\.\` before any I/O, for every runner
 
+  - **Done 2026-09-30:** F466 (Copilot's Workspace only judges only what Copilot asks; 1.1 narrowed the read-only class) and F467 (the appendix corrections) in `scripts/drive/FINDINGS.md`; the UNC stall was already F464.
 ## 11. Drive on the trial Hub `:8010`
 
 Start it **from `hub/`, from source**, never through `agentweave --port 8010`, and never touch `:8000`:
@@ -547,12 +549,13 @@ Confirm the database it serves before trusting it (`.claude/reference/hubs.md`).
 
 Copilot **Free plan**, Auto only: this group spends **at most four** model prompts. Keep every prompt tiny, and record each prompt's cost in the drive notes.
 
-- [ ] 11.1 No model call. Check the following:
+- [x] 11.1 No model call. Check the following:
   - the Runners page offers `copilot`;
   - create a Copilot runner, then a Copilot agent `cop-1` on it with a short charter;
   - `~/.agentweave/hub/copilot-home/projects/proj-d85a82bf4216/cop-1/agents/cop-1.agent.md` exists (confirm the trial Hub's project id first) and holds the charter and the precedence statement, and the repository has no new file;
   - launchability for `copilot` reads runnable and names no token.
-- [ ] 11.2 **Prompt 1.** Under Workspace only, send `cop-1`: *"Create hello.txt containing hi in your workspace, then send me a one-line message with agentweave-send_message."* Record the timeline verbatim:
+  - **Done 2026-09-30** on a drive Hub `:8031` (`drive0930`), not `:8010`; see design.md Round log, "Drive, group 11". All four checks held.
+- [x] 11.2 **Prompt 1.** Under Workspace only, send `cop-1`: *"Create hello.txt containing hi in your workspace, then send me a one-line message with agentweave-send_message."* Record the timeline verbatim:
   - one text block per message;
   - the edit's tool row with its path;
   - the message arriving in the operator inbox;
@@ -561,11 +564,16 @@ Copilot **Free plan**, Auto only: this group spends **at most four** model promp
   - no replayed history.
 
   Then confirm `Conversation.provider_session_id` is set.
-- [ ] 11.3 **Prompt 2.** A specification turn, with `SPEC_TURN_USES_PLAN_MODE` switched **on for this drive only** (it ships off, design D9): open an empty spec document and ask `cop-1` one question about it. Check: it interviews rather than writing a plan file; it has no editing tool but `create`, and any file it tries to create is refused (design D9 item 1a); whether `exit_plan_mode` was called and whether `exit_plan_mode.requested` reached the client (and so cancelled the turn); and that the next, non-spec turn of the conversation (11.4) starts in `#agent`. Leave the constant `False` unless neither the interview nor the ending suffered; turning it on is a commit citing this drive. If the turn was cancelled, file a finding and re-run with prompt 3 with the constant off.
-- [ ] 11.4 **Prompt 3.** Under Ask me, in the same conversation (a resume), ask for `echo hi` in the shell. An operator card opens. Deny it: the timeline shows the refusal, the run completes, and the first turn's output is not rendered again.
-- [ ] 11.5 **Prompt 4 (only if unused).** Stop a running turn with the stop button during a long request. The run ends `stopped`, and no `copilot.exe` or `powershell.exe` child of it survives: check with `Get-Process`.
-- [ ] 11.6 Write the drive notes into `design.md`'s Round log (prompts spent, what matched, what did not). File every mismatch as a finding. Measure Open question 5 from the context readings of 11.2 and 11.4.
+  - **Done 2026-09-30** on a drive Hub `:8031` (`drive0930`), not `:8010`; see design.md Round log, "Drive, group 11". Held, with three findings: `apply_patch` paths (fixed), the sweep deleting Copilot's own first-launch files (fixed), and the drive prompt's impossible "send me" turning into a self-message (F468).
+- [x] 11.3 **Prompt 2.** A specification turn, with `SPEC_TURN_USES_PLAN_MODE` switched **on for this drive only** (it ships off, design D9): open an empty spec document and ask `cop-1` one question about it. Check: it interviews rather than writing a plan file; it has no editing tool but `create`, and any file it tries to create is refused (design D9 item 1a); whether `exit_plan_mode` was called and whether `exit_plan_mode.requested` reached the client (and so cancelled the turn); and that the next, non-spec turn of the conversation (11.4) starts in `#agent`. Leave the constant `False` unless neither the interview nor the ending suffered; turning it on is a commit citing this drive. If the turn was cancelled, file a finding and re-run with prompt 3 with the constant off.
+  - **Done 2026-09-30** on a drive Hub `:8031` (`drive0930`), not `:8010`; see design.md Round log, "Drive, group 11". Plan mode was accepted and did not hang, and `exit_plan_mode` was not called; but the agent asked its question as reply text, not through `ask_user`, so the constant stays `False`.
+- [x] 11.4 **Prompt 3.** Under Ask me, in the same conversation (a resume), ask for `echo hi` in the shell. An operator card opens. Deny it: the timeline shows the refusal, the run completes, and the first turn's output is not rendered again.
+  - **Done 2026-09-30** on a drive Hub `:8031` (`drive0930`), not `:8010`; see design.md Round log, "Drive, group 11". The card, the denial and the refusal held; the turn started in `#agent`; context grew 15,702 -> 29,913.
+- [x] 11.5 **Prompt 4 (only if unused).** Stop a running turn with the stop button during a long request. The run ends `stopped`, and no `copilot.exe` or `powershell.exe` child of it survives: check with `Get-Process`.
+  - **Done 2026-09-30** on a drive Hub `:8031` (`drive0930`), not `:8010`; see design.md Round log, "Drive, group 11". The run ended `stopped` with no `copilot --acp` process left.
+- [x] 11.6 Write the drive notes into `design.md`'s Round log (prompts spent, what matched, what did not). File every mismatch as a finding. Measure Open question 5 from the context readings of 11.2 and 11.4.
 
+  - **Done 2026-09-30:** the drive notes are in design.md's Round log; 5 model prompts spent (one more than planned, by F468's self-message); findings F468 filed; open question 5 measured above.
 ## 12. Archive
 
 - [ ] 12.1 All tasks above checked, or explicitly deferred with a finding. `openspec validate a-copilot-agent-runs-over-acp --strict` passes. Sync the deltas into `openspec/specs/` (`openspec-sync-specs`) and archive (`openspec-archive-change`). Write the handoff per the handoff-cadence rule

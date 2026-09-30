@@ -29,6 +29,7 @@ watched a tool nobody taught it is worse than no record.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 #: Claude's file-writing tools, each mapped to the input key naming the file it writes.
@@ -75,7 +76,11 @@ def written_paths(tool: str, input_data: Any) -> Tuple[str, ...]:
     if tool == CODEX_WRITE_TOOL:
         return _change_paths(input_data)
     if tool in COPILOT_WRITE_TOOLS:
-        return _location_paths(input_data) or _change_paths(input_data)
+        return (
+            _location_paths(input_data)
+            or _change_paths(input_data)
+            or _patch_paths(input_data.get("rawInput") if isinstance(input_data, dict) else None)
+        )
     return ()
 
 
@@ -124,6 +129,27 @@ def _location_paths(input_data: Any) -> Tuple[str, ...]:
             continue
         path = location.get("path")
         if isinstance(path, str) and path and path not in paths:
+            paths.append(path)
+    return tuple(paths)
+
+
+#: The header lines of the `apply_patch` format, each naming one file (`*** Move to:` names the
+#: destination of a rename).
+_PATCH_HEADER_RE = re.compile(
+    r"^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+?)\s*$", re.M
+)
+
+
+def _patch_paths(raw_input: Any) -> Tuple[str, ...]:
+    """Copilot's `apply_patch` call carries **no** `locations` and no diff: its `rawInput` is the
+    patch text itself (measured, group 11 drive, 1.0.88), so the files it writes are named only by
+    the patch's own headers."""
+    if not isinstance(raw_input, str):
+        return ()
+    paths: List[str] = []
+    for match in _PATCH_HEADER_RE.finditer(raw_input):
+        path = match.group(1)
+        if path and path not in paths:
             paths.append(path)
     return tuple(paths)
 

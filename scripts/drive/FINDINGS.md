@@ -33532,3 +33532,30 @@ Fix: refuse `\`, `//`, `\?\` and `\.\` paths before `realpath`, so no network I/
 `request_agent` counts every agent row, including archived ones, against `Project.agent_budget` (`hub/hub/api/v1/agents.py:2290-2298`, `existing_names = set(rows_by_name)`). The taken-name check counts archived rows on purpose, since a name is never reused (design D5 of that change). The budget reuses the same set, and nothing says the budget should count them too. The count predates the change: the old code counted the same rows. Agents cannot be deleted, only archived. So once a project reaches its budget, an agent can never again request one, however many are retired, unless the operator raises the budget. `agent-tool-surface` says only that the budget "SHALL be counted over the project's agents alone".
 
 Question for the operator: should the budget count **open** agents only (archiving frees a slot), or is it a lifetime cap on how many agents a project has ever had? Test either way: a project at its budget with one agent archived, then a request, asserting the chosen answer.
+
+## F466 (C) — a Copilot run's Workspace only judges only the commands Copilot asks about
+
+**Status:** open, filed 2026-09-30 from `a-copilot-agent-runs-over-acp` (review 2026-09-28, finding 1; task 10.1). Partly measured: task 1.1's capture (`hub/tests/fixtures/copilot_acp/turn_write_shell_mcp.jsonl`, Copilot 1.0.88).
+
+Under Claude, `_decide` reads every Bash command word by word. Under Copilot, the Hub judges only what Copilot raises as `session/request_permission`. Copilot's own `manual` mode auto-approves requests it classes read-only (DOCUMENTED: *"read-only requests are auto-approved"*), and the exploration's capture (`acp4…log:34-39`) shows an `echo` running with no request at all. So a Copilot run under Workspace only judges fewer commands than a Claude run, and which ones is decided in Copilot's native runtime. Task 1.1 narrowed the gap rather than confirming it: `Get-ChildItem` **did** raise a request (three times, `readOnly:false`), so the read-only class is smaller than the design assumed. And `curl.exe` raised an ordinary `execute` request, never the `url` request the design anticipated. Parity is therefore measured command by command, not assumed.
+
+What would close it: a deciding `preToolUse` hook, which slice 5 declines. Test to write when it matters: a drive that runs a known read-only command under Workspace only and records whether a request arrived.
+
+## F467 (D) — facts about Copilot CLI that the exploration's appendix recorded wrongly
+
+**Status:** open (a record, not a defect), filed 2026-09-30 from `a-copilot-agent-runs-over-acp`'s rounds and captures (task 10.1), so later slices do not inherit the old statements.
+
+- `copilot.exe --no-auto-update` runs the npm-installed build (1.0.88 here), not the bundled 1.0.75 appendix C named.
+- `~/.agents/skills` **does** load under a custom `COPILOT_HOME` ("Inherited", `r1-probe-agent.log:13`); appendix A §E said it did not.
+- Copilot's MCP `timeout` defaults to 30 s, which would cut every `ask_user`; the Hub's server config sets 660 s.
+- An empty `--available-tools=` means **no filter** (`app.js` `Y0`), so with `--allow-all-tools` it approves every tool; tools are removed with `--excluded-tools=builtin:*,mcp:*,custom:*` instead (task 1.2 confirmed zero tools offered).
+- Project-level custom agents (`.github/agents/`, `.claude/agents/`) outrank `$COPILOT_HOME/agents/` (DOCUMENTED), so a repository agent named like the Hub's shadows it; the Hub checks the selected agent's marker and deselects on a mismatch.
+- The UNC-path stall the same review measured is F464.
+
+## F468 (C) — an agent can message itself, and the message starts a new autonomous turn
+
+**Status:** open, filed 2026-09-30. Found by driving `a-copilot-agent-runs-over-acp` 11.2 on a drive Hub (`:8031`, `drive0930`). Not Copilot-specific: the path is the Hub's `send_message`.
+
+Asked to "send me a one-line message with agentweave-send_message", a Copilot agent called `send_message(to_agent="cop-1", …)`, addressing itself. The operator is not a message recipient (the tool's own docstring says so), so the model picked the nearest name it had. The Hub accepted it: the message was queued as input to `cop-1` (`origin_type='agent'`, `origin_agent='cop-1'`) and immediately started a second turn, `initiator='autonomous'`, in a new conversation. That turn spent one more model call (a Free-plan premium request) acknowledging its own message. The hop budget bounds a chain, so this is not unbounded, but every self-message costs a turn and splits the work across conversations.
+
+Question for the operator: should `send_message` refuse `to_agent` equal to the caller (a 400 naming the reply as the way to reach the operator), or is messaging yourself a legitimate way to schedule follow-up work? Test either way: an agent run's `send_message` to itself, asserting the chosen answer and that no turn starts if refused.

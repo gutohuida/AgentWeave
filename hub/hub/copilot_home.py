@@ -32,7 +32,7 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +212,22 @@ def _is_owned(home: Path, path: Path, owned: Dict[str, str]) -> bool:
         return False
 
 
+def _parse_config(text: str) -> Dict[str, Any]:
+    """Copilot's `config.json` is JSONC: it writes it with a `//` header ("User settings belong in
+    settings.json. This file is managed automatically."), measured on 1.0.88 in the group 11 drive.
+    Whole-line `//` comments are dropped before parsing; anything else that does not parse is
+    damage, and raises `ValueError`."""
+    body = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("//"))
+    data = json.loads(body)
+    if not isinstance(data, dict):
+        raise ValueError("config.json is not an object")
+    return data
+
+
+def _holds_a_file(path: Path) -> bool:
+    return path.is_file() or (path.is_dir() and any(p.is_file() for p in path.rglob("*")))
+
+
 def _remove(path: Path) -> None:
     if path.is_dir() and not path.is_symlink():
         shutil.rmtree(path)
@@ -236,19 +252,22 @@ def _sweep(home: Path, agent: str) -> List[str]:
             if path.is_file() and not _is_owned(home, path, owned):
                 gone(path)
 
-    for name in ("settings.json", "mcp-config.json", "installed-plugins"):
+    for name in ("settings.json", "mcp-config.json"):
         path = home / name
         if path.exists() or path.is_symlink():
             gone(path)
+    # Copilot creates an empty `installed-plugins/` on its first launch. An empty one installs
+    # nothing, and removing it every turn only made every turn report a repair (group 11 drive).
+    plugins = home / "installed-plugins"
+    if plugins.is_symlink() or _holds_a_file(plugins):
+        gone(plugins)
 
     config = home / "config.json"
     if config.exists():
         try:
-            data = json.loads(config.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                raise ValueError("not an object")
+            data = _parse_config(config.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            # JSONC or damaged: Copilot recreates it.
+            # Damaged: Copilot recreates it.
             gone(config)
         else:
             dropped = [key for key in _CONFIG_PERMISSION_KEYS if key in data]

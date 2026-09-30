@@ -109,6 +109,7 @@ answer and `posture_for` are now tested at the end of this file.
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, Optional
 
 import pytest
@@ -119,6 +120,18 @@ from hub.model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_
 ACCEPT_EDITS = "acceptEdits"
 MANUAL = "manual"
 HUB_URL = "http://127.0.0.1:8010"
+
+# Paths outside every test workspace, on both of CI's platforms. A Windows literal on Linux is a
+# relative file name, which resolves *inside* the workspace, so these refusal tests passed on
+# Windows and failed on ubuntu (CI, 2026-09-30).
+if os.name == "nt":
+    OUTSIDE_FILE = "C:\\Windows\\System32\\evil.txt"
+    OUTSIDE_SECRET = "C:\\Windows\\System32\\secret.txt"
+else:
+    OUTSIDE_FILE = "/etc/agentweave-drive/evil.txt"
+    OUTSIDE_SECRET = "/etc/agentweave-drive/secret.txt"
+# A traversal both platforms read as one: PowerShell accepts `/`, and on POSIX `\` is no separator.
+TRAVERSAL_COMMAND = "Remove-Item ../../x"
 
 ALL_POSTURES = (WORKSPACE_PERMISSION_MODE, ACCEPT_EDITS, MANUAL, FULL_ACCESS_PERMISSION_MODE)
 
@@ -174,7 +187,7 @@ class TestExecute:
     """design.md:636 — `kind:"execute"`, `rawInput.command`."""
 
     def test_command_naming_a_path_outside_the_workspace_is_refused_under_workspace(self, tmp_path):
-        params = _params(kind="execute", raw_input={"command": "Remove-Item ..\\..\\x"})
+        params = _params(kind="execute", raw_input={"command": TRAVERSAL_COMMAND})
         result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path)
         assert result["outcome"] == "REJECT"
 
@@ -183,7 +196,7 @@ class TestExecute:
         result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path)
         assert result["outcome"] == "ALLOW"
 
-    @pytest.mark.parametrize("command", ["Get-ChildItem", "Remove-Item ..\\..\\x"])
+    @pytest.mark.parametrize("command", ["Get-ChildItem", TRAVERSAL_COMMAND])
     def test_every_execute_request_is_rejected_under_accept_edits(self, tmp_path, command):
         params = _params(kind="execute", raw_input={"command": command})
         result = _decide(params, ACCEPT_EDITS, tmp_path)
@@ -195,7 +208,7 @@ class TestExecute:
         assert result["outcome"] == "ASK_OPERATOR"
 
     def test_execute_is_allowed_under_full_access(self, tmp_path):
-        params = _params(kind="execute", raw_input={"command": "Remove-Item ..\\..\\x"})
+        params = _params(kind="execute", raw_input={"command": TRAVERSAL_COMMAND})
         result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path)
         assert result["outcome"] == "ALLOW"
 
@@ -217,7 +230,7 @@ class TestEdit:
             assert result["outcome"] == "ALLOW", posture
 
     def test_edit_outside_the_workspace_is_refused_under_workspace_and_accept_edits(self, tmp_path):
-        params = _params(kind="edit", locations=[{"path": "C:\\Windows\\System32\\evil.txt"}])
+        params = _params(kind="edit", locations=[{"path": OUTSIDE_FILE}])
         for posture in (WORKSPACE_PERMISSION_MODE, ACCEPT_EDITS):
             result = _decide(params, posture, tmp_path)
             assert result["outcome"] == "REJECT", posture
@@ -236,7 +249,7 @@ class TestEdit:
         assert result["outcome"] == "ASK_OPERATOR"
 
     def test_edit_is_allowed_under_full_access(self, tmp_path):
-        params = _params(kind="edit", locations=[{"path": "C:\\Windows\\System32\\evil.txt"}])
+        params = _params(kind="edit", locations=[{"path": OUTSIDE_FILE}])
         result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path)
         assert result["outcome"] == "ALLOW"
 
@@ -252,7 +265,7 @@ class TestRead:
             assert result["outcome"] == "ALLOW", posture
 
     def test_read_outside_the_workspace_is_refused_under_workspace_and_accept_edits(self, tmp_path):
-        params = _params(kind="read", raw_input={"path": "C:\\Windows\\System32\\secret.txt"})
+        params = _params(kind="read", raw_input={"path": OUTSIDE_SECRET})
         for posture in (WORKSPACE_PERMISSION_MODE, ACCEPT_EDITS):
             result = _decide(params, posture, tmp_path)
             assert result["outcome"] == "REJECT", posture
@@ -270,7 +283,7 @@ class TestRead:
         assert result["outcome"] == "ASK_OPERATOR"
 
     def test_read_is_allowed_under_full_access(self, tmp_path):
-        params = _params(kind="read", raw_input={"path": "C:\\Windows\\System32\\secret.txt"})
+        params = _params(kind="read", raw_input={"path": OUTSIDE_SECRET})
         result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path)
         assert result["outcome"] == "ALLOW"
 
@@ -377,7 +390,7 @@ class TestMcp:
         params = _params(
             tool_call_id="call_m2",
             kind="other",
-            raw_input={"path": "C:\\Windows\\System32\\secret.txt"},
+            raw_input={"path": OUTSIDE_SECRET},
         )
         calls = {
             "call_m2": CallFacts(
@@ -489,7 +502,7 @@ class TestSpecTurn:
     @pytest.mark.parametrize(
         "command,expected",
         [
-            ("Remove-Item ..\\..\\x", "REJECT"),
+            (TRAVERSAL_COMMAND, "REJECT"),
             ("Set-Content .\\x", "ALLOW"),
         ],
     )
@@ -506,7 +519,7 @@ class TestSpecTurn:
         params = _params(
             tool_call_id="call_m2",
             kind="other",
-            raw_input={"path": "C:\\Windows\\System32\\secret.txt"},
+            raw_input={"path": OUTSIDE_SECRET},
         )
         calls = {
             "call_m2": CallFacts(
@@ -529,7 +542,7 @@ class TestSpecTurn:
     @pytest.mark.parametrize(
         "kind,raw_input",
         [
-            ("execute", {"command": "Remove-Item ..\\..\\x"}),
+            ("execute", {"command": TRAVERSAL_COMMAND}),
             ("memory", {}),
         ],
     )
@@ -552,7 +565,7 @@ class TestSpecTurn:
         foreign_params = _params(
             tool_call_id="call_m2",
             kind="other",
-            raw_input={"path": "C:\\Windows\\System32\\secret.txt"},
+            raw_input={"path": OUTSIDE_SECRET},
         )
         calls = {
             "call_m2": CallFacts(
@@ -696,7 +709,7 @@ class TestReadPathSplitting:
         see both — one outside the workspace refuses the whole request even though the other,
         alone, would be allowed."""
         inside = str(tmp_path / "a.txt")
-        outside = "C:\\Windows\\System32\\evil.txt"
+        outside = OUTSIDE_FILE
         params = _params(kind="read", raw_input={"path": f"{inside}, {outside}"})
         result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path)
         assert result["outcome"] == "REJECT"
@@ -722,7 +735,7 @@ class TestMcpForeignNameCollision:
         params = _params(
             tool_call_id="call_m7",
             kind="other",
-            raw_input={"command": "Remove-Item ..\\..\\x"},
+            raw_input={"command": TRAVERSAL_COMMAND},
         )
         calls = {
             "call_m7": CallFacts(
@@ -738,7 +751,7 @@ class TestMcpForeignNameCollision:
         params = _params(
             tool_call_id="call_m8",
             kind="other",
-            raw_input={"command": "Remove-Item ..\\..\\x"},
+            raw_input={"command": TRAVERSAL_COMMAND},
         )
         calls = {
             "call_m8": CallFacts(
@@ -975,7 +988,7 @@ class TestPostureFor:
     def test_an_unset_mode_is_judged_exactly_as_workspace(self, tmp_path):
         from hub.copilot_acp import posture_for
 
-        for command in ("Get-ChildItem", "Remove-Item ..\\..\\x"):
+        for command in ("Get-ChildItem", TRAVERSAL_COMMAND):
             params = _params(kind="execute", raw_input={"command": command})
             unset = _decide(params, posture_for(None), tmp_path)
             workspace = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path)
@@ -1029,7 +1042,7 @@ class TestOperatorLabelsAndAnswers:
     def test_workspace_verdict_is_the_workspace_judge(self, tmp_path):
         from hub.copilot_acp import workspace_verdict
 
-        outside = _params(kind="execute", raw_input={"command": "Remove-Item ..\\..\\x"})
+        outside = _params(kind="execute", raw_input={"command": TRAVERSAL_COMMAND})
         inside = _params(kind="execute", raw_input={"command": "Get-ChildItem"})
         assert workspace_verdict(outside, str(tmp_path), hub_url=HUB_URL)["allow"] is False
         assert workspace_verdict(inside, str(tmp_path), hub_url=HUB_URL)["allow"] is True

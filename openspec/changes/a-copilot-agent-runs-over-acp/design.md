@@ -2552,6 +2552,86 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     capture needed by a later task in this change must either reuse these two fixtures or wait for
     a fresh allowance — not run a third Free-plan prompt in this group.
 
+- **IMPL, 2026-09-30 (interactive session).**
+  - **Task 1.20's probe** (`evidence/t1_20_probe.py`, log `t1_20_probe.log`, Copilot 1.0.88, no
+    model call). A scratch git repository held `.mcp.json` and `.github/agents/probe-builder.agent.md`,
+    each naming a stand-in server `agentweave`, beside the Hub's `--additional-mcp-config`:
+    - The repository agent **loads in an untrusted folder** and is offered in `session/new`'s
+      `agent` option with **its own** description, so D6's marker check tells it from the Hub's
+      file. Selecting it and then selecting `""` reads back `currentValue: ""`, so D6's deselect
+      works as designed.
+    - A repository agent's `mcp-servers` entry without `tools` makes the whole file fail to load
+      (`frontmatter is malformed: mcp-servers.agentweave.tools: Required`), and the select is
+      then refused `-32602`: the fallback path, with nothing to deselect.
+    - **No `session.mcp_servers_loaded` arrives before a prompt.** Only
+      `session.mcp_server_status_changed` for the disabled `github-mcp-server` did. So which
+      `agentweave` loads, and with what `source`, cannot be read without a model call. Task 1.1's
+      prompted capture reported the Hub's server with no `source` or `transport` at all. D8's
+      accepted value is therefore fixed from that capture: an **absent** `source`/`transport` is
+      accepted, and a present `workspace`/`plugin` source or a non-`stdio` transport refuses
+      (`copilot_acp.hub_server_unverified`). Checking the start event's `mcpConfigSource`
+      (`"user"` in 1.1) was added beside it. Measuring a repository `.mcp.json` claim needs one
+      prompted turn, so it is left to the drive (group 11).
+  - **Group 6 was built by a subagent against this design and the night's tests, then reviewed.**
+    It changed four `decide` assertions: under **genuine** Full access an unidentified MCP call is
+    ALLOWed (:704-707, :807). Line :583's "full-access fallback" is the run whose allow-all was
+    withheld, which is judged as `workspace`. Its other judgement calls are recorded on tasks 1.6,
+    6.1-6.3 and 7.3.
+  - **Not built, because their changes have not landed:** allow recording (`permission_tally`,
+    task 7.3), and storing the Workspace-only verdict on an Ask-me card
+    (`an-ask-me-card-says-what-workspace-only-would-decide`). `run_turn` computes the verdict and
+    passes it in the card's subject.
+
+- **Drive, group 11, 2026-09-30** (`scripts/drive/d0930_copilot.py`; Copilot 1.0.88, Free plan,
+  Auto). **Not on `:8010`:** a separate drive Hub on `:8031` with a fresh `drive0930` profile,
+  started from this checkout. `SPEC_TURN_USES_PLAN_MODE` was switched on for this drive only by a
+  launcher, and the scratch project lived under `testbed/scratch/copilot-drive/`. This kept the
+  trial Hub's state out of it and never pointed a Hub at this repository.
+  **Model prompts spent: 5, not 4.** The extra one was the autonomous turn in 11.2 (below).
+  - **11.1 (no model call):** the seed offers `claude`, `codex`, `copilot`. A Copilot runner and
+    `cop-1` were created with a charter. The agent file exists and holds the charter and the
+    precedence statement. The repository was untouched. Launchability read runnable, resolved the
+    platform `copilot.exe` behind the npm shim, and named no token.
+  - **11.2 (prompt 1, Workspace only):** one text block per message. The write was Copilot's
+    `apply_patch` (kind `edit`), rendered as `edit`/`file_change`. The context reading had a limit
+    (15,702 / 272,000, model resolved `gpt-6-luna`), the MCP adapter came online, and
+    `provider_session_id` was bound. **Three findings, two fixed in this change:**
+    - `apply_patch` carries `locations: null` and the patch as its `rawInput`, so no path was
+      attributed. **Fixed:** `workspace_writes._patch_paths` reads the patch headers.
+    - On its first launch Copilot writes a JSONC `config.json` (a `//` header plus
+      `firstLaunchAt`) and an empty `installed-plugins/`. The next turn's sweep deleted both and
+      emitted `copilot.home_repaired`, and every turn would have repeated it. **Fixed:** the
+      sweep drops whole-line `//` comments before parsing, and removes `installed-plugins/` only
+      when it holds a file.
+    - "Send me a message with agentweave-send_message" cannot be done: the operator is not a
+      message recipient (the tool's docstring). The model sent the message to **itself**, and that
+      queued input started a second, autonomous turn in a new conversation. The prompt in 11.2 was
+      wrong. The Hub accepting a self-addressed message is filed as F468; it is not
+      Copilot-specific.
+  - **11.3 (prompt 2, spec turn, plan mode on):** `set_mode #plan` was accepted.
+    `exit_plan_mode` was **not** called, and nothing hung or was cancelled. The file tools were
+    excluded, and Copilot reported `Disabled tools: apply_patch`. It also warned `Unknown tool
+    name in the tool excludedlist: "str_replace"`: the "costs nothing" names cost one warning per
+    spec turn on this model's tool set. The warning was mapped to a diagnostic, correctly. The
+    agent read the document with `agentweave-read_spec_document`. **It then asked its question
+    as reply text instead of calling `agentweave-ask_user`** (F38's pattern: the turn ended with
+    no question recorded). Whether plan mode contributed cannot be told from one turn, so the
+    interview counts as suffering: **`SPEC_TURN_USES_PLAN_MODE` stays `False`**.
+  - **11.4 (prompt 3, Ask me, same conversation):** the next turn started in `#agent`, since
+    `set_mode` is sent every turn. `echo hi` raised a request, which is itself a data point for
+    F466. The card read "a command" with `{"command": "echo hi"}`. Denied, the shell call failed,
+    and the run completed; the earlier turns were not rendered again. Context grew
+    15,702 -> 29,913 over the resumed turns (open question 5: the per-turn block and each turn's
+    history accumulate as designed).
+  - **11.5 (prompt 4):** stopped 12 s in. The run ended `stopped`, and no `copilot … --acp`
+    process survived.
+  - **Found by running the tests on Linux** (WSL, same checkout), not by the drive:
+    `ACPProcess.spawn` and the probe started Copilot in the Hub's own process group. On POSIX
+    `terminate_process_tree` kills the group, so the first `close()` would have killed the Hub.
+    **Fixed:** both spawn with `start_new_session=True` on POSIX. Several decide and run_turn
+    tests also used Windows literals, which are relative names on Linux; they now use per-OS
+    paths.
+
 ## Cross-slice consistency (orchestrator, 2026-09-27, after all five R1s; reconciled in R2)
 
 For R2 to reconcile against `each-runner-cli-is-one-adapter`'s design:

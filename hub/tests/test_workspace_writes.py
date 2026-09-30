@@ -621,3 +621,18 @@ def test_a_copilot_shell_row_is_not_a_write():
     # Copilot's shell writes (`Set-Content`) arrive as `shell`; the Hub does not parse commands.
     assert written_paths("shell", {"locations": [{"path": "x.py"}]}) == ()
     assert written_paths("read", {"locations": [{"path": "x.py"}]}) == ()
+
+
+def test_a_copilot_apply_patch_names_its_files_from_the_patch():
+    """Measured on 1.0.88 (group 11 drive): Copilot's `apply_patch` row has `locations: null`
+    and its `rawInput` is the patch text, so the patch headers are the only record of the file."""
+    patch = (
+        "*** Begin Patch\n*** Add File: hello.txt\n+hi\n"
+        "*** Update File: src/a.py\n@@\n-x\n+y\n*** Move to: src/b.py\n"
+        "*** Delete File: old.txt\n*** End Patch\n"
+    )
+    extracted = written_paths(
+        "edit", {"title": "apply_patch", "rawInput": patch, "locations": None}
+    )
+    assert extracted == ("hello.txt", "src/a.py", "src/b.py", "old.txt")
+    assert written_paths("edit", {"rawInput": "no headers here"}) == ()

@@ -1229,6 +1229,11 @@ class ACPProcess:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             limit=STDOUT_LINE_LIMIT,
+            # Its own process group on POSIX. `close()` ends the tree with
+            # `terminate_process_tree`, which there kills the child's *group*; a child left in the
+            # Hub's group would take the Hub down with it (measured under WSL, 2026-09-30: the test
+            # runner was killed by the first `close()`). Windows walks the pid tree instead.
+            **({} if os.name == "nt" else {"start_new_session": True}),
             **no_console_kwargs(),
         )
         session = cls(proc, on_notification=on_notification, on_server_request=on_server_request)
@@ -1549,10 +1554,14 @@ def _context_block(per_turn_context: Optional[str], tool_surface_context: Option
     return "\n\n".join(parts)
 
 
-def _record_probe(*, present: bool, authorized: bool, reason: Optional[str]) -> None:
-    """Tell `CopilotProbe` what this turn learned (D12, R3). Never raises."""
+def _record_probe(
+    *, present: bool, authorized: bool, reason: Optional[str], cli: Optional[str] = None
+) -> None:
+    """Tell `CopilotProbe` what this turn learned (D12, R3). Never raises. A runner's pinned
+    executable is passed on, so the verdict is filed under the executable that was actually run."""
+    extra = {"cli_override": cli} if cli else {}
     try:
-        CopilotProbe.record(present=present, authorized=authorized, reason=reason)
+        CopilotProbe.record(present=present, authorized=authorized, reason=reason, **extra)
     except Exception:  # noqa: BLE001 - a verdict note must never fail the turn
         logger.debug("recording the Copilot verdict failed", exc_info=True)
 
@@ -1865,7 +1874,7 @@ async def run_turn(
         version = info.get("version")
         if not version_supported(version):
             shown = version if isinstance(version, str) and version else "(unknown version)"
-            _record_probe(present=True, authorized=False, reason=too_old_reason(shown))
+            _record_probe(present=True, authorized=False, reason=too_old_reason(shown), cli=cli)
             raise CopilotACPError(
                 f"Copilot CLI {shown} is older than the supported {COPILOT_MIN_VERSION}. Update it "
                 "with `copilot update` or npm."
@@ -1910,12 +1919,14 @@ async def run_turn(
                 if exc.code == AUTH_REQUIRED_CODE:
                     # Written before the raise: the executor re-drains at once, and without the
                     # verdict each retry would spend a delivery attempt (D12, R3).
-                    _record_probe(present=True, authorized=False, reason=NOT_SIGNED_IN_REASON)
+                    _record_probe(
+                        present=True, authorized=False, reason=NOT_SIGNED_IN_REASON, cli=cli
+                    )
                 raise
             session_id = _str_or_none(session_response.get("sessionId"))
             if session_id is None:
                 raise CopilotACPError("Copilot's session/new answered no sessionId.")
-        _record_probe(present=True, authorized=True, reason=None)
+        _record_probe(present=True, authorized=True, reason=None, cli=cli)
         state["session_id"] = session_id
         if on_session is not None:
             await on_session(session_id)

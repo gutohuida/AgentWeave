@@ -70,6 +70,19 @@ from hub.copilot_acp import ACPProcess, CopilotACPError, TurnOutcome, run_turn
 
 pytestmark = pytest.mark.asyncio
 
+# A workspace and paths that mean the same thing on both of CI's platforms. On Linux `C:\work` is a
+# relative name, so `C:\other\evil.txt` resolved *inside* it and an outside edit was allowed
+# (CI, 2026-09-30). Only what a judge reads needs to be absolute; the rest is carried as text.
+if os.name == "nt":
+    WORK = "C:\\work"
+    OTHER_EVIL = "C:\\other\\evil.txt"
+else:
+    WORK = "/work"
+    OTHER_EVIL = "/other/evil.txt"
+WORK_NOTES = os.path.join(WORK, "notes.txt")
+WORK_SLOW = os.path.join(WORK, "slow.txt")
+WORK_X_PY = os.path.join(WORK, "x.py")
+
 SESSION_ID = "ea76eb05-6a87-4257-8280-d7cc9e571ba5"  # a real session id, r1-probe-agent.log:5
 AGENT_NAME = "probe-builder"  # the real agent name r1-probe-agent.log selected
 AGENT_MARKER = f"AgentWeave agent {AGENT_NAME} — context rendered by the AgentWeave Hub"  # D4
@@ -360,7 +373,7 @@ class TestNewSessionSequence:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt=raw_prompt,
             model=None,
@@ -372,7 +385,7 @@ class TestNewSessionSequence:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -403,7 +416,7 @@ class TestNewSessionSequence:
         assert "session.error" in subscribed and "tool.execution_start" in subscribed
 
         new_params = fake.sent_requests[i_new][1]
-        assert new_params["cwd"] == "C:\\work"
+        assert new_params["cwd"] == WORK
         assert new_params["mcpServers"] == []
 
         agent_params = fake.sent_requests[i_agent][1]
@@ -505,7 +518,7 @@ class TestResumedSessionSequence:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Anything changed since I left?",
             model=None,
@@ -517,7 +530,7 @@ class TestResumedSessionSequence:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -532,7 +545,7 @@ class TestResumedSessionSequence:
         assert len(load_calls) == 1, methods
         load_params = load_calls[0][1]
         assert load_params["sessionId"] == RESUME_ID
-        assert load_params["cwd"] == "C:\\work"
+        assert load_params["cwd"] == WORK
         assert load_params["mcpServers"] == []
 
     async def test_replayed_chunks_before_load_response_produce_no_event(self, monkeypatch):
@@ -669,7 +682,7 @@ class TestSessionLoadNotFoundRebinds:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Anything changed since I left?",
             model=None,
@@ -681,7 +694,7 @@ class TestSessionLoadNotFoundRebinds:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -706,7 +719,7 @@ class TestSessionLoadNotFoundRebinds:
         assert load_params["sessionId"] == RESUME_ID
 
         new_params = fake.sent_requests[i_new][1]
-        assert new_params["cwd"] == "C:\\work"
+        assert new_params["cwd"] == WORK
         assert new_params["mcpServers"] == []
 
         diagnostics = [e for e in events if e.kind == "diagnostic"]
@@ -755,7 +768,7 @@ class TestVersionGateFailsBeforeAnySessionRequest:
 
         with pytest.raises(CopilotACPError) as exc_info:
             await run_turn(
-                cwd="C:\\work",
+                cwd=WORK,
                 env=None,
                 prompt="Anything changed since I left?",
                 model=None,
@@ -767,7 +780,7 @@ class TestVersionGateFailsBeforeAnySessionRequest:
                 control_overrides=None,
                 told_access_path="mcp",
                 permission_mode=None,
-                workspace="C:\\work",
+                workspace=WORK,
                 restrict_spec_writes=False,
                 extra_flags=None,
                 on_event=_collector(events),
@@ -843,7 +856,7 @@ class TestFullAccessWithNoAllowAllOption:
     """
 
     EDIT_CALL_ID = "call_synthetic_full_access_edit_1"
-    OUTSIDE_PATH = "C:\\other\\evil.txt"
+    OUTSIDE_PATH = OTHER_EVIL
 
     async def test_diagnostic_and_outside_workspace_edit_rejected(self, monkeypatch):
         events = []
@@ -900,7 +913,7 @@ class TestFullAccessWithNoAllowAllOption:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Please edit a file outside the workspace.",
             model=None,
@@ -912,7 +925,7 @@ class TestFullAccessWithNoAllowAllOption:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode="bypassPermissions",
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -1038,7 +1051,7 @@ class TestAgentMarkerMismatchFallsBackToResourceBlock:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt=raw_prompt,
             model=None,
@@ -1050,7 +1063,7 @@ class TestAgentMarkerMismatchFallsBackToResourceBlock:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -1189,7 +1202,7 @@ class TestStopSendsSessionCancelAndInterrupts:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Please review the open PR.",
             model=None,
@@ -1201,7 +1214,7 @@ class TestStopSendsSessionCancelAndInterrupts:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -1248,8 +1261,8 @@ class TestEveryRequestPermissionAnsweredExactlyOnce:
 
     INSIDE_CALL_ID = "call_synthetic_exactly_once_edit_inside"
     OUTSIDE_CALL_ID = "call_synthetic_exactly_once_edit_outside"
-    INSIDE_PATH = "C:\\work\\notes.txt"
-    OUTSIDE_PATH = "C:\\other\\evil.txt"
+    INSIDE_PATH = WORK_NOTES
+    OUTSIDE_PATH = OTHER_EVIL
 
     @staticmethod
     def _request_permission_entry(request_id, call_id, path):
@@ -1317,7 +1330,7 @@ class TestEveryRequestPermissionAnsweredExactlyOnce:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Please edit two files.",
             model=None,
@@ -1329,7 +1342,7 @@ class TestEveryRequestPermissionAnsweredExactlyOnce:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -1451,7 +1464,7 @@ class TestUsageUpdateProducesMeasuredSampleWithResolvedModel:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="What model is running?",
             model="claude-haiku-4.5",
@@ -1463,7 +1476,7 @@ class TestUsageUpdateProducesMeasuredSampleWithResolvedModel:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -1507,7 +1520,7 @@ class TestUsageUpdateProducesMeasuredSampleWithResolvedModel:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="What model is running?",
             model="claude-haiku-4.5",
@@ -1519,7 +1532,7 @@ class TestUsageUpdateProducesMeasuredSampleWithResolvedModel:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -1610,7 +1623,7 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
         _patch_spawn(monkeypatch, fake, captured_cmds=captured_cmds)
 
         await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Write the specification document.",
             model=None,
@@ -1622,7 +1635,7 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
             control_overrides=None,
             told_access_path="shim",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=True,
             extra_flags=None,
             on_event=_collector(events),
@@ -1666,7 +1679,7 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
                             "toolCallId": "call_synthetic_spec_turn_execute_outside",
                             "title": "Run a PowerShell command",
                             "kind": "execute",
-                            "rawInput": {"command": "Remove-Item ..\\..\\x"},
+                            "rawInput": {"command": "Remove-Item ../../x"},
                         },
                         "options": [
                             {"optionId": "allow_once", "name": "Allow", "kind": "allow_once"},
@@ -1691,7 +1704,7 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Please write the spec and run a check.",
             model=None,
@@ -1703,7 +1716,7 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode="bypassPermissions",
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=True,
             extra_flags=None,
             on_event=_collector(events),
@@ -1756,7 +1769,7 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
         async def _on_refusal(method, subject):
             refusals.append((method, subject))
 
-        inside_path = "C:\\work\\x.py"
+        inside_path = WORK_X_PY
         script = self._standard_prefix() + [
             {"response": {}},  # session/set_mode -- D8's posture step, unasserted here
             {
@@ -1795,7 +1808,7 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Please write the specification.",
             model=None,
@@ -1807,7 +1820,7 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=True,
             extra_flags=None,
             on_event=_collector(events),
@@ -1859,7 +1872,7 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
         _patch_spawn(monkeypatch, fake)
 
         await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Draft the specification.",
             model=None,
@@ -1871,7 +1884,7 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=True,
             extra_flags=None,
             on_event=_collector(events),
@@ -1936,7 +1949,7 @@ class TestPrePromptErrorRaisesCopilotACPErrorAsAppServerError:
 
         with pytest.raises(CopilotACPError) as exc_info:
             await run_turn(
-                cwd="C:\\work",
+                cwd=WORK,
                 env=None,
                 prompt="Anything changed since I left?",
                 model=None,
@@ -1948,7 +1961,7 @@ class TestPrePromptErrorRaisesCopilotACPErrorAsAppServerError:
                 control_overrides=None,
                 told_access_path="mcp",
                 permission_mode=None,
-                workspace="C:\\work",
+                workspace=WORK,
                 restrict_spec_writes=False,
                 extra_flags=None,
                 on_event=_collector(events),
@@ -2018,7 +2031,7 @@ class TestSessionNewAuthErrorMarksProbeNotAuthorized:
 
         with pytest.raises(CopilotACPError) as exc_info:
             await run_turn(
-                cwd="C:\\work",
+                cwd=WORK,
                 env=None,
                 prompt="Anything changed since I left?",
                 model=None,
@@ -2030,7 +2043,7 @@ class TestSessionNewAuthErrorMarksProbeNotAuthorized:
                 control_overrides=None,
                 told_access_path="mcp",
                 permission_mode=None,
-                workspace="C:\\work",
+                workspace=WORK,
                 restrict_spec_writes=False,
                 extra_flags=None,
                 on_event=_collector(events),
@@ -2066,7 +2079,7 @@ def _minimal_valid_run_turn_kwargs():
     own least-invented reading of `run_turn`'s signature, not a design citation) -- reused here
     only to prove a rejected extra keyword, never awaited, so no script/fake session is needed."""
     return {
-        "cwd": "C:\\work",
+        "cwd": WORK,
         "env": None,
         "prompt": "Anything changed since I left?",
         "model": None,
@@ -2078,7 +2091,7 @@ def _minimal_valid_run_turn_kwargs():
         "control_overrides": None,
         "told_access_path": "mcp",
         "permission_mode": None,
-        "workspace": "C:\\work",
+        "workspace": WORK,
         "restrict_spec_writes": False,
         "extra_flags": None,
         "on_event": lambda *a, **k: None,
@@ -2209,7 +2222,7 @@ class TestProcessTerminatedWithForceOnAFailedTurnToo:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Anything changed since I left?",
             model=None,
@@ -2221,7 +2234,7 @@ class TestProcessTerminatedWithForceOnAFailedTurnToo:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -2332,7 +2345,7 @@ class TestPostPromptFailuresReturnFailedOutcomeNotRaise:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Anything changed since I left?",
             model=None,
@@ -2344,7 +2357,7 @@ class TestPostPromptFailuresReturnFailedOutcomeNotRaise:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -2379,7 +2392,7 @@ class TestPostPromptFailuresReturnFailedOutcomeNotRaise:
         # for the JSON-RPC-error one above -- a run_turn that let the fake's AppServerError
         # propagate would fail this call itself, not just an assertion below.
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Anything changed since I left?",
             model=None,
@@ -2391,7 +2404,7 @@ class TestPostPromptFailuresReturnFailedOutcomeNotRaise:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -2482,7 +2495,7 @@ class TestArmedSessionErrorFailsUnlessStopWins:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Summarise the failing build.",
             model=None,
@@ -2494,7 +2507,7 @@ class TestArmedSessionErrorFailsUnlessStopWins:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -2525,7 +2538,7 @@ class TestArmedSessionErrorFailsUnlessStopWins:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Summarise the failing build.",
             model=None,
@@ -2537,7 +2550,7 @@ class TestArmedSessionErrorFailsUnlessStopWins:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -2601,7 +2614,7 @@ class TestPromptOrderingAndControlOverridesArgv:
         _patch_spawn(monkeypatch, fake)
 
         await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Summarise the failing build.",
             model=None,
@@ -2613,7 +2626,7 @@ class TestPromptOrderingAndControlOverridesArgv:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -2649,7 +2662,7 @@ class TestPromptOrderingAndControlOverridesArgv:
         _patch_spawn(monkeypatch, fake, captured_cmds=captured_cmds)
 
         await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Summarise the failing build.",
             model=None,
@@ -2661,7 +2674,7 @@ class TestPromptOrderingAndControlOverridesArgv:
             control_overrides={"effort": "high"},
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -2718,7 +2731,7 @@ class TestEmptyContextStillOpensWithHeadNotAMessageSlashCommand:
         _patch_spawn(monkeypatch, fake)
 
         await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt=message,
             model=None,
@@ -2730,7 +2743,7 @@ class TestEmptyContextStillOpensWithHeadNotAMessageSlashCommand:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -2857,7 +2870,7 @@ class TestPostureStepEveryTurn:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Anything changed since I left?",
             model=None,
@@ -2869,7 +2882,7 @@ class TestPostureStepEveryTurn:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -2997,7 +3010,7 @@ class TestPostureStepEveryTurn:
 
         with pytest.raises(CopilotACPError) as exc_info:
             await run_turn(
-                cwd="C:\\work",
+                cwd=WORK,
                 env=None,
                 prompt="Anything changed since I left?",
                 model=None,
@@ -3009,7 +3022,7 @@ class TestPostureStepEveryTurn:
                 control_overrides=None,
                 told_access_path="mcp",
                 permission_mode=None,
-                workspace="C:\\work",
+                workspace=WORK,
                 restrict_spec_writes=False,
                 extra_flags=None,
                 on_event=_collector([]),
@@ -3153,7 +3166,7 @@ class TestDeselectOnMarkerMismatch:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Anything changed since I left?",
             model=None,
@@ -3165,7 +3178,7 @@ class TestDeselectOnMarkerMismatch:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector([]),
@@ -3215,7 +3228,7 @@ class TestDeselectOnMarkerMismatch:
 
         with pytest.raises(CopilotACPError) as exc_info:
             await run_turn(
-                cwd="C:\\work",
+                cwd=WORK,
                 env=None,
                 prompt="Anything changed since I left?",
                 model=None,
@@ -3227,7 +3240,7 @@ class TestDeselectOnMarkerMismatch:
                 control_overrides=None,
                 told_access_path="mcp",
                 permission_mode=None,
-                workspace="C:\\work",
+                workspace=WORK,
                 restrict_spec_writes=False,
                 extra_flags=None,
                 on_event=_collector([]),
@@ -3318,7 +3331,7 @@ class TestRunnerFlagWideningStrippedFromArgv:
         _patch_spawn(monkeypatch, fake, captured_cmds=captured_cmds)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Anything changed since I left?",
             model=None,
@@ -3330,7 +3343,7 @@ class TestRunnerFlagWideningStrippedFromArgv:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=self.EXTRA_FLAGS,
             on_event=_collector(events),
@@ -3423,7 +3436,7 @@ class TestRunnerFlagWideningStrippedFromArgv:
         _patch_spawn(monkeypatch, fake, captured_cmds=captured_cmds)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Anything changed since I left?",
             model=None,
@@ -3435,7 +3448,7 @@ class TestRunnerFlagWideningStrippedFromArgv:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode="bypassPermissions",
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=self.EXTRA_FLAGS,
             on_event=_collector(events),
@@ -3530,7 +3543,7 @@ class TestPermissionJudgeRunsOffTheEventLoop:
     """
 
     EDIT_CALL_ID = "call_synthetic_offloaded_edit_1"
-    INSIDE_PATH = "C:\\work\\slow.txt"
+    INSIDE_PATH = WORK_SLOW
     TICK_INTERVAL = 0.05
     REALPATH_DELAY = 2.0
     TICK_FLOOR = 10
@@ -3626,7 +3639,7 @@ class TestPermissionJudgeRunsOffTheEventLoop:
         ticker_task = asyncio.ensure_future(_ticker())
         try:
             outcome = await run_turn(
-                cwd="C:\\work",
+                cwd=WORK,
                 env=None,
                 prompt="Please edit a file inside the workspace.",
                 model=None,
@@ -3638,7 +3651,7 @@ class TestPermissionJudgeRunsOffTheEventLoop:
                 control_overrides=None,
                 told_access_path="mcp",
                 permission_mode=None,
-                workspace="C:\\work",
+                workspace=WORK,
                 restrict_spec_writes=False,
                 extra_flags=None,
                 on_event=_collector([]),
@@ -3763,7 +3776,7 @@ class TestExitPlanModeUnanswerableAndPlanModeShipsOff:
         _patch_spawn(monkeypatch, fake)
 
         outcome = await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Keep going.",
             model=None,
@@ -3775,7 +3788,7 @@ class TestExitPlanModeUnanswerableAndPlanModeShipsOff:
             control_overrides=None,
             told_access_path="mcp",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=False,
             extra_flags=None,
             on_event=_collector(events),
@@ -3841,7 +3854,7 @@ class TestExitPlanModeUnanswerableAndPlanModeShipsOff:
         _patch_spawn(monkeypatch, fake, captured_cmds=captured_cmds)
 
         await run_turn(
-            cwd="C:\\work",
+            cwd=WORK,
             env=None,
             prompt="Write the specification document.",
             model=None,
@@ -3853,7 +3866,7 @@ class TestExitPlanModeUnanswerableAndPlanModeShipsOff:
             control_overrides=None,
             told_access_path="shim",
             permission_mode=None,
-            workspace="C:\\work",
+            workspace=WORK,
             restrict_spec_writes=True,
             extra_flags=None,
             on_event=_collector([]),
@@ -3974,7 +3987,7 @@ async def _drive(monkeypatch, script, *, captured_cmds=None, **overrides):
     fake = _FakeACPSession(script)
     _patch_spawn(monkeypatch, fake, captured_cmds=captured_cmds)
     kwargs = {
-        "cwd": "C:\\work",
+        "cwd": WORK,
         "env": None,
         "prompt": "List my tasks.",
         "model": None,
@@ -3986,7 +3999,7 @@ async def _drive(monkeypatch, script, *, captured_cmds=None, **overrides):
         "control_overrides": None,
         "told_access_path": "mcp",
         "permission_mode": "acceptEdits",
-        "workspace": "C:\\work",
+        "workspace": WORK,
         "restrict_spec_writes": False,
         "extra_flags": None,
         "on_event": _collector(events),
@@ -4090,7 +4103,7 @@ class TestOperatorCardWiring:
         )
         script = _new_with() + [
             start,
-            self._execute_request("Remove-Item ..\\..\\x"),
+            self._execute_request("Remove-Item ../../x"),
             _END_TURN,
         ]
         fake, _events, _outcome = await _drive(
@@ -4106,7 +4119,7 @@ class TestOperatorCardWiring:
         method, subject = asked[0]
         assert method == "session/request_permission"
         assert subject["tool_name"] == "a command"
-        assert subject["tool_input"]["command"] == "Remove-Item ..\\..\\x"
+        assert subject["tool_input"]["command"] == "Remove-Item ../../x"
         assert subject["workspace_verdict"]["allow"] is False
         expected = "allow_once" if operator_allows else "reject_once"
         assert fake.sent_responses == [
@@ -4151,3 +4164,22 @@ class TestHubServerFailureBeforeArmingStillReported:
         _fake, events, _outcome = await _drive(monkeypatch, _new_with(failed) + [_END_TURN])
         errors = [e for e in events if e.kind == "error"]
         assert [e.payload["code"] for e in errors] == ["copilot_mcp_server_failed"]
+
+
+async def test_a_pinned_executables_verdict_is_filed_under_that_executable(monkeypatch):
+    """What a turn learns is recorded against the executable it actually ran: a runner's pinned
+    `cli` is passed on, and the default executable's verdict is left alone."""
+    recorded = []
+
+    class _Probe:
+        @staticmethod
+        def record(**kwargs):
+            recorded.append(kwargs)
+
+    monkeypatch.setattr(copilot_acp, "CopilotProbe", _Probe)
+    copilot_acp._record_probe(
+        present=True, authorized=False, reason="r", cli="C:/pinned/copilot.exe"
+    )
+    copilot_acp._record_probe(present=True, authorized=True, reason=None)
+    assert recorded[0]["cli_override"] == "C:/pinned/copilot.exe"
+    assert "cli_override" not in recorded[1]
