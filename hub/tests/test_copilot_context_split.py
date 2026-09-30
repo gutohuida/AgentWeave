@@ -33,18 +33,9 @@ QUALITY = {
 }
 
 
-async def _register(app, auth_headers, name):
-    response = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": name, "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert response.status_code == 200, response.text
-
-
-async def _fixture(app, auth_headers):
-    await _register(app, auth_headers, "splitter")
-    await _register(app, auth_headers, "peer")
+async def _fixture(app, auth_headers, add_agent):
+    await add_agent("splitter")
+    await add_agent("peer")
     async with async_session_factory() as db:
         db.add(
             Charter(
@@ -101,8 +92,8 @@ def _sections(text: str) -> list[str]:
 
 
 @pytest.mark.asyncio
-async def test_context_for_a_claude_run_is_unchanged(app, auth_headers):
-    await _fixture(app, auth_headers)
+async def test_context_for_a_claude_run_is_unchanged(app, auth_headers, add_agent):
+    await _fixture(app, auth_headers, add_agent)
     context = (await _render())["context"]
     if os.environ.get("AW_UPDATE_CONTEXT_SNAPSHOT"):
         SNAPSHOT.write_text(context, encoding="utf-8", newline="\n")
@@ -111,8 +102,8 @@ async def test_context_for_a_claude_run_is_unchanged(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_the_three_parts_hold_every_section_exactly_once(app, auth_headers):
-    await _fixture(app, auth_headers)
+async def test_the_three_parts_hold_every_section_exactly_once(app, auth_headers, add_agent):
+    await _fixture(app, auth_headers, add_agent)
     rendered = await _render("copilot")
     parts = [rendered["stable"], rendered["per_turn"], rendered["tool_surface"]]
     together = sorted(section for part in parts for section in _sections(part))
@@ -126,8 +117,8 @@ async def test_the_three_parts_hold_every_section_exactly_once(app, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_charter_and_instructions_are_stable(app, auth_headers):
-    await _fixture(app, auth_headers)
+async def test_charter_and_instructions_are_stable(app, auth_headers, add_agent):
+    await _fixture(app, auth_headers, add_agent)
     rendered = await _render("copilot")
     for text in ("## Charter: Builder", "Build carefully.", "## Project Instructions", "py -3.11"):
         assert text in rendered["stable"]
@@ -138,8 +129,8 @@ async def test_charter_and_instructions_are_stable(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_workspace_is_per_turn_and_tool_surface_is_its_own(app, auth_headers):
-    await _fixture(app, auth_headers)
+async def test_workspace_is_per_turn_and_tool_surface_is_its_own(app, auth_headers, add_agent):
+    await _fixture(app, auth_headers, add_agent)
     rendered = await _render("copilot")
     assert "### Your workspace" in rendered["per_turn"]
     assert "### Team" in rendered["per_turn"]

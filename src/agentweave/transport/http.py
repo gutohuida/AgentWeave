@@ -585,36 +585,6 @@ class HttpTransport(BaseTransport):
             )
             return False
 
-    def get_agent_registration(self, agent: str) -> Optional[Dict[str, Any]]:
-        """Return registration metadata for an agent from the Hub.
-
-        Returns a dict with 'self_registered' and 'contact_mode' if found,
-        otherwise None.
-        """
-        try:
-            agents = self._request("GET", "/agents")
-            if isinstance(agents, list):
-                match = next((a for a in agents if a.get("name") == agent), None)
-                if match:
-                    return {
-                        "self_registered": bool(match.get("self_registered", False)),
-                        "contact_mode": match.get("contact_mode"),
-                        "config": match.get("config", {}),
-                    }
-            return None
-        except RuntimeError as exc:
-            logger.warning(
-                "transport_error",
-                extra={
-                    "event": "transport_error",
-                    "data": {
-                        **_transport_error_data("get_agent_registration", exc),
-                        "agent": agent,
-                    },
-                },
-            )
-            return None
-
     def push_log(
         self,
         event_type: str,

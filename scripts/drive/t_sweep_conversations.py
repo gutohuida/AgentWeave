@@ -15,7 +15,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import P, api  # noqa: E402
+from aw import P, api, make_agent  # noqa: E402
 
 AGENT = "conv-probe"
 RESULTS = []
@@ -36,7 +36,7 @@ def probe(row, label, method, path, body=None, expect=None):
     return code, out
 
 
-api("POST", f"/projects/{P}/agents/register", {"name": AGENT, "contact_mode": "poll"})
+make_agent(P, AGENT)  # unbound, as register left it
 
 print("=" * 78)
 print("ROW 5 — conversations: lifecycle, lineage, renaming, continuation")

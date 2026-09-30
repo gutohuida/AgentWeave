@@ -363,8 +363,8 @@ def test_the_http_rendering_names_the_credential_variable_and_never_a_value(monk
 
 def test_the_mcp_rendering_is_what_a_caller_that_says_nothing_gets():
     """Every caller outside a run keeps the injected-tool wording, and that default is what makes
-    `access_path` safe to add: `GET /agents/agent-context` and `POST /agents/register` are answered
-    without a run, so they have no path to describe and must not invent one."""
+    `access_path` safe to add: `GET /agents/agent-context` is answered without a run, so it has no
+    path to describe and must not invent one."""
     assert _tool_surface_lines() == _tool_surface_lines(access_path="mcp")
     assert _tool_surface_lines() != _tool_surface_lines(access_path=HTTP_PATH)
 

@@ -83,6 +83,29 @@ def api(method, path, body=None, raw=False, timeout=60):
         return code, text
 
 
+def make_agent(project, name, cli="claude", bound=False):
+    """Create *name* in *project* through the operator's routes, as the dialog does. Returns
+    `(status, body)` of the create call.
+
+    Replaces `POST /agents/register`, deleted with self-registration
+    (`agents-no-longer-register-themselves`). The create route needs a launchable runner, so one
+    for *cli* is reused or made, and with `bound=False` (what register used to leave behind)
+    the agent is unbound again afterwards. An existing name is left as it is, and unbound too
+    when `bound=False`.
+    """
+    _, runners = api("GET", f"/projects/{project}/runners")
+    runner = next((r for r in runners or [] if r.get("cli") == cli), None)
+    if runner is None:
+        _, runner = api("POST", f"/projects/{project}/runners", {"name": f"{cli} (drive)", "cli": cli})
+    code, body = api("POST", f"/projects/{project}/agents", {"name": name, "runner_id": runner["id"]})
+    exists = code == 409 and "already exists" in str(body)
+    if code >= 300 and not exists:
+        raise RuntimeError(f"creating agent {name!r} failed: {code} {body}")
+    if not bound:
+        api("PATCH", f"/projects/{project}/agents/{name}", {"runner_id": None})
+    return code, body
+
+
 def task_rows(body):
     """The rows of a `GET /tasks` answer, which is `{tasks, total, has_more}` since F202.
 

@@ -11,16 +11,6 @@ import pytest
 from sqlalchemy import select
 
 
-async def _register(app, auth_headers, name: str):
-    resp = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": name, "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200
-    return resp
-
-
 async def _names(app, auth_headers, lifecycle: str | None = None):
     url = "/api/v1/projects/proj-test/agents"
     if lifecycle:
@@ -31,8 +21,8 @@ async def _names(app, auth_headers, lifecycle: str | None = None):
 
 
 @pytest.mark.asyncio
-async def test_archive_removes_the_agent_from_the_default_roster(app, auth_headers):
-    await _register(app, auth_headers, "archie")
+async def test_archive_removes_the_agent_from_the_default_roster(app, auth_headers, add_agent):
+    await add_agent("archie")
     assert "archie" in await _names(app, auth_headers)
 
     resp = await app.post("/api/v1/projects/proj-test/agents/archie/archive", headers=auth_headers)
@@ -45,8 +35,8 @@ async def test_archive_removes_the_agent_from_the_default_roster(app, auth_heade
 
 
 @pytest.mark.asyncio
-async def test_an_archived_agent_is_reachable_when_asked_for(app, auth_headers):
-    await _register(app, auth_headers, "findable")
+async def test_an_archived_agent_is_reachable_when_asked_for(app, auth_headers, add_agent):
+    await add_agent("findable")
     await app.post("/api/v1/projects/proj-test/agents/findable/archive", headers=auth_headers)
 
     # Without this the agent could be archived and then never unarchived, because its own
@@ -56,8 +46,8 @@ async def test_an_archived_agent_is_reachable_when_asked_for(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_unarchive_restores_the_agent(app, auth_headers):
-    await _register(app, auth_headers, "backagain")
+async def test_unarchive_restores_the_agent(app, auth_headers, add_agent):
+    await add_agent("backagain")
     await app.post("/api/v1/projects/proj-test/agents/backagain/archive", headers=auth_headers)
 
     resp = await app.post(
@@ -70,7 +60,9 @@ async def test_unarchive_restores_the_agent(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_archiving_releases_the_charter_but_not_the_runner(app, auth_headers, bind_runner):
+async def test_archiving_releases_the_charter_but_not_the_runner(
+    app, auth_headers, bind_runner, add_agent
+):
     """F185: a bound charter walls off its own deletion behind a name the roster does not show.
 
     Archival releases `charter_id` so the charter becomes deletable again. `runner_id` is left
@@ -86,7 +78,7 @@ async def test_archiving_releases_the_charter_but_not_the_runner(app, auth_heade
     )
     charter_id = charter.json()["id"]
 
-    await _register(app, auth_headers, "chartered-and-runnered")
+    await add_agent("chartered-and-runnered")
     runner_id = await bind_runner("chartered-and-runnered")
     bound = await app.patch(
         "/api/v1/projects/proj-test/agents/chartered-and-runnered",
@@ -114,7 +106,9 @@ async def test_archiving_releases_the_charter_but_not_the_runner(app, auth_heade
 
 
 @pytest.mark.asyncio
-async def test_archive_and_unarchive_responses_state_the_bindings_fate(app, auth_headers):
+async def test_archive_and_unarchive_responses_state_the_bindings_fate(
+    app, auth_headers, add_agent
+):
     """F185 group 2 (design.md D2, D9): the API states what archival released.
 
     R2: nothing renders this today — `useArchiveAgent`'s `onSuccess` discards the body — but the
@@ -128,7 +122,7 @@ async def test_archive_and_unarchive_responses_state_the_bindings_fate(app, auth
     )
     charter_id = charter.json()["id"]
 
-    await _register(app, auth_headers, "sentenced")
+    await add_agent("sentenced")
     bound = await app.patch(
         "/api/v1/projects/proj-test/agents/sentenced",
         json={"charter_id": charter_id},
@@ -159,7 +153,7 @@ async def test_archive_and_unarchive_responses_state_the_bindings_fate(app, auth
     assert unarchived_body["message"] == standing_sentence
     assert "before this agent's next turn" not in unarchived_body["message"]
 
-    await _register(app, auth_headers, "never-chartered")
+    await add_agent("never-chartered")
     archived_bare = await app.post(
         "/api/v1/projects/proj-test/agents/never-chartered/archive", headers=auth_headers
     )
@@ -176,7 +170,7 @@ async def test_archive_and_unarchive_responses_state_the_bindings_fate(app, auth
 
 
 @pytest.mark.asyncio
-async def test_archiving_and_unarchiving_persist_events(app, auth_headers):
+async def test_archiving_and_unarchiving_persist_events(app, auth_headers, add_agent):
     """F391 (design.md D10, group 2b): the transition leaves a trace in event_logs/SSE.
 
     Positive control (F391's own reproduction shape): a heartbeat on the same agent must land an
@@ -190,7 +184,7 @@ async def test_archiving_and_unarchiving_persist_events(app, auth_headers):
     )
     charter_id = charter.json()["id"]
 
-    await _register(app, auth_headers, "traced")
+    await add_agent("traced")
     bound = await app.patch(
         "/api/v1/projects/proj-test/agents/traced",
         json={"charter_id": charter_id},
@@ -239,9 +233,11 @@ async def test_archiving_and_unarchiving_persist_events(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_archiving_a_never_chartered_agent_still_records_an_event(app, auth_headers):
+async def test_archiving_a_never_chartered_agent_still_records_an_event(
+    app, auth_headers, add_agent
+):
     """2b.3: an agent archived holding nothing records `released_charter_id: null`, not no event."""
-    await _register(app, auth_headers, "traced-bare")
+    await add_agent("traced-bare")
 
     archived = await app.post(
         "/api/v1/projects/proj-test/agents/traced-bare/archive", headers=auth_headers
@@ -259,8 +255,8 @@ async def test_archiving_a_never_chartered_agent_still_records_an_event(app, aut
 
 
 @pytest.mark.asyncio
-async def test_archiving_is_idempotent(app, auth_headers):
-    await _register(app, auth_headers, "twice")
+async def test_archiving_is_idempotent(app, auth_headers, add_agent):
+    await add_agent("twice")
     first = await app.post("/api/v1/projects/proj-test/agents/twice/archive", headers=auth_headers)
     second = await app.post("/api/v1/projects/proj-test/agents/twice/archive", headers=auth_headers)
     assert first.status_code == 200
@@ -275,12 +271,12 @@ async def test_archiving_an_unknown_agent_is_404(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_a_running_agent_is_refused_with_a_reason(app, auth_headers):
+async def test_a_running_agent_is_refused_with_a_reason(app, auth_headers, add_agent):
     """Refused, not resolved. Stopping a live run from a settings page destroys work with no undo."""
     from hub.db.engine import async_session_factory
     from hub.db.models import Run
 
-    await _register(app, auth_headers, "busy")
+    await add_agent("busy")
     async with async_session_factory() as session:
         session.add(
             Run(
@@ -301,12 +297,14 @@ async def test_a_running_agent_is_refused_with_a_reason(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_queued_input_refusal_names_exactly_what_can_be_discarded(app, auth_headers):
+async def test_queued_input_refusal_names_exactly_what_can_be_discarded(
+    app, auth_headers, add_agent
+):
     from hub.conversations import new_conversation
     from hub.db.engine import async_session_factory
     from hub.inbound_queue import new_entry
 
-    await _register(app, auth_headers, "queued-agent")
+    await add_agent("queued-agent")
     async with async_session_factory() as session:
         conversation = new_conversation(
             project_id="proj-test", agent="queued-agent", origin="operator"
@@ -345,14 +343,14 @@ async def test_queued_input_refusal_names_exactly_what_can_be_discarded(app, aut
 
 
 @pytest.mark.asyncio
-async def test_the_project_summary_roster_also_drops_archived_agents(app, auth_headers):
+async def test_the_project_summary_roster_also_drops_archived_agents(app, auth_headers, add_agent):
     """The rail draws from `useProjects()`, not `useAgents()` — a second roster.
 
     Found by driving the browser: archiving an agent removed it from `/agents` but left it in the
     rail and in the project's agent count, because `_project_summary` builds its own list. This is
     the exact failure mode task 3b.4 warned about, so it gets its own test rather than a comment.
     """
-    await _register(app, auth_headers, "railonly")
+    await add_agent("railonly")
 
     resp = await app.get("/api/v1/projects", headers=auth_headers)
     assert resp.status_code == 200
@@ -370,14 +368,16 @@ async def test_the_project_summary_roster_also_drops_archived_agents(app, auth_h
 
 
 @pytest.mark.asyncio
-async def test_an_archived_agent_is_not_named_as_a_peer_in_agent_context(app, auth_headers):
+async def test_an_archived_agent_is_not_named_as_a_peer_in_agent_context(
+    app, auth_headers, add_agent
+):
     """The roster an agent is *told about* is a third offering surface.
 
     Naming an archived peer would be worse than unhelpful: sending to one is refused, so the
     roster would be inviting a turn that can only fail.
     """
-    await _register(app, auth_headers, "reader")
-    await _register(app, auth_headers, "retired")
+    await add_agent("reader")
+    await add_agent("retired")
 
     resp = await app.get(
         "/api/v1/projects/proj-test/agents/agent-context?agent=reader", headers=auth_headers
@@ -395,14 +395,14 @@ async def test_an_archived_agent_is_not_named_as_a_peer_in_agent_context(app, au
 
 
 @pytest.mark.asyncio
-async def test_an_archived_agent_keeps_its_name_reserved(app, auth_headers):
+async def test_an_archived_agent_keeps_its_name_reserved(app, auth_headers, add_agent):
     """Deliberately *not* filtered: the name stays taken.
 
     Archival is reversible, so freeing the name would let a new agent take it and make
     unarchiving a collision. The agent budget counts archived agents for the same reason — noted
     here because it is a choice, not an oversight.
     """
-    await _register(app, auth_headers, "taken")
+    await add_agent("taken")
     await app.post("/api/v1/projects/proj-test/agents/taken/archive", headers=auth_headers)
 
     runners = await app.get("/api/v1/projects/proj-test/runners", headers=auth_headers)
@@ -418,7 +418,7 @@ async def test_an_archived_agent_keeps_its_name_reserved(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_a_peer_send_to_an_archived_agent_is_refused_with_its_content(
-    app, auth_headers, start_run
+    app, auth_headers, start_run, add_agent
 ):
     """The archived-*agent* case, which the archived-*conversation* contract does not cover.
 
@@ -426,8 +426,8 @@ async def test_a_peer_send_to_an_archived_agent_is_refused_with_its_content(
     sit queued forever. So the send is refused — and it carries the sender's own content back, so
     retrying is mechanical rather than reconstructive.
     """
-    await _register(app, auth_headers, "sender")
-    await _register(app, auth_headers, "gone")
+    await add_agent("sender")
+    await add_agent("gone")
     await app.post("/api/v1/projects/proj-test/agents/gone/archive", headers=auth_headers)
 
     resp = await app.post(
@@ -450,13 +450,13 @@ async def test_a_peer_send_to_an_archived_agent_is_refused_with_its_content(
 
 
 @pytest.mark.asyncio
-async def test_an_archived_agent_keeps_its_history(app, auth_headers, start_run):
+async def test_an_archived_agent_keeps_its_history(app, auth_headers, start_run, add_agent):
     """Archival is tidying, not deletion — the messages an agent sent keep their attribution."""
     from hub.db.engine import async_session_factory
     from hub.db.models import Run
 
-    await _register(app, auth_headers, "historian")
-    await _register(app, auth_headers, "listener")
+    await add_agent("historian")
+    await add_agent("listener")
     run_id = await start_run("historian")
 
     sent = await app.post(

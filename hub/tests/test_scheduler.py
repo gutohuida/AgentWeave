@@ -20,7 +20,6 @@ from hub import checkpoints
 from hub.checkpoint_generation import render_checkpoint
 from hub.db.engine import async_session_factory
 from hub.db.models import (
-    Agent,
     AIJob,
     Checkpoint,
     Conversation,
@@ -143,33 +142,6 @@ async def test_fired_job_creates_a_run_via_direct_execution_not_a_message(
         assert len(job_runs) == 1
         # Design D13, task A4.3: the background run above actually completed.
         assert job_runs[0].status == "completed"
-
-
-@pytest.mark.asyncio
-async def test_job_for_self_registered_poll_agent_is_skipped(app, auth_headers):
-    async with async_session_factory() as db:
-        db.add(
-            Agent(
-                id="agent-poll-sched",
-                project_id="proj-test",
-                name="poll-job-agent",
-                self_registered=True,
-                contact_mode="poll",
-            )
-        )
-        job = await _make_job(db, suffix="poll", agent="poll-job-agent")
-
-    scheduler = JobScheduler()
-    async with async_session_factory() as db:
-        fresh_job = await db.get(AIJob, job.id)
-        success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
-
-    assert success is False
-
-    async with async_session_factory() as db:
-        run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
-        assert run.status == "skipped"
-        assert "poll" in run.error_summary
 
 
 @pytest.mark.asyncio

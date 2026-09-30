@@ -24,15 +24,6 @@ BASE = "/api/v1/projects/proj-test/project"
 PATH = "spec/changes/precedence/spec.html"
 
 
-async def _register(app, auth_headers, name):
-    response = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": name, "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert response.status_code == 200, response.text
-
-
 async def _create_document(app, auth_headers, path=PATH):
     response = await app.post(
         f"{BASE}/documents", json={"path": path, "title": "Demo"}, headers=auth_headers
@@ -64,8 +55,8 @@ async def _render(agent_name, spec_document):
 
 
 @pytest.mark.asyncio
-async def test_the_context_says_which_procedure_governs(app, auth_headers, tmp_path):
-    await _register(app, auth_headers, "speccer")
+async def test_the_context_says_which_procedure_governs(app, auth_headers, tmp_path, add_agent):
+    await add_agent("speccer")
     await _create_document(app, auth_headers)
 
     context = await _render("speccer", PATH)
@@ -80,11 +71,11 @@ async def test_the_context_says_which_procedure_governs(app, auth_headers, tmp_p
 
 @pytest.mark.asyncio
 async def test_it_tells_the_agent_to_raise_a_competing_workflow_rather_than_only_banning_it(
-    app, auth_headers, tmp_path
+    app, auth_headers, tmp_path, add_agent
 ):
     """An agent told only "do not" is holding a fact with nowhere to put it — and the tool it found
     belongs to the operator, who is the one who should decide about it."""
-    await _register(app, auth_headers, "speccer")
+    await add_agent("speccer")
     await _create_document(app, auth_headers)
 
     context = await _render("speccer", PATH)
@@ -94,11 +85,13 @@ async def test_it_tells_the_agent_to_raise_a_competing_workflow_rather_than_only
 
 
 @pytest.mark.asyncio
-async def test_reading_a_competing_workflows_files_is_still_allowed(app, auth_headers, tmp_path):
+async def test_reading_a_competing_workflows_files_is_still_allowed(
+    app, auth_headers, tmp_path, add_agent
+):
     """A project may legitimately contain an `openspec/` directory that is real context about the
     project. The rule is about which authority governs the document, not which files may be read —
     an agent that refuses to look is worse than one that looked and stayed."""
-    await _register(app, auth_headers, "speccer")
+    await add_agent("speccer")
     await _create_document(app, auth_headers)
 
     context = await _render("speccer", PATH)
@@ -107,10 +100,10 @@ async def test_reading_a_competing_workflows_files_is_still_allowed(app, auth_he
 
 
 @pytest.mark.asyncio
-async def test_it_names_no_product(app, auth_headers, tmp_path):
+async def test_it_names_no_product(app, auth_headers, tmp_path, add_agent):
     """A blocklist dates the moment a different tool is installed, and implies the unnamed ones are
     acceptable. Asserted as an absence so a later edit cannot quietly turn this into one."""
-    await _register(app, auth_headers, "speccer")
+    await add_agent("speccer")
     await _create_document(app, auth_headers)
 
     context = await _render("speccer", PATH)
@@ -121,11 +114,11 @@ async def test_it_names_no_product(app, auth_headers, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_precedence_does_not_depend_on_a_charter(app, auth_headers, tmp_path):
+async def test_precedence_does_not_depend_on_a_charter(app, auth_headers, tmp_path, add_agent):
     """The floor is code-owned. A project with no charter bound is the case most exposed — mechanism
     without judgement — so precedence carried by a charter would be missing exactly where it is
     needed most."""
-    await _register(app, auth_headers, "uncharted")
+    await add_agent("uncharted")
     await _create_document(app, auth_headers)
 
     context = await _render("uncharted", PATH)
@@ -137,10 +130,12 @@ async def test_precedence_does_not_depend_on_a_charter(app, auth_headers, tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_a_turn_with_no_document_says_nothing_about_procedure(app, auth_headers, tmp_path):
+async def test_a_turn_with_no_document_says_nothing_about_procedure(
+    app, auth_headers, tmp_path, add_agent
+):
     """The claim is about *this document*. Asserting procedural precedence on a turn that has
     nothing to do with specifications would be untrue and noise on every unrelated turn."""
-    await _register(app, auth_headers, "speccer")
+    await add_agent("speccer")
     await _create_document(app, auth_headers)
 
     context = await _render("speccer", None)
@@ -151,7 +146,7 @@ async def test_a_turn_with_no_document_says_nothing_about_procedure(app, auth_he
 
 @pytest.mark.asyncio
 async def test_the_instruction_and_the_tool_list_agree_in_one_rendered_context(
-    app, auth_headers, tmp_path
+    app, auth_headers, tmp_path, add_agent
 ):
     """The failure was a contradiction inside a single context file.
 
@@ -163,7 +158,7 @@ async def test_the_instruction_and_the_tool_list_agree_in_one_rendered_context(
     `test_tool_surface_matches_server.py` checks the surface against the server. This checks the two
     halves of what one agent actually reads, which is where they disagreed.
     """
-    await _register(app, auth_headers, "speccer")
+    await add_agent("speccer")
     await _create_document(app, auth_headers)
 
     context = await _render("speccer", PATH)
@@ -177,12 +172,14 @@ async def test_the_instruction_and_the_tool_list_agree_in_one_rendered_context(
 
 
 @pytest.mark.asyncio
-async def test_both_runners_are_told_the_same_thing(app, auth_headers, bind_runner, tmp_path):
+async def test_both_runners_are_told_the_same_thing(
+    app, auth_headers, bind_runner, tmp_path, add_agent
+):
     """Runner-agnostic delivery is the premise the skills' deletion rested on, and the live failure
     was on Codex. The context file is what both runners consume, so this asserts rather than assumes
     that neither is left out."""
-    await _register(app, auth_headers, "claude-side")
-    await _register(app, auth_headers, "codex-side")
+    await add_agent("claude-side")
+    await add_agent("codex-side")
     await bind_runner("claude-side", cli="claude")
     await bind_runner("codex-side", cli="codex")
     await _create_document(app, auth_headers)

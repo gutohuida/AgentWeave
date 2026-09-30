@@ -103,29 +103,10 @@ async def _actor(agent: str = "lead", run_id: str = "run-req") -> dict[str, str]
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _register_template(app, auth_headers, bind_runner, name, *, config=None, charter_id=None):
-    resp = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": name, "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
-    if config:
-        patched = await app.patch(
-            f"/api/v1/projects/proj-test/agents/{name}",
-            json={"config": config},
-            headers=auth_headers,
-        )
-        assert patched.status_code == 200, patched.text
-    runner_id = await bind_runner(name, cli="claude")
-    if charter_id:
-        patched = await app.patch(
-            f"/api/v1/projects/proj-test/agents/{name}",
-            json={"charter_id": charter_id},
-            headers=auth_headers,
-        )
-        assert patched.status_code == 200, patched.text
-    return runner_id
+async def _template(add_agent, bind_runner, name, *, config=None, charter_id=None):
+    """An open, bound agent for `request_agent` to model a new one on."""
+    await add_agent(name, config=config, charter_id=charter_id)
+    return await bind_runner(name, cli="claude")
 
 
 async def _agent_row(name: str) -> Agent:
@@ -135,16 +116,14 @@ async def _agent_row(name: str) -> Agent:
 
 
 @pytest.mark.asyncio
-async def test_a_template_creates_a_runnable_agent(app, auth_headers, bind_runner):
+async def test_a_template_creates_a_runnable_agent(app, auth_headers, add_agent, bind_runner):
     """Task 1.1. FAILS today (400 *not pre-approved*)."""
     async with async_session_factory() as session:
         session.add(
             Charter(id="charter-t1", project_id="proj-test", name="T1", content="Be helpful")
         )
         await session.commit()
-    await _register_template(
-        app, auth_headers, bind_runner, "worker-template", charter_id="charter-t1"
-    )
+    await _template(add_agent, bind_runner, "worker-template", charter_id="charter-t1")
 
     headers = await _actor(run_id="run-1.1")
     resp = await app.post(
@@ -164,9 +143,9 @@ async def test_a_template_creates_a_runnable_agent(app, auth_headers, bind_runne
 
 
 @pytest.mark.asyncio
-async def test_grants_are_not_inherited(app, auth_headers, bind_runner):
+async def test_grants_are_not_inherited(app, auth_headers, add_agent, bind_runner):
     """Task 1.2. FAILS today (400)."""
-    await _register_template(app, auth_headers, bind_runner, "evidence-template")
+    await _template(add_agent, bind_runner, "evidence-template")
     granted = await app.patch(
         "/api/v1/projects/proj-test/agents/evidence-template",
         json={"can_accept_evidence": True},
@@ -188,10 +167,10 @@ async def test_grants_are_not_inherited(app, auth_headers, bind_runner):
 
 @pytest.mark.asyncio
 async def test_a_full_access_template_does_not_produce_a_full_access_agent(
-    app, auth_headers, bind_runner
+    app, auth_headers, add_agent, bind_runner
 ):
     """Task 1.2a. FAILS today (400); would FAIL after a fix that copied `config` whole."""
-    await _register_template(app, auth_headers, bind_runner, "yolo-template")
+    await _template(add_agent, bind_runner, "yolo-template")
     posture = await app.patch(
         "/api/v1/projects/proj-test/agents/yolo-template",
         json={"default_permission_mode": FULL_ACCESS_PERMISSION_MODE},
@@ -219,12 +198,11 @@ async def test_a_full_access_template_does_not_produce_a_full_access_agent(
 
 @pytest.mark.asyncio
 async def test_read_only_and_env_vars_are_copied_but_no_conversation_lends_a_posture(
-    app, auth_headers, bind_runner
+    app, auth_headers, add_agent, bind_runner
 ):
     """Task 1.2b, a control. FAILS today only because every call 400s."""
-    await _register_template(
-        app,
-        auth_headers,
+    await _template(
+        add_agent,
         bind_runner,
         "override-template",
         config={"read_only": True, "env_vars": {"OTHER": "kept"}},
@@ -264,14 +242,12 @@ async def test_read_only_and_env_vars_are_copied_but_no_conversation_lends_a_pos
 
 
 @pytest.mark.asyncio
-async def test_hub_client_is_not_inherited(app, auth_headers, bind_runner):
+async def test_hub_client_is_not_inherited(app, auth_headers, add_agent, bind_runner):
     """Task 1.2c (operator review: drop `hub_client`).
 
     FAILS today (400); would FAIL after a fix that dropped only `principal` and `yolo`.
     """
-    await _register_template(
-        app, auth_headers, bind_runner, "cli-template", config={"hub_client": "cli"}
-    )
+    await _template(add_agent, bind_runner, "cli-template", config={"hub_client": "cli"})
 
     headers = await _actor(run_id="run-1.2c")
     resp = await app.post(
@@ -304,13 +280,12 @@ async def test_hub_client_is_not_inherited(app, auth_headers, bind_runner):
 
 @pytest.mark.asyncio
 async def test_a_waiting_override_in_env_vars_is_not_inherited(
-    app, auth_headers, bind_runner, monkeypatch
+    app, auth_headers, add_agent, bind_runner, monkeypatch
 ):
     """Task 1.2d. FAILS today (400); would FAIL after a fix that copied `env_vars` whole."""
     monkeypatch.delenv(QUESTION_WAIT_ENV, raising=False)
-    await _register_template(
-        app,
-        auth_headers,
+    await _template(
+        add_agent,
         bind_runner,
         "waiting-template",
         config={"env_vars": {QUESTION_WAIT_ENV: "5", "OTHER": "kept"}},
@@ -333,10 +308,10 @@ async def test_a_waiting_override_in_env_vars_is_not_inherited(
 
 
 @pytest.mark.asyncio
-async def test_an_unknown_template_names_what_would_work(app, auth_headers, bind_runner):
+async def test_an_unknown_template_names_what_would_work(app, auth_headers, add_agent, bind_runner):
     """Task 1.3. FAILS today (the detail names no agent)."""
-    await _register_template(app, auth_headers, bind_runner, "open-one")
-    archived = await _register_template(app, auth_headers, bind_runner, "archived-one")
+    await _template(add_agent, bind_runner, "open-one")
+    archived = await _template(add_agent, bind_runner, "archived-one")
     del archived
     archive_resp = await app.post(
         "/api/v1/projects/proj-test/agents/archived-one/archive", headers=auth_headers
@@ -355,9 +330,9 @@ async def test_an_unknown_template_names_what_would_work(app, auth_headers, bind
 
 
 @pytest.mark.asyncio
-async def test_an_archived_template_names_archival(app, auth_headers, bind_runner):
+async def test_an_archived_template_names_archival(app, auth_headers, add_agent, bind_runner):
     """Task 1.4. FAILS today (400)."""
-    await _register_template(app, auth_headers, bind_runner, "will-archive")
+    await _template(add_agent, bind_runner, "will-archive")
     archive_resp = await app.post(
         "/api/v1/projects/proj-test/agents/will-archive/archive", headers=auth_headers
     )
@@ -374,14 +349,9 @@ async def test_an_archived_template_names_archival(app, auth_headers, bind_runne
 
 
 @pytest.mark.asyncio
-async def test_a_template_with_no_runner_is_refused(app, auth_headers):
+async def test_a_template_with_no_runner_is_refused(app, add_agent):
     """Task 1.5. FAILS today (400)."""
-    resp = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "runnerless-template", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
+    await add_agent("runnerless-template")
 
     headers = await _actor(run_id="run-1.5")
     resp = await app.post(
@@ -394,9 +364,9 @@ async def test_a_template_with_no_runner_is_refused(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_the_budget_still_bounds_it(app, auth_headers, bind_runner):
+async def test_the_budget_still_bounds_it(app, auth_headers, add_agent, bind_runner):
     """Task 1.6, a control. FAILS today only because the template check comes first."""
-    await _register_template(app, auth_headers, bind_runner, "budget-template")
+    await _template(add_agent, bind_runner, "budget-template")
 
     async with async_session_factory() as session:
         from hub.db.models import Project
@@ -420,9 +390,11 @@ async def test_the_budget_still_bounds_it(app, auth_headers, bind_runner):
 
 
 @pytest.mark.asyncio
-async def test_a_raise_from_scheduling_still_answers_queued(app, auth_headers, bind_runner):
+async def test_a_raise_from_scheduling_still_answers_queued(
+    app, auth_headers, add_agent, bind_runner
+):
     """Task 1.7. FAILS today (500)."""
-    await _register_template(app, auth_headers, bind_runner, "raising-template")
+    await _template(add_agent, bind_runner, "raising-template")
 
     headers = await _actor(run_id="run-1.7")
     with patch("hub.turn_scheduler.schedule_agent", side_effect=RuntimeError("boom")):

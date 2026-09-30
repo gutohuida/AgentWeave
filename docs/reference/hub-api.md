@@ -58,8 +58,7 @@ names that agent's running run; agents send through their own run with the `send
 | `GET` | `/agents/{name}/timeline` | Get agent timeline events |
 | `PUT` | `/agents/roles/config` | Update roles configuration |
 | `GET` | `/agents/roles/config` | Get roles configuration |
-| `POST` | `/agents/register` | Self-register or re-register an agent |
-| `PATCH` | `/agents/{name}` | Update self-registered agent metadata/config |
+| `PATCH` | `/agents/{name}` | Update an agent's description, bindings, config and per-agent settings |
 | `GET` | `/agents/context?role=...` | Fetch a role guide |
 
 ### Agent Chat and Trigger

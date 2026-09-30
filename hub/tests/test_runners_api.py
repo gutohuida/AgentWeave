@@ -276,7 +276,7 @@ async def test_delete_runner(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_delete_runner_bound_to_agent_is_refused(app, auth_headers):
+async def test_delete_runner_bound_to_agent_is_refused(app, auth_headers, add_agent):
     runner = (
         await app.post(
             "/api/v1/projects/proj-test/runners",
@@ -285,12 +285,7 @@ async def test_delete_runner_bound_to_agent_is_refused(app, auth_headers):
         )
     ).json()
 
-    reg = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "bound-agent", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert reg.status_code in (200, 201)
+    await add_agent("bound-agent")
 
     bind = await app.patch(
         "/api/v1/projects/proj-test/agents/bound-agent",
@@ -308,7 +303,7 @@ async def test_delete_runner_bound_to_agent_is_refused(app, auth_headers):
     assert "bound-agent" in resp.json()["detail"]
 
 
-async def _make_runner_bound_agent(app, auth_headers, runner_name, agent_name):
+async def _make_runner_bound_agent(app, auth_headers, add_agent, runner_name, agent_name):
     runner = (
         await app.post(
             "/api/v1/projects/proj-test/runners",
@@ -316,12 +311,7 @@ async def _make_runner_bound_agent(app, auth_headers, runner_name, agent_name):
             headers=auth_headers,
         )
     ).json()
-    reg = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": agent_name, "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert reg.status_code in (200, 201)
+    await add_agent(agent_name)
     bind = await app.patch(
         f"/api/v1/projects/proj-test/agents/{agent_name}",
         json={"runner_id": runner["id"]},
@@ -332,8 +322,12 @@ async def _make_runner_bound_agent(app, auth_headers, runner_name, agent_name):
 
 
 @pytest.mark.asyncio
-async def test_delete_runner_bound_to_only_archived_agent_names_it_archived(app, auth_headers):
-    runner = await _make_runner_bound_agent(app, auth_headers, "OnlyArchived", "archived-only")
+async def test_delete_runner_bound_to_only_archived_agent_names_it_archived(
+    app, auth_headers, add_agent
+):
+    runner = await _make_runner_bound_agent(
+        app, auth_headers, add_agent, "OnlyArchived", "archived-only"
+    )
     arch = await app.post(
         "/api/v1/projects/proj-test/agents/archived-only/archive", headers=auth_headers
     )
@@ -350,15 +344,10 @@ async def test_delete_runner_bound_to_only_archived_agent_names_it_archived(app,
 
 @pytest.mark.asyncio
 async def test_delete_runner_bound_to_mixed_holders_qualifies_only_the_archived_one(
-    app, auth_headers
+    app, auth_headers, add_agent
 ):
-    runner = await _make_runner_bound_agent(app, auth_headers, "Mixed", "mixed-open")
-    reg2 = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "mixed-archived", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert reg2.status_code in (200, 201)
+    runner = await _make_runner_bound_agent(app, auth_headers, add_agent, "Mixed", "mixed-open")
+    await add_agent("mixed-archived")
     bind2 = await app.patch(
         "/api/v1/projects/proj-test/agents/mixed-archived",
         json={"runner_id": runner["id"]},
@@ -382,7 +371,7 @@ async def test_delete_runner_bound_to_mixed_holders_qualifies_only_the_archived_
 
 
 @pytest.mark.asyncio
-async def test_agent_list_surfaces_bound_runner_id(app, auth_headers):
+async def test_agent_list_surfaces_bound_runner_id(app, auth_headers, add_agent):
     runner = (
         await app.post(
             "/api/v1/projects/proj-test/runners",
@@ -390,12 +379,7 @@ async def test_agent_list_surfaces_bound_runner_id(app, auth_headers):
             headers=auth_headers,
         )
     ).json()
-    reg = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "listed-agent", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert reg.status_code in (200, 201)
+    await add_agent("listed-agent")
     bind = await app.patch(
         "/api/v1/projects/proj-test/agents/listed-agent",
         json={"runner_id": runner["id"]},
@@ -411,13 +395,8 @@ async def test_agent_list_surfaces_bound_runner_id(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_bind_agent_to_unknown_runner_is_refused(app, auth_headers):
-    reg = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "unbound-agent", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert reg.status_code in (200, 201)
+async def test_bind_agent_to_unknown_runner_is_refused(app, auth_headers, add_agent):
+    await add_agent("unbound-agent")
 
     resp = await app.patch(
         "/api/v1/projects/proj-test/agents/unbound-agent",

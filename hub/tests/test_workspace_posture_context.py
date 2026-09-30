@@ -15,15 +15,6 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent
 
 
-async def _register(app, auth_headers, name):
-    response = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": name, "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert response.status_code == 200, response.text
-
-
 async def _render(agent_name, **kwargs):
     async with async_session_factory() as db:
         agent_row = (
@@ -48,8 +39,8 @@ async def _render(agent_name, **kwargs):
 
 
 @pytest.mark.asyncio
-async def test_an_agent_with_no_repository_is_told_so(app, auth_headers):
-    await _register(app, auth_headers, "placebound")
+async def test_an_agent_with_no_repository_is_told_so(app, auth_headers, add_agent):
+    await add_agent("placebound")
 
     context = await _render("placebound", isolated=False, isolation_unavailable=True)
 
@@ -59,13 +50,15 @@ async def test_an_agent_with_no_repository_is_told_so(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_an_agent_with_no_repository_is_told_it_shares_the_directory(app, auth_headers):
+async def test_an_agent_with_no_repository_is_told_it_shares_the_directory(
+    app, auth_headers, add_agent
+):
     """The accepted risk of design.md Decision 7, stated to the party who can act on it.
 
     Two writing agents in one directory can overwrite each other with no conflict to resolve.
     The Hub does not serialize them, so the only mitigation available is that each knows.
     """
-    await _register(app, auth_headers, "sharer")
+    await add_agent("sharer")
 
     context = await _render("sharer", isolated=False, isolation_unavailable=True)
 
@@ -74,11 +67,13 @@ async def test_an_agent_with_no_repository_is_told_it_shares_the_directory(app, 
 
 
 @pytest.mark.asyncio
-async def test_a_read_only_agent_is_not_told_the_repository_is_missing(app, auth_headers):
+async def test_a_read_only_agent_is_not_told_the_repository_is_missing(
+    app, auth_headers, add_agent
+):
     """Sharing by configuration inside a real repository. Nothing about git is absent, so
     claiming it is would be false — and would tell an agent that can read the repository not
     to try."""
-    await _register(app, auth_headers, "reader")
+    await add_agent("reader")
 
     context = await _render("reader", isolated=False, isolation_unavailable=False)
 
@@ -87,9 +82,9 @@ async def test_a_read_only_agent_is_not_told_the_repository_is_missing(app, auth
 
 
 @pytest.mark.asyncio
-async def test_an_isolated_agent_is_told_about_its_branch(app, auth_headers):
+async def test_an_isolated_agent_is_told_about_its_branch(app, auth_headers, add_agent):
     """The unchanged case, pinned here because the new branch sits directly above it."""
-    await _register(app, auth_headers, "isolated-one")
+    await add_agent("isolated-one")
 
     context = await _render("isolated-one", isolated=True, isolation_unavailable=False)
 
@@ -98,7 +93,7 @@ async def test_an_isolated_agent_is_told_about_its_branch(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_a_task_bound_turn_is_told_the_task_branch_not_its_own(app, auth_headers):
+async def test_a_task_bound_turn_is_told_the_task_branch_not_its_own(app, auth_headers, add_agent):
     """Task 6.5, and the reason phase 6 is not optional.
 
     From phase 4B until this, the sentence was rendered from `branch_name(agent)` regardless of
@@ -106,7 +101,7 @@ async def test_a_task_bound_turn_is_told_the_task_branch_not_its_own(app, auth_h
     `agentweave/<agent>` while its `cwd` was a checkout of `agentweave/task/<id>`. An agent acting
     on that pushes, diffs and reports against a branch it is not on.
     """
-    await _register(app, auth_headers, "bound-one")
+    await add_agent("bound-one")
 
     context = await _render(
         "bound-one",
@@ -121,12 +116,12 @@ async def test_a_task_bound_turn_is_told_the_task_branch_not_its_own(app, auth_h
 
 @pytest.mark.asyncio
 async def test_a_task_bound_turn_is_told_the_checkout_is_the_tasks_and_not_its_own(
-    app, auth_headers
+    app, auth_headers, add_agent
 ):
     """The second half of 6.5. Naming the right branch is not enough on its own: an agent that
     believes the directory is *its* will not expect another agent to continue in it, and will not
     expect it to be taken away when the task is approved."""
-    await _register(app, auth_headers, "bound-two")
+    await add_agent("bound-two")
 
     context = await _render(
         "bound-two",
@@ -140,10 +135,12 @@ async def test_a_task_bound_turn_is_told_the_checkout_is_the_tasks_and_not_its_o
 
 
 @pytest.mark.asyncio
-async def test_an_unbound_turn_is_told_its_own_branch_and_no_task_sentence(app, auth_headers):
+async def test_an_unbound_turn_is_told_its_own_branch_and_no_task_sentence(
+    app, auth_headers, add_agent
+):
     """The per-agent workspace is not legacy (design D3), so the unbound answer has to stay
     exactly what it was — and must not acquire the task sentence."""
-    await _register(app, auth_headers, "unbound-one")
+    await add_agent("unbound-one")
 
     context = await _render(
         "unbound-one",
@@ -158,7 +155,7 @@ async def test_an_unbound_turn_is_told_its_own_branch_and_no_task_sentence(app, 
 
 @pytest.mark.asyncio
 async def test_the_separate_checkouts_sentence_no_longer_claims_a_branch_per_agent(
-    app, auth_headers
+    app, auth_headers, add_agent
 ):
     """The sentence two lines below the branch, also corrected by 6.5.
 
@@ -167,7 +164,7 @@ async def test_the_separate_checkouts_sentence_no_longer_claims_a_branch_per_age
     checkout, which is on the *task's* branch — and the replacement has to keep saying the part
     that is still true and load-bearing, which is that the changes are not visible across them.
     """
-    await _register(app, auth_headers, "separate-one")
+    await add_agent("separate-one")
 
     context = await _render("separate-one", isolated=True, isolation_unavailable=False)
 
@@ -177,11 +174,13 @@ async def test_the_separate_checkouts_sentence_no_longer_claims_a_branch_per_age
 
 
 @pytest.mark.asyncio
-async def test_a_caller_with_no_run_to_describe_still_gets_the_agent_branch(app, auth_headers):
+async def test_a_caller_with_no_run_to_describe_still_gets_the_agent_branch(
+    app, auth_headers, add_agent
+):
     """`GET /agents/agent-context` is asked outside any turn and supplies no branch. The fallback
     is the agent's own, which is the branch an unbound turn would run on — the honest answer to
     "where would you work", and the same one this endpoint gave before."""
-    await _register(app, auth_headers, "contextless")
+    await add_agent("contextless")
 
     context = await _render("contextless", isolated=True, isolation_unavailable=False)
 

@@ -700,6 +700,16 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-08-29 — self-registration leaves the product (recorded 2026-09-30)
+
+- DECIDED   self-registration  **Delete it.** The operator, 2026-08-29: *"No it does not belong
+  in the product … I think it's a legacy thing"* (untracked handoff
+  `handoff-0099-2026-08-29-1250-merged-decided-drove-and-armed.md`, decision 2; FINDINGS F111,
+  *"The decision, 2026-08-29"*). Approved as `agents-no-longer-register-themselves` on 2026-09-24
+  with the Opus review's fixes, including its open question 2: `project_sessions` and
+  `POST /session/sync` stay, and retiring them is a separate follow-on. Written here on
+  2026-09-30, when the change was built, because it had lived only inside F111 (task 0.3).
+
 ### 2026-09-28 — ghcp slices 2–5: five answers after the Opus review
 
 **DECIDED by the operator in an interactive session, 2026-09-28**, answering *"yes"* to every

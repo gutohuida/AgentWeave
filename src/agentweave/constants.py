@@ -311,15 +311,6 @@ MESSAGE_TYPES = ["message", "delegation", "review", "discussion", "direct_trigge
 # Priorities
 PRIORITIES = ["low", "medium", "high", "critical"]
 
-# DEAD (2026-09-20): nothing reads this, and one of its three values names a deleted subsystem.
-# Why: `CONTACT_MODES` has exactly one reference in the repository — this definition.
-#   "watchdog-spawn" names the watchdog, which was deleted (CLAUDE.md, Architecture rules).
-# Live equivalent: hub/hub/api/v1/agents.py's own `_CONTACT_MODES`, which is what the Hub
-#   validates a self-registering agent against (agents.py:2165).
-# Removal: nothing imports it; check no template or doc quotes "watchdog-spawn" as valid.
-# Contact modes for self-registered agents
-CONTACT_MODES = ["poll", "mcp-push", "watchdog-spawn"]
-
 # DEAD (2026-09-20): lines 325-355 — CLAUDE_CONTEXT_LIMITS, KIMI_WIRE_MODE,
 # CODEX_MODEL_CONTEXT_LIMITS and _get_context_limit. Nothing computes a context limit here.
 # Why: `_get_context_limit` has exactly one reference in the repository, its own definition;

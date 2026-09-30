@@ -13,15 +13,6 @@ import pytest
 from tests.test_agent_trigger import _await_background_run, _fake_pty
 
 
-async def _register(app, auth_headers, name):
-    resp = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": name, "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
-
-
 async def _set_posture(app, auth_headers, name, mode):
     return await app.patch(
         f"/api/v1/projects/proj-test/agents/{name}",
@@ -31,14 +22,14 @@ async def _set_posture(app, auth_headers, name, mode):
 
 
 @pytest.mark.asyncio
-async def test_the_posture_and_the_legacy_yolo_flag_cannot_disagree(app, auth_headers):
+async def test_the_posture_and_the_legacy_yolo_flag_cannot_disagree(app, auth_headers, add_agent):
     """`yolo` is the older two-valued spelling of this setting, not a second setting.
 
     `runner_commands`, `codex_appserver` and the collaboration-readiness check all read the flag.
     Letting the two drift produces the specific incoherence of a run under "Ask me" whose `yolo`
     suppresses the `--allowedTools` allowlist its own MCP tools need.
     """
-    await _register(app, auth_headers, "posture-sync")
+    await add_agent("posture-sync")
 
     resp = await _set_posture(app, auth_headers, "posture-sync", "bypassPermissions")
     assert resp.status_code == 200
@@ -59,9 +50,9 @@ async def test_the_posture_and_the_legacy_yolo_flag_cannot_disagree(app, auth_he
 
 
 @pytest.mark.asyncio
-async def test_a_body_setting_both_ends_with_them_agreeing(app, auth_headers):
+async def test_a_body_setting_both_ends_with_them_agreeing(app, auth_headers, add_agent):
     """The posture is applied after the config merge, so it wins — one choice, one answer."""
-    await _register(app, auth_headers, "posture-both")
+    await add_agent("posture-both")
 
     resp = await app.patch(
         "/api/v1/projects/proj-test/agents/posture-both",
@@ -74,8 +65,8 @@ async def test_a_body_setting_both_ends_with_them_agreeing(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_an_unknown_posture_is_refused_and_stores_nothing(app, auth_headers):
-    await _register(app, auth_headers, "posture-invalid")
+async def test_an_unknown_posture_is_refused_and_stores_nothing(app, auth_headers, add_agent):
+    await add_agent("posture-invalid")
 
     resp = await _set_posture(app, auth_headers, "posture-invalid", "yolo-please")
     assert resp.status_code == 400
@@ -87,13 +78,13 @@ async def test_an_unknown_posture_is_refused_and_stores_nothing(app, auth_header
 
 
 @pytest.mark.asyncio
-async def test_the_posture_is_settable_without_a_runner_bound(app, auth_headers):
+async def test_the_posture_is_settable_without_a_runner_bound(app, auth_headers, add_agent):
     """Validated against the catalog, not against the agent's provider.
 
     An agent may have no runner bound, and rebinding one must not invalidate a default the
     operator already chose.
     """
-    await _register(app, auth_headers, "posture-unbound")
+    await add_agent("posture-unbound")
 
     resp = await _set_posture(app, auth_headers, "posture-unbound", "manual")
     assert resp.status_code == 200

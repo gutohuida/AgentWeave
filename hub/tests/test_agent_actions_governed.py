@@ -40,15 +40,10 @@ async def _actor(agent: str = "lead", run_id: str = "run-governed") -> dict[str,
 
 @pytest.mark.asyncio
 async def test_agent_request_uses_bound_requester_template_and_budget(
-    app, auth_headers, bind_runner
+    app, auth_headers, add_agent, bind_runner
 ):
     headers = await _actor()
-    reg = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "worker-template", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert reg.status_code == 200, reg.text
+    await add_agent("worker-template")
     patched = await app.patch(
         "/api/v1/projects/proj-test/agents/worker-template",
         json={"config": {"model": "small"}},

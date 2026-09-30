@@ -45,11 +45,6 @@ LAX_BY_DESIGN: dict[str, str] = {
 # A route whose body is an untyped `dict` has no contract to enforce. These are named, with
 # the reason they are still here, so that the count is a decision rather than an oversight.
 NO_CONTRACT_BY_DESIGN: dict[str, str] = {
-    "register_agent": (
-        "F111 deletes this route outright -- self-registration is the watchdog-spawn contact "
-        "mode's last caller and the Hub owns execution now. Giving it a model first would be "
-        "work thrown away."
-    ),
     "patch_agent": (
         "Still an untyped body, but no longer an unchecked one: the handler refuses any key outside "
         "`_PATCH_AGENT_FIELDS` with a 400 naming it (F117, `test_patch_agent_refuses_unknown_fields`). "

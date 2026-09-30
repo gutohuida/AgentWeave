@@ -213,7 +213,7 @@ async def test_get_missing_charter_returns_404(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_delete_bound_charter_is_refused(app, auth_headers):
+async def test_delete_bound_charter_is_refused(app, auth_headers, add_agent):
     charter = (
         await app.post(
             "/api/v1/projects/proj-test/charters",
@@ -221,12 +221,7 @@ async def test_delete_bound_charter_is_refused(app, auth_headers):
             headers=auth_headers,
         )
     ).json()
-    registered = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "chartered-agent", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert registered.status_code in (200, 201)
+    await add_agent("chartered-agent")
     bound = await app.patch(
         "/api/v1/projects/proj-test/agents/chartered-agent",
         json={"charter_id": charter["id"]},
@@ -241,7 +236,7 @@ async def test_delete_bound_charter_is_refused(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_deleting_a_charter_bound_to_an_archived_agent_succeeds(app, auth_headers):
+async def test_deleting_a_charter_bound_to_an_archived_agent_succeeds(app, auth_headers, add_agent):
     """F185, end to end through HTTP: archiving releases the binding, so the charter is
     deletable again without the operator ever having to find and unbind the archived agent.
     """
@@ -252,12 +247,7 @@ async def test_deleting_a_charter_bound_to_an_archived_agent_succeeds(app, auth_
             headers=auth_headers,
         )
     ).json()
-    registered = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "archived-chartered-agent", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert registered.status_code in (200, 201)
+    await add_agent("archived-chartered-agent")
     bound = await app.patch(
         "/api/v1/projects/proj-test/agents/archived-chartered-agent",
         json={"charter_id": charter["id"]},
@@ -278,7 +268,7 @@ async def test_deleting_a_charter_bound_to_an_archived_agent_succeeds(app, auth_
 
 
 @pytest.mark.asyncio
-async def test_no_archived_agent_row_ever_holds_a_charter(app, auth_headers):
+async def test_no_archived_agent_row_ever_holds_a_charter(app, auth_headers, add_agent):
     """The invariant itself, driven rather than asserted on a snapshot: archive, then attempt
     a re-bind, then check every row in `agents` rather than trusting the refusal alone.
     """
@@ -292,12 +282,7 @@ async def test_no_archived_agent_row_ever_holds_a_charter(app, auth_headers):
             headers=auth_headers,
         )
     ).json()
-    registered = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "invariant-agent", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert registered.status_code in (200, 201)
+    await add_agent("invariant-agent")
     bound = await app.patch(
         "/api/v1/projects/proj-test/agents/invariant-agent",
         json={"charter_id": charter["id"]},

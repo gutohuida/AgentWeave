@@ -19,7 +19,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import P, api  # noqa: E402
+from aw import P, api, make_agent  # noqa: E402
 
 AGENT = "unbound-driver"
 RESULTS = []
@@ -37,7 +37,7 @@ RESULTS = []
 #    what it was observing: the waiting_reason it reported was "agent is already running" rather
 #    than the never-launchable case it exists to probe. Unbind, and refuse to continue if the
 #    unbind did not take, rather than reporting on a situation that is not the one described.
-api("POST", f"/projects/{P}/agents/register", {"name": AGENT, "contact_mode": "poll"})
+make_agent(P, AGENT)  # unbound, as register left it
 api("POST", f"/projects/{P}/agents/{AGENT}/unarchive")
 api("PATCH", f"/projects/{P}/agents/{AGENT}", {"runner_id": None})
 _code, _roster = api("GET", f"/projects/{P}/agents")

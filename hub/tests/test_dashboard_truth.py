@@ -40,13 +40,8 @@ def ago(minutes: int) -> datetime:
     return NOW - timedelta(minutes=minutes)
 
 
-async def _agent(session, name: str, *, self_registered: bool = False) -> Agent:
-    row = Agent(
-        id=f"agent-{name}",
-        project_id="proj-test",
-        name=name,
-        self_registered=self_registered,
-    )
+async def _agent(session, name: str) -> Agent:
+    row = Agent(id=f"agent-{name}", project_id="proj-test", name=name)
     session.add(row)
     await session.flush()
     return row
@@ -115,9 +110,13 @@ async def test_a_run_that_has_only_started_already_counts(app):
 
 @pytest.mark.asyncio
 async def test_a_heartbeat_still_counts_and_can_be_the_newest_thing(app):
-    """A self-registered agent that only ever heartbeats reads exactly as it did before."""
+    """An agent whose newest record is a heartbeat reads that heartbeat as its last activity.
+
+    Heartbeat rows still arrive through `POST /agents/{name}/heartbeat`; only self-registration,
+    whose agents were once their only writers, is gone.
+    """
     async with async_session_factory() as session:
-        await _agent(session, "poller", self_registered=True)
+        await _agent(session, "poller")
         session.add(
             Run(
                 id="run-old",
@@ -605,7 +604,7 @@ async def test_a_stalled_heartbeat_survives_a_derivation_that_has_no_run_to_offe
     answer there is the opposite one — on purpose.
     """
     async with async_session_factory() as session:
-        await _agent(session, "builder", self_registered=True)
+        await _agent(session, "builder")
         session.add(
             Task(
                 id="task-1",
@@ -648,7 +647,7 @@ async def test_a_live_run_outranks_a_stalled_heartbeat_here_exactly_as_it_does_o
     reconsidered, this test fails alongside the roster's own, which is the point.
     """
     async with async_session_factory() as session:
-        await _agent(session, "builder", self_registered=True)
+        await _agent(session, "builder")
         session.add(
             Task(
                 id="task-1",

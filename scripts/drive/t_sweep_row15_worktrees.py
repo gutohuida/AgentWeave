@@ -49,7 +49,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api, task_rows  # noqa: E402
+from aw import api, make_agent, task_rows  # noqa: E402
 
 HUB = os.environ.get("AW_HUB", "")
 KEY = os.environ.get("AW_KEY", "")
@@ -842,16 +842,15 @@ ok(
 )
 note("repo root worktree state after the flipped turn", dirty or "clean")
 
-code, body = api(
-    "POST",
-    f"{A}/agents/register",
-    {"name": SELFREG, "contact_mode": "mcp-push", "config": {"read_only": True}},
-)
-note("POST /agents/register with read_only", f"{code} {json.dumps(body)[:120]}")
+# Made through the operator's routes: self-registration, which this leg used, was deleted
+# (`agents-no-longer-register-themselves`). The point survives: read_only shares the checkout.
+make_agent(P, SELFREG)
+code, body = api("PATCH", f"{A}/agents/{SELFREG}", {"config": {"read_only": True}})
+note("PATCH read_only on a new agent", f"{code} {json.dumps(body)[:120]}")
 if code < 300:
     _, ws_r = workspace(SELFREG)
     ok(
-        "a self-registered read_only agent shares the project checkout, as designed",
+        "a read_only agent shares the project checkout, as designed",
         ws_r.get("isolated") is False
         and os.path.normcase(ws_r.get("working_dir", "")) == os.path.normcase(DIR),
         json.dumps({k: ws_r.get(k) for k in ("isolated", "working_dir", "provisioned")}),

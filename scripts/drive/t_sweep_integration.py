@@ -36,7 +36,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import P, api  # noqa: E402
+from aw import P, api, make_agent  # noqa: E402
 
 RESULTS = []
 
@@ -57,7 +57,7 @@ def step(label, method, path, body=None, expect=None):
 
 
 AGENT = f"integ-{int(time.time()) % 100000}"
-api("POST", f"/projects/{P}/agents/register", {"name": AGENT, "contact_mode": "poll"})
+make_agent(P, AGENT)  # unbound, as register left it
 
 print("=" * 78)
 print("ROW 17 — approval, and what it does with nothing to merge")

@@ -53,15 +53,13 @@ async def test_operator_creates_bound_agent_without_eager_worktree(app, auth_hea
             "runner_id": runners[1]["id"],
             "charter_id": charters[0]["id"],
             "color_index": 0,
-            "contact_mode": "watchdog-spawn",
-            "self_registered": False,
         }
         event = await queue.get()
         assert event.event == "agent_created"
         assert json.loads(event.data)["agent"] == "ui-codex"
         async with async_session_factory() as session:
             row = await session.get(Agent, body["id"])
-            assert row is not None and row.self_registered is False
+            assert row is not None
     finally:
         sse_manager.unsubscribe("proj-test", queue)
 

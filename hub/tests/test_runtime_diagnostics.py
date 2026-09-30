@@ -36,17 +36,10 @@ async def test_agent_trigger_reports_missing_cli_directly(app, auth_headers, bin
 
 
 @pytest.mark.asyncio
-async def test_log_agents_endpoint_includes_configured_and_logged_agents(app, auth_headers):
-    resp = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={
-            "name": "minimax",
-            "contact_mode": "poll",
-            "config": {"runner": "claude_proxy"},
-        },
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200
+async def test_log_agents_endpoint_includes_configured_and_logged_agents(
+    app, auth_headers, add_agent
+):
+    await add_agent("minimax", config={"runner": "claude_proxy"})
 
     log_resp = await app.post(
         "/api/v1/projects/proj-test/logs",

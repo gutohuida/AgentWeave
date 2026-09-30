@@ -1783,3 +1783,14 @@ disappears is indistinguishable from one that was forgotten.
 - **Windows path literals in tests are relative names on Linux** (`C:\work`, `..\..\x`), so refusal tests pass on Windows and fail in CI's ubuntu `hub-test`. Run touched tests on Linux before pushing: WSL Ubuntu has a venv at `~/awvenv` (made 2026-09-30 from this checkout with `-c constraints-dev.txt -e ./hub` and `-e ".[dev]"` from `hub/`): `wsl.exe -d Ubuntu -- bash -lc "cd /mnt/c/Users/huida/Documents/projects/AgentWeave/hub && ~/awvenv/bin/python -m pytest tests/<file> -q -p no:cacheprovider"`. Run `wsl.exe --shutdown` afterwards: the running VM slowed the local suite badly.
 - **The local full Hub suite took ~100 min today, CI's `hub-test` 18 min** (5,442 tests), with WSL and a drive Hub running beside it. Use CI's run as the full-suite count when the machine is busy. 2026-09-30.
 - **Copilot CLI 1.0.88 facts measured in the group 11 drive:** its first launch writes a JSONC `config.json` (a `//` header) and an empty `installed-plugins/` into `COPILOT_HOME`; its `apply_patch` tool call carries `locations: null` with the patch text as `rawInput`; no `session.mcp_servers_loaded` arrives before a prompt; `send_message` from a Copilot agent told "send me a message" goes to itself (F468). 2026-09-30.
+
+- **2026-09-30 — archiving an openspec change moves its `evidence/`, and a full-path grep misses
+  code that builds the path in segments.** `bdc8447` archived `a-copilot-agent-runs-over-acp`
+  after `grep "openspec/changes/<name>"` found only a comment; `tests/test_model_catalog_drift.py`
+  and `hub/tests/test_copilot_acp_mapper.py` built it as `/ "changes" / "<name>" / "evidence"` and
+  broke CI (fixed `6c0adea`). Before archiving, grep the **bare change name** outside `openspec/`,
+  then run `tests/` as well as `hub/tests/`.
+- **2026-09-30 — a Hub must never be started on a copy of `:8000`'s database.** The scheduler would
+  fire the operator's real enabled jobs and loops against their real project directories. To test
+  a migration on real data, copy with the SQLite backup API from a `mode=ro` connection and run
+  `alembic upgrade` alone (config at `hub/hub/alembic.ini`), then delete the copy.

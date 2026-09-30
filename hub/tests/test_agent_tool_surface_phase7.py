@@ -96,17 +96,14 @@ def test_runner_commands_inject_one_stdio_surface_for_claude_and_codex():
 
 
 @pytest.mark.asyncio
-async def test_request_agent_copies_preapproved_template_and_queues_work(app, auth_headers):
+async def test_request_agent_copies_preapproved_template_and_queues_work(
+    app, auth_headers, add_agent
+):
     """The template is now an existing open Agent, not a `project_sessions` entry —
     `request-agent-models-the-new-agent-on-one-the-operator-made` (F378)."""
     from hub.db.engine import async_session_factory
 
-    registered = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "worker-template", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert registered.status_code == 200, registered.text
+    await add_agent("worker-template")
     configured = await app.patch(
         "/api/v1/projects/proj-test/agents/worker-template",
         json={"config": {"model": "haiku"}},
@@ -172,15 +169,10 @@ async def test_request_agent_copies_preapproved_template_and_queues_work(app, au
 
 
 @pytest.mark.asyncio
-async def test_request_agent_refuses_to_exceed_project_budget(app, auth_headers):
+async def test_request_agent_refuses_to_exceed_project_budget(app, auth_headers, add_agent):
     from hub.db.engine import async_session_factory
 
-    registered = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "template", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert registered.status_code == 200, registered.text
+    await add_agent("template")
     runner = await app.post(
         "/api/v1/projects/proj-test/runners",
         json={"name": "template-runner", "cli": "claude"},

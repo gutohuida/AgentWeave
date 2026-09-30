@@ -20,8 +20,6 @@ export interface AgentSummary {
   display_model?: string  // e.g. "Claude", "Kimi", "Minimax" — derived from runner
   context_usage?: ContextUsage
   session_started_at?: string  // ISO timestamp when current session started
-  self_registered?: boolean  // True if agent joined via self-registration
-  liveness?: 'online' | 'offline' | null  // Liveness for self-registered agents
   runner_options?: Record<string, unknown>  // Runner-specific options (e.g., memory for Codex)
   color_index?: number | null  // Stable palette index, assigned once at registration
   runner_id?: string | null  // Bound Runner record, if any (runner-agent-charter-separation)
@@ -72,8 +70,6 @@ export interface CreatedAgent {
   runner_id: string
   charter_id?: string | null
   color_index: number
-  contact_mode: string
-  self_registered: boolean
 }
 
 export interface ContextUsage {

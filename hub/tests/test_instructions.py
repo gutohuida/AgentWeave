@@ -58,7 +58,7 @@ async def test_put_overwrites_instructions(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_get_agent_context_places_instructions_before_charter(app, auth_headers):
+async def test_get_agent_context_places_instructions_before_charter(app, auth_headers, add_agent):
     """Full agent context layers project instructions ahead of charter guidance."""
     # Set project instructions
     resp = await app.put(
@@ -75,11 +75,7 @@ async def test_get_agent_context_places_instructions_before_charter(app, auth_he
             headers=auth_headers,
         )
     ).json()
-    await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "instruction-agent", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
+    await add_agent("instruction-agent")
     await app.patch(
         "/api/v1/projects/proj-test/agents/instruction-agent",
         json={"charter_id": charter["id"]},

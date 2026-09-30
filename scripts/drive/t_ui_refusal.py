@@ -38,7 +38,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import P, api  # noqa: E402
+from aw import P, api, make_agent  # noqa: E402
 
 HUB = os.environ.get("AW_HUB", "http://127.0.0.1:8010")
 KEY = os.environ["AW_KEY"]
@@ -51,7 +51,7 @@ AGENT = f"uiprobe-{int(time.time()) % 100000}"
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 print(f"agent {AGENT}")
-api("POST", f"/projects/{P}/agents/register", {"name": AGENT, "contact_mode": "poll"})
+make_agent(P, AGENT)  # unbound, as register left it
 
 SEED = f"""
 sessionStorage.setItem('agentweave-session', {json.dumps(json.dumps({"apiKey": KEY, "hubUrl": HUB}))});

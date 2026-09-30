@@ -203,21 +203,6 @@ class Agent(Base):
     # would leave two places to look when an agent acts wrongly. This one is for the human
     # reading a roster of six similarly named agents.
     description: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    contact_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    self_registered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    # DEAD (2026-09-20): write-only columns — the Hub stores and echoes them, nothing acts on them.
-    # Why: every reference outside tests is in one file — written at api/v1/agents.py:2194-2195
-    #   and :2207-2208 (register), :2466 and :2468 (PATCH), and read back only into the response
-    #   dict at :2537-2538. No spawn path reads either: runner_commands.build_command takes its
-    #   binary from the resolved CLI, never spawn_cmd, and agent_trigger.py builds the MCP server
-    #   command itself rather than reading mcp_endpoint. They are the deleted watchdog's contact
-    #   fields (CLAUDE.md, Architecture rules).
-    # Live equivalent: Runner.cli + Runner.model (api/v1/agent_trigger.py:677-678) for spawning;
-    #   the Hub-built --mcp-config for the endpoint.
-    # Removal: hub/tests/test_agents_self_registered.py asserts on both in API responses, and
-    #   dropping columns needs a migration — see .claude/rules/db-migrations.md.
-    mcp_endpoint: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    spawn_cmd: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     config: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     # Assigned once at registration by arrival order within the project, never derived
     # from the name (a rename must not change it). Persists across restarts because it

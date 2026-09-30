@@ -228,32 +228,6 @@ def cron_day_ambiguity_reason(cron: str) -> Optional[str]:
     )
 
 
-async def _job_agent_skip_reason(
-    session: AsyncSession, project_id: str, agent: str
-) -> Optional[str]:
-    """Return why *agent*'s scheduled jobs should not auto-fire, or `None` if they should.
-
-    Mirrors a guard the old watchdog message-trigger path used to enforce
-    (`_trigger_agent_from_message`, removed from `src/agentweave/watchdog.py` in task 3.10):
-    self-registered poll-mode agents manage their own inbox polling and would double-execute
-    if the Hub also spawned them directly. Checked here, against the Hub's own `Agent` table,
-    rather than ported into `trigger_agent_directly` itself — that function also backs the
-    manual-trigger endpoint, which has never enforced this guard; adding it there would change
-    manual trigger behavior too, which nothing asked for.
-    """
-    from sqlalchemy import select
-
-    result = await session.execute(
-        select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
-    )
-    agent_row = result.scalars().first()
-    if agent_row is None:
-        return None
-    if agent_row.self_registered and agent_row.contact_mode == "poll":
-        return f"{agent} is a self-registered poll agent and manages its own execution"
-    return None
-
-
 async def _loop_agent_busy_reason(
     session: AsyncSession, project_id: str, agent: str
 ) -> Optional[str]:
@@ -3349,31 +3323,6 @@ class JobScheduler:
             # Prune old history (keep last 100 runs per job)
             await self._prune_job_history(session, job.id)
 
-            skip_reason = await _job_agent_skip_reason(session, job.project_id, job.agent)
-            if skip_reason:
-                run.status = "skipped"
-                run.error_summary = skip_reason
-                await session.commit()
-                if pending_edit_payload is not None:
-                    await _emit_loop_edit_applied(session, pending_edit_payload)
-                    pending_edit_payload = None
-                await persist_event(
-                    session,
-                    job.project_id,
-                    "job_run_skipped",
-                    {
-                        "job_id": job.id,
-                        "job_name": job.name,
-                        "agent": job.agent,
-                        "trigger": trigger,
-                        "job_run_id": run_id,
-                        "reason": skip_reason,
-                    },
-                    agent=job.agent,
-                )
-                logger.info(f"Job {job.id} fire skipped: {skip_reason}")
-                return False
-
             if loop is None:
                 # A plain job's message is a standing instruction (`_loop_agent_busy_reason`), and
                 # one queued copy keeps it (`a-spent-allowance-holds-the-queue`, D7). Queuing a copy
@@ -3645,9 +3594,9 @@ class JobScheduler:
                     # correct answer here; resuming a provider session across a change of agent is
                     # not a thing this product does.
                     #
-                    # The deeper fix is ordering: `_job_agent_skip_reason` and the resume lookup
-                    # both run before the claim and both take `job.agent`, so they answer about
-                    # the wrong agent whenever a selection diverges. Restructuring that region is
+                    # The deeper fix is ordering: the resume lookup runs before the claim and
+                    # takes `job.agent`, so it answers about the wrong agent whenever a selection
+                    # diverges. Restructuring that region is
                     # `loop-notices-and-reacts`' firing-decision work, not this group's — until
                     # then this guard keeps the divergence from producing a wrong thread.
                     conversation = None

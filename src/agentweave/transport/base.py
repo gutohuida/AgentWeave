@@ -95,10 +95,6 @@ class BaseTransport(ABC):
         """Check whether an agent exists in the backend (always False on non-HTTP transports)."""
         return False
 
-    def get_agent_registration(self, agent: str) -> Optional[Dict[str, Any]]:
-        """Return registration metadata for an agent (None on non-HTTP transports)."""
-        return None
-
     def post_agent_output(
         self,
         agent: str,

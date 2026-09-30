@@ -4,13 +4,14 @@ travels as `job_run_id`, in the SSE broadcast, the persisted payload and the Run
 Tasks 1.1-1.4. Each fails on the code before the rename (the key was `run_id`).
 """
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, AIJob, EventLog, JobRun, Run
+from hub.db.models import AIJob, EventLog, JobRun, Loop, Run
 from hub.scheduler import JobScheduler
 
 from .test_a_task_nothing_will_move_holds_nobody import _no_spawn
@@ -98,19 +99,23 @@ async def test_a_fired_job_names_its_job_run(
 
 
 async def test_a_skipped_job_names_its_job_run(app, auth_headers, live_scheduler):
-    """1.2."""
+    """1.2 — a loop whose stop time has passed, one of the skip paths that remain.
+
+    It used to reach the skip through a self-registered `poll` agent, a path deleted with
+    self-registration (`agents-no-longer-register-themselves`, D3); every remaining skip persists
+    the same `job_run_skipped` payload.
+    """
+    job = await _job("skipped", "runid-loop")
     async with async_session_factory() as db:
         db.add(
-            Agent(
+            Loop(
+                id="loop-runid-skipped",
                 project_id=PROJECT,
-                id="agent-runid-poll",
-                name="runid-poll",
-                self_registered=True,
-                contact_mode="poll",
+                job_id=job.id,
+                stop_at=datetime.now(timezone.utc) - timedelta(minutes=1),
             )
         )
         await db.commit()
-    job = await _job("skipped", "runid-poll")
     await _press(app, auth_headers, job)
     (job_run_id,) = await _job_run_ids(job.id)
     (persisted,) = [d for d in await _events("job_run_skipped") if d["job_id"] == job.id]

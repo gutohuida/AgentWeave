@@ -88,10 +88,6 @@ class AgentSummary(BaseModel):
         None  # {percent, warning, model, threshold_warning, updated_at}
     )
     session_started_at: Optional[datetime] = None  # When the current session started
-    self_registered: bool = False  # True if agent joined via self-registration
-    liveness: Optional[str] = Field(
-        default=None, max_length=64
-    )  # "online" | "offline" for self-registered agents
     runner_options: Optional[Dict[str, Any]] = (
         None  # Runner-specific options (e.g., memory for Codex)
     )

@@ -34,18 +34,6 @@ async def test_a_session_declaring_an_agent_named_operator_is_refused(app, auth_
 
 
 @pytest.mark.asyncio
-async def test_registering_an_agent_named_operator_is_refused(app, auth_headers):
-    resp = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "operator", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-
-    assert resp.status_code == 400, resp.text
-    assert "reserved agent name 'operator'" in resp.json()["detail"]
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("name", ["operator", "Operator", "user"])
 async def test_the_create_dialog_route_refuses_a_reserved_name(app, auth_headers, name):
     """Round 4 review: `POST /agents`, the Add-agent dialog's route, checked only the pattern and

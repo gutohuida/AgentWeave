@@ -393,7 +393,6 @@ def main():
         "/agents/agent-context",
         "/agents/configured",
         "/agents/context",
-        "/agents/register",
         "/agents/request",
         "/agents/launchability",
         # with the terminating backtick: `runners/launchability` is a PREFIX of

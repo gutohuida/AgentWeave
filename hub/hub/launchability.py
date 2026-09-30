@@ -562,7 +562,7 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
 
     Merges three sources, in increasing priority: the session-synced `agents.<name>` entry
     (session.json, pushed by the CLI — has `runner`/`model`/`cli`/`env_vars`/`yolo` for
-    CLI-configured agents), any self-registered `Agent.config` JSON, and — since 2026-08-21 —
+    CLI-configured agents), the agent's own `Agent.config` JSON, and — since 2026-08-21 —
     **the bound `Runner` record**, which is the roster's own answer and outranks both.
 
     That third source used to be missing here and was pasted into two call sites instead
@@ -573,8 +573,9 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
     after the agent. Doing it here fixes both surfaces at once and gives the unbound case a name
     of its own (`RUNNER_UNBOUND`) rather than a wrong one.
 
-    A **self-registered** agent is exempt: it manages its own execution and legitimately has no
-    `Runner`, so calling it unbound would refuse something that works.
+    No agent is exempt by how it came to exist. Self-registration, whose agents were once
+    exempted here, was deleted (`agents-no-longer-register-themselves`, F136): the exemption
+    told an unbound agent to install a binary named after itself.
     """
     from .db.models import Agent, ProjectSession, Runner
 
@@ -597,16 +598,8 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
 
     if agent_row is not None:
         if agent_row.runner_id:
-            # Keyed on `runner_id`, not on how the agent came to exist (F30). This whole branch
-            # used to sit behind `not agent_row.self_registered`. That exemption's *intent* is
-            # sound — a self-registered agent manages its own execution and legitimately has no
-            # `Runner` — but it was written as `self_registered ⇒ unbound` and nothing enforced it:
-            # `self_registered = 1` with a non-null `runner_id` is reachable through two ordinary
-            # API calls, and is what the repo's own e2e harness produced. Measured 2026-08-25, all
-            # three such agents were reported unlaunchable with `Runner CLI 'architect' was not
-            # found in PATH` — a binary named after the agent — while triggering them worked fine,
-            # because `trigger_agent_directly` reads `runner_id` directly. The probe and the spawn
-            # disagreed about the same agent and the probe is the one the operator sees.
+            # Keyed on `runner_id`, not on how the agent came to exist (F30): the probe must
+            # describe what `trigger_agent_directly`, which reads `runner_id`, would launch.
             runner_row = await db.get(Runner, agent_row.runner_id)
             if runner_row is not None:
                 # Overwrites rather than defers to session.json: the bound Runner is what
@@ -614,14 +607,13 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
                 # agent nobody is going to start.
                 meta["runner"] = runner_row.cli
                 meta["model"] = runner_row.model
-        elif not agent_row.self_registered and "runner" not in meta:
+        elif "runner" not in meta:
             # Unbound means *nothing anywhere says how to launch this* — not merely "no Runner
             # row". A CLI-configured agent carries its runner in session.json and no `Runner` is
             # expected; `test_agent_with_no_bound_runner_has_no_collaboration_verdict` pins that
             # such an agent stays launchable, and `..._reports_configured_agents` pins that one
             # whose session.json says `manual` keeps the manual reason. Both would break under a
-            # rule keyed on `runner_id` alone, and both are right: the Hub cannot *trigger* these
-            # agents, which is a separate verdict (`collaboration_ready`) that already says so.
+            # rule keyed on `runner_id` alone. No agent is exempt by origin (F136).
             meta["runner"] = RUNNER_UNBOUND
 
     return meta

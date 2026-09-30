@@ -144,7 +144,7 @@ async def test_launchability_endpoint_reports_configured_agents(app, auth_header
 
 
 @pytest.mark.asyncio
-async def test_launchability_lifecycle_filter_matches_the_roster(app, auth_headers):
+async def test_launchability_lifecycle_filter_matches_the_roster(app, auth_headers, add_agent):
     """F181: the probe must apply the same lifecycle filter `list_agents` does, with the same
     "no `Agent` row counts as open" rule — see `get_agents_launchability`'s docstring. Covers
     4.3's four cases in one sequence: default omits archived, `?lifecycle=archived` returns it,
@@ -158,12 +158,7 @@ async def test_launchability_lifecycle_filter_matches_the_roster(app, auth_heade
     )
     assert sync.status_code == 200
 
-    reg = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "db-agent", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert reg.status_code == 200
+    await add_agent("db-agent")
     archived = await app.post(
         "/api/v1/projects/proj-test/agents/db-agent/archive", headers=auth_headers
     )

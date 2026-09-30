@@ -21,14 +21,14 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import P, api  # noqa: E402
+from aw import P, api, make_agent  # noqa: E402
 
 DB = os.environ.get("AW_DB", r"C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db")
 # A fresh agent per run — see `t_queue_attrition.py` for why reusing a name mixes an earlier
 # run's rows into this one's reading.
 AGENT = f"continue-{int(time.time()) % 100000}"
 
-api("POST", f"/projects/{P}/agents/register", {"name": AGENT, "contact_mode": "poll"})
+make_agent(P, AGENT)  # unbound, as register left it
 code, out = api("POST", f"/projects/{P}/agent/trigger",
                 {"agent": AGENT, "message": "the one message", "session_mode": "new"})
 conv, entry = out.get("conversation_id"), out.get("queue_entry_id")

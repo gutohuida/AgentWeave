@@ -72,10 +72,10 @@ os.environ["AW_BOOTSTRAP_API_KEY"] = TEST_API_KEY = "aw_live_testkey_abcdefgh"
 TEST_PROJECT_ID = "proj-test"
 TEST_PROJECT_NAME = "Test Project"
 
-from sqlalchemy import event  # noqa: E402
+from sqlalchemy import event, select  # noqa: E402
 
 from hub.db.engine import async_session_factory, engine, init_db  # noqa: E402
-from hub.db.models import ApiKey, Base, Project  # noqa: E402
+from hub.db.models import Agent, ApiKey, Base, Project  # noqa: E402
 from hub.main import create_app  # noqa: E402 — env must be set first
 from hub.project_workspace import (  # noqa: E402
     # A module-level constant holding the unpatched original, not a function alias.
@@ -879,6 +879,46 @@ def auth_headers():
 # §4.4. Nothing shells out at trigger time now: the access path is the operator's `hub_client`, and
 # what a run is *told* is decided from `Run.mcp_adapter_online_at`, a database fact. Do not add a
 # fixture back here to "default the probe" — there is nothing to default.
+
+
+@pytest.fixture
+def add_agent(app):
+    """Returns an async helper: `await add_agent(name, config=None, **columns)` -> name.
+
+    Inserts an `Agent` row directly, the way the operator's create route would leave it, but
+    without that route's runner probe, so it needs no runner CLI on PATH (CI has none). It
+    replaced `POST /agents/register`, deleted with self-registration
+    (`agents-no-longer-register-themselves`, design D4). Calling it again for an existing name
+    merges `config` into the row, as re-registering did. Bind a runner with `bind_runner`.
+    """
+    from hub.utils import short_id
+
+    async def _add(name, config=None, project_id="proj-test", **columns):
+        async with async_session_factory() as session:
+            row = (
+                await session.execute(
+                    select(Agent).where(Agent.project_id == project_id, Agent.name == name)
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                session.add(
+                    Agent(
+                        id=f"agent-{short_id()}",
+                        project_id=project_id,
+                        name=name,
+                        config=config or {},
+                        **columns,
+                    )
+                )
+            else:
+                if config:
+                    row.config = {**(row.config or {}), **config}
+                for key, value in columns.items():
+                    setattr(row, key, value)
+            await session.commit()
+        return name
+
+    return _add
 
 
 @pytest.fixture

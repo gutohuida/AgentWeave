@@ -13,6 +13,7 @@ New file `hub/tests/test_isolation_does_not_change_under_held_work.py`.
 - [ ] 1.2 (D1) The same with `{"config": null}` on an agent stored `read_only: true` → 409 (clearing is a change). FAILS today
 - [ ] 1.3 (D1) Agent with a run registered in `run_liveness.active_ptys` and no task: flip → 409 naming the run. FAILS today
 - [ ] 1.4 (D1) `POST /agents/register` for an existing self-registered agent holding a task, with `config: {"read_only": true}` → 409; `contact_mode`, `mcp_endpoint` unchanged too. FAILS today
+  **Moot as of 2026-09-30:** `agents-no-longer-register-themselves` landed first and deleted the route (design *Cross-bundle*). Drop this task when building.
 - [ ] 1.5 (D1) Refused whole: a PATCH carrying `description` and the flip → 409, description unchanged. FAILS today
 - [ ] 1.5a (D1) Turning isolation **on**: agent stored `read_only: true`, assigned an `in_progress` task, no task checkout on disk. `PATCH {"config": {"read_only": false}}` → 409. FAILS today; FAILS if the rule is narrowed to provisioned checkouts
 - [ ] 1.6 Control: the same flip on an idle agent with only `approved`/`rejected` tasks → 200. Passes before and after
@@ -29,6 +30,7 @@ New file `hub/tests/test_isolation_does_not_change_under_held_work.py`.
 
 - [ ] 2.1 `launchability.effective_agent_config` (the one merge rule; `get_agent_config` switches to it, `launchability.py:485-486`) and `launchability.isolation_change_refusal`; correct `get_agent_config`'s docstring (`:453-456`), which states the opposite precedence to the code
 - [ ] 2.1a Call sites: `patch_agent` and `register_agent` (`agents.py:2648-2659`, `:2300-2308`), each before it mutates the row
+  **2026-09-30:** `register_agent` no longer exists (`agents-no-longer-register-themselves`); only `patch_agent` remains, and its line numbers moved.
 - [ ] 2.1b Call site: `sync_session` (`api/v1/session_sync.py:46-75`), for each agent in the new payload that has a row, before `row.data = body.data` (`:67`)
 - [ ] 2.2 `AgentSettingsPage.tsx:290-294`: the comment states the rule and names this change (comment only)
 - [ ] 2.3 Full `hub/tests/`; ruff; black `--target-version py311`

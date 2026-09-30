@@ -3,7 +3,9 @@
 import pytest
 
 
-async def _create_agent_and_charter(app, auth_headers, *, content: str = "Custom charter"):
+async def _create_agent_and_charter(
+    app, auth_headers, add_agent, *, content: str = "Custom charter"
+):
     charter = (
         await app.post(
             "/api/v1/projects/proj-test/charters",
@@ -11,12 +13,7 @@ async def _create_agent_and_charter(app, auth_headers, *, content: str = "Custom
             headers=auth_headers,
         )
     ).json()
-    registered = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "chartered", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert registered.status_code == 200
+    await add_agent("chartered")
     bound = await app.patch(
         "/api/v1/projects/proj-test/agents/chartered",
         json={"charter_id": charter["id"]},
@@ -27,9 +24,9 @@ async def _create_agent_and_charter(app, auth_headers, *, content: str = "Custom
 
 
 @pytest.mark.asyncio
-async def test_agent_context_includes_bound_charter(app, auth_headers):
+async def test_agent_context_includes_bound_charter(app, auth_headers, add_agent):
     charter = await _create_agent_and_charter(
-        app, auth_headers, content="# Custom Charter\n\nHonor the release checklist."
+        app, auth_headers, add_agent, content="# Custom Charter\n\nHonor the release checklist."
     )
 
     response = await app.get(
@@ -43,8 +40,8 @@ async def test_agent_context_includes_bound_charter(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_agent_context_uses_edited_charter_content(app, auth_headers):
-    charter = await _create_agent_and_charter(app, auth_headers, content="Old behavior")
+async def test_agent_context_uses_edited_charter_content(app, auth_headers, add_agent):
+    charter = await _create_agent_and_charter(app, auth_headers, add_agent, content="Old behavior")
     updated = await app.patch(
         f"/api/v1/projects/proj-test/charters/{charter['id']}",
         json={"content": "New behavior after edit"},
@@ -60,19 +57,14 @@ async def test_agent_context_uses_edited_charter_content(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_agent_without_charter_gets_instructions_and_notice(app, auth_headers):
+async def test_agent_without_charter_gets_instructions_and_notice(app, auth_headers, add_agent):
     instructions = await app.put(
         "/api/v1/projects/proj-test/project/instructions",
         json={"content": "# Project Rules\n\nKeep changes focused."},
         headers=auth_headers,
     )
     assert instructions.status_code == 200
-    registered = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "unchartered", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert registered.status_code == 200
+    await add_agent("unchartered")
 
     response = await app.get(
         "/api/v1/projects/proj-test/agents/agent-context?agent=unchartered", headers=auth_headers
@@ -112,15 +104,14 @@ async def test_direct_charter_lookup_rejects_unknown_id(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_bind_agent_to_unknown_charter_is_refused(app, auth_headers):
-    await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "unknown-charter", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
+async def test_bind_agent_to_unknown_charter_is_refused(app, auth_headers, add_agent):
+    await add_agent("unknown-charter")
     response = await app.patch(
         "/api/v1/projects/proj-test/agents/unknown-charter",
         json={"charter_id": "charter-does-not-exist"},
         headers=auth_headers,
     )
+    # The charter's 404, not the agent's: when the fixture was the deleted register route this
+    # passed without the agent existing at all.
     assert response.status_code == 404
+    assert "Charter 'charter-does-not-exist' not found" in response.json()["detail"]

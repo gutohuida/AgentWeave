@@ -406,7 +406,7 @@ async def test_the_conflicts_route_checks_against_the_projects_main_branch(
 
 @pytest.mark.asyncio
 async def test_an_agents_workspace_reads_without_provisioning_one(
-    app, auth_headers, repo, bind_project_workspace
+    app, auth_headers, add_agent, repo, bind_project_workspace
 ):
     """Opening an agent's configuration must not create its worktree.
 
@@ -415,12 +415,7 @@ async def test_an_agents_workspace_reads_without_provisioning_one(
     not leave a checkout behind. Task 3.7 of 2026-08-08-agent-configuration-page.
     """
     await bind_project_workspace(repo)
-    reg = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "vera", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert reg.status_code == 200
+    await add_agent("vera")
 
     resp = await app.get("/api/v1/projects/proj-test/worktrees/vera", headers=auth_headers)
     assert resp.status_code == 200
@@ -438,17 +433,12 @@ async def test_an_agents_workspace_reads_without_provisioning_one(
 
 @pytest.mark.asyncio
 async def test_a_read_only_agent_shares_the_project_checkout(
-    app, auth_headers, repo, bind_project_workspace
+    app, auth_headers, add_agent, repo, bind_project_workspace
 ):
     """No branch and nothing to provision — reporting "not provisioned" would imply something
     is missing, when sharing the checkout is the whole arrangement."""
     await bind_project_workspace(repo)
-    reg = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "wren", "contact_mode": "poll", "config": {"read_only": True}},
-        headers=auth_headers,
-    )
-    assert reg.status_code == 200
+    await add_agent("wren", config={"read_only": True})
 
     resp = await app.get("/api/v1/projects/proj-test/worktrees/wren", headers=auth_headers)
     assert resp.status_code == 200
@@ -461,7 +451,7 @@ async def test_a_read_only_agent_shares_the_project_checkout(
 
 @pytest.mark.asyncio
 async def test_a_writer_with_no_repository_shares_the_project_directory(
-    app, auth_headers, tmp_path, bind_project_workspace
+    app, auth_headers, add_agent, tmp_path, bind_project_workspace
 ):
     """Sharing, but not for the reason a read-only agent shares — and the difference is the only
     thing that tells the operator `git init` would change something.
@@ -472,12 +462,7 @@ async def test_a_writer_with_no_repository_shares_the_project_directory(
     plain = tmp_path / "not-a-repo"
     plain.mkdir()
     await bind_project_workspace(plain)
-    reg = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "xan", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert reg.status_code == 200
+    await add_agent("xan")
 
     resp = await app.get("/api/v1/projects/proj-test/worktrees/xan", headers=auth_headers)
     assert resp.status_code == 200
@@ -491,18 +476,13 @@ async def test_a_writer_with_no_repository_shares_the_project_directory(
 
 @pytest.mark.asyncio
 async def test_the_two_ways_of_sharing_the_project_directory_are_distinguishable(
-    app, auth_headers, repo, bind_project_workspace
+    app, auth_headers, add_agent, repo, bind_project_workspace
 ):
     """A read-only agent in a repository and a writer with no repository both report
     `isolated: false` with the project directory. Only the second carries a reason, and without
     it the operator could not tell a configured choice from an absent repository."""
     await bind_project_workspace(repo)
-    reg = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": "yuki", "contact_mode": "poll", "config": {"read_only": True}},
-        headers=auth_headers,
-    )
-    assert reg.status_code == 200
+    await add_agent("yuki", config={"read_only": True})
 
     resp = await app.get("/api/v1/projects/proj-test/worktrees/yuki", headers=auth_headers)
     assert resp.status_code == 200

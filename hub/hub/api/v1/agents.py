@@ -18,7 +18,7 @@ from ...agent_colors import next_color_index
 from ...agent_lifecycle import archivable as agent_archivable
 from ...agent_lifecycle import archive as archive_agent_row
 from ...agent_lifecycle import unarchive as unarchive_agent_row
-from ...agent_status import effective_heartbeat_status, heartbeat_is_stale
+from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...checkpoint_policy import CHECKPOINT_MODES, threshold_error
 from ...codex_appserver import APP_SERVER_OPT_OUT_FLAG, uses_app_server
@@ -77,15 +77,6 @@ _24H = timedelta(hours=24)
 # answer is the drift shape all three of this product's loop stall bugs came out of.
 _ACTIVE_TASK_STATUSES = tuple(sorted(LIVE_STATUSES))
 _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
-# DEAD (2026-09-20): "mcp-push" is accepted and stored, but nothing anywhere branches on it.
-# Why: Agent.contact_mode is read in exactly two places in hub/hub — scheduler.py:227
-#   (`== "poll"`) and the response echo below — and no .py/.ts/.tsx file in hub/ or src/ compares
-#   anything to "mcp-push". Its only other occurrence in the product is the CLI's mirror list at
-#   src/agentweave/constants.py:314, which is itself dead (see the DEAD block there).
-# Live equivalent: "poll", the one value with a branch, and "watchdog-spawn", which this file
-#   writes for every operator-created agent (lines 679 and 2094).
-# Removal: hub/tests/test_agents_self_registered.py:468,534,538,689 use it to exercise PATCH.
-_CONTACT_MODES = ("poll", "mcp-push", "watchdog-spawn")
 
 
 class AgentRequest(RequestModel):
@@ -130,8 +121,6 @@ class OperatorAgentResponse(BaseModel):
     runner_id: str
     charter_id: Optional[str]
     color_index: int
-    contact_mode: str
-    self_registered: bool
 
 
 async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]:
@@ -195,9 +184,9 @@ async def get_agents_launchability(
     `runner`/`model` keys (see that function's comment). Without this override, an agent
     whose session-synced config disagreed with its actually-bound Runner would report
     launchability for a CLI/model combination `trigger_agent_directly` would never
-    actually use. An agent with no bound Runner (self-registered or CLI-launched,
-    outside the Hub's own spawn path) keeps the legacy config-derived probe unchanged —
-    that path is real for those agents, not stale.
+    actually use. An agent with no bound Runner keeps the legacy config-derived probe
+    unchanged: a session-synced `runner` key still launches, and with none it is reported
+    unbound.
 
     `lifecycle` mirrors `list_agents`' own filter (same default, same values, same
     "an agent with no row counts as open" rule) — see that function's docstring for why
@@ -388,7 +377,7 @@ async def list_agents(
         if name and name not in session_agents_meta:
             session_agents_meta[name] = {}
 
-    # Also include agents from the Agent table (self-registered agents)
+    # Also include agents from the Agent table (every agent the operator or a request created)
     agent_q = select(Agent).where(Agent.project_id == project_id)
     agent_res = await session.execute(agent_q)
     db_agents: dict[str, Agent] = {}
@@ -539,7 +528,7 @@ async def list_agents(
     for agent_name in sorted(session_agents_meta):
         agent_meta = session_agents_meta.get(agent_name, {})
 
-        # Merge stored config from DB for self-registered agents
+        # Merge the agent's stored config from its row
         agent_row = db_agents.get(agent_name)
         if agent_row and agent_row.config:
             agent_meta = {**(agent_row.config or {}), **agent_meta}
@@ -553,9 +542,8 @@ async def list_agents(
         context_usage = context_usage_map.get(agent_name)
         session_started_at = session_started_map.get(agent_name)
 
-        # A Runner-bound agent reports its runner's cli/model; an agent with no binding
-        # (self-registered, launched outside the Hub's spawn path) keeps deriving from its own
-        # stored config, because for those agents that path is still the real one.
+        # A Runner-bound agent reports its runner's cli/model; an agent with no binding keeps
+        # deriving from its own stored config (a legacy session-synced `runner` key, if any).
         bound_runner = runners_by_id.get(agent_row.runner_id) if agent_row else None
         if bound_runner is not None:
             agent_meta = {
@@ -576,19 +564,6 @@ async def list_agents(
             "copilot": agent_meta.get("model", "GitHub Copilot"),
         }.get(_runner, agent_meta.get("model", _runner.replace("_", " ").title()))
 
-        _self_registered = agent_row.self_registered if agent_row else False
-
-        # Liveness: online if heartbeat within 2 minutes (only for self-registered agents)
-        _liveness = None
-        if _self_registered and hb and hb.timestamp:
-            now = datetime.now(timezone.utc)
-            ts = hb.timestamp
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            _liveness = "offline" if heartbeat_is_stale(hb, now=now) else "online"
-        elif _self_registered:
-            _liveness = "offline"
-
         summaries.append(
             AgentSummary(
                 name=agent_name,
@@ -603,8 +578,6 @@ async def list_agents(
                 display_model=_display_model,
                 context_usage=context_usage,
                 session_started_at=session_started_at,
-                self_registered=_self_registered,
-                liveness=_liveness,
                 runner_options=agent_meta.get("runner_options"),
                 color_index=agent_row.color_index if agent_row else None,
                 runner_id=agent_row.runner_id if agent_row else None,
@@ -748,8 +721,6 @@ async def create_operator_agent(
         id=f"agent-{short_id()}",
         project_id=project_id,
         name=body.name,
-        contact_mode="watchdog-spawn",
-        self_registered=False,
         config={},
         color_index=await next_color_index(session, project_id),
         runner_id=runner.id,
@@ -776,8 +747,6 @@ async def create_operator_agent(
         runner_id=agent.runner_id,
         charter_id=agent.charter_id,
         color_index=agent.color_index,
-        contact_mode=agent.contact_mode,
-        self_registered=agent.self_registered,
     )
 
 
@@ -1789,12 +1758,13 @@ async def _render_hub_agent_context(
 
     **The other two callers deliberately keep the `"mcp"` default, and that is a decision rather
     than an omission** (task 2.2 of `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`).
-    `POST /agents/register` and `GET /agents/agent-context` are both answered outside any run,
-    under the project API key rather than a run credential. The access path is a per-*run* fact
+    `GET /agents/agent-context` is answered outside any run, under the project API key rather than
+    a run credential (`POST /agents/register` was the other such caller until self-registration
+    was deleted, `agents-no-longer-register-themselves`). The access path is a per-*run* fact
     (`design.md` D3): it is settled at spawn time from the runner about to be launched, and a route
     answering "what will your next run use" would be making a prediction the trigger is free to
     contradict — the disagreement this parameter exists to prevent, reintroduced one layer up.
-    Neither route is on a run's path to the plane: a run reads the materialized context file this
+    It is not on a run's path to the plane: a run reads the materialized context file this
     function writes, never these routes. If a caller ever does need the run's idiom, it must be
     given the path the trigger resolved, not resolve one of its own.
     """
@@ -2407,8 +2377,6 @@ async def request_agent(
         id=f"agent-{short_id()}",
         project_id=project_id,
         name=body.name,
-        contact_mode="watchdog-spawn",
-        self_registered=False,
         config=copied_config,
         runner_id=template_row.runner_id,
         charter_id=template_row.charter_id,
@@ -2473,80 +2441,6 @@ async def request_agent(
             body.name,
         )
     return {**payload, "status": "queued"}
-
-
-@router.post("/register")
-async def register_agent(
-    body: dict,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Register or re-register a self-registered agent."""
-    project_id, _ = project
-    name = body.get("name")
-    contact_mode = body.get("contact_mode")
-    mcp_endpoint = body.get("mcp_endpoint")
-    spawn_cmd = body.get("spawn_cmd")
-    config = body.get("config") or {}
-
-    if not name:
-        raise HTTPException(status_code=400, detail="name is required")
-    try:
-        worktrees.validate_agent_name(name)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if contact_mode not in _CONTACT_MODES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid contact_mode '{contact_mode}'. Valid: {', '.join(_CONTACT_MODES)}",
-        )
-
-    # Reject collision with configured agents
-    session_data = await _get_session_data(project_id, session)
-    if session_data and name in session_data.get("agents", {}):
-        raise HTTPException(
-            status_code=409, detail=f"Agent name '{name}' is reserved for a configured agent"
-        )
-
-    result = await session.execute(
-        select(Agent).where(Agent.project_id == project_id, Agent.name == name)
-    )
-    agent_row = result.scalars().first()
-
-    if agent_row:
-        agent_row.contact_mode = contact_mode
-        agent_row.self_registered = True
-        agent_row.mcp_endpoint = mcp_endpoint
-        agent_row.spawn_cmd = spawn_cmd
-        # Merge config on re-registration so omitted fields don't wipe existing config
-        if config:
-            agent_row.config = {**(agent_row.config or {}), **config}
-        agent_row.updated = datetime.now(timezone.utc)
-    else:
-        agent_row = Agent(
-            id=f"agent-{short_id()}",
-            project_id=project_id,
-            name=name,
-            contact_mode=contact_mode,
-            self_registered=True,
-            mcp_endpoint=mcp_endpoint,
-            spawn_cmd=spawn_cmd,
-            config=config,
-            color_index=await next_color_index(session, project_id),
-        )
-        session.add(agent_row)
-
-    await session.commit()
-
-    rendered = await _render_hub_agent_context(
-        agent=name,
-        project_id=project_id,
-        db=session,
-        session_data=session_data,
-        agent_row=agent_row,
-    )
-    return {"charter_id": agent_row.charter_id, "context": rendered["context"]}
 
 
 # How long an agent may be told to wait on the operator. The floor stops a wait so short the card
@@ -2734,10 +2628,7 @@ def _validated_waiting_seconds(field: str, value: object) -> Optional[int]:
 # added here too, or the route refuses it -- which is the direction this is meant to fail in.
 _PATCH_AGENT_FIELDS = frozenset(
     {
-        "contact_mode",
         "description",
-        "mcp_endpoint",
-        "spawn_cmd",
         "runner_id",
         "charter_id",
         "config",
@@ -2756,7 +2647,7 @@ async def patch_agent(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Partially update a self-registered agent's fields.
+    """Partially update an agent's fields.
 
     Only fields present in the body are modified. Config is merged
     (existing keys preserved unless overridden).
@@ -2781,8 +2672,8 @@ async def patch_agent(
     # Reject collision with configured agents — except for the fields the CLI's legacy
     # session-sync config never owned. runner_id/charter_id are runner-agent-charter-separation
     # fields; the waiting settings are newer still. A configured agent needs all of them settable
-    # exactly like a self-registered one — an agent does not wait differently for the operator
-    # because of how it was declared.
+    # exactly like any other agent — an agent does not wait differently for the operator because
+    # of how it was declared.
     _unrestricted_fields = {
         "runner_id",
         *GRANT_FIELDS,
@@ -2810,22 +2701,8 @@ async def patch_agent(
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
 
     # Update top-level fields if provided
-    if "contact_mode" in body:
-        contact_mode = body["contact_mode"]
-        if contact_mode not in _CONTACT_MODES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid contact_mode '{contact_mode}'. Valid: {', '.join(_CONTACT_MODES)}",
-            )
-        agent_row.contact_mode = contact_mode
-
     if "description" in body:
         agent_row.description = _validated_description(body["description"])
-
-    if "mcp_endpoint" in body:
-        agent_row.mcp_endpoint = body["mcp_endpoint"]
-    if "spawn_cmd" in body:
-        agent_row.spawn_cmd = body["spawn_cmd"]
 
     # No lifecycle guard on runner_id: D3 keeps an archived agent's runner bound through
     # archival on purpose, so re-binding one here is consistent with that, not an oversight.
@@ -2917,10 +2794,6 @@ async def patch_agent(
         "id": agent_row.id,
         "name": agent_row.name,
         "description": agent_row.description,
-        "contact_mode": agent_row.contact_mode,
-        "self_registered": agent_row.self_registered,
-        "mcp_endpoint": agent_row.mcp_endpoint,
-        "spawn_cmd": agent_row.spawn_cmd,
         "config": agent_row.config,
         "runner_id": agent_row.runner_id,
         "charter_id": agent_row.charter_id,

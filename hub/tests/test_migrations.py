@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0112"
+HEAD_REVISION = "0113"
 
 
 # ---------------------------------------------------------------------------
@@ -721,8 +721,8 @@ def test_migration_0016_adds_and_backfills_agent_color_index(tmp_path) -> None:
                 )
                 await conn.execute(
                     sa.text(
-                        "INSERT INTO agents (id, project_id, name, self_registered, created_at, updated) "
-                        "VALUES (:id, :project_id, :name, 0, :created_at, :created_at)"
+                        "INSERT INTO agents (id, project_id, name, created_at, updated) "
+                        "VALUES (:id, :project_id, :name, :created_at, :created_at)"
                     ),
                     [
                         {
@@ -3595,14 +3595,14 @@ def test_migration_0105_clears_an_archived_agents_charter_but_leaves_an_open_one
             "INSERT INTO projects (id, name, created_at) VALUES ('proj-1', 'p', " f"'{stamp}')"
         )
         conn.execute(
-            "INSERT INTO agents (id, project_id, name, self_registered, lifecycle, "
+            "INSERT INTO agents (id, project_id, name, lifecycle, "
             "charter_id, created_at, updated) VALUES ('agent-archived', 'proj-1', "
-            f"'a1', 0, 'archived', 'charter-1', '{stamp}', '{stamp}')"
+            f"'a1', 'archived', 'charter-1', '{stamp}', '{stamp}')"
         )
         conn.execute(
-            "INSERT INTO agents (id, project_id, name, self_registered, lifecycle, "
+            "INSERT INTO agents (id, project_id, name, lifecycle, "
             "charter_id, created_at, updated) VALUES ('agent-open', 'proj-1', "
-            f"'a2', 0, 'open', 'charter-2', '{stamp}', '{stamp}')"
+            f"'a2', 'open', 'charter-2', '{stamp}', '{stamp}')"
         )
         conn.commit()
 
@@ -4274,3 +4274,158 @@ def test_migration_0112_is_guarded_when_runners_does_not_exist(tmp_path) -> None
 
     with sqlite3.connect(db_file) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0112"
+
+
+# ---------------------------------------------------------------------------------------------
+# 0113 -- agents no longer register themselves: the watchdog-era agent columns go
+# ---------------------------------------------------------------------------------------------
+
+_WATCHDOG_AGENT_COLUMNS = {"contact_mode", "self_registered", "mcp_endpoint", "spawn_cmd"}
+
+# `:8000`'s real `agents` table, read `mode=ro` on 2026-09-30 at revision 0109 (design D2). Copied
+# rather than built from the models, because the models are what this migration changes, and the
+# failure it guards against is specific to this text: `self_registered BOOLEAN NOT NULL` with no
+# default, which every ORM insert would violate if the drop failed while the model no longer
+# names the column.
+_REAL_AGENTS_DDL = """
+CREATE TABLE agents (
+	id VARCHAR(64) NOT NULL,
+	project_id VARCHAR(64) NOT NULL,
+	name VARCHAR(64) NOT NULL,
+	description VARCHAR(256),
+	contact_mode VARCHAR(32),
+	self_registered BOOLEAN NOT NULL,
+	mcp_endpoint VARCHAR(256),
+	spawn_cmd JSON,
+	config JSON,
+	color_index INTEGER,
+	created_by_run_id VARCHAR(64),
+	runner_id VARCHAR(64),
+	charter_id VARCHAR(64),
+	permission_timeout_seconds INTEGER,
+	question_timeout_seconds INTEGER,
+	default_permission_mode VARCHAR(32),
+	checkpoint_mode VARCHAR(16),
+	checkpoint_threshold_mode VARCHAR(8),
+	checkpoint_threshold_value INTEGER,
+	checkpoint_notes_value INTEGER,
+	can_read_checkpoints BOOLEAN DEFAULT '0' NOT NULL,
+	can_recall BOOLEAN DEFAULT '0' NOT NULL,
+	can_accept_evidence BOOLEAN DEFAULT '0' NOT NULL,
+	lifecycle VARCHAR(16) DEFAULT 'open' NOT NULL,
+	archived_at DATETIME,
+	created_at DATETIME NOT NULL,
+	updated DATETIME NOT NULL,
+	PRIMARY KEY (id),
+	CONSTRAINT ck_agents_lifecycle CHECK (lifecycle IN ('open', 'archived')),
+	FOREIGN KEY(project_id) REFERENCES projects (id),
+	FOREIGN KEY(runner_id) REFERENCES runners (id),
+	FOREIGN KEY(charter_id) REFERENCES charters (id)
+)
+"""
+
+
+def _agent_columns(conn: sqlite3.Connection) -> dict[str, tuple]:
+    return {row[1]: row for row in conn.execute("PRAGMA table_info(agents)")}
+
+
+def test_migration_0113_drops_the_watchdog_agent_columns_and_downgrade_restores_them(
+    tmp_path,
+) -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "agents_columns.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(_REAL_AGENTS_DDL)
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0112')")
+
+    _upgrade_to(db_url, "0113")
+    with sqlite3.connect(db_file) as conn:
+        assert not _WATCHDOG_AGENT_COLUMNS & set(_agent_columns(conn))
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0112")
+    with sqlite3.connect(db_file) as conn:
+        columns = _agent_columns(conn)
+        assert set(columns) >= _WATCHDOG_AGENT_COLUMNS
+        # Restored nullable (PRAGMA's `notnull` is index 3), with nothing to restore into them.
+        assert all(columns[name][3] == 0 for name in _WATCHDOG_AGENT_COLUMNS)
+
+
+def test_migration_0113_leaves_the_real_agents_table_insertable(tmp_path) -> None:
+    """Design D2: `:8000`'s own table, upgraded, keeps its constraint and indexes and accepts an
+    agent written through the ORM. A drop that failed quietly would leave `self_registered NOT
+    NULL` behind a model that no longer sets it, and every agent insert would then fail."""
+    db_file = tmp_path / "real_agents.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("DROP TABLE agents")
+        conn.execute(_REAL_AGENTS_DDL)
+        conn.execute("CREATE INDEX ix_agents_name ON agents (name)")
+        conn.execute("CREATE INDEX ix_agents_created_by_run_id ON agents (created_by_run_id)")
+        conn.execute("CREATE UNIQUE INDEX ix_agents_project_name ON agents (project_id, name)")
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('proj-1', 'p', "
+            "'2026-01-01T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO agents (id, project_id, name, contact_mode, self_registered, created_at, "
+            "updated) VALUES ('agt-old', 'proj-1', 'old', 'watchdog-spawn', 0, "
+            "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+        )
+        # Every other table is at the models' shape already; only `agents` is at 0112's.
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0112')")
+
+    _upgrade_to(db_url, "0113")
+
+    async def _insert_and_read() -> list[str]:
+        from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from hub.db.models import Agent
+
+        engine = create_async_engine(db_url)
+        try:
+            async with async_sessionmaker(engine)() as session:
+                session.add(Agent(id="agt-new", project_id="proj-1", name="new"))
+                await session.commit()
+                rows = (await session.execute(select(Agent.name).order_by(Agent.name))).all()
+                return [row[0] for row in rows]
+        finally:
+            await engine.dispose()
+
+    assert _run(_insert_and_read()) == ["new", "old"]
+    with sqlite3.connect(db_file) as conn:
+        assert not _WATCHDOG_AGENT_COLUMNS & set(_agent_columns(conn))
+        indexes = {row[1] for row in conn.execute("PRAGMA index_list(agents)")}
+        assert {
+            "ix_agents_project_name",
+            "ix_agents_name",
+            "ix_agents_created_by_run_id",
+        } <= indexes
+        table_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'agents'"
+        ).fetchone()[0]
+        assert "ck_agents_lifecycle" in table_sql
+        with pytest.raises(sqlite3.IntegrityError, match="ck_agents_lifecycle"):
+            conn.execute("UPDATE agents SET lifecycle = 'gone' WHERE id = 'agt-new'")
+
+
+def test_migration_0113_is_guarded_when_agents_does_not_exist(tmp_path) -> None:
+    db_file = tmp_path / "no_agents_0113.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0112')")
+
+    _upgrade_to(db_url, "0113")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0113"

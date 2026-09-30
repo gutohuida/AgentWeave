@@ -121,19 +121,21 @@ def cmd_agent(project, name, charter_sub, cli, model=None):
     charters = unwrap(call("GET", f"/api/v1/projects/{project}/charters"))
     charter = next((c for c in charters if charter_sub.lower() in c["name"].lower()), None)
 
-    try:
-        call(
-            "POST",
-            f"/api/v1/projects/{project}/agents/register",
-            {"name": name, "contact_mode": "poll"},
-            quiet=True,
-        )
-    except RuntimeError:
-        pass
-    patch = {"runner_id": runner["id"]}
+    # The operator's create route (self-registration is gone). Only an existing name falls back to
+    # rebinding it: the route also answers 409 for a runner that cannot launch, and that must
+    # stop the drive here rather than surface later as something else.
+    body = {"name": name, "runner_id": runner["id"]}
     if charter:
-        patch["charter_id"] = charter["id"]
-    call("PATCH", f"/api/v1/projects/{project}/agents/{name}", patch)
+        body["charter_id"] = charter["id"]
+    try:
+        call("POST", f"/api/v1/projects/{project}/agents", body, quiet=True)
+    except RuntimeError as exc:
+        if "already exists" not in str(exc):
+            raise
+        patch = {"runner_id": runner["id"]}
+        if charter:
+            patch["charter_id"] = charter["id"]
+        call("PATCH", f"/api/v1/projects/{project}/agents/{name}", patch)
     print(
         f"agent {name}: runner={runner['name']} ({runner['cli']}/{runner.get('model')}) "
         f"charter={charter['name'] if charter else None}"

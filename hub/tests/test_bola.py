@@ -38,7 +38,7 @@ async def other_project(app, auth_headers):
 
 
 @pytest_asyncio.fixture
-async def project_a_resources(app, project_a):
+async def project_a_resources(app, project_a, add_agent):
     """Create a representative set of resources in Project A and return their IDs."""
     auth_headers = project_a["headers"]
     base = f"/api/v1/projects/{project_a['project_id']}"
@@ -57,13 +57,8 @@ async def project_a_resources(app, project_a):
     )
     assert sync_resp.status_code == 200
 
-    # Self-register another agent
-    reg_resp = await app.post(
-        f"{base}/agents/register",
-        json={"name": "bob", "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert reg_resp.status_code == 200
+    # Another agent
+    await add_agent("bob", project_id=project_a["project_id"])
 
     # Message
     msg_resp = await app.post(

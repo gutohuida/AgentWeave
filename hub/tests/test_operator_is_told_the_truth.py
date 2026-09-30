@@ -136,7 +136,7 @@ def test_a_loop_error_summary_still_hides_a_credential():
 # ---------------------------------------------------------------------------
 
 
-async def _agent(session, name, *, self_registered, runner_id=None):
+async def _agent(session, name, *, runner_id=None):
     from hub.db.models import Agent
 
     session.add(
@@ -144,7 +144,6 @@ async def _agent(session, name, *, self_registered, runner_id=None):
             id=f"agt-{name}",
             project_id="proj-test",
             name=name,
-            self_registered=self_registered,
             runner_id=runner_id,
         )
     )
@@ -161,14 +160,15 @@ async def _runner(session, runner_id, cli="claude", model="haiku"):
 
 
 @pytest.mark.asyncio
-async def test_a_self_registered_agent_with_a_runner_reports_that_runner(app):
-    """The F30 reproduction. Three agents made via `POST /agents/register` and then bound were all
-    reported unlaunchable, naming a CLI after the agent itself — while triggering them worked."""
+async def test_a_bound_agent_reports_its_runner_not_its_own_name(app):
+    """The F30 reproduction. Three agents made via `POST /agents/register` (since deleted) and then
+    bound were all reported unlaunchable, naming a CLI after the agent itself — while triggering
+    them worked. The point never depended on how the agent was made: a bound runner is the CLI."""
     from hub.db.engine import async_session_factory
 
     async with async_session_factory() as session:
         await _runner(session, "rnr-f30")
-        await _agent(session, "architect", self_registered=True, runner_id="rnr-f30")
+        await _agent(session, "architect", runner_id="rnr-f30")
 
         config = await get_agent_config("proj-test", "architect", session)
 
@@ -180,26 +180,12 @@ async def test_a_self_registered_agent_with_a_runner_reports_that_runner(app):
 
 
 @pytest.mark.asyncio
-async def test_a_self_registered_agent_with_no_runner_keeps_its_exemption(app):
-    """The exemption's intent is sound and is preserved: such an agent manages its own execution
-    and is not marked unbound."""
-    from hub.db.engine import async_session_factory
-
-    async with async_session_factory() as session:
-        await _agent(session, "selfrun", self_registered=True)
-
-        config = await get_agent_config("proj-test", "selfrun", session)
-
-    assert config.get("runner") != "unbound"
-
-
-@pytest.mark.asyncio
 async def test_an_ordinary_agent_with_no_runner_is_still_reported_unbound(app):
     """The case the previous fix (2026-08-21) exists for, unchanged."""
     from hub.db.engine import async_session_factory
 
     async with async_session_factory() as session:
-        await _agent(session, "norunner", self_registered=False)
+        await _agent(session, "norunner")
 
         config = await get_agent_config("proj-test", "norunner", session)
 
@@ -216,7 +202,7 @@ async def test_an_ordinary_bound_agent_is_unchanged(app):
 
     async with async_session_factory() as session:
         await _runner(session, "rnr-plain", cli="codex", model="gpt-5")
-        await _agent(session, "plain", self_registered=False, runner_id="rnr-plain")
+        await _agent(session, "plain", runner_id="rnr-plain")
 
         config = await get_agent_config("proj-test", "plain", session)
 

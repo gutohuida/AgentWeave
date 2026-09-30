@@ -22,15 +22,6 @@ BASE = "/api/v1/projects/proj-test/project"
 PATH = "spec/changes/interview/spec.html"
 
 
-async def _register(app, auth_headers, name):
-    response = await app.post(
-        "/api/v1/projects/proj-test/agents/register",
-        json={"name": name, "contact_mode": "poll"},
-        headers=auth_headers,
-    )
-    assert response.status_code == 200, response.text
-
-
 async def _create_document(app, auth_headers):
     response = await app.post(
         f"{BASE}/documents", json={"path": PATH, "title": "Demo"}, headers=auth_headers
@@ -110,10 +101,10 @@ def test_ask_user_is_described_as_a_decision_tool():
 
 
 @pytest.mark.asyncio
-async def test_a_charterless_exploring_turn_gets_all_of_it(app, auth_headers, tmp_path):
+async def test_a_charterless_exploring_turn_gets_all_of_it(app, auth_headers, tmp_path, add_agent):
     """The floor is what always ships. Everything load-bearing has to survive here or it is
     load-bearing only when someone remembers to bind a charter."""
-    await _register(app, auth_headers, "uncharted")
+    await add_agent("uncharted")
     await _create_document(app, auth_headers)
 
     context = await _render("uncharted")
@@ -165,9 +156,9 @@ async def _render_at(agent_name, path):
 
 
 @pytest.mark.asyncio
-async def test_change_spec_exploring_is_asked_how_it_will_be_built(app, auth_headers):
+async def test_change_spec_exploring_is_asked_how_it_will_be_built(app, auth_headers, add_agent):
     """D2, Opus notes 5 and 7: the interview line, and the two phrases the review added."""
-    await _register(app, auth_headers, "solo")
+    await add_agent("solo")
     await _create_document(app, auth_headers)
 
     context = await _render("solo")
@@ -180,9 +171,9 @@ async def test_change_spec_exploring_is_asked_how_it_will_be_built(app, auth_hea
 
 
 @pytest.mark.asyncio
-async def test_roadmap_exploring_is_not_asked_about_delivery(app, auth_headers):
+async def test_roadmap_exploring_is_not_asked_about_delivery(app, auth_headers, add_agent):
     """D4 requires `delivery` of change-spec documents only, so no other kind is asked."""
-    await _register(app, auth_headers, "roadmapper")
+    await add_agent("roadmapper")
     await _create_roadmap_document(app, auth_headers, ROADMAP_PATH)
 
     context = await _render_at("roadmapper", ROADMAP_PATH)
@@ -192,10 +183,13 @@ async def test_roadmap_exploring_is_not_asked_about_delivery(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_single_agent_project_lists_open_agents_with_no_team_heading(app, auth_headers):
+async def test_single_agent_project_lists_open_agents_with_no_team_heading(
+    app, auth_headers, add_agent
+):
     """The roster line is built from `roster` regardless of team size, but `### Team` still
-    prints only when there are peers (`test_agents_self_registered.py:726`)."""
-    await _register(app, auth_headers, "solo")
+    prints only when there are peers
+    (`test_agents.py::test_single_agent_project_gets_no_team_section`)."""
+    await add_agent("solo")
     await _create_document(app, auth_headers)
 
     context = await _render("solo")
