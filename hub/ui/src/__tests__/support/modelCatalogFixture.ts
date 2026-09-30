@@ -21,10 +21,22 @@ const MODELS: Record<string, ModelCatalogResponse['providers'][number]['models']
     { id: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', aliases: [], context_window: 272_000, default: true },
     { id: 'gpt-5.4-mini', label: 'GPT-5.4-Mini', aliases: [], context_window: 272_000, default: false },
   ],
+  // `a-copilot-agent-runs-over-acp` D13: Auto first and the default, every window unknown.
+  copilot: [
+    { id: 'auto', label: 'Auto', aliases: [], context_window: null, default: true },
+    { id: 'claude-haiku-4.5', label: 'Claude Haiku 4.5', aliases: [], context_window: null, default: false },
+  ],
+}
+
+// Copilot's Permissions default is Workspace only (D8: it has no sandbox to fall back on).
+const PERMISSION_DEFAULT: Record<string, string> = {
+  claude: 'acceptEdits',
+  codex: 'acceptEdits',
+  copilot: 'workspace',
 }
 
 export const MODEL_CATALOG_FIXTURE: ModelCatalogResponse = {
-  providers: ['claude', 'codex'].map((provider) => ({
+  providers: ['claude', 'codex', 'copilot'].map((provider) => ({
     provider,
     label: provider,
     // Both providers built-in by default (matches "no cache on this machine"); Codex's own
@@ -43,7 +55,7 @@ export const MODEL_CATALOG_FIXTURE: ModelCatalogResponse = {
           { id: 'manual', label: 'Ask me' },
           { id: 'bypassPermissions', label: 'Full access' },
         ],
-        default: 'acceptEdits',
+        default: PERMISSION_DEFAULT[provider],
         apply: { style: 'flag' as const, template: '--permission-mode {value}' },
       },
     ],

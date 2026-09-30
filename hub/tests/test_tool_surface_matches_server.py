@@ -380,6 +380,27 @@ def test_the_claude_family_prefixed_rendering_names_the_same_tools(monkeypatch):
     assert prefixed == _described()
 
 
+def test_the_copilot_rendering_names_every_tool_by_its_copilot_name():
+    """`a-copilot-agent-runs-over-acp` task 1.18 (D16): Copilot calls an MCP tool
+    `<server>-<tool>`, so a Copilot run told the MCP form is told `agentweave-<tool>`, with the
+    Copilot host-tool sentence, and the turn notice names them the same way."""
+    from hub.launchability import access_path_notice
+    from hub.runner_commands import mcp_tool_prefix
+
+    text = "\n".join(_tool_surface_lines(runner="copilot", access_path="mcp"))
+    named = set(re.findall(r"`agentweave-(\w+)\(", text))
+    assert named == _served() - set(UNDESCRIBED_TOOLS)
+    assert "mcp__agentweave__" not in text
+    assert "only way to reach AgentWeave agents or the operator" in text
+
+    notice = access_path_notice("mcp", tool_prefix=mcp_tool_prefix("copilot"))
+    assert "agentweave-send_message" in notice and "agentweave-ask_user" in notice
+
+    # Told the HTTP form, a Copilot run is told the requests, never a prefixed tool name.
+    http = "\n".join(_tool_surface_lines(runner="copilot", access_path=HTTP_PATH))
+    assert "`agentweave-" not in http
+
+
 def _http_line_for(tool: str) -> str:
     """Every line the HTTP rendering writes about one operation, joined.
 

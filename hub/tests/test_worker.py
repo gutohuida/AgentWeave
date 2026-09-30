@@ -450,3 +450,124 @@ def test_the_outcome_vocabulary_cannot_drift_from_the_check_constraint():
     """`worker.OUTCOMES` and the column constraint are written in two files; a new outcome added
     to one and not the other fails at INSERT time in production and nowhere in the tests."""
     assert tuple(OUTCOMES) == tuple(WORKER_OUTCOMES)
+
+
+# --------------------------------------------------------------------------- Copilot (task 1.14)
+#
+# `a-copilot-agent-runs-over-acp` D14. The envelope is task 1.2's capture of a real
+# `copilot -p --output-format json` call (build 1.0.88), not an invented shape.
+
+from pathlib import Path  # noqa: E402
+
+import hub.worker as worker_module  # noqa: E402
+from hub.copilot_probe import CopilotExecutableNotFound  # noqa: E402
+from hub.worker import SUPPORTED_CLIS, parse_copilot_envelope  # noqa: E402
+
+ONESHOT_FIXTURE = Path(__file__).parent / "fixtures" / "copilot_acp" / "oneshot_ok.jsonl"
+FAKE_EXE = "C:/npm/node_modules/@github/copilot/node_modules/@github/copilot-win32-x64/copilot.exe"
+
+
+@pytest.fixture()
+def copilot_exe(monkeypatch):
+    monkeypatch.setattr(
+        "hub.copilot_probe.resolve_copilot_executable", lambda override: Path(FAKE_EXE)
+    )
+    return str(Path(FAKE_EXE))
+
+
+def test_the_copilot_worker_command_offers_no_tool(copilot_exe):
+    cmd = build_worker_command(cli="copilot", model="auto", prompt="P")
+    assert cmd[0] == copilot_exe, "the platform executable, never the npm shim"
+    assert cmd[1:3] == ["-p", "P"]
+    assert "--excluded-tools=builtin:*,mcp:*,custom:*" in cmd
+    assert not any(arg.startswith("--available-tools") for arg in cmd)
+    assert "--no-custom-instructions" in cmd
+    assert "--output-format" in cmd and cmd[cmd.index("--output-format") + 1] == "json"
+    assert "--model" not in cmd, "auto is Copilot's own default"
+    assert build_worker_command(cli="copilot", model="gpt-5.5", prompt="P")[-2:] == [
+        "--model",
+        "gpt-5.5",
+    ]
+
+
+def test_copilot_is_a_supported_one_shot_cli():
+    assert "copilot" in SUPPORTED_CLIS
+
+
+def test_the_captured_copilot_envelope_yields_its_answer():
+    answer, usage, error = parse_copilot_envelope(ONESHOT_FIXTURE.read_text(encoding="utf-8"))
+    assert (answer, error) == ("ok", None)
+    assert usage.input_tokens is None, "usage and credits are slice 4's"
+
+
+def test_a_copilot_session_error_is_an_error():
+    stdout = '{"type":"session.error","data":{"errorType":"quota","message":"No quota left"}}\n'
+    answer, _usage, error = parse_copilot_envelope(stdout)
+    assert answer is None
+    assert "No quota left" in error
+
+
+@pytest.mark.asyncio
+async def test_an_unresolvable_copilot_is_spawn_failed_not_unsupported(app, monkeypatch):
+    def _missing(override):
+        raise CopilotExecutableNotFound("Copilot was not found; looked for C:/x/copilot.exe")
+
+    monkeypatch.setattr("hub.copilot_probe.resolve_copilot_executable", _missing)
+    cleaned = []
+    real_tempdir = worker_module.tempfile.TemporaryDirectory
+
+    class _Tracked(real_tempdir):
+        def cleanup(self):
+            cleaned.append(self.name)
+            super().cleanup()
+
+    monkeypatch.setattr(worker_module.tempfile, "TemporaryDirectory", _Tracked)
+
+    def explode(*_args, **_kwargs):  # pragma: no cover
+        raise AssertionError("nothing to spawn")
+
+    monkeypatch.setattr(subprocess, "run", explode)
+    result = await _run(cli="copilot", model="auto")
+    assert result.outcome == "spawn_failed"
+    assert "C:/x/copilot.exe" in result.error
+    assert cleaned, "the temporary worker directory is still removed"
+    assert (await _invocations())[0].outcome == "spawn_failed"
+
+
+@pytest.mark.asyncio
+async def test_the_copilot_spawn_gets_the_worker_home_and_no_token(
+    app, monkeypatch, copilot_exe, tmp_path
+):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setenv("GH_TOKEN", "ghp_ambient")
+    monkeypatch.setenv("COPILOT_ALLOW_ALL", "true")
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["env"] = kwargs.get("env")
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=ONESHOT_FIXTURE.read_text(encoding="utf-8"), stderr=""
+        )
+
+    monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    await _run(cli="copilot", model="auto")
+
+    env = seen["env"]
+    assert env["COPILOT_HOME"] == str(tmp_path / ".agentweave" / "hub" / "copilot-home" / "worker")
+    assert "GH_TOKEN" not in {key.upper() for key in env}
+    assert "COPILOT_ALLOW_ALL" not in {key.upper() for key in env}
+
+
+@pytest.mark.asyncio
+async def test_claude_and_codex_spawns_still_inherit_the_hubs_environment(app, monkeypatch):
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["env"] = kwargs.get("env", "absent")
+        return subprocess.CompletedProcess(cmd, 0, stdout=CLAUDE_STDOUT, stderr="")
+
+    monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    await _run()
+    assert seen["env"] is None

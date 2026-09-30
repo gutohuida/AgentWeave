@@ -1104,3 +1104,25 @@ def _no_real_copilot_probe(monkeypatch):
     monkeypatch.setattr(CopilotProbe, "refresh_enabled", False)
     yield
     CopilotProbe.reset()
+
+
+@pytest.fixture(autouse=True)
+def _copilot_homes_stay_out_of_the_real_home(tmp_path_factory, monkeypatch):
+    """Binding or creating a Copilot agent writes its Hub-owned home
+    (`a-copilot-agent-runs-over-acp` D4), which lives under `Path.home()`. A test that does not
+    patch the home itself gets a temporary root instead, so the suite never writes into the
+    operator's real `~/.agentweave`. A test that patches `Path.home` keeps its own layout."""
+    from pathlib import Path
+
+    from hub import copilot_home
+
+    real_home = Path.home()
+    temporary = tmp_path_factory.mktemp("copilot-home-root")
+
+    def _root() -> Path:
+        home = Path.home()
+        if home == real_home:
+            return temporary
+        return home / ".agentweave" / "hub" / "copilot-home"
+
+    monkeypatch.setattr(copilot_home, "copilot_home_root", _root)

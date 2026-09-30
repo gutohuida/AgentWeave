@@ -590,3 +590,34 @@ def test_classify_takes_no_session_and_returns_only_declared_kinds(project):
         classify("a.txt", workspace_dir=None, project_root=None).kind,
     }
     assert reached == set(WRITE_LOCATION_KINDS)
+
+
+# ---------------------------------------------------------------------------------------------
+# Copilot (`a-copilot-agent-runs-over-acp` task 1.13, design D10/D19)
+# ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("tool", ["edit", "delete", "move"])
+def test_a_copilot_file_change_names_its_locations(tool):
+    extracted = written_paths(
+        tool, {"title": "t", "rawInput": {}, "locations": [{"path": "C:/elsewhere/x.py"}]}
+    )
+    assert extracted == ("C:/elsewhere/x.py",)
+
+
+def test_a_copilot_move_names_both_ends_once_each():
+    extracted = written_paths(
+        "move", {"locations": [{"path": "a.py"}, {"path": "b.py"}, {"path": "a.py", "line": 3}]}
+    )
+    assert extracted == ("a.py", "b.py")
+
+
+def test_a_copilot_edit_with_no_location_falls_back_to_its_diff():
+    extracted = written_paths("edit", {"locations": [], "changes": [{"path": "d.py"}]})
+    assert extracted == ("d.py",)
+
+
+def test_a_copilot_shell_row_is_not_a_write():
+    # Copilot's shell writes (`Set-Content`) arrive as `shell`; the Hub does not parse commands.
+    assert written_paths("shell", {"locations": [{"path": "x.py"}]}) == ()
+    assert written_paths("read", {"locations": [{"path": "x.py"}]}) == ()

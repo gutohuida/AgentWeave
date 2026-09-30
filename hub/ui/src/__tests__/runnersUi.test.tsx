@@ -150,6 +150,14 @@ describe('runner management UI', () => {
     catalogOverride = null
   })
 
+  it('offers copilot as a runner CLI (a-copilot-agent-runs-over-acp task 1.19)', async () => {
+    const user = userEvent.setup()
+    render(<RunnersPage />)
+
+    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    expect(optionsOf(screen.getByLabelText('CLI'))).toEqual(['claude', 'codex', 'copilot'])
+  })
+
   it('names the built-in fallback under the Codex model select when no cache was read (design test 9)', async () => {
     const user = userEvent.setup()
     render(<RunnersPage />)

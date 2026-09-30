@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, postJson, patchJson, fetchWithAuth } from './client'
 import { useConfigStore } from '@/store/configStore'
 
-export type RunnerCli = 'claude' | 'codex'
+export type RunnerCli = 'claude' | 'codex' | 'copilot'
 
 export interface Runner {
   id: string

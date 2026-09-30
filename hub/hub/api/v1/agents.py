@@ -50,7 +50,7 @@ from ...model_catalog import (
 )
 from ...output_recording import record_agent_output, record_context_usage
 from ...review_turn import ReviewContext, verdict_evidence_sentence
-from ...runner_commands import CLAUDE_FAMILY_RUNNERS
+from ...runner_commands import CLAUDE_FAMILY_RUNNERS, mcp_tool_prefix
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -568,6 +568,7 @@ async def list_agents(
             "opencode": agent_meta.get("model", "OpenCode"),
             "codex": agent_meta.get("model", "Codex"),
             "codex_mcp": agent_meta.get("model", "Codex MCP"),
+            "copilot": agent_meta.get("model", "GitHub Copilot"),
         }.get(_runner, agent_meta.get("model", _runner.replace("_", " ").title()))
 
         _self_registered = agent_row.self_registered if agent_row else False
@@ -762,6 +763,8 @@ async def create_operator_agent(
     }
     await persist_event(session, project_id, "agent_created", payload, agent=agent.name)
     await sse_manager.broadcast(project_id, "agent_created", payload)
+    # After the broadcast, so nothing this does can stop the UI learning of the agent (D4 (a)).
+    await write_copilot_home_after_commit(session, project_id, agent)
     return OperatorAgentResponse(
         id=agent.id,
         name=agent.name,
@@ -1538,6 +1541,13 @@ _HOST_TOOLS_NOTE = (
     "started — which cannot reach AgentWeave agents or the operator."
 )
 
+# Copilot's counterpart (`a-copilot-agent-runs-over-acp` D16): its own task tool dispatches a
+# subagent, which is not an AgentWeave agent.
+_COPILOT_HOST_TOOLS_NOTE = (
+    "Copilot has its own tools with similar purposes (such as its task tool); these AgentWeave "
+    "tools are the only way to reach AgentWeave agents or the operator."
+)
+
 
 def _tool_surface_lines(
     *, has_peers: bool = True, access_path: str = "mcp", runner: Optional[str] = None
@@ -1584,8 +1594,9 @@ def _tool_surface_lines(
     """
     over_mcp = access_path == "mcp"
     is_claude_family = runner in CLAUDE_FAMILY_RUNNERS
-    tool_prefix = "mcp__agentweave__" if (over_mcp and is_claude_family) else ""
-    if over_mcp and is_claude_family:
+    # Known for a Claude-family run and, since `a-copilot-agent-runs-over-acp` D16, for Copilot.
+    tool_prefix = mcp_tool_prefix(runner) if over_mcp else ""
+    if tool_prefix:
         preamble = (
             "These are AgentWeave's tools, named below by their full callable names. Elsewhere "
             "in these instructions a tool may be named by its short name (`ask_user`); call it "
@@ -1614,6 +1625,8 @@ def _tool_surface_lines(
     lines = ["## Your tools", "", preamble]
     if is_claude_family:
         lines.append(_HOST_TOOLS_NOTE)
+    elif runner == "copilot":
+        lines.append(_COPILOT_HOST_TOOLS_NOTE)
     lines.append("")
     for operation in _operations():
         lines.extend(render(operation))
@@ -1659,6 +1672,57 @@ SPEC_PHASE_DUTIES = {
         "needs the operator to reopen it, not a rewrite."
     ),
 }
+
+
+async def write_copilot_home_after_commit(
+    session: AsyncSession, project_id: str, agent_row: Agent
+) -> None:
+    """Write a Copilot-bound agent's Hub-owned home after its row is committed
+    (`a-copilot-agent-runs-over-acp` D4 (a) and (b), operator decision `ghcp-d2`).
+
+    A no-op for any other runner. **Every** exception is logged and swallowed: the row is already
+    committed, so a raise here would answer 500 for an agent that exists, and the operator's
+    retry would then be refused 409 "already exists". Nothing is lost by swallowing it: every
+    Copilot spawn re-ensures the home first (D4 (c)), and fails that turn agent-wide if it still
+    cannot. Effort is a per-conversation control, so only a turn knows it; this writes none.
+    """
+    import sys
+
+    from ... import tool_server
+    from ...copilot_home import ensure_copilot_home
+    from ...launchability import resolve_access_path
+
+    try:
+        if agent_row.runner_id is None:
+            return
+        runner = await session.get(Runner, agent_row.runner_id)
+        if runner is None or runner.cli != "copilot":
+            return
+        rendered = await _render_hub_agent_context(
+            agent=agent_row.name,
+            project_id=project_id,
+            db=session,
+            session_data=None,
+            agent_row=agent_row,
+            runner="copilot",
+        )
+        mcp_command = None
+        if resolve_access_path("copilot", (agent_row.config or {}).get("hub_client")) == "mcp":
+            mcp_command = [sys.executable, str(tool_server.pinned_server_path())]
+        await asyncio.to_thread(
+            ensure_copilot_home,
+            project_id,
+            agent_row.name,
+            stable_context=rendered["stable"],
+            model=runner.model,
+            effort=None,
+            mcp_command=mcp_command,
+        )
+    except Exception:
+        logger.exception(
+            "Could not write %s's Copilot home; its next turn writes it before spawning",
+            agent_row.name,
+        )
 
 
 async def _render_hub_agent_context(
@@ -1759,7 +1823,17 @@ async def _render_hub_agent_context(
     runners_result = await db.execute(select(Runner).where(Runner.project_id == project_id))
     roster_runners = {row.id: row for row in runners_result.scalars().all()}
 
-    lines = []
+    lines: List[str] = []
+    # `a-copilot-agent-runs-over-acp` D5: which part of the context each run of lines belongs to.
+    # A Copilot agent gets `stable` once, in its agent file, and `per_turn` and `tool_surface` in
+    # each prompt; `context` below is unchanged and is what Claude and Codex read. The parts are
+    # tagged as they are appended, not parsed back out of the markdown, because the tool surface
+    # sits inside the Communication Mode block and the parts are not contiguous slices of `lines`.
+    part_starts: List[Tuple[int, str]] = [(0, "stable")]
+
+    def _part(name: str) -> None:
+        part_starts.append((len(lines), name))
+
     if registered:
         lines.append(f"# {agent} - AgentWeave Runtime Context")
     else:
@@ -1774,6 +1848,7 @@ async def _render_hub_agent_context(
     # first permission denial of the operator's 2026-08-06 test.
     lines.append("")
 
+    _part("per_turn")
     if work_dir:
         lines.append("### Your workspace")
         lines.append(f"- Working directory: `{work_dir}`")
@@ -2165,6 +2240,7 @@ async def _render_hub_agent_context(
             )
         lines.append("")
 
+    _part("stable")
     if project_instructions:
         lines.append("## Project Instructions")
         lines.append("")
@@ -2179,10 +2255,12 @@ async def _render_hub_agent_context(
             "their ordinary command equivalents. Inbound state is already supplied."
         )
         lines.append("")
+        _part("tool_surface")
         lines.extend(
             _tool_surface_lines(has_peers=bool(peers), access_path=access_path, runner=runner)
         )
     else:
+        _part("per_turn")
         lines.append("## Registration")
         lines.append("")
         lines.append("You are not registered with AgentWeave yet.")
@@ -2190,6 +2268,7 @@ async def _render_hub_agent_context(
         lines.append("")
         missing.append("agent registration")
 
+    _part("stable")
     if charter:
         lines.append(f"## Charter: {charter.name}")
         lines.append("")
@@ -2203,6 +2282,11 @@ async def _render_hub_agent_context(
         missing.append("charter")
 
     context = "\n".join(lines).rstrip() + "\n"
+    split: Dict[str, List[str]] = {"stable": [], "per_turn": [], "tool_surface": []}
+    for index, (start, name) in enumerate(part_starts):
+        end = part_starts[index + 1][0] if index + 1 < len(part_starts) else len(lines)
+        split[name].extend(lines[start:end])
+    parts = {name: "\n".join(chunk).strip() for name, chunk in split.items()}
     # `declared`/`provisional` are kept for existing clients, but Hub registration is now the only
     # thing that decides them — there is no separate "declared in agentweave.yml" state to report.
     return {
@@ -2219,6 +2303,9 @@ async def _render_hub_agent_context(
             "source": "hub",
         },
         "context": context,
+        "stable": parts["stable"],
+        "per_turn": parts["per_turn"],
+        "tool_surface": parts["tool_surface"],
     }
 
 
@@ -2799,6 +2886,10 @@ async def patch_agent(
 
     agent_row.updated = datetime.now(timezone.utc)
     await session.commit()
+
+    if "runner_id" in body or "charter_id" in body:
+        # D4 (b): before the re-drain below, so a turn it starts finds the file current.
+        await write_copilot_home_after_commit(session, project_id, agent_row)
 
     if runner_newly_bound:
         # Binding a runner is the repair the refusal names, so it has to be a redrain site — the

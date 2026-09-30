@@ -88,6 +88,7 @@ export function providerForRunner(runner: string | undefined | null): string | n
   if (!runner) return null
   if (runner === 'claude' || runner === 'claude_proxy' || runner === 'native') return 'claude'
   if (runner === 'codex') return 'codex'
+  if (runner === 'copilot') return 'copilot'
   return null
 }
 

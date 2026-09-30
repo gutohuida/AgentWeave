@@ -121,7 +121,7 @@ async def _title(conversation_id: str):
 
 
 def _fake_spawn(monkeypatch, output: str, calls=None):
-    def _run(cmd, cwd):
+    def _run(cmd, cwd, env=None):
         if calls is not None:
             calls.append(cmd)
         return output
@@ -247,7 +247,7 @@ async def test_a_rename_during_generation_wins(app, auth_headers, bind_runner, m
     conversation_id = await _conversation(app, auth_headers, bind_runner)
     await _set_mode("generate")
 
-    def _run_and_rename(cmd, cwd):
+    def _run_and_rename(cmd, cwd, env=None):
         import asyncio
 
         async def _rename():
@@ -388,7 +388,7 @@ async def test_the_titler_runs_in_the_projects_own_directory(
     await _set_mode("generate")
     directories = []
 
-    def _run(cmd, cwd):
+    def _run(cmd, cwd, env=None):
         directories.append(cwd)
         return "Checkout flake investigation"
 
@@ -469,7 +469,7 @@ async def test_a_first_reply_arriving_later_is_worth_one_more_title(
     await _set_mode("generate")
     prompts = []
 
-    def _run(cmd, cwd):
+    def _run(cmd, cwd, env=None):
         prompts.append(cmd[-1])
         return f"Title {len(prompts)}"
 
@@ -516,7 +516,7 @@ async def test_a_later_runs_text_does_not_become_the_first_reply(
     await _set_mode("generate")
     prompts = []
 
-    def _run(cmd, cwd):
+    def _run(cmd, cwd, env=None):
         prompts.append(cmd[-1])
         return f"Title {len(prompts)}"
 
@@ -573,7 +573,7 @@ async def test_a_failed_generation_is_retried_on_the_next_turn(
     outputs = iter(["", "Checkout flake investigation"])
     calls = []
 
-    def _run(cmd, cwd):
+    def _run(cmd, cwd, env=None):
         calls.append(cmd)
         return next(outputs)
 
@@ -644,3 +644,72 @@ async def test_a_title_the_model_escaped_is_stored_restored(
 
     assert result == "Fix @scope build"
     assert (await _title(conversation_id)) == ("Fix @scope build", False)
+
+
+# ---------------------------------------------------------------------------
+# Copilot (`a-copilot-agent-runs-over-acp` task 1.14, design D14)
+# ---------------------------------------------------------------------------
+
+from pathlib import Path  # noqa: E402
+
+from hub.copilot_probe import CopilotExecutableNotFound  # noqa: E402
+
+_ONESHOT = Path(__file__).parent / "fixtures" / "copilot_acp" / "oneshot_ok.jsonl"
+_EXE = "C:/npm/node_modules/@github/copilot/node_modules/@github/copilot-win32-x64/copilot.exe"
+
+
+def test_the_copilot_title_command_keeps_the_projects_instructions(monkeypatch) -> None:
+    monkeypatch.setattr("hub.copilot_probe.resolve_copilot_executable", lambda o: Path(_EXE))
+    cmd = build_title_command(cli="copilot", model=None, prompt="P")
+    assert cmd[0] == str(Path(_EXE))
+    assert "--no-custom-instructions" not in cmd, "the titler runs there for the project memory"
+    assert "--excluded-tools=builtin:*,mcp:*,custom:*" in cmd
+    assert not any(arg.startswith("--available-tools") for arg in cmd)
+    assert "copilot" in conversation_titles._SUPPORTED_CLIS
+
+
+async def _copilot_conversation(app, auth_headers, bind_runner):
+    await _sync_agent(app, auth_headers)
+    conversation_id = await _conversation(app, auth_headers)
+    await bind_runner("offline", cli="copilot")
+    await _set_mode("generate")
+    return conversation_id
+
+
+@pytest.mark.asyncio
+async def test_a_copilot_conversation_is_titled_from_the_answer_not_the_json(
+    app, auth_headers, bind_runner, monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr("hub.copilot_probe.resolve_copilot_executable", lambda o: Path(_EXE))
+    conversation_id = await _copilot_conversation(app, auth_headers, bind_runner)
+    seen = {}
+
+    def _run(cmd, cwd, env=None):
+        seen["env"] = env
+        return _ONESHOT.read_text(encoding="utf-8")
+
+    monkeypatch.setattr(conversation_titles, "_run_titler", _run)
+    result = await conversation_titles.generate_conversation_title(
+        project_id="proj-test", conversation_id=conversation_id
+    )
+    assert result == "ok"
+    assert seen["env"]["COPILOT_HOME"].endswith("worker")
+
+
+@pytest.mark.asyncio
+async def test_an_unresolvable_copilot_titles_nothing(
+    app, auth_headers, bind_runner, monkeypatch
+) -> None:
+    def _missing(override):
+        raise CopilotExecutableNotFound("not found")
+
+    monkeypatch.setattr("hub.copilot_probe.resolve_copilot_executable", _missing)
+    conversation_id = await _copilot_conversation(app, auth_headers, bind_runner)
+    calls = []
+    _fake_spawn(monkeypatch, "never", calls)
+    result = await conversation_titles.generate_conversation_title(
+        project_id="proj-test", conversation_id=conversation_id
+    )
+    assert result is None
+    assert calls == []

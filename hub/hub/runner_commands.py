@@ -65,6 +65,22 @@ SUPPORTED_RUNNERS = ("claude", "claude_proxy", "native", "codex", "copilot")
 # (`2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`).
 CLAUDE_FAMILY_RUNNERS = ("claude", "claude_proxy", "native")
 
+# Copilot names an MCP tool `<server>-<tool>` (VERIFIED: `hubprobe-ping`), so a Copilot run's
+# callable names are known too (`a-copilot-agent-runs-over-acp` D16). Slice 1 moves this onto the
+# adapter as its `mcp_tool_prefix` ClassVar.
+COPILOT_MCP_TOOL_PREFIX = "agentweave-"
+
+
+def mcp_tool_prefix(runner: Optional[str]) -> str:
+    """The full callable-name prefix of the Hub's tools for a run of *runner* that was injected
+    the Hub's server, or "" where it is unknown (the harness *may* prefix; F139)."""
+    if runner in CLAUDE_FAMILY_RUNNERS:
+        return "mcp__agentweave__"
+    if runner == "copilot":
+        return COPILOT_MCP_TOOL_PREFIX
+    return ""
+
+
 # The posture a non-yolo Claude run gets when the operator has chosen none.
 #
 # `manual` was used until 2026-08-06 and is unusable headlessly: it defers each decision to an

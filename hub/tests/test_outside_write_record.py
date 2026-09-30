@@ -65,6 +65,9 @@ def _write_event(path: Path, *, tool: str = "Write", call_id: str = "call-1"):
     """
     if tool == "apply_patch":
         input_data: Any = {"changes": [{"path": str(path), "diff": "@@\n+x\n"}]}
+    elif tool == "edit":
+        # Copilot's ACP row (`copilot_acp.CopilotEventMapper`): the files are its `locations`.
+        input_data = {"title": "Edit", "rawInput": {}, "locations": [{"path": str(path)}]}
     else:
         input_data = {"file_path": str(path), "content": "x\n"}
     return tool_use_event(
@@ -965,3 +968,23 @@ async def test_the_timeline_reports_what_a_run_wrote_outside_its_workspace(
     assert (
         quiet.json()["runs"][runs[clean]]["outside_workspace_writes"] == []
     ), "watched and clean is `[]`, and the schema must not turn it into `None` or the reverse"
+
+
+@pytest.mark.asyncio
+async def test_a_copilot_edit_outside_the_workspace_is_recorded(app, layout):
+    """Task 1.13: Copilot's `edit` rows reach the same recorder the other two runners feed."""
+    await seed_run("run-copilot", "p4-writer")
+    rec = recorder(
+        "run-copilot",
+        "p4-writer",
+        workspace_dir=str(layout["workspace"]),
+        project_root=str(layout["root"]),
+    )
+
+    await rec.watch()
+    await rec.note(_write_event(layout["stray"] / "escaped.txt", tool="edit"))
+    await rec.flush()
+
+    recorded = await column_of("run-copilot")
+    assert recorded and len(recorded) == 1, recorded
+    assert "escaped.txt" in str(recorded[0])

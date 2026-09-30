@@ -19,7 +19,7 @@ import asyncio
 import hashlib
 import logging
 import subprocess
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy import select
 
@@ -65,7 +65,7 @@ _PROMPT = (
 
 # Runners whose CLI can answer a one-shot text prompt. Anything else is a no-op rather than a
 # guessed invocation — the same line `runner_commands.build_command` holds.
-_SUPPORTED_CLIS = ("claude", "codex")
+_SUPPORTED_CLIS = ("claude", "codex", "copilot")
 
 
 def build_title_command(*, cli: str, model: Optional[str], prompt: str) -> Optional[List[str]]:
@@ -93,6 +93,13 @@ def build_title_command(*, cli: str, model: Optional[str], prompt: str) -> Optio
         if model:
             cmd += ["--model", model]
         return cmd + [neutralise_file_mentions(prompt)]
+    if cli == "copilot":
+        # The worker's no-tool invocation, keeping the project's custom instructions: the titler
+        # runs in the project's directory so that its memory applies (`a-copilot-agent-runs-over-
+        # acp` D14). Raises `FileNotFoundError` when Copilot cannot be resolved.
+        from .worker import copilot_one_shot_command
+
+        return copilot_one_shot_command(prompt=prompt, model=model, custom_instructions=True)
     return None
 
 
@@ -110,7 +117,7 @@ def title_from_output(output: str) -> str:
     return title_from_message(candidate)
 
 
-def _run_titler(cmd: List[str], cwd: str) -> str:
+def _run_titler(cmd: List[str], cwd: str, env: Optional[Dict[str, str]] = None) -> str:
     """Blocking spawn. Returns "" on any failure — this never raises into the caller."""
     try:
         completed = subprocess.run(  # noqa: S603 — argv list, no shell
@@ -122,6 +129,7 @@ def _run_titler(cmd: List[str], cwd: str) -> str:
             errors="replace",
             timeout=TITLE_TIMEOUT_SECONDS,
             stdin=subprocess.DEVNULL,
+            env=env,
             **no_console_kwargs(),
         )
     except (OSError, subprocess.SubprocessError) as exc:
@@ -265,14 +273,28 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
             return None
         cwd = str(workspace.root)
 
-    cmd = build_title_command(
-        cli=runner.cli, model=runner.model, prompt=_PROMPT.format(excerpt=excerpt)
-    )
+    from .worker import one_shot_env, parse_copilot_envelope
+
+    try:
+        cmd = build_title_command(
+            cli=runner.cli, model=runner.model, prompt=_PROMPT.format(excerpt=excerpt)
+        )
+        env = one_shot_env(runner.cli)
+    except FileNotFoundError as exc:
+        # The CLI could not be resolved (Copilot's executable, D14): no title, the floor.
+        logger.debug("conversation titling could not resolve %s: %s", runner.cli, exc)
+        return None
     if cmd is None:
         return None
 
     async with _gate:
-        output = await asyncio.to_thread(_run_titler, cmd, cwd)
+        output = await asyncio.to_thread(_run_titler, cmd, cwd, env)
+    if runner.cli == "copilot":
+        # `--output-format json` prints JSONL; titled from its last line, every Copilot
+        # conversation would be named after a fragment of JSON (R2). An unparseable envelope
+        # titles nothing, the titler's existing floor.
+        answer, _usage, _error = parse_copilot_envelope(output)
+        output = answer or ""
 
     title = title_from_output(restore_file_mentions(output))
     if not title:

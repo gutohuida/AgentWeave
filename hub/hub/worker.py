@@ -68,7 +68,7 @@ _gate = asyncio.Semaphore(MAX_CONCURRENT_WORKER_RUNS)
 # CLIs with a supported one-shot invocation. Anything else is refused with a stated outcome
 # rather than a guessed invocation — the line `runner_commands.build_command` and
 # `conversation_titles.build_title_command` both hold.
-SUPPORTED_CLIS = ("claude", "codex")
+SUPPORTED_CLIS = ("claude", "codex", "copilot")
 
 # Every way a worker call can end. "ok" is the only success; the rest are distinguished because
 # "it failed" is not diagnosable — a timeout, a CLI that is not installed, and a model that
@@ -120,6 +120,63 @@ class WorkerResult:
         return self.outcome == "ok"
 
 
+#: A Copilot one-shot call, offered **no tool** (`a-copilot-agent-runs-over-acp` D14). Tools
+#: are removed by `--excluded-tools`, which always wins; `--available-tools=` is never used, because
+#: an empty value means *no filter* (`app.js`'s `Y0`) and, with `--allow-all-tools`, would approve
+#: every built-in tool on an untrusted transcript (F420). `--allow-all-tools` is required for `-p`,
+#: and with every tool excluded it grants nothing. Task 1.2's capture confirmed zero tools.
+COPILOT_ONE_SHOT_FLAGS: Tuple[str, ...] = (
+    "--output-format",
+    "json",
+    "--no-auto-update",
+    "--disable-builtin-mcps",
+    "--no-ask-user",
+    "--excluded-tools=builtin:*,mcp:*,custom:*",
+    "--allow-all-tools",
+)
+
+
+def copilot_one_shot_command(
+    *, prompt: str, model: Optional[str], custom_instructions: bool
+) -> List[str]:
+    """`copilot -p` for a one-shot call. `cmd[0]` is the absolute platform executable, never the
+    bare `copilot` that `resolve_executable` would resolve to the npm shim. Raises
+    `CopilotExecutableNotFound` (a `FileNotFoundError`) when there is none; the callers turn that
+    into their own "could not spawn" outcome.
+
+    `custom_instructions=False` adds `--no-custom-instructions`: the worker wants none, while the
+    titler runs in the project's directory precisely so the project's memory applies.
+    """
+    from .copilot_probe import resolve_copilot_executable
+
+    cmd = [str(resolve_copilot_executable(None)), "-p", neutralise_file_mentions(prompt)]
+    cmd += list(COPILOT_ONE_SHOT_FLAGS)
+    if not custom_instructions:
+        cmd.append("--no-custom-instructions")
+    if model and model != "auto":
+        cmd += ["--model", model]
+    return cmd
+
+
+def copilot_one_shot_env(config: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    """The Hub's environment through the one Copilot filter, under the worker home (D14): no
+    GitHub token, no allow-all or trust variable, no provider override. `config` is the runner's,
+    for slice 5's providers; nothing reads it yet."""
+    from .copilot_home import copilot_worker_home
+    from .launchability import copilot_guard_env
+
+    home = copilot_worker_home()
+    home.mkdir(parents=True, exist_ok=True, mode=0o700)
+    env, _removed = copilot_guard_env(dict(os.environ), {})
+    env["COPILOT_HOME"] = str(home)
+    return env
+
+
+def one_shot_env(cli: str) -> Optional[Dict[str, str]]:
+    """The environment a one-shot spawn of *cli* gets: None (inherit the Hub's) except Copilot."""
+    return copilot_one_shot_env() if cli == "copilot" else None
+
+
 def build_worker_command(
     *,
     cli: str,
@@ -152,6 +209,8 @@ def build_worker_command(
         if model:
             cmd += ["--model", model]
         return cmd + [neutralise_file_mentions(prompt)]
+    if cli == "copilot":
+        return copilot_one_shot_command(prompt=prompt, model=model, custom_instructions=False)
     return None
 
 
@@ -320,11 +379,50 @@ def parse_codex_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Optio
     return answer, usage, None
 
 
+def parse_copilot_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
+    """(answer text, usage, error) from `copilot -p --output-format json`.
+
+    JSONL, one session event per line (task 1.2's capture): the answer is the last
+    `assistant.message`'s `content`, a failure is a `session.error`, and the closing `result` line
+    carries the session id. Usage stays empty: premium requests and credits are slice 4's.
+    """
+    answer: Optional[str] = None
+    failure: Optional[str] = None
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        data = event.get("data") if isinstance(event.get("data"), dict) else {}
+        kind = event.get("type")
+        if kind == "assistant.message":
+            content = data.get("content")
+            if isinstance(content, str) and content.strip():
+                answer = content
+        elif kind == "session.error":
+            message = data.get("message")
+            failure = (
+                f"copilot reported an error: {message or data.get('errorType') or 'no detail'}"
+            )
+    if failure is not None:
+        return None, WorkerUsage(), failure
+    if answer is None:
+        return None, WorkerUsage(), "copilot produced no assistant message"
+    return answer, WorkerUsage(), None
+
+
 def parse_envelope(cli: str, stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
     if cli == "claude":
         return parse_claude_envelope(stdout)
     if cli == "codex":
         return parse_codex_envelope(stdout)
+    if cli == "copilot":
+        return parse_copilot_envelope(stdout)
     return None, WorkerUsage(), f"no envelope parser for {cli!r}"
 
 
@@ -338,7 +436,9 @@ class _Spawn:
     error: Optional[str] = None
 
 
-def _run_worker_process(cmd: List[str], cwd: Optional[str], timeout: int) -> _Spawn:
+def _run_worker_process(
+    cmd: List[str], cwd: Optional[str], timeout: int, env: Optional[Dict[str, str]] = None
+) -> _Spawn:
     """Blocking spawn. Classifies its own failure and never raises into the caller.
 
     `stdin=DEVNULL` is not incidental: `codex exec` given an open stdin blocks reading it forever
@@ -355,6 +455,8 @@ def _run_worker_process(cmd: List[str], cwd: Optional[str], timeout: int) -> _Sp
             errors="replace",
             timeout=timeout,
             stdin=subprocess.DEVNULL,
+            # None inherits the Hub's environment, as every spawn did; Copilot's is filtered.
+            env=env,
             **no_console_kwargs(),
         )
     except subprocess.TimeoutExpired:
@@ -451,19 +553,30 @@ async def run_worker(
             schema_path = os.path.join(worker_dir, "output-schema.json")
             with open(schema_path, "w", encoding="utf-8") as schema_file:
                 json.dump(strict_output_schema(output_model), schema_file)
-        cmd = build_worker_command(
-            cli=cli,
-            model=model,
-            prompt=prompt,
-            output_schema_path=schema_path,
-        )
-        if cmd is None:  # pragma: no cover — SUPPORTED_CLIS and the builder agree
+        cmd: Optional[List[str]] = None
+        env: Optional[Dict[str, str]] = None
+        unspawnable: Optional[WorkerResult] = None
+        try:
+            cmd = build_worker_command(
+                cli=cli,
+                model=model,
+                prompt=prompt,
+                output_schema_path=schema_path,
+            )
+            env = one_shot_env(cli)
+        except FileNotFoundError as exc:
+            # Copilot's executable cannot be resolved (D14, R3). Not `unsupported_cli`, which is
+            # what a `None` command means: the CLI is supported and could not be spawned.
+            unspawnable = WorkerResult("spawn_failed", error=str(exc))
+        if unspawnable is not None:
+            result = unspawnable
+        elif cmd is None:  # pragma: no cover — SUPPORTED_CLIS and the builder agree
             result = WorkerResult("unsupported_cli", error=f"no command for {cli!r}")
         else:
             started = asyncio.get_running_loop().time()
             async with _gate:
                 spawn = await asyncio.to_thread(
-                    _run_worker_process, cmd, cwd or worker_dir, timeout_seconds
+                    _run_worker_process, cmd, cwd or worker_dir, timeout_seconds, env
                 )
             duration_ms = round((asyncio.get_running_loop().time() - started) * 1000)
             result = _interpret(spawn, cli, output_model, duration_ms)

@@ -395,15 +395,17 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   parts.
 - [x] 1.10 `hub/tests/test_copilot_home.py` (new): `copilot_home_path` is `…/copilot-home/projects/<pid>/<agent>` and refuses a project id of `..`, `a/b`, `a\b` or one resolving outside the root (R2); the worker home is `…/copilot-home/worker`. `ensure_copilot_home` writes `agents/<agent>.agent.md` with frontmatter `name`, `description` (the marker), `tools`, `model` (omitted for `auto`) and `reasoningEffort`, and a body that opens with the precedence statement and holds the stable context. It also writes `agentweave-mcp.json` with no `env` and `timeout == (agents.MAX_WAITING_SECONDS + 60) * 1000`. A second call with the same content does not rewrite the file (mtime unchanged). No file contains an `aw_run_` string. (Review, finding 8) With `hooks/allow.json`, `settings.json`, `mcp-config.json`, `installed-plugins/p/`, `agents/other.agent.md` and a `config.json` holding `trustedFolders` and `firstLaunchAt` placed in the home, `ensure_copilot_home` removes the first five, drops `trustedFolders` and keeps `firstLaunchAt`, leaves `session-state/` alone, and reports what it removed; a hook recorded in `.agentweave-owned.json` survives, and the same path with changed content is removed
   - **Done 2026-09-30:** `hub/tests/test_copilot_home.py`, 23 tests (one symlink case skips on a Windows account that cannot create links; it runs on Linux CI).
-- [ ] 1.11 `hub/tests/test_copilot_context_split.py` (new):
+- [x] 1.11 `hub/tests/test_copilot_context_split.py` (new):
   - `_render_hub_agent_context`'s `stable`, `per_turn` and `tool_surface` (R3) together hold every `##`/`###` section of `context` exactly once;
   - the charter and project instructions are in `stable`;
   - the workspace is in `per_turn`, and the tool surface only in `tool_surface`;
   - `context` for a Claude run equals a snapshot taken before the change (write the snapshot as the first step of this task, from today's code)
+  - **Done 2026-09-30:** `hub/tests/test_copilot_context_split.py` (4 tests); the Claude snapshot `fixtures/context_split_claude_snapshot.md` was written from the renderer before 4.1 changed it, and still matches after.
 - [x] 1.12 `hub/tests/test_model_catalog.py`: `get_provider("copilot")` exists, its default model is `auto` labelled "Auto", every model's `context_window is None`, its Permissions values and labels equal Codex's with default `workspace` (R2), and `validate_overrides("copilot", {"model": "bogus-model"})` is refused
   - **Done 2026-09-30:** `TestCopilotCatalog` (7 tests) in `test_model_catalog.py`, red before 2.4 (8 failures incl. the coverage test naming only claude/codex), green after.
-- [ ] 1.13 `hub/tests/test_workspace_writes.py`: `written_paths("edit", {"locations": [{"path": "C:/elsewhere/x.py"}], …})` returns that path, and `delete`/`move` likewise. `"shell"` returns `()`. `OutsideWriteRecorder` records a Copilot edit outside the workspace
-- [ ] 1.14 `hub/tests/test_worker.py` and `test_conversation_titles.py`:
+- [x] 1.13 `hub/tests/test_workspace_writes.py`: `written_paths("edit", {"locations": [{"path": "C:/elsewhere/x.py"}], …})` returns that path, and `delete`/`move` likewise. `"shell"` returns `()`. `OutsideWriteRecorder` records a Copilot edit outside the workspace
+  - **Done 2026-09-30:** 6 tests in `test_workspace_writes.py` (`edit`/`delete`/`move` from `locations`, a move's two ends once each, the diff fallback, `shell`/`read` not writes) and one in `test_outside_write_record.py` (a Copilot `edit` outside the workspace is recorded).
+- [x] 1.14 `hub/tests/test_worker.py` and `test_conversation_titles.py`:
   - `build_worker_command(cli="copilot", …)` returns design D14's argv (the resolved `.exe`, not the npm shim, with `--no-custom-instructions`);
   - `build_title_command` returns it without `--no-custom-instructions`;
   - `parse_copilot_envelope` on the 1.2 fixture returns `"ok"`;
@@ -412,6 +414,7 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - (R2) a Copilot conversation titled from the 1.2 fixture gets the answer, not a JSON fragment (`generate_conversation_title` with `_run_titler` patched to return the fixture);
   - (R2, mechanism fixed in R3) with `resolve_copilot_executable` raising `CopilotExecutableNotFound` (a `FileNotFoundError`), `run_worker` returns `spawn_failed` (not `unsupported_cli`) naming the looked-for path, raises nothing and removes its temporary directory, and titling returns `None`;
   - (R2) the spawn helpers pass the Copilot environment (`COPILOT_HOME` = the worker home, no `GH_TOKEN`) and still pass `env=None` for Claude and Codex
+  - **Done 2026-09-30:** 7 tests in `test_worker.py` and 3 in `test_title_generation.py`, on the 1.2 capture. The title fakes of `_run_titler` gained the new `env` parameter.
 - [x] 1.15 `hub/tests/test_launchability.py`:
   - with `GH_TOKEN` unset and a cached probe verdict "signed in, 1.0.88", `probe_agent` for `copilot` is runnable (today it says "No GitHub auth token found");
   - "not signed in" → not authorized, with the `copilot login` sentence;
@@ -424,14 +427,16 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
 - [ ] 1.17 `hub/tests/test_mcp_server_stdio_surface.py`: spawn `mcp_server.py` as the Hub does, with `HUB_URL` on a dead port. Send `{"jsonrpc":"2.0","id":0,"method":"server/discover","params":{}}` **before** `initialize`. Assert a JSON-RPC error response with id 0 (not a crash, not silence). Then `initialize` with `protocolVersion "2025-11-25"` succeeds and `tools/list` lists `send_message`.
 
   This test documents behaviour R1 measured (design § VERIFIED). It passes today and is a guard, which it says in its docstring
-- [ ] 1.18 `hub/tests/test_tool_surface_matches_server.py`: a Copilot run in the MCP form names every tool `agentweave-<tool>`, and the access notice does too. **Depends on** `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` having landed. If it has not, leave this unchecked and say so
-- [ ] 1.19 UI tests:
+- [x] 1.18 `hub/tests/test_tool_surface_matches_server.py`: a Copilot run in the MCP form names every tool `agentweave-<tool>`, and the access notice does too. **Depends on** `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` having landed. If it has not, leave this unchecked and say so
+  - **Done 2026-09-30:** `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` had landed, so the prefix mechanism existed. `test_the_copilot_rendering_names_every_tool_by_its_copilot_name`.
+- [x] 1.19 UI tests:
   - `hub/ui/src/__tests__/` asserts `providerForRunner('copilot') === 'copilot'`;
   - `ProviderMark` renders an SVG, not initials, for `copilot`;
   - the Runners page's CLI select offers `copilot`;
   - (R2) an `AgentTimeline` tool row with `tool: "edit"` is rendered as a writing block.
 
   Extend `modelCatalogFixture.ts` with the Copilot provider. Verify: `cd hub/ui && npx vitest run`
+  - **Done 2026-09-30:** `__tests__/copilotRunnerUi.test.tsx` (provider mapping, the mark, `edit`/`delete`/`move` rows counted as writes and named from `locations`, a shell row not) and a CLI-options case in `runnersUi.test.tsx`; the fixture gains Copilot with Permissions default `workspace`. `npx vitest run`: 169 files, 1753 passed.
 - [ ] 1.20 **Probe (no model call; review 2026-09-28, finding 6).** Under a scratch `COPILOT_HOME`, in a scratch git repository holding `.mcp.json` and `.github/agents/<agent>.agent.md` whose `mcp-servers` both name a stand-in server `agentweave`, spawn `copilot.exe --acp` with the Hub's `--additional-mcp-config` (dead `HUB_URL`) and `COPILOT_ALLOW_ALL` unset. Run `initialize` (subscribing `session.mcp_servers_loaded`), `session/new`, select then deselect the agent, and `session/close`. Record in the Round log which `agentweave` loaded and with what `source`/`transport`, whether the repository agent's `mcp-servers` loaded at all in an untrusted folder, and whether deselecting it changed the loaded servers. The result fixes D8's accepted `source`
 
 ## 2. Registry, migration, seeding, catalog
@@ -459,12 +464,14 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - **Done 2026-09-30:** env-token branch and `RUNNER_CLI["copilot"]` deleted, `probe_agent` asks `CopilotProbe` first, `copilot` in `MCP_INJECTABLE_RUNNERS`, and `copilot_guard_env` (tokens unless named; trust, `COPILOT_PROVIDER_*`, `COPILOT_MODEL`, `COPILOT_OFFLINE` and `COPILOT_HOME` always) with `copilot_env_removal_sentence` for the turn's diagnostic.
 ## 4. The Hub-owned Copilot home and the context split
 
-- [ ] 4.1 `_render_hub_agent_context` returns `stable` and `per_turn` beside the unchanged `context` (design D5). Task 1.11 passes
+- [x] 4.1 `_render_hub_agent_context` returns `stable` and `per_turn` beside the unchanged `context` (design D5). Task 1.11 passes
+  - **Done 2026-09-30:** parts tagged as appended (`part_starts`), not parsed back; `context` byte-identical (the snapshot test).
 - [x] 4.2 `hub/hub/copilot_home.py`: `copilot_home_path` and `ensure_copilot_home` (design D4), including (review) the configuration-surface sweep and the `.agentweave-owned.json` recorder. Task 1.10 passes
   - **Done 2026-09-30:** `hub/hub/copilot_home.py`: `copilot_home_path`, `copilot_worker_home`, `ensure_copilot_home` returning `CopilotHome(path, removed)`, `record_owned_file`, the sweep. Task 1.10 passes. The call sites are 4.3.
-- [ ] 4.3 Call `ensure_copilot_home` after `create_operator_agent` commits and after `PATCH /agents/{name}` commits, for a Copilot-bound agent: on create after the `agent_created` broadcast (`agents.py:758`), on PATCH before the `schedule_agent` re-drain (`:2720`). **Any** exception is logged and does not fail the route (R3: not only `OSError`). Not after `POST /agents/request`, design D4 (R3). Add route tests: creating a Copilot agent produces the agent file; a patched write raising `OSError`, and one raising `RuntimeError`, each still return 201 and broadcast `agent_created`
+- [x] 4.3 Call `ensure_copilot_home` after `create_operator_agent` commits and after `PATCH /agents/{name}` commits, for a Copilot-bound agent: on create after the `agent_created` broadcast (`agents.py:758`), on PATCH before the `schedule_agent` re-drain (`:2720`). **Any** exception is logged and does not fail the route (R3: not only `OSError`). Not after `POST /agents/request`, design D4 (R3). Add route tests: creating a Copilot agent produces the agent file; a patched write raising `OSError`, and one raising `RuntimeError`, each still return 201 and broadcast `agent_created`
   - Verify: `py -3.11 -m pytest hub/tests/test_copilot_home.py hub/tests/test_copilot_context_split.py -q`
 
+  - **Done 2026-09-30:** `write_copilot_home_after_commit` in `agents.py`, called after the `agent_created` broadcast and on PATCH of `runner_id`/`charter_id` before the re-drain; every exception logged. `hub/tests/test_copilot_home_routes.py` (6). `hub/tests/conftest.py` gives every test a temporary copilot-home root unless it patches `Path.home`, so binding a Copilot runner in a test never writes the real home.
 ## 5. Approvals
 
 - [x] 5.1 `mcp_server.py`: add keyword-only `workspace`/`hub_url` to `_decide`, and thread `hub_url` through `_read_command`, `_judge_word`, `_judge_url` and `_is_own_hub` (R2: all five; `HUB_URL` is read at `:1191` and `:1241`), defaulting to the environment. Add no import (`.claude/rules/mcp-server.md`). Task 1.7 passes, and `test_permission_approver.py` and `test_mcp_server.py` are otherwise unchanged
@@ -481,8 +488,9 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
 
 ## 7. Wiring into the trigger
 
-- [ ] 7.1 If slice 1 did not already make `_execute_codex_appserver_run` a runner-parameterised RPC executor, do that first: replace the four `runner="codex"` literals (`agent_trigger.py:3089`, `:3261`, `:3350`, `:3445`) with the adapter's name, and `codex_run_turn` with the adapter's `run_turn`. Run the whole Codex app-server suite unchanged
+- [x] 7.1 If slice 1 did not already make `_execute_codex_appserver_run` a runner-parameterised RPC executor, do that first: replace the four `runner="codex"` literals (`agent_trigger.py:3089`, `:3261`, `:3350`, `:3445`) with the adapter's name, and `codex_run_turn` with the adapter's `run_turn`. Run the whole Codex app-server suite unchanged
   - Verify: `py -3.11 -m pytest hub/tests/test_codex_appserver_run_turn.py hub/tests/test_codex_appserver.py -q`
+  - **Done 2026-09-30:** `_execute_rpc_run(runner, start_turn, refusal_label, ...)` with an `RpcCallbacks` dataclass; `_execute_codex_appserver_run` is now only how a Codex turn starts. No `"codex"` literal is left in the shared executor. Codex app-server, trigger, turn-ending, failed-run and outside-write suites: 188 passed, unchanged.
 - [ ] 7.2 In `trigger_agent_directly`, a `copilot` runner:
   - resolves the executable (a `TriggerAgentError(409, agent_wide=True)` with the probe's sentence when absent);
   - ensures its home with this turn's model and effort (`TriggerAgentError(409, agent_wide=True)` on failure; R3);
@@ -498,18 +506,24 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
 
 ## 8. Outside writes, one-shot calls, tool names, display
 
-- [ ] 8.1 `workspace_writes.py`: `COPILOT_WRITE_TOOLS = {"edit", "delete", "move"}` reading `locations[].path`, added to `WRITE_TOOLS`. Task 1.13 passes
-- [ ] 8.2 `worker.py`: add the `copilot` branch, `parse_copilot_envelope` and the worker-home environment; `_run_worker_process` and `_run_titler` gain an `env` parameter (R2: neither passes one today). `conversation_titles.py` gets its `copilot` branch and parses the envelope before `title_from_output` (design D14). The builders catch a resolution failure rather than raise. Task 1.14 passes
+- [x] 8.1 `workspace_writes.py`: `COPILOT_WRITE_TOOLS = {"edit", "delete", "move"}` reading `locations[].path`, added to `WRITE_TOOLS`. Task 1.13 passes
+  - **Done 2026-09-30:** `COPILOT_WRITE_TOOLS` in `WRITE_TOOLS`, read from `locations[].path` with the diff as fallback; the timeline's `WRITING_TOOLS` gains the same three (the equality test holds).
+- [x] 8.2 `worker.py`: add the `copilot` branch, `parse_copilot_envelope` and the worker-home environment; `_run_worker_process` and `_run_titler` gain an `env` parameter (R2: neither passes one today). `conversation_titles.py` gets its `copilot` branch and parses the envelope before `title_from_output` (design D14). The builders catch a resolution failure rather than raise. Task 1.14 passes
   - Verify: `py -3.11 -m pytest hub/tests/test_worker.py hub/tests/test_conversation_titles.py hub/tests/test_title_generation.py -q`
-- [ ] 8.3 The tool surface uses the `agentweave-` prefix and Copilot preamble for Copilot runs (design D16), through the mechanism of `a-claude-run-is-told-its-agentweave-tools-by-their-full-names`. Task 1.18 passes
-- [ ] 8.4 `api/v1/agents.py` `_display_model` gains `"copilot": agent_meta.get("model", "GitHub Copilot")`
+  - **Done 2026-09-30:** `copilot_one_shot_command`, `copilot_one_shot_env`/`one_shot_env`, `parse_copilot_envelope` in `worker.py`; both spawn helpers take `env`; `run_worker` answers `spawn_failed` and still cleans up when the executable is missing; the titler keeps custom instructions and titles from the parsed answer.
+- [x] 8.3 The tool surface uses the `agentweave-` prefix and Copilot preamble for Copilot runs (design D16), through the mechanism of `a-claude-run-is-told-its-agentweave-tools-by-their-full-names`. Task 1.18 passes
+  - **Done 2026-09-30:** `runner_commands.mcp_tool_prefix(runner)` (`agentweave-` for copilot) used by `_tool_surface_lines` and the turn notice, plus the Copilot host-tool sentence. Task 1.18 passes.
+- [x] 8.4 `api/v1/agents.py` `_display_model` gains `"copilot": agent_meta.get("model", "GitHub Copilot")`
+  - **Done 2026-09-30.**
 - [ ] 8.5 CI parity: `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`, `py -3.11 -m pytest hub/tests/ -q`. With `claude` stripped from `PATH`, re-run the Copilot tests to confirm they do not depend on a local CLI (memory: the local suite is green because `claude` is on `PATH`)
 
 ## 9. UI
 
-- [ ] 9.1 `RunnerCli`, `CLI_OPTIONS`, `providerForRunner`, `PROVIDER_MARKS.copilot` from `siGithubcopilot` in `currentColor`, and (R2) `AgentTimeline.tsx`'s `WRITING_TOOLS`/`TOOL_ICON` gain `edit`, `delete`, `move` (design D19). Task 1.19 passes
-- [ ] 9.2 `cd hub/ui && npm run lint && npx vitest run && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`. Commit `hub/ui/src` and `hub/hub/static/ui` together (`.claude/rules/hub-ui.md`)
+- [x] 9.1 `RunnerCli`, `CLI_OPTIONS`, `providerForRunner`, `PROVIDER_MARKS.copilot` from `siGithubcopilot` in `currentColor`, and (R2) `AgentTimeline.tsx`'s `WRITING_TOOLS`/`TOOL_ICON` gain `edit`, `delete`, `move` (design D19). Task 1.19 passes
+  - **Done 2026-09-30:** plus `writtenFileName` reads `locations[0].path`, `agentweave-<tool>` MCP rows get the hub icon (Codex's `agentweave.` rows already did), and `drive_file_move` maps to lucide `FolderInput`. Task 1.19 passes.
+- [x] 9.2 `cd hub/ui && npm run lint && npx vitest run && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`. Commit `hub/ui/src` and `hub/hub/static/ui` together (`.claude/rules/hub-ui.md`)
 
+  - **Done 2026-09-30:** eslint clean, `tsc --noEmit` clean, vitest 1753 passed, `npm run build`, `refresh_ui_bundle.py`; source and bundle committed together.
 ## 10. Findings and docs
 
 - [ ] 10.1 Record in `spec-queue/` FINDINGS the appendix corrections from the Round log (R1: `--no-auto-update` version, `~/.agents/skills`, the MCP 30 s timeout; R2: an empty `--available-tools=` means no filter, project-level custom agents outrank `$COPILOT_HOME/agents`), so later slices do not inherit them. From the review (2026-09-28), also file:

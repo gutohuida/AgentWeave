@@ -23,9 +23,10 @@ import asyncio
 import logging
 import os
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
@@ -125,12 +126,12 @@ from ...run_task_binding import (
     tasks_held_by_a_running_turn,
 )
 from ...runner_commands import (
-    CLAUDE_FAMILY_RUNNERS,
     OPERATOR_POSTURE,
     SUPPORTED_RUNNERS,
     UnsupportedRunnerError,
     build_command,
     catalog_provider_for_runner,
+    mcp_tool_prefix,
 )
 from ...runner_events import AccountingSample
 from ...runner_parsing import (
@@ -1177,9 +1178,7 @@ async def _trigger_agent_directly(
     # context materialization, which needs the same value. The prefix is grounded the same way the
     # tool list's is: known only for a Claude-family run described as having the injected surface
     # (F139).
-    notice_prefix = (
-        "mcp__agentweave__" if (described_path == "mcp" and runner in CLAUDE_FAMILY_RUNNERS) else ""
-    )
+    notice_prefix = mcp_tool_prefix(runner) if described_path == "mcp" else ""
     notices = [access_path_notice(described_path, tool_prefix=notice_prefix)]
     # F52: told once, up front, rather than discovered turn after turn by an agent that treats a
     # refused git command as work lost. `review_context is None` matches the condition `worktree`
@@ -3047,6 +3046,22 @@ async def _await_operator_permission(
     return False
 
 
+@dataclass
+class RpcCallbacks:
+    """What the RPC executor hands a transport's `run_turn` (slice 1's `RpcCallbacks`, built
+    here because slice 1 is not; `a-copilot-agent-runs-over-acp` task 7.1)."""
+
+    on_event: Callable[[Any], Awaitable[None]]
+    on_usage: Callable[[Any], Awaitable[None]]
+    on_accounting: Callable[[Any], Awaitable[None]]
+    on_session: Callable[[str], Awaitable[None]]
+    #: Copilot's D7: the saved session named nothing that exists, so a new one is being started
+    #: and the conversation's old binding may be replaced, the one exception to first-writer.
+    on_session_missing: Callable[[str], Awaitable[None]]
+    should_interrupt: Callable[[], bool]
+    on_refusal: Callable[[str, Dict[str, Any]], Awaitable[None]]
+
+
 async def _execute_codex_appserver_run(
     *,
     project_id: str,
@@ -3068,12 +3083,87 @@ async def _execute_codex_appserver_run(
 ) -> None:
     """Codex `app-server` (task 2.8) counterpart to `_execute_run`'s PTY/pipe read loop above.
 
-    `codex_appserver.run_turn` owns the actual subprocess and JSON-RPC exchange internally
-    (see its own docstring); this function's job is only to wire that transport's callbacks
-    to the same recording/broadcast/scheduling calls `_execute_run` makes for `exec`, so the
-    two transports are indistinguishable to everything downstream of a `Run` row (task 2.5's
-    stated goal) — a `Run`, its `AgentOutput` rows, its usage accounting, and its lifecycle
-    broadcasts all look the same regardless of which transport produced them.
+    `codex_appserver.run_turn` owns the actual subprocess and JSON-RPC exchange internally (see
+    its own docstring). Everything this transport shares with Copilot's ACP one -- recording,
+    broadcasts, the run's end -- is `_execute_rpc_run`; this function says only how a Codex turn
+    is started.
+    """
+
+    async def _start_turn(cb: RpcCallbacks) -> TurnOutcome:
+        return await codex_run_turn(
+            cli=cli,
+            posture=_codex_posture(permission_mode),
+            workspace=work_dir,
+            request_approval=lambda method, subject: _await_operator_permission(
+                project_id=project_id,
+                agent=agent,
+                run_id=run_id,
+                method=method,
+                subject=subject,
+                timeout_seconds=_codex_decision_timeout(env),
+            ),
+            cwd=work_dir,
+            env=env,
+            prompt=prompt,
+            model=model,
+            resume_thread_id=known_session_id,
+            yolo=yolo,
+            mcp_command=mcp_command,
+            config_overrides=config_overrides,
+            on_event=cb.on_event,
+            on_usage=cb.on_usage,
+            on_accounting=cb.on_accounting,
+            on_thread_started=cb.on_session,
+            should_interrupt=cb.should_interrupt,
+            on_refusal=cb.on_refusal,
+        )
+
+    await _execute_rpc_run(
+        runner="codex",
+        start_turn=_start_turn,
+        refusal_label=lambda method, subject: codex_approval_label(method),
+        project_id=project_id,
+        agent=agent,
+        run_id=run_id,
+        conversation_id=conversation_id,
+        model=model,
+        work_dir=work_dir,
+        known_session_id=known_session_id,
+        env=env,
+        worktree=worktree,
+        repo_root=repo_root,
+    )
+
+
+async def _execute_rpc_run(
+    *,
+    runner: str,
+    start_turn: Callable[[RpcCallbacks], Awaitable[Any]],
+    refusal_label: Callable[[str, Dict[str, Any]], str],
+    project_id: str,
+    agent: str,
+    run_id: str,
+    conversation_id: str,
+    model: Optional[str],
+    work_dir: Optional[str],
+    known_session_id: Optional[str],
+    env: Optional[Dict[str, str]],
+    worktree: Optional[Path],
+    repo_root: Optional[str] = None,
+    pre_turn_events: Sequence[Any] = (),
+) -> None:
+    """The executor every RPC transport shares (Codex `app-server`, Copilot ACP).
+
+    The transport owns the process and the JSON-RPC exchange; *start_turn* starts one turn with
+    the callbacks this function builds. Everything else -- the `Run` row, its `AgentOutput` rows,
+    usage accounting, the refusal record, lifecycle broadcasts, the worktree snapshot and the
+    run's end -- is the same whichever transport produced it (task 2.5's stated goal), so a
+    Copilot run is indistinguishable downstream from a Codex one. `runner` names it wherever the
+    record needs a runner, never a literal (`a-copilot-agent-runs-over-acp` D11/D18).
+
+    *pre_turn_events* are recorded before the turn starts: notices the trigger decided about this
+    turn's setup (Copilot's removed environment names, its repaired home), which belong in the
+    run's own timeline rather than in a log.
 
     *repo_root* is `_execute_run`'s own parameter, passed straight through — see its docstring.
     """
@@ -3096,7 +3186,7 @@ async def _execute_codex_appserver_run(
                 "run_started",
                 agent=agent,
                 run_id=run_id,
-                runner="codex",
+                runner=runner,
                 model=model,
             )
 
@@ -3108,6 +3198,21 @@ async def _execute_codex_appserver_run(
         binding_conflict: Optional[str] = None
         accounting_sample: Optional[AccountingSample] = None
         sequence = 0
+
+        async def _forget_missing_session(old_id: str) -> None:
+            # Copilot's D7 exception to the first-writer rule: `session/load` answered -32002, so
+            # the stored id names nothing that exists. Only that exact id is cleared, so the new
+            # session binds through `_bind_session_id` as a first write. A binding that already
+            # moved on is left alone and conflicts there, as any other would.
+            nonlocal session_id
+            async with async_session_factory() as db:
+                conversation = await get_conversation_by_id(db, conversation_id)
+                if conversation is not None and conversation.provider_session_id == old_id:
+                    conversation.provider_session_id = None
+                    conversation.updated_at = datetime.now(timezone.utc)
+                    await db.commit()
+            if session_id == old_id:
+                session_id = None
 
         async def _bind_session_id(thread_id: str) -> None:
             # Mirrors `_execute_run._flush_line`'s conversation-binding logic (same
@@ -3209,7 +3314,7 @@ async def _execute_codex_appserver_run(
                     event_type="permission_denied",
                     agent=agent,
                     data={
-                        "tool_name": codex_approval_label(method),
+                        "tool_name": refusal_label(method, subject),
                         "reason": reason or (f"outside {agent}'s workspace" if detail else ""),
                         "detail": detail if isinstance(detail, str) else " ".join(map(str, detail)),
                         "run_id": run_id,
@@ -3220,36 +3325,23 @@ async def _execute_codex_appserver_run(
             await sse_manager.broadcast(
                 project_id,
                 "permission_denied",
-                {"agent": agent, "tool_name": codex_approval_label(method), "run_id": run_id},
+                {"agent": agent, "tool_name": refusal_label(method, subject), "run_id": run_id},
             )
 
+        for event in pre_turn_events:
+            await _on_event(event)
+
         try:
-            outcome: TurnOutcome = await codex_run_turn(
-                cli=cli,
-                posture=_codex_posture(permission_mode),
-                workspace=work_dir,
-                request_approval=lambda method, subject: _await_operator_permission(
-                    project_id=project_id,
-                    agent=agent,
-                    run_id=run_id,
-                    method=method,
-                    subject=subject,
-                    timeout_seconds=_codex_decision_timeout(env),
-                ),
-                cwd=work_dir,
-                env=env,
-                prompt=prompt,
-                model=model,
-                resume_thread_id=known_session_id,
-                yolo=yolo,
-                mcp_command=mcp_command,
-                config_overrides=config_overrides,
-                on_event=_on_event,
-                on_usage=_on_usage,
-                on_accounting=_on_accounting,
-                on_thread_started=_bind_session_id,
-                should_interrupt=lambda: run_id in _stop_requested,
-                on_refusal=_on_refusal,
+            outcome = await start_turn(
+                RpcCallbacks(
+                    on_event=_on_event,
+                    on_usage=_on_usage,
+                    on_accounting=_on_accounting,
+                    on_session=_bind_session_id,
+                    on_session_missing=_forget_missing_session,
+                    should_interrupt=lambda: run_id in _stop_requested,
+                    on_refusal=_on_refusal,
+                )
             )
         except (FileNotFoundError, AppServerError, asyncio.TimeoutError, OSError) as exc:
             # Mirrors `_execute_run`'s own early-spawn-failure handling: nothing was ever
@@ -3268,7 +3360,7 @@ async def _execute_codex_appserver_run(
                         run_id=run_id,
                         project_id=project_id,
                         agent=agent,
-                        runner="codex",
+                        runner=runner,
                         sample=None,
                     )
                 # Design D13, task A4.3 — see `_execute_run`'s spawn-failure branch.
@@ -3357,7 +3449,7 @@ async def _execute_codex_appserver_run(
                     run_id=run_id,
                     project_id=project_id,
                     agent=agent,
-                    runner="codex",
+                    runner=runner,
                     sample=accounting_sample,
                 )
             # See `_execute_run`. This is the path a killed app-server actually takes: `run_turn`
@@ -3452,7 +3544,7 @@ async def _execute_codex_appserver_run(
             agent=agent,
             run_id=run_id,
             conversation_id=conversation_id,
-            runner="codex",
+            runner=runner,
             exc=exc,
         )
         if isinstance(exc, asyncio.CancelledError):

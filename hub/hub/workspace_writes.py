@@ -48,11 +48,16 @@ CLAUDE_WRITE_TOOLS: Dict[str, str] = {
 #: `{"changes": [...]}`, so one entry covers both.
 CODEX_WRITE_TOOL = "apply_patch"
 
-#: Every tool whose call *is* a write, across both providers. Reads (`Read`, `Glob`, `Grep`,
+#: Copilot's file-changing tool rows, as `copilot_acp.CopilotEventMapper` labels them from an ACP
+#: `tool_call`'s `kind` (`a-copilot-agent-runs-over-acp` D10). Each names its files under
+#: `locations[].path`; a diff's `changes[].path` is the fallback when a call carried no location.
+COPILOT_WRITE_TOOLS = frozenset({"edit", "delete", "move"})
+
+#: Every tool whose call *is* a write, across all three providers. Reads (`Read`, `Glob`, `Grep`,
 #: `LS`) are deliberately absent: the finding is about work landing where nothing will attribute
 #: it, and a read leaves nothing behind. Recording reads would also drown the record -- an agent
 #: reads outside its workspace constantly and correctly.
-WRITE_TOOLS = frozenset(CLAUDE_WRITE_TOOLS) | {CODEX_WRITE_TOOL}
+WRITE_TOOLS = frozenset(CLAUDE_WRITE_TOOLS) | {CODEX_WRITE_TOOL} | COPILOT_WRITE_TOOLS
 
 
 def written_paths(tool: str, input_data: Any) -> Tuple[str, ...]:
@@ -69,6 +74,8 @@ def written_paths(tool: str, input_data: Any) -> Tuple[str, ...]:
         return _one_path(input_data, CLAUDE_WRITE_TOOLS[tool])
     if tool == CODEX_WRITE_TOOL:
         return _change_paths(input_data)
+    if tool in COPILOT_WRITE_TOOLS:
+        return _location_paths(input_data) or _change_paths(input_data)
     return ()
 
 
@@ -100,6 +107,23 @@ def _change_paths(input_data: Any) -> Tuple[str, ...]:
             continue
         path = change.get("path")
         if isinstance(path, str) and path:
+            paths.append(path)
+    return tuple(paths)
+
+
+def _location_paths(input_data: Any) -> Tuple[str, ...]:
+    """An ACP tool call names the files it touches under `locations[].path` (`{path, line?}`)."""
+    if not isinstance(input_data, dict):
+        return ()
+    locations = input_data.get("locations")
+    if not isinstance(locations, list):
+        return ()
+    paths: List[str] = []
+    for location in locations:
+        if not isinstance(location, dict):
+            continue
+        path = location.get("path")
+        if isinstance(path, str) and path and path not in paths:
             paths.append(path)
     return tuple(paths)
 

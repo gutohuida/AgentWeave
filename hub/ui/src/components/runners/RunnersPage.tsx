@@ -21,7 +21,7 @@ import {
 } from '@/api/modelCatalog'
 import { readableApiError } from '@/api/client'
 
-const CLI_OPTIONS: RunnerCli[] = ['claude', 'codex']
+const CLI_OPTIONS: RunnerCli[] = ['claude', 'codex', 'copilot']
 
 export function RunnersPage() {
   const { data: runners, isLoading } = useRunners()

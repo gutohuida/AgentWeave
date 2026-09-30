@@ -647,12 +647,26 @@ const TOOL_ICON: Record<string, { icon: string; label: string }> = {
   Agent: { icon: 'group', label: 'Subagent' },
   TodoWrite: { icon: 'task_alt', label: 'Plan' },
   NotebookEdit: { icon: 'edit_note', label: 'Notebook' },
+  // Copilot's ACP rows are labelled by kind, lower-case (`copilot_acp.CopilotEventMapper`).
+  edit: { icon: 'edit', label: 'Edit' },
+  delete: { icon: 'delete', label: 'Delete' },
+  move: { icon: 'drive_file_move', label: 'Move' },
 }
 const TOOL_ICON_FALLBACK = { icon: 'build' }
 
 /** Tools that change the workspace, as opposed to reading it. A block that wrote something is
  *  worth opening; one that only looked at things usually is not. */
-const WRITING_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'apply_patch'])
+const WRITING_TOOLS = new Set([
+  'Edit',
+  'MultiEdit',
+  'Write',
+  'NotebookEdit',
+  'apply_patch',
+  // Copilot file-changing rows, labelled by the kind of the ACP tool call
+  'edit',
+  'delete',
+  'move',
+])
 
 /** The bare filename a write targeted, or '' when the payload does not carry a usable path. */
 function writtenFileName(payload: Record<string, unknown> | null | undefined): string {
@@ -666,7 +680,10 @@ function writtenFileName(payload: Record<string, unknown> | null | undefined): s
   }
   if (!parsed || typeof parsed !== 'object') return ''
   const fields = parsed as Record<string, unknown>
-  const path = fields.file_path ?? fields.path
+  // Copilot's ACP rows name their files under `locations[].path` rather than a top-level key.
+  const locations = Array.isArray(fields.locations) ? fields.locations : []
+  const firstLocation = locations[0] as Record<string, unknown> | undefined
+  const path = fields.file_path ?? fields.path ?? firstLocation?.path
   if (typeof path !== 'string' || !path.trim()) return ''
   return path.split(/[\\/]/).pop() ?? ''
 }
@@ -683,6 +700,10 @@ function toolVisual(toolName: unknown): { icon: string; label?: string } {
   if (toolName === 'shell' || toolName === 'local_shell') return { icon: 'terminal', label: 'Shell' }
   if (toolName.startsWith('agentweave.')) {
     return { icon: 'hub', label: toolName.slice('agentweave.'.length) }
+  }
+  // Copilot names the Hub's tools `agentweave-<tool>` (`<server>-<tool>`).
+  if (toolName.startsWith('agentweave-')) {
+    return { icon: 'hub', label: toolName.slice('agentweave-'.length) }
   }
   if (toolName.includes('.')) return { icon: 'extension', label: toolName.split('.').slice(-1)[0] }
   // A name with no mapping and no namespace keeps the generic label it has always had: the
