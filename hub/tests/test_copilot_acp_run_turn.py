@@ -631,3 +631,89 @@ class TestSessionLoadNotFoundRebinds:
         assert sessions_missing == [RESUME_ID], "on_session_missing must name the dead old id"
         assert sessions_bound == [SESSION_ID], "on_session must bind the new id, once, not the old"
         assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+
+
+class TestVersionGateFailsBeforeAnySessionRequest:
+    """Tasks.md 1.9(d): a Copilot CLI below `COPILOT_MIN_VERSION` fails before any `session/*`
+    request is sent -- D12 (design.md:1155-1165). The client compares `initialize.result.
+    agentInfo.version` (dotted integers) against `COPILOT_MIN_VERSION`; below it, or missing
+    entirely (":1165", 'A missing version is treated as too old'), `run_turn` raises
+    `CopilotACPError` -- never `session/new`/`session/load` -- with the message design.md gives
+    verbatim (":1163-1165"): "Copilot CLI <v> is older than the supported 1.0.81. Update it with
+    `copilot update` or npm."
+
+    Both tests script only `initialize`'s response and nothing after it. That is deliberate, not
+    an oversight: `_FakeACPSession.request()` raises its own `AssertionError` ("script exhausted")
+    if a second `request()` call is made and finds nothing left to pop, so a real implementation
+    that incorrectly sent `session/new`/`session/load` past the gate would fail loudly on that
+    `AssertionError`, not silently pass -- the same proof-by-exhaustion the module docstring's
+    `_FakeACPSession` doc already relies on, applied here to "no second request happens" rather
+    than to a scripted response.
+
+    The exact text `<v>` renders as for the *missing*-version half is not stated anywhere in
+    design.md, so `test_version_missing_is_treated_as_too_old` asserts only the fixed half of the
+    sentence (the part every case must share) and does not assert what stands in for `<v>` -- an
+    invented literal there would be this file's own guess, not design.md's.
+    """
+
+    async def _run_and_capture_raise(self, monkeypatch, agent_info):
+        events = []
+        sessions_bound = []
+        script = [
+            {"response": {"protocolVersion": 1, "agentCapabilities": {}, "agentInfo": agent_info}}
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        with pytest.raises(CopilotACPError) as exc_info:
+            await run_turn(
+                cwd="C:\\work",
+                env=None,
+                prompt="Anything changed since I left?",
+                model=None,
+                resume_session_id=None,
+                agent=AGENT_NAME,
+                per_turn_context="## Workspace\n- root: C:\\work",
+                tool_surface_context="## Tools\n- agentweave-send_message",
+                stable_context=None,
+                control_overrides=None,
+                told_access_path="mcp",
+                permission_mode=None,
+                workspace="C:\\work",
+                restrict_spec_writes=False,
+                extra_flags=None,
+                on_event=_collector(events),
+                on_session=_collector(sessions_bound),
+            )
+        return fake, exc_info.value
+
+    async def test_version_below_minimum_fails_before_any_session_request(self, monkeypatch):
+        assert copilot_acp.COPILOT_MIN_VERSION == "1.0.81", "design.md:1155's own stated minimum"
+
+        fake, err = await self._run_and_capture_raise(
+            monkeypatch, {"name": "Copilot", "title": "Copilot", "version": "1.0.75"}
+        )
+
+        assert str(err) == (
+            "Copilot CLI 1.0.75 is older than the supported 1.0.81. Update it with "
+            "`copilot update` or npm."
+        )
+        assert fake.sent_requests == [
+            ("initialize", fake.sent_requests[0][1])
+        ], "no session/new or session/load may be sent once the gate fails"
+        assert fake.sent_requests[0][0] == "initialize"
+        assert len(fake.sent_requests) == 1
+        assert fake.closed_with_force is False, "D17: the process is still closed, not forced"
+
+    async def test_version_missing_is_treated_as_too_old(self, monkeypatch):
+        fake, err = await self._run_and_capture_raise(
+            monkeypatch, {"name": "Copilot", "title": "Copilot"}  # no "version" key at all
+        )
+
+        assert "is older than the supported 1.0.81. Update it with `copilot update` or npm." in str(
+            err
+        ), str(err)
+        assert (
+            len(fake.sent_requests) == 1 and fake.sent_requests[0][0] == "initialize"
+        ), "a missing version must fail the gate before any session/* request too"
+        assert fake.closed_with_force is False, "D17: the process is still closed, not forced"
