@@ -33572,3 +33572,11 @@ Question for the operator: should the Runners page show flags read-only (cheap, 
 
 **Operator answered 2026-09-30 (AskUserQuestion, handoff-0158 resume):** show them read-only. The Runners page renders a runner's `flags`; editing stays with the API (or delete and recreate). Ready to propose.
 
+## F470 (D) — `each-runner-cli-is-one-adapter`'s design.md predates a same-named function `a-copilot-agent-runs-over-acp` already added
+
+**Status:** open (a record, not a defect), filed 2026-09-30/10-01 from the night window's ORDER 1/24 task 1.4, reading `agent_trigger.py` closely enough to build the RPC golden.
+
+`each-runner-cli-is-one-adapter`'s design.md D9 (R3 pass, 2026-09-28) says `_execute_codex_appserver_run` "→ `_execute_rpc_run(adapter, transport, …)`", describing it as a new function slice 1's group 2 will add. But `a-copilot-agent-runs-over-acp` (archived 2026-09-30, after that R3 pass) already added a function of that exact name at `agent_trigger.py:3386` — signature `(*, runner: str, start_turn: Callable[[RpcCallbacks], Awaitable[Any]], refusal_label, project_id, agent, run_id, conversation_id, model, work_dir, known_session_id, env, worktree, repo_root=None, pre_turn_events=())` — plus a local `RpcCallbacks` dataclass at `:3110` (with `on_session_missing`, beyond D1's field list) and `_execute_copilot_run` (`:3304`) that already calls it for Copilot's ACP turns. The `RpcCallbacks` docstring says so directly: *"slice 1's `RpcCallbacks`, built here because slice 1 is not; `a-copilot-agent-runs-over-acp` task 7.1"* — this was a deliberate, documented placeholder, not an oversight, but `each-runner-cli-is-one-adapter`'s own design.md/tasks.md never mention it because the ACP change landed after the last re-read.
+
+Group 2 of `each-runner-cli-is-one-adapter` (not yet reached tonight — group 1 is goldens/tests only) cannot simply add a second `_execute_rpc_run(adapter, transport, …)`; it would collide with the existing name and strand `_execute_copilot_run`'s call. It has to move today's `RpcCallbacks` into `hub.runner_adapters.base` and fold the adapter/transport-taking shape into the existing `runner`/`start_turn`/`refusal_label` signature (or thread `adapter`/`transport` through it) so Copilot's ACP path keeps working. Re-read `agent_trigger.py:3110-3420` fresh at that point rather than trusting design.md's D9 text alone.
+
