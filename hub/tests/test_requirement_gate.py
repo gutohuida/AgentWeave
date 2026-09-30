@@ -732,6 +732,25 @@ async def test_every_rigor_change_is_recorded_and_attributed(app, auth_headers, 
 
 
 @pytest.mark.asyncio
+async def test_the_rigor_history_route_answers_oldest_first(app, auth_headers, builder, tmp_path):
+    """The order the app's history list is built on. The UI reverses it to show newest first, and
+    its test fixture is in this order (F190: a fixture in an order the route never emits is not
+    evidence), so this pins the route rather than the table."""
+    await _document(app, auth_headers, builder)
+    await _set_rigor(app, auth_headers, "contract", reason="")
+    await _set_rigor(app, auth_headers, "gate", reason="ready to enforce")
+
+    response = await app.get(f"{BASE}/documents/{PATH}/rigor-history", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    events = response.json()["events"]
+    assert [(e["from"], e["to"]) for e in events] == [("sketch", "contract"), ("contract", "gate")]
+    assert [e["reason"] for e in events] == ["", "ready to enforce"]
+    assert events[0]["created_at"] <= events[1]["created_at"]
+    assert all(e["actor_kind"] == "operator" for e in events)
+
+
+@pytest.mark.asyncio
 async def test_a_rigor_change_against_a_stale_digest_is_refused(
     app, auth_headers, builder, tmp_path
 ):

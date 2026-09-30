@@ -498,6 +498,80 @@ async def test_a_retired_requirement_nobody_serves_is_retired_not_unserved(
     assert _entry(await _coverage(app, auth_headers), "FR-1")["state"] == "unserved"
 
 
+def _numbered(count):
+    return [
+        {"key": f"req-{n}", "statement": f"It does thing {n}", "modal": "MUST"}
+        for n in range(1, count + 1)
+    ]
+
+
+async def _resubmit(app, run_headers, requirements):
+    saved = await app.post(
+        SUBMIT,
+        json={
+            "path": PATH,
+            "document": {
+                "schema_version": SCHEMA_VERSION,
+                "kind": "change-spec",
+                "title": "Coverage demo",
+                "requirements": list(requirements),
+            },
+        },
+        headers=run_headers,
+    )
+    assert saved.status_code == 200, saved.text
+
+
+@pytest.mark.asyncio
+async def test_the_requirement_list_includes_retired_rows_in_string_order(
+    app, auth_headers, builder, tmp_path
+):
+    """F211: `GET /spec/requirements` is the only read that includes retired requirements, and the
+    app's retired list is built on it. Its order is a string sort on the identifier — `FR-10`
+    before `FR-2` — which the app's fixture copies and the app re-sorts numerically on purpose."""
+    requirements = _numbered(10)
+    await _document(app, auth_headers, builder, requirements=requirements)
+    # Drop req-2 and req-10: FR-2 and FR-10 are retired, not deleted.
+    await _resubmit(app, builder, [r for r in requirements if r["key"] not in ("req-2", "req-10")])
+
+    response = await app.get(
+        f"{BASE}/spec/requirements", params={"document": PATH}, headers=auth_headers
+    )
+
+    assert response.status_code == 200, response.text
+    rows = response.json()["requirements"]
+    assert [row["identifier"] for row in rows][:3] == ["FR-1", "FR-10", "FR-2"]
+    states = {row["identifier"]: row["state"] for row in rows}
+    assert states["FR-2"] == "retired"
+    assert states["FR-10"] == "retired"
+    assert states["FR-1"] == "active"
+    assert {row["identifier"]: row["key"] for row in rows}["FR-10"] == "req-10"
+
+
+@pytest.mark.asyncio
+async def test_a_retired_requirement_still_answers_with_the_task_linked_to_it(
+    app, auth_headers, builder, tmp_path
+):
+    """F211: the work still pointing at a retired requirement is reachable through its detail."""
+    await _document(app, auth_headers, builder)
+    created = await app.post(
+        TASKS, json={"title": "Build FR-2", "requirement_ids": ["FR-2"]}, headers=auth_headers
+    )
+    assert created.status_code == 201, created.text
+    await _document_resubmitted_without_beta(builder, app)
+
+    detail = await app.get(
+        f"{BASE}/spec/requirements/FR-2", params={"document": PATH}, headers=auth_headers
+    )
+
+    assert detail.status_code == 200, detail.text
+    body = detail.json()
+    assert body["requirement"]["state"] == "retired"
+    assert [task["id"] for task in body["tasks"]] == [created.json()["id"]]
+    assert body["tasks"][0]["title"] == "Build FR-2"
+    assert body["coverage"] is not None
+
+
 async def _document_resubmitted_without_beta(run_headers, app):
     saved = await app.post(
         SUBMIT,

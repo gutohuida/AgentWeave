@@ -15,7 +15,13 @@ import { ApiError } from '@/api/client'
 const closeExploration = vi.fn()
 const propose = vi.fn()
 const setPhase = vi.fn()
+const setRigor = vi.fn()
 let documents: unknown[] = []
+/** `GET /documents/{path}/rigor-history` answers **oldest first** (`spec_rigor.history_for` orders
+ *  by `created_at, id` ascending; pinned by `test_the_rigor_history_route_answers_oldest_first`).
+ *  Every fixture here is in that order (F190). */
+let rigorEvents: unknown[] = []
+let rigorHistoryError: unknown = null
 
 vi.mock('@/api/spec', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/spec')>()
@@ -25,6 +31,11 @@ vi.mock('@/api/spec', async (importOriginal) => {
     useCloseExploration: () => ({ mutate: closeExploration, isPending: false }),
     useProposeSpecDocument: () => ({ mutateAsync: propose, isPending: false }),
     useSetSpecPhase: () => ({ mutate: setPhase, isPending: false }),
+    useSetSpecRigor: () => ({ mutateAsync: setRigor, isPending: false }),
+    useSpecRigorHistory: () =>
+      rigorHistoryError
+        ? { data: undefined, error: rigorHistoryError }
+        : { data: { events: rigorEvents }, error: null },
   }
 })
 
@@ -53,6 +64,10 @@ function doc(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks()
   setPhase.mockReset()
+  setRigor.mockReset()
+  setRigor.mockResolvedValue(doc())
+  rigorEvents = []
+  rigorHistoryError = null
   documents = [doc()]
   propose.mockResolvedValue({ ...doc(), blocking: [] })
 })
@@ -276,4 +291,150 @@ describe('SpecPhaseBar', () => {
       expect(screen.getByTestId('spec-phase')).toHaveTextContent(phase)
     },
   )
+})
+
+/*
+ * The rigor history, and the reason a rigor change carries (F211, F429;
+ * `a-documents-rigor-history-and-retired-requirements-are-on-screen`).
+ */
+describe('SpecPhaseBar — rigor history and the reason for a change', () => {
+  const PATH = 'spec/changes/demo/spec.html'
+
+  function event(id: string, from: string, to: string, reason: string, createdAt: string) {
+    return { id, from, to, actor_kind: 'operator', actor: 'operator', reason, created_at: createdAt }
+  }
+
+  // 1.2 (D1, F190). The fixture is in the route's order, oldest first. The list shows newest
+  // first, so `contract → gate` leads. A component that did not reverse — or a fixture reversed
+  // into an order the route never emits — fails the first assertion on the list.
+  it('lists the history newest first from the route\'s oldest-first answer', async () => {
+    documents = [doc({ rigor: 'gate', content_digest: 'abc' })]
+    rigorEvents = [
+      event('sre-1', 'sketch', 'contract', '', '2026-09-24T10:00:00+00:00'),
+      event('sre-2', 'contract', 'gate', 'ready to enforce', '2026-09-24T11:00:00+00:00'),
+    ]
+    renderBar()
+
+    const toggle = screen.getByTestId('spec-rigor-history-toggle')
+    expect(toggle).toHaveTextContent('History (2)')
+    await userEvent.click(toggle)
+
+    const items = within(screen.getByTestId('spec-rigor-history')).getAllByRole('listitem')
+    expect(items).toHaveLength(2)
+    expect(items[0]).toHaveTextContent('contract → gate')
+    expect(items[0]).toHaveTextContent('ready to enforce')
+    expect(items[1]).toHaveTextContent('sketch → contract')
+    expect(items[1]).toHaveTextContent('no reason given')
+    expect(items[0]).toHaveTextContent('operator')
+  })
+
+  it('offers no history toggle when the rigor has never changed', () => {
+    documents = [doc({ rigor: 'sketch' })]
+    rigorEvents = []
+    renderBar()
+    expect(screen.queryByTestId('spec-rigor-history-toggle')).not.toBeInTheDocument()
+  })
+
+  // D5: a failed history read is said, and not mistaken for "never changed" (no toggle).
+  it('says the history could not be loaded when its read fails', () => {
+    documents = [doc({ rigor: 'gate' })]
+    rigorHistoryError = new ApiError(500, 'database is locked')
+    renderBar()
+    expect(screen.getByTestId('spec-rigor-history-error')).toHaveTextContent('database is locked')
+    expect(screen.queryByTestId('spec-rigor-history-toggle')).not.toBeInTheDocument()
+  })
+
+  // 1.3 (D2). A demotion does not post on change; it asks why, and cannot be confirmed blank.
+  it('asks for a reason before lowering a gate, and sends it', async () => {
+    documents = [doc({ rigor: 'gate', content_digest: 'abc' })]
+    renderBar()
+
+    await userEvent.selectOptions(screen.getByTestId('spec-rigor'), 'sketch')
+
+    expect(setRigor).not.toHaveBeenCalled()
+    const row = screen.getByTestId('spec-rigor-confirm')
+    expect(row).toHaveTextContent('Change enforcement from Gate to Sketch?')
+    const confirm = within(row).getByRole('button', { name: 'Confirm' })
+    expect(confirm).toBeDisabled()
+
+    // Whitespace is not a reason.
+    const reason = within(row).getByRole('textbox')
+    await userEvent.type(reason, '   ')
+    expect(confirm).toBeDisabled()
+
+    await userEvent.clear(reason)
+    await userEvent.type(reason, 'shipping today')
+    expect(confirm).toBeEnabled()
+    await userEvent.click(confirm)
+
+    expect(setRigor).toHaveBeenCalledWith({
+      path: PATH,
+      rigor: 'sketch',
+      reason: 'shipping today',
+      expectedDigest: 'abc',
+    })
+  })
+
+  // 1.4 (D2). A promotion offers the field and does not require it.
+  it('lets a promotion be confirmed with the reason left empty', async () => {
+    documents = [doc({ rigor: 'sketch', content_digest: 'abc' })]
+    renderBar()
+
+    await userEvent.selectOptions(screen.getByTestId('spec-rigor'), 'gate')
+
+    expect(setRigor).not.toHaveBeenCalled()
+    const row = screen.getByTestId('spec-rigor-confirm')
+    expect(within(row).getByRole('textbox')).toHaveValue('')
+    const confirm = within(row).getByRole('button', { name: 'Confirm' })
+    expect(confirm).toBeEnabled()
+    await userEvent.click(confirm)
+
+    expect(setRigor).toHaveBeenCalledWith({
+      path: PATH,
+      rigor: 'gate',
+      reason: '',
+      expectedDigest: 'abc',
+    })
+  })
+
+  it('changes nothing when the confirmation is cancelled', async () => {
+    documents = [doc({ rigor: 'sketch', content_digest: 'abc' })]
+    renderBar()
+
+    await userEvent.selectOptions(screen.getByTestId('spec-rigor'), 'gate')
+    await userEvent.click(
+      within(screen.getByTestId('spec-rigor-confirm')).getByRole('button', { name: 'Cancel' }),
+    )
+
+    expect(setRigor).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('spec-rigor-confirm')).not.toBeInTheDocument()
+    expect((screen.getByTestId('spec-rigor') as HTMLSelectElement).value).toBe('sketch')
+  })
+
+  // 1.5 (D2) control. The refusal display is kept; it now arrives after Confirm.
+  it('still lists every blocking line when the confirmed change is refused', async () => {
+    setRigor.mockRejectedValue(
+      new ApiError(
+        409,
+        JSON.stringify({
+          detail: {
+            code: 'document_not_enforceable',
+            message: 'this document cannot be enforced as it stands',
+            blocking: ['these requirements hold no identifier yet: alpha', 'FR-3 has no statement'],
+          },
+        }),
+      ),
+    )
+    documents = [doc({ rigor: 'sketch', content_digest: 'abc' })]
+    renderBar()
+
+    await userEvent.selectOptions(screen.getByTestId('spec-rigor'), 'gate')
+    await userEvent.click(
+      within(screen.getByTestId('spec-rigor-confirm')).getByRole('button', { name: 'Confirm' }),
+    )
+
+    const refusal = await screen.findByTestId('spec-rigor-refusal')
+    expect(refusal).toHaveTextContent('hold no identifier yet: alpha')
+    expect(refusal).toHaveTextContent('FR-3 has no statement')
+  })
 })

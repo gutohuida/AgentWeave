@@ -60,7 +60,12 @@ vi.mock('@/components/agents/AgentOutputPanel', () => ({
   AgentOutputPanel: () => <div data-testid="conversation-surface" />,
 }))
 
-vi.mock('@/api/client', () => ({ fetchWithAuth: vi.fn() }))
+// No `getJson`, so every read the panel does not stub fails; `readableApiError` is here because a
+// panel section that says a read failed (the retired-requirements list, F211) calls it to say so.
+vi.mock('@/api/client', () => ({
+  fetchWithAuth: vi.fn(),
+  readableApiError: (_error: unknown, fallback: string) => fallback,
+}))
 
 import { ConversationView } from '@/components/agents/ConversationView'
 import { usePanelTabsStore } from '@/store/panelTabsStore'

@@ -3,6 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { SpecPhaseBar } from './SpecPhaseBar'
 import { SpecApprovalReport } from './SpecApprovalReport'
 import { SpecCoverageBar } from './SpecCoverageBar'
+import { SpecRetiredRequirements } from './SpecRetiredRequirements'
 import { SpecProposalsPanel } from './SpecProposalsPanel'
 import { SpecDocumentTasksLink } from './SpecDocumentTasksLink'
 import { Button } from '@/components/ui/button'
@@ -247,6 +248,10 @@ export function SpecDocumentPanel({
           product. Under the phase bar because it is about what the document *says*, not about
           reading it. */}
       <SpecCoverageBar path={path} onOpenTasks={onOpenTasks} />
+
+      {/* The requirements coverage leaves out: retired ones, with the work still pointing at them.
+          Right after coverage, because it is the rest of the same answer (F211). */}
+      <SpecRetiredRequirements path={path} onOpenTasks={onOpenTasks} />
 
       {/* Pending proposals (design F1-F3) — a `contract`/`gate` submission lands here instead of
           on the document itself. Directly beneath coverage, on the same document view, so a

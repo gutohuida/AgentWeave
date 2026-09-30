@@ -166,6 +166,9 @@ export interface CoverageEntry {
     | 'in_progress'
     | 'not_started'
     | 'unserved'
+    // Reported only for a retired requirement nothing serves any more (F214), which only
+    // `GET /spec/requirements/{identifier}` reads — document coverage leaves retired rows out.
+    | 'retired'
   integration: 'integrated' | 'not_integrated' | 'unknown' | 'not_applicable'
   evidence_count: number
   accepted_count: number
@@ -301,6 +304,12 @@ export function useSpecEvents() {
       // document's pending list looks like — the same broadcast covers all three (accept/reject
       // routes and submit_spec_document all emit `spec_updated`).
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specProposals'] })
+      // A rigor change arrives here (`set_document_rigor` broadcasts `{path, rigor}`), and so does
+      // a save that retires a requirement — the history, the requirement list and an open
+      // requirement's detail all move with them.
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRigorHistory'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRequirements'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRequirement'] })
       if (d?.path) {
         queryClient.invalidateQueries({ queryKey: ['project', projectId, 'spec', d.path] })
       }
@@ -432,16 +441,113 @@ export function useProposeSpecDocument() {
  *  There is deliberately no agent-facing equivalent anywhere in this codebase. An agent blocked by
  *  a gate that could lower the document has not been gated. */
 export function useSetSpecRigor() {
-  return useSpecMutation<
-    { path: string; rigor: string; reason?: string; expectedDigest?: string | null },
-    SpecDocumentRecord
-  >((projectId, { path, rigor, reason, expectedDigest }) =>
-    postJson(`/api/v1/projects/${projectId}/project/documents/${path}/rigor`, {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({
+      path,
       rigor,
-      reason: reason ?? '',
-      expected_digest: expectedDigest ?? null,
-    }),
-  )
+      reason,
+      expectedDigest,
+    }: {
+      path: string
+      rigor: string
+      reason?: string
+      expectedDigest?: string | null
+    }) =>
+      postJson<SpecDocumentRecord>(`/api/v1/projects/${projectId}/project/documents/${path}/rigor`, {
+        rigor,
+        reason: reason ?? '',
+        expected_digest: expectedDigest ?? null,
+      }),
+    // What `useSpecMutation` invalidates, plus the history of the path just changed — so the tab
+    // that pressed Confirm does not wait for the `spec_updated` round-trip to see its own change.
+    // Its own `onSuccess`, the way `useSetSpecPhase` has one, so the shared helper and every other
+    // mutation built on it are unchanged.
+    onSuccess: (_record, { path }) => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRigorHistory', path] })
+    },
+  })
+}
+
+/** One recorded rigor change. `reason` is `''` where none was given — every change the app made
+ *  before it asked for one (F429). */
+export interface SpecRigorEvent {
+  id: string
+  from: SpecDocumentRecord['rigor']
+  to: SpecDocumentRecord['rigor']
+  actor_kind: string
+  actor: string
+  reason: string
+  created_at: string
+}
+
+/** Oldest first — the order the route returns (`spec_rigor.history_for`: `created_at, id`). */
+export function useSpecRigorHistory(path: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ events: SpecRigorEvent[] }>({
+    queryKey: ['project', projectId, 'specRigorHistory', path],
+    queryFn: () =>
+      getJson<{ events: SpecRigorEvent[] }>(
+        `/api/v1/projects/${projectId}/project/documents/${path}/rigor-history`,
+      ),
+    enabled: isConfigured && !!projectId && !!path,
+  })
+}
+
+/** A requirement as the index holds it. A removed requirement is retired, not deleted, so its
+ *  links and evidence survive; `state` says which. */
+export interface SpecRequirementRow {
+  id: string
+  identifier: string
+  key: string
+  document_id: string
+  state: 'active' | 'retired'
+  digest: string
+  anchor: string | null
+}
+
+/** Every requirement of one document, **retired ones included** (the route's default) — the only
+ *  read that returns them. Ordered by identifier as a *string*, so `FR-10` comes before `FR-2`. */
+export function useSpecRequirements(path: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ requirements: SpecRequirementRow[] }>({
+    queryKey: ['project', projectId, 'specRequirements', path],
+    queryFn: () =>
+      getJson<{ requirements: SpecRequirementRow[] }>(
+        `/api/v1/projects/${projectId}/project/spec/requirements?document=${encodeURIComponent(
+          path ?? '',
+        )}`,
+      ),
+    enabled: isConfigured && !!projectId && !!path,
+  })
+}
+
+export interface SpecRequirementDetail {
+  requirement: SpecRequirementRow
+  /** In `Task.created_at` order (`requirement_links.tasks_for_requirement`). */
+  tasks: Array<{ id: string; title: string; status: string; assignee: string | null }>
+  /** Oldest first (`requirement_evidence.for_requirement`). */
+  evidence: EvidencePiece[]
+  coverage: CoverageEntry | null
+}
+
+/** One requirement and everything still pointing at it. `document` is always sent: identifiers
+ *  are minted per document, and without it an identifier two documents declare is a 422. */
+export function useSpecRequirement(identifier: string, path: string) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<SpecRequirementDetail>({
+    queryKey: ['project', projectId, 'specRequirement', path, identifier],
+    queryFn: () =>
+      getJson<SpecRequirementDetail>(
+        `/api/v1/projects/${projectId}/project/spec/requirements/${encodeURIComponent(
+          identifier,
+        )}?document=${encodeURIComponent(path)}`,
+      ),
+    enabled: isConfigured && !!projectId,
+  })
 }
 
 /** Approving (or reopening). Approving a change-spec document with a flow delivery may create the

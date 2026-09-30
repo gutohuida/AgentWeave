@@ -59,8 +59,13 @@ function mount(record: Record<string, unknown>, postResponse?: { ok: boolean; te
         }
       }
       // The phase bar also asks for the loops (to find the document's flow); a real route answers
-      // that with a list, and this test has no flows.
-      const payload = url.includes('/loops') ? [] : { documents: [record] }
+      // that with a list, and this test has no flows. And for the rigor history, which here has
+      // nothing in it.
+      const payload = url.includes('/loops')
+        ? []
+        : url.includes('/rigor-history')
+          ? { events: [] }
+          : { documents: [record] }
       return {
         ok: true,
         status: 200,
@@ -76,6 +81,12 @@ function mount(record: Record<string, unknown>, postResponse?: { ok: boolean; te
       <SpecPhaseBar path={PATH} />
     </QueryClientProvider>,
   )
+}
+
+/** A rigor change is confirmed, not posted on change (design D2); a promotion needs no reason. */
+async function choose(rigor: string) {
+  fireEvent.change(await screen.findByTestId('spec-rigor'), { target: { value: rigor } })
+  fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }))
 }
 
 describe('setting a document rigor', () => {
@@ -101,12 +112,11 @@ describe('setting a document rigor', () => {
   it('sends the digest it read, so the change cannot land on an edited document', async () => {
     mount(document_())
 
-    const control = await screen.findByTestId('spec-rigor')
-    fireEvent.change(control, { target: { value: 'gate' } })
+    await choose('gate')
 
     await waitFor(() => expect(posted).toHaveLength(1))
     expect(posted[0].url).toContain('/rigor')
-    expect(posted[0].body).toMatchObject({ rigor: 'gate', expected_digest: 'abc123' })
+    expect(posted[0].body).toMatchObject({ rigor: 'gate', reason: '', expected_digest: 'abc123' })
   })
 
   it('says what is wrong when a promotion is refused', async () => {
@@ -121,7 +131,7 @@ describe('setting a document rigor', () => {
       }),
     })
 
-    fireEvent.change(await screen.findByTestId('spec-rigor'), { target: { value: 'gate' } })
+    await choose('gate')
 
     const refusal = await screen.findByTestId('spec-rigor-refusal')
     expect(refusal).toHaveTextContent('hold no identifier yet: alpha')
@@ -130,7 +140,7 @@ describe('setting a document rigor', () => {
   it('still shows something readable when the refusal is not structured', async () => {
     mount(document_(), { ok: false, text: 'the document changed since you read it' })
 
-    fireEvent.change(await screen.findByTestId('spec-rigor'), { target: { value: 'gate' } })
+    await choose('gate')
 
     const refusal = await screen.findByTestId('spec-rigor-refusal')
     expect(refusal).toHaveTextContent('the document changed since you read it')

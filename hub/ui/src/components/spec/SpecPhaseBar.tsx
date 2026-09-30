@@ -1,10 +1,13 @@
 import { useState } from 'react'
+import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { ArchiveConfirmDialog } from '@/components/spec/ArchiveConfirmDialog'
 import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
 import { useDocumentFlow, type LoopSummary } from '@/api/loops'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
+import { Button } from '@/components/ui/button'
+import { hubDate } from '@/lib/hubTime'
 import {
   useCloseExploration,
   useProposeSpecDocument,
@@ -12,8 +15,17 @@ import {
   useSetSpecRigor,
   useSpec,
   useSpecDocuments,
+  useSpecRigorHistory,
   type SpecBlockingFinding,
+  type SpecDocumentRecord,
 } from '@/api/spec'
+
+type Rigor = SpecDocumentRecord['rigor']
+
+/** Lowest to highest. A move down this list is a demotion, and a demotion made in the app needs a
+ *  reason: the record is what makes lowering a gate legitimate (F429). */
+const RIGOR_ORDER: Rigor[] = ['sketch', 'contract', 'gate']
+const RIGOR_LABEL: Record<Rigor, string> = { sketch: 'Sketch', contract: 'Contract', gate: 'Gate' }
 
 /** No choice made yet — distinct from `''`, which is a real choice ("No flow", design D5b). */
 const NO_CHOICE = '__unset__'
@@ -68,6 +80,12 @@ export function SpecPhaseBar({
   const [archiveRefusal, setArchiveRefusal] = useState<string | null>(null)
   const [startingFlow, setStartingFlow] = useState(false)
   const [deliveryAgentChoice, setDeliveryAgentChoice] = useState(NO_CHOICE)
+  // A rigor chosen in the select and not yet confirmed. The select no longer posts on change: the
+  // change waits here for its reason (design D2).
+  const [pendingRigor, setPendingRigor] = useState<Rigor | null>(null)
+  const [rigorReason, setRigorReason] = useState('')
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const { data: historyData, error: historyError } = useSpecRigorHistory(path)
 
   const document = data?.documents.find((entry) => entry.path === path)
   const flow = useDocumentFlow(document?.id)
@@ -129,16 +147,38 @@ export function SpecPhaseBar({
     )
   }
 
-  async function onRigor(rigor: string) {
+  // The route answers oldest first; the history reads newest first, reversed here and only here.
+  const history = [...(historyData?.events ?? [])].reverse()
+  const demoting =
+    pendingRigor !== null && RIGOR_ORDER.indexOf(pendingRigor) < RIGOR_ORDER.indexOf(document.rigor)
+  const reasonMissing = demoting && rigorReason.trim() === ''
+
+  function onChooseRigor(rigor: Rigor) {
+    setRigorRefusal([])
+    setRigorReason('')
+    setPendingRigor(rigor === document?.rigor ? null : rigor)
+  }
+
+  function onCancelRigor() {
+    setPendingRigor(null)
+    setRigorReason('')
+  }
+
+  async function onConfirmRigor() {
+    if (pendingRigor === null || reasonMissing) return
     setRigorRefusal([])
     try {
       await setRigor.mutateAsync({
         path,
-        rigor,
+        rigor: pendingRigor,
+        reason: rigorReason.trim(),
         // Compare-and-swap: what is being enforced has to be what the operator read.
         expectedDigest: document?.content_digest ?? null,
       })
+      setPendingRigor(null)
+      setRigorReason('')
     } catch (error) {
+      // The row stays open with its reason, so a refusal the operator can fix is one retry away.
       // `ApiError.message` is the response body verbatim, so the structured refusal has to be
       // parsed back out of it. Falling through to the raw text is deliberate: an unparseable
       // failure the operator can still read beats a generic sentence that hides it.
@@ -321,9 +361,9 @@ export function SpecPhaseBar({
           <span>Enforcement</span>
           <select
             data-testid="spec-rigor"
-            value={document.rigor}
+            value={pendingRigor ?? document.rigor}
             disabled={busy || setRigor.isPending}
-            onChange={(event) => onRigor(event.target.value)}
+            onChange={(event) => onChooseRigor(event.target.value as Rigor)}
             className="rounded-[var(--radius-sm)] px-1.5 py-0.5"
             style={{
               background: 'var(--surface-2)',
@@ -337,7 +377,101 @@ export function SpecPhaseBar({
             <option value="gate">Gate — unverified work cannot be approved</option>
           </select>
         </label>
+
+        {/* The audit trail that makes demotion legitimate, beside the control that demotes. Absent
+            until there is something in it. */}
+        {history.length > 0 && (
+          <button
+            type="button"
+            data-testid="spec-rigor-history-toggle"
+            aria-expanded={historyOpen}
+            onClick={() => setHistoryOpen((open) => !open)}
+            className="flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 hover:bg-[var(--row-hover)]"
+            style={{ color: 'var(--text-3)' }}
+          >
+            <Icon name="schedule" size={13} />
+            History ({history.length})
+          </button>
+        )}
+        {/* A failed read is said, not shown as "no changes yet" — the absent toggle means exactly
+            that, so an error must not reach it (F197's shape). */}
+        {historyError && (
+          <span data-testid="spec-rigor-history-error" style={{ color: 'var(--amber)' }}>
+            Could not load the rigor history: {readableApiError(historyError, 'the Hub did not answer.')}
+          </span>
+        )}
       </div>
+
+      {/* A rigor change, waiting for its reason (design D2). A promotion may go without one; a
+          demotion may not, because the reason is the record. */}
+      {pendingRigor !== null && (
+        <div
+          data-testid="spec-rigor-confirm"
+          className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] px-2 py-1.5"
+          style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+        >
+          <span>
+            Change enforcement from {RIGOR_LABEL[document.rigor]} to {RIGOR_LABEL[pendingRigor]}?
+          </span>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              aria-label="Reason for the change"
+              value={rigorReason}
+              onChange={(event) => setRigorReason(event.target.value)}
+              placeholder={demoting ? 'Why lower it?' : 'Why? (optional)'}
+              maxLength={2000}
+              className="min-w-0 flex-1 rounded-[var(--radius-sm)] px-1.5 py-0.5"
+              style={{
+                background: 'var(--bg)',
+                color: 'var(--text)',
+                border: '1px solid var(--border)',
+                fontSize: 11,
+              }}
+            />
+            <Button
+              variant="primary"
+              size="xs"
+              disabled={reasonMissing || setRigor.isPending}
+              onClick={onConfirmRigor}
+            >
+              Confirm
+            </Button>
+            <Button variant="ghost" size="xs" disabled={setRigor.isPending} onClick={onCancelRigor}>
+              Cancel
+            </Button>
+          </div>
+          {reasonMissing && (
+            <span style={{ color: 'var(--text-3)' }}>
+              Say why — this is the record that makes lowering a gate legitimate.
+            </span>
+          )}
+        </div>
+      )}
+
+      {historyOpen && history.length > 0 && (
+        <ul
+          data-testid="spec-rigor-history"
+          className="flex flex-col gap-0.5 pl-1"
+          style={{ color: 'var(--text-3)' }}
+        >
+          {history.map((event) => {
+            const at = hubDate(event.created_at)
+            return (
+              <li key={event.id} className="flex flex-wrap items-baseline gap-x-1.5">
+                <span style={{ color: 'var(--text-2)' }}>
+                  {event.from} → {event.to}
+                </span>
+                <span>· {event.actor}</span>
+                <span>· {event.reason ? event.reason : <em>no reason given</em>}</span>
+                <span title={at.toLocaleString()}>
+                  · {formatDistanceToNow(at, { addSuffix: true })}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
       {/* Why a promotion was refused. A document that cannot be read cannot be enforced, and
           saying only "refused" leaves the operator guessing at which of several things is wrong. */}

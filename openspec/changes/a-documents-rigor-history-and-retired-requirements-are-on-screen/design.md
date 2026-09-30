@@ -121,6 +121,21 @@ statements (the index stores no statement, `SpecRequirement` columns).
 
 ## Round log
 
+### Implementation notes — 2026-09-30
+
+No decision contradicted by the code. Small corrections the code showed: the routes moved
+(`RigorRequest` `spec.py:523`, `set_document_rigor` `:538`, `rigor_history` `:647`,
+`list_requirements` `:850`, `requirement_detail` `:888`). `CoverageEntry.state` in `api/spec.ts` did
+not list `retired` (F214 added it server-side only); added. D4's own-tab invalidation is a
+`useMutation` of `useSetSpecRigor`'s own (the `useSetSpecPhase` pattern) rather than a per-call
+option, so it fires for `mutate` and `mutateAsync` alike; `useSpecMutation` is untouched. Two
+existing UI tests assumed the old behaviour: `specRigor.test.tsx` posted on change (now presses
+Confirm), and `specNavigationUi.test.tsx` mocks `@/api/client` without `readableApiError`, which the
+new list calls when a read fails.
+D5 did not name the history read itself: `test_surface_ceilings.py` (n11 ratchet) refused a new
+query site that ignores its error, and an empty history is indistinguishable from a failed one (no
+toggle either way). The phase bar now says *"Could not load the rigor history"* with the body.
+
 ### Operator review fixes — 2026-09-24
 
 Applied the review's §4 LOW at HEAD `d2b9c32`: D4's own-tab invalidation and test 1.10. Re-read
