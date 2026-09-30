@@ -17076,7 +17076,7 @@ the test's unknown proposal) where they were 422; fails on the old code.
 
 ## F211 (C) — F206's shape, three more routes with no operator surface
 
-**Status:** open. Verified 2026-09-09: `spec/requirements` and `rigor-history` still
+**Status:** fixed 536b6d8 (`a-documents-rigor-history-and-retired-requirements-are-on-screen`, 2026-09-30: the rigor history is a toggle beside Enforcement, newest first; a document lists its retired requirements and each opens to its tasks, evidence and coverage as reported; driven in Chromium on `:8038`). Was: open. Verified 2026-09-09: `spec/requirements` and `rigor-history` still
 have **0** occurrences anywhere under `hub/ui/src`, so all three routes remain reachable only by a
 direct HTTP client -- including the audit trail the demotion feature argues its own legitimacy
 from. [classified 2026-09-09, D-3]
@@ -33117,7 +33117,7 @@ and passes today.
 
 ## F429 (C) — the app records every rigor change with an empty reason
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 3). `SpecPhaseBar.tsx:62-70` sends an empty reason, but the spec requires the reason to be recorded. **Carried by B6's `a-documents-rigor-history-and-retired-requirements-are-on-screen`.**
+**Status:** fixed 536b6d8 (`a-documents-rigor-history-and-retired-requirements-are-on-screen`, 2026-09-30: a rigor change is confirmed inline with a reason box; lowering it cannot be confirmed without one, and the reason is recorded and shown in the history). Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 3). `SpecPhaseBar.tsx:62-70` sends an empty reason, but the spec requires the reason to be recorded. **Carried by B6's `a-documents-rigor-history-and-retired-requirements-are-on-screen`.**
 
 
 ## F430 (B) — a drift candidate can be answered twice, and the second answer overwrites the first

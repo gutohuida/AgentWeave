@@ -164,7 +164,10 @@ describe('SpecRetiredRequirements', () => {
           identifier: 'FR-2',
           requirement_id: 'req-FR-2',
           document_id: 'spdoc-1',
-          state: 'retired',
+          // What `requirement_coverage._state` reports for this detail: its current-digest
+          // evidence is all rejected, and that is decided before retirement is looked at.
+          // `retired` is only ever the state of a retired requirement nothing serves (below).
+          state: 'rejected',
           integration: 'not_applicable',
           evidence_count: 2,
           accepted_count: 0,
@@ -196,10 +199,45 @@ describe('SpecRetiredRequirements', () => {
     expect(pieces[0]).toHaveTextContent('rejected')
     expect(pieces[0]).toHaveTextContent('wrong branch')
 
-    expect(within(detail).getByTestId('spec-retired-coverage-FR-2')).toHaveTextContent('retired')
+    // Shown as reported (the spec's "as reported for that requirement"), not overwritten.
+    expect(within(detail).getByTestId('spec-retired-coverage-FR-2')).toHaveTextContent(
+      'Coverage: rejected',
+    )
 
     await userEvent.click(task.querySelector('button')!)
     expect(onOpenTasks).toHaveBeenCalledWith(['task-1'])
+  })
+
+  // The route's other answer for a retired requirement: nothing links to it and nothing proves it
+  // (`test_a_retired_requirement_nobody_serves_is_retired_not_unserved`).
+  it('shows a retired requirement nothing serves as retired, with no work', async () => {
+    detailResults['FR-2'] = {
+      data: {
+        requirement: requirement('FR-2', 'records-watering', 'retired'),
+        tasks: [],
+        evidence: [],
+        coverage: {
+          identifier: 'FR-2',
+          requirement_id: 'req-FR-2',
+          document_id: 'spdoc-1',
+          state: 'retired',
+          integration: 'not_applicable',
+          evidence_count: 0,
+          accepted_count: 0,
+          linked_task_ids: [],
+        },
+      },
+    }
+    mount()
+
+    await userEvent.click(screen.getByTestId('spec-retired-toggle'))
+    await userEvent.click(screen.getByTestId('spec-retired-expand-FR-2'))
+
+    const detail = screen.getByTestId('spec-retired-detail-FR-2')
+    expect(within(detail).getByTestId('spec-retired-coverage-FR-2')).toHaveTextContent(
+      'Coverage: retired',
+    )
+    expect(detail).toHaveTextContent('No tasks link to it.')
   })
 
   // 1.8 (D5, the F197 shape). A failed read says so, with the Hub's words, and never spins.
