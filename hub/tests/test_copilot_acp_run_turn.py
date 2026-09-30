@@ -3675,3 +3675,211 @@ class TestPermissionJudgeRunsOffTheEventLoop:
         assert outcome.session_id == SESSION_ID
         assert outcome.status == "completed"
         assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
+
+
+class TestExitPlanModeUnanswerableAndPlanModeShipsOff:
+    """Tasks.md 1.9(w) (`:288`, review finding 9), the last case in this file's list: "an armed
+    `exit_plan_mode.requested` -> `session/cancel`, a `copilot.plan_mode_exit_unanswerable`
+    diagnostic, status `failed`; `SPEC_TURN_USES_PLAN_MODE` is `False`, so a spec turn sends
+    `set_mode #agent`, not `#plan`, and still carries `--excluded-tools`."
+
+    Two independent sub-claims, per this task's own queued caution (case (s) needed five tests,
+    case (j) four): the armed-cancellation half and the switch's-default half do not share a turn
+    or even a posture, so each gets its own test.
+
+    **The armed half.** Design.md's own statement (`:925-936`, review 2026-09-28, finding 9):
+    `exit_plan_mode` raises an input request Copilot itself has no ACP method to answer (CODE,
+    "only the `-p` path auto-approves it"), so a specification turn whose model tries to leave
+    plan mode could otherwise wait out the Hub's own turn timeout. `exit_plan_mode.requested` is
+    subscribed unconditionally (`:1104-1105`, a `COPILOT_RAW_EVENTS` member regardless of
+    `SPEC_TURN_USES_PLAN_MODE`'s own value), and "when it arrives armed the turn is cancelled
+    (`session/cancel`, D17) with a `copilot.plan_mode_exit_unanswerable` diagnostic and ends
+    `failed`" (`:933-935`) -- unlike case (s)'s `copilot_posture_escalated`, this is a
+    `diagnostic` event (design.md's diagnostics table, `:1024`: `copilot.plan_mode_exit
+    _unanswerable` / `warning`), not an `error`-kind one, the same distinction case (u)'s own
+    docstring draws between `copilot.runner_flag_removed` and `copilot_posture_escalated`. This
+    test arms the event on an ordinary non-spec turn: nothing in `:925-936` ties the subscription
+    or the cancellation to `restrict_spec_writes`, only to plan mode being active in Copilot's own
+    session state, which an ordinary turn's *loaded* session could still be in (`loadSession`
+    restores the saved mode, `:817`) -- so this test does not need `SPEC_TURN_USES_PLAN_MODE`
+    patched at all to exercise the cancellation. `exit_plan_mode.requested`'s own wire envelope is
+    not captured in any evidence log any more than `session.mode_changed`'s was
+    (`TestPostureStepEveryTurn`'s own docstring, `:2804-2813`) -- design.md names only the raw
+    event's `type` string as a `COPILOT_RAW_EVENTS` member (`:1104-1105`) delivered over the same
+    `github.com/copilot/sessionEvent` channel (`:1094-1096`, VERIFIED for the channel itself) as
+    `session.error` and `session.mode_changed` before it; this test's own
+    `_armed_exit_plan_mode_notification` invents an empty `data: {}` the same way those two
+    fixtures flagged their own synthetic shapes, since nothing in `:925-936` describes this
+    event's own payload -- what matters to the assertion is only that `run_turn` reacts to the
+    event's `type` arriving, not this fixture's exact `data`.
+
+    **The default-off half.** `SPEC_TURN_USES_PLAN_MODE` ships `False` (`:929`), a module-level
+    constant this file's other test of it, `test_plan_mode_set_mode_carries_the_full_plan_uri
+    _before_the_prompt` (`TestSpecTurnRestrictsWritesAndAllowAll`, `:1835-1893`), only ever
+    exercises *patched* `True` -- this file has not yet, anywhere, run a spec turn against the
+    constant's own shipped default. That test's sibling,
+    `test_spawn_argv_excludes_copilots_edit_tools_but_keeps_create`, scripts `session/set_mode`
+    but explicitly leaves it "unasserted here" (`:1601`) -- so neither existing test proves the
+    unpatched module sends `#agent`, not `#plan`, on a spec turn. This test asserts the constant's
+    own default directly (`monkeypatch` is never called on it), then drives one spec turn much as
+    that sibling test does, asserting both that turn's `session/set_mode` call (D8's posture step,
+    `:823-829`: `#agent` "whatever the load reported" applies here too, since
+    `SPEC_TURN_USES_PLAN_MODE` being off means D9 item 2 never fires and step 1 alone governs) and
+    its spawn argv's `--excluded-tools` flag (D9 item 1, already proven standalone by that sibling
+    test, reasserted here only to confirm both halves of (w)'s own bullet hold on the *same* turn,
+    not as new coverage of the flag itself).
+    """
+
+    @staticmethod
+    def _armed_exit_plan_mode_notification():
+        return {
+            "notification": "github.com/copilot/sessionEvent",
+            "params": {
+                "sessionId": SESSION_ID,
+                "type": "exit_plan_mode.requested",
+                "timestamp": "2026-09-30T00:00:09.000Z",
+                "data": {},
+            },
+        }
+
+    async def test_armed_exit_plan_mode_requested_cancels_with_diagnostic_and_fails(
+        self, monkeypatch
+    ):
+        events = []
+        sessions_bound = []
+
+        script = _session_established_script(
+            tail_entries=[
+                self._armed_exit_plan_mode_notification(),
+                {
+                    "response": {
+                        "stopReason": "end_turn",
+                        "usage": {"inputTokens": 1, "outputTokens": 1},
+                    }
+                },  # session/prompt's own eventual result -- Copilot may still answer end_turn
+            ]
+        )
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Keep going.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        cancel_calls = [(m, p) for m, p in fake.sent_notifications if m == "session/cancel"]
+        assert len(cancel_calls) == 1, (
+            "design.md:933-935: an armed exit_plan_mode.requested must send session/cancel; "
+            f"got {fake.sent_notifications}"
+        )
+        assert cancel_calls[0][1] == {"sessionId": SESSION_ID}
+        assert (
+            "session/cancel",
+            {"sessionId": SESSION_ID},
+        ) not in fake.sent_requests, "session/cancel is a notification (D17), not a request"
+
+        assert outcome.status == "failed", (
+            "design.md:933-935: an armed exit_plan_mode.requested must end the turn failed, "
+            f"got status {outcome.status!r}"
+        )
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        assert len(diagnostics) == 1, events
+        payload = diagnostics[0].payload
+        assert payload["code"] == "copilot.plan_mode_exit_unanswerable", payload
+        assert payload["severity"] == "warning", payload
+        assert sessions_bound == [SESSION_ID]
+
+    async def test_spec_turn_uses_plan_mode_defaults_false_and_sends_agent_mode(self, monkeypatch):
+        assert copilot_acp.SPEC_TURN_USES_PLAN_MODE is False, (
+            "design.md:929: SPEC_TURN_USES_PLAN_MODE must ship off -- exit_plan_mode has no ACP "
+            "method to answer it, and a spec turn left waiting on it would hang out the timeout"
+        )
+
+        captured_cmds = []
+        script = [
+            {"response": INIT_RESPONSE},
+            {
+                "response": {
+                    "sessionId": SESSION_ID,
+                    "modes": {"currentModeId": AGENT_MODE_URI},
+                    "configOptions": [_mode_option(), _agent_option(""), _allow_all_option()],
+                }
+            },  # session/new
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent
+            {"response": {}},  # session/set_mode -- the #agent call this test asserts
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake, captured_cmds=captured_cmds)
+
+        await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Write the specification document.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="shim",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=True,
+            extra_flags=None,
+            on_event=_collector([]),
+            on_session=_collector([]),
+        )
+
+        methods = [m for m, _ in fake.sent_requests]
+        set_mode_calls = [(m, p) for m, p in fake.sent_requests if m == "session/set_mode"]
+        assert len(set_mode_calls) == 1, (
+            "with SPEC_TURN_USES_PLAN_MODE off, a spec turn must still send exactly one "
+            f"session/set_mode, D8's ordinary #agent one; got {set_mode_calls}"
+        )
+        _, params = set_mode_calls[0]
+        assert params == {"sessionId": SESSION_ID, "modeId": AGENT_MODE_URI}, (
+            "design.md:823-829, 929: with the switch off, D9 item 2 never fires and step 1 alone "
+            f"governs -- set_mode must carry #agent, not #plan; got {params}"
+        )
+        i_set_mode = methods.index("session/set_mode")
+        i_prompt = methods.index("session/prompt")
+        assert i_set_mode < i_prompt, methods
+
+        cmd = captured_cmds[0]
+        excluded_flags = [a for a in cmd if a.startswith("--excluded-tools=")]
+        assert excluded_flags == [
+            "--excluded-tools=apply_patch,edit,str_replace,str_replace_editor"
+        ], (
+            "design.md:884-895 (D9 item 1): --excluded-tools is unconditional on a spec turn "
+            f"regardless of SPEC_TURN_USES_PLAN_MODE; got {cmd}"
+        )
