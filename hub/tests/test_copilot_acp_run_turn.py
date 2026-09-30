@@ -54,9 +54,13 @@ Confirmed red: `pytest hub/tests/test_copilot_acp_run_turn.py -q` fails at colle
 `ModuleNotFoundError: No module named 'hub.copilot_acp'`.
 """
 
+import asyncio
+import contextlib
 import dataclasses
 import inspect
 import json
+import os
+import time
 
 import pytest
 
@@ -3461,5 +3465,213 @@ class TestRunnerFlagWideningStrippedFromArgv:
         assert payload["severity"] == "warning", payload
         assert "--config-dir" in payload["summary"], payload["summary"]
 
+        assert outcome.status == "completed"
+
+
+class TestPermissionJudgeRunsOffTheEventLoop:
+    """Tasks.md 1.9(v) (`:287`, review finding 7, design.md:617-628): "with os.path.realpath
+    patched to sleep 2 s, a coroutine running beside the turn makes progress while a path
+    request is decided (the judge runs in asyncio.to_thread)." Design.md's own paragraph, read
+    fresh ("The judge runs off the event loop"), states the mechanism directly: `_where`
+    (`mcp_server.py:1113-1133`) calls `os.path.realpath` on every path, measured by the
+    reviewer at 21 s for a UNC path on this machine, and moving that judge into the Hub process
+    would otherwise freeze every project, run and route sharing this event loop for however long
+    one model-written path takes to resolve. So the client is required to
+    `await asyncio.to_thread(decide_permission, …)`, never judge a `session/request_permission`
+    inline -- this case proves that operationally, the same "measure it, don't read it"
+    discipline case (u)'s own sanity check used for the argv-stripping rule, rather than by
+    reading source (unlike almost everything else in this class-per-case file, which asserts
+    on wire shape and ordering, not timing).
+
+    **The test's own mechanism.** `os.path.realpath` is patched so that calls naming this case's
+    own `INSIDE_PATH` specifically -- not every call -- add a real, synchronous `time.sleep(2.0)`
+    before delegating to the original function (not `asyncio.sleep`, since the point is proving
+    the *event loop* stays free while this specific call occupies a worker thread). Scoping the
+    delay to one path, rather than blocking every `os.path.realpath` call for the test's
+    duration, matters operationally, not just stylistically: pytest's own machinery (assertion
+    rewriting, `pathlib` resolution during fixture teardown, `pytest-asyncio`'s own bookkeeping)
+    calls `os.path.realpath` an unbounded, unpredictable number of times around the test body,
+    and delaying all of them compounds into a hang rather than a bounded 2s wait -- confirmed
+    directly: an earlier draft patched every call unconditionally and the test did not return
+    within a 120s timeout, killed rather than diagnosed further, before this narrower version
+    was written. A background coroutine ticks a counter every 0.05 s
+    via `asyncio.sleep` for as long as `run_turn` is in flight. `_FakeACPSession.request()`'s
+    `server_request` branch (module docstring, above) awaits `run_turn`'s own `on_server_request`
+    handler and appends its result to `sent_responses` immediately afterward (`:212-213`) -- this
+    class's own `_patch_spawn_recording_ticks_at_response`, a `_patch_spawn` variant, wraps
+    *that* handler (not `_FakeACPSession.request` itself, which this file does not subclass) so
+    the counter's own value is captured at the exact instant the permission decision concludes,
+    before `run_turn` does anything else with the result. If `run_turn` called
+    `decide_permission` directly on the event loop instead of through `asyncio.to_thread`, the
+    blocking `time.sleep` call never yields control back to the loop, so the ticking coroutine
+    could not run even once during the whole two seconds -- the captured count would be exactly
+    0, not merely low. A correctly offloaded implementation lets the ticking coroutine run on the
+    event loop the whole time `os.path.realpath` blocks a worker thread, so the captured count
+    should land within rounding of `2.0 / 0.05 == 40`; the assertion below only requires "well
+    above zero, and not merely the one or two ticks that scheduling jitter around the await
+    boundary could produce on its own" (10, a quarter of the theoretical maximum) precisely so it
+    does not depend on the exact thread-pool and event-loop scheduling latency of the machine
+    running it.
+
+    Sanity-checked against a throwaway stand-in (`hub/hub/copilot_acp.py`, not committed) two
+    ways: (1) `await asyncio.to_thread(os.path.realpath, path)` in the stand-in's
+    `on_server_request` handler -- the captured tick count was in the high 30s, comfortably
+    above the 10-tick floor, and the test passed; (2) the same handler calling
+    `os.path.realpath(path)` directly, inline, with no `to_thread` -- the captured count was
+    exactly 0 every run, failing the floor assertion as designed, not by timing out or raising.
+    Restored nothing (the stand-in was never part of this file), deleted the stand-in and its
+    `__pycache__` entry, confirmed red again at the same `ModuleNotFoundError`.
+
+    The permission request itself is an ordinary in-workspace `edit`, reusing
+    `TestFullAccessWithNoAllowAllOption`'s (part 11/N) `toolCall`/`options` shape. This case does
+    not care which verdict `decide_permission` reaches (ALLOW or REJECT) -- only that judging it
+    does not stall the loop -- so the response's `optionId` is checked only for being one the
+    request actually offered, not for a specific value.
+    """
+
+    EDIT_CALL_ID = "call_synthetic_offloaded_edit_1"
+    INSIDE_PATH = "C:\\work\\slow.txt"
+    TICK_INTERVAL = 0.05
+    REALPATH_DELAY = 2.0
+    TICK_FLOOR = 10
+
+    def _permission_request_entry(self, path):
+        return {
+            "server_request": {
+                "id": 1,
+                "method": "session/request_permission",
+                "params": {
+                    "sessionId": SESSION_ID,
+                    "toolCall": {
+                        "toolCallId": self.EDIT_CALL_ID,
+                        "title": "Edit slow.txt",
+                        "kind": "edit",
+                        "rawInput": {"fileName": path},
+                        "locations": [{"path": path}],
+                    },
+                    "options": [
+                        {"optionId": "allow_once", "name": "Allow", "kind": "allow_once"},
+                        {
+                            "optionId": "allow_always",
+                            "name": "Always Allow",
+                            "kind": "allow_always",
+                        },
+                        {"optionId": "reject_once", "name": "Reject", "kind": "reject_once"},
+                    ],
+                },
+            }
+        }
+
+    @staticmethod
+    def _patch_spawn_recording_ticks_at_response(monkeypatch, fake, tick_counter, snapshots):
+        async def _fake_spawn(cmd, *, cwd=None, env=None, **kwargs):
+            if kwargs.get("on_notification") is not None:
+                fake._on_notification = kwargs["on_notification"]
+            real_on_server_request = kwargs.get("on_server_request")
+            if real_on_server_request is not None:
+
+                async def _recording(method, params):
+                    result = await real_on_server_request(method, params)
+                    # Captured the instant the permission decision concludes -- before
+                    # `_FakeACPSession.request()` itself does anything else with `result` -- so a
+                    # `run_turn` that judged inline on the event loop is caught here, not
+                    # papered over by whatever the loop gets around to doing afterwards.
+                    snapshots.append(tick_counter["ticks"])
+                    return result
+
+                fake._on_server_request = _recording
+            return fake
+
+        monkeypatch.setattr(ACPProcess, "spawn", _fake_spawn)
+        monkeypatch.setattr(
+            copilot_acp,
+            "resolve_copilot_executable",
+            lambda *a, **k: ["copilot.exe"],
+            raising=False,
+        )
+
+    async def test_ticker_advances_while_realpath_blocks_in_a_worker_thread(self, monkeypatch):
+        tick_counter = {"ticks": 0}
+        snapshots = []
+        stop = asyncio.Event()
+
+        async def _ticker():
+            while not stop.is_set():
+                await asyncio.sleep(self.TICK_INTERVAL)
+                tick_counter["ticks"] += 1
+
+        real_realpath = os.path.realpath
+
+        def _slow_realpath(path, *a, **k):
+            if os.fspath(path) == self.INSIDE_PATH:
+                time.sleep(self.REALPATH_DELAY)
+            return real_realpath(path, *a, **k)
+
+        monkeypatch.setattr(os.path, "realpath", _slow_realpath)
+
+        script = _session_established_script(
+            tail_entries=[
+                self._permission_request_entry(self.INSIDE_PATH),
+                {
+                    "response": {
+                        "stopReason": "end_turn",
+                        "usage": {"inputTokens": 1, "outputTokens": 1},
+                    }
+                },  # session/prompt
+            ]
+        )
+        fake = _FakeACPSession(script)
+        self._patch_spawn_recording_ticks_at_response(monkeypatch, fake, tick_counter, snapshots)
+
+        ticker_task = asyncio.ensure_future(_ticker())
+        try:
+            outcome = await run_turn(
+                cwd="C:\\work",
+                env=None,
+                prompt="Please edit a file inside the workspace.",
+                model=None,
+                resume_session_id=None,
+                agent=AGENT_NAME,
+                per_turn_context="## Workspace\n- root: C:\\work",
+                tool_surface_context="## Tools\n- agentweave-send_message",
+                stable_context=None,
+                control_overrides=None,
+                told_access_path="mcp",
+                permission_mode=None,
+                workspace="C:\\work",
+                restrict_spec_writes=False,
+                extra_flags=None,
+                on_event=_collector([]),
+                on_session=_collector([]),
+            )
+        finally:
+            stop.set()
+            ticker_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await ticker_task
+
+        assert len(snapshots) == 1, (
+            "exactly one session/request_permission must have been answered; " f"got {snapshots}"
+        )
+        assert snapshots[0] >= self.TICK_FLOOR, (
+            "the ticking coroutine must have made real progress on the event loop while "
+            "os.path.realpath blocked a worker thread for 2s -- a count this low (or zero) "
+            "means run_turn judged the permission request inline on the event loop instead of "
+            f"through asyncio.to_thread; got {snapshots[0]} ticks, floor is {self.TICK_FLOOR}"
+        )
+
+        offered_ids = {
+            o["optionId"]
+            for o in self._permission_request_entry(self.INSIDE_PATH)["server_request"]["params"][
+                "options"
+            ]
+        }
+        assert fake.sent_responses[0][0] == 1, fake.sent_responses
+        assert fake.sent_responses[0][1]["outcome"]["optionId"] in offered_ids, (
+            "this case does not pin down which verdict decide_permission reaches, only that "
+            f"reaching one did not stall the loop; got {fake.sent_responses}"
+        )
+
+        assert outcome.session_id == SESSION_ID
         assert outcome.status == "completed"
         assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
