@@ -861,3 +861,151 @@ class TestFullAccessWithNoAllowAllOption:
         assert sessions_bound == [SESSION_ID]
         assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
         assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
+
+
+class TestAgentMarkerMismatchFallsBackToResourceBlock:
+    """Tasks.md 1.9(f): an `agent` option whose description is not the marker -- the stable
+    context goes as a `resource` block, with a diagnostic. D6 (design.md:498-536): after
+    `session/set_config_option {agent: <name>}`, the client proceeds only when the option exists,
+    `currentValue == <name>` **and** the selected value's `description` equals the marker written
+    in D4 (`f"AgentWeave agent {agent} — context rendered by the AgentWeave Hub"`, this file's own
+    `AGENT_MARKER`). This part covers the "foreign description" branch of that check specifically
+    (`currentValue` *is* the agent, but `description` is someone else's text) -- a repository
+    `.claude/agents/<agent>.md`/`.github/agents/<agent>.md` with the same name standing in for the
+    Hub's file, exactly D6's own stated scenario (`:508-517`). The check's other two failure
+    branches (no `agent` option at all; a refused set) are not this bullet's to invent a case for
+    -- tasks.md's own wording names only "whose description is not the marker".
+
+    On failure the run (D6, `:519-524`) sends the stable context as an ACP `resource` content
+    block -- the exact shape design.md gives (`:520-522`): `{"type": "resource", "resource":
+    {"uri": "agentweave://context/<agent>/stable", "mimeType": "text/markdown", "text": …}}` --
+    **ahead of** the usual `COPILOT_TURN_CONTEXT_HEAD` block, and emits one `diagnostic` whose
+    summary is design.md's own sentence (`:522-524`): "Copilot did not select the AgentWeave agent
+    file (<reason>); this turn's context was sent with the prompt instead." `<reason>` is never
+    given a literal wording for any of the three branches, so only the sentence's fixed halves are
+    asserted here, the same discipline `TestVersionGateFailsBeforeAnySessionRequest` applies to
+    the missing-version case's `<v>`. `copilot.agent_not_selected` / `warning` is D10's diagnostic
+    table's only row naming D6 (`:1014`, source "D6 fallback") -- read the table fresh rather than
+    assume a second, more specific code exists for this branch: no other row names D6 at all, so
+    the one row covers every branch of the same check, this one included.
+
+    **The deselect is scripted, not asserted here.** D6 (`:526-536`, review finding 6) also sends
+    `session/set_config_option {agent: ""}` before the prompt on the same failure, and raises if it
+    does not read back `""` -- that is tasks.md 1.9(t)'s own case, already named for a later part.
+    This part's script answers that call so a real implementation reaches the prompt at all (a
+    script omitting it would exhaust on the extra request), but makes no assertion about its
+    params or the raise path -- inventing that coverage under (f)'s name would duplicate (t) before
+    (t) exists. Ordering: design.md's own "posture step, every turn" paragraph (`:815-821`) states
+    the posture step (which sends `session/set_mode`) runs "after new/load **and agent selection
+    (D6)**" -- so the deselect, being part of D6, is scripted before `session/set_mode` here, not
+    after; `_FakeACPSession` pops script entries strictly in call order regardless of method name,
+    so a real implementation calling them in the other order would consume the wrong entries and
+    fail loudly (either `script exhausted` or an unexpected shape reaching a later request), not
+    pass silently for the wrong reason.
+    """
+
+    FOREIGN_DESCRIPTION = "A custom repository agent, unrelated to AgentWeave"
+
+    async def test_foreign_description_sends_resource_block_and_diagnostic(self, monkeypatch):
+        events = []
+        sessions_bound = []
+        stable_context = "## Charter\n- Ship safely.\n## Project instructions\n- Use py -3.11."
+        per_turn_context = "## Workspace\n- root: C:\\work"
+        tool_surface_context = "## Tools\n- agentweave-send_message"
+        raw_prompt = "Please review the open PR."
+
+        script = [
+            {"response": INIT_RESPONSE},
+            {
+                "response": {
+                    "sessionId": SESSION_ID,
+                    "modes": {"currentModeId": AGENT_MODE_URI},
+                    "configOptions": [_mode_option(), _agent_option(""), _allow_all_option()],
+                }
+            },  # session/new
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME, description=self.FOREIGN_DESCRIPTION),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent -- foreign description, D6's check fails
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(""),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent "" -- D6's deselect, reads back "" (case (t)'s
+            # territory, unasserted here)
+            {"response": {}},  # session/set_mode -- D8's posture step, unasserted here too
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt=raw_prompt,
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context=per_turn_context,
+            tool_surface_context=tool_surface_context,
+            stable_context=stable_context,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        assert len(diagnostics) == 1, events
+        payload = diagnostics[0].payload
+        assert payload["code"] == "copilot.agent_not_selected", payload
+        assert payload["severity"] == "warning", payload
+        assert payload["summary"].startswith(
+            "Copilot did not select the AgentWeave agent file ("
+        ), payload["summary"]
+        assert payload["summary"].endswith(
+            "); this turn's context was sent with the prompt instead."
+        ), payload["summary"]
+
+        methods = [m for m, _ in fake.sent_requests]
+        prompt_calls = [(m, p) for m, p in fake.sent_requests if m == "session/prompt"]
+        assert len(prompt_calls) == 1, methods
+        prompt_params = prompt_calls[0][1]
+        blocks = prompt_params["prompt"]
+        assert len(blocks) >= 3, "resource block, context block and message must all be present"
+        assert blocks[0] == {
+            "type": "resource",
+            "resource": {
+                "uri": f"agentweave://context/{AGENT_NAME}/stable",
+                "mimeType": "text/markdown",
+                "text": stable_context,
+            },
+        }, blocks[0]
+        assert blocks[1]["text"].startswith(copilot_acp.COPILOT_TURN_CONTEXT_HEAD)
+        assert per_turn_context in blocks[1]["text"]
+        assert tool_surface_context in blocks[1]["text"]
+        assert (
+            blocks[-1]["text"] == raw_prompt
+        ), "the operator's message must still reach the wire byte-identical"
+
+        assert sessions_bound == [SESSION_ID]
+        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+        assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
