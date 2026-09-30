@@ -1009,3 +1009,133 @@ class TestAgentMarkerMismatchFallsBackToResourceBlock:
         assert sessions_bound == [SESSION_ID]
         assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
         assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
+
+
+class TestStopSendsSessionCancelAndInterrupts:
+    """Tasks.md 1.9(g): stop -- `session/cancel` is sent, and `stopReason: cancelled` ->
+    `interrupted`. D17 (design.md:1481-1505): once a stop is requested the client (1) sends
+    `session/cancel {sessionId}` as a *notification*, not a request (design.md's own words,
+    `:1486`) -- unlike Codex's `turn/interrupt`, a request Codex's own client awaits
+    (`test_codex_appserver_run_turn.py::TestRunTurnInterrupt`); (2) waits (up to 10 s, `:1488`,
+    not itself timed by this test) for the pending `session/prompt` to return
+    `stopReason:"cancelled"`; (3) maps that to `TurnOutcome.status == "interrupted"` (`:1493`,
+    "as for Codex"); (4) closes the process with `terminate_process_tree(pid, force=True)`, "not
+    `proc.kill()`" (`:1489-1491`, because `copilot.exe` runs its shells as children a
+    single-process kill would orphan) -- the one case in this file so far where
+    `closed_with_force` is **not** `False`.
+
+    **The stop signal itself, and where `should_interrupt` is polled, is this file's own
+    least-invented reading, flagged as such.** D18 names `should_interrupt` as one of the
+    callbacks this slice's `run_turn` takes (design.md:1514-1517), the same name Codex's own
+    `run_turn` already has; D17's own "the client polls it as Codex does" cites Codex's `while
+    True` loop, which checks `should_interrupt()` once per notification it reads
+    (`codex_appserver.py:1022-1029`). This file's fake has no such loop of its own -- a
+    `session/prompt` call's notifications are delivered to `on_notification` from *inside* the
+    single `request()` call that also returns that prompt's eventual response (see the module
+    docstring) -- so the only point this fake can give a real `run_turn` a chance to notice a
+    stop while `session/prompt` is still pending is during that callback. This test's script
+    places one otherwise-unremarkable `session/update` notification ahead of `session/prompt`'s
+    own `stopReason:"cancelled"` response for exactly that reason: if a real implementation
+    instead polls on some tick this fake cannot produce, this test fails loudly (the ordering
+    assertion below, or `session/cancel` never sent), not silently.
+
+    **Ordering is instrumented, not assumed.** `_CancelOrderingFake` (below) records whether
+    `session/cancel` was sent *before* `session/prompt`'s own `request()` call has returned to
+    its caller -- proving the notification precedes the response causally, not merely appearing
+    first in some unordered set. A `run_turn` that instead waited for the full response and only
+    then decided, after the fact, to call `session/cancel` would still produce the same set of
+    sent messages but would fail this specific check (the CLAUDE.md ordering-evidence rule).
+    """
+
+    class _CancelOrderingFake(_FakeACPSession):
+        def __init__(self, script):
+            super().__init__(script)
+            self.prompt_call_returned = False
+            self.cancel_sent_before_prompt_returned = None
+
+        async def request(self, method, params, *, timeout=30.0):
+            result = await super().request(method, params, timeout=timeout)
+            if method == "session/prompt":
+                self.prompt_call_returned = True
+            return result
+
+        async def notify(self, method, params):
+            await super().notify(method, params)
+            if method == "session/cancel" and self.cancel_sent_before_prompt_returned is None:
+                self.cancel_sent_before_prompt_returned = not self.prompt_call_returned
+
+    async def test_should_interrupt_sends_session_cancel_and_returns_interrupted(self, monkeypatch):
+        events = []
+        sessions_bound = []
+
+        script = [
+            {"response": INIT_RESPONSE},
+            {
+                "response": {
+                    "sessionId": SESSION_ID,
+                    "modes": {"currentModeId": AGENT_MODE_URI},
+                    "configOptions": [_mode_option(), _agent_option(""), _allow_all_option()],
+                }
+            },  # session/new
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent
+            {"response": {}},  # session/set_mode -- D8's posture step, unasserted here too
+            {
+                "notification": "session/update",
+                "params": {
+                    "sessionId": SESSION_ID,
+                    "update": {
+                        "sessionUpdate": "agent_message_chunk",
+                        "content": {"type": "text", "text": "wor"},
+                    },
+                },
+            },  # the one in-flight notification giving run_turn's own on_notification callback
+            # the sole reentrant point this fake has while session/prompt is still pending --
+            # see the class docstring
+            {"response": {"stopReason": "cancelled"}},  # session/prompt's eventual result
+        ]
+        fake = self._CancelOrderingFake(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Please review the open PR.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+            should_interrupt=lambda: True,
+        )
+
+        cancel_calls = [(m, p) for m, p in fake.sent_notifications if m == "session/cancel"]
+        assert len(cancel_calls) == 1, fake.sent_notifications
+        assert cancel_calls[0][1] == {"sessionId": SESSION_ID}
+        assert (
+            fake.cancel_sent_before_prompt_returned is True
+        ), "session/cancel must be sent while session/prompt is still pending, not after"
+        assert (
+            "session/cancel",
+            {"sessionId": SESSION_ID},
+        ) not in fake.sent_requests, "session/cancel is a notification (D17), not a request"
+
+        assert sessions_bound == [SESSION_ID]
+        assert outcome == TurnOutcome(session_id=SESSION_ID, status="interrupted", error=None)
+        assert fake.closed_with_force is True, "D17: terminate_process_tree(force=True) on a stop"
