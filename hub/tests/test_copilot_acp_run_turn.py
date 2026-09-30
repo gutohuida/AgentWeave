@@ -282,6 +282,29 @@ def _collector(target):
     return _append
 
 
+class _FakeCopilotProbe:
+    """Part 16/N, case (p): a stand-in for `hub.copilot_probe.CopilotProbe` (D15), which does not
+    exist yet -- design.md names its read side (`CopilotProbe.verdict()`, used verbatim across
+    the doc) but never its write side, only the effect ("`run_turn` writes that verdict into
+    `CopilotProbe` ... before raising", `:1215-1217`). `record(present, authorized, reason)` is
+    this file's own least-invented guess at that write call, symmetric with the read-side name;
+    flagged for a future round the same way part 1/N flagged its own invented names. Starts
+    `authorized=True` so a `run_turn` that never reaches this fake at all (the real singleton
+    turns out to be wired some other way) leaves `verdict()` reporting authorized and the test
+    fails loudly on that, rather than passing for the wrong reason."""
+
+    def __init__(self):
+        self.recorded = []
+        self._verdict = {"present": True, "authorized": True, "reason": None}
+
+    def record(self, *, present, authorized, reason):
+        self.recorded.append({"present": present, "authorized": authorized, "reason": reason})
+        self._verdict = {"present": present, "authorized": authorized, "reason": reason}
+
+    def verdict(self):
+        return dict(self._verdict)
+
+
 class TestNewSessionSequence:
     """Tasks.md 1.9(a): the plain new-session sequence, nothing resumed, nothing escalated."""
 
@@ -1940,6 +1963,93 @@ class TestPrePromptErrorRaisesCopilotACPErrorAsAppServerError:
             "session/new",
         ], "no session/prompt may be sent once a pre-prompt request errors"
         assert fake.closed_with_force is False, "D17: the process is still closed, not forced"
+        assert sessions_bound == [], "on_session must never fire when no session was ever bound"
+
+
+class TestSessionNewAuthErrorMarksProbeNotAuthorized:
+    """Tasks.md 1.9(p) (R3): `session/new` answered `-32000` raises, and `CopilotProbe`'s verdict
+    reads not authorized before the raise propagates.
+
+    Case (k)'s `TestPrePromptErrorRaisesCopilotACPErrorAsAppServerError` already covers the
+    generic "any pre-prompt error raises, is an `AppServerError`, carries `.code`/`.data`" claim
+    with a deliberately different code (`-32603`), so its scope stays distinct from this one
+    (that class's own docstring says so). This case is scoped to the auth-specific consequence
+    design.md `:1215-1217` names: *"When ... `session/new` fails `-32000`, `run_turn` writes that
+    verdict into `CopilotProbe` (D15) before raising."* `-32000` and its message "Authentication
+    required" are CODE (design.md `:1398-1399`, `app.js` `newSession` -> `ps.authRequired()`); the
+    `reason` sentence asserted below ("Copilot CLI is not signed in. Run `copilot login`.") is
+    D15's own table row for this state (design.md `:1409`), reused here as the least-invented
+    reading of "that verdict" -- `run_turn` presumably writes the same verdict shape
+    `CopilotProbe`'s own refresh would have concluded, not a distinct message of its own.
+
+    `hub.copilot_probe.CopilotProbe` does not exist yet, and design.md never names its write
+    side, only the read one (`CopilotProbe.verdict()`, used verbatim three times). This part
+    invents a `CopilotProbe.record(present=, authorized=, reason=)` call (`_FakeCopilotProbe`,
+    module-level above) as the least-invented symmetric guess, flagged for a future round the way
+    part 1/N flagged its own invented names. `copilot_acp.CopilotProbe` is patched the same way
+    `_patch_spawn` already patches `copilot_acp.resolve_copilot_executable` -- `raising=False`, so
+    a real implementation that reaches the singleton some other way (not a name bound directly in
+    `copilot_acp`'s own namespace) makes this patch a no-op, and the untouched fake's
+    `authorized=True` starting state then fails the assertion loudly instead of passing for the
+    wrong reason.
+    """
+
+    async def test_session_new_auth_error_raises_and_marks_probe_not_authorized(self, monkeypatch):
+        events = []
+        sessions_bound = []
+
+        script = [
+            {"response": INIT_RESPONSE},
+            {"error": {"code": -32000, "message": "Authentication required"}},  # session/new
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        fake_probe = _FakeCopilotProbe()
+        monkeypatch.setattr(copilot_acp, "CopilotProbe", fake_probe, raising=False)
+
+        with pytest.raises(CopilotACPError) as exc_info:
+            await run_turn(
+                cwd="C:\\work",
+                env=None,
+                prompt="Anything changed since I left?",
+                model=None,
+                resume_session_id=None,
+                agent=AGENT_NAME,
+                per_turn_context="## Workspace\n- root: C:\\work",
+                tool_surface_context="## Tools\n- agentweave-send_message",
+                stable_context=None,
+                control_overrides=None,
+                told_access_path="mcp",
+                permission_mode=None,
+                workspace="C:\\work",
+                restrict_spec_writes=False,
+                extra_flags=None,
+                on_event=_collector(events),
+                on_session=_collector(sessions_bound),
+            )
+
+        err = exc_info.value
+        assert err.code == -32000, err.code
+
+        verdict = fake_probe.verdict()
+        assert verdict["authorized"] is False, (
+            "run_turn must write an unauthorized verdict into CopilotProbe before the -32000 "
+            f"raise propagates (design.md:1215-1217); got {verdict!r}"
+        )
+        assert verdict["present"] is True, (
+            "the executable ran and answered -- absent would be a different D15 row (not "
+            f"resolvable at all); got {verdict!r}"
+        )
+        assert verdict["reason"] == "Copilot CLI is not signed in. Run `copilot login`.", verdict[
+            "reason"
+        ]
+
+        methods = [m for m, _ in fake.sent_requests]
+        assert methods == [
+            "initialize",
+            "session/new",
+        ], "no session/prompt may be sent once session/new errors"
         assert sessions_bound == [], "on_session must never fire when no session was ever bound"
 
 
