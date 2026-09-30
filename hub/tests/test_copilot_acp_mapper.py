@@ -85,28 +85,46 @@ from a mapper's returned events -- so whether Copilot's `run_turn` reads the map
 `diagnostic` split, or re-inspects the raw `session.error` itself, is task 1.9's
 (`test_copilot_acp_run_turn.py`) question. See that class's own docstring for the full reasoning.
 
-**Task 1.8 is not fully covered by this file yet, despite the part 4/N sub-note's closing claim.**
-Re-reading `tasks.md`'s own Assert list fresh while writing this part surfaced two bullets neither
-this part nor any earlier one addresses:
+**Task 1.8 was not fully covered through part 5/N**, despite part 4/N's own closing claim to the
+contrary. Re-reading `tasks.md`'s Assert list fresh (part 5/N's own correction) found two bullets
+no earlier part addressed: the model-substitution diagnostic (`session.model_change`/
+`session.auto_mode_resolved`/`session.tools_updated`, design.md:1096-1108) and the
+mapper-testable half of the `user_message_chunk`-before-arming bullet (design.md:977's "Dropped"
+set, independent of the arming gate that lives outside this file).
 
-- *"`session.model_change` to a different model emits one diagnostic"* -- `TestDiagnosticPayloadShape`'s
-  own docstring already flagged this as "left for a later part" back in part 3/N, but part 4/N's
-  docstring and the `next_action` that queued this part both dropped it from the running tally and
-  claimed the subagent-error bullet was the *only* one left. It is not: no test in this file
-  exercises `session.model_change`/`session.auto_mode_resolved`/`session.tools_updated` or the
-  model-substitution diagnostic (design.md:1096-1108) at all.
-- *"a replayed `user_message_chunk` before arming emits nothing"* -- likely resolvable the same
-  way the `agentweave`-server-status bullet was in part 4/N (out of this file's scope: arming is
-  `_on_armed_raw_event`'s gate, outside `CopilotEventMapper`, already established at
-  `TestMcpServerUnavailableDiagnostic`'s docstring above), *except* design.md:977 separately lists
-  `user_message_chunk` in the mapper's own "Dropped" set for `on_session_update` regardless of
-  arming -- which **is** mapper-testable and is not yet tested. Needs a fresh read before writing,
-  not this note's summary.
+Part 6/N closes both, re-reading design.md:1096-1108 and :977 fresh rather than off that summary,
+per the correction's own instruction:
 
-Do not move to task 1.9 on the next firing without either closing both bullets here (part 6/N) or
-getting an operator/round decision that they are out of scope, recorded the same explicit way as
-the D8-vs-D10 resolution above -- not by dropping them from a tally silently, which is exactly how
-they were lost between part 3/N and part 4/N.
+- `TestModelSubstitutionDiagnostic`: exercises `session.tools_updated {model}` -- the one of the
+  three raw shapes design.md says the real capture actually shows (`:1084-1085`;
+  `session.model_change`/`session.auto_mode_resolved` never appear in either capture, checked
+  directly, so their CODE-cited shapes -- `{newModel, previousModel?}` and `{chosenModel,
+  availableModels?}`, design.md:1081-1083 -- are used only for the "first raw event wins" test
+  below, to prove the rule is about *event order*, not about which of the three shapes arrived).
+  `CopilotEventMapper`'s constructor is given a second inferred keyword here, `requested_model`,
+  the same way part 3/N added `told_access_path`: to carry `RpcTurnRequest.model` (design.md:1527)
+  into the mapper, not named anywhere in design.md, flagged the same way. Four cases: a resolved
+  model that differs from the requested one emits one `copilot.model_substituted` diagnostic
+  (`severity="info"`, design.md:1018); an unchanged model emits none; a requested model of
+  `"auto"` emits none even when the resolved model differs (design.md:1088's own gate); and the
+  *first* of the three raw event types the mapper sees decides the resolved model -- a second,
+  differently-shaped event arriving afterward does not re-diagnose (design.md:1086-1087's "takes
+  the resolved model from the first ... it sees"). The illustrative message text and `"this plan
+  allows: [...]"` list format (design.md:1089-1091) are not asserted byte-exact, per the
+  `next_action` that queued this part -- only `code`/`severity`/`stream` and that the two model
+  names appear in `summary`.
+- `TestUserMessageChunkDropped`: `on_session_update` returns nothing for a `user_message_chunk`
+  update, and one arriving while an `agent_message_chunk` block is still open neither flushes it
+  nor contributes its own text to it -- the block's later `flush()` still yields exactly the agent
+  text. The "before arming" half of the original bullet stays out of this file's scope, per the
+  resolution already recorded above for the `agentweave`-server-status bullet and for
+  `TestMcpServerUnavailableDiagnostic`.
+
+With both closed, task 1.8's Assert list (`tasks.md:251-262`) is fully covered by this file: every
+bullet either has a direct test above, or is explicitly recorded as out of this file's scope (the
+"before arming" half) or already covered by another bullet's test (the `agentweave`-server-status
+bullet, part 4/N). The next firing should move to task 1.9 (`test_copilot_acp_run_turn.py`), not
+invent a part 7/N.
 """
 
 import json
@@ -760,3 +778,152 @@ class TestSessionErrorRootVsSubagent:
         diagnostics = [e for e in events if e.kind == "diagnostic"]
         assert len(diagnostics) == 1
         assert diagnostics[0].payload["code"] == "copilot.subagent_error"
+
+
+class TestModelSubstitutionDiagnostic:
+    """Task 1.8 part 6/N, the model-substitution bullet: "`session.model_change` to a different
+    model emits one diagnostic" (design.md:1081-1092, re-read fresh for this part).
+
+    The mapper "takes the resolved model from the first of `session.model_change`,
+    `session.auto_mode_resolved` or `session.tools_updated` it sees" and, "when the requested
+    model was not `auto` and differs from the resolved one", emits one `diagnostic_event` carrying
+    `code == "copilot.model_substituted"`, `severity == "info"` (design.md:1018). Neither capture
+    has a `session.model_change`/`session.auto_mode_resolved` at all (checked directly); the real
+    capture *does* show `session.tools_updated {model}` (design.md:1084-1085), so the primary
+    tests below use that shape, and the other two only where the point under test is specifically
+    about *which of the three shapes arrived first*, not about `tools_updated` itself.
+
+    `CopilotEventMapper` gets a second inferred constructor keyword here, `requested_model` --
+    not named anywhere in design.md, added the same way `told_access_path` was in part 3/N, to
+    carry `RpcTurnRequest.model` (design.md:1527) into the mapper. Flagged for a future round the
+    same way.
+
+    The example message text and `"this plan allows: [...]"` list format (design.md:1089-1091)
+    are illustrative, not a byte-exact CODE citation (the `next_action` that queued this part says
+    so explicitly) -- assertions below check `code`/`severity`/`stream` and that both model names
+    appear in `summary`, never the exact wording.
+    """
+
+    @staticmethod
+    def _tools_updated(model: str) -> tuple:
+        data = {"model": model}
+        params = {
+            "sessionId": "synthetic-session",
+            "type": "session.tools_updated",
+            "timestamp": "2026-09-30T00:00:07.000Z",
+            "data": data,
+        }
+        return "session.tools_updated", data, params
+
+    @staticmethod
+    def _model_change(new_model: str, previous_model: str | None = None) -> tuple:
+        data = {"newModel": new_model}
+        if previous_model is not None:
+            data["previousModel"] = previous_model
+        params = {
+            "sessionId": "synthetic-session",
+            "type": "session.model_change",
+            "timestamp": "2026-09-30T00:00:08.000Z",
+            "data": data,
+        }
+        return "session.model_change", data, params
+
+    @staticmethod
+    def _auto_mode_resolved(chosen_model: str, available_models: list | None = None) -> tuple:
+        data = {"chosenModel": chosen_model}
+        if available_models is not None:
+            data["availableModels"] = available_models
+        params = {
+            "sessionId": "synthetic-session",
+            "type": "session.auto_mode_resolved",
+            "timestamp": "2026-09-30T00:00:09.000Z",
+            "data": data,
+        }
+        return "session.auto_mode_resolved", data, params
+
+    def test_resolved_model_differing_from_requested_emits_one_diagnostic(self):
+        mapper = CopilotEventMapper(requested_model="claude-haiku-4.5")
+        type_, data, params = self._tools_updated("mai-code-1.1-flash")
+        events = mapper.on_raw_event(type_, data, params)
+
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        assert len(diagnostics) == 1
+        payload = diagnostics[0].payload
+        assert payload["code"] == "copilot.model_substituted"
+        assert payload["severity"] == "info"
+        assert payload["stream"] == "copilot"
+        assert "mai-code-1.1-flash" in payload["summary"]
+        assert "claude-haiku-4.5" in payload["summary"]
+
+    def test_resolved_model_matching_requested_emits_no_diagnostic(self):
+        mapper = CopilotEventMapper(requested_model="claude-haiku-4.5")
+        type_, data, params = self._tools_updated("claude-haiku-4.5")
+        events = mapper.on_raw_event(type_, data, params)
+
+        assert not any(e.kind == "diagnostic" for e in events)
+
+    def test_requested_model_auto_emits_no_diagnostic_even_when_resolved_differs(self):
+        mapper = CopilotEventMapper(requested_model="auto")
+        type_, data, params = self._tools_updated("mai-code-1.1-flash")
+        events = mapper.on_raw_event(type_, data, params)
+
+        assert not any(e.kind == "diagnostic" for e in events)
+
+    def test_resolved_model_taken_from_the_first_raw_event_type_seen(self):
+        # The first raw event seen (`session.tools_updated`) resolves the model; a second,
+        # differently-shaped raw event (`session.model_change`) arriving afterward must not
+        # re-diagnose against its own, different model -- design.md:1086-1087's "first ... it
+        # sees" is about arrival order across all three shapes, not about `tools_updated` alone.
+        mapper = CopilotEventMapper(requested_model="claude-haiku-4.5")
+        first_type, first_data, first_params = self._tools_updated("mai-code-1.1-flash")
+        first_events = mapper.on_raw_event(first_type, first_data, first_params)
+
+        second_type, second_data, second_params = self._model_change(
+            "gpt-5-mini", previous_model="mai-code-1.1-flash"
+        )
+        second_events = mapper.on_raw_event(second_type, second_data, second_params)
+
+        first_diagnostics = [e for e in first_events if e.kind == "diagnostic"]
+        second_diagnostics = [e for e in second_events if e.kind == "diagnostic"]
+        assert len(first_diagnostics) == 1
+        assert len(second_diagnostics) == 0
+        assert "mai-code-1.1-flash" in first_diagnostics[0].payload["summary"]
+        assert "gpt-5-mini" not in first_diagnostics[0].payload["summary"]
+
+
+class TestUserMessageChunkDropped:
+    """Task 1.8 part 6/N, the mapper-testable half of the `user_message_chunk`-before-arming
+    bullet. design.md:977 lists `user_message_chunk` in the mapper's own "Dropped" set for
+    `on_session_update`, unconditional on arming -- arming itself is `_on_armed_raw_event`'s gate,
+    outside `CopilotEventMapper`, out of this file's scope for the same reason already recorded at
+    `TestMcpServerUnavailableDiagnostic`'s docstring for the `agentweave`-server-status bullet.
+    """
+
+    def test_user_message_chunk_emits_nothing(self):
+        mapper = CopilotEventMapper()
+        events = mapper.on_session_update(
+            {
+                "sessionUpdate": "user_message_chunk",
+                "content": {"type": "text", "text": "echo hookprobe ."},
+            }
+        )
+        assert events == []
+
+    def test_user_message_chunk_does_not_flush_or_join_a_pending_agent_message_block(self):
+        mapper = CopilotEventMapper()
+        events = []
+        events += mapper.on_session_update(
+            {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Hello"}}
+        )
+        events += mapper.on_session_update(
+            {
+                "sessionUpdate": "user_message_chunk",
+                "content": {"type": "text", "text": "unrelated user text"},
+            }
+        )
+        assert events == []  # neither the still-open agent block nor the dropped chunk emits yet
+
+        events += mapper.flush()
+        text_events = [e for e in events if e.kind == "text"]
+        assert len(text_events) == 1
+        assert text_events[0].content == "Hello"  # the dropped chunk's text never joined the block
