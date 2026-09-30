@@ -63,3 +63,9 @@ selected.
 - **WHEN** a file the Hub did not write has been placed in the hooks directory of a Copilot agent's home, and the agent is triggered
 - **THEN** the file is gone before the Copilot process starts
 - **AND** the turn's permission requests reach the Hub
+
+#### Scenario: What Copilot writes for itself is kept
+
+- **WHEN** Copilot has written its own configuration file, holding no setting that trusts a folder or grants a permission, and an empty plugin directory into a Copilot agent's home, and the agent is triggered again
+- **THEN** both are still there when the Copilot process starts
+- **AND** the turn's timeline reports no repair of the home
