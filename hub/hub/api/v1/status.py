@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Message, Question, Task
+from ...db.models import InboundQueueEntry, Message, Question, Task
 from ...schemas.common import StatusResponse
 from ...schemas.messages import OPERATOR_SENDER
 
@@ -39,10 +39,21 @@ async def get_status(
         session.scalar(
             select(func.count()).select_from(Message).where(Message.project_id == project_id)
         ),
+        # Pending mail is mail not yet delivered, which its inbound entry records; `Message.read`
+        # is API bookkeeping nothing in the product sets (F259).
         session.scalar(
             select(func.count())
             .select_from(Message)
-            .where(Message.project_id == project_id, Message.read == False)  # noqa: E712
+            .where(
+                Message.project_id == project_id,
+                Message.id.in_(
+                    select(InboundQueueEntry.message_id).where(
+                        InboundQueueEntry.project_id == project_id,
+                        InboundQueueEntry.state == "queued",
+                        InboundQueueEntry.message_id.is_not(None),
+                    )
+                ),
+            )
         ),
         session.execute(
             select(Task.status, func.count())

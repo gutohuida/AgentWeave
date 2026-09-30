@@ -33,6 +33,7 @@ from hub.db.models import (
     RunDivergence,
     Task,
 )
+from hub.inbound_queue import new_entry
 from hub.run_task_binding import TERMINAL_FOR_BINDING, release_block_for_question
 from hub.scheduler import (
     _LOOP_BRIEFING_CHECKPOINT_CHARS,
@@ -1868,6 +1869,12 @@ async def test_loop_queue_exhausted_event_names_an_unread_message_to_the_creator
                 read=False,
             )
         )
+        # Outstanding means not yet delivered, which the message's inbound entry records.
+        db.add(
+            _mail_entry(
+                "msg-loop-exhausted-1", "loop-creator-agent", "loop-agent-exhausted-message"
+            )
+        )
         await db.commit()
 
     scheduler = JobScheduler()
@@ -1957,6 +1964,7 @@ async def test_a_loops_pending_message_is_never_another_projects():
                     timestamp=at,
                 )
             )
+            db.add(_mail_entry(msg_id, "f264-creator", "f264-executor", project_id=project_id))
         await db.commit()
 
     scheduler = JobScheduler()
@@ -1976,6 +1984,159 @@ async def test_a_loops_pending_message_is_never_another_projects():
         )
     [event] = [e for e in events if e.data.get("loop_id") == loop.id]
     assert event.data["pending_request"]["reason"] == "this project's question"
+
+
+def _mail_entry(
+    message_id, recipient, sender, *, project_id="proj-test", state="queued", run_id=None
+):
+    """The inbound entry `POST /messages` creates for a message, in the given delivery state."""
+    entry = new_entry(
+        project_id=project_id,
+        agent=recipient,
+        origin_type="agent",
+        origin_agent=sender,
+        content=f"mail {message_id}",
+        hop_depth=1,
+        message_id=message_id,
+    )
+    entry.state = state
+    entry.delivered_in_run_id = run_id
+    return entry
+
+
+async def _pending_request_for_mail(suffix, mails, *, reading_run_status=None):
+    """Drain a loop whose executor wrote *mails* to its creator, and return the recorded
+    `pending_request`. Each mail is `(subject, seconds_ago, entry_state)`; a `delivered` one is
+    delivered into a creator run with *reading_run_status* when that is given."""
+    executor, creator = f"exec-{suffix}", f"creator-{suffix}"
+    base = datetime.now(timezone.utc) - timedelta(hours=1)
+    async with async_session_factory() as db:
+        db.add(
+            Run(
+                id=f"run-create-{suffix}", project_id="proj-test", agent=creator, status="completed"
+            )
+        )
+        if reading_run_status is not None:
+            db.add(
+                Run(
+                    id=f"run-read-{suffix}",
+                    project_id="proj-test",
+                    agent=creator,
+                    status=reading_run_status,
+                )
+            )
+        await db.commit()
+        job = await _make_job(db, suffix=suffix, agent=executor)
+        loop = await _make_loop(
+            db,
+            job_id=job.id,
+            purpose="wait on the creator",
+            stop_when_queue_empties=True,
+            created_by_run_id=f"run-create-{suffix}",
+        )
+        db.add(
+            Task(
+                id=f"task-{suffix}",
+                project_id="proj-test",
+                title="finished",
+                status="approved",
+                loop_id=loop.id,
+            )
+        )
+        for n, (subject, seconds_ago, state) in enumerate(mails):
+            message_id = f"msg-{suffix}-{n}"
+            # Explicit, well-separated timestamps: two rows seeded in one flush can tie on the
+            # column default, and the newest-first order would then be decided by accident.
+            db.add(
+                Message(
+                    id=message_id,
+                    project_id="proj-test",
+                    sender=executor,
+                    recipient=creator,
+                    subject=subject,
+                    content=subject,
+                    read=False,
+                    timestamp=base - timedelta(seconds=seconds_ago),
+                )
+            )
+            run_id = f"run-read-{suffix}" if state == "delivered" and reading_run_status else None
+            db.add(_mail_entry(message_id, creator, executor, state=state, run_id=run_id))
+        await db.commit()
+
+    scheduler = JobScheduler()
+    async with async_session_factory() as db:
+        fresh_job = await db.get(AIJob, job.id)
+        await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    async with async_session_factory() as db:
+        events = (
+            (
+                await db.execute(
+                    select(EventLog).where(EventLog.event_type == "loop_queue_exhausted")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    [event] = [e for e in events if e.data.get("loop_id") == loop.id]
+    return event.data["pending_request"]
+
+
+# F259: nothing in the product sets `Message.read`, so "unread" named every message ever sent. What
+# the loop is waiting on is mail its creator has not received yet, or is reading in a turn that has
+# not ended (`a-loops-outstanding-mail-is-mail-not-yet-delivered`, design D2).
+# Each takes `app` for the schema, so it runs alone too (F264's foot: the exhaustion tests above
+# rely on an earlier test having created it).
+
+
+@pytest.mark.asyncio
+async def test_a_delivered_message_is_not_an_outstanding_request(app):
+    pending = await _pending_request_for_mail("f259-delivered", [("answered", 0, "delivered")])
+
+    assert pending is None
+
+
+@pytest.mark.asyncio
+async def test_a_withdrawn_message_is_not_an_outstanding_request(app):
+    pending = await _pending_request_for_mail("f259-withdrawn", [("taken back", 0, "withdrawn")])
+
+    assert pending is None
+
+
+@pytest.mark.asyncio
+async def test_the_newest_undelivered_message_is_the_one_named(app):
+    pending = await _pending_request_for_mail(
+        "f259-newest",
+        [
+            ("newest, already delivered", 0, "delivered"),
+            ("newest still waiting", 10, "queued"),
+            ("older still waiting", 20, "queued"),
+        ],
+    )
+
+    assert pending["kind"] == "message"
+    assert pending["reason"] == "newest still waiting"
+
+
+@pytest.mark.asyncio
+async def test_a_message_the_creator_is_still_reading_is_outstanding(app):
+    """Delivered into a creator turn that is still running: the creator has it and has not
+    answered, which is the plainest case of a request still in flight (design D2, R2)."""
+    pending = await _pending_request_for_mail(
+        "f259-reading", [("being read", 0, "delivered")], reading_run_status="running"
+    )
+
+    assert pending is not None
+    assert pending["reason"] == "being read"
+
+
+@pytest.mark.asyncio
+async def test_a_message_read_in_a_turn_that_ended_is_not_outstanding(app):
+    pending = await _pending_request_for_mail(
+        "f259-read", [("read and done", 0, "delivered")], reading_run_status="completed"
+    )
+
+    assert pending is None
 
 
 @pytest.mark.asyncio

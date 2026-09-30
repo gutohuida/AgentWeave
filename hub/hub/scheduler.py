@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, Iterable, Mapping, NamedTuple, Optional, Sequence, Set
 
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import dependency_gate, requirement_evidence, requirement_links
@@ -28,6 +28,7 @@ from .db.models import (
     Agent,
     AIJob,
     Checkpoint,
+    InboundQueueEntry,
     JobRun,
     Loop,
     Message,
@@ -438,8 +439,8 @@ async def _pending_loop_request(
     itself (`exclude_run_id`).
 
     Checked before the `Message` case: an unanswered `ask_user` is a hard block on the run that
-    asked it, closer to "the thing this loop was actually waiting on" than mail sitting unread in
-    an inbox nobody has to check. D6 does not state a tiebreak when both exist.
+    asked it, closer to "the thing this loop was actually waiting on" than mail not yet delivered.
+    D6 does not state a tiebreak when both exist.
     """
     prior_run_result = await session.execute(
         select(JobRun.conversation_id)
@@ -487,15 +488,32 @@ async def _pending_loop_request(
         if creator_run is not None:
             creator_agent = creator_run.agent
     if creator_agent is not None:
+        # Outstanding is read from the message's inbound entry, not `Message.read`, which nothing in
+        # the product sets (F259): still queued, or delivered into a creator turn that has not ended
+        # (the creator has it and has not answered). An uncorrelated `IN`, so a message counts once
+        # however many entries name it; one with no entry will never arrive and is not outstanding.
+        in_flight = (
+            select(InboundQueueEntry.message_id)
+            .outerjoin(Run, Run.id == InboundQueueEntry.delivered_in_run_id)
+            .where(
+                InboundQueueEntry.project_id == job.project_id,
+                InboundQueueEntry.agent == creator_agent,
+                InboundQueueEntry.message_id.is_not(None),
+                or_(
+                    InboundQueueEntry.state == "queued",
+                    and_(InboundQueueEntry.state == "delivered", Run.status == "running"),
+                ),
+            )
+        )
         message_result = await session.execute(
             select(Message)
             .where(
-                # Agent names repeat across projects; without this the newest unread mail between
+                # Agent names repeat across projects; without this the newest pending mail between
                 # two same-named agents anywhere on the instance became this loop's reason (F264).
                 Message.project_id == job.project_id,
                 Message.sender == job.agent,
                 Message.recipient == creator_agent,
-                Message.read == False,  # noqa: E712
+                Message.id.in_(in_flight),
             )
             .order_by(Message.timestamp.desc())
         )
