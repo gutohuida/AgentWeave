@@ -17159,7 +17159,7 @@ the array, and no drive read it (checked: the drives read the per-requirement `s
 
 ## F213 (D) — a resubmitted edit stacks a duplicate proposal, and the twin can never be resolved
 
-**Status:** open. The compare-and-swap still catches the twin, so nothing is
+**Status:** fixed 2f120b4 (`a-pending-proposal-can-be-withdrawn`, 2026-09-30: a repeated submission stacks nothing and answers `already_pending`, a revision supersedes its own earlier proposal, and the operator can withdraw a pending proposal without judging it; driven with a Haiku agent and two browser windows on `:8038`). Was: open. The compare-and-swap still catches the twin, so nothing is
 misapplied, and there is still no withdraw route -- the only exit remains a rejection that records a
 judgement nobody made. Named in no change. [classified 2026-09-09, D-3]
 
@@ -33112,7 +33112,7 @@ and passes today.
 
 ## F428 (C) — rejecting a proposal in the app leaves it on screen
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 2). There is no broadcast, and the mutation invalidates nothing (`spec.py:669-694`, `api/spec.ts:244-256`). **Carried by B6's `a-pending-proposal-can-be-withdrawn`.**
+**Status:** fixed 2f120b4 (`a-pending-proposal-can-be-withdrawn`, 2026-09-30: reject broadcasts and the decision invalidates the proposals list, so every open window drops the row; driven with a Haiku agent and two browser windows on `:8038`). Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 2). There is no broadcast, and the mutation invalidates nothing (`spec.py:669-694`, `api/spec.ts:244-256`). **Carried by B6's `a-pending-proposal-can-be-withdrawn`.**
 
 
 ## F429 (C) — the app records every rigor change with an empty reason
@@ -33127,7 +33127,7 @@ and passes today.
 
 ## F431 (C) — an accept refused as stale commits `stale` and leaves the row on screen
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 9). Found by R2 (`spec.py:642-649`). **Carried by B6's `a-pending-proposal-can-be-withdrawn`.**
+**Status:** fixed 2f120b4 (`a-pending-proposal-can-be-withdrawn`, 2026-09-30: accept broadcasts after its stale-refusal commit and the decision invalidates the list on settle; driven with a Haiku agent and two browser windows on `:8038`). Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 9). Found by R2 (`spec.py:642-649`). **Carried by B6's `a-pending-proposal-can-be-withdrawn`.**
 
 
 ## F432 (C) — evidence with no footprint row is never scanned and never reported
