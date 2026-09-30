@@ -54,6 +54,8 @@ Confirmed red: `pytest hub/tests/test_copilot_acp_run_turn.py -q` fails at colle
 `ModuleNotFoundError: No module named 'hub.copilot_acp'`.
 """
 
+import json
+
 import pytest
 
 import hub.copilot_acp as copilot_acp
@@ -65,6 +67,8 @@ SESSION_ID = "ea76eb05-6a87-4257-8280-d7cc9e571ba5"  # a real session id, r1-pro
 AGENT_NAME = "probe-builder"  # the real agent name r1-probe-agent.log selected
 AGENT_MARKER = f"AgentWeave agent {AGENT_NAME} — context rendered by the AgentWeave Hub"  # D4
 AGENT_MODE_URI = "https://agentclientprotocol.com/protocol/session-modes#agent"  # VERIFIED wire
+PLAN_MODE_URI = "https://agentclientprotocol.com/protocol/session-modes#plan"  # VERIFIED,
+# r1-probe-plan.log:8 (`session/set_mode` params: `{"sessionId": ..., "modeId": <this URI>}`)
 
 
 def _mode_option(current=AGENT_MODE_URI):
@@ -190,7 +194,7 @@ class _FakeACPSession:
         self.closed_with_force = force
 
 
-def _patch_spawn(monkeypatch, fake):
+def _patch_spawn(monkeypatch, fake, *, captured_cmds=None):
     async def _fake_spawn(cmd, *, cwd=None, env=None, **kwargs):
         # Part 2/N: forward whatever notification/server-request handlers `run_turn`'s own
         # `ACPProcess.spawn` call supplies onto the *same* fake the test already built its
@@ -205,6 +209,11 @@ def _patch_spawn(monkeypatch, fake):
         # no-op and a script with notification entries fails loudly (`script exhausted` /
         # `on_notification handler` AssertionError) rather than silently passing for the wrong
         # reason.
+        # Part 10/N: also capture the argv itself, when a test asks for it, so a case (like
+        # 1.9(j)'s spawn-argv claim) can inspect exactly what `run_turn` handed to `spawn`
+        # without needing its own bespoke patch.
+        if captured_cmds is not None:
+            captured_cmds.append(list(cmd))
         if kwargs.get("on_notification") is not None:
             fake._on_notification = kwargs["on_notification"]
         if kwargs.get("on_server_request") is not None:
@@ -1454,3 +1463,355 @@ class TestUsageUpdateProducesMeasuredSampleWithResolvedModel:
 
         assert sessions_bound == [SESSION_ID]
         assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+
+
+class TestSpecTurnRestrictsWritesAndAllowAll:
+    """Tasks.md 1.9(j): a specification turn (`restrict_spec_writes=True`), consistency pass
+    2026-09-28, slice 3's D16, D9. The bare bullet names four independent sub-claims -- the spawn
+    argv's `--excluded-tools` flag, full access never setting `allow_all` on plus judging a
+    non-`edit` request as `workspace`, a `create` `edit` refused and recorded through
+    `_on_refusal`, and (switch patched on) `set_mode` carrying the full plan URI before the
+    prompt -- so, per this task's own queued caution (case (h) needed two requests, part 9/N
+    needed two tests), this part gives each its own test rather than one test whose assertions
+    could pass or fail together for the wrong reason.
+
+    `decide_permission`'s own `spec_turn=True` decision table (which posture answers which
+    `toolCall.kind` how) is already covered directly, case by case, in
+    `test_copilot_acp_decide.py::TestSpecTurn` -- including the exact PowerShell-outside-workspace
+    row this part's second test reuses (`test_spec_turn_under_full_access_judges_powershell_as_
+    workspace`, `"Remove-Item ..\\..\\x"` -> REJECT) and the exact inside-workspace-edit-is-
+    REJECTed-anyway row this part's third test reuses (`test_edit_inside_workspace_is_rejected_
+    under_every_posture_on_a_spec_turn`). This file's job is only the wiring around that pure
+    table: that `run_turn` actually builds the spec-turn argv, passes `spec_turn=True` through to
+    `decide_permission`, and answers/records through the callbacks tasks.md 1.9(j) names -- not to
+    re-derive `decide_permission`'s own table a second time.
+    """
+
+    @staticmethod
+    def _standard_prefix(*, allow_all_current="off"):
+        return [
+            {"response": INIT_RESPONSE},
+            {
+                "response": {
+                    "sessionId": SESSION_ID,
+                    "modes": {"currentModeId": AGENT_MODE_URI},
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(""),
+                        _allow_all_option(allow_all_current),
+                    ],
+                }
+            },  # session/new
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option(allow_all_current),
+                    ]
+                }
+            },  # session/set_config_option agent
+        ]
+
+    async def test_spawn_argv_excludes_copilots_edit_tools_but_keeps_create(self, monkeypatch):
+        """Design.md:181-186 (D3), :211-218: one comma-joined argv word,
+        `--excluded-tools=apply_patch,edit,str_replace,str_replace_editor`, sent unconditionally
+        for a spec turn, including under full access -- and `create` is never in it, since a spec
+        turn's own `shim` access path must still write its args file (D9 item 1)."""
+        events = []
+        sessions_bound = []
+        captured_cmds = []
+
+        script = self._standard_prefix() + [
+            {"response": {}},  # session/set_mode -- D8's posture step, unasserted here
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake, captured_cmds=captured_cmds)
+
+        await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Write the specification document.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="shim",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=True,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        assert len(captured_cmds) == 1, "exactly one spawn per turn"
+        cmd = captured_cmds[0]
+        excluded_flags = [a for a in cmd if a.startswith("--excluded-tools=")]
+        assert excluded_flags == [
+            "--excluded-tools=apply_patch,edit,str_replace,str_replace_editor"
+        ], cmd
+        assert "create" not in excluded_flags[0].split("=", 1)[1].split(","), (
+            "create is never excluded on a spec turn -- the shim access path must still write "
+            "its own args file (D9 item 1)"
+        )
+
+    async def test_full_access_never_sets_allow_all_and_judges_execute_as_workspace(
+        self, monkeypatch
+    ):
+        """D8 full-access bullet + D9 item 1a's closing paragraph (design.md:807-813, 904-908;
+        operator decision 2026-09-28, open question 13, option (c)): a spec turn under full access
+        never attempts `session/set_config_option allow_all=on` -- it reads `off` off both
+        `session/new`'s and `session/set_config_option agent`'s own `configOptions` and leaves it
+        there -- and its non-`edit` requests are judged as `workspace`, never the defensive ALLOW
+        an ordinary full-access turn would give. Reusing `test_copilot_acp_decide.py::TestSpecTurn.
+        test_spec_turn_under_full_access_judges_powershell_as_workspace`'s own outside-workspace
+        command (`"Remove-Item ..\\..\\x"`) rather than inventing a new one."""
+        events = []
+        sessions_bound = []
+
+        script = self._standard_prefix() + [
+            {"response": {}},  # session/set_mode -- D8's posture step, unasserted here
+            {
+                "server_request": {
+                    "id": 1,
+                    "method": "session/request_permission",
+                    "params": {
+                        "sessionId": SESSION_ID,
+                        "toolCall": {
+                            "toolCallId": "call_synthetic_spec_turn_execute_outside",
+                            "title": "Run a PowerShell command",
+                            "kind": "execute",
+                            "rawInput": {"command": "Remove-Item ..\\..\\x"},
+                        },
+                        "options": [
+                            {"optionId": "allow_once", "name": "Allow", "kind": "allow_once"},
+                            {
+                                "optionId": "allow_always",
+                                "name": "Always Allow",
+                                "kind": "allow_always",
+                            },
+                            {"optionId": "reject_once", "name": "Reject", "kind": "reject_once"},
+                        ],
+                    },
+                }
+            },
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Please write the spec and run a check.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode="bypassPermissions",
+            workspace="C:\\work",
+            restrict_spec_writes=True,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        allow_all_sets = [
+            (m, p)
+            for m, p in fake.sent_requests
+            if m == "session/set_config_option" and p.get("configId") == "allow_all"
+        ]
+        assert allow_all_sets == [], (
+            "a spec turn never sets allow_all on, even under full access -- it never asks "
+            f"Copilot for it at all; got {allow_all_sets}"
+        )
+
+        assert fake.sent_responses == [
+            (1, {"outcome": {"outcome": "selected", "optionId": "reject_once"}})
+        ], "an outside-workspace execute must be REJECTed once judged as workspace, not ALLOWed"
+
+        assert sessions_bound == [SESSION_ID]
+        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+
+    async def test_create_edit_is_rejected_and_recorded_through_on_refusal(self, monkeypatch):
+        """D9 item 1a (design.md:896-908): until slice 3 lands there is no step-3 allow, so every
+        `edit` request on a spec turn is REJECTed, in every posture -- including one naming a path
+        *inside* the workspace, which the ordinary `workspace` posture would otherwise ALLOW
+        outright (the same fixture `test_copilot_acp_decide.py::TestSpecTurn.
+        test_edit_inside_workspace_is_rejected_under_every_posture_on_a_spec_turn` already proves
+        at `decide_permission`'s own level) -- proving this is item 1a's blanket rule and not
+        merely the ordinary workspace judge repeated. `create` is the Copilot tool this actually
+        exercises in practice (never excluded by the spawn argv, unlike `apply_patch`/`edit`/
+        `str_replace`/`str_replace_editor`), reported to the ACP client as an ordinary
+        `kind:"edit"` request the same as any other edit tool (design.md gives no separate ACP
+        `toolCall.kind` for it).
+
+        `_on_refusal`'s exact `(method, subject)` shape for Copilot is not itself stated anywhere
+        in design.md beyond "the same `_on_refusal` shape Codex uses" (design.md:866) -- this
+        test's own least-invented reading, flagged the same way this file flags its other inferred
+        surfaces, is that `method` is the wire method the refused request arrived on
+        (`session/request_permission`) and `subject` is built from that request's own `toolCall`,
+        so it asserts only what should hold under any reasonable reading of that sentence: exactly
+        one refusal is recorded, tagged with that method, and identifying the request that was
+        refused by the path it named.
+        """
+        events = []
+        sessions_bound = []
+        refusals = []
+
+        async def _on_refusal(method, subject):
+            refusals.append((method, subject))
+
+        inside_path = "C:\\work\\x.py"
+        script = self._standard_prefix() + [
+            {"response": {}},  # session/set_mode -- D8's posture step, unasserted here
+            {
+                "server_request": {
+                    "id": 1,
+                    "method": "session/request_permission",
+                    "params": {
+                        "sessionId": SESSION_ID,
+                        "toolCall": {
+                            "toolCallId": "call_synthetic_spec_turn_create_x_py",
+                            "title": "Create x.py",
+                            "kind": "edit",
+                            "rawInput": {"fileName": inside_path},
+                            "locations": [{"path": inside_path}],
+                        },
+                        "options": [
+                            {"optionId": "allow_once", "name": "Allow", "kind": "allow_once"},
+                            {
+                                "optionId": "allow_always",
+                                "name": "Always Allow",
+                                "kind": "allow_always",
+                            },
+                            {"optionId": "reject_once", "name": "Reject", "kind": "reject_once"},
+                        ],
+                    },
+                }
+            },
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Please write the specification.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=True,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+            on_refusal=_on_refusal,
+        )
+
+        assert fake.sent_responses == [
+            (1, {"outcome": {"outcome": "selected", "optionId": "reject_once"}})
+        ], "an edit not naming the spec turn's own args file must be REJECTed, even inside the workspace"
+
+        assert len(refusals) == 1, refusals
+        method, subject = refusals[0]
+        assert method == "session/request_permission", (method, subject)
+        # Checked against the bare filename, not the full `inside_path`: `json.dumps` escapes
+        # the path's own backslashes, so a direct substring check against the unescaped Python
+        # string would fail even for a correct implementation.
+        assert "x.py" in json.dumps(
+            subject
+        ), f"the recorded subject must identify which request was refused; got {subject!r}"
+
+        assert sessions_bound == [SESSION_ID]
+        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+
+    async def test_plan_mode_set_mode_carries_the_full_plan_uri_before_the_prompt(
+        self, monkeypatch
+    ):
+        """D9 item 2 (design.md:909-919): with `SPEC_TURN_USES_PLAN_MODE` patched on, `run_turn`
+        sends `session/set_mode` with the full URI `…session-modes#plan` (VERIFIED accepted,
+        `r1-probe-plan.log:8`) after agent selection and before `session/prompt`. "The per-turn
+        `set_mode` of D8's posture step sets `#agent` on every other turn either way" (`:937`)
+        reads as: on *this* turn it does not also send a second, `#agent` one -- so this test
+        scripts exactly one `session/set_mode` response and asserts exactly one such call was
+        made, carrying the plan URI, not the ordinary agent-mode one."""
+        monkeypatch.setattr(copilot_acp, "SPEC_TURN_USES_PLAN_MODE", True)
+        events = []
+        sessions_bound = []
+
+        script = self._standard_prefix() + [
+            {"response": {}},  # session/set_mode -- the #plan call this test asserts
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Draft the specification.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=True,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        methods = [m for m, _ in fake.sent_requests]
+        set_mode_calls = [(m, p) for m, p in fake.sent_requests if m == "session/set_mode"]
+        assert len(set_mode_calls) == 1, (
+            "a plan-mode spec turn must send exactly one session/set_mode, carrying the plan "
+            f"URI, not also D8's ordinary #agent one; got {set_mode_calls}"
+        )
+        _, params = set_mode_calls[0]
+        assert params == {"sessionId": SESSION_ID, "modeId": PLAN_MODE_URI}, params
+
+        i_set_mode = methods.index("session/set_mode")
+        i_prompt = methods.index("session/prompt")
+        assert i_set_mode < i_prompt, methods
