@@ -41,7 +41,13 @@ from ...db.models import (
     Task,
 )
 from ...inbound_queue import new_entry
-from ...launchability import agent_config, get_agent_config, probe_agent, resolve_access_path
+from ...launchability import (
+    agent_config,
+    get_agent_config,
+    isolation_change_refusal,
+    probe_agent,
+    resolve_access_path,
+)
 from ...model_catalog import (
     FULL_ACCESS_PERMISSION_MODE,
     get_provider,
@@ -2768,11 +2774,23 @@ async def patch_agent(
     if "config" in body:
         new_config = body["config"]
         if new_config is None:
-            agent_row.config = {}
+            merged_config: dict = {}
         elif not isinstance(new_config, dict):
             raise HTTPException(status_code=400, detail="config must be an object or null")
         else:
-            agent_row.config = _merge_patch(agent_row.config or {}, new_config)
+            merged_config = _merge_patch(agent_row.config or {}, new_config)
+        # Where the agent works must not change under held work (F242). Raised before the row is
+        # written; nothing commits a refused body, so no field of it is kept.
+        refusal = await isolation_change_refusal(
+            session,
+            project_id,
+            name,
+            agent_config(session_data, name, agent_row.config),
+            agent_config(session_data, name, merged_config),
+        )
+        if refusal is not None:
+            raise HTTPException(status_code=409, detail=refusal)
+        agent_row.config = merged_config
 
     # After the config merge, deliberately: a body carrying both must end with the two agreeing,
     # and the posture is the newer spelling of the same choice, so it is the one that wins.

@@ -163,3 +163,24 @@ deletes the guard with the route. B3's design already records this (its *Cross-b
   (`session_sync.py:46-75`, commit `:115`), guarded per operator decision 4. Seeding fixtures that
   sync `read_only` (`test_agent_trigger.py:488`, `test_project_scoped_runtime.py:103`) seed the roster
   at setup, which holds no work; control 1.14 runs every suite that calls `/session/sync` to prove it.
+- **Verification round at IMPL, 2026-09-30** (master `70368b7`). Two doors remain, not three:
+  `agents-no-longer-register-themselves` landed first and deleted `POST /agents/register` (task 1.4
+  dropped, 2.1a's register half moot). And the one merge rule D1 asks for already exists:
+  `the-permissions-pill-shows-the-posture-the-run-gets` (archived today) lifted
+  `launchability.agent_config(session_data, agent, stored)` out of `get_agent_config` unchanged, so
+  the refusal uses it rather than adding `effective_agent_config` beside it (the same rule, one
+  name). It also applies the session-wide `hub_client`, which `is_writing_agent` does not read.
+  `live_run_ids` (`run_liveness.py:111`), `TERMINAL_STATUSES` (`task_transition_service.py:746`),
+  `is_writing_agent` (`worktrees.py:231`) and `sync_session`'s shape (`session_sync.py:46-128`,
+  `row.data =` before the roster loop, commit before the releases) are as D1 states. The refusal's
+  body is `{"code", "message", "held": {"runs": [...], "tasks": [...]}}`.
+  **One correction to the tests.** Tasks 1.9 and 1.10 put a PATCH of `config` on an agent with a
+  synced session entry, expecting 200. That PATCH is already refused, 409 *"reserved for a configured
+  agent"*, by `patch_agent`'s guard (`agents.py:2708-2716`: `config` is not among the fields a
+  configured agent may have patched). So the effective-config comparison matters at one door only,
+  `/session/sync`, and both tests move there, keeping what they discriminate: 1.9 now has
+  `Agent.config` `read_only: true` under a session entry `read_only: false` (isolated), and a sync
+  whose entry drops `read_only` (sharing) is refused, which an `Agent.config`-only helper would
+  allow; 1.10 has a sync that leaves the effective value unchanged while `Agent.config` disagrees
+  with it, and is answered 200.
+

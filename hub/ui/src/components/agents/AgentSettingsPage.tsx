@@ -290,8 +290,11 @@ function parseQueueArchiveRefusal(error: ApiError): { message: string; ids: stri
  * Isolation itself is not editable here. It is a real stored setting (`config.read_only`) that
  * nothing offers today, and giving it a control is a change of behaviour — flipping an agent with
  * uncommitted work in its worktree to the shared checkout would strand that work somewhere the
- * agent no longer looks. That belongs in its own change, with a decision about what happens to the
- * existing worktree, not smuggled in behind a panel that was asked to *show* the workspace.
+ * agent no longer looks. The Hub now holds that line on every door that can change it
+ * (`isolation-does-not-change-under-held-work`): a change to where an agent works is refused, 409
+ * `isolation_change_under_held_work`, while it has a running turn or an unfinished task. A control
+ * here would still need its own change, not to be smuggled in behind a panel that was asked to
+ * *show* the workspace.
  */
 function WorkspaceLocation({ agent }: { agent: string }) {
   const { data, isLoading, error } = useAgentWorkspace(agent)

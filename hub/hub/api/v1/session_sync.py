@@ -30,6 +30,7 @@ from ...agent_colors import next_color_index
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, ProjectSession
+from ...launchability import agent_config, isolation_change_refusal
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
@@ -62,6 +63,34 @@ async def sync_session(
         select(ProjectSession).where(ProjectSession.project_id == project_id)
     )
     row = session_result.scalars().first()
+
+    # The synced entry outranks `Agent.config` in where an agent works, so replacing it is a third
+    # way to flip isolation under held work (F242). Checked for every agent the payload names that
+    # already has a row, before anything is written; the first refusal refuses the payload whole.
+    old_data = row.data if row else {}
+    named = list((body.data.get("agents") or {}).keys())
+    if named:
+        rows_by_name = {
+            agent_row.name: agent_row
+            for agent_row in (
+                await session.execute(
+                    select(Agent).where(Agent.project_id == project_id, Agent.name.in_(named))
+                )
+            ).scalars()
+        }
+        for agent_name in named:
+            agent_row = rows_by_name.get(agent_name)
+            if agent_row is None:
+                continue
+            refusal = await isolation_change_refusal(
+                session,
+                project_id,
+                agent_name,
+                agent_config(old_data, agent_name, agent_row.config),
+                agent_config(body.data, agent_name, agent_row.config),
+            )
+            if refusal is not None:
+                raise HTTPException(status.HTTP_409_CONFLICT, detail=refusal)
 
     if row:
         row.data = body.data

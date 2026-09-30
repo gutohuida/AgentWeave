@@ -579,13 +579,83 @@ def agent_config(
     return meta
 
 
+ISOLATION_CHANGE_UNDER_HELD_WORK = "isolation_change_under_held_work"
+
+
+async def isolation_change_refusal(
+    db: AsyncSession,
+    project_id: str,
+    agent: str,
+    before: Dict[str, Any],
+    after: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Why changing where `agent` works is refused now, or None.
+
+    `before` and `after` are the configuration its turns read (`agent_config`: the synced session
+    entry laid over `Agent.config`), as stored and as about to be written. Only a change to
+    `worktrees.is_writing_agent` is this rule's question, and it is refused while the agent holds
+    work: a turn this Hub is executing, or a task assigned to it that has not reached a terminal
+    status. Flipping under either strands work -- the next task-bound turn runs in a checkout the
+    earlier ones did not, and nothing commits the difference (F242,
+    `isolation-does-not-change-under-held-work`, design D1). Both directions count.
+    """
+    from . import run_liveness, worktrees
+    from .db.models import Run, Task
+    from .task_transition_service import TERMINAL_STATUSES
+
+    if worktrees.is_writing_agent(before) == worktrees.is_writing_agent(after):
+        return None
+    live = run_liveness.live_run_ids()
+    runs = []
+    if live:
+        runs = list(
+            (
+                await db.execute(
+                    select(Run.id)
+                    .where(Run.project_id == project_id, Run.agent == agent, Run.id.in_(live))
+                    .order_by(Run.id)
+                )
+            ).scalars()
+        )
+    tasks = list(
+        (
+            await db.execute(
+                select(Task.id)
+                .where(
+                    Task.project_id == project_id,
+                    Task.assignee == agent,
+                    Task.status.not_in(TERMINAL_STATUSES),
+                )
+                .order_by(Task.id)
+            )
+        ).scalars()
+    )
+    if not runs and not tasks:
+        return None
+    direction = "its own checkout" if worktrees.is_writing_agent(after) else "the shared checkout"
+    held = []
+    if runs:
+        held.append(f"a turn that is running ({', '.join(runs)}); let it end")
+    if tasks:
+        held.append(f"unfinished tasks ({', '.join(tasks)}); finish, reassign or reject them")
+    return {
+        "code": ISOLATION_CHANGE_UNDER_HELD_WORK,
+        "message": (
+            f"{agent} cannot move to {direction} while it holds work, because the work would be "
+            f"left where its next turn no longer looks: {'; and '.join(held)}."
+        ),
+        "held": {"runs": runs, "tasks": tasks},
+    }
+
+
 async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dict[str, Any]:
     """Return the merged runner config `probe_agent` expects for one agent.
 
-    Merges three sources, in increasing priority: the session-synced `agents.<name>` entry
-    (session.json, pushed by the CLI — has `runner`/`model`/`cli`/`env_vars`/`yolo` for
-    CLI-configured agents), the agent's own `Agent.config` JSON, and — since 2026-08-21 —
-    **the bound `Runner` record**, which is the roster's own answer and outranks both.
+    Merges three sources, in increasing priority: the agent's own `Agent.config` JSON, the
+    session-synced `agents.<name>` entry (session.json, pushed by the CLI — has
+    `runner`/`model`/`cli`/`env_vars`/`yolo` for CLI-configured agents), which outranks it
+    (`agent_config`), and — since 2026-08-21 — **the bound `Runner` record**, which is the roster's
+    own answer and outranks both.
 
     That third source used to be missing here and was pasted into two call sites instead
     (`api/v1/agents.py` and `api/v1/inbound_queue.py`, which carried byte-identical blocks
