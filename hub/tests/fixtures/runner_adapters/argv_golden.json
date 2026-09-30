@@ -1,0 +1,3209 @@
+[
+  {
+    "id": "claude/cross/pm=None/mcp=none/yolo=False/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=None/mcp=none/yolo=False/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "--permission-mode",
+      "acceptEdits",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=None/mcp=none/yolo=True/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--dangerously-skip-permissions",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=None/mcp=none/yolo=True/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "--dangerously-skip-permissions",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=None/mcp=set/yolo=False/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--allowedTools",
+      "mcp__agentweave__*",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
+      "--permission-mode",
+      "manual",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=None/mcp=set/yolo=False/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--allowedTools",
+      "mcp__agentweave__*",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
+      "--permission-mode",
+      "manual",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=None/mcp=set/yolo=True/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--dangerously-skip-permissions",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=None/mcp=set/yolo=True/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--dangerously-skip-permissions",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=acceptEdits/mcp=none/yolo=False/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=acceptEdits/mcp=none/yolo=False/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=acceptEdits/mcp=none/yolo=True/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=acceptEdits/mcp=none/yolo=True/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=acceptEdits/mcp=set/yolo=False/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--allowedTools",
+      "mcp__agentweave__*",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=acceptEdits/mcp=set/yolo=False/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--allowedTools",
+      "mcp__agentweave__*",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=acceptEdits/mcp=set/yolo=True/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=acceptEdits/mcp=set/yolo=True/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=workspace/mcp=none/yolo=False/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=workspace/mcp=none/yolo=False/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=workspace/mcp=none/yolo=True/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=workspace/mcp=none/yolo=True/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=workspace/mcp=set/yolo=False/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--allowedTools",
+      "mcp__agentweave__*",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=workspace/mcp=set/yolo=False/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--allowedTools",
+      "mcp__agentweave__*",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=workspace/mcp=set/yolo=True/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=workspace/mcp=set/yolo=True/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=manual/mcp=none/yolo=False/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=manual/mcp=none/yolo=False/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=manual/mcp=none/yolo=True/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=manual/mcp=none/yolo=True/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=manual/mcp=set/yolo=False/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--allowedTools",
+      "mcp__agentweave__*",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=manual/mcp=set/yolo=False/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--allowedTools",
+      "mcp__agentweave__*",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=manual/mcp=set/yolo=True/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=manual/mcp=set/yolo=True/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--permission-prompt-tool",
+      "mcp__agentweave__approve_tool_call",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=bypassPermissions/mcp=none/yolo=False/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "bypassPermissions",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=bypassPermissions/mcp=none/yolo=False/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=bypassPermissions/mcp=none/yolo=True/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "bypassPermissions",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=bypassPermissions/mcp=none/yolo=True/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=bypassPermissions/mcp=set/yolo=False/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "bypassPermissions",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--allowedTools",
+      "mcp__agentweave__*",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=bypassPermissions/mcp=set/yolo=False/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "--allowedTools",
+      "mcp__agentweave__*",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=bypassPermissions/mcp=set/yolo=True/restrict=False",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "bypassPermissions",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/cross/pm=bypassPermissions/mcp=set/yolo=True/restrict=True",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "Edit,MultiEdit,Write,NotebookEdit",
+      "--mcp-config",
+      "{\"mcpServers\": {\"agentweave\": {\"type\": \"stdio\", \"command\": \"<PY>\", \"args\": [\"<SERVER>\"]}}}",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/axis/model",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": "test-model-x",
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--model",
+      "test-model-x",
+      "--permission-mode",
+      "acceptEdits",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/axis/session_id",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": "session-abc-123",
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "--resume",
+      "session-abc-123",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/axis/context_present",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "present",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--append-system-prompt-file",
+      "<CTX>",
+      "--permission-mode",
+      "acceptEdits",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/axis/extra_flags",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": [
+        "--some-extra-flag",
+        "value"
+      ],
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "--some-extra-flag",
+      "value",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/axis/effort",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "effort": "high"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--effort",
+      "high",
+      "--permission-mode",
+      "acceptEdits",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/no-app-server",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": [
+        "--no-app-server"
+      ],
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "--no-app-server",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/mcp-empty-list",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [],
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/effort-x-pm/pm=None",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "effort": "high"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--effort",
+      "high",
+      "--permission-mode",
+      "acceptEdits",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/effort-x-pm/pm=acceptEdits",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits",
+        "effort": "high"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "acceptEdits",
+      "--effort",
+      "high",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/effort-x-pm/pm=workspace",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace",
+        "effort": "high"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--effort",
+      "high",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/effort-x-pm/pm=manual",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual",
+        "effort": "high"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "manual",
+      "--effort",
+      "high",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "claude/effort-x-pm/pm=bypassPermissions",
+    "input": {
+      "runner": "claude",
+      "cli": "claude",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions",
+        "effort": "high"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "claude",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--permission-mode",
+      "bypassPermissions",
+      "--effort",
+      "high",
+      "-p",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=None/mcp=none/yolo=False/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=None/mcp=none/yolo=False/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=None/mcp=none/yolo=True/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=None/mcp=none/yolo=True/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=None/mcp=set/yolo=False/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=None/mcp=set/yolo=False/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=None/mcp=set/yolo=True/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=None/mcp=set/yolo=True/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=acceptEdits/mcp=none/yolo=False/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=acceptEdits/mcp=none/yolo=False/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=acceptEdits/mcp=none/yolo=True/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=acceptEdits/mcp=none/yolo=True/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=acceptEdits/mcp=set/yolo=False/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=acceptEdits/mcp=set/yolo=False/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=acceptEdits/mcp=set/yolo=True/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=acceptEdits/mcp=set/yolo=True/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=workspace/mcp=none/yolo=False/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=workspace/mcp=none/yolo=False/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=workspace/mcp=none/yolo=True/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=workspace/mcp=none/yolo=True/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=workspace/mcp=set/yolo=False/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=workspace/mcp=set/yolo=False/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=workspace/mcp=set/yolo=True/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=workspace/mcp=set/yolo=True/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=manual/mcp=none/yolo=False/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=manual/mcp=none/yolo=False/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=manual/mcp=none/yolo=True/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=manual/mcp=none/yolo=True/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=manual/mcp=set/yolo=False/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=manual/mcp=set/yolo=False/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=manual/mcp=set/yolo=True/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=manual/mcp=set/yolo=True/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=bypassPermissions/mcp=none/yolo=False/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=bypassPermissions/mcp=none/yolo=False/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=bypassPermissions/mcp=none/yolo=True/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=bypassPermissions/mcp=none/yolo=True/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=bypassPermissions/mcp=set/yolo=False/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=bypassPermissions/mcp=set/yolo=False/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=bypassPermissions/mcp=set/yolo=True/restrict=False",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/cross/pm=bypassPermissions/mcp=set/yolo=True/restrict=True",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions"
+      },
+      "restrict_spec_writes": true
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "mcp_servers.agentweave.command=\"<PY>\"",
+      "-c",
+      "mcp_servers.agentweave.args=[\"<SERVER>\"]",
+      "-c",
+      "mcp_servers.agentweave.env_vars=[\"AW_RUN_TOKEN\", \"AW_AGENT_IDENTITY\", \"AW_RUN_ID\", \"AW_TURN_DEPTH\", \"HUB_URL\"]",
+      "--sandbox",
+      "read-only",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/axis/model",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": "test-model-x",
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--model",
+      "test-model-x",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/axis/session_id",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": "session-abc-123",
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "workspace-write",
+      "resume",
+      "session-abc-123",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/axis/context_present",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "present",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "model_instructions_file=<CTX>",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/axis/extra_flags",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": [
+        "--some-extra-flag",
+        "value"
+      ],
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "workspace-write",
+      "--some-extra-flag",
+      "value",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/axis/effort",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "effort": "high"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "model_reasoning_effort=high",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/no-app-server",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": [
+        "--no-app-server"
+      ],
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "workspace-write",
+      "--no-app-server",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/mcp-empty-list",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": [],
+      "extra_flags": null,
+      "control_overrides": null,
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/effort-x-pm/pm=None",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "effort": "high"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "model_reasoning_effort=high",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/effort-x-pm/pm=acceptEdits",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "acceptEdits",
+        "effort": "high"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "model_reasoning_effort=high",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/effort-x-pm/pm=workspace",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "workspace",
+        "effort": "high"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "model_reasoning_effort=high",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/effort-x-pm/pm=manual",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "manual",
+        "effort": "high"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "model_reasoning_effort=high",
+      "--sandbox",
+      "workspace-write",
+      "hello world"
+    ]
+  },
+  {
+    "id": "codex/effort-x-pm/pm=bypassPermissions",
+    "input": {
+      "runner": "codex",
+      "cli": "codex",
+      "prompt": "hello world",
+      "model": null,
+      "context_file": "missing",
+      "session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "extra_flags": null,
+      "control_overrides": {
+        "permission_mode": "bypassPermissions",
+        "effort": "high"
+      },
+      "restrict_spec_writes": false
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-c",
+      "model_reasoning_effort=high",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "hello world"
+    ]
+  }
+]
