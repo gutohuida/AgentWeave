@@ -241,6 +241,27 @@ def _thread_policy(*, yolo: bool, posture: Optional[str]) -> "tuple[str, str]":
     return "workspace-write", "on-request"
 
 
+def workspace_verdict(subject: Dict[str, Any], workspace: Optional[str]) -> Dict[str, Any]:
+    """What "Workspace only" decides for a sandbox approval: its working directory (or grant root)
+    inside the workspace. The one check `decide_approval` enforces under that posture, and the
+    advice an "Ask me" card shows (`an-ask-me-card-says-what-workspace-only-would-decide`, D1/D3),
+    so the two cannot drift. The command itself is never read, and the reason says so."""
+    if _within(subject.get("cwd") or subject.get("grantRoot"), workspace):
+        return {
+            "allow": True,
+            "reason": (
+                "its working directory is inside your workspace; checked by working directory only"
+            ),
+        }
+    return {
+        "allow": False,
+        "reason": (
+            "its working directory is outside your workspace, or it names none; checked by "
+            "working directory only"
+        ),
+    }
+
+
 def decide_approval(
     method: str,
     params: Dict[str, Any],
@@ -278,9 +299,8 @@ def decide_approval(
             # turns this into a real accept/decline and must never pass it back to Codex.
             return dict(ASK_OPERATOR)
         if posture == WORKSPACE_PERMISSION_MODE:
-            subject = approval_subject(method, params)
-            inside = _within(subject.get("cwd") or subject.get("grantRoot"), workspace)
-            return {"decision": "accept"} if inside else {"decision": "decline"}
+            verdict = workspace_verdict(approval_subject(method, params), workspace)
+            return {"decision": "accept"} if verdict["allow"] else {"decision": "decline"}
         # "Full access" accepts, on its own terms rather than on `yolo`'s. A thread under this
         # posture starts `danger-full-access`/`never` and should raise nothing at all, so this is
         # the defensive half of the same rule the thread policy states — and it must not be left

@@ -1640,6 +1640,7 @@ def _decide(
             if why:
                 return _refuse(value, why)
     command = tool_input.get("command")
+    expands = False
     if isinstance(command, str) and command:
         # A shell command declares no path, so its text is read in the tool's dialect and judged
         # word by word (the reader above). Relative words resolve against the workspace root,
@@ -1651,8 +1652,27 @@ def _decide(
                 refusal = _read_command(command, root, dialect, reading, hub_url=hub_url)
                 if refusal:
                     return refusal
+                expands = expands or _names_a_runtime_value(command, dialect, reading)
 
+    if expands:
+        # The text was inside; what the shell substitutes when it runs was not seen. An allow is
+        # read by an operator on an "Ask me" card, so it must not claim more than was checked
+        # (`an-ask-me-card-says-what-workspace-only-would-decide`, D4).
+        return {
+            "allow": True,
+            "reason": (
+                "inside your workspace as far as its text shows; it names a value the shell "
+                "decides when it runs"
+            ),
+        }
     return {"allow": True, "reason": "inside your workspace"}
+
+
+def _names_a_runtime_value(command: str, dialect: str, reading: str) -> bool:
+    """Whether any word of `command`, or a substitution nested in it, holds something the shell
+    decides when it runs -- which the judge above cannot see."""
+    arguments, nested = _lex(command, dialect == "bash", reading)
+    return bool(nested) or any(_expands(word) for word, _, _ in _words(arguments))
 
 
 def _report_decision(tool_name: str, decision: Dict[str, Any], tool_use_id: str) -> None:
@@ -1702,12 +1722,25 @@ def _ask_operator(tool_name: str, tool_input: Dict[str, Any], tool_use_id: str) 
     suspends the turn indefinitely, which is the failure this whole design exists to avoid. An
     operator who was away gets a denied action and a record of it, not a stuck agent.
     """
+    body: Dict[str, Any] = {
+        "tool_name": tool_name,
+        "tool_use_id": tool_use_id,
+        "tool_input": tool_input,
+    }
+    verdict = _workspace_verdict(tool_name, tool_input)
     try:
-        opened = _hub_request(
-            "POST",
-            "/permission-requests",
-            {"tool_name": tool_name, "tool_use_id": tool_use_id, "tool_input": tool_input},
-        )
+        try:
+            opened = _hub_request(
+                "POST",
+                "/permission-requests",
+                {**body, "workspace_verdict": verdict} if verdict is not None else body,
+            )
+        except HubAPIError as exc:
+            # A Hub not yet restarted onto the field refuses it in validation, before any row
+            # exists, so asking once more without it opens exactly one card (design D2).
+            if exc.status_code != 422 or verdict is None:
+                raise
+            opened = _hub_request("POST", "/permission-requests", body)
         request_id = opened["id"]
     except Exception:  # noqa: BLE001 - see docstring; an unreachable Hub must not hang the turn
         return {
@@ -1716,6 +1749,21 @@ def _ask_operator(tool_name: str, tool_input: Dict[str, Any], tool_use_id: str) 
         }
 
     return _await_decision(request_id)
+
+
+def _workspace_verdict(tool_name: str, tool_input: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """What "Workspace only" would decide for this call, shown to the operator as advice
+    (`an-ask-me-card-says-what-workspace-only-would-decide`, D1/D3). None when it cannot be worked
+    out: advice that fails must never stop the operator being asked.
+
+    A shell command's allow says the text was read, not the command sandboxed."""
+    try:
+        verdict = dict(_decide(tool_name, tool_input))
+    except Exception:  # noqa: BLE001 - the ask goes ahead without advice rather than failing
+        return None
+    if verdict.get("allow") and isinstance(tool_input.get("command"), str):
+        verdict["reason"] = f"{verdict['reason']}; a shell command is read, not sandboxed"
+    return verdict
 
 
 def _await_decision(request_id: str) -> Dict[str, Any]:

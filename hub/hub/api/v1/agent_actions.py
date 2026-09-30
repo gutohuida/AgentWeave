@@ -1013,12 +1013,22 @@ async def record_permission_decision(
     return {"recorded": not body.allowed}
 
 
+class WorkspaceVerdict(RequestModel):
+    """What "Workspace only" would decide for the call, as the approver worked it out. Advice for
+    the operator's card; it answers nothing (`an-ask-me-card-says-what-workspace-only-would-decide`,
+    D3). The reason fits the record a refusal is kept in."""
+
+    allow: bool
+    reason: str = Field(max_length=1000)
+
+
 class PermissionRequestCreate(RequestModel):
     """A run asking the operator to decide one tool call."""
 
     tool_name: str = Field(max_length=128)
     tool_use_id: str = Field(default="", max_length=128)
     tool_input: dict = Field(default_factory=dict)
+    workspace_verdict: Optional[WorkspaceVerdict] = None
 
 
 @router.post("/permission-requests", status_code=status.HTTP_201_CREATED)
@@ -1045,6 +1055,9 @@ async def open_permission_request(
             tool_name=body.tool_name,
             tool_use_id=body.tool_use_id,
             tool_input=body.tool_input,
+            workspace_verdict=(
+                body.workspace_verdict.model_dump() if body.workspace_verdict is not None else None
+            ),
             status="pending",
         )
     )

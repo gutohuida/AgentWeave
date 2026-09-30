@@ -1505,3 +1505,106 @@ def test_decide_hub_url_keyword_reaches_a_reference_and_refuses_the_environments
 
     nested = _decide("Bash", {"command": "echo $(curl http://env-hub:8000/x)"}, hub_url=real_hub)
     assert nested["allow"] is False
+
+
+# --- An "Ask me" card carries what Workspace only would decide (F230, F284) -----------------------
+# `an-ask-me-card-says-what-workspace-only-would-decide`, design D1-D4. Advice, never an answer.
+
+
+class _Opened(list):
+    """The bodies the Hub accepted; `.attempts` holds every body sent, refused ones included."""
+
+    attempts: list
+
+
+def _operator_hub(monkeypatch, *, reject_verdict_with=None):
+    """A Hub stub under the operator posture that answers "allowed" and records each opening body.
+    With `reject_verdict_with`, a body carrying `workspace_verdict` is refused with that status."""
+    from hub import mcp_server
+
+    monkeypatch.setenv("AW_PERMISSION_POSTURE", mcp_server.OPERATOR_POSTURE)
+    monkeypatch.setattr(mcp_server, "OPERATOR_POLL_SECONDS", 0.01)
+    opened = _Opened()
+    attempts = []
+
+    def hub(method, path, body=None, *_a, **_k):
+        if method == "POST" and path == "/permission-requests":
+            attempts.append(body)
+            if reject_verdict_with and "workspace_verdict" in (body or {}):
+                raise mcp_server.HubAPIError(reject_verdict_with, "no such field")
+            opened.append(body)
+            return {"id": "perm-1", "status": "pending"}
+        return {"id": "perm-1", "status": "allowed"}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    opened.attempts = attempts
+    return opened
+
+
+def test_an_operator_request_carries_the_workspace_verdict(workspace, tmp_path, monkeypatch):
+    from hub import mcp_server
+
+    opened = _operator_hub(monkeypatch)
+    outside = str(tmp_path / "outside" / "a.txt")
+    mcp_server.approve_tool_call("Write", {"file_path": outside}, "tu-1")
+    mcp_server.approve_tool_call("Write", {"file_path": str(workspace / "a.txt")}, "tu-2")
+    mcp_server.approve_tool_call("Bash", {"command": "ls sub"}, "tu-3")
+
+    refused, inside, shell = (body["workspace_verdict"] for body in opened)
+    assert refused == mcp_server._decide("Write", {"file_path": outside})
+    assert refused["allow"] is False
+    assert inside == {"allow": True, "reason": "inside your workspace"}
+    assert shell["allow"] is True
+    assert shell["reason"].endswith("a shell command is read, not sandboxed")
+
+
+def test_an_allow_says_what_it_did_not_check(workspace):
+    from hub import mcp_server
+
+    expanding = mcp_server._decide("Bash", {"command": "cp x $DEST"})
+    assert expanding["allow"] is True
+    assert expanding["reason"] == (
+        "inside your workspace as far as its text shows; it names a value the shell decides "
+        "when it runs"
+    )
+    assert mcp_server._decide("Bash", {"command": "ls sub"})["reason"] == "inside your workspace"
+
+
+def test_a_hub_that_refuses_the_verdict_is_still_asked(workspace, monkeypatch):
+    """An un-restarted Hub answers the new field with 422 before any row exists; the approver asks
+    again without it, once (design D2)."""
+    from hub import mcp_server
+
+    opened = _operator_hub(monkeypatch, reject_verdict_with=422)
+    answer = json.loads(mcp_server.approve_tool_call("Write", {"file_path": "a.txt"}, "tu"))
+
+    assert answer["behavior"] == "allow"
+    assert "workspace_verdict" in opened.attempts[0]
+    assert len(opened) == 1 and "workspace_verdict" not in opened[0]
+
+
+def test_only_a_validation_refusal_is_retried(workspace, monkeypatch):
+    from hub import mcp_server
+
+    opened = _operator_hub(monkeypatch, reject_verdict_with=500)
+    answer = json.loads(mcp_server.approve_tool_call("Write", {"file_path": "a.txt"}, "tu"))
+
+    assert answer["behavior"] == "deny"
+    assert "could not be asked" in answer["message"]
+    assert len(opened.attempts) == 1 and opened == []
+
+
+def test_a_judge_that_raises_does_not_stop_the_ask(workspace, monkeypatch):
+    """The advice must never be able to fail the thing it advises (design D1, R2)."""
+    from hub import mcp_server
+
+    opened = _operator_hub(monkeypatch)
+
+    def broken(*_a, **_k):
+        raise RuntimeError("judge failed")
+
+    monkeypatch.setattr(mcp_server, "_decide", broken)
+    answer = json.loads(mcp_server.approve_tool_call("Write", {"file_path": "a.txt"}, "tu"))
+
+    assert answer["behavior"] == "allow"
+    assert len(opened) == 1 and "workspace_verdict" not in opened[0]

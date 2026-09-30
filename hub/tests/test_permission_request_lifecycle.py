@@ -427,3 +427,47 @@ async def test_dismissing_does_not_revive_the_conversation_or_the_request(app, a
         json={"allow": True},
     )
     assert decided.status_code == 409, decided.text
+
+
+# --- The Workspace only verdict rides the request (F230, F284) -----------------------------------
+# `an-ask-me-card-says-what-workspace-only-would-decide`, design D3: stored as data, returned to the
+# card, decides nothing.
+
+
+@pytest.mark.asyncio
+async def test_a_request_keeps_the_workspace_verdict_it_was_opened_with(app, auth_headers):
+    headers = await _waiting_run()
+    verdict = {"allow": False, "reason": "writes outside your workspace"}
+    opened = await app.post(
+        "/api/v1/agent-actions/permission-requests",
+        headers=headers,
+        json={
+            "tool_name": "Write",
+            "tool_use_id": "toolu_v",
+            "tool_input": {"file_path": "/elsewhere/a.txt"},
+            "workspace_verdict": verdict,
+        },
+    )
+    assert opened.status_code == 201, opened.text
+    plain_id = await _open_request(app, headers)
+
+    listed = await app.get("/api/v1/projects/proj-test/permission-requests", headers=auth_headers)
+    assert listed.status_code == 200, listed.text
+    by_id = {row["id"]: row for row in listed.json()}
+    assert by_id[opened.json()["id"]]["workspace_verdict"] == verdict
+    assert by_id[plain_id]["workspace_verdict"] is None
+
+
+@pytest.mark.asyncio
+async def test_an_over_long_verdict_reason_is_refused(app):
+    headers = await _waiting_run()
+    opened = await app.post(
+        "/api/v1/agent-actions/permission-requests",
+        headers=headers,
+        json={
+            "tool_name": "Write",
+            "tool_input": {},
+            "workspace_verdict": {"allow": True, "reason": "x" * 1001},
+        },
+    )
+    assert opened.status_code == 422, opened.text

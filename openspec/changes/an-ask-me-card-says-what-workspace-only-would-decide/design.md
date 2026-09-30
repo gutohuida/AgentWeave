@@ -133,6 +133,29 @@ substitution expands (`_expands` true on some word, or `nested` non-empty in `_l
 Only the reason changes; `allow` does not. `approve_tool_call` sends no message on an allow
 (`:1711-1712`), so the model sees nothing new.
 
+### D5 — Copilot, and what moved since R3 (verification round at IMPL, 2026-09-30)
+
+Re-derived on master `e540752`. D1–D4 stand, with three things the rounds could not see:
+
+- **Copilot is a third operator path.** `a-copilot-agent-runs-over-acp` (archived today) asks the
+  operator through the same `_await_operator_permission` as Codex, and already computes the advice:
+  `copilot_acp.workspace_verdict(params, workspace, …)` runs its own Workspace-only judge
+  (`decide_permission(posture="workspace")`) and puts the result in `subject["workspace_verdict"]`
+  before calling `request_approval`. Nothing stores it: that half was left to this change (its task
+  7.3). So `_await_operator_permission` takes the verdict as a parameter,
+  `workspace_verdict: Optional[dict]`, and writes it on the row; the Codex caller passes
+  `codex_appserver.workspace_verdict(subject, work_dir)` (D1) and the Copilot caller passes
+  `subject.get("workspace_verdict")`. The requirement's *"the same check that answers under the
+  workspace posture for that run's provider"* then holds for all three.
+- **Copilot's shell allow must not overclaim either.** Its judge reads an `execute` call's command
+  through `mcp_server._decide`, so an allow's reason is `_decide`'s (and D4's qualification reaches
+  it); `copilot_acp.workspace_verdict` appends the same *"; a shell command is read, not sandboxed"*
+  as the Claude approver when it allows an `execute` request.
+- **The migration is `0114`**, not `0106`: seven migrations landed since R1. And
+  `an-agents-tool-server-is-the-one-its-hub-loaded` (B11) has landed, so a Hub spawns the copy of
+  `mcp_server.py` it pinned at start; the 422 retry (D2) is kept as D2 says, inert while the pinned
+  approver and the route change on the same restart.
+
 ## Risks
 
 - Migration reaches `:8000` on the operator's next restart (tell them, as the rules require).

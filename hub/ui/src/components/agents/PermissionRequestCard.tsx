@@ -121,6 +121,23 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
             >
               {describe(request)}
             </code>
+            {/* Advice, never an answer: what "Workspace only" would have decided, from the same check
+                that posture enforces. The reason says how far the check went, so an allow never
+                reads as "this stays inside" (an-ask-me-card-says-what-workspace-only-would-decide). */}
+            {request.workspace_verdict && (
+              <p
+                data-testid={`permission-verdict-${request.id}`}
+                style={{
+                  fontSize: 11,
+                  color: request.workspace_verdict.allow ? 'var(--text-3)' : 'var(--amber)',
+                }}
+              >
+                {request.workspace_verdict.allow
+                  ? 'Workspace only would allow this: '
+                  : "Outside this agent's workspace — Workspace only would refuse this: "}
+                {request.workspace_verdict.reason}
+              </p>
+            )}
             {expired ? (
               <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
                 The agent stopped waiting and was refused. Give yourself longer to answer by

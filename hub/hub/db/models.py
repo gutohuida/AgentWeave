@@ -1615,6 +1615,10 @@ class PermissionRequest(Base):
     tool_name: Mapped[str] = mapped_column(String(128), nullable=False)
     tool_use_id: Mapped[str] = mapped_column(String(128), default="", nullable=False)
     tool_input: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    # What "Workspace only" would have decided for this call, shown on an "Ask me" card as advice:
+    # `{"allow": bool, "reason": str}`, or null when none was worked out. It decides nothing
+    # (`an-ask-me-card-says-what-workspace-only-would-decide`, D3).
+    workspace_verdict: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # "pending" | "allowed" | "denied" | "expired"
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False, index=True)
     # The operator has finished looking at an expired request and cleared it from view.

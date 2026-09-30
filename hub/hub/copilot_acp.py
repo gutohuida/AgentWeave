@@ -677,7 +677,11 @@ def workspace_verdict(
             calls=calls or {},
             servers=servers,
         )
-        return {"allow": decided["outcome"] == ALLOW, "reason": decided["reason"]}
+        verdict = {"allow": decided["outcome"] == ALLOW, "reason": decided["reason"]}
+        if verdict["allow"] and _tool_call(params).get("kind") == "execute":
+            # The judge read the command's text; it did not sandbox what the shell does (D5).
+            verdict["reason"] = f"{verdict['reason']}; a shell command is read, not sandboxed"
+        return verdict
     except Exception:  # noqa: BLE001 - a card detail must never fail the card
         return None
 

@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0113"
+HEAD_REVISION = "0114"
 
 
 # ---------------------------------------------------------------------------
@@ -4429,3 +4429,43 @@ def test_migration_0113_is_guarded_when_agents_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0113"
+
+
+# ---------------------------------------------------------------------------------------------
+# 0114 -- an Ask me card says what Workspace only would decide: permission_requests.workspace_verdict
+# ---------------------------------------------------------------------------------------------
+
+
+def test_migration_0114_adds_a_nullable_workspace_verdict(tmp_path) -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "workspace_verdict.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0113")
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(permission_requests)")}
+        assert "workspace_verdict" not in columns
+
+    _upgrade_to(db_url, "0114")
+    with sqlite3.connect(db_file) as conn:
+        info = {row[1]: row for row in conn.execute("PRAGMA table_info(permission_requests)")}
+        assert info["workspace_verdict"][3] == 0  # nullable
+
+
+def test_migration_0114_is_guarded_when_permission_requests_does_not_exist(tmp_path) -> None:
+    db_file = tmp_path / "no_permission_requests_0114.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0113')")
+
+    _upgrade_to(db_url, "0114")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0114"

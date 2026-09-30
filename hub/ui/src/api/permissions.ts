@@ -10,6 +10,9 @@ export interface PermissionRequest {
   tool_name: string
   tool_use_id: string
   tool_input: Record<string, unknown>
+  /** What "Workspace only" would decide for this call, as advice; null when none was worked out,
+   *  and absent from a Hub older than the field (both mean: say nothing). */
+  workspace_verdict?: { allow: boolean; reason: string } | null
   status: 'pending' | 'allowed' | 'denied' | 'expired'
   /** The operator has seen this expired request and cleared it from view. */
   dismissed: boolean

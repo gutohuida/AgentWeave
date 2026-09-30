@@ -58,6 +58,7 @@ from ...codex_appserver import (
 )
 from ...codex_appserver import approval_label as codex_approval_label
 from ...codex_appserver import run_turn as codex_run_turn
+from ...codex_appserver import workspace_verdict as codex_workspace_verdict
 from ...conversation_titles import maybe_generate_title
 from ...conversations import (
     conversation_for_provider_session,
@@ -3041,12 +3042,17 @@ async def _await_operator_permission(
     timeout_seconds: Optional[int] = None,
     label: Optional[str] = None,
     tool_input: Optional[Dict[str, object]] = None,
+    workspace_verdict: Optional[Dict[str, object]] = None,
 ) -> bool:
     """Open a permission request for an RPC runner's approval and wait for the operator.
 
     `label` and `tool_input` are what the card shows. Codex passes neither, and its label is
     looked up from its protocol method; Copilot passes both, because its requests share one method
     and differ by kind (`a-copilot-agent-runs-over-acp` D8, *Operator posture*).
+
+    `workspace_verdict` is what "Workspace only" would decide, from the runner's own check, stored
+    for the card as advice (`an-ask-me-card-says-what-workspace-only-would-decide`, D1/D5). It
+    answers nothing.
 
     The Codex counterpart of `mcp_server._ask_operator`, and it holds the same line: a turn is
     suspended, not failed, while this waits, so the wait is bounded and running out denies.
@@ -3064,6 +3070,7 @@ async def _await_operator_permission(
                 tool_name=label or _CODEX_APPROVAL_LABELS.get(method, method),
                 tool_use_id="",
                 tool_input=dict(tool_input if tool_input is not None else subject),
+                workspace_verdict=workspace_verdict,
                 status="pending",
             )
         )
@@ -3155,6 +3162,7 @@ async def _execute_codex_appserver_run(
                 method=method,
                 subject=subject,
                 timeout_seconds=_codex_decision_timeout(env),
+                workspace_verdict=codex_workspace_verdict(subject, work_dir),
             ),
             cwd=work_dir,
             env=env,
@@ -3349,6 +3357,8 @@ async def _execute_copilot_run(
                 timeout_seconds=_codex_decision_timeout(env),
                 label=str(subject.get("tool_name") or "a Copilot request"),
                 tool_input=subject.get("tool_input") or {},
+                # Worked out by the turn with Copilot's own Workspace-only judge (D5).
+                workspace_verdict=subject.get("workspace_verdict"),
             ),
             on_refusal=cb.on_refusal,
             # No `on_decision`: `a-run-records-that-its-calls-were-allowed` has not landed, so

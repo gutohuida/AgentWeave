@@ -1047,6 +1047,16 @@ class TestOperatorLabelsAndAnswers:
         assert workspace_verdict(outside, str(tmp_path), hub_url=HUB_URL)["allow"] is False
         assert workspace_verdict(inside, str(tmp_path), hub_url=HUB_URL)["allow"] is True
 
+    def test_an_allowed_shell_verdict_does_not_claim_the_command_stays_inside(self, tmp_path):
+        """The card reads this reason; a command is read, not sandboxed
+        (`an-ask-me-card-says-what-workspace-only-would-decide`, design D5)."""
+        from hub.copilot_acp import workspace_verdict
+
+        inside = _params(kind="execute", raw_input={"command": "Get-ChildItem"})
+        verdict = workspace_verdict(inside, str(tmp_path), hub_url=HUB_URL)
+        assert verdict["allow"] is True
+        assert verdict["reason"].endswith("a shell command is read, not sandboxed")
+
     def test_workspace_verdict_never_raises(self, tmp_path, monkeypatch):
         import hub.copilot_acp as copilot_acp
 

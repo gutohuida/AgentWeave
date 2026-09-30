@@ -35,6 +35,8 @@ class PermissionRequestResponse(BaseModel):
     tool_name: str
     tool_use_id: str
     tool_input: dict
+    # Advice for the card: what "Workspace only" would decide, or null (design D3).
+    workspace_verdict: dict | None = None
     status: str
     dismissed: bool
     created_at: datetime

@@ -311,4 +311,65 @@ describe('permission card wears the composer’s chrome', () => {
     expect(container.querySelector('.conversation-interject')).not.toBeNull()
     expect(container.innerHTML).not.toContain('--amber')
   })
+
+  // `an-ask-me-card-says-what-workspace-only-would-decide`: what "Workspace only" would decide,
+  // as advice. In the order `GET /permission-requests` returns them: newest first.
+  it('says what Workspace only would decide, with its reason, beside each request', () => {
+    const newer = request({
+      id: 'perm-outside',
+      created_at: '2026-09-30T10:09:00Z',
+      workspace_verdict: { allow: false, reason: 'writes to C:/outside/secrets.txt, outside your workspace' },
+    })
+    const older = request({
+      id: 'perm-inside',
+      created_at: '2026-09-30T10:00:00Z',
+      tool_input: { file_path: 'C:/work/asker/a.txt' },
+      workspace_verdict: { allow: true, reason: 'inside your workspace' },
+    })
+    const unknown = request({
+      id: 'perm-unknown',
+      created_at: '2026-09-30T09:50:00Z',
+      tool_input: { file_path: 'C:/work/b.txt' },
+      workspace_verdict: null,
+    })
+    render(<PermissionRequestCard requests={[newer, older, unknown]} agent="haiku-1" />)
+
+    const refused = screen.getByTestId('permission-verdict-perm-outside')
+    expect(refused).toHaveTextContent(
+      "Outside this agent's workspace — Workspace only would refuse this: writes to C:/outside/secrets.txt, outside your workspace",
+    )
+    const allowed = screen.getByTestId('permission-verdict-perm-inside')
+    expect(allowed).toHaveTextContent('Workspace only would allow this: inside your workspace')
+    expect(screen.queryByTestId('permission-verdict-perm-unknown')).not.toBeInTheDocument()
+    // Each line sits on its own request, in the route's order.
+    expect(screen.getByTestId('permission-request-perm-outside')).toContainElement(refused)
+    expect(screen.getByTestId('permission-request-perm-inside')).toContainElement(allowed)
+    const lines = screen.getAllByTestId(/^permission-verdict-/)
+    expect(lines.map((line) => line.dataset.testid)).toEqual([
+      'permission-verdict-perm-outside',
+      'permission-verdict-perm-inside',
+    ])
+  })
+
+  it('never says a command stays inside', () => {
+    render(
+      <PermissionRequestCard
+        requests={[
+          request({
+            tool_name: 'Bash',
+            tool_input: { command: 'ls sub' },
+            workspace_verdict: {
+              allow: true,
+              reason: 'inside your workspace; a shell command is read, not sandboxed',
+            },
+          }),
+        ]}
+        agent="haiku-1"
+      />,
+    )
+    expect(screen.getByTestId('permission-verdict-perm-1')).toHaveTextContent(
+      'Workspace only would allow this: inside your workspace; a shell command is read, not sandboxed',
+    )
+    expect(screen.queryByText(/stays inside/)).not.toBeInTheDocument()
+  })
 })
