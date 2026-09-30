@@ -557,6 +557,28 @@ def auto_snapshot_notice() -> str:
     )
 
 
+def agent_config(
+    session_data: Optional[Dict[str, Any]], agent: str, stored: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """An agent's configuration as its run reads it: the session's per-agent entry, with the
+    session-wide `hub_client` filling it in, laid over the agent's own stored `Agent.config`.
+
+    The order matters and is the spawn's: the session-wide `hub_client` is applied to the
+    session's entry *before* that entry is laid over `stored`, so it beats a `hub_client` stored on
+    the row. Pure, so the agents list can read the same answer `get_agent_config` gives the trigger
+    (`the-permissions-pill-shows-the-posture-the-run-gets`, design D2).
+    """
+    session_data = session_data or {}
+    meta = dict(((session_data.get("agents", {})) or {}).get(agent, {}))
+    if "hub_client" not in meta and session_data.get("hub_client"):
+        # Session-wide default (session.json's top-level `hub_client`), same fallback
+        # order as the CLI's Session.get_agent_hub_client — a per-agent override wins.
+        meta["hub_client"] = session_data["hub_client"]
+    if stored:
+        meta = {**stored, **meta}
+    return meta
+
+
 async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dict[str, Any]:
     """Return the merged runner config `probe_agent` expects for one agent.
 
@@ -582,19 +604,12 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
     result = await db.execute(select(ProjectSession).where(ProjectSession.project_id == project_id))
     row = result.scalars().first()
     session_data = row.data if row else {}
-    session_agents_meta = (session_data.get("agents", {})) or {}
-    meta = dict(session_agents_meta.get(agent, {}))
-    if "hub_client" not in meta and session_data.get("hub_client"):
-        # Session-wide default (session.json's top-level `hub_client`), same fallback
-        # order as the CLI's Session.get_agent_hub_client — a per-agent override wins.
-        meta["hub_client"] = session_data["hub_client"]
 
     agent_result = await db.execute(
         select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
     )
     agent_row = agent_result.scalars().first()
-    if agent_row and agent_row.config:
-        meta = {**agent_row.config, **meta}
+    meta = agent_config(session_data, agent, agent_row.config if agent_row else None)
 
     if agent_row is not None:
         if agent_row.runner_id:

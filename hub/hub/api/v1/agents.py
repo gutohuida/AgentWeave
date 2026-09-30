@@ -41,7 +41,7 @@ from ...db.models import (
     Task,
 )
 from ...inbound_queue import new_entry
-from ...launchability import get_agent_config, probe_agent
+from ...launchability import agent_config, get_agent_config, probe_agent, resolve_access_path
 from ...model_catalog import (
     FULL_ACCESS_PERMISSION_MODE,
     get_provider,
@@ -50,7 +50,12 @@ from ...model_catalog import (
 )
 from ...output_recording import record_agent_output, record_context_usage
 from ...review_turn import ReviewContext, verdict_evidence_sentence
-from ...runner_commands import CLAUDE_FAMILY_RUNNERS, mcp_tool_prefix
+from ...runner_commands import (
+    CLAUDE_FAMILY_RUNNERS,
+    catalog_provider_for_runner,
+    mcp_tool_prefix,
+    posture_at_rest,
+)
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -552,6 +557,21 @@ async def list_agents(
                 **({"model": bound_runner.model} if bound_runner.model else {}),
             }
 
+        # What the next run gets when nobody chose a posture, read from the one function the spawn
+        # falls back to, over the config the spawn reads (`get_agent_config`'s merge, not
+        # `agent_meta`, whose precedence differs for `hub_client`). F283.
+        permission_mode_at_rest = permission_mode_built_in = None
+        provider = catalog_provider_for_runner(bound_runner.cli) if bound_runner else None
+        if provider is not None:
+            spawn_config = agent_config(
+                session_data, agent_name, agent_row.config if agent_row else None
+            )
+            access_path = resolve_access_path(bound_runner.cli, spawn_config.get("hub_client"))
+            permission_mode_at_rest = posture_at_rest(
+                provider, access_path, bool(spawn_config.get("yolo"))
+            )
+            permission_mode_built_in = posture_at_rest(provider, access_path, False)
+
         _runner = agent_meta.get("runner", "native")
         _display_model = {
             "claude": agent_meta.get("model", "Claude"),
@@ -581,6 +601,8 @@ async def list_agents(
                 runner_options=agent_meta.get("runner_options"),
                 color_index=agent_row.color_index if agent_row else None,
                 runner_id=agent_row.runner_id if agent_row else None,
+                permission_mode_at_rest=permission_mode_at_rest,
+                permission_mode_built_in=permission_mode_built_in,
                 charter_id=agent_row.charter_id if agent_row else None,
                 permission_timeout_seconds=(
                     agent_row.permission_timeout_seconds if agent_row else None

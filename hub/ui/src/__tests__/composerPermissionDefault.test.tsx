@@ -129,10 +129,29 @@ describe("the composer shows the agent's default posture", () => {
     })
   })
 
-  it('reads the catalog default when the agent states none', () => {
-    roster = [agent()]
+  it('reads the posture the run gets at rest when the agent states none (F283)', () => {
+    // A Codex-shaped at-rest value, so this cannot pass by reading the catalog's Claude default.
+    roster = [agent({ permission_mode_at_rest: 'acceptEdits' })]
     render(<AgentOutputPanel agent={roster[0]} conversationId={conversation.id} />)
     expect(permissionsPill()).toHaveTextContent('Edit files')
+  })
+
+  it('reads Workspace only for a Claude agent the Hub answers for', () => {
+    roster = [agent({ permission_mode_at_rest: 'workspace' })]
+    render(<AgentOutputPanel agent={roster[0]} conversationId={conversation.id} />)
+    expect(permissionsPill()).toHaveTextContent('Workspace only')
+  })
+
+  it('falls back to the catalog default when the roster does not say (a Hub not yet restarted)', () => {
+    roster = [agent()]
+    render(<AgentOutputPanel agent={roster[0]} conversationId={conversation.id} />)
+    expect(permissionsPill()).toHaveTextContent('Workspace only')
+  })
+
+  it("puts the agent's own default above the posture at rest", () => {
+    roster = [agent({ default_permission_mode: 'manual', permission_mode_at_rest: 'workspace' })]
+    render(<AgentOutputPanel agent={roster[0]} conversationId={conversation.id} />)
+    expect(permissionsPill()).toHaveTextContent('Ask me')
   })
 
   it("reads the agent's default when it has one", () => {
@@ -145,7 +164,7 @@ describe("the composer shows the agent's default posture", () => {
     // Showing it is not the same as sending it. The Hub applies the default itself, so sending it
     // back would silently freeze today's default onto this conversation the first time the
     // operator typed anything — and then changing the agent's default would leave it behind.
-    roster = [agent({ default_permission_mode: 'manual' })]
+    roster = [agent({ default_permission_mode: 'manual', permission_mode_at_rest: 'workspace' })]
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ status: 'started', conversation_id: conversation.id }), {
         status: 200,

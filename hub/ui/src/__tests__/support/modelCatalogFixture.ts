@@ -30,7 +30,7 @@ const MODELS: Record<string, ModelCatalogResponse['providers'][number]['models']
 
 // Copilot's Permissions default is Workspace only (D8: it has no sandbox to fall back on).
 const PERMISSION_DEFAULT: Record<string, string> = {
-  claude: 'acceptEdits',
+  claude: 'workspace',
   codex: 'acceptEdits',
   copilot: 'workspace',
 }

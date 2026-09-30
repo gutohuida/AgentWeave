@@ -180,6 +180,12 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
   const { data: catalog, isLoading } = useModelCatalog()
   const update = useUpdateAgentPermissionDefault()
   const options = permissionModeValues(catalog)
+  // What clearing the default gives this agent's run, as the Hub computes it (without Full access,
+  // which clearing also clears). Unknown with no runner bound, or from a Hub older than F283's fix.
+  const builtIn = agent.permission_mode_built_in
+  const builtInLabel = builtIn
+    ? (options.find((option) => option.id === builtIn)?.label ?? builtIn)
+    : 'depends on the runner'
 
   if (isLoading) {
     return <span className="text-xs" style={{ color: 'var(--text-3)' }}>Loading postures...</span>
@@ -197,7 +203,7 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
           opacity: update.isPending ? 0.6 : 1,
         }}
       >
-        <option value="">Built-in default (Edit files)</option>
+        <option value="">Built-in default ({builtInLabel})</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>{option.label}</option>
         ))}

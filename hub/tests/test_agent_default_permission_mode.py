@@ -196,3 +196,70 @@ async def test_an_agent_with_no_default_is_unchanged(app, auth_headers, bind_run
     # approver — so an agent given no configuration can still run what it wrote.
     assert command[command.index("--permission-mode") + 1] == "manual"
     assert "--permission-prompt-tool" in command
+
+
+# --- What the roster says a run gets at rest (F283) ----------------------------------------------
+# `the-permissions-pill-shows-the-posture-the-run-gets`, design D2/D3/D5. The pills and the settings
+# select read these two fields, so each row below is the posture the spawn would really use.
+
+
+async def _roster_postures(app, auth_headers):
+    listed = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
+    assert listed.status_code == 200, listed.text
+    return {
+        row["name"]: (row["permission_mode_at_rest"], row["permission_mode_built_in"])
+        for row in listed.json()
+    }
+
+
+@pytest.mark.asyncio
+async def test_the_roster_states_the_posture_each_agent_gets_at_rest(
+    app, auth_headers, add_agent, bind_runner
+):
+    await add_agent("plain")
+    await bind_runner("plain", cli="claude")
+    await add_agent("no-server", config={"hub_client": "cli"})
+    await bind_runner("no-server", cli="claude")
+    await add_agent("autonomous", config={"yolo": True})
+    await bind_runner("autonomous", cli="claude")
+    await add_agent("codexer")
+    await bind_runner("codexer", cli="codex")
+    await add_agent("copiloter")
+    await bind_runner("copiloter", cli="copilot")
+    await add_agent("unbound")
+
+    postures = await _roster_postures(app, auth_headers)
+
+    assert postures["plain"] == ("workspace", "workspace")
+    assert postures["no-server"] == ("acceptEdits", "acceptEdits")
+    # Clearing the default clears the flag too, so the blank option names the non-yolo posture.
+    assert postures["autonomous"] == ("bypassPermissions", "workspace")
+    assert postures["codexer"] == ("acceptEdits", "acceptEdits")
+    assert postures["copiloter"] == ("workspace", "workspace")
+    # No runner, no run to describe.
+    assert postures["unbound"] == (None, None)
+
+
+@pytest.mark.asyncio
+async def test_the_roster_reads_hub_client_the_way_the_spawn_does(
+    app, auth_headers, add_agent, bind_runner
+):
+    """The spawn reads `get_agent_config`, where a session-wide `hub_client` fills in the session's
+    per-agent entry *before* that entry is laid over `Agent.config`, so it beats a `hub_client`
+    stored on the row (design D2, R2 and R3). A roster that merged in another order would say
+    "Workspace only" for a run spawned under "Edit files"."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"hub_client": "cli", "agents": {}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200, sync.text
+    await add_agent("inherits")
+    await bind_runner("inherits", cli="claude")
+    await add_agent("overridden", config={"hub_client": "mcp"})
+    await bind_runner("overridden", cli="claude")
+
+    postures = await _roster_postures(app, auth_headers)
+
+    assert postures["inherits"] == ("acceptEdits", "acceptEdits")
+    assert postures["overridden"] == ("acceptEdits", "acceptEdits")

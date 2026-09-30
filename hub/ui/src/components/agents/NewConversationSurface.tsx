@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAgents } from '@/api/agents'
+import { postureAtRest, useAgents } from '@/api/agents'
 import { useRunners } from '@/api/runners'
 import { useWorkspacePaths } from '@/api/workspace'
 import { Icon } from '@/components/common/Icon'
@@ -209,6 +209,7 @@ export function NewConversationSurface({
               workspacePaths={workspacePaths}
               runner={runnerRow?.cli ?? null}
               effectiveModel={runnerRow?.model ?? null}
+              effectiveControls={postureAtRest(agentRow)}
               pendingOverrides={pendingOverrides}
               onPendingOverridesChange={setPendingOverrides}
               specDocumentLabel={null}

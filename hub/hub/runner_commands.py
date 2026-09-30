@@ -142,6 +142,34 @@ def catalog_provider_for_runner(runner: str) -> Optional[str]:
     return _CATALOG_PROVIDER_BY_RUNNER.get(runner)
 
 
+def posture_at_rest(provider: str, access_path: str, yolo: bool) -> str:
+    """The permission posture a run gets when neither the conversation nor the agent chose one.
+
+    The one answer the spawn and every display read (`the-permissions-pill-shows-the-posture-the-
+    run-gets`, design D1): `build_command` falls back to it, Copilot's `posture_for` returns it for
+    an unset mode, and the agents list serves it as `permission_mode_at_rest`, so the Permissions
+    pill cannot say one thing while the run does another (F283).
+
+    - Claude: Full access under `yolo`; `workspace` when the Hub's server is there to answer it
+      (`access_path == "mcp"`); otherwise `acceptEdits`, which needs no answerer.
+    - Codex: Full access under `yolo`, else `acceptEdits` ("no posture" and `acceptEdits` map to the
+      same thread policy, so "Edit files" is what the run gets).
+    - Copilot: Full access under `yolo`, else `workspace`, whatever the access path: it has no
+      sandbox of its own to fall back on (design D5).
+    """
+    if yolo:
+        return FULL_ACCESS_PERMISSION_MODE
+    if provider == "copilot":
+        return WORKSPACE_PERMISSION_MODE
+    if provider == "claude":
+        return (
+            DEFAULT_CLAUDE_PERMISSION_MODE
+            if access_path == "mcp"
+            else DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER
+        )
+    return "acceptEdits"
+
+
 class UnsupportedRunnerError(ValueError):
     """Raised when asked to build a command for a runner this module doesn't cover yet."""
 
@@ -258,11 +286,7 @@ def _build_claude_command(
     # The posture this run falls back to, decided before the flags are assembled because two
     # places need it: the approver flag below, and the mode flag at the end. `workspace` only
     # works where the Hub's server is there to answer it.
-    default_posture = (
-        DEFAULT_CLAUDE_PERMISSION_MODE
-        if mcp_command
-        else DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER
-    )
+    default_posture = posture_at_rest("claude", "mcp" if mcp_command else "cli", False)
     defaults_to_approver = (
         not operator_set_permission_mode
         and not yolo

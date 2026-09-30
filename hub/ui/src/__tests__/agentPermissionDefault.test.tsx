@@ -74,12 +74,35 @@ describe('an agent has a default permission posture', () => {
     renderExecution(agent())
     const labels = [...control().querySelectorAll('option')].map((o) => o.textContent)
     expect(labels).toEqual([
-      'Built-in default (Edit files)',
+      'Built-in default (depends on the runner)',
       'Edit files',
       'Workspace only',
       'Ask me',
       'Full access',
     ])
+  })
+
+  it('names the built-in default the run would get (F283)', () => {
+    renderExecution(agent({ runner_id: 'runner-1', permission_mode_built_in: 'workspace' }))
+    expect(control().querySelector('option[value=""]')).toHaveTextContent(
+      'Built-in default (Workspace only)',
+    )
+  })
+
+  it('names what clearing gives, not the Full access this agent has now', () => {
+    // Choosing Full access sets the autonomy flag and clearing clears it, so the blank option is
+    // the posture without it (design D3, operator review).
+    renderExecution(
+      agent({
+        runner_id: 'runner-1',
+        default_permission_mode: 'bypassPermissions',
+        permission_mode_at_rest: 'bypassPermissions',
+        permission_mode_built_in: 'workspace',
+      }),
+    )
+    expect(control().querySelector('option[value=""]')).toHaveTextContent(
+      'Built-in default (Workspace only)',
+    )
   })
 
   it('sits at the built-in default until one is chosen', () => {

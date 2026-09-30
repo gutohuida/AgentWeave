@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NewConversationSurface } from '@/components/agents/NewConversationSurface'
 import { useConfigStore } from '@/store/configStore'
 
-vi.mock('@/api/agents', () => ({
+vi.mock('@/api/agents', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/agents')>()),
   useAgents: () => ({
     data: [
       { name: 'claude', status: 'idle', message_count: 0, active_task_count: 0, color_index: 1, runner_id: 'runner-claude' },

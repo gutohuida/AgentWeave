@@ -67,7 +67,7 @@ from .copilot_probe import (
 )
 from .model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
 from .pty_runner import terminate_process_tree
-from .runner_commands import OPERATOR_POSTURE
+from .runner_commands import OPERATOR_POSTURE, posture_at_rest
 from .runner_events import (
     ContextUsageSample,
     RunEvent,
@@ -263,7 +263,8 @@ def posture_for(permission_mode: Optional[str], *, yolo: bool = False) -> str:
     its own to fall back on, so an unset mode is `workspace`, not Codex's "let the runtime decide".
     """
     if permission_mode is None or permission_mode == "":
-        return _FULL if yolo else WORKSPACE_PERMISSION_MODE
+        # The posture at rest is one function's answer, which the Permissions pill reads too.
+        return posture_at_rest("copilot", "mcp", yolo)
     if permission_mode in (_MANUAL, OPERATOR_POSTURE):
         return _MANUAL
     if permission_mode == _ACCEPT_EDITS:

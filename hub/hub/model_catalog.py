@@ -292,7 +292,10 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                     ControlValue(id="manual", label="Ask me"),
                     ControlValue(id="bypassPermissions", label="Full access"),
                 ),
-                default="acceptEdits",
+                # The posture a Claude run the Hub can answer gets at rest
+                # (`runner_commands.posture_at_rest`, F283); a pill with nothing else to go on
+                # shows this, so it must be true.
+                default=WORKSPACE_PERMISSION_MODE,
                 apply=ApplySpec(style="flag", template="--permission-mode {value}"),
             ),
         ),
@@ -582,11 +585,6 @@ def context_window_for_model(model_id: str) -> Optional[int]:
 
 
 PERMISSION_MODE_CONTROL = "permission_mode"
-
-# The posture applied when neither the conversation nor the agent states one. Named here rather
-# than read off one provider's descriptor because it has to hold for an agent with no runner bound
-# at all — there is no provider to ask.
-DEFAULT_PERMISSION_MODE = "acceptEdits"
 
 
 def permission_mode_values() -> List[ControlValue]:

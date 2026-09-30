@@ -6,6 +6,7 @@ import {
   AgentSummary,
   useAgentOutput,
   useAgents,
+  postureAtRest,
 } from '@/api/agents'
 import {
   conversationLabel,
@@ -15,7 +16,6 @@ import {
   releaseConversationTask,
   type AgentConversation,
 } from '@/api/agentChat'
-import { PERMISSION_MODE_CONTROL } from '@/api/modelCatalog'
 import { NEW_CONVERSATION_ID } from '@/lib/navigation'
 import { useQueueStatus, useQueuedEntries, releaseQueueEntry, withdrawQueueEntry } from '@/api/queue'
 import { useRunners } from '@/api/runners'
@@ -108,10 +108,6 @@ interface TriggerResult {
 function emptyToUndefined(overrides: Record<string, string>): Record<string, string> | undefined {
   return Object.keys(overrides).length > 0 ? overrides : undefined
 }
-
-/** A stable identity for "this agent states no defaults", so the Composer's memoized children do
- *  not re-render on every parent render for want of one. */
-const EMPTY_CONTROLS: Record<string, string> = {}
 
 /** Breathing room above a turn pinned to the top of the viewport — enough that it does not look
  *  clipped against the edge, small enough that it still reads as "the top". */
@@ -390,9 +386,7 @@ export function AgentOutputPanel({
   // layers the conversation's own overrides on top of this; it sends only those, so showing the
   // agent's default here states what will happen without silently turning it into a choice the
   // operator made for this one conversation.
-  const agentDefaultControls = targetAgentRow?.default_permission_mode
-    ? { [PERMISSION_MODE_CONTROL]: targetAgentRow.default_permission_mode }
-    : EMPTY_CONTROLS
+  const agentDefaultControls = postureAtRest(targetAgentRow)
   const { data: accounting } = useAccounting()
   const { data: conversationUsage } = useConversationAccounting(currentConversationId ?? null)
   const { data: queueStatus } = useQueueStatus(agent.name)

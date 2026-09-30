@@ -88,6 +88,10 @@ class AgentSummary(BaseModel):
         None  # {percent, warning, model, threshold_warning, updated_at}
     )
     session_started_at: Optional[datetime] = None  # When the current session started
+    # The posture this agent's next run gets when nobody chose one, and what clearing its default
+    # would give (the same with `yolo` off). Null with no runner bound: there is no run to describe.
+    permission_mode_at_rest: Optional[str] = Field(default=None, max_length=32)
+    permission_mode_built_in: Optional[str] = Field(default=None, max_length=32)
     runner_options: Optional[Dict[str, Any]] = (
         None  # Runner-specific options (e.g., memory for Codex)
     )

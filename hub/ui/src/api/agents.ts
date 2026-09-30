@@ -4,6 +4,7 @@ import { deleteJson, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { onSseReconnect, useSSE, SSEEvent } from '@/hooks/useSSE'
 import { hubDate } from '@/lib/hubTime'
+import { PERMISSION_MODE_CONTROL } from './modelCatalog'
 
 export interface AgentSummary {
   name: string
@@ -29,6 +30,11 @@ export interface AgentSummary {
   question_timeout_seconds?: number | null
   /** What this agent may do when the conversation has not said. `null` is the built-in default. */
   default_permission_mode?: string | null
+  /** The posture this agent's next run gets when nobody chose one, as the spawn decides it; and
+   *  what clearing its default would give (the same without Full access). Null with no runner
+   *  bound; absent from a Hub older than F283's fix, which a reader treats as unknown. */
+  permission_mode_at_rest?: string | null
+  permission_mode_built_in?: string | null
   /** Per-agent checkpoint overrides. All null means "inherit the project's". */
   checkpoint_mode?: 'off' | 'offered' | 'automatic' | null
   checkpoint_threshold_mode?: 'percent' | 'tokens' | null
@@ -620,3 +626,16 @@ export function useAgentSessions(agentName: string | null) {
     enabled: isConfigured && !!projectId && !!agentName,
   })
 }
+
+const NO_KNOWN_POSTURE: Record<string, string> = {}
+
+/** What a composer's Permissions pill shows before the operator touches it: the agent's own
+ *  default, else the posture its run gets at rest, else nothing (and the pill falls back to the
+ *  catalog). The one reader for every composer, so no two can disagree about the same agent
+ *  (F283, `the-permissions-pill-shows-the-posture-the-run-gets` D3). Shown, never sent: the
+ *  Composer sends only the operator's own overrides. */
+export function postureAtRest(agentRow: AgentSummary | undefined | null): Record<string, string> {
+  const posture = agentRow?.default_permission_mode ?? agentRow?.permission_mode_at_rest
+  return posture ? { [PERMISSION_MODE_CONTROL]: posture } : NO_KNOWN_POSTURE
+}
+
