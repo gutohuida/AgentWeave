@@ -286,6 +286,37 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - (u) (review, finding 10) `build_acp_argv` with runner flags `--yolo --allow-tool=shell --add-dir C:\x --config-dir C:\y --deny-tool=x` under `workspace` keeps only `--deny-tool=x` and emits one `copilot.runner_flag_removed` per removed flag; under full access it keeps all but `--config-dir`;
   - (v) (review, finding 7) with `os.path.realpath` patched to sleep 2 s, a coroutine running beside the turn makes progress while a `path` request is decided (the judge runs in `asyncio.to_thread`);
   - (w) (review, finding 9) an armed `exit_plan_mode.requested` → `session/cancel`, a `copilot.plan_mode_exit_unanswerable` diagnostic, status `failed`; `SPEC_TURN_USES_PLAN_MODE` is `False`, so a spec turn sends `set_mode #agent`, not `#plan`, and still carries `--excluded-tools`
+
+  2026-09-30 (part 1/N): built the fake-session harness, `_FakeACPSession`, and covered case (a)
+  only. Unlike `test_codex_appserver_run_turn.py`'s `_FakeSession` (canned instant responses),
+  `_FakeACPSession.request()` pops one strictly-ordered script, delivering any notification or
+  server-request entry it passes over before returning the response entry -- reproducing directly,
+  rather than asserting separately, that a `session/prompt` response arrives after that turn's
+  notifications (`acp4…log`: request at line 5, result at line 54). `TestNewSessionSequence`
+  asserts `initialize` < `session/new` < `session/set_config_option(agent)` < `session/prompt`
+  by index (not a fixed full sequence: `session/set_mode`, which D8's posture step sends
+  unconditionally after agent selection on every turn, is scripted with its real VERIFIED `{}`
+  response so a real implementation calling it does not exhaust the script, but is otherwise
+  unasserted here -- that is D8's own coverage, not case (a)'s four waypoints); that `initialize`'s
+  subscribed-events list equals the module constant `COPILOT_RAW_EVENTS` itself, de-duplicated
+  (not a re-derived copy of its contents, to avoid inventing a second, possibly-wrong list this
+  file would then enforce); that `session/new`'s `mcpServers` is `[]`; and that `session/prompt`'s
+  first content block opens with `COPILOT_TURN_CONTEXT_HEAD` and contains both `per_turn_context`
+  and `tool_surface_context`, while its last block is the caller's `prompt` byte-identical. A
+  second test proves the ordering assertion itself is real, not incidental, by feeding it a
+  reversed method list and checking it fails (the CLAUDE.md ordering rule, applied here since
+  `_FakeACPSession` makes reordering the fixture, not the real routing, the thing under test).
+  Every symbol imported (`run_turn`, `ACPProcess`, `TurnOutcome`, `COPILOT_RAW_EVENTS`,
+  `COPILOT_TURN_CONTEXT_HEAD`) is checked in the file's own docstring against design.md citations
+  where one exists (`ACPProcess.close()`, D17 `:1502`; `COPILOT_RAW_EVENTS`, D10 `:1130`;
+  `COPILOT_TURN_CONTEXT_HEAD`, the D5 review note `:479`) and flagged INFERRED otherwise
+  (`run_turn`'s keyword surface, mirrored from D18's `RpcTurnRequest`/`RpcCallbacks` field names
+  and from `codex_appserver.run_turn`'s analogous shape). Sanity-checked both tests against a
+  throwaway stand-in `copilot_acp.py` (not committed, deleted after use) before trusting them, same
+  discipline as 1.8. Confirmed red: `ModuleNotFoundError: No module named 'hub.copilot_acp'`
+  (checked directly: neither `hub/hub/copilot_acp.py` nor `hub/hub/copilot_probe.py` exist).
+  `ruff`/`black --target-version py311` clean; `openspec validate --strict` (via the `openspec`
+  CLI directly) passes. Cases (b)-(s), 17 of the 18 lettered cases, remain for later parts.
 - [ ] 1.10 `hub/tests/test_copilot_home.py` (new): `copilot_home_path` is `…/copilot-home/projects/<pid>/<agent>` and refuses a project id of `..`, `a/b`, `a\b` or one resolving outside the root (R2); the worker home is `…/copilot-home/worker`. `ensure_copilot_home` writes `agents/<agent>.agent.md` with frontmatter `name`, `description` (the marker), `tools`, `model` (omitted for `auto`) and `reasoningEffort`, and a body that opens with the precedence statement and holds the stable context. It also writes `agentweave-mcp.json` with no `env` and `timeout == (agents.MAX_WAITING_SECONDS + 60) * 1000`. A second call with the same content does not rewrite the file (mtime unchanged). No file contains an `aw_run_` string. (Review, finding 8) With `hooks/allow.json`, `settings.json`, `mcp-config.json`, `installed-plugins/p/`, `agents/other.agent.md` and a `config.json` holding `trustedFolders` and `firstLaunchAt` placed in the home, `ensure_copilot_home` removes the first five, drops `trustedFolders` and keeps `firstLaunchAt`, leaves `session-state/` alone, and reports what it removed; a hook recorded in `.agentweave-owned.json` survives, and the same path with changed content is removed
 - [ ] 1.11 `hub/tests/test_copilot_context_split.py` (new):
   - `_render_hub_agent_context`'s `stable`, `per_turn` and `tool_surface` (R3) together hold every `##`/`###` section of `context` exactly once;
