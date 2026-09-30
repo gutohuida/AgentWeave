@@ -361,3 +361,372 @@ async def test_an_accept_with_no_reason_stores_an_empty_one_rather_than_failing(
         row = await session.get(SpecEditProposal, proposal_id)
     assert row.status == "accepted"
     assert row.resolution_reason == ""
+
+
+# --- A pending proposal leaves the queue without a judgement (F213, F428, F431) ------------------
+# `a-pending-proposal-can-be-withdrawn`, design D1-D7.
+
+
+def _operator():
+    from hub.spec_lifecycle import Actor
+
+    return Actor(kind="operator", name="operator")
+
+
+@pytest.fixture
+async def second_agent_headers():
+    token = "aw_run_propose-other-secret"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-propose-other",
+                project_id="proj-test",
+                agent="claude-2",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await session.commit()
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def _submit(app, headers, document):
+    response = await app.post(AGENT, json={"path": PATH, "document": document}, headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+async def _pending(app, auth_headers):
+    listing = await app.get(f"{BASE}/documents/{PATH}/proposals", headers=auth_headers)
+    assert listing.status_code == 200, listing.text
+    return listing.json()["proposals"]
+
+
+async def _stored(proposal_id):
+    async with async_session_factory() as session:
+        return await session.get(SpecEditProposal, proposal_id)
+
+
+def _alpha(statement):
+    changed = _document()
+    changed["requirements"][0]["statement"] = statement
+    return changed
+
+
+@pytest.mark.asyncio
+async def test_submitting_the_same_edit_twice_proposes_it_once(app, auth_headers, run_headers):
+    """F213: 2 units submitted twice made 4 pending, with nothing to tell the pairs apart."""
+    await _gate_document(app, auth_headers, run_headers)
+    changed = _alpha("It responds within 100ms")
+    changed["summary"] = "Revised summary"
+
+    first = await _submit(app, run_headers, changed)
+    second = await _submit(app, run_headers, changed)
+
+    assert {p["id"] for p in await _pending(app, auth_headers)} == {
+        p["id"] for p in first["proposals"]
+    }
+    assert second["proposals"] == []
+    assert {p["id"] for p in second["already_pending"]} == {p["id"] for p in first["proposals"]}
+
+
+@pytest.mark.asyncio
+async def test_a_revision_supersedes_the_proposers_earlier_edit(app, auth_headers, run_headers):
+    await _gate_document(app, auth_headers, run_headers)
+    first = await _submit(app, run_headers, _alpha("It responds within 100ms"))
+    second = await _submit(app, run_headers, _alpha("It responds within 50ms"))
+
+    [old] = [p for p in first["proposals"] if p["unit_key"] == "alpha"]
+    [new] = [p for p in second["proposals"] if p["unit_key"] == "alpha"]
+    pending_alpha = [p for p in await _pending(app, auth_headers) if p["unit_key"] == "alpha"]
+    assert [p["id"] for p in pending_alpha] == [new["id"]]
+    row = await _stored(old["id"])
+    assert row.status == "superseded"
+    assert new["id"] in row.resolution_reason
+
+
+@pytest.mark.asyncio
+async def test_another_proposers_edit_is_an_alternative_not_a_revision(
+    app, auth_headers, run_headers, second_agent_headers
+):
+    await _gate_document(app, auth_headers, run_headers)
+    await _submit(app, run_headers, _alpha("It responds within 100ms"))
+    await _submit(app, second_agent_headers, _alpha("It responds within 50ms"))
+
+    pending_alpha = [p for p in await _pending(app, auth_headers) if p["unit_key"] == "alpha"]
+    assert len(pending_alpha) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_resubmission_after_an_accept_replaces_the_stale_in_waiting_sibling(
+    app, auth_headers, run_headers
+):
+    await _gate_document(app, auth_headers, run_headers)
+    changed = _alpha("It responds within 100ms")
+    changed["summary"] = "Revised summary"
+    first = await _submit(app, run_headers, changed)
+    [alpha] = [p for p in first["proposals"] if p["unit_kind"] == "requirement"]
+    [metadata] = [p for p in first["proposals"] if p["unit_kind"] == "metadata"]
+    accepted = await app.post(
+        f"{BASE}/documents/{PATH}/proposals/{alpha['id']}/accept", json={}, headers=auth_headers
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    again = await _submit(app, run_headers, changed)
+
+    assert again["already_pending"] == []
+    assert (await _stored(metadata["id"])).status == "superseded"
+    [fresh] = [p for p in await _pending(app, auth_headers) if p["unit_kind"] == "metadata"]
+    assert fresh["id"] != metadata["id"]
+
+
+@pytest.mark.asyncio
+async def test_the_operator_can_withdraw_a_pending_proposal(app, auth_headers, run_headers):
+    await _gate_document(app, auth_headers, run_headers)
+    [proposal] = (await _submit(app, run_headers, _alpha("It responds within 100ms")))["proposals"]
+    before = await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)
+
+    withdrawn = await app.post(
+        f"{BASE}/documents/{PATH}/proposals/{proposal['id']}/withdraw",
+        json={"note": "a duplicate"},
+        headers=auth_headers,
+    )
+
+    assert withdrawn.status_code == 200, withdrawn.text
+    assert withdrawn.json()["proposal"]["status"] == "withdrawn"
+    assert withdrawn.json()["proposal"]["resolution_reason"] == "a duplicate"
+    after = await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)
+    assert before.json()["content"] == after.json()["content"]
+    assert await _pending(app, auth_headers) == []
+    again = await app.post(
+        f"{BASE}/documents/{PATH}/proposals/{proposal['id']}/withdraw", headers=auth_headers
+    )
+    assert again.status_code == 409
+    assert again.json()["detail"]["code"] == "proposal_not_pending"
+    missing = await app.post(
+        f"{BASE}/documents/{PATH}/proposals/spprop-nope/withdraw", headers=auth_headers
+    )
+    assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_withdrawing_is_the_operators(app, auth_headers, run_headers):
+    from hub import spec_service
+    from hub.spec_lifecycle import Actor
+
+    await _gate_document(app, auth_headers, run_headers)
+    [proposal] = (await _submit(app, run_headers, _alpha("It responds within 100ms")))["proposals"]
+    async with async_session_factory() as session:
+        row = await session.get(SpecEditProposal, proposal["id"])
+        with pytest.raises(spec_service.ProposalRefusedError) as refused:
+            await spec_service.withdraw_proposal(
+                session, row, actor=Actor(kind="agent", name="claude-1")
+            )
+    assert refused.value.code == "withdraw_is_the_operators"
+
+
+@pytest.mark.asyncio
+async def test_reject_and_withdraw_tell_every_view(app, auth_headers, run_headers, monkeypatch):
+    await _gate_document(app, auth_headers, run_headers)
+    changed = _alpha("It responds within 100ms")
+    changed["summary"] = "Revised summary"
+    first, second = (await _submit(app, run_headers, changed))["proposals"]
+    events = []
+
+    async def record(project_id, event, data):
+        events.append((event, data.get("path")))
+
+    monkeypatch.setattr("hub.api.v1.spec.sse_manager.broadcast", record)
+    rejected = await app.post(
+        f"{BASE}/documents/{PATH}/proposals/{first['id']}/reject", json={}, headers=auth_headers
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert events == [("spec_updated", PATH)]
+    withdrawn = await app.post(
+        f"{BASE}/documents/{PATH}/proposals/{second['id']}/withdraw", headers=auth_headers
+    )
+    assert withdrawn.status_code == 200, withdrawn.text
+    assert events == [("spec_updated", PATH), ("spec_updated", PATH)]
+
+
+@pytest.mark.asyncio
+async def test_an_accept_refused_as_stale_tells_every_view(
+    app, auth_headers, run_headers, monkeypatch
+):
+    """F431: the refusal commits the row's move to `stale`; the list must drop it everywhere."""
+    await _gate_document(app, auth_headers, run_headers)
+    changed = _alpha("It responds within 100ms")
+    changed["summary"] = "Revised summary"
+    proposals = (await _submit(app, run_headers, changed))["proposals"]
+    [alpha] = [p for p in proposals if p["unit_kind"] == "requirement"]
+    [metadata] = [p for p in proposals if p["unit_kind"] == "metadata"]
+    await app.post(
+        f"{BASE}/documents/{PATH}/proposals/{alpha['id']}/accept", json={}, headers=auth_headers
+    )
+    events = []
+
+    async def record(project_id, event, data):
+        events.append((event, data.get("path")))
+
+    monkeypatch.setattr("hub.api.v1.spec.sse_manager.broadcast", record)
+    stale = await app.post(
+        f"{BASE}/documents/{PATH}/proposals/{metadata['id']}/accept", json={}, headers=auth_headers
+    )
+
+    assert stale.status_code == 409 and stale.json()["detail"]["code"] == "proposal_stale"
+    assert events == [("spec_updated", PATH)]
+    assert (await _stored(metadata["id"])).status == "stale"
+
+
+@pytest.mark.asyncio
+async def test_a_unit_put_back_as_stored_retracts_its_removal(app, auth_headers, run_headers):
+    """Without this, v1's `remove beta` stays pending after v2 restores beta, and accepting it
+    deletes a requirement its proposer brought back."""
+    await _gate_document(app, auth_headers, run_headers)
+    without_beta = _document()
+    without_beta["requirements"] = without_beta["requirements"][:1]
+    [removal] = (await _submit(app, run_headers, without_beta))["proposals"]
+    assert removal["change_kind"] == "remove"
+
+    restored = await _submit(app, run_headers, _document())
+
+    assert restored["proposals"] == []
+    row = await _stored(removal["id"])
+    assert row.status == "superseded"
+    assert "leaves this unit as stored" in row.resolution_reason
+    assert await _pending(app, auth_headers) == []
+    accept = await app.post(
+        f"{BASE}/documents/{PATH}/proposals/{removal['id']}/accept", json={}, headers=auth_headers
+    )
+    assert accept.status_code == 409
+    assert accept.json()["detail"]["code"] == "proposal_not_pending"
+    content = await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)
+    assert "It logs the request" in content.json()["content"]
+
+
+@pytest.mark.asyncio
+async def test_a_unit_dropped_from_the_next_submission_is_retracted(
+    app, auth_headers, run_headers, second_agent_headers
+):
+    await _gate_document(app, auth_headers, run_headers)
+    with_gamma = _document()
+    with_gamma["requirements"].append({"key": "gamma", "statement": "It is new", "modal": "MUST"})
+    [added] = (await _submit(app, run_headers, with_gamma))["proposals"]
+    [other] = (await _submit(app, second_agent_headers, with_gamma))["proposals"]
+
+    await _submit(app, run_headers, _document())
+    assert (await _stored(added["id"])).status == "superseded"
+    assert (await _stored(other["id"])).status == "pending"
+
+    summary = _document(summary="A new summary")
+    [metadata] = (await _submit(app, run_headers, summary))["proposals"]
+    await _submit(app, run_headers, _document())
+    assert (await _stored(metadata["id"])).status == "superseded"
+
+
+@pytest.mark.asyncio
+async def test_a_decided_proposal_cannot_be_decided_again_by_a_stale_copy(
+    app, auth_headers, run_headers
+):
+    """D7: every move out of `pending` is a conditional UPDATE. An attribute write on a row loaded
+    before another request decided it turned `accepted` into `rejected`."""
+    from hub import spec_service
+
+    await _gate_document(app, auth_headers, run_headers)
+    for decide in ("reject", "withdraw"):
+        [proposal] = (await _submit(app, run_headers, _alpha(f"It responds within {decide}")))[
+            "proposals"
+        ]
+        async with async_session_factory() as s1:
+            held = await s1.get(SpecEditProposal, proposal["id"])
+            assert held.status == "pending"
+            await s1.commit()  # no transaction held across the other request
+            accepted = await app.post(
+                f"{BASE}/documents/{PATH}/proposals/{proposal['id']}/accept",
+                json={},
+                headers=auth_headers,
+            )
+            assert accepted.status_code == 200, accepted.text
+            with pytest.raises(spec_service.ProposalRefusedError) as refused:
+                if decide == "reject":
+                    await spec_service.reject_proposal(s1, held, actor=_operator())
+                else:
+                    await spec_service.withdraw_proposal(s1, held, actor=_operator())
+            await s1.commit()
+        assert refused.value.code == "proposal_not_pending"
+        assert (await _stored(proposal["id"])).status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_a_supersede_never_overwrites_a_decision(app, auth_headers, run_headers):
+    from hub import spec_service
+    from hub.db.models import SpecDocument
+    from hub.spec_lifecycle import Actor
+    from hub.spec_payload import validate_payload
+
+    await _gate_document(app, auth_headers, run_headers)
+    [proposal] = (await _submit(app, run_headers, _alpha("It responds within 100ms")))["proposals"]
+    async with async_session_factory() as s1:
+        held = await s1.get(SpecEditProposal, proposal["id"])
+        assert held.status == "pending"
+        await s1.commit()
+        accepted = await app.post(
+            f"{BASE}/documents/{PATH}/proposals/{proposal['id']}/accept",
+            json={},
+            headers=auth_headers,
+        )
+        assert accepted.status_code == 200, accepted.text
+        document = (
+            await s1.execute(select(SpecDocument).where(SpecDocument.path == PATH))
+        ).scalar_one()
+        await s1.refresh(document)
+        stored = _alpha("It responds within 100ms")
+        await spec_service.propose_edit(
+            s1,
+            document,
+            validate_payload(_alpha("It responds within 10ms")),
+            stored,
+            actor=Actor(kind="agent", name="claude-1", run_id="run-propose"),
+        )
+        await s1.commit()
+    assert (await _stored(proposal["id"])).status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_an_accept_loses_to_a_withdraw_and_writes_nothing(app, auth_headers, run_headers):
+    from hub import project_workspace, spec_service
+    from hub.db.models import SpecDocument
+
+    await _gate_document(app, auth_headers, run_headers)
+    [proposal] = (await _submit(app, run_headers, _alpha("It responds within 100ms")))["proposals"]
+    before = await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)
+    async with async_session_factory() as s1:
+        held = await s1.get(SpecEditProposal, proposal["id"])
+        document = (
+            await s1.execute(select(SpecDocument).where(SpecDocument.path == PATH))
+        ).scalar_one()
+        await s1.commit()
+        withdrawn = await app.post(
+            f"{BASE}/documents/{PATH}/proposals/{proposal['id']}/withdraw", headers=auth_headers
+        )
+        assert withdrawn.status_code == 200, withdrawn.text
+        workspace = await project_workspace.resolve_project_workspace(s1, "proj-test")
+        with pytest.raises(spec_service.ProposalRefusedError) as refused:
+            await spec_service.accept_proposal(s1, workspace, document, held, actor=_operator())
+        await s1.rollback()
+    assert refused.value.code == "proposal_not_pending"
+    after = await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)
+    assert before.json()["content"] == after.json()["content"]
+
+
+@pytest.mark.asyncio
+async def test_a_listed_proposal_carries_the_digest_it_was_made_against(
+    app, auth_headers, run_headers
+):
+    await _gate_document(app, auth_headers, run_headers)
+    [proposal] = (await _submit(app, run_headers, _alpha("It responds within 100ms")))["proposals"]
+
+    [listed] = await _pending(app, auth_headers)
+
+    assert listed["expected_digest"] == (await _stored(proposal["id"])).expected_digest

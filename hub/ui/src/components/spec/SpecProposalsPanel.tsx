@@ -4,6 +4,7 @@ import {
   useAcceptSpecProposal,
   useRejectSpecProposal,
   useSpecProposals,
+  useWithdrawSpecProposal,
   type SpecEditProposal,
 } from '@/api/spec'
 
@@ -22,12 +23,14 @@ export function SpecProposalsPanel({ path }: { path: string }) {
   const { data } = useSpecProposals(path)
   const accept = useAcceptSpecProposal()
   const reject = useRejectSpecProposal()
+  const withdraw = useWithdrawSpecProposal()
   const [error, setError] = useState<string | null>(null)
   const [rejecting, setRejecting] = useState<string | null>(null)
   const [reason, setReason] = useState('')
 
   const proposals = data?.proposals ?? []
   if (proposals.length === 0) return null
+  const twins = twinNotes(proposals)
 
   async function onAccept(proposal: SpecEditProposal) {
     setError(null)
@@ -49,7 +52,16 @@ export function SpecProposalsPanel({ path }: { path: string }) {
     }
   }
 
-  const busy = accept.isPending || reject.isPending
+  async function onWithdraw(proposal: SpecEditProposal) {
+    setError(null)
+    try {
+      await withdraw.mutateAsync({ path, proposalId: proposal.id })
+    } catch (err) {
+      setError(describeError(err))
+    }
+  }
+
+  const busy = accept.isPending || reject.isPending || withdraw.isPending
 
   return (
     <div
@@ -114,7 +126,26 @@ export function SpecProposalsPanel({ path }: { path: string }) {
               >
                 Reject
               </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onWithdraw(proposal)}
+                title="Take it off the list without judging it — for duplicates and proposals nobody is pursuing"
+                className="rounded-[var(--radius-sm)] px-2 py-0.5 hover:bg-[var(--row-hover)]"
+                style={{
+                  color: twins.has(proposal.id) ? 'var(--text-1)' : 'var(--text-3)',
+                  fontWeight: twins.has(proposal.id) ? 600 : undefined,
+                }}
+              >
+                Withdraw
+              </button>
             </div>
+
+            {twins.has(proposal.id) && (
+              <div data-testid={`proposal-twin-${proposal.id}`} style={{ color: 'var(--amber)' }}>
+                {twins.get(proposal.id)}
+              </div>
+            )}
 
             {proposal.unit_kind === 'requirement' && proposal.change_kind !== 'remove' && (
               <div style={{ color: 'var(--text-2)' }}>
@@ -171,4 +202,41 @@ function describeError(err: unknown): string {
   } catch {
     return raw || 'That change was refused.'
   }
+}
+
+/** The same proposal twice: same unit, change and content. Payloads compare by a key-sorted
+ *  serialisation, since the column is JSON and two equal objects need not arrive in one key order.
+ *  The list is in the route's `created_at` order, so "above" means earlier. Twins on one document
+ *  version are true duplicates, and the later is marked; twins on different versions are not, and
+ *  the earlier (older digest) is the one refused as stale on accept, so it is marked instead
+ *  (`a-pending-proposal-can-be-withdrawn`, D4). */
+function twinNotes(proposals: SpecEditProposal[]): Map<string, string> {
+  const notes = new Map<string, string>()
+  const sameness = (p: SpecEditProposal) =>
+    JSON.stringify([p.unit_kind, p.unit_key, p.change_kind, sortedKeys(p.proposed_payload)])
+  proposals.forEach((later, index) => {
+    const earlier = proposals.slice(0, index).find((row) => sameness(row) === sameness(later))
+    if (!earlier) return
+    if ((earlier.expected_digest ?? null) === (later.expected_digest ?? null)) {
+      notes.set(later.id, 'same as the one above')
+    } else {
+      notes.set(
+        earlier.id,
+        'same as the one below, which was made against a newer version — this one would be refused as stale',
+      )
+    }
+  })
+  return notes
+}
+
+function sortedKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortedKeys)
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [key, sortedKeys((value as Record<string, unknown>)[key])]),
+    )
+  }
+  return value
 }

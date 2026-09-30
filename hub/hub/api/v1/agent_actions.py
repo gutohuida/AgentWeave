@@ -1731,6 +1731,7 @@ async def submit_spec_document(
             "phase": result.phase,
             "proposals": result.proposals,
             "unchanged": result.unchanged,
+            "already_pending": result.already_pending,
         }
     return {
         "path": result.path,

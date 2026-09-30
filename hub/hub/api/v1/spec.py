@@ -634,6 +634,7 @@ async def write_document_content(
             "phase": result.phase,
             "proposals": result.proposals,
             "unchanged": result.unchanged,
+            "already_pending": result.already_pending,
         }
     return {
         "path": result.path,
@@ -680,6 +681,9 @@ def _proposal_view(proposal: SpecEditProposal) -> dict:
         "proposed_payload": proposal.proposed_payload,
         "previous_payload": proposal.previous_payload,
         "status": proposal.status,
+        # The document version it was made against: two identical proposals on different versions
+        # are not duplicates, and the older one is refused as stale on accept (design D4).
+        "expected_digest": proposal.expected_digest,
         "proposer_actor_kind": proposal.proposer_actor_kind,
         "proposer_actor_name": proposal.proposer_actor_name,
         "created_at": proposal.created_at.isoformat(),
@@ -753,7 +757,10 @@ async def accept_proposal_route(
     except spec_service.ProposalRefusedError as exc:
         # `accept_proposal` may have marked the row `stale` before raising — that mutation must
         # survive this response, not be rolled back with everything else an exception discards.
+        # And it leaves the pending list, so every view is told (F431).
         await session.commit()
+        if exc.code == "proposal_stale":
+            await sse_manager.broadcast(project_id, "spec_updated", {"path": document.path})
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"message": str(exc), "code": exc.code},
@@ -802,6 +809,40 @@ async def reject_proposal_route(
         ) from exc
 
     await session.commit()
+    # A rejected row leaves the pending list; every view is told, as accept tells them (F428).
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": document.path})
+    return {"proposal": _proposal_view(proposal)}
+
+
+class ProposalWithdrawal(RequestModel):
+    note: str = Field(default="", max_length=2000)
+
+
+@router.post("/documents/{path:path}/proposals/{proposal_id}/withdraw")
+async def withdraw_proposal_route(
+    path: str,
+    proposal_id: str,
+    body: Optional[ProposalWithdrawal] = None,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Take a pending proposal off the list without judging it -- for duplicates and proposals
+    nobody is pursuing (`a-pending-proposal-can-be-withdrawn`, D3). The document is untouched."""
+    body = body or ProposalWithdrawal()
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    proposal = await _require_proposal(session, document.id, proposal_id)
+
+    try:
+        await spec_service.withdraw_proposal(session, proposal, actor=_operator(), note=body.note)
+    except spec_service.ProposalRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": str(exc), "code": exc.code},
+        ) from exc
+
+    await session.commit()
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": document.path})
     return {"proposal": _proposal_view(proposal)}
 
 
@@ -2108,6 +2149,7 @@ async def merge_document(
             **_document_view(document),
             "proposals": result.proposals,
             "unchanged": result.unchanged,
+            "already_pending": result.already_pending,
             "merged": 0,
         }
     else:

@@ -1926,8 +1926,11 @@ def submit_spec_document(
     At `sketch` rigor (the default) this writes the document immediately, as above. At `contract`
     or `gate` rigor it does not: your submission is diffed against what is stored and recorded as
     one pending proposal per changed requirement plus one for everything else, for an operator to
-    accept or reject. The response then carries `proposals`/`unchanged` instead of `identifiers`/
-    `divergence` — check which shape came back rather than assuming a write happened.
+    accept or reject. The response then carries `proposals`/`unchanged`/`already_pending` instead
+    of `identifiers`/`divergence` — check which shape came back rather than assuming a write
+    happened. A unit you submit again unchanged is recorded once: it is named in `already_pending`,
+    not proposed twice. A different edit to a unit replaces your earlier pending proposal for it,
+    and a unit you put back as stored withdraws yours.
 
     `requirements` — objects with:
       `key`      stable handle, lowercase and hyphenated, unique in this document. Keep it across

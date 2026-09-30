@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import (
@@ -64,6 +64,10 @@ class ProposeResult:
     phase: str
     proposals: List[Dict[str, Any]] = field(default_factory=list)
     unchanged: List[str] = field(default_factory=list)
+    # Units this submission repeated exactly -- the same proposer, content, change, position and
+    # document version as a proposal still pending -- named instead of proposed a second time
+    # (`a-pending-proposal-can-be-withdrawn`, D1).
+    already_pending: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -319,6 +323,72 @@ async def propose_edit(
     unchanged: List[str] = []
     seen_keys: set = set()
     previous_key: Optional[str] = None
+    # The document's pending proposals, read once (D1): a repeat of one of this proposer's is
+    # named rather than proposed again, and whatever of theirs this submission neither repeats nor
+    # replaces is superseded at the end (D2).
+    pending = list(
+        (
+            await session.execute(
+                select(SpecEditProposal)
+                .where(
+                    SpecEditProposal.document_id == document.id,
+                    SpecEditProposal.status == "pending",
+                )
+                .order_by(SpecEditProposal.created_at)
+            )
+        ).scalars()
+    )
+    mine = [
+        row
+        for row in pending
+        if row.proposer_actor_kind == actor.kind and row.proposer_actor_name == (actor.name or "")
+    ]
+    already_pending: List[Dict[str, Any]] = []
+    kept_ids: set = set()
+
+    async def _propose(**unit: Any) -> None:
+        repeat = next(
+            (
+                row
+                for row in mine
+                if row.unit_kind == unit["unit_kind"]
+                and row.unit_key == unit["unit_key"]
+                and row.change_kind == unit["change_kind"]
+                and row.position_after_key == unit["position_after_key"]
+                and row.proposed_payload == unit["proposed_payload"]
+                and row.expected_digest == document.content_digest
+            ),
+            None,
+        )
+        if repeat is not None:
+            kept_ids.add(repeat.id)
+            already_pending.append(
+                {
+                    "id": repeat.id,
+                    "unit_kind": repeat.unit_kind,
+                    "unit_key": repeat.unit_key,
+                    "change_kind": repeat.change_kind,
+                }
+            )
+            return
+        created = await _create_proposal(session, document, actor=actor, **unit)
+        kept_ids.add(created["id"])
+        proposals.append(created)
+        # A revision replaces this proposer's earlier word on the unit (D2).
+        for row in mine:
+            if (
+                row.id not in kept_ids
+                and row.unit_kind == unit["unit_kind"]
+                and row.unit_key == unit["unit_key"]
+            ):
+                await _leave_pending(
+                    session,
+                    row,
+                    status="superseded",
+                    resolved_by=actor.name or "",
+                    reason=f"superseded by {created['id']}",
+                )
+                kept_ids.add(row.id)  # decided now, whether or not the race was ours
 
     for entry in submitted_requirements:
         key = entry.get("key")
@@ -327,32 +397,22 @@ async def propose_edit(
         seen_keys.add(key)
         existing = stored_requirements.get(key)
         if existing is None:
-            proposals.append(
-                await _create_proposal(
-                    session,
-                    document,
-                    unit_kind="requirement",
-                    unit_key=key,
-                    change_kind="add",
-                    position_after_key=previous_key,
-                    proposed_payload=entry,
-                    previous_payload=None,
-                    actor=actor,
-                )
+            await _propose(
+                unit_kind="requirement",
+                unit_key=key,
+                change_kind="add",
+                position_after_key=previous_key,
+                proposed_payload=entry,
+                previous_payload=None,
             )
         elif existing != entry:
-            proposals.append(
-                await _create_proposal(
-                    session,
-                    document,
-                    unit_kind="requirement",
-                    unit_key=key,
-                    change_kind="modify",
-                    position_after_key=None,
-                    proposed_payload=entry,
-                    previous_payload=existing,
-                    actor=actor,
-                )
+            await _propose(
+                unit_kind="requirement",
+                unit_key=key,
+                change_kind="modify",
+                position_after_key=None,
+                proposed_payload=entry,
+                previous_payload=existing,
             )
         else:
             unchanged.append(key)
@@ -361,41 +421,87 @@ async def propose_edit(
     for key, existing in stored_requirements.items():
         if key in seen_keys:
             continue
-        proposals.append(
-            await _create_proposal(
-                session,
-                document,
-                unit_kind="requirement",
-                unit_key=key,
-                change_kind="remove",
-                position_after_key=None,
-                proposed_payload={},
-                previous_payload=existing,
-                actor=actor,
-            )
+        await _propose(
+            unit_kind="requirement",
+            unit_key=key,
+            change_kind="remove",
+            position_after_key=None,
+            proposed_payload={},
+            previous_payload=existing,
         )
 
     metadata_new = _metadata_bundle(submitted)
     metadata_old = _metadata_bundle(stored_before or {})
     if metadata_new != metadata_old:
-        proposals.append(
-            await _create_proposal(
-                session,
-                document,
-                unit_kind="metadata",
-                unit_key="metadata",
-                change_kind="modify",
-                position_after_key=None,
-                proposed_payload=metadata_new,
-                previous_payload=metadata_old if stored_before else None,
-                actor=actor,
-            )
+        await _propose(
+            unit_kind="metadata",
+            unit_key="metadata",
+            change_kind="modify",
+            position_after_key=None,
+            proposed_payload=metadata_new,
+            previous_payload=metadata_old if stored_before else None,
         )
     else:
         unchanged.append("metadata")
 
+    # A submission is the proposer's whole document, so it is their current word on every unit.
+    # Whatever of theirs it neither repeated nor replaced -- a unit put back as stored, or one no
+    # longer mentioned -- they took back (D2, operator review). Without this a `remove` from v1
+    # stayed pending after v2 restored the unit, and accepting it deleted what they brought back.
+    for row in mine:
+        if row.id not in kept_ids:
+            await _leave_pending(
+                session,
+                row,
+                status="superseded",
+                resolved_by=actor.name or "",
+                reason="superseded: the proposer's latest submission leaves this unit as stored",
+            )
+
     return ProposeResult(
-        path=document.path, phase=document.phase, proposals=proposals, unchanged=unchanged
+        path=document.path,
+        phase=document.phase,
+        proposals=proposals,
+        unchanged=unchanged,
+        already_pending=already_pending,
+    )
+
+
+async def _leave_pending(
+    session: AsyncSession,
+    proposal: SpecEditProposal,
+    *,
+    status: str,
+    resolved_by: str,
+    reason: Optional[str] = None,
+) -> bool:
+    """Move `proposal` out of `pending`, if it is still there. True when this call moved it.
+
+    A conditional UPDATE whose row count is checked, never an attribute write on a row loaded
+    earlier (design D7): two requests deciding the same proposal each held it as `pending`, and the
+    later write won, turning `accepted` into `rejected`. The shape `questions.py` uses for the same
+    race. The row is refreshed either way, so the caller reads what now stands.
+    """
+    values: Dict[str, Any] = {
+        "status": status,
+        "resolved_at": datetime.now(timezone.utc),
+        "resolved_by_actor_name": resolved_by,
+    }
+    if reason is not None:
+        values["resolution_reason"] = reason
+    result = await session.execute(
+        update(SpecEditProposal)
+        .where(SpecEditProposal.id == proposal.id, SpecEditProposal.status == "pending")
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    await session.refresh(proposal)
+    return result.rowcount == 1
+
+
+def _not_pending(proposal: SpecEditProposal) -> ProposalRefusedError:
+    return ProposalRefusedError(
+        f"this proposal is {proposal.status}, not pending", code="proposal_not_pending"
     )
 
 
@@ -519,9 +625,10 @@ async def accept_proposal(
             code="stale_digest",
         )
     if document.content_digest != proposal.expected_digest:
-        proposal.status = "stale"
-        proposal.resolved_at = datetime.now(timezone.utc)
-        proposal.resolved_by_actor_name = actor.name or ""
+        if not await _leave_pending(
+            session, proposal, status="stale", resolved_by=actor.name or ""
+        ):
+            raise _not_pending(proposal)
         raise ProposalRefusedError(
             "the document changed since this proposal was created; it is now stale, not accepted",
             code="proposal_stale",
@@ -534,6 +641,16 @@ async def accept_proposal(
         payload = validate_payload(merged)
     except PayloadError as exc:
         raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
+
+    # Claimed before anything is written, so losing the race to another decision writes no file
+    # (D7). `resolution_reason` is kept, as `reject_proposal` keeps its own (F209): the route
+    # declared and size-limited this field and then dropped it, leaving *why* a spec change was let
+    # in as the one half of the pair the corpus did not record. A write refused below rolls this
+    # claim back with the rest of the transaction.
+    if not await _leave_pending(
+        session, proposal, status="accepted", resolved_by=actor.name or "", reason=reason
+    ):
+        raise _not_pending(proposal)
 
     result = await _apply_and_write(
         session,
@@ -549,13 +666,6 @@ async def accept_proposal(
             "proposer_actor_name": proposal.proposer_actor_name,
         },
     )
-    proposal.status = "accepted"
-    proposal.resolved_at = datetime.now(timezone.utc)
-    proposal.resolved_by_actor_name = actor.name or ""
-    # Kept, as `reject_proposal` keeps its own (F209). The route declared and size-limited this
-    # field and then dropped it, so an accept answered 200 and stored nothing — leaving *why* a
-    # spec change was let in as the one half of the pair the corpus does not record.
-    proposal.resolution_reason = reason
     return result
 
 
@@ -575,14 +685,32 @@ async def reject_proposal(
         raise ProposalRefusedError(
             "only the operator can reject a proposal", code="reject_is_the_operators"
         )
-    if proposal.status != "pending":
+    if proposal.status != "pending" or not await _leave_pending(
+        session, proposal, status="rejected", resolved_by=actor.name or "", reason=reason
+    ):
+        raise _not_pending(proposal)
+
+
+async def withdraw_proposal(
+    session: AsyncSession,
+    proposal: SpecEditProposal,
+    *,
+    actor: spec_lifecycle.Actor,
+    note: str = "",
+) -> None:
+    """Take a pending proposal off the list without judging it (design D3).
+
+    For twins and proposals nobody is pursuing: a reject records that the edit is wrong, which
+    nobody decided. Operator-only, like accept and reject. The live document is untouched.
+    """
+    if actor.kind != "operator":
         raise ProposalRefusedError(
-            f"this proposal is {proposal.status}, not pending", code="proposal_not_pending"
+            "only the operator can withdraw a proposal", code="withdraw_is_the_operators"
         )
-    proposal.status = "rejected"
-    proposal.resolved_at = datetime.now(timezone.utc)
-    proposal.resolved_by_actor_name = actor.name or ""
-    proposal.resolution_reason = reason
+    if proposal.status != "pending" or not await _leave_pending(
+        session, proposal, status="withdrawn", resolved_by=actor.name or "", reason=note
+    ):
+        raise _not_pending(proposal)
 
 
 async def merge_document(

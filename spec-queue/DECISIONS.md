@@ -700,6 +700,16 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-24 — a pending proposal can be withdrawn: W3 (recorded 2026-09-30)
+
+- DECIDED   f213-w3  **W3: de-duplicate at submission and give the operator a withdraw.** A repeat
+  from the same proposer creates nothing, a revision (or a retraction) supersedes the proposer's
+  earlier pending proposal, and a pending proposal can be withdrawn without a judgement. Answered in
+  the operator's 2026-09-24 approval of `a-pending-proposal-can-be-withdrawn` (APPROVALS 2026-09-24:
+  *"W3. Review fixes: a MODIFIED delta on the gating requirement; a retraction supersedes; a
+  row-count-checked `UPDATE … WHERE status='pending'` for every status change."*). Written here when
+  the change was built, as its task 0.3 asks.
+
 ### 2026-08-29 — self-registration leaves the product (recorded 2026-09-30)
 
 - DECIDED   self-registration  **Delete it.** The operator, 2026-08-29: *"No it does not belong

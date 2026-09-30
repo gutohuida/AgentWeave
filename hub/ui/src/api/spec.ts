@@ -606,7 +606,11 @@ export interface SpecEditProposal {
   position_after_key: string | null
   proposed_payload: Record<string, unknown>
   previous_payload: Record<string, unknown> | null
-  status: 'pending' | 'accepted' | 'rejected' | 'stale'
+  status: 'pending' | 'accepted' | 'rejected' | 'stale' | 'withdrawn' | 'superseded'
+  /** The document version this was made against. Two identical proposals on different versions
+   *  are not duplicates: the older is refused as stale on accept (`a-pending-proposal-can-be-
+   *  withdrawn`, D4). Absent from a Hub older than the field. */
+  expected_digest?: string | null
   proposer_actor_kind: string | null
   proposer_actor_name: string | null
   created_at: string
@@ -627,8 +631,29 @@ export function useSpecProposals(path: string | null) {
   })
 }
 
+/** A decision on one proposal. Invalidates the document's proposals **on settled**, not only on
+ *  success: an accept refused as stale still moves the row out of `pending`, and the pressing tab
+ *  must not wait for the broadcast to drop it (F428, F431; `a-pending-proposal-can-be-withdrawn`
+ *  D5). Everything else `useSpecMutation` invalidates, on success, as before. */
+function useProposalDecision<TArgs extends { path: string }, TResult>(
+  call: (projectId: string, args: TArgs) => Promise<TResult>,
+) {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (args: TArgs) => call(projectId ?? '', args),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
+    },
+    onSettled: (_data, _error, args) => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specProposals', args.path] })
+    },
+  })
+}
+
 export function useAcceptSpecProposal() {
-  return useSpecMutation<
+  return useProposalDecision<
     { path: string; proposalId: string; expectedDigest?: string | null },
     SpecDocumentRecord
   >((projectId, { path, proposalId, expectedDigest }) =>
@@ -640,11 +665,23 @@ export function useAcceptSpecProposal() {
 }
 
 export function useRejectSpecProposal() {
-  return useSpecMutation<{ path: string; proposalId: string; reason?: string }, unknown>(
+  return useProposalDecision<{ path: string; proposalId: string; reason?: string }, unknown>(
     (projectId, { path, proposalId, reason }) =>
       postJson(
         `/api/v1/projects/${projectId}/project/documents/${path}/proposals/${proposalId}/reject`,
         { reason: reason ?? '' },
+      ),
+  )
+}
+
+/** Take a pending proposal off the list without judging it (D3): for duplicates and proposals
+ *  nobody is pursuing. The document is untouched. */
+export function useWithdrawSpecProposal() {
+  return useProposalDecision<{ path: string; proposalId: string; note?: string }, unknown>(
+    (projectId, { path, proposalId, note }) =>
+      postJson(
+        `/api/v1/projects/${projectId}/project/documents/${path}/proposals/${proposalId}/withdraw`,
+        { note: note ?? '' },
       ),
   )
 }
