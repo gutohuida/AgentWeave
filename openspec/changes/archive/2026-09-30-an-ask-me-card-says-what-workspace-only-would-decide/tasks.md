@@ -50,4 +50,5 @@
 
 ## 4. Close
 
-- [ ] 4.1 F230 and F284 → `fixed <sha>`; backlog regenerated; `openspec validate an-ask-me-card-says-what-workspace-only-would-decide --strict`; archive
+- [x] 4.1 F230 and F284 → `fixed <sha>`; backlog regenerated; `openspec validate an-ask-me-card-says-what-workspace-only-would-decide --strict`; archive
+  Done 2026-09-30: both footed `fixed 3967f83`; validate --strict passes; archived. The backlog page is regenerated once at the end of this session's batch.

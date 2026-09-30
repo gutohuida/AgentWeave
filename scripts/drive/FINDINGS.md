@@ -18175,7 +18175,7 @@ it was declined and no way to have declined it there in the first place.
 
 ## F230 (C) — Allow crosses the workspace boundary the product enforces everywhere else, and the card cannot say so
 
-**Status:** open. The card schema still carries no workspace and nothing derived from
+**Status:** fixed 3967f83 (`an-ask-me-card-says-what-workspace-only-would-decide`, 2026-09-30: an "Ask me" card shows what "Workspace only" would decide, with its reason, for Claude, Codex and Copilot). Was: open. The card schema still carries no workspace and nothing derived from
 one, so an operator answering under the `manual` posture still cannot see which side of the boundary
 a path is on. Named by the 2026-09-02 research beside its sibling; neither was specced. [classified 2026-09-09, D-3]
 
@@ -22030,7 +22030,7 @@ at-rest display through the same fallback the spawn uses.
 
 ## F284 (C) - the permission card the operator answers gives them no way to see that the path leaves the run's workspace
 
-**Status:** open. The card still names the tool and the absolute path and nothing
+**Status:** fixed 3967f83 (`an-ask-me-card-says-what-workspace-only-would-decide`, 2026-09-30: an "Ask me" card shows what "Workspace only" would decide, with its reason, for Claude, Codex and Copilot). Was: open. The card still names the tool and the absolute path and nothing
 derived from the boundary the Hub itself computed. `spec-queue/APPROVALS.md:512-515` carries it with
 the instruction that it be decided together with the posture finding beside it; neither has been
 decided. [classified 2026-09-09, D-3]
