@@ -89,7 +89,13 @@ export function useUpdateRunner() {
   return useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: RunnerUpdate }) =>
       patchJson<Runner>(`/api/v1/projects/${projectId}/runners/${id}`, updates),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'runners'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'runners'] })
+      // A bound agent's verdict is read from its runner, and lives under `agents` with a 30 s
+      // stale time, so it would outlive the edit (F178). Create and delete need nothing: a new
+      // runner has no agent, and the Hub refuses to delete one that has (409).
+      return queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents', 'launchability'] })
+    },
   })
 }
 

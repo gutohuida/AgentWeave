@@ -185,8 +185,9 @@ async def get_agents_launchability(
     Read-only — this checks PATH, environment variables, and DB rows visible to the Hub
     process; it never spawns an agent run (task 6.2). A stale Copilot verdict schedules a
     model-free ACP handshake in the background (`a-copilot-agent-runs-over-acp` D15), which
-    starts no conversation and makes no model call. Feeds
-    launchability indicators in the agent/runner selector.
+    starts no conversation and makes no model call. Its one screen is the
+    runner picker in an agent's Execution settings (`RunnerPicker`), which shows the cannot-run
+    reason and, for a runnable agent, the cannot-collaborate reason.
 
     For an agent bound to a Hub Runner (`Agent.runner_id` set), the Runner's own
     `cli`/`model` are the source of truth for the probe — mirroring
@@ -260,12 +261,16 @@ async def get_agents_launchability(
                     collaboration_ready = True
                 else:
                     collaboration_ready = False
+                    # The remedies are ones the app offers, named as it labels them: `yolo` is
+                    # the legacy spelling of the Full access posture, and no screen shows the word
+                    # or edits a runner's flags (F469), so the flag is left by rebinding.
                     collaboration_reason = (
                         "This Codex agent's runner opted out of the app-server transport "
-                        f'(flags: ["{APP_SERVER_OPT_OUT_FLAG}"]) and does not have yolo '
-                        "enabled, so it falls back to classic exec — AgentWeave tool calls "
+                        f'(flags: ["{APP_SERVER_OPT_OUT_FLAG}"]) and the agent does not have '
+                        "Full access, so it falls back to classic exec — AgentWeave tool calls "
                         "(send_message, etc.) will be silently denied with no operator "
-                        "present to approve them. Remove the opt-out, or enable yolo."
+                        f"present to approve them. Bind a runner without {APP_SERVER_OPT_OUT_FLAG}, "
+                        "or set this agent's permissions to Full access."
                     )
             else:
                 collaboration_ready = True

@@ -50,7 +50,8 @@ shows. The first case is still rendered the same way if it ever arrives.
 
 ## What does not change
 
-- The launchability route and its payload are unchanged.
+- The launchability route's shape is unchanged. Only the Codex opt-out reason's last sentence changes, to
+  name its two remedies as the app labels them (design D7, R2 2026-09-30).
 - No new query and no new call site: `RunnerPicker` already reads the verdict and already handles a
   failed read (`AgentSettingsControls.tsx:258-263`). The `n11` counts do not move.
 
@@ -58,5 +59,5 @@ shows. The first case is still rendered the same way if it ever arrives.
 
 - `hub/ui/src/components/agents/AgentSettingsControls.tsx`, one new test file, two deleted files,
   and the bundle.
-- `hub/hub/api/v1/agents.py` (docstring only).
+- `hub/hub/api/v1/agents.py`: the docstring, and the Codex opt-out reason's remedy sentence (design D7).
 - Spec: `runtime-diagnostics`, one ADDED requirement.

@@ -4,7 +4,7 @@
 
 The application SHALL show, at the control where the operator binds an agent's runner, the Hub's collaboration-readiness reason whenever the Hub reports that agent runnable but not collaboration-ready. It SHALL show nothing for an agent reported collaboration-ready, and nothing for a report that does not apply to the agent.
 
-The reason shown SHALL be the Hub's own sentence, so that the condition to fix is named where it can be fixed. Once the operator changes or removes the runner, the application SHALL show the Hub's new report without the operator reloading, so that a warning is not left standing after its condition was fixed.
+The reason shown SHALL be the Hub's own sentence, so that the condition to fix is named where it can be fixed. A remedy the reason names SHALL be named as the application labels it. Once the operator changes or removes the runner, the application SHALL show the Hub's new report without the operator reloading, so that a warning is not left standing after its condition was fixed.
 
 #### Scenario: A runner that opted out of its tool transport is named at the binding control
 
@@ -25,8 +25,15 @@ The reason shown SHALL be the Hub's own sentence, so that the condition to fix i
 - **WHEN** the operator opens that agent's execution settings
 - **THEN** only the statement that it cannot run is shown
 
-#### Scenario: Fixing the runner clears the warning without a reload
+#### Scenario: Fixing the condition clears the warning without a reload
 
 - **GIVEN** an agent whose runner control states that it cannot collaborate
-- **WHEN** the operator edits that runner so the Hub reports the agent collaboration-ready
+- **WHEN** the operator changes the agent's runner or permissions, or edits that runner, so the Hub reports the agent collaboration-ready
 - **THEN** the statement is no longer shown when the operator returns to the agent's execution settings, without reloading the application
+
+#### Scenario: The reason names its remedies as the application labels them
+
+- **GIVEN** a Codex agent whose runner opted out of the app-server transport and whose permissions are not Full access
+- **WHEN** the Hub reports that agent's collaboration readiness
+- **THEN** the reason names the runner flag to avoid and the Full access permission setting
+- **AND** it does not name a setting the application does not show

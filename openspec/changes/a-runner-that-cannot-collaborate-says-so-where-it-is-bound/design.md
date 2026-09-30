@@ -106,3 +106,48 @@ provider']`, `runners.ts:56`, `:69`) are already under the `runners` prefix and 
 Deleting a bound runner does change one: the agent becomes `runnable: false`, and the cannot-run
 line must appear. `onSuccess`, not `onSettled`, matching the hooks' existing shape: a failed edit
 changes nothing a verdict depends on.
+
+## D7 — the reason names each remedy by the name the app shows (R2, 2026-09-30)
+
+R2 re-derived D1–D6 on master `bdc8447`. They stand. `a-copilot-agent-runs-over-acp` (archived today)
+edited `runners.ts` and the launchability docstring. It left `useUpdateRunner` and `useDeleteRunner`
+invalidating only `['project', pid, 'runners']`, and the collaboration branch unchanged. A Copilot or
+Claude runner falls into its `else` and is always `collaboration_ready: true`.
+
+One gap: the sentence this change puts on screen ends *"Remove the opt-out, or enable yolo."*
+(`agents.py:268`). The app never shows the word "yolo". The setting is the agent's default
+permission posture, which `model_catalog.py` labels **Full access** (`bypassPermissions`), and
+`set_default_permission_mode` keeps `config["yolo"]` equal to it (`agents.py`, "keep `config["yolo"]`
+saying the same thing"). The opt-out is a flag on the *runner* (`--no-app-server`). The requirement
+this change adds says the reason names the condition *"where it can be fixed"*. A remedy phrased as
+a setting the operator cannot find does not do that.
+
+A second gap, found while writing task 1.5: **the app cannot edit a runner's flags, or show them.**
+`PATCH /runners/{id}` accepts `flags` (`schemas/runners.py` `RunnerUpdate`), but the UI's `RunnerUpdate`
+(`api/runners.ts`) carries only `name` and `model`, and no component renders or sets `flags`. A
+flagged runner exists only because something called the API. So "remove the opt-out", which D6 and
+test-guide step 2 assumed the operator does on the Runners page, is not something the app offers.
+Filed as F469. It is not fixed here: flags are free-form CLI arguments, and editing them is its own
+change.
+
+So the Hub's sentence names two remedies the app does offer, as it labels them: bind a runner without
+`--no-app-server` (the picker directly above the line; `useBindAgentRunner` already refreshes the
+verdict), or set this agent's permissions to Full access. It still leads with "silently
+denied", which `test_launchability.py` asserts on. Choosing Full access already refreshes the
+verdict: `useUpdateAgentPermissionDefault` invalidates every `['project', pid, 'agents', …]` key,
+the launchability key included. D6 is narrowed by the drive (2026-09-30, below).
+
+What the route returns when what it calls raises is unchanged: the sentence is a literal.
+
+**Drive, 2026-09-30** (throwaway Hub `:8032`, profile `drive0930b`, project `proj-7b2768097be5`, no
+model call; script in the session scratchpad, `d0930_collab.py`). A Codex runner created through the
+API with `["--no-app-server"]`, an agent bound to it, `GET /agents/launchability` after each step:
+flagged + default posture → `runnable: true, collaboration_ready: false`, with the new sentence (names
+`--no-app-server` and Full access, no "yolo"); Full access → `true`; posture cleared → `false`;
+rebound to a flagless Codex runner → `true`. **Deleting the bound runner answered 409** ("Runner is
+bound to agent(s): … Unbind before deleting."), and the verdict stayed `true`. So D6's premise that
+deleting a bound runner changes an agent's verdict is wrong: the Hub refuses that delete, and an
+unbound runner's delete changes no verdict. `useDeleteRunner` is therefore left as it was, and only
+`useUpdateRunner` re-reads the verdict (a model edit changes the probe, which reads the bound
+runner's `cli`/`model`). Task 1.5's delete case became a control, and test-guide step 2 drops it.
+

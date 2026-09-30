@@ -12,12 +12,15 @@
 
 ## Human-only (trial Hub `:8010`, never `:8000`)
 
-1. Create a Codex runner with flags `["--no-app-server"]`, with yolo off, and bind an agent to it.
-   Open the agent's settings, Execution. Below the runner picker, the line reads *"This agent will
-   run, but cannot collaborate: This Codex agent's runner opted out …"*. Judge whether it reads as
-   something to act on.
-2. On the Runners page, remove the flag, or enable yolo, and save. Return to the agent's
-   Execution settings without reloading. The line is gone at once, well inside the 30 s stale
-   time (design D6). Then delete a runner that an agent is bound to: that agent's settings show the
-   cannot-run line without a reload.
+1. Create a Codex runner with flags `["--no-app-server"]` **through the API** (`POST
+   /api/v1/projects/<pid>/runners`; the app cannot set flags, F469), keep the agent's permissions off
+   Full access, and bind an agent to it. Open the agent's settings, Execution. Below the runner
+   picker, the line reads *"This agent will run, but cannot collaborate: This Codex agent's runner
+   opted out …"*, ending with its two remedies: bind a runner without `--no-app-server`, or set
+   Full access. Judge whether it reads as something to act on.
+2. Without reloading, set the agent's permissions to Full access: the line goes at once. Set them
+   back: it returns. Rebind the agent to a Codex runner created in the app (no flags): the line goes.
+   Then rename, on the Runners page, the runner the agent is bound to, and return: the picker shows
+   the fresh verdict without a reload (design D6). Deleting a bound runner is refused with "Unbind
+   before deleting", so it cannot leave a stale verdict.
 3. Bind a Claude runner. There is no collaboration line.

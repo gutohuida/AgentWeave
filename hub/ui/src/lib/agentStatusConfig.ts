@@ -1,6 +1,6 @@
 /**
  * Single source of truth for agent status presentation. Previously duplicated
- * in 2 components (AgentCard, AgentInfoTab) — Q6.
+ * in 2 components (the since-deleted AgentCard, and AgentInfoTab) — Q6.
  */
 
 export interface StatusConfig {

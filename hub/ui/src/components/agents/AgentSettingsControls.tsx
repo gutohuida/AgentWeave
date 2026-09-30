@@ -230,6 +230,8 @@ export function RunnerPicker({ agent }: { agent: AgentSummary }) {
   const { data: launchability, error: launchabilityError } = useAgentLaunchability()
   const verdict = launchability?.agents[agent.name]
   const cannotRun = verdict?.runnable === false
+  // The Hub judges collaboration only for a runnable agent, so the two lines never meet (F178).
+  const cannotCollaborate = verdict?.runnable === true && verdict.collaboration_ready === false
 
   if (isLoading) {
     return <span className="text-xs" style={{ color: 'var(--text-3)' }}>Loading runners...</span>
@@ -259,6 +261,12 @@ export function RunnerPicker({ agent }: { agent: AgentSummary }) {
       {cannotRun && (
         <p role="status" className="text-xs mt-2" style={{ color: 'var(--amber)' }}>
           This agent cannot run: {verdict.reason ?? 'the Hub reports it as not runnable.'}
+        </p>
+      )}
+      {cannotCollaborate && (
+        <p role="status" className="text-xs mt-2" style={{ color: 'var(--amber)' }}>
+          This agent will run, but cannot collaborate:{' '}
+          {verdict.collaboration_reason ?? 'the Hub reports its tool calls would be refused.'}
         </p>
       )}
       {/* A failed check is not a clean one: say so rather than going quiet. */}

@@ -181,7 +181,7 @@ async def test_activity_never_leaks_across_projects(app):
 
 @pytest.mark.asyncio
 async def test_the_agents_route_reports_the_derived_last_seen(app, auth_headers):
-    """The surface, not the helper: `AgentCard` and `OverviewPage` read this response."""
+    """The surface, not the helper: the rail (`AgentTree`) and `OverviewPage` read this response."""
     async with async_session_factory() as session:
         await _agent(session, "builder")
         session.add(

@@ -341,6 +341,12 @@ class TestCollaborationReadiness:
         assert result["runnable"] is True
         assert result["collaboration_ready"] is False
         assert "silently denied" in result["collaboration_reason"]
+        # The remedies as the app labels them: the runner's flag, and the Full access posture.
+        # "yolo" is a legacy config key no screen shows (design D7 of
+        # `a-runner-that-cannot-collaborate-says-so-where-it-is-bound`).
+        assert "--no-app-server" in result["collaboration_reason"]
+        assert "Full access" in result["collaboration_reason"]
+        assert "yolo" not in result["collaboration_reason"]
 
     @pytest.mark.asyncio
     async def test_yolo_codex_agent_is_collaboration_ready(self, app, auth_headers, bind_runner):
