@@ -1,0 +1,65 @@
+{
+  "_comment": "task 1.7 drive baseline, captured pre-change (group 2 not yet started) against the trial Hub (proj-d85a82bf4216) from source at HEAD 90d4e51. IDs and timestamps removed. Task 5.4 diffs the three named agents' GET /agents fields against this; task 5.5 diffs the two codex collaboration entries.",
+  "runners_launchability_by_provider": {
+    "claude": {
+      "runner": "claude",
+      "cli": "claude",
+      "present": true,
+      "authorized": true,
+      "runnable": true,
+      "reason": null
+    },
+    "codex": {
+      "runner": "codex",
+      "cli": "codex",
+      "present": true,
+      "authorized": true,
+      "runnable": true,
+      "reason": null
+    },
+    "copilot": {
+      "runner": "copilot",
+      "cli": "C:\\Users\\huida\\AppData\\Roaming\\npm\\node_modules\\@github\\copilot\\node_modules\\@github\\copilot-win32-x64\\copilot.exe",
+      "present": true,
+      "authorized": true,
+      "runnable": true,
+      "reason": null,
+      "verdict_pending": true
+    }
+  },
+  "agents": {
+    "claude_bound": {
+      "name_role": "radrive-claude",
+      "runner": "claude",
+      "display_model": "Claude",
+      "permission_mode_at_rest": "workspace",
+      "permission_mode_built_in": "workspace"
+    },
+    "codex_bound_null_flags": {
+      "name_role": "radrive-codex",
+      "runner": "codex",
+      "display_model": "Codex",
+      "permission_mode_at_rest": "acceptEdits",
+      "permission_mode_built_in": "acceptEdits"
+    },
+    "hub_client_cli": {
+      "name_role": "radrive-clihub",
+      "runner": "claude",
+      "display_model": "Claude",
+      "permission_mode_at_rest": "acceptEdits",
+      "permission_mode_built_in": "acceptEdits"
+    }
+  },
+  "codex_collaboration": {
+    "no_flags": {
+      "name_role": "radrive-codex",
+      "collaboration_ready": true,
+      "collaboration_reason": null
+    },
+    "no_app_server_flag": {
+      "name_role": "radrive-codex-noappserver",
+      "collaboration_ready": false,
+      "collaboration_reason": "This Codex agent's runner opted out of the app-server transport (flags: [\"--no-app-server\"]) and the agent does not have Full access, so it falls back to classic exec — AgentWeave tool calls (send_message, etc.) will be silently denied with no operator present to approve them. Bind a runner without --no-app-server, or set this agent's permissions to Full access."
+    }
+  }
+}
