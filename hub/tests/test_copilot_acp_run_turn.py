@@ -1139,3 +1139,129 @@ class TestStopSendsSessionCancelAndInterrupts:
         assert sessions_bound == [SESSION_ID]
         assert outcome == TurnOutcome(session_id=SESSION_ID, status="interrupted", error=None)
         assert fake.closed_with_force is True, "D17: terminate_process_tree(force=True) on a stop"
+
+
+class TestEveryRequestPermissionAnsweredExactlyOnce:
+    """Tasks.md 1.9(h): every `session/request_permission` is answered exactly once. Tasks.md
+    states only the bare bullet; design.md's own contract for it is D8 step 5 (`:597-600`):
+    "answer through one function that writes the JSON-RPC response ... . Every decision reaches
+    the recorders, whichever step made it" -- i.e. each server-initiated request gets exactly one
+    correlated JSON-RPC response, not zero (silently dropped) and not more than one (double
+    answered), and the response it gets is the one *its own* id's decision produced, not another
+    request's.
+
+    A single request answered correctly is not evidence of this: a `run_turn` that always sent
+    exactly one response regardless of which request it was answering would still pass a
+    single-request script. This test therefore scripts **two** `session/request_permission`
+    requests in one turn, judged to *different* outcomes under the `workspace` posture (an `edit`
+    inside the workspace, and one outside -- design.md:637, and the same
+    inside/outside-workspace distinguishing technique `TestFullAccessWithNoAllowAllOption` already
+    uses for its own single request), each with its own id and `toolCallId`. Answering both
+    correctly, in order, correlated by id, is evidence against dropping one, answering one twice,
+    or swapping the two answers; answering only one, or answering one of them twice, or swapping
+    the two responses, all fail the assertion below.
+    """
+
+    INSIDE_CALL_ID = "call_synthetic_exactly_once_edit_inside"
+    OUTSIDE_CALL_ID = "call_synthetic_exactly_once_edit_outside"
+    INSIDE_PATH = "C:\\work\\notes.txt"
+    OUTSIDE_PATH = "C:\\other\\evil.txt"
+
+    @staticmethod
+    def _request_permission_entry(request_id, call_id, path):
+        return {
+            "server_request": {
+                "id": request_id,
+                "method": "session/request_permission",
+                "params": {
+                    "sessionId": SESSION_ID,
+                    "toolCall": {
+                        "toolCallId": call_id,
+                        "title": f"Edit {path}",
+                        "kind": "edit",
+                        "rawInput": {"fileName": path},
+                        "locations": [{"path": path}],
+                    },
+                    "options": [
+                        {"optionId": "allow_once", "name": "Allow", "kind": "allow_once"},
+                        {
+                            "optionId": "allow_always",
+                            "name": "Always Allow",
+                            "kind": "allow_always",
+                        },
+                        {"optionId": "reject_once", "name": "Reject", "kind": "reject_once"},
+                    ],
+                },
+            }
+        }
+
+    async def test_two_requests_in_one_turn_each_answered_once_and_correctly_correlated(
+        self, monkeypatch
+    ):
+        events = []
+        sessions_bound = []
+
+        script = [
+            {"response": INIT_RESPONSE},
+            {
+                "response": {
+                    "sessionId": SESSION_ID,
+                    "modes": {"currentModeId": AGENT_MODE_URI},
+                    "configOptions": [_mode_option(), _agent_option(""), _allow_all_option()],
+                }
+            },  # session/new
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent
+            {"response": {}},  # session/set_mode -- D8's posture step, unasserted here too
+            self._request_permission_entry(1, self.INSIDE_CALL_ID, self.INSIDE_PATH),
+            self._request_permission_entry(2, self.OUTSIDE_CALL_ID, self.OUTSIDE_PATH),
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Please edit two files.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        ids_answered = [request_id for request_id, _ in fake.sent_responses]
+        assert ids_answered == [1, 2], (
+            "each session/request_permission must be answered exactly once, in order, "
+            f"correlated by its own id; got {fake.sent_responses}"
+        )
+        assert fake.sent_responses == [
+            (1, {"outcome": {"outcome": "selected", "optionId": "allow_once"}}),
+            (2, {"outcome": {"outcome": "selected", "optionId": "reject_once"}}),
+        ], "an edit inside the workspace and one outside must not be answered the same way"
+
+        assert sessions_bound == [SESSION_ID]
+        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+        assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
