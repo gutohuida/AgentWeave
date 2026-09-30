@@ -2540,3 +2540,135 @@ class TestArmedSessionErrorFailsUnlessStopWins:
             "design.md:1043, 1209-1210: 'a stop wins' -- stopReason cancelled must give "
             f"interrupted even with an armed session.error pending, got {outcome!r}"
         )
+
+
+class TestPromptOrderingAndControlOverridesArgv:
+    """Tasks.md 1.9(q) (`:282`): "the prompt's first text block is `per_turn_context` then
+    `tool_surface_context`, and `control_overrides {"effort": "high"}` puts
+    `--reasoning-effort high` on the spawn argv." Two independent sub-claims -- one about
+    `session/prompt`'s own content, the other about the spawned argv -- so, per this task's own
+    queued caution (case (j) needed four tests, case (h) needed two), each gets its own test.
+
+    **Ordering.** Design.md `:473-477`: "`per_turn`, then `tool_surface`, go into the
+    `session/prompt` content as the first text block" -- an ordering claim, not just the
+    both-present check case (a)'s own `TestNewSessionSequence` already makes (part 1/N, `:410-411`,
+    ``per_turn_context in blocks[0]["text"]`` / ``tool_surface_context in blocks[0]["text"]``, no
+    relative position asserted). This part reuses that same first-block shape but additionally
+    checks `per_turn_context`'s own position precedes `tool_surface_context`'s.
+
+    **Control overrides.** Design.md `:1537-1541` (D18, R3): `control_overrides` is the raw
+    catalog controls, added because Copilot's Effort is a **flag** control (D13 `:1259-1261`,
+    `ApplySpec("flag", "--reasoning-effort {value}")`) that `render_control_config` (the rendering
+    `config_overrides` already gets) skips -- "without the raw controls `run_turn` could not
+    produce `--reasoning-effort`." D13 `:1266-1267` (R2): "the effort control is rendered to argv
+    by `render_control_args("copilot", overrides)` inside the Copilot `run_turn` (D3), since the
+    trigger builds no Copilot argv." `render_control_args` itself already exists and is not this
+    slice's own (`hub/hub/model_catalog.py:612-646`, shared with Codex) -- confirmed there that a
+    `"flag"`-style spec renders `rendered.split(" ")` (`:645`), i.e. two argv words,
+    `"--reasoning-effort"` then `"high"`, not one `--reasoning-effort=high` word (that spelling is
+    case (j)'s `--excluded-tools=...`, a different control's own single-word style, not this one's
+    -- checked, not assumed, per this file's part 5/N correction about not carrying a spelling
+    across cases without checking). This test's job is only that `run_turn` wires
+    `control_overrides` through to that existing renderer and onto the real spawn argv -- not to
+    re-derive `render_control_args`'s own behaviour a second time.
+    """
+
+    async def test_first_prompt_block_orders_per_turn_context_before_tool_surface_context(
+        self, monkeypatch
+    ):
+        events = []
+        sessions_bound = []
+        per_turn_context = "## Workspace\n- root: C:\\work"
+        tool_surface_context = "## Tools\n- agentweave-send_message"
+
+        script = _session_established_script(
+            tail_entry={
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            }
+        )
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Summarise the failing build.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context=per_turn_context,
+            tool_surface_context=tool_surface_context,
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        prompt_calls = [(m, p) for m, p in fake.sent_requests if m == "session/prompt"]
+        assert len(prompt_calls) == 1, "exactly one session/prompt per turn"
+        blocks = prompt_calls[0][1]["prompt"]
+        first_text = blocks[0]["text"]
+        assert per_turn_context in first_text and tool_surface_context in first_text
+        assert first_text.index(per_turn_context) < first_text.index(tool_surface_context), (
+            "design.md:473-477: per_turn_context must precede tool_surface_context in the "
+            f"first block, got {first_text!r}"
+        )
+
+    async def test_control_overrides_effort_high_puts_reasoning_effort_on_spawn_argv(
+        self, monkeypatch
+    ):
+        events = []
+        sessions_bound = []
+        captured_cmds = []
+
+        script = _session_established_script(
+            tail_entry={
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            }
+        )
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake, captured_cmds=captured_cmds)
+
+        await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Summarise the failing build.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides={"effort": "high"},
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        assert len(captured_cmds) == 1, "exactly one spawn per turn"
+        cmd = captured_cmds[0]
+        assert "--reasoning-effort" in cmd, cmd
+        i = cmd.index("--reasoning-effort")
+        assert cmd[i + 1] == "high", (
+            "design.md:1260-1261, 1266-1267: the effort control is a 'flag' ApplySpec, rendered "
+            f"as two argv words by render_control_args's own split(' ') -- got {cmd!r}"
+        )
+        assert "--reasoning-effort=high" not in cmd, (
+            "the flag style is two words, not one '=' word (that spelling belongs to "
+            "--excluded-tools, case (j), a different control)"
+        )
