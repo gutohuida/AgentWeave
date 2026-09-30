@@ -54,6 +54,8 @@ Confirmed red: `pytest hub/tests/test_copilot_acp_run_turn.py -q` fails at colle
 `ModuleNotFoundError: No module named 'hub.copilot_acp'`.
 """
 
+import dataclasses
+import inspect
 import json
 
 import pytest
@@ -1898,3 +1900,80 @@ class TestPrePromptErrorRaisesCopilotACPErrorAsAppServerError:
         ], "no session/prompt may be sent once a pre-prompt request errors"
         assert fake.closed_with_force is False, "D17: the process is still closed, not forced"
         assert sessions_bound == [], "on_session must never fire when no session was ever bound"
+
+
+def _minimal_valid_run_turn_kwargs():
+    """The same 17-keyword surface `TestNewSessionSequence` calls `run_turn` with (this file's
+    own least-invented reading of `run_turn`'s signature, not a design citation) -- reused here
+    only to prove a rejected extra keyword, never awaited, so no script/fake session is needed."""
+    return {
+        "cwd": "C:\\work",
+        "env": None,
+        "prompt": "Anything changed since I left?",
+        "model": None,
+        "resume_session_id": None,
+        "agent": AGENT_NAME,
+        "per_turn_context": "## Workspace\n- root: C:\\work",
+        "tool_surface_context": "## Tools\n- agentweave-send_message",
+        "stable_context": None,
+        "control_overrides": None,
+        "told_access_path": "mcp",
+        "permission_mode": None,
+        "workspace": "C:\\work",
+        "restrict_spec_writes": False,
+        "extra_flags": None,
+        "on_event": lambda *a, **k: None,
+        "on_session": lambda *a, **k: None,
+    }
+
+
+class TestNoRemovedRawEventCallbackOrOutcomeFields:
+    """Tasks.md 1.9(l) (R2, amended in R3), second half only. The first half -- `initialize`
+    subscribing `clientCapabilities._meta["github.com/copilot"].events` to
+    `COPILOT_RAW_EVENTS`, de-duplicated, including `tool.execution_start` and `session.error` --
+    is already asserted directly by `TestNewSessionSequence`
+    (`test_initialize_new_agent_then_prompt_in_order_with_context_first`, `:324-329`); repeating
+    it here under a new name would duplicate that part's own coverage, not add to it.
+
+    What remains uncovered is (l)'s *negative* clause: "there is no `on_raw_event` callback and
+    no `prompt_usage`/`session_was_new` field". Read D10's full R3 paragraph fresh
+    (design.md:1118-1130, plus its restatements at `:1546`, `:1712`, `:1777-1781`) rather than
+    trusting this docstring's own summary of it: R2 had added an `on_raw_event` callback and two
+    `TurnOutcome` fields, `prompt_usage`/`session_was_new`, for slice 4; R3 removed all three
+    because slice 1's rule is that no member exists without a caller, and slice 4 (its own D2,
+    "why not slice 2's `on_raw_event`", and its contract item 11) does not consume them --
+    consuming them here would put a Copilot ledger inside the generic executor. Slice 4 instead
+    gets an internal dispatch point (`_on_armed_raw_event`), the prompt result read in one place,
+    and a local `session_was_new`, none of which cross `run_turn`'s own public boundary.
+
+    No evidence-log line constrains this claim -- it is a negative shape assertion about the
+    module's own contract, not a captured wire behaviour -- so the exact mechanism is this part's
+    own judgment call, flagged the same way this file flags its other inferred surfaces:
+    (1) `dataclasses.fields(TurnOutcome)` must not name `prompt_usage` or `session_was_new`;
+    (2) calling `run_turn` with an `on_raw_event=` keyword, in addition to its ordinary surface,
+    must raise `TypeError` for an unexpected keyword argument -- proved dynamically (the call
+    itself, never awaited) rather than only by static `inspect.signature` inspection, so a
+    `run_turn(**kwargs)` catch-all sink that silently swallowed the keyword would still fail this
+    test, not just a `run_turn` that spells the parameter out by name.
+    """
+
+    async def test_turn_outcome_has_no_prompt_usage_or_session_was_new_field(self):
+        field_names = {f.name for f in dataclasses.fields(TurnOutcome)}
+        assert "prompt_usage" not in field_names, (
+            "R3 removed prompt_usage from TurnOutcome (D10); slice 4 owns its own usage "
+            "sample instead"
+        )
+        assert (
+            "session_was_new" not in field_names
+        ), "R3 removed session_was_new from TurnOutcome (D10); it stays a local inside run_turn"
+
+    async def test_run_turn_rejects_an_on_raw_event_keyword(self):
+        kwargs = _minimal_valid_run_turn_kwargs()
+        kwargs["on_raw_event"] = lambda *a, **k: None
+        with pytest.raises(TypeError):
+            run_turn(**kwargs)
+
+        assert "on_raw_event" not in inspect.signature(run_turn).parameters, (
+            "R3 removed the on_raw_event callback (D10); slice 4's needs are met inside "
+            "run_turn, not through a caller-supplied hook"
+        )
