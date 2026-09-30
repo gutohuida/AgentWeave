@@ -72,6 +72,10 @@ AGENT_MARKER = f"AgentWeave agent {AGENT_NAME} — context rendered by the Agent
 AGENT_MODE_URI = "https://agentclientprotocol.com/protocol/session-modes#agent"  # VERIFIED wire
 PLAN_MODE_URI = "https://agentclientprotocol.com/protocol/session-modes#plan"  # VERIFIED,
 # r1-probe-plan.log:8 (`session/set_mode` params: `{"sessionId": ..., "modeId": <this URI>}`)
+AUTOPILOT_MODE_URI = "https://agentclientprotocol.com/protocol/session-modes#autopilot"  # CODE,
+# design.md:78 ("The mode ids are `…session-modes#agent`, `#plan`, `#autopilot`"), not itself in
+# an evidence log -- by symmetry with AGENT_MODE_URI/PLAN_MODE_URI, both VERIFIED wire values that
+# share this same `…session-modes#<name>` shape.
 
 
 def _mode_option(current=AGENT_MODE_URI):
@@ -2750,3 +2754,305 @@ class TestEmptyContextStillOpensWithHeadNotAMessageSlashCommand:
             "wire byte-identical as its own block, never merged into the first"
         )
         assert not blocks[-1]["text"].startswith(copilot_acp.COPILOT_TURN_CONTEXT_HEAD)
+
+
+class TestPostureStepEveryTurn:
+    """Tasks.md 1.9(s) (`:284`, review finding 4): a five-clause bullet -- "a `session/load`
+    response with `currentModeId` `#plan` on a non-spec turn -> `set_mode #agent` is sent before
+    the prompt; `#autopilot` likewise; `allow_all` `on` after load under `workspace` -> `off` is
+    set and read back; an `off` that reads back `on` -> `run_turn` raises and **no**
+    `session/prompt` is sent; an armed `session.mode_changed` into `#autopilot` under `workspace`
+    -> `session/cancel`, a `copilot_posture_escalated` error, status `failed`."
+
+    Read design.md's *The posture step, every turn* fresh (`:815-843`, review 2026-09-28, finding
+    4) rather than assuming the bullet's own clause boundaries: it turns out to be that section's
+    numbered steps 1, 3 and 4, restated for `session/load` specifically (step 2, full access, is
+    a different case's scope, already covered by `TestSpecTurnRestrictsWritesAndAllowAll`'s
+    `test_full_access_never_sets_allow_all_and_judges_execute_as_workspace`, and by no non-spec
+    case yet). Five independent sub-claims by count, and per this task's own queued caution (case
+    (j) needed four tests, case (h) two, case (q) two) each gets its own test here too, rather
+    than one test whose assertions could pass or fail together for the wrong reason:
+
+    1. step 1, "Always `session/set_mode`... whatever the load reported" -- `#plan` loaded, `#agent`
+       sent;
+    2. the same step 1 rule, `#autopilot` loaded;
+    3. step 3's success half: `allow_all` read `"on"` off the load response is set `"off"` and the
+       set's own response confirms it read back `"off"` -- the turn proceeds to the prompt;
+    4. step 3's failure half: the set's own response still reads back `"on"` -- `run_turn` raises
+       before the prompt (D12, the message design.md gives verbatim, `:838-839`) and no
+       `session/prompt` is ever sent;
+    5. step 4: an **armed** `session.mode_changed` into `#autopilot`, delivered while
+       `session/prompt` is still in flight (the same in-flight-notification mechanism
+       `TestArmedSessionErrorFailsUnlessStopWins` (case (o), part 15/N) already relies on) ->
+       `session/cancel` sent as a notification (D17, mirroring `TestStopSendsSessionCancelAnd
+       Interrupts`'s own assertion style) and status `failed` with an `error`-kind event carrying
+       `payload["code"] == "copilot_posture_escalated"` (design.md:1027: this code, unlike this
+       slice's `copilot.<name>` diagnostics, is an `error_event`, kept underscore-named like
+       Codex's `codex_mcp_server_failed" -- `test_codex_appserver_run_turn.py:623,782` is this
+       file's model for asserting an `error`-kind event by `payload["code"]`).
+
+    All five use `restrict_spec_writes=False` (a non-spec turn, as clauses 1-2 say explicitly, and
+    as the other three's own silence about a spec turn implies -- D9's spec-turn carve-out is a
+    different case's scope, `TestSpecTurnRestrictsWritesAndAllowAll`, and `permission_mode=None`
+    (`workspace`, this file's existing convention for it, e.g. `TestNewSessionSequence`), since
+    clauses 3-5 name `workspace` explicitly and 1-2 don't depend on posture at all.
+
+    `session.mode_changed`'s own wire envelope is not captured in any evidence log (unlike
+    `session.error`'s, reused from `TestUsageUpdateProducesMeasuredSampleWithResolvedModel`'s own
+    citation) -- design.md only names it as a member of `COPILOT_RAW_EVENTS` (`:1104`) delivered
+    over the same `github.com/copilot/sessionEvent` channel as every other raw event in that list
+    (`:1094-1096`, VERIFIED wire shape for the channel itself, though not for this event's own
+    `data`). This test's `_armed_mode_changed_notification` therefore invents a `data.newModeId`
+    field the same way `_replay_chunk` and `_armed_session_error_notification` before it flagged
+    their own synthetic shapes -- what matters to the assertions below is only that `run_turn`
+    reacts to *some* delivered `session.mode_changed` naming `#autopilot`, not this fixture's exact
+    field name, which a future round should confirm or correct against the real module.
+    """
+
+    @staticmethod
+    def _load_prefix(*, current_mode_id, allow_all_current="off"):
+        return [
+            {"response": INIT_RESPONSE},
+            {
+                "response": {
+                    "modes": {"currentModeId": current_mode_id},
+                    "configOptions": [
+                        _mode_option(current=current_mode_id),
+                        _agent_option(""),
+                        _allow_all_option(allow_all_current),
+                    ],
+                }
+            },  # session/load
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(current=current_mode_id),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option(allow_all_current),
+                    ]
+                }
+            },  # session/set_config_option agent
+        ]
+
+    @staticmethod
+    def _armed_mode_changed_notification(mode_uri):
+        return {
+            "notification": "github.com/copilot/sessionEvent",
+            "params": {
+                "sessionId": SESSION_ID,
+                "type": "session.mode_changed",
+                "timestamp": "2026-09-30T00:00:09.000Z",
+                "data": {"newModeId": mode_uri},
+            },
+        }
+
+    async def _run(self, monkeypatch, script, *, resume_session_id=RESUME_ID):
+        events = []
+        sessions_bound = []
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Anything changed since I left?",
+            model=None,
+            resume_session_id=resume_session_id,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+        return fake, events, sessions_bound, outcome
+
+    async def test_loaded_plan_mode_sends_set_mode_agent_before_prompt(self, monkeypatch):
+        script = self._load_prefix(current_mode_id=PLAN_MODE_URI) + [
+            {"response": {}},  # session/set_mode -- the #agent call this test asserts
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake, _events, _sessions_bound, outcome = await self._run(monkeypatch, script)
+
+        methods = [m for m, _ in fake.sent_requests]
+        set_mode_calls = [(m, p) for m, p in fake.sent_requests if m == "session/set_mode"]
+        assert len(set_mode_calls) == 1, (
+            "a non-spec turn must send exactly one session/set_mode, the ordinary #agent one, "
+            f"even though the load reported #plan; got {set_mode_calls}"
+        )
+        _, params = set_mode_calls[0]
+        assert params == {"sessionId": RESUME_ID, "modeId": AGENT_MODE_URI}, (
+            "design.md:823-829: set_mode must be sent #agent 'whatever the load reported' -- "
+            f"got {params}"
+        )
+        i_set_mode = methods.index("session/set_mode")
+        i_prompt = methods.index("session/prompt")
+        assert i_set_mode < i_prompt, methods
+        assert outcome.status == "completed"
+
+    async def test_loaded_autopilot_mode_sends_set_mode_agent_before_prompt(self, monkeypatch):
+        script = self._load_prefix(current_mode_id=AUTOPILOT_MODE_URI) + [
+            {"response": {}},  # session/set_mode -- the #agent call this test asserts
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake, _events, _sessions_bound, outcome = await self._run(monkeypatch, script)
+
+        methods = [m for m, _ in fake.sent_requests]
+        set_mode_calls = [(m, p) for m, p in fake.sent_requests if m == "session/set_mode"]
+        assert len(set_mode_calls) == 1, (
+            "a non-spec turn must send exactly one session/set_mode, the ordinary #agent one, "
+            f"even though the load reported #autopilot; got {set_mode_calls}"
+        )
+        _, params = set_mode_calls[0]
+        assert params == {"sessionId": RESUME_ID, "modeId": AGENT_MODE_URI}, (
+            "design.md:823-829: set_mode must be sent #agent 'whatever the load reported', "
+            f"including autopilot; got {params}"
+        )
+        i_set_mode = methods.index("session/set_mode")
+        i_prompt = methods.index("session/prompt")
+        assert i_set_mode < i_prompt, methods
+        assert outcome.status == "completed"
+
+    async def test_allow_all_on_after_load_under_workspace_is_set_off_and_read_back(
+        self, monkeypatch
+    ):
+        script = self._load_prefix(current_mode_id=AGENT_MODE_URI, allow_all_current="on") + [
+            {"response": {}},  # session/set_mode -- D8 step 1, unasserted here
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option allow_all off -- reads back off, the success half
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake, _events, sessions_bound, outcome = await self._run(monkeypatch, script)
+
+        methods = [m for m, _ in fake.sent_requests]
+        allow_all_sets = [
+            (m, p)
+            for m, p in fake.sent_requests
+            if m == "session/set_config_option" and p.get("configId") == "allow_all"
+        ]
+        assert len(allow_all_sets) == 1, (
+            "design.md:836-838: allow_all read 'on' under workspace must be set 'off' exactly "
+            f"once; got {allow_all_sets}"
+        )
+        _, params = allow_all_sets[0]
+        assert params["value"] == "off", params
+        i_allow_all = methods.index(
+            "session/set_config_option", methods.index("session/set_mode") + 1
+        )
+        i_prompt = methods.index("session/prompt")
+        assert i_allow_all < i_prompt, (
+            "the allow_all off-and-read-back exchange must finish before the prompt is written, "
+            f"got {methods}"
+        )
+        assert sessions_bound == [RESUME_ID]
+        assert outcome == TurnOutcome(session_id=RESUME_ID, status="completed", error=None)
+
+    async def test_allow_all_reading_back_on_raises_and_sends_no_prompt(self, monkeypatch):
+        script = self._load_prefix(current_mode_id=AGENT_MODE_URI, allow_all_current="on") + [
+            {"response": {}},  # session/set_mode -- D8 step 1, unasserted here
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("on"),  # the set was refused/ignored -- still "on"
+                    ]
+                }
+            },  # session/set_config_option allow_all off -- reads back on, the failure half
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        with pytest.raises(CopilotACPError) as exc_info:
+            await run_turn(
+                cwd="C:\\work",
+                env=None,
+                prompt="Anything changed since I left?",
+                model=None,
+                resume_session_id=RESUME_ID,
+                agent=AGENT_NAME,
+                per_turn_context="## Workspace\n- root: C:\\work",
+                tool_surface_context="## Tools\n- agentweave-send_message",
+                stable_context=None,
+                control_overrides=None,
+                told_access_path="mcp",
+                permission_mode=None,
+                workspace="C:\\work",
+                restrict_spec_writes=False,
+                extra_flags=None,
+                on_event=_collector([]),
+                on_session=_collector([]),
+            )
+
+        assert str(exc_info.value) == (
+            "Copilot kept allow-all on for this session; AgentWeave did not start the turn, "
+            "because no action would have been put to it."
+        ), str(exc_info.value)
+        methods = [m for m, _ in fake.sent_requests]
+        assert "session/prompt" not in methods, (
+            "design.md:837-839: a readback that is still 'on' must raise before the prompt -- "
+            f"session/prompt must never be sent; got {methods}"
+        )
+        assert fake.closed_with_force is False, "D17: the process is still closed, not forced"
+
+    async def test_armed_mode_changed_into_autopilot_under_workspace_cancels_and_fails(
+        self, monkeypatch
+    ):
+        script = self._load_prefix(current_mode_id=AGENT_MODE_URI) + [
+            {"response": {}},  # session/set_mode -- D8 step 1, unasserted here
+            self._armed_mode_changed_notification(AUTOPILOT_MODE_URI),
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt's own eventual result -- Copilot may still answer end_turn
+        ]
+        fake, events, sessions_bound, outcome = await self._run(monkeypatch, script)
+
+        cancel_calls = [(m, p) for m, p in fake.sent_notifications if m == "session/cancel"]
+        assert len(cancel_calls) == 1, (
+            "design.md:841-843: an armed change into #autopilot under workspace must send "
+            f"session/cancel; got {fake.sent_notifications}"
+        )
+        assert cancel_calls[0][1] == {"sessionId": RESUME_ID}
+        assert (
+            "session/cancel",
+            {"sessionId": RESUME_ID},
+        ) not in fake.sent_requests, "session/cancel is a notification (D17), not a request"
+
+        assert (
+            outcome.status == "failed"
+        ), f"design.md:841-843: the turn must end failed, got status {outcome.status!r}"
+        error_events = [e for e in events if e.kind == "error"]
+        assert len(error_events) == 1, events
+        assert error_events[0].payload["code"] == "copilot_posture_escalated", error_events[0]
+        assert sessions_bound == [RESUME_ID]
