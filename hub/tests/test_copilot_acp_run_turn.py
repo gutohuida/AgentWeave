@@ -1977,3 +1977,108 @@ class TestNoRemovedRawEventCallbackOrOutcomeFields:
             "R3 removed the on_raw_event callback (D10); slice 4's needs are met inside "
             "run_turn, not through a caller-supplied hook"
         )
+
+
+class TestProcessTerminatedWithForceOnAFailedTurnToo:
+    """Tasks.md 1.9(m) (R2): "the process tree is terminated on a failed turn too, not only on a
+    stop". Read D17 fresh (design.md:1481-1505) rather than trusting the queued caution's own
+    paraphrase, together with tasks.md's (n)/(o) bullets, before deciding what this case actually
+    narrows to.
+
+    D17 step 3 gives a stop's own close: `terminate_process_tree(pid, force=True)`, "not
+    `proc.kill()`", because "`copilot.exe` runs its shells as children" (`:1489-1491`). `:1501-1503`
+    then generalises: "`ACPProcess.close()` therefore uses `terminate_process_tree` on **every**
+    exit, not only after a stop: a turn that fails or times out with a shell still running would
+    otherwise leave `powershell.exe` behind exactly as a stop would." Two different things are
+    bundled in that sentence, and only one is testable from this file's own vantage point:
+
+    - *which primitive* `ACPProcess.close()` calls internally (`terminate_process_tree` vs a bare
+      single-process kill) is invisible here -- `_patch_spawn` hands `run_turn` this file's own
+      `_FakeACPSession` in place of the real `ACPProcess`, so `run_turn` never touches the real
+      `close()` body at all. That half of D17's claim is `ACPProcess`'s own unit to prove (not yet
+      written; task 1.9 tests `run_turn`, not `ACPProcess` directly), not this file's.
+    - what this file *can* observe is the `force` value `run_turn` itself passes to `close()` --
+      already exercised for every *pre-prompt* failure this file has covered so far (the version
+      gate, part 4/N; a pre-prompt JSON-RPC error, part 11/N), each asserting `force is False`, on
+      the reasoning (this file's own inference, not yet checked against this sentence until now)
+      that no shell could be running before `session/prompt` is ever sent, so `force=False`
+      (`SIGTERM` via `terminate_process_tree`, `pty_runner.py:213`) is enough there. This case is
+      the first *post*-prompt failure this file scripts, and the reconciliation holds: `:1501-1503`
+      draws the line at "a shell still running", which is only possible once `session/prompt` has
+      actually been sent -- so a pre-prompt failure keeping `force=False` and a post-prompt failure
+      getting `force=True` are not a contradiction, they are the same rule read at two different
+      points in the turn. Task 1.9(n) is the one that will fully test this scenario's returned
+      `TurnOutcome` (the error, `stderr_tail`) and the "process exits after the prompt is written"
+      variant; this case's own test reuses (n)'s first scenario (a JSON-RPC `error` response to
+      `session/prompt` itself) only far enough to prove the close-force claim, and does not repeat
+      (n)'s own assertions in full here, matching this file's usual don't-duplicate-a-later-case's-
+      coverage discipline (e.g. case (i)'s note on `test_copilot_acp_mapper.py`, part 9/N).
+    """
+
+    async def test_close_uses_force_true_when_session_prompt_itself_errors(self, monkeypatch):
+        sessions_bound = []
+        events = []
+
+        script = [
+            {"response": INIT_RESPONSE},
+            {
+                "response": {
+                    "sessionId": SESSION_ID,
+                    "modes": {"currentModeId": AGENT_MODE_URI},
+                    "configOptions": [_mode_option(), _agent_option(""), _allow_all_option()],
+                }
+            },
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },
+            {"response": {}},  # session/set_mode -- D8's posture step, unasserted here
+            {
+                "error": {
+                    "code": -32603,
+                    "message": "Internal error",
+                    "data": {"detail": "synthetic post-prompt failure, not captured evidence"},
+                }
+            },  # session/prompt itself errors -- a shell could already be running by now
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Anything changed since I left?",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        # Corroboration only, not this test's main claim (that is (n)'s job in full): a
+        # `run_turn` that raised instead of returning, or that somehow reported success, would
+        # not be exercising the failure path this case is about at all.
+        assert outcome.status == "failed", (
+            "the fake's session/prompt error must reach run_turn as a failed turn, not "
+            "propagate as an uncaught exception (that is (n)'s own claim, sanity-checked here "
+            "only so far as to confirm this is the scenario under test)"
+        )
+        assert fake.closed_with_force is True, (
+            "D17 :1501-1503: a shell could be running by the time session/prompt has been "
+            "sent, so a failure from this point on must close with force=True, exactly as a "
+            "stop does -- not force=False as this file's pre-prompt failures do"
+        )
