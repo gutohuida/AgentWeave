@@ -59,6 +59,7 @@ import json
 import pytest
 
 import hub.copilot_acp as copilot_acp
+from hub.codex_appserver import AppServerError
 from hub.copilot_acp import ACPProcess, CopilotACPError, TurnOutcome, run_turn
 
 pytestmark = pytest.mark.asyncio
@@ -1815,3 +1816,85 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
         i_set_mode = methods.index("session/set_mode")
         i_prompt = methods.index("session/prompt")
         assert i_set_mode < i_prompt, methods
+
+
+class TestPrePromptErrorRaisesCopilotACPErrorAsAppServerError:
+    """Tasks.md 1.9(k) (R2, narrowed in R3): a JSON-RPC `error` response to a request **before**
+    the prompt (e.g. `session/new`) raises `CopilotACPError` carrying `.code` and `.data`, and it
+    **is** an `AppServerError`. Read D12 fresh by grepping "AppServerError"/"CopilotACPError"
+    rather than assuming a line range, landing on design.md:1167-1179: `CopilotACPError`
+    subclasses `codex_appserver.AppServerError` specifically so the executor's pre-spawn `except
+    (FileNotFoundError, AppServerError, asyncio.TimeoutError, OSError)` (`agent_trigger.py:3244`)
+    catches it, and `.data` (`:1179`, needed by slice 4's contract item 12, `:1777`) is not yet
+    asserted anywhere in this file.
+
+    Case (c)'s `TestSessionLoadNotFoundRebinds` already scripts an `{"error": {...}}` entry, but
+    for `session/load`'s own `-32002`, which is *recovered* (a fresh `session/new` follows, per
+    D7) rather than re-raised -- it never reaches a `pytest.raises` at all, and asserts neither
+    `.code` nor `.data`, so this is new coverage, not a duplicate. Case (p) (tasks.md 1.9(p))
+    separately covers `session/new` answered exactly `-32000`, an auth-specific error with its own
+    `CopilotProbe`-verdict assertion; this part deliberately scripts a *different* code so its own
+    scope -- the generic "any pre-prompt error raises, is an `AppServerError`, and carries
+    `.code`/`.data`" -- is not confused with (p)'s auth-specific one. The exact code/message/data
+    used here (`-32603`, `"Internal error"`, `{"detail": ...}`) is not captured in any evidence
+    log -- CODE-only, synthetic, flagged the same way case (b)'s replayed-chunk shape was,
+    standing in for "some pre-prompt error that is neither -32002 nor -32000".
+    """
+
+    async def test_session_new_error_raises_copilot_acp_error_as_app_server_error(
+        self, monkeypatch
+    ):
+        events = []
+        sessions_bound = []
+
+        script = [
+            {"response": INIT_RESPONSE},
+            {
+                "error": {
+                    "code": -32603,
+                    "message": "Internal error",
+                    "data": {"detail": "synthetic pre-prompt failure, not captured evidence"},
+                }
+            },  # session/new
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        with pytest.raises(CopilotACPError) as exc_info:
+            await run_turn(
+                cwd="C:\\work",
+                env=None,
+                prompt="Anything changed since I left?",
+                model=None,
+                resume_session_id=None,
+                agent=AGENT_NAME,
+                per_turn_context="## Workspace\n- root: C:\\work",
+                tool_surface_context="## Tools\n- agentweave-send_message",
+                stable_context=None,
+                control_overrides=None,
+                told_access_path="mcp",
+                permission_mode=None,
+                workspace="C:\\work",
+                restrict_spec_writes=False,
+                extra_flags=None,
+                on_event=_collector(events),
+                on_session=_collector(sessions_bound),
+            )
+
+        err = exc_info.value
+        assert isinstance(err, AppServerError), (
+            "CopilotACPError must subclass codex_appserver.AppServerError (D12) so the "
+            "executor's pre-spawn except tuple (agent_trigger.py:3244) catches it"
+        )
+        assert err.code == -32603, err.code
+        assert err.data == {
+            "detail": "synthetic pre-prompt failure, not captured evidence"
+        }, err.data
+
+        methods = [m for m, _ in fake.sent_requests]
+        assert methods == [
+            "initialize",
+            "session/new",
+        ], "no session/prompt may be sent once a pre-prompt request errors"
+        assert fake.closed_with_force is False, "D17: the process is still closed, not forced"
+        assert sessions_bound == [], "on_session must never fire when no session was ever bound"
