@@ -16,6 +16,32 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-30
+
+No review page today. **Written in an interactive session with the operator present**, at 22:30.
+Asked what tonight would build, the operator answered *"Add the things from ghcp into the queue and
+then the rest"*. So tonight's `ORDER:` is the four Copilot (ghcp) slices still unbuilt, in slice
+order, then the seven changes still open from the 2026-09-27 `ORDER:`, then the other unarchived,
+approved changes in the backlog's severity order (last night's queue order).
+
+**This overrides two gates written on 2026-09-28**, by the operator's instruction above:
+
+- Slice 1's row said *"Not before every change still open from the 2026-09-27 `ORDER:` is
+  archived"*. Of the changes its proposal's *Depends on* names, only
+  `a-run-records-that-its-calls-were-allowed` is still unbuilt (the others are archived). Slice 1
+  goes first anyway; **`a-run-records-that-its-calls-were-allowed` then rebases onto the adapter
+  slice 1 leaves**, instead of slice 1 rebasing onto it. Do slice 1's rebase-at-IMPL lines against
+  the tree as it stands tonight.
+- `ghcp-d5-order` (slices in order 1→3→4→5, each after the one before it is archived) **still
+  holds**: slice 2 (`a-copilot-agent-runs-over-acp`) is archived. A slice left unfinished stops the
+  ghcp run; go on to the seven, not to the next slice.
+
+Not unattended work, skip it: slice 5's task 7.6 (spends real money; needs the operator's capped
+key). `an-agent-can-be-paused-and-keeps-its-input` is `REVISING` and is not in the queue.
+
+ORDER: each-runner-cli-is-one-adapter, a-run-reaches-the-hub-without-mcp, a-copilot-run-shows-its-credits, a-copilot-agent-uses-hooks-and-its-own-agents, the-corpus-is-indexed-arranged-and-adopted-from-the-app, a-specification-is-read-in-results-that-fit, input-the-hub-accepted-is-answered-as-accepted, charters-are-named-once-and-an-empty-one-says-so, a-dialog-takes-the-keyboard-when-it-opens, the-app-window-keeps-the-operators-preferences, a-run-records-that-its-calls-were-allowed, drift-is-scanned-and-answered-on-the-document, a-retried-firing-records-how-its-work-ended, a-task-checkout-catches-up-with-its-approved-prerequisites, stop-clears-a-run-an-earlier-hub-left-running, worker-spend-counts-against-the-budget, every-event-the-hub-sends-reaches-the-app, a-flow-stages-its-review-in-the-dispatch, the-shell-judge-reads-a-word-whole, a-drive-or-a-home-variable-names-a-directory-by-itself, drift-watches-the-files-its-evidence-is-about, a-name-a-caller-chooses-reaches-its-own-resource, a-file-path-is-not-redacted-as-a-credential, a-refused-first-send-leaves-no-exploration-behind
+
+
 ## 2026-09-28
 
 No review page today. **Written in an interactive session with the operator present.** The
