@@ -1794,3 +1794,21 @@ disappears is indistinguishable from one that was forgotten.
   fire the operator's real enabled jobs and loops against their real project directories. To test
   a migration on real data, copy with the SQLite backup API from a `mode=ro` connection and run
   `alembic upgrade` alone (config at `hub/hub/alembic.ini`), then delete the copy.
+- **2026-09-30 — Claude Code reaps background shells under memory pressure.** A full
+  `pytest hub/tests/ -n 8` run in the background was killed ("system is running low on memory")
+  while the operator had a game open (`Marvel-Win64-Shipping`, ~11.7 GB of 31.8 GB). The notice says
+  not to restart it unasked. Check free memory first (`Get-CimInstance Win32_OperatingSystem`), and
+  use **CI's `hub-test` count** for a push instead of a local full run: every push to master runs
+  it (~16 min, no `claude` on PATH), and `gh api repos/gutohuida/AgentWeave/actions/jobs/<id>/logs`
+  gives the `N passed` line. `gh run view` needs an explicit run id when not interactive.
+- **2026-09-30 — the local full Hub suite with `-n 8` takes 5-13 min on this machine when it is
+  quiet** (5,4xx tests, `claude` stripped from PATH in PowerShell by dropping only directories that
+  hold a `claude` executable). Run vitest *alone*, not beside it: the `dependencyBoard*.test.tsx`
+  files fail 1-5 tests under load and pass 36/36 alone.
+- **2026-09-30 — Bash tool: a command holding two quoted heredocs, one delimited `EOF`, failed to
+  parse** ("unexpected EOF while looking for matching `'`") with Python bodies containing quotes.
+  Distinct delimiters (`PYEOF`, `TSEOF`) worked; for long edits, writing the script to the session
+  scratchpad and running it is the reliable form.
+- **2026-09-30 — a check you run with `;` before `git commit` does not gate the commit.** A
+  task-evidence failure scrolled by and the commit went through (`536b6d8`, CI red until
+  `6ed8c28`). Chain the gate with `&&`.
