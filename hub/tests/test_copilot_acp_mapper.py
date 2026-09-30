@@ -52,10 +52,29 @@ field but never the mapper's own surface for receiving it (flagged in the next_a
 this part); a keyword on the existing single-mapper-per-turn constructor is the least invented
 reading available, matching how the rest of this file constructs one mapper per turn.
 
-Left for a later part, and why: the edit/diff bullet and the warning/info/`agentweave`-failed-
-status bullets are in neither fixture (checked directly: no `edit`-kind `tool_call` and no
-`session.warning`/`session.info`/`session.error` event in either file) and need synthetic,
-CODE-shaped notifications too. The subagent-error bullet is likewise synthetic-only.
+Part 4/N adds the edit/diff bullet and the warning/info-text bullets, both synthetic for the same
+reason recorded above (checked directly again here: no `edit`-kind `tool_call` and no
+`session.warning`/`session.info` event in either capture). It also closes out, without a new test,
+the `next_action` caution that queued this part: whether "an `agentweave` server status `failed`
+emits one error" (`tasks.md`'s own bullet, for *this* file) is the same code path as part 3/N's
+`copilot_mcp_server_failed`/`copilot.mcp_server_unavailable` pair, or D8's differently-sourced
+`copilot.hub_server_unverified` diagnostic (design.md:1023, `:732-736`). Read fresh: D8's
+`hub_server_unverified` fires from `decide_permission`'s own MCP-server-identification step (the
+load-time condition over `calls`/`servers` inside `mcp_server._decide`'s caller,
+`test_permission_approver.py`'s file, tasks 1.6/1.7) -- a different function, a different test
+file, and a diagnostic this mapper never builds. D10's "The Hub's own server failing" paragraph
+(design.md:1066-1079), the one this bullet actually annotates (it sits directly under D10 in both
+this file's docstring and `tasks.md`'s own bullet list, which is scoped to `CopilotEventMapper`
+throughout), is exactly the `copilot_mcp_server_failed`/`copilot.mcp_server_unavailable` pair
+`TestMcpServerUnavailableDiagnostic` already covers (`test_mcp_told_path_emits_the_error_not_the_
+diagnostic` is the `told_access_path == "mcp"` -> error half). So the bullet is satisfied already;
+this part adds no test for it, and `tasks.md`'s sub-note below says so explicitly rather than
+silently dropping it.
+
+Left for a later part, and why: the subagent-error bullet (review, cross-slice) needs both a
+root-agent and a subagent-tagged `session.error`, neither present in either capture, and needs a
+fresh read of the `agentId`/`parentToolCallId` gating (design.md:1053-1062) this part did not
+touch.
 """
 
 import json
@@ -414,3 +433,155 @@ class TestDiagnosticPayloadShape:
         assert payload["stream"] == "copilot"
         assert payload["severity"] == "warning"
         assert isinstance(payload["summary"], str) and payload["summary"]
+
+
+class TestEditDiffToolUse:
+    """Task 1.8 part 4/N, the edit/diff bullet: "the edit's `tool_use` carries the file path and
+    diff". Synthetic -- neither capture has an `edit`-kind `tool_call` (design.md:2476-2480,
+    checked directly again for this part). Built from design.md:637's ACP shape for an edit
+    request (`kind:"edit"`, `locations[].path`) and design.md:964-965's `input_data` rule: `title`,
+    `rawInput`, `locations`, plus `"changes": [{path, oldText, newText}]` from any `content` item
+    of type `diff`. `tool_use_event`'s own `input` field (`runner_events.py:178`) is the
+    redacted, stringified `input_data`, not a separate structured field -- the same field this
+    file's shell test already reads a substring out of
+    (`test_shell_tool_use_then_result_share_call_id_in_recorded_order`).
+    """
+
+    EDIT_CALL_ID = "call_synthetic_edit_1"
+    EDIT_PATH = "C:\\workspace\\probe.py"
+
+    @classmethod
+    def _edit_tool_call(cls) -> dict:
+        return {
+            "sessionUpdate": "tool_call",
+            "toolCallId": cls.EDIT_CALL_ID,
+            "title": "Edit probe.py",
+            "kind": "edit",
+            "status": "pending",
+            "rawInput": {"fileName": cls.EDIT_PATH},
+            "locations": [{"path": cls.EDIT_PATH}],
+            "content": [
+                {
+                    "type": "diff",
+                    "path": cls.EDIT_PATH,
+                    "oldText": "old probe body",
+                    "newText": "new probe body",
+                }
+            ],
+        }
+
+    def test_edit_tool_use_carries_the_path_and_the_diff(self):
+        mapper = CopilotEventMapper()
+        events = mapper.on_session_update(self._edit_tool_call())
+
+        tool_use = [e for e in events if e.kind == "tool_use" and e.call_id == self.EDIT_CALL_ID]
+        assert len(tool_use) == 1
+        payload = tool_use[0].payload
+        assert payload["tool"] == "edit"
+        assert payload["category"] == "file_change"
+        # `input` is the stringified `input_data` (`runner_events.py:178`); the path and both
+        # sides of the diff must all survive into it. Substring-only, not an exact backslash
+        # match: `json.dumps` may re-escape `\` and this is not the escaping's own test.
+        assert "probe.py" in payload["input"]
+        assert "old probe body" in payload["input"]
+        assert "new probe body" in payload["input"]
+
+
+class TestWarningInfoTextClassification:
+    """Task 1.8 part 4/N, the warning/info-text bullet: a synthetic message `"Warning: X"` with a
+    matching raw `session.warning` becomes `diagnostic`, and without one stays `text`
+    (design.md:982-994). Symmetric coverage of the `"Info: X"`/`session.info` half is included:
+    design.md states both under the same rule and the same table row (`copilot.<warningType>` /
+    `copilot.<infoType>`, design.md:1013), so the rule under test is identical for either.
+
+    Both raw events are synthetic -- neither capture has a `session.warning`/`session.info` event
+    (design.md:2481-2486, checked directly again for this part) -- built from design.md:987-988's
+    CODE-cited shapes (`session.warning: {warningType, message, url?, remediation?}`,
+    `session.info: {infoType, message, tip?, url?}`). Fed through `on_raw_event` before the
+    matching message block, the same order `TestMcpServerUnavailableDiagnostic` above uses for its
+    own raw events, and matching design.md:1112-1116's "raw events feed [...] from spawn onward,
+    unarmed" -- the raw event must already be known by the time the block it explains is flushed.
+    """
+
+    @staticmethod
+    def _warning_event(warning_type: str, message: str) -> tuple:
+        data = {"warningType": warning_type, "message": message}
+        params = {
+            "sessionId": "synthetic-session",
+            "type": "session.warning",
+            "timestamp": "2026-09-30T00:00:02.000Z",
+            "data": data,
+        }
+        return "session.warning", data, params
+
+    @staticmethod
+    def _info_event(info_type: str, message: str) -> tuple:
+        data = {"infoType": info_type, "message": message}
+        params = {
+            "sessionId": "synthetic-session",
+            "type": "session.info",
+            "timestamp": "2026-09-30T00:00:03.000Z",
+            "data": data,
+        }
+        return "session.info", data, params
+
+    def test_message_block_matching_a_raw_warning_becomes_a_diagnostic(self):
+        mapper = CopilotEventMapper()
+        type_, data, params = self._warning_event(
+            "rate_limit_warning", "You are near your rate limit"
+        )
+        mapper.on_raw_event(type_, data, params)
+
+        events = mapper.on_session_update(
+            {
+                "sessionUpdate": "agent_message_chunk",
+                "content": {"type": "text", "text": "Warning: You are near your rate limit"},
+            }
+        )
+        events += mapper.flush()
+
+        assert not any(e.kind == "text" for e in events)
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        assert len(diagnostics) == 1
+        payload = diagnostics[0].payload
+        assert payload["code"] == "copilot.rate_limit_warning"
+        assert payload["severity"] == "warning"
+        assert payload["stream"] == "copilot"
+        assert "near your rate limit" in payload["summary"]
+
+    def test_message_block_matching_a_raw_info_becomes_a_diagnostic(self):
+        mapper = CopilotEventMapper()
+        type_, data, params = self._info_event("model_tip", "Try /model to switch")
+        mapper.on_raw_event(type_, data, params)
+
+        events = mapper.on_session_update(
+            {
+                "sessionUpdate": "agent_message_chunk",
+                "content": {"type": "text", "text": "Info: Try /model to switch"},
+            }
+        )
+        events += mapper.flush()
+
+        assert not any(e.kind == "text" for e in events)
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        assert len(diagnostics) == 1
+        payload = diagnostics[0].payload
+        assert payload["code"] == "copilot.model_tip"
+        assert payload["severity"] == "info"
+
+    def test_message_block_with_no_matching_raw_event_stays_text(self):
+        mapper = CopilotEventMapper()
+        # No `on_raw_event` call at all: nothing this turn explains a "Warning:" prefix, so the
+        # block must fall through to plain text -- the bullet's other half.
+        events = mapper.on_session_update(
+            {
+                "sessionUpdate": "agent_message_chunk",
+                "content": {"type": "text", "text": "Warning: You are near your rate limit"},
+            }
+        )
+        events += mapper.flush()
+
+        assert not any(e.kind == "diagnostic" for e in events)
+        text_events = [e for e in events if e.kind == "text"]
+        assert len(text_events) == 1
+        assert text_events[0].content == "Warning: You are near your rate limit"
