@@ -1265,3 +1265,192 @@ class TestEveryRequestPermissionAnsweredExactlyOnce:
         assert sessions_bound == [SESSION_ID]
         assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
         assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
+
+
+class TestUsageUpdateProducesMeasuredSampleWithResolvedModel:
+    """Tasks.md 1.9(i): `usage_update` -> `on_usage` with a measured sample and the resolved
+    model. D11 (design.md:1134-1136): `usage_update {used, size}` -> `ContextUsageSample(
+    status="measured", source="copilot_acp", basis="provider_context", context_tokens=used,
+    limit_tokens=size, model=<resolved model or requested>, breakdown=None)`. The raw shape --
+    `sessionUpdate: "usage_update", used, size` under a `session/update` notification -- is
+    VERIFIED directly against the real capture (`evidence/acp4-turn-mcp-shell-1.0.88.log:18`),
+    not invented.
+
+    **"the resolved model", not the requested one, is what this test is evidence for.** D10
+    (`:1086-1088`) resolves the model from the first of `session.model_change`,
+    `session.auto_mode_resolved` or `session.tools_updated` the client sees -- already the
+    mapper's own job, tested directly in
+    `test_copilot_acp_mapper.py::TestModelSubstitutionDiagnostic` via `session.tools_updated`. A
+    `run_turn` that stamped its own `model` argument onto every `ContextUsageSample`, ignoring
+    whatever the mapper resolved, would still pass a fixture whose resolved and requested models
+    happen to match -- so the primary case below requests one model and resolves a *different*
+    one via a `session.tools_updated` raw event (`github.com/copilot/sessionEvent {sessionId,
+    type, timestamp, data}`, VERIFIED wire shape `design.md:73`) delivered before the
+    `usage_update`, and asserts the sample carries the resolved name, not the requested one.
+
+    **Where `run_turn` reads "the resolved model" from is this file's own least-invented reading,
+    flagged as such** (same status as this file's other inferred surfaces, see the module
+    docstring): no design.md line names the object that hands D11's step its resolved model: the
+    mapper is the only place a resolved model is tracked at all (D10), so this test treats that
+    tracking as D11's source too, without design.md saying so in those words. A future part or
+    round should confirm or correct this against whatever `copilot_acp.py` actually does.
+
+    A second test covers D11's own "or requested" half: with no raw event ever resolving a model
+    before `usage_update` arrives, the sample must fall back to the turn's requested `model`
+    argument -- otherwise a `None` model would reach the meter for a turn where Copilot resolves a
+    model too early for this client to have subscribed a raw event catching it.
+    """
+
+    @staticmethod
+    def _tools_updated_notification(model):
+        return {
+            "notification": "github.com/copilot/sessionEvent",
+            "params": {
+                "sessionId": SESSION_ID,
+                "type": "session.tools_updated",
+                "timestamp": "2026-09-30T00:00:07.000Z",
+                "data": {"model": model},
+            },
+        }
+
+    @staticmethod
+    def _usage_update_notification(used, size):
+        return {
+            "notification": "session/update",
+            "params": {
+                "sessionId": SESSION_ID,
+                "update": {"sessionUpdate": "usage_update", "used": used, "size": size},
+            },
+        }
+
+    @staticmethod
+    def _standard_prefix():
+        return [
+            {"response": INIT_RESPONSE},
+            {
+                "response": {
+                    "sessionId": SESSION_ID,
+                    "modes": {"currentModeId": AGENT_MODE_URI},
+                    "configOptions": [_mode_option(), _agent_option(""), _allow_all_option()],
+                }
+            },  # session/new
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent
+            {"response": {}},  # session/set_mode -- D8's posture step, unasserted here too
+        ]
+
+    async def test_resolved_model_from_tools_updated_overrides_the_requested_model(
+        self, monkeypatch
+    ):
+        events = []
+        sessions_bound = []
+        usages = []
+
+        script = self._standard_prefix() + [
+            self._tools_updated_notification("mai-code-1.1-flash"),
+            self._usage_update_notification(12122, 128000),
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="What model is running?",
+            model="claude-haiku-4.5",
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+            on_usage=_collector(usages),
+        )
+
+        assert len(usages) == 1, usages
+        sample = usages[0]
+        assert sample.status == "measured"
+        assert sample.source == "copilot_acp"
+        assert sample.basis == "provider_context"
+        assert sample.context_tokens == 12122
+        assert sample.limit_tokens == 128000
+        assert sample.breakdown is None
+        assert sample.model == "mai-code-1.1-flash", (
+            "the sample must carry the model session.tools_updated resolved, not the requested "
+            f"claude-haiku-4.5; got {sample.model!r}"
+        )
+
+        assert sessions_bound == [SESSION_ID]
+        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+
+    async def test_falls_back_to_the_requested_model_when_nothing_has_resolved_one_yet(
+        self, monkeypatch
+    ):
+        events = []
+        sessions_bound = []
+        usages = []
+
+        script = self._standard_prefix() + [
+            self._usage_update_notification(12056, 128000),  # no tools_updated first
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="What model is running?",
+            model="claude-haiku-4.5",
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+            on_usage=_collector(usages),
+        )
+
+        assert len(usages) == 1, usages
+        assert usages[0].model == "claude-haiku-4.5", (
+            "with no raw event ever resolving a model, D11's 'or requested' half must supply the "
+            f"turn's own requested model; got {usages[0].model!r}"
+        )
+        assert usages[0].status == "measured"
+        assert usages[0].context_tokens == 12056
+        assert usages[0].limit_tokens == 128000
+
+        assert sessions_bound == [SESSION_ID]
+        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
