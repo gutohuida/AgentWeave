@@ -1,0 +1,1592 @@
+[
+  {
+    "id": "cross/pm=None/mcp=none/yolo=False",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=None/mcp=none/yolo=False",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=None/mcp=none/yolo=False",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": null,
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/cross/pm=None/mcp=none/yolo=False",
+      "cwd": "/fake/workspace/cross/pm=None/mcp=none/yolo=False",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=None/mcp=none/yolo=False",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=None/mcp=none/yolo=False/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=None/mcp=none/yolo=False/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-None_mcp-none_yolo-False",
+      "run_id": "run-cross_pm-None_mcp-none_yolo-False",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-None_mcp-none_yolo-False",
+    "run_session_id_after": "thread-cross_pm-None_mcp-none_yolo-False",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=None/mcp=none/yolo=True",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=None/mcp=none/yolo=True",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=None/mcp=none/yolo=True",
+      "known_session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": null,
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/cross/pm=None/mcp=none/yolo=True",
+      "cwd": "/fake/workspace/cross/pm=None/mcp=none/yolo=True",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=None/mcp=none/yolo=True",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=None/mcp=none/yolo=True/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=None/mcp=none/yolo=True/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-None_mcp-none_yolo-True",
+      "run_id": "run-cross_pm-None_mcp-none_yolo-True",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-None_mcp-none_yolo-True",
+    "run_session_id_after": "thread-cross_pm-None_mcp-none_yolo-True",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=None/mcp=set/yolo=False",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=None/mcp=set/yolo=False",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=None/mcp=set/yolo=False",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": null,
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/cross/pm=None/mcp=set/yolo=False",
+      "cwd": "/fake/workspace/cross/pm=None/mcp=set/yolo=False",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=None/mcp=set/yolo=False",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=None/mcp=set/yolo=False/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=None/mcp=set/yolo=False/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-None_mcp-set_yolo-False",
+      "run_id": "run-cross_pm-None_mcp-set_yolo-False",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-None_mcp-set_yolo-False",
+    "run_session_id_after": "thread-cross_pm-None_mcp-set_yolo-False",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=None/mcp=set/yolo=True",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=None/mcp=set/yolo=True",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=None/mcp=set/yolo=True",
+      "known_session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": null,
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/cross/pm=None/mcp=set/yolo=True",
+      "cwd": "/fake/workspace/cross/pm=None/mcp=set/yolo=True",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=None/mcp=set/yolo=True",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=None/mcp=set/yolo=True/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=None/mcp=set/yolo=True/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-None_mcp-set_yolo-True",
+      "run_id": "run-cross_pm-None_mcp-set_yolo-True",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-None_mcp-set_yolo-True",
+    "run_session_id_after": "thread-cross_pm-None_mcp-set_yolo-True",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=acceptEdits/mcp=none/yolo=False",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=acceptEdits/mcp=none/yolo=False",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=acceptEdits/mcp=none/yolo=False",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "acceptEdits",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/cross/pm=acceptEdits/mcp=none/yolo=False",
+      "cwd": "/fake/workspace/cross/pm=acceptEdits/mcp=none/yolo=False",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=acceptEdits/mcp=none/yolo=False",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=acceptEdits/mcp=none/yolo=False/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=acceptEdits/mcp=none/yolo=False/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-acceptEdits_mcp-none_yolo-False",
+      "run_id": "run-cross_pm-acceptEdits_mcp-none_yolo-False",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-acceptEdits_mcp-none_yolo-False",
+    "run_session_id_after": "thread-cross_pm-acceptEdits_mcp-none_yolo-False",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=acceptEdits/mcp=none/yolo=True",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=acceptEdits/mcp=none/yolo=True",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=acceptEdits/mcp=none/yolo=True",
+      "known_session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "acceptEdits",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/cross/pm=acceptEdits/mcp=none/yolo=True",
+      "cwd": "/fake/workspace/cross/pm=acceptEdits/mcp=none/yolo=True",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=acceptEdits/mcp=none/yolo=True",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=acceptEdits/mcp=none/yolo=True/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=acceptEdits/mcp=none/yolo=True/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-acceptEdits_mcp-none_yolo-True",
+      "run_id": "run-cross_pm-acceptEdits_mcp-none_yolo-True",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-acceptEdits_mcp-none_yolo-True",
+    "run_session_id_after": "thread-cross_pm-acceptEdits_mcp-none_yolo-True",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=acceptEdits/mcp=set/yolo=False",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=acceptEdits/mcp=set/yolo=False",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=acceptEdits/mcp=set/yolo=False",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "acceptEdits",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/cross/pm=acceptEdits/mcp=set/yolo=False",
+      "cwd": "/fake/workspace/cross/pm=acceptEdits/mcp=set/yolo=False",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=acceptEdits/mcp=set/yolo=False",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=acceptEdits/mcp=set/yolo=False/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=acceptEdits/mcp=set/yolo=False/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-acceptEdits_mcp-set_yolo-False",
+      "run_id": "run-cross_pm-acceptEdits_mcp-set_yolo-False",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-acceptEdits_mcp-set_yolo-False",
+    "run_session_id_after": "thread-cross_pm-acceptEdits_mcp-set_yolo-False",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=acceptEdits/mcp=set/yolo=True",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=acceptEdits/mcp=set/yolo=True",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=acceptEdits/mcp=set/yolo=True",
+      "known_session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "acceptEdits",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/cross/pm=acceptEdits/mcp=set/yolo=True",
+      "cwd": "/fake/workspace/cross/pm=acceptEdits/mcp=set/yolo=True",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=acceptEdits/mcp=set/yolo=True",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=acceptEdits/mcp=set/yolo=True/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=acceptEdits/mcp=set/yolo=True/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-acceptEdits_mcp-set_yolo-True",
+      "run_id": "run-cross_pm-acceptEdits_mcp-set_yolo-True",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-acceptEdits_mcp-set_yolo-True",
+    "run_session_id_after": "thread-cross_pm-acceptEdits_mcp-set_yolo-True",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=workspace/mcp=none/yolo=False",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=workspace/mcp=none/yolo=False",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=workspace/mcp=none/yolo=False",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "workspace",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": "workspace",
+      "workspace": "/fake/workspace/cross/pm=workspace/mcp=none/yolo=False",
+      "cwd": "/fake/workspace/cross/pm=workspace/mcp=none/yolo=False",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=workspace/mcp=none/yolo=False",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=workspace/mcp=none/yolo=False/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=workspace/mcp=none/yolo=False/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-workspace_mcp-none_yolo-False",
+      "run_id": "run-cross_pm-workspace_mcp-none_yolo-False",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-workspace_mcp-none_yolo-False",
+    "run_session_id_after": "thread-cross_pm-workspace_mcp-none_yolo-False",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=workspace/mcp=none/yolo=True",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=workspace/mcp=none/yolo=True",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=workspace/mcp=none/yolo=True",
+      "known_session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "workspace",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": "workspace",
+      "workspace": "/fake/workspace/cross/pm=workspace/mcp=none/yolo=True",
+      "cwd": "/fake/workspace/cross/pm=workspace/mcp=none/yolo=True",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=workspace/mcp=none/yolo=True",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=workspace/mcp=none/yolo=True/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=workspace/mcp=none/yolo=True/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-workspace_mcp-none_yolo-True",
+      "run_id": "run-cross_pm-workspace_mcp-none_yolo-True",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-workspace_mcp-none_yolo-True",
+    "run_session_id_after": "thread-cross_pm-workspace_mcp-none_yolo-True",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=workspace/mcp=set/yolo=False",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=workspace/mcp=set/yolo=False",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=workspace/mcp=set/yolo=False",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "workspace",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": "workspace",
+      "workspace": "/fake/workspace/cross/pm=workspace/mcp=set/yolo=False",
+      "cwd": "/fake/workspace/cross/pm=workspace/mcp=set/yolo=False",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=workspace/mcp=set/yolo=False",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=workspace/mcp=set/yolo=False/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=workspace/mcp=set/yolo=False/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-workspace_mcp-set_yolo-False",
+      "run_id": "run-cross_pm-workspace_mcp-set_yolo-False",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-workspace_mcp-set_yolo-False",
+    "run_session_id_after": "thread-cross_pm-workspace_mcp-set_yolo-False",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=workspace/mcp=set/yolo=True",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=workspace/mcp=set/yolo=True",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=workspace/mcp=set/yolo=True",
+      "known_session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "workspace",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": "workspace",
+      "workspace": "/fake/workspace/cross/pm=workspace/mcp=set/yolo=True",
+      "cwd": "/fake/workspace/cross/pm=workspace/mcp=set/yolo=True",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=workspace/mcp=set/yolo=True",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=workspace/mcp=set/yolo=True/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=workspace/mcp=set/yolo=True/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-workspace_mcp-set_yolo-True",
+      "run_id": "run-cross_pm-workspace_mcp-set_yolo-True",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-workspace_mcp-set_yolo-True",
+    "run_session_id_after": "thread-cross_pm-workspace_mcp-set_yolo-True",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=manual/mcp=none/yolo=False",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=manual/mcp=none/yolo=False",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=manual/mcp=none/yolo=False",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "manual",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": "operator",
+      "workspace": "/fake/workspace/cross/pm=manual/mcp=none/yolo=False",
+      "cwd": "/fake/workspace/cross/pm=manual/mcp=none/yolo=False",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=manual/mcp=none/yolo=False",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=manual/mcp=none/yolo=False/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=manual/mcp=none/yolo=False/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-manual_mcp-none_yolo-False",
+      "run_id": "run-cross_pm-manual_mcp-none_yolo-False",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-manual_mcp-none_yolo-False",
+    "run_session_id_after": "thread-cross_pm-manual_mcp-none_yolo-False",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=manual/mcp=none/yolo=True",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=manual/mcp=none/yolo=True",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=manual/mcp=none/yolo=True",
+      "known_session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "manual",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": "operator",
+      "workspace": "/fake/workspace/cross/pm=manual/mcp=none/yolo=True",
+      "cwd": "/fake/workspace/cross/pm=manual/mcp=none/yolo=True",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=manual/mcp=none/yolo=True",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=manual/mcp=none/yolo=True/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=manual/mcp=none/yolo=True/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-manual_mcp-none_yolo-True",
+      "run_id": "run-cross_pm-manual_mcp-none_yolo-True",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-manual_mcp-none_yolo-True",
+    "run_session_id_after": "thread-cross_pm-manual_mcp-none_yolo-True",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=manual/mcp=set/yolo=False",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=manual/mcp=set/yolo=False",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=manual/mcp=set/yolo=False",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "manual",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": "operator",
+      "workspace": "/fake/workspace/cross/pm=manual/mcp=set/yolo=False",
+      "cwd": "/fake/workspace/cross/pm=manual/mcp=set/yolo=False",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=manual/mcp=set/yolo=False",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=manual/mcp=set/yolo=False/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=manual/mcp=set/yolo=False/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-manual_mcp-set_yolo-False",
+      "run_id": "run-cross_pm-manual_mcp-set_yolo-False",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-manual_mcp-set_yolo-False",
+    "run_session_id_after": "thread-cross_pm-manual_mcp-set_yolo-False",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=manual/mcp=set/yolo=True",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=manual/mcp=set/yolo=True",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=manual/mcp=set/yolo=True",
+      "known_session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "manual",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": "operator",
+      "workspace": "/fake/workspace/cross/pm=manual/mcp=set/yolo=True",
+      "cwd": "/fake/workspace/cross/pm=manual/mcp=set/yolo=True",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=manual/mcp=set/yolo=True",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=manual/mcp=set/yolo=True/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=manual/mcp=set/yolo=True/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-manual_mcp-set_yolo-True",
+      "run_id": "run-cross_pm-manual_mcp-set_yolo-True",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-manual_mcp-set_yolo-True",
+    "run_session_id_after": "thread-cross_pm-manual_mcp-set_yolo-True",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=bypassPermissions/mcp=none/yolo=False",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=bypassPermissions/mcp=none/yolo=False",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=bypassPermissions/mcp=none/yolo=False",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "bypassPermissions",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": "bypassPermissions",
+      "workspace": "/fake/workspace/cross/pm=bypassPermissions/mcp=none/yolo=False",
+      "cwd": "/fake/workspace/cross/pm=bypassPermissions/mcp=none/yolo=False",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=bypassPermissions/mcp=none/yolo=False",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=bypassPermissions/mcp=none/yolo=False/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=bypassPermissions/mcp=none/yolo=False/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-bypassPermissions_mcp-none_yolo-False",
+      "run_id": "run-cross_pm-bypassPermissions_mcp-none_yolo-False",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-bypassPermissions_mcp-none_yolo-False",
+    "run_session_id_after": "thread-cross_pm-bypassPermissions_mcp-none_yolo-False",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=bypassPermissions/mcp=none/yolo=True",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=bypassPermissions/mcp=none/yolo=True",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=bypassPermissions/mcp=none/yolo=True",
+      "known_session_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "bypassPermissions",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": "bypassPermissions",
+      "workspace": "/fake/workspace/cross/pm=bypassPermissions/mcp=none/yolo=True",
+      "cwd": "/fake/workspace/cross/pm=bypassPermissions/mcp=none/yolo=True",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=bypassPermissions/mcp=none/yolo=True",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": true,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=bypassPermissions/mcp=none/yolo=True/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=bypassPermissions/mcp=none/yolo=True/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-bypassPermissions_mcp-none_yolo-True",
+      "run_id": "run-cross_pm-bypassPermissions_mcp-none_yolo-True",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-bypassPermissions_mcp-none_yolo-True",
+    "run_session_id_after": "thread-cross_pm-bypassPermissions_mcp-none_yolo-True",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=bypassPermissions/mcp=set/yolo=False",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=bypassPermissions/mcp=set/yolo=False",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=bypassPermissions/mcp=set/yolo=False",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "bypassPermissions",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": "bypassPermissions",
+      "workspace": "/fake/workspace/cross/pm=bypassPermissions/mcp=set/yolo=False",
+      "cwd": "/fake/workspace/cross/pm=bypassPermissions/mcp=set/yolo=False",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=bypassPermissions/mcp=set/yolo=False",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=bypassPermissions/mcp=set/yolo=False/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=bypassPermissions/mcp=set/yolo=False/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-bypassPermissions_mcp-set_yolo-False",
+      "run_id": "run-cross_pm-bypassPermissions_mcp-set_yolo-False",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-bypassPermissions_mcp-set_yolo-False",
+    "run_session_id_after": "thread-cross_pm-bypassPermissions_mcp-set_yolo-False",
+    "refusal": null
+  },
+  {
+    "id": "cross/pm=bypassPermissions/mcp=set/yolo=True",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for cross/pm=bypassPermissions/mcp=set/yolo=True",
+      "model": null,
+      "work_dir": "/fake/workspace/cross/pm=bypassPermissions/mcp=set/yolo=True",
+      "known_session_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": "bypassPermissions",
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": "bypassPermissions",
+      "workspace": "/fake/workspace/cross/pm=bypassPermissions/mcp=set/yolo=True",
+      "cwd": "/fake/workspace/cross/pm=bypassPermissions/mcp=set/yolo=True",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for cross/pm=bypassPermissions/mcp=set/yolo=True",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": true,
+      "mcp_command": [
+        "<PY>",
+        "<SERVER>"
+      ],
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/cross/pm=bypassPermissions/mcp=set/yolo=True/nested",
+        "paths": [
+          "/fake/workspace/cross/pm=bypassPermissions/mcp=set/yolo=True/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-cross_pm-bypassPermissions_mcp-set_yolo-True",
+      "run_id": "run-cross_pm-bypassPermissions_mcp-set_yolo-True",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-cross_pm-bypassPermissions_mcp-set_yolo-True",
+    "run_session_id_after": "thread-cross_pm-bypassPermissions_mcp-set_yolo-True",
+    "refusal": null
+  },
+  {
+    "id": "axis/known_session_id",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for axis/known_session_id",
+      "model": null,
+      "work_dir": "/fake/workspace/axis/known_session_id",
+      "known_session_id": "thread-x",
+      "yolo": false,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": null,
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/axis/known_session_id",
+      "cwd": "/fake/workspace/axis/known_session_id",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for axis/known_session_id",
+      "model": null,
+      "resume_thread_id": "thread-x",
+      "yolo": false,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/axis/known_session_id/nested",
+        "paths": [
+          "/fake/workspace/axis/known_session_id/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-axis_known_session_id",
+      "run_id": "run-axis_known_session_id",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-axis_known_session_id",
+    "run_session_id_after": "thread-axis_known_session_id",
+    "refusal": null
+  },
+  {
+    "id": "axis/config_overrides",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for axis/config_overrides",
+      "model": null,
+      "work_dir": "/fake/workspace/axis/config_overrides",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": null,
+      "config_overrides": {
+        "model_reasoning_effort": "high"
+      }
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/axis/config_overrides",
+      "cwd": "/fake/workspace/axis/config_overrides",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for axis/config_overrides",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "config_overrides": {
+        "model_reasoning_effort": "high"
+      }
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/axis/config_overrides/nested",
+        "paths": [
+          "/fake/workspace/axis/config_overrides/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-axis_config_overrides",
+      "run_id": "run-axis_config_overrides",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-axis_config_overrides",
+    "run_session_id_after": "thread-axis_config_overrides",
+    "refusal": null
+  },
+  {
+    "id": "axis/model",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for axis/model",
+      "model": "gpt-5.5",
+      "work_dir": "/fake/workspace/axis/model",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": null,
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/axis/model",
+      "cwd": "/fake/workspace/axis/model",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for axis/model",
+      "model": "gpt-5.5",
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/axis/model/nested",
+        "paths": [
+          "/fake/workspace/axis/model/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-axis_model",
+      "run_id": "run-axis_model",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-axis_model",
+    "run_session_id_after": "thread-axis_model",
+    "refusal": null
+  },
+  {
+    "id": "axis/decision_timeout",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for axis/decision_timeout",
+      "model": null,
+      "work_dir": "/fake/workspace/axis/decision_timeout",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive",
+        "AW_DECISION_TIMEOUT": "90"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": null,
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/axis/decision_timeout",
+      "cwd": "/fake/workspace/axis/decision_timeout",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive",
+        "AW_DECISION_TIMEOUT": "90"
+      },
+      "prompt": "prompt for axis/decision_timeout",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/axis/decision_timeout/nested",
+        "paths": [
+          "/fake/workspace/axis/decision_timeout/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-axis_decision_timeout",
+      "run_id": "run-axis_decision_timeout",
+      "timeout_seconds": 90
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-axis_decision_timeout",
+    "run_session_id_after": "thread-axis_decision_timeout",
+    "refusal": null
+  },
+  {
+    "id": "refusal/item-commandExecution-requestApproval",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for refusal/item-commandExecution-requestApproval",
+      "model": null,
+      "work_dir": "/fake/workspace/refusal/item-commandExecution-requestApproval",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": null,
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/refusal/item-commandExecution-requestApproval",
+      "cwd": "/fake/workspace/refusal/item-commandExecution-requestApproval",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for refusal/item-commandExecution-requestApproval",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/refusal/item-commandExecution-requestApproval/nested",
+        "paths": [
+          "/fake/workspace/refusal/item-commandExecution-requestApproval/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-refusal_item-commandExecution-requestApproval",
+      "run_id": "run-refusal_item-commandExecution-requestApproval",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-refusal_item-commandExecution-requestApproval",
+    "run_session_id_after": "thread-refusal_item-commandExecution-requestApproval",
+    "refusal": {
+      "method": "item/commandExecution/requestApproval",
+      "persisted_tool_name": "Bash",
+      "broadcast_tool_name": "Bash"
+    }
+  },
+  {
+    "id": "refusal/item-fileChange-requestApproval",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for refusal/item-fileChange-requestApproval",
+      "model": null,
+      "work_dir": "/fake/workspace/refusal/item-fileChange-requestApproval",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": null,
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/refusal/item-fileChange-requestApproval",
+      "cwd": "/fake/workspace/refusal/item-fileChange-requestApproval",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for refusal/item-fileChange-requestApproval",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/refusal/item-fileChange-requestApproval/nested",
+        "paths": [
+          "/fake/workspace/refusal/item-fileChange-requestApproval/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-refusal_item-fileChange-requestApproval",
+      "run_id": "run-refusal_item-fileChange-requestApproval",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-refusal_item-fileChange-requestApproval",
+    "run_session_id_after": "thread-refusal_item-fileChange-requestApproval",
+    "refusal": {
+      "method": "item/fileChange/requestApproval",
+      "persisted_tool_name": "Write",
+      "broadcast_tool_name": "Write"
+    }
+  },
+  {
+    "id": "refusal/mcpServer-elicitation-request",
+    "input": {
+      "cli": "codex",
+      "prompt": "prompt for refusal/mcpServer-elicitation-request",
+      "model": null,
+      "work_dir": "/fake/workspace/refusal/mcpServer-elicitation-request",
+      "known_session_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "worktree": null,
+      "repo_root": null,
+      "permission_mode": null,
+      "config_overrides": null
+    },
+    "codex_run_turn_kwargs": {
+      "cli": "codex",
+      "posture": null,
+      "workspace": "/fake/workspace/refusal/mcpServer-elicitation-request",
+      "cwd": "/fake/workspace/refusal/mcpServer-elicitation-request",
+      "env": {
+        "HUB_URL": "http://fake-hub.invalid",
+        "AW_RUN_TOKEN": "tok-distinctive"
+      },
+      "prompt": "prompt for refusal/mcpServer-elicitation-request",
+      "model": null,
+      "resume_thread_id": null,
+      "yolo": false,
+      "mcp_command": null,
+      "config_overrides": null
+    },
+    "request_approval": {
+      "method": "item/fileChange/requestApproval",
+      "subject": {
+        "cwd": "/fake/workspace/refusal/mcpServer-elicitation-request/nested",
+        "paths": [
+          "/fake/workspace/refusal/mcpServer-elicitation-request/nested/file.py"
+        ]
+      },
+      "project_id": "proj-rpc-capture",
+      "agent": "rpc-refusal_mcpServer-elicitation-request",
+      "run_id": "run-refusal_mcpServer-elicitation-request",
+      "timeout_seconds": 120
+    },
+    "should_interrupt": {
+      "before": false,
+      "after": true
+    },
+    "bound_thread_id": "thread-refusal_mcpServer-elicitation-request",
+    "run_session_id_after": "thread-refusal_mcpServer-elicitation-request",
+    "refusal": {
+      "method": "mcpServer/elicitation/request",
+      "persisted_tool_name": "a prompt from one of its own tools",
+      "broadcast_tool_name": "a prompt from one of its own tools"
+    }
+  }
+]

@@ -19,11 +19,13 @@ tasks.md 1.1).
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from unittest.mock import AsyncMock, patch
 
 from hub.conversation_titles import build_title_command
 from hub.runner_commands import build_command
@@ -34,6 +36,7 @@ FIXTURES_DIR = Path(__file__).parent
 OUTPUT_PATH = FIXTURES_DIR / "argv_golden.json"
 STREAM_EVENTS_OUTPUT_PATH = FIXTURES_DIR / "stream_events_golden.json"
 ONE_SHOT_OUTPUT_PATH = FIXTURES_DIR / "one_shot_golden.json"
+RPC_KWARGS_OUTPUT_PATH = FIXTURES_DIR / "rpc_kwargs_golden.json"
 CLAUDE_STREAM_JSONL = FIXTURES_DIR / "claude_stream.jsonl"
 CODEX_EXEC_JSONL = FIXTURES_DIR / "codex_exec.jsonl"
 
@@ -328,6 +331,257 @@ def build_one_shot_cases() -> List[Dict[str, Any]]:
     return cases
 
 
+#: Task 1.4's main cross product, against the default one-axis values below.
+RPC_PERMISSION_MODES: List[Optional[str]] = [
+    None,
+    "acceptEdits",
+    "workspace",
+    "manual",
+    "bypassPermissions",
+]
+
+
+def _rpc_project_id() -> str:
+    return "proj-rpc-capture"
+
+
+def _rpc_env(*, decision_timeout: Optional[str] = None) -> Dict[str, str]:
+    env = {"HUB_URL": "http://fake-hub.invalid", "AW_RUN_TOKEN": "tok-distinctive"}
+    if decision_timeout is not None:
+        env["AW_DECISION_TIMEOUT"] = decision_timeout
+    return env
+
+
+def _rpc_cases() -> List[Dict[str, Any]]:
+    """Task 1.4's inputs: the main cross product plus its one-axis variations, each a full set
+    of keyword arguments for `_execute_codex_appserver_run`. `refusal_method` is not one of the
+    executor's own parameters -- it tells the capture driver which of `codex_appserver
+    ._REFUSAL_LABELS` this case's recorder should additionally invoke `on_refusal` for (task
+    1.4's behaviour 2); `None` means the case only exercises behaviours 1/3/4.
+    """
+    cases: List[Dict[str, Any]] = []
+
+    def _add(case_id: str, *, refusal_method: Optional[str] = None, **overrides: Any) -> None:
+        inputs: Dict[str, Any] = {
+            "cli": "codex",
+            "prompt": f"prompt for {case_id}",
+            "model": None,
+            "work_dir": f"/fake/workspace/{case_id}",
+            "known_session_id": None,
+            "yolo": False,
+            "mcp_command": None,
+            "env": _rpc_env(),
+            "worktree": None,
+            "repo_root": None,
+            "permission_mode": None,
+            "config_overrides": None,
+        }
+        inputs.update(overrides)
+        cases.append({"id": case_id, "inputs": inputs, "refusal_method": refusal_method})
+
+    # Main cross product: permission_mode x mcp_command x yolo.
+    for pm in RPC_PERMISSION_MODES:
+        for mcp in (None, FAKE_MCP_COMMAND):
+            for yolo in BOOL_AXIS:
+                case_id = f"cross/pm={pm}/mcp={'set' if mcp else 'none'}/yolo={yolo}"
+                _add(case_id, permission_mode=pm, mcp_command=mcp, yolo=yolo)
+
+    # One-axis variations off the default case (pm=None, mcp=None, yolo=False).
+    _add("axis/known_session_id", known_session_id="thread-x")
+    _add("axis/config_overrides", config_overrides={"model_reasoning_effort": "high"})
+    _add("axis/model", model="gpt-5.5")
+    # The timeout behaviour's "once with, once without" pair: the default case above is the
+    # "without" side (no `AW_DECISION_TIMEOUT` in `env`); this is the "with" side.
+    _add("axis/decision_timeout", env=_rpc_env(decision_timeout="90"))
+
+    # One case per `codex_appserver._REFUSAL_LABELS` method, off the default inputs, so the
+    # refusal-label mapping is checked independent of the main cross product's axes.
+    from hub.codex_appserver import _REFUSAL_LABELS
+
+    for method in _REFUSAL_LABELS:
+        safe_method = method.replace("/", "-")
+        _add(f"refusal/{safe_method}", refusal_method=method)
+
+    return cases
+
+
+async def _drive_rpc_case(case: Dict[str, Any]) -> Dict[str, Any]:
+    """Drive one case of task 1.4's RPC golden: seed a Conversation/Run, patch
+    `codex_run_turn`/`_await_operator_permission` with recorders, call today's
+    `_execute_codex_appserver_run(**inputs)`, and read back what it recorded.
+    """
+    import hub.api.v1.agent_trigger as agent_trigger
+    from hub.codex_appserver import FILE_CHANGE_APPROVAL_METHOD, TurnOutcome
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Conversation, EventLog, Run
+
+    case_id = case["id"]
+    slug = case_id.replace("/", "_").replace("=", "-")
+    inputs = dict(case["inputs"])
+    refusal_method = case["refusal_method"]
+
+    project_id = _rpc_project_id()
+    agent = f"rpc-{slug}"
+    run_id = f"run-{slug}"
+    conversation_id = f"conv-{slug}"
+
+    async with async_session_factory() as db:
+        db.add(
+            Conversation(id=conversation_id, project_id=project_id, agent=agent, lifecycle="open")
+        )
+        db.add(Run(id=run_id, project_id=project_id, agent=agent, conversation_id=conversation_id))
+        await db.commit()
+
+    permission_calls: List[Dict[str, Any]] = []
+
+    async def _fake_await_operator_permission(**kwargs: Any) -> bool:
+        permission_calls.append(
+            {
+                "method": kwargs["method"],
+                "subject": kwargs["subject"],
+                "project_id": kwargs["project_id"],
+                "agent": kwargs["agent"],
+                "run_id": kwargs["run_id"],
+                "timeout_seconds": kwargs["timeout_seconds"],
+            }
+        )
+        return True
+
+    broadcasts: List[Dict[str, Any]] = []
+
+    async def _fake_broadcast(project_id: str, event_type: str, payload: Dict[str, Any]) -> None:
+        broadcasts.append({"event_type": event_type, "payload": payload})
+
+    captured: Dict[str, Any] = {}
+
+    async def _recorder(**kwargs: Any) -> TurnOutcome:
+        captured["data_kwargs"] = {
+            "cli": kwargs["cli"],
+            "posture": kwargs["posture"],
+            "workspace": kwargs["workspace"],
+            "cwd": kwargs["cwd"],
+            "env": kwargs["env"],
+            "prompt": kwargs["prompt"],
+            "model": kwargs["model"],
+            "resume_thread_id": kwargs["resume_thread_id"],
+            "yolo": kwargs["yolo"],
+            "mcp_command": kwargs["mcp_command"],
+            "config_overrides": kwargs["config_overrides"],
+        }
+
+        should_interrupt = kwargs["should_interrupt"]
+        before = should_interrupt()
+        agent_trigger._stop_requested.add(run_id)
+        after = should_interrupt()
+        agent_trigger._stop_requested.discard(run_id)
+        captured["should_interrupt"] = {"before": before, "after": after}
+
+        thread_id = f"thread-{slug}"
+        await kwargs["on_thread_started"](thread_id)
+        captured["thread_id"] = thread_id
+
+        subject = {
+            "cwd": f"{inputs['work_dir']}/nested",
+            "paths": [f"{inputs['work_dir']}/nested/file.py"],
+        }
+        await kwargs["request_approval"](FILE_CHANGE_APPROVAL_METHOD, subject)
+
+        if refusal_method is not None:
+            await kwargs["on_refusal"](
+                refusal_method,
+                {"reason": "captured", "paths": [f"{inputs['work_dir']}/refused.py"]},
+            )
+
+        return TurnOutcome(thread_id=thread_id, status="completed")
+
+    with patch.object(agent_trigger, "codex_run_turn", AsyncMock(side_effect=_recorder)):
+        with patch.object(
+            agent_trigger,
+            "_await_operator_permission",
+            AsyncMock(side_effect=_fake_await_operator_permission),
+        ):
+            with patch.object(
+                agent_trigger.sse_manager, "broadcast", AsyncMock(side_effect=_fake_broadcast)
+            ):
+                await agent_trigger._execute_codex_appserver_run(
+                    project_id=project_id,
+                    agent=agent,
+                    run_id=run_id,
+                    conversation_id=conversation_id,
+                    **inputs,
+                )
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        run_session_id_after = run.session_id if run else None
+
+    refusal_result: Optional[Dict[str, Any]] = None
+    if refusal_method is not None:
+        async with async_session_factory() as db:
+            from sqlalchemy import select
+
+            result = await db.execute(
+                select(EventLog)
+                .where(EventLog.event_type == "permission_denied", EventLog.agent == agent)
+                .order_by(EventLog.timestamp.desc())
+            )
+            row = result.scalars().first()
+            persisted_tool_name = (row.data or {}).get("tool_name") if row else None
+        broadcast_tool_name = next(
+            (
+                b["payload"].get("tool_name")
+                for b in broadcasts
+                if b["event_type"] == "permission_denied"
+            ),
+            None,
+        )
+        refusal_result = {
+            "method": refusal_method,
+            "persisted_tool_name": persisted_tool_name,
+            "broadcast_tool_name": broadcast_tool_name,
+        }
+
+    return {
+        "id": case_id,
+        "input": inputs,
+        "codex_run_turn_kwargs": captured["data_kwargs"],
+        "request_approval": permission_calls[0] if permission_calls else None,
+        "should_interrupt": captured["should_interrupt"],
+        "bound_thread_id": captured["thread_id"],
+        "run_session_id_after": run_session_id_after,
+        "refusal": refusal_result,
+    }
+
+
+async def _build_rpc_kwargs_cases_async() -> List[Dict[str, Any]]:
+    import hub.api.v1.agent_trigger  # noqa: F401 -- triggers the DATABASE_URL-requiring import chain early
+    from hub.db.engine import engine
+    from hub.db.models import Base, Project
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    from hub.db.engine import async_session_factory
+
+    async with async_session_factory() as db:
+        db.add(Project(id=_rpc_project_id(), name="RPC capture (task 1.4)"))
+        await db.commit()
+
+    results = []
+    for case in _rpc_cases():
+        results.append(await _drive_rpc_case(case))
+    return results
+
+
+def build_rpc_kwargs_cases() -> List[Dict[str, Any]]:
+    """Task 1.4's capture half: drive `_execute_codex_appserver_run` for every case and record
+    what reaches `codex_appserver.run_turn`, plus the four behaviours the design names. Needs
+    `DATABASE_URL` in the environment (set for this run only -- see task 1.3's own note above),
+    pointed at a throwaway sqlite file, since this drives the real executor end to end.
+    """
+    return asyncio.run(_build_rpc_kwargs_cases_async())
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         context_paths = _context_paths(Path(tmp))
@@ -345,6 +599,12 @@ def main() -> None:
     one_shot_cases = build_one_shot_cases()
     ONE_SHOT_OUTPUT_PATH.write_text(json.dumps(one_shot_cases, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {len(one_shot_cases)} cases to {ONE_SHOT_OUTPUT_PATH}")
+
+    rpc_kwargs_cases = build_rpc_kwargs_cases()
+    RPC_KWARGS_OUTPUT_PATH.write_text(
+        json.dumps(rpc_kwargs_cases, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"wrote {len(rpc_kwargs_cases)} cases to {RPC_KWARGS_OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
