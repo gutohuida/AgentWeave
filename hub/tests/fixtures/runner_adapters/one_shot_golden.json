@@ -1,0 +1,246 @@
+[
+  {
+    "id": "claude/worker/model=None/schema=None",
+    "kind": "worker",
+    "input": {
+      "cli": "claude",
+      "model": null,
+      "prompt": "please check @notes.md for context",
+      "output_schema_path": null
+    },
+    "argv": [
+      "claude",
+      "--tools",
+      "",
+      "--strict-mcp-config",
+      "--output-format",
+      "json",
+      "-p",
+      "please check \\@notes.md for context"
+    ]
+  },
+  {
+    "id": "claude/worker/model=None/schema=<SCHEMA>",
+    "kind": "worker",
+    "input": {
+      "cli": "claude",
+      "model": null,
+      "prompt": "please check @notes.md for context",
+      "output_schema_path": "<SCHEMA>"
+    },
+    "argv": [
+      "claude",
+      "--tools",
+      "",
+      "--strict-mcp-config",
+      "--output-format",
+      "json",
+      "-p",
+      "please check \\@notes.md for context"
+    ]
+  },
+  {
+    "id": "claude/worker/model=test-model-x/schema=None",
+    "kind": "worker",
+    "input": {
+      "cli": "claude",
+      "model": "test-model-x",
+      "prompt": "please check @notes.md for context",
+      "output_schema_path": null
+    },
+    "argv": [
+      "claude",
+      "--tools",
+      "",
+      "--strict-mcp-config",
+      "--output-format",
+      "json",
+      "--model",
+      "test-model-x",
+      "-p",
+      "please check \\@notes.md for context"
+    ]
+  },
+  {
+    "id": "claude/worker/model=test-model-x/schema=<SCHEMA>",
+    "kind": "worker",
+    "input": {
+      "cli": "claude",
+      "model": "test-model-x",
+      "prompt": "please check @notes.md for context",
+      "output_schema_path": "<SCHEMA>"
+    },
+    "argv": [
+      "claude",
+      "--tools",
+      "",
+      "--strict-mcp-config",
+      "--output-format",
+      "json",
+      "--model",
+      "test-model-x",
+      "-p",
+      "please check \\@notes.md for context"
+    ]
+  },
+  {
+    "id": "claude/title/model=None",
+    "kind": "title",
+    "input": {
+      "cli": "claude",
+      "model": null,
+      "prompt": "please check @notes.md for context"
+    },
+    "argv": [
+      "claude",
+      "--tools",
+      "",
+      "--strict-mcp-config",
+      "-p",
+      "please check \\@notes.md for context"
+    ]
+  },
+  {
+    "id": "claude/title/model=test-model-x",
+    "kind": "title",
+    "input": {
+      "cli": "claude",
+      "model": "test-model-x",
+      "prompt": "please check @notes.md for context"
+    },
+    "argv": [
+      "claude",
+      "--tools",
+      "",
+      "--strict-mcp-config",
+      "--model",
+      "test-model-x",
+      "-p",
+      "please check \\@notes.md for context"
+    ]
+  },
+  {
+    "id": "codex/worker/model=None/schema=None",
+    "kind": "worker",
+    "input": {
+      "cli": "codex",
+      "model": null,
+      "prompt": "please check @notes.md for context",
+      "output_schema_path": null
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--skip-git-repo-check",
+      "--json",
+      "--ephemeral",
+      "--sandbox",
+      "read-only",
+      "please check \\@notes.md for context"
+    ]
+  },
+  {
+    "id": "codex/worker/model=None/schema=<SCHEMA>",
+    "kind": "worker",
+    "input": {
+      "cli": "codex",
+      "model": null,
+      "prompt": "please check @notes.md for context",
+      "output_schema_path": "<SCHEMA>"
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--skip-git-repo-check",
+      "--json",
+      "--ephemeral",
+      "--sandbox",
+      "read-only",
+      "--output-schema",
+      "<SCHEMA>",
+      "please check \\@notes.md for context"
+    ]
+  },
+  {
+    "id": "codex/worker/model=test-model-x/schema=None",
+    "kind": "worker",
+    "input": {
+      "cli": "codex",
+      "model": "test-model-x",
+      "prompt": "please check @notes.md for context",
+      "output_schema_path": null
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--skip-git-repo-check",
+      "--json",
+      "--ephemeral",
+      "--sandbox",
+      "read-only",
+      "--model",
+      "test-model-x",
+      "please check \\@notes.md for context"
+    ]
+  },
+  {
+    "id": "codex/worker/model=test-model-x/schema=<SCHEMA>",
+    "kind": "worker",
+    "input": {
+      "cli": "codex",
+      "model": "test-model-x",
+      "prompt": "please check @notes.md for context",
+      "output_schema_path": "<SCHEMA>"
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--skip-git-repo-check",
+      "--json",
+      "--ephemeral",
+      "--sandbox",
+      "read-only",
+      "--output-schema",
+      "<SCHEMA>",
+      "--model",
+      "test-model-x",
+      "please check \\@notes.md for context"
+    ]
+  },
+  {
+    "id": "codex/title/model=None",
+    "kind": "title",
+    "input": {
+      "cli": "codex",
+      "model": null,
+      "prompt": "please check @notes.md for context"
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "please check \\@notes.md for context"
+    ]
+  },
+  {
+    "id": "codex/title/model=test-model-x",
+    "kind": "title",
+    "input": {
+      "cli": "codex",
+      "model": "test-model-x",
+      "prompt": "please check @notes.md for context"
+    },
+    "argv": [
+      "codex",
+      "exec",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "--model",
+      "test-model-x",
+      "please check \\@notes.md for context"
+    ]
+  }
+]

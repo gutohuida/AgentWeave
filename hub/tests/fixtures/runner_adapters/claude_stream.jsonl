@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","cwd":"C:\\tmp","session_id":"39ad524c-b7f7-4ae6-a480-2c57ee1180e2","tools":["Bash","Read"],"model":"claude-sonnet-5"}
+{"type":"assistant","message":{"model":"claude-sonnet-5","content":[{"type":"text","text":"OK"}],"usage":{"input_tokens":2,"cache_creation_input_tokens":8615,"cache_read_input_tokens":21375,"output_tokens":1}},"session_id":"39ad524c-b7f7-4ae6-a480-2c57ee1180e2"}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"call_1","name":"Bash","input":{"command":"echo hi"}}]},"session_id":"sess-1"}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"call_1","is_error":false,"content":"hi"}]},"session_id":"sess-1"}
+{"is_error":false,"session_id":"39ad524c-b7f7-4ae6-a480-2c57ee1180e2","total_cost_usd":0.0587525,"result":"OK","type":"result","subtype":"success","modelUsage":{"claude-haiku-4-5-20251001":{"contextWindow":200000},"claude-sonnet-5":{"contextWindow":1000000}}}
+{"is_error":true,"session_id":"sess-1","type":"result","subtype":"error_max_turns","result":"Max turns reached"}
+{"type":"result","subtype":"success","is_error":false,"session_id":"sess-usage","total_cost_usd":0.0125,"usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":30,"cache_creation_input_tokens":10},"modelUsage":{"claude-sonnet-5":{"inputTokens":999,"outputTokens":999,"contextWindow":1000000}}}

@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"019fbcb2-f137-7d01-9258-703716d57a3b"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"OK"}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"echo hi"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","exit_code":0,"aggregated_output":"hi\n"}}
+{"type":"turn.completed","usage":{"input_tokens":13690,"cached_input_tokens":11008,"cache_write_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0}}
+{"type":"turn.failed","error":{"message":"model overloaded"}}

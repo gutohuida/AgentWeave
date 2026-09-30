@@ -19,15 +19,29 @@ tasks.md 1.1).
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from hub.conversation_titles import build_title_command
 from hub.runner_commands import build_command
+from hub.runner_parsing import ParsedLine, parse_claude_line, parse_codex_line
+from hub.worker import build_worker_command
 
 FIXTURES_DIR = Path(__file__).parent
 OUTPUT_PATH = FIXTURES_DIR / "argv_golden.json"
+STREAM_EVENTS_OUTPUT_PATH = FIXTURES_DIR / "stream_events_golden.json"
+ONE_SHOT_OUTPUT_PATH = FIXTURES_DIR / "one_shot_golden.json"
+CLAUDE_STREAM_JSONL = FIXTURES_DIR / "claude_stream.jsonl"
+CODEX_EXEC_JSONL = FIXTURES_DIR / "codex_exec.jsonl"
+
+# Task 1.3: a prompt with an `@` -- `one_shot` neutralises the raw prompt itself (design D3), so
+# a prompt without one would pass this golden whether or not that neutralisation runs.
+ONE_SHOT_PROMPT = "please check @notes.md for context"
+ONE_SHOT_MODELS: List[Optional[str]] = [None, "test-model-x"]
+ONE_SHOT_SCHEMAS: List[Optional[str]] = [None, "<SCHEMA>"]
 
 FAKE_MCP_COMMAND = ["<PY>", "<SERVER>"]
 RUNNERS = ("claude", "codex")
@@ -220,6 +234,100 @@ def build_golden_cases(context_paths: Dict[str, Path]) -> List[Dict[str, Any]]:
     return cases
 
 
+def _sample_to_dict(sample: Any) -> Optional[Dict[str, Any]]:
+    if sample is None:
+        return None
+    data = dataclasses.asdict(sample)
+    # `ContextUsageSample.observed_at` defaults to `time.time()` at construction -- wall-clock,
+    # not part of what parsing derives from the line, so it would make the golden unreproducible.
+    data.pop("observed_at", None)
+    return data
+
+
+def _parsed_line_to_dict(parsed: ParsedLine) -> Dict[str, Any]:
+    return {
+        "events": [
+            {"kind": event.kind, "content": event.content, "payload": event.payload}
+            for event in parsed.events
+        ],
+        "usage": _sample_to_dict(parsed.usage),
+        "accounting": _sample_to_dict(parsed.accounting),
+        "session_id": parsed.session_id,
+    }
+
+
+def build_stream_events_cases() -> List[Dict[str, Any]]:
+    """Task 1.3: `parse_claude_line` over `claude_stream.jsonl`, `parse_codex_line(model=
+    "gpt-5.5")` over `codex_exec.jsonl` -- both files copy the JSONL lines inlined in
+    `test_runner_parsing.py`, in their file order."""
+    cases: List[Dict[str, Any]] = []
+
+    claude_lines = CLAUDE_STREAM_JSONL.read_text(encoding="utf-8").splitlines()
+    for index, line in enumerate(claude_lines):
+        parsed = parse_claude_line(line)
+        cases.append(
+            {
+                "id": f"claude/line-{index}",
+                "runner": "claude",
+                "line_index": index,
+                **_parsed_line_to_dict(parsed),
+            }
+        )
+
+    codex_lines = CODEX_EXEC_JSONL.read_text(encoding="utf-8").splitlines()
+    for index, line in enumerate(codex_lines):
+        parsed = parse_codex_line(line, model="gpt-5.5")
+        cases.append(
+            {
+                "id": f"codex/line-{index}",
+                "runner": "codex",
+                "line_index": index,
+                **_parsed_line_to_dict(parsed),
+            }
+        )
+
+    return cases
+
+
+def build_one_shot_cases() -> List[Dict[str, Any]]:
+    """Task 1.3: worker argv per CLI x {model, None} x {schema path, None}, and title argv per
+    CLI x {model, None} (review 8.3: `build_title_command` takes no schema)."""
+    cases: List[Dict[str, Any]] = []
+
+    for runner in RUNNERS:
+        cli = CLI_BY_RUNNER[runner]
+        for model in ONE_SHOT_MODELS:
+            for schema in ONE_SHOT_SCHEMAS:
+                argv = build_worker_command(
+                    cli=cli, model=model, prompt=ONE_SHOT_PROMPT, output_schema_path=schema
+                )
+                cases.append(
+                    {
+                        "id": f"{cli}/worker/model={model}/schema={schema}",
+                        "kind": "worker",
+                        "input": {
+                            "cli": cli,
+                            "model": model,
+                            "prompt": ONE_SHOT_PROMPT,
+                            "output_schema_path": schema,
+                        },
+                        "argv": argv,
+                    }
+                )
+        for model in ONE_SHOT_MODELS:
+            argv = build_title_command(cli=cli, model=model, prompt=ONE_SHOT_PROMPT)
+            cases.append(
+                {
+                    "id": f"{cli}/title/model={model}",
+                    "kind": "title",
+                    "input": {"cli": cli, "model": model, "prompt": ONE_SHOT_PROMPT},
+                    "argv": argv,
+                }
+            )
+
+    return cases
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         context_paths = _context_paths(Path(tmp))
@@ -227,6 +335,16 @@ def main() -> None:
 
     OUTPUT_PATH.write_text(json.dumps(cases, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {len(cases)} cases to {OUTPUT_PATH}")
+
+    stream_events_cases = build_stream_events_cases()
+    STREAM_EVENTS_OUTPUT_PATH.write_text(
+        json.dumps(stream_events_cases, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"wrote {len(stream_events_cases)} cases to {STREAM_EVENTS_OUTPUT_PATH}")
+
+    one_shot_cases = build_one_shot_cases()
+    ONE_SHOT_OUTPUT_PATH.write_text(json.dumps(one_shot_cases, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote {len(one_shot_cases)} cases to {ONE_SHOT_OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
