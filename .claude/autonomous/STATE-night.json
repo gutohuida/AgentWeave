@@ -1,68 +1,202 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-29-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "40c8e1a",
-    "stop_at":  "2026-09-30T07:00:00+01:00",
-    "iteration":  21,
-    "log_file":  ".claude/autonomous/2026-09-29-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "a-copilot-agent-runs-over-acp-impl",
-    "next_action":  "BACKLOG 1/34 (severity A, F299): continue a-copilot-agent-runs-over-acp via openspec-apply-change at task 1.9 part 3/N: hub/tests/test_copilot_acp_run_turn.py, case (c). Parts 1/N-2/N (iterations 20-21, 2026-09-30) built _FakeACPSession and covered cases (a) new-session sequence and (b) session/load + replayed chunks produce no event (TestResumedSessionSequence, two tests covering both orderings of the replay relative to the load response, since design.md's own Uncertainties line 96 says that order is INFERRED and 'handled order-independently'). Part 2/N also changed the shared _patch_spawn helper: it now forwards whatever on_notification/on_server_request keywords run_turn's real ACPProcess.spawn call supplies onto the fake (previously ignored, since part 1/N's script had no notifications) -- necessary so a script's notification entries reach run_turn's own arming-gate handler, not a test-written stand-in, or the 'produces no event' assertions would pass vacuously. This is this file's own least-invented reading of ACPProcess.spawn's signature, unconfirmed against any design.md citation (design.md is silent on notification wiring) -- flagged for a future round. Confirmed red the same way as every part of 1.8: ModuleNotFoundError: No module named 'hub.copilot_acp'. ruff/black --target-version py311 clean; openspec validate --strict (openspec CLI directly) passes. -- Case (c) (tasks.md 1.9, the (c) bullet): 'load -32002: session/new follows and on_session_missing fires.' Read design.md's D7 *A load that finds nothing* paragraph fresh (design.md:556-568 as of iteration 20/21 -- line numbers drift, do not trust them without checking) for the exact rule: a session/load answered with JSON-RPC error code -32002 means the client starts session/new instead (the rebinding is a stated exception to the first-writer rule, since the old id named nothing that exists); a diagnostic event is recorded ('Copilot had no saved session <id>; a new one was started'); _bind_session_id is called with an explicit replace_missing=True for this call only; RpcCallbacks gets an on_session_missing(old_id) callback for exactly this (this change's own addition per D7, slice 1 leaves room for it) -- run_turn's real signature almost certainly needs this callback added as a new on_session_missing kwarg, matching D18's callback list (design.md ~1514-1518: on_event, on_usage, on_accounting, on_session, should_interrupt, on_refusal, request_approval, on_decision, plus on_session_missing for D7's rebinding). The real evidence for the -32002 half is r1-probe-load.log:8-12 (VERIFIED): request id 3 session/load {sessionId: 'b193bf66...', cwd, mcpServers: []}, error response {code: -32002, message: 'Resource not found: Session ... not found', data: {uri: ...}} at line 10 -- but that capture never re-sends session/new afterward (it goes straight to a doomed session/prompt on the dead id, itself erroring -32602) -- so the 'session/new follows' half of case (c) is NOT captured behavior, it's this change's own designed recovery path (D7's bullet list), and the test's session/new-follows script segment is therefore synthetic/design-derived, not a capture, same caveat discipline as case (b)'s synthetic replay chunks. IMPORTANT new sub-step before writing the test: _FakeACPSession's script entries only support {'response': {...}} for a SUCCESSFUL result dict (checked directly in the current file) -- there is no error-response entry shape yet, so case (c) cannot be scripted until _FakeACPSession gains one, e.g. {'error': {'code': -32002, 'message': ..., 'data': {...}}} that request() raises as CopilotACPError(code=..., data=...) (case (k)'s own future error-raising contract, tasks.md bullet (k), reuse that shape now rather than inventing a second one later) or returns to run_turn as a raised exception per JSON-RPC semantics -- decide by re-reading design.md's D-section on error responses (grep 'error response' and 'CopilotACPError' in design.md, around line 1175) before choosing the entry's exact key names. Extend _FakeACPSession minimally (one new script-entry kind, documented in its own docstring like the other three) rather than building a parallel harness. Then: script initialize -> session/load (error -32002) -> session/new (success) -> session/set_config_option agent -> session/set_mode -> session/prompt; assert methods contains session/new AFTER the failed session/load attempt, assert a diagnostic-shaped event ('Copilot had no saved session...') appears in the collected on_event list, and assert on_session_missing (a new callback param this test must pass to run_turn, collected like on_session/on_event are) receives the old (now-dead) session id. Sanity-check against a throwaway stand-in before trusting it, same discipline as every prior part -- build the error-response support into the stand-in's fake-adjacent understanding too if needed, but the stand-in module itself (hub/hub/copilot_acp.py) must still not be committed. Record remaining cases (d)-(s), 15 of 18, in tasks.md's next sub-note. Code/test only, no model call. Drive before closing the queue item; archive if a firing finishes the last task group. -- openspec validate must be run as the openspec CLI directly (C:\\Users\\huida\\AppData\\Roaming\\npm\\openspec.cmd) -- npx could not resolve an executable as of iteration 19-21, and py -3.11 -m openspec also fails. Task 1.6 stays UNCHECKED: finding 6 is genuinely BLOCKED on a review-round decision (confirmed iterations 11, 12) -- do not invent a fixture for it; needs an R2/R3-style re-derivation round or an operator decision. Task 1.8 is fully covered and closed (iteration 19); do not revisit it.",
-    "queue":  [
-        {"id": "a-copilot-agent-runs-over-acp-impl", "status": "open", "title": "BACKLOG 1/34 (A, F299): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-run-reaches-the-hub-without-mcp-impl", "status": "open", "title": "BACKLOG 2/34 (A, F300): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "agents-no-longer-register-themselves-impl", "status": "open", "title": "BACKLOG 3/34 (B, F111): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "drift-is-scanned-and-answered-on-the-document-impl", "status": "open", "title": "BACKLOG 4/34 (B, F129): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "charters-are-named-once-and-an-empty-one-says-so-impl", "status": "open", "title": "BACKLOG 5/34 (B, F134): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-retried-firing-records-how-its-work-ended-impl", "status": "open", "title": "BACKLOG 6/34 (B, F147): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-task-checkout-catches-up-with-its-approved-prerequisites-impl", "status": "open", "title": "BACKLOG 7/34 (B, F158): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "stop-clears-a-run-an-earlier-hub-left-running-impl", "status": "open", "title": "BACKLOG 8/34 (B, F168): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-runner-that-cannot-collaborate-says-so-where-it-is-bound-impl", "status": "open", "title": "BACKLOG 9/34 (B, F178): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "the-corpus-is-indexed-arranged-and-adopted-from-the-app-impl", "status": "open", "title": "BACKLOG 10/34 (B, F206): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "worker-spend-counts-against-the-budget-impl", "status": "open", "title": "BACKLOG 11/34 (B, F240): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "isolation-does-not-change-under-held-work-impl", "status": "open", "title": "BACKLOG 12/34 (B, F242): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "every-event-the-hub-sends-reaches-the-app-impl", "status": "open", "title": "BACKLOG 13/34 (B, F251): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-loops-outstanding-mail-is-mail-not-yet-delivered-impl", "status": "open", "title": "BACKLOG 14/34 (B, F259): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "the-permissions-pill-shows-the-posture-the-run-gets-impl", "status": "open", "title": "BACKLOG 15/34 (B, F283): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-dialog-takes-the-keyboard-when-it-opens-impl", "status": "open", "title": "BACKLOG 16/34 (B, F307): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-flow-stages-its-review-in-the-dispatch-impl", "status": "open", "title": "BACKLOG 17/34 (B, F327): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "input-the-hub-accepted-is-answered-as-accepted-impl", "status": "open", "title": "BACKLOG 18/34 (B, F349): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-copilot-run-shows-its-credits-impl", "status": "open", "title": "BACKLOG 19/34 (B, F355): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "the-shell-judge-reads-a-word-whole-impl", "status": "open", "title": "BACKLOG 20/34 (B, F362): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-specification-is-read-in-results-that-fit-impl", "status": "open", "title": "BACKLOG 21/34 (B, F363): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "each-runner-cli-is-one-adapter-impl", "status": "open", "title": "BACKLOG 22/34 (B, F393): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-drive-or-a-home-variable-names-a-directory-by-itself-impl", "status": "open", "title": "BACKLOG 23/34 (B, F402): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "the-approval-preview-asks-the-gates-merge-question-impl", "status": "open", "title": "BACKLOG 24/34 (C, F141): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-documents-rigor-history-and-retired-requirements-are-on-screen-impl", "status": "open", "title": "BACKLOG 25/34 (C, F211): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "drift-watches-the-files-its-evidence-is-about-impl", "status": "open", "title": "BACKLOG 26/34 (C, F217): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "an-ask-me-card-says-what-workspace-only-would-decide-impl", "status": "open", "title": "BACKLOG 27/34 (C, F230): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-name-a-caller-chooses-reaches-its-own-resource-impl", "status": "open", "title": "BACKLOG 28/34 (C, F248): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-file-path-is-not-redacted-as-a-credential-impl", "status": "open", "title": "BACKLOG 29/34 (C, F278): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-refused-first-send-leaves-no-exploration-behind-impl", "status": "open", "title": "BACKLOG 30/34 (C, F330): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "the-app-window-keeps-the-operators-preferences-impl", "status": "open", "title": "BACKLOG 31/34 (C, F385): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-run-records-that-its-calls-were-allowed-impl", "status": "open", "title": "BACKLOG 32/34 (C, F389): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-pending-proposal-can-be-withdrawn-impl", "status": "open", "title": "BACKLOG 33/34 (D, F213): implement via openspec-apply-change; drive before closing; archive if last group finishes"},
-        {"id": "a-copilot-agent-uses-hooks-and-its-own-agents-impl", "status": "open", "title": "BACKLOG 34/34 (severity unknown, ghcp slice, R2'd 2026-09-28): implement via openspec-apply-change; drive before closing; archive if last group finishes"}
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-29-daily",
+    "parent_branch": "master",
+    "parent_sha": "40c8e1a",
+    "stop_at": "2026-09-30T07:00:00+01:00",
+    "iteration": 22,
+    "log_file": ".claude/autonomous/2026-09-29-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "a-copilot-agent-runs-over-acp-impl",
+    "next_action": "BACKLOG 1/34 (severity A, F299): continue a-copilot-agent-runs-over-acp via openspec-apply-change at task 1.9 part 4/N: hub/tests/test_copilot_acp_run_turn.py, case (d). Part 3/N (iteration 22, 2026-09-30) added TestSessionLoadNotFoundRebinds covering case (c): session/load answered -32002 (VERIFIED, r1-probe-load.log:8-12, reused verbatim) is followed by exactly one session/new (D7's own stated recovery path, design.md:560, NOT itself captured -- that log's own next step is a doomed session/prompt on the dead id instead), a copilot.session_missing diagnostic event (severity info, dead id in summary), a new on_session_missing(old_id) callback firing exactly once, and on_session binding only the fresh id. This part also gave _FakeACPSession its first error-response script entry, {\"error\": {\"code\", \"message\", \"data\"}}, raised by request() as CopilotACPError(message, code=code, data=data) -- mirroring design.md's stated ACPProcess.request translation (:1175, R3's .data at :1179); until now every script in the file only used success response dicts. This shape is meant to be reused verbatim by every later error-carrying case (k, n, o, p), not reinvented. Confirmed red the same way as every part of 1.8/1.9: ModuleNotFoundError: No module named 'hub.copilot_acp'. Sanity-checked against a throwaway stand-in (all 5 tests passed), then deliberately broke the stand-in's on_session_missing call and re-ran with -k TestSessionLoadNotFoundRebinds (failed as expected, on sessions_missing == [RESUME_ID]), restored, re-ran clean, deleted the stand-in, confirmed red again. ruff/black --target-version py311 clean; openspec validate --strict (openspec CLI directly) passes. tasks.md got a 2026-09-30 (part 3/N) sub-note. Task 1.9 stays UNCHECKED, cases (d)-(s) (15 of 18) remain. -- Case (d) (tasks.md 1.9, the (d) bullet): 'version 1.0.75: fails before any session/* request'. Read design.md's *Minimum version and gating* section fresh (around :1155-1165 as of iteration 22 -- line numbers drift, verify before trusting) for the exact rule: minimum is 1.0.81 (dotted-integer compare against initialize's response agentInfo.version); a version below that, OR a MISSING version (design.md:1165's own explicit 'a missing version is treated as too old'), must raise CopilotACPError('Copilot CLI <v> is older than the supported 1.0.81. Update it with `copilot update` or npm.') -- confirm this message text is design.md's own literal wording (:1163-1165), not a paraphrase, since it's one of the few cases where design.md gives exact message text -- and the raise must happen BEFORE session/new or session/load is ever sent (R2's rule, :1167-1170: this and every other pre-prompt failure is a raised CopilotACPError, not a returned TurnOutcome, per R3's later raises-vs-returns split at :1181-1210, which this part does not yet need to exercise beyond the version gate itself). The process must still be closed (session.close, check with which force= value -- D17 probably says force=False like every other close in this file so far, but confirm against D17's own text rather than assuming) on this path even though no session/new/session/load was ever sent. Script only initialize (with a low/missing version in its response) -- the script must exhaust immediately after that, i.e. assert the raise happens before any second request() call is even attempted (or, if run_turn's version check happens without a second script entry to consume, the existing _FakeACPSession's 'script exhausted' AssertionError machinery would itself catch a real implementation that keeps going past the gate incorrectly -- decide the cleanest way to prove 'no session/* request follows' from what the fake already offers before adding anything new to it). Write two sub-cases if the missing-version half needs a separate script (initialize response with no agentInfo.version key at all vs. one below 1.0.81) -- read design.md fresh to decide whether one test with two parametrized calls or two separate tests reads better, matching this file's own established one-test-per-distinct-scripted-scenario style. Sanity-check against a throwaway stand-in before trusting, same discipline as every prior part; the stand-in module itself (hub/hub/copilot_acp.py) must still not be committed. Record remaining cases (e)-(s), 14 of 18, in tasks.md's next sub-note. Code/test only, no model call. Drive before closing the queue item; archive if a firing finishes the last task group. -- openspec validate must be run as the openspec CLI directly (C:\\Users\\huida\\AppData\\Roaming\\npm\\openspec.cmd) -- npx could not resolve an executable as of iteration 19-22, and py -3.11 -m openspec also fails. Task 1.6 stays UNCHECKED: finding 6 is genuinely BLOCKED on a review-round decision (confirmed iterations 11, 12) -- do not invent a fixture for it; needs an R2/R3-style re-derivation round or an operator decision. Task 1.8 is fully covered and closed (iteration 19); do not revisit it.",
+    "queue": [
+        {
+            "id": "a-copilot-agent-runs-over-acp-impl",
+            "status": "open",
+            "title": "BACKLOG 1/34 (A, F299): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-run-reaches-the-hub-without-mcp-impl",
+            "status": "open",
+            "title": "BACKLOG 2/34 (A, F300): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "agents-no-longer-register-themselves-impl",
+            "status": "open",
+            "title": "BACKLOG 3/34 (B, F111): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "drift-is-scanned-and-answered-on-the-document-impl",
+            "status": "open",
+            "title": "BACKLOG 4/34 (B, F129): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "charters-are-named-once-and-an-empty-one-says-so-impl",
+            "status": "open",
+            "title": "BACKLOG 5/34 (B, F134): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-retried-firing-records-how-its-work-ended-impl",
+            "status": "open",
+            "title": "BACKLOG 6/34 (B, F147): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-task-checkout-catches-up-with-its-approved-prerequisites-impl",
+            "status": "open",
+            "title": "BACKLOG 7/34 (B, F158): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "stop-clears-a-run-an-earlier-hub-left-running-impl",
+            "status": "open",
+            "title": "BACKLOG 8/34 (B, F168): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-runner-that-cannot-collaborate-says-so-where-it-is-bound-impl",
+            "status": "open",
+            "title": "BACKLOG 9/34 (B, F178): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "the-corpus-is-indexed-arranged-and-adopted-from-the-app-impl",
+            "status": "open",
+            "title": "BACKLOG 10/34 (B, F206): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "worker-spend-counts-against-the-budget-impl",
+            "status": "open",
+            "title": "BACKLOG 11/34 (B, F240): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "isolation-does-not-change-under-held-work-impl",
+            "status": "open",
+            "title": "BACKLOG 12/34 (B, F242): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "every-event-the-hub-sends-reaches-the-app-impl",
+            "status": "open",
+            "title": "BACKLOG 13/34 (B, F251): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-loops-outstanding-mail-is-mail-not-yet-delivered-impl",
+            "status": "open",
+            "title": "BACKLOG 14/34 (B, F259): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "the-permissions-pill-shows-the-posture-the-run-gets-impl",
+            "status": "open",
+            "title": "BACKLOG 15/34 (B, F283): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-dialog-takes-the-keyboard-when-it-opens-impl",
+            "status": "open",
+            "title": "BACKLOG 16/34 (B, F307): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-flow-stages-its-review-in-the-dispatch-impl",
+            "status": "open",
+            "title": "BACKLOG 17/34 (B, F327): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "input-the-hub-accepted-is-answered-as-accepted-impl",
+            "status": "open",
+            "title": "BACKLOG 18/34 (B, F349): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-copilot-run-shows-its-credits-impl",
+            "status": "open",
+            "title": "BACKLOG 19/34 (B, F355): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "the-shell-judge-reads-a-word-whole-impl",
+            "status": "open",
+            "title": "BACKLOG 20/34 (B, F362): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-specification-is-read-in-results-that-fit-impl",
+            "status": "open",
+            "title": "BACKLOG 21/34 (B, F363): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "each-runner-cli-is-one-adapter-impl",
+            "status": "open",
+            "title": "BACKLOG 22/34 (B, F393): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-drive-or-a-home-variable-names-a-directory-by-itself-impl",
+            "status": "open",
+            "title": "BACKLOG 23/34 (B, F402): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "the-approval-preview-asks-the-gates-merge-question-impl",
+            "status": "open",
+            "title": "BACKLOG 24/34 (C, F141): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-documents-rigor-history-and-retired-requirements-are-on-screen-impl",
+            "status": "open",
+            "title": "BACKLOG 25/34 (C, F211): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "drift-watches-the-files-its-evidence-is-about-impl",
+            "status": "open",
+            "title": "BACKLOG 26/34 (C, F217): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "an-ask-me-card-says-what-workspace-only-would-decide-impl",
+            "status": "open",
+            "title": "BACKLOG 27/34 (C, F230): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-name-a-caller-chooses-reaches-its-own-resource-impl",
+            "status": "open",
+            "title": "BACKLOG 28/34 (C, F248): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-file-path-is-not-redacted-as-a-credential-impl",
+            "status": "open",
+            "title": "BACKLOG 29/34 (C, F278): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-refused-first-send-leaves-no-exploration-behind-impl",
+            "status": "open",
+            "title": "BACKLOG 30/34 (C, F330): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "the-app-window-keeps-the-operators-preferences-impl",
+            "status": "open",
+            "title": "BACKLOG 31/34 (C, F385): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-run-records-that-its-calls-were-allowed-impl",
+            "status": "open",
+            "title": "BACKLOG 32/34 (C, F389): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-pending-proposal-can-be-withdrawn-impl",
+            "status": "open",
+            "title": "BACKLOG 33/34 (D, F213): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        },
+        {
+            "id": "a-copilot-agent-uses-hooks-and-its-own-agents-impl",
+            "status": "open",
+            "title": "BACKLOG 34/34 (severity unknown, ghcp slice, R2'd 2026-09-28): implement via openspec-apply-change; drive before closing; archive if last group finishes"
+        }
     ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
 }

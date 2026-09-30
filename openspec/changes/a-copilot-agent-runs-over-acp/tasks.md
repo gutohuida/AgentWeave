@@ -355,6 +355,44 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   `ModuleNotFoundError: No module named 'hub.copilot_acp'` after deleting the stand-in;
   `ruff`/`black --target-version py311` clean; `openspec validate --strict` (via the `openspec` CLI
   directly) passes. Cases (c)-(s), 16 of 18, remain for later parts.
+
+  2026-09-30 (part 3/N): covered case (c) only. Read D7's *A load that finds nothing* paragraph
+  (design.md:556-568) and `r1-probe-load.log:8-12` fresh. The `-32002` half is VERIFIED, reused
+  verbatim from that capture (`code`, `message`, `data`); the "`session/new` follows" half is not
+  captured (that log goes straight to a doomed `session/prompt` on the dead id instead, itself
+  erroring `-32602`, an unrelated error this case does not cover) -- it is D7's own stated recovery
+  path, synthetic in the same sense case (b)'s replayed-chunk shape was, flagged as such rather than
+  asserted as captured. Added `TestSessionLoadNotFoundRebinds` with one test:
+  `session/load` answered `-32002` is followed by exactly one `session/new` (never two, never a
+  hang); the fake's `session/load` params still name the dead `RESUME_ID`; the fake's `session/new`
+  params carry the fresh `cwd`/`mcpServers: []`; a `diagnostic` event with
+  `payload["code"] == "copilot.session_missing"`, `severity == "info"` and the dead id in `summary`
+  appears in `on_event`'s collected list; `on_session_missing` (a new callback this test adds
+  alongside `on_event`/`on_session`) receives exactly the dead id; `on_session` binds only the new
+  id, once; and the turn still completes normally afterward (`session/set_config_option agent`,
+  `session/set_mode`, `session/prompt` all still fire on the new id).
+
+  This part also gives `_FakeACPSession` its first error-response script entry,
+  `{"error": {"code", "message", "data"}}`, which raises `CopilotACPError(message, code=code,
+  data=data)` from `request()` instead of returning -- mirroring design.md's own stated translation
+  ("`ACPProcess.request` raises `CopilotACPError(code=<error.code>)` for a response holding
+  `error`", `:1175`, R3 adds `.data`, `:1179`). Until this part every script in the file only ever
+  used success `response` dicts, so a JSON-RPC error path had no way to be scripted at all; cases
+  (k), (n), (o), (p) will reuse this same entry shape rather than inventing a second one.
+
+  Sanity-checked before trusting: wrote a throwaway stand-in `hub/hub/copilot_acp.py` (not
+  committed) implementing the sequence, the `-32002` catch-and-rebind branch, and the diagnostic/
+  callback emissions under test; all five tests in the file (parts 1/N-3/N together) passed. Then
+  deliberately broke the stand-in (the `-32002` branch stopped calling `on_session_missing`) and
+  re-ran with `-k TestSessionLoadNotFoundRebinds`: the new test failed as expected (on the
+  `sessions_missing == [RESUME_ID]` assertion) while the other four tests were unaffected -- the
+  CLAUDE.md ordering-rule discipline, applied here to a rebinding callback rather than a method-
+  order fixture, so the new assertion is evidence of the callback firing, not incidentally true
+  regardless of it. Restored the fix, re-ran (all five passed again), deleted the stand-in and
+  re-ran: confirmed red again at the same `ModuleNotFoundError: No module named 'hub.copilot_acp'`.
+  `ruff`/`black --target-version py311` clean; `openspec validate --strict` (via the `openspec` CLI
+  directly) passes, both before and after this edit. Cases (d)-(s), 15 of 18, remain for later
+  parts.
 - [ ] 1.10 `hub/tests/test_copilot_home.py` (new): `copilot_home_path` is `…/copilot-home/projects/<pid>/<agent>` and refuses a project id of `..`, `a/b`, `a\b` or one resolving outside the root (R2); the worker home is `…/copilot-home/worker`. `ensure_copilot_home` writes `agents/<agent>.agent.md` with frontmatter `name`, `description` (the marker), `tools`, `model` (omitted for `auto`) and `reasoningEffort`, and a body that opens with the precedence statement and holds the stable context. It also writes `agentweave-mcp.json` with no `env` and `timeout == (agents.MAX_WAITING_SECONDS + 60) * 1000`. A second call with the same content does not rewrite the file (mtime unchanged). No file contains an `aw_run_` string. (Review, finding 8) With `hooks/allow.json`, `settings.json`, `mcp-config.json`, `installed-plugins/p/`, `agents/other.agent.md` and a `config.json` holding `trustedFolders` and `firstLaunchAt` placed in the home, `ensure_copilot_home` removes the first five, drops `trustedFolders` and keeps `firstLaunchAt`, leaves `session-state/` alone, and reports what it removed; a hook recorded in `.agentweave-owned.json` survives, and the same path with changed content is removed
 - [ ] 1.11 `hub/tests/test_copilot_context_split.py` (new):
   - `_render_hub_agent_context`'s `stable`, `per_turn` and `tool_surface` (R3) together hold every `##`/`###` section of `context` exactly once;

@@ -53,7 +53,7 @@ Confirmed red: `pytest hub/tests/test_copilot_acp_run_turn.py -q` fails at colle
 import pytest
 
 import hub.copilot_acp as copilot_acp
-from hub.copilot_acp import ACPProcess, TurnOutcome, run_turn
+from hub.copilot_acp import ACPProcess, CopilotACPError, TurnOutcome, run_turn
 
 pytestmark = pytest.mark.asyncio
 
@@ -119,7 +119,15 @@ class _FakeACPSession:
       - ``{"response": {...}}``                        -- ends the in-flight `request()` call;
       - ``{"notification": method, "params": {...}}``   -- delivered via `on_notification` first;
       - ``{"server_request": {"id", "method", "params"}}`` -- delivered via `on_server_request`,
-        its answer appended to `sent_responses`.
+        its answer appended to `sent_responses`;
+      - ``{"error": {"code": ..., "message": ..., "data": {...}}}`` -- part 3/N: ends the
+        in-flight `request()` call by *raising* `CopilotACPError(message, code=code, data=data)`
+        instead of returning, mirroring design.md's own stated translation ("`ACPProcess.request`
+        raises `CopilotACPError(code=<error.code>)` for a response holding `error`", `:1175`, R3
+        adds `.data`, `:1179`) -- a JSON-RPC error response is never handed back as a plain dict
+        the way the three other entry kinds are. `message`/`data` default to `None` if the entry
+        omits them; a real response always carries `message` (JSON-RPC requires it) but this
+        fake does not enforce that, since no case needs to test a malformed error.
     """
 
     def __init__(self, script, *, on_notification=None, on_server_request=None):
@@ -138,6 +146,11 @@ class _FakeACPSession:
             entry = self._script.pop(0)
             if "response" in entry:
                 return entry["response"]
+            if "error" in entry:
+                err = entry["error"]
+                raise CopilotACPError(
+                    err.get("message"), code=err.get("code"), data=err.get("data")
+                )
             if "notification" in entry:
                 if self._on_notification is None:
                     raise AssertionError(
@@ -504,3 +517,117 @@ class TestResumedSessionSequence:
         assert events == [], "replayed history chunks before the prompt must produce no event"
         assert sessions_bound == [RESUME_ID], "on_session must bind the resumed id before return"
         assert outcome == TurnOutcome(session_id=RESUME_ID, status="completed", error=None)
+
+
+class TestSessionLoadNotFoundRebinds:
+    """Tasks.md 1.9(c): `session/load` answered `-32002` -> `session/new` follows and
+    `on_session_missing` fires -- D7's *A load that finds nothing* paragraph (design.md:556-568).
+
+    The `-32002` half is VERIFIED, not synthetic: `r1-probe-load.log:8-12` is a real capture of
+    exactly this error, for exactly this reason (the loaded id, `RESUME_ID`, was never prompted in
+    that session, so it was never persisted) -- reused here verbatim (`code`, `message`, `data`).
+    But that capture never re-sends `session/new` afterward; it goes straight to a doomed
+    `session/prompt` on the dead id, itself erroring `-32602` (`r1-probe-load.log:11-12`, a
+    different, unrelated error this case does not cover). So the "`session/new` follows" half is
+    NOT captured behavior -- it is D7's own stated recovery path (design.md:560), synthetic in the
+    same sense case (b)'s replayed-chunk shape was: built from a design rule, not a capture, and
+    flagged as such rather than asserted as VERIFIED.
+
+    This part also extends `_FakeACPSession` with its first error-response script entry (see the
+    class docstring's new `{"error": ...}` bullet and `request()`'s new branch) -- until now every
+    script in this file only ever used success `response` dicts, so a JSON-RPC error path had no
+    way to be scripted at all.
+    """
+
+    async def test_load_not_found_starts_new_session_and_notifies_the_missing_id(self, monkeypatch):
+        events = []
+        sessions_bound = []
+        sessions_missing = []
+
+        script = [
+            {"response": INIT_RESPONSE},
+            {
+                "error": {
+                    "code": -32002,
+                    "message": f"Resource not found: Session {RESUME_ID} not found",
+                    "data": {"uri": f"Session {RESUME_ID} not found"},
+                }
+            },  # session/load -- VERIFIED, r1-probe-load.log:10
+            {
+                "response": {
+                    "sessionId": SESSION_ID,
+                    "modes": {"currentModeId": AGENT_MODE_URI},
+                    "configOptions": [_mode_option(), _agent_option(""), _allow_all_option()],
+                }
+            },  # session/new, following the failed load -- D7's stated recovery, not a capture
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent
+            {"response": {}},  # session/set_mode
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Anything changed since I left?",
+            model=None,
+            resume_session_id=RESUME_ID,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+            on_session_missing=_collector(sessions_missing),
+        )
+
+        methods = [m for m, _ in fake.sent_requests]
+
+        def _first(method):
+            for i, (m, _p) in enumerate(fake.sent_requests):
+                if m == method:
+                    return i
+            raise AssertionError(f"{method!r} was never sent; got {methods}")
+
+        i_load = _first("session/load")
+        i_new = _first("session/new")
+        assert i_load < i_new, methods
+        assert methods.count("session/new") == 1, methods
+
+        load_params = fake.sent_requests[i_load][1]
+        assert load_params["sessionId"] == RESUME_ID
+
+        new_params = fake.sent_requests[i_new][1]
+        assert new_params["cwd"] == "C:\\work"
+        assert new_params["mcpServers"] == []
+
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        assert len(diagnostics) == 1, events
+        payload = diagnostics[0].payload
+        assert payload["code"] == "copilot.session_missing"
+        assert payload["severity"] == "info"
+        assert RESUME_ID in payload["summary"], payload["summary"]
+
+        assert sessions_missing == [RESUME_ID], "on_session_missing must name the dead old id"
+        assert sessions_bound == [SESSION_ID], "on_session must bind the new id, once, not the old"
+        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
