@@ -3056,3 +3056,187 @@ class TestPostureStepEveryTurn:
         assert len(error_events) == 1, events
         assert error_events[0].payload["code"] == "copilot_posture_escalated", error_events[0]
         assert sessions_bound == [RESUME_ID]
+
+
+class TestDeselectOnMarkerMismatch:
+    """Tasks.md 1.9(t) (`:285`, review finding 6): "an `agent` option whose description is not
+    the marker -> `set_config_option agent \"\"` is sent before the prompt; a deselect that does
+    not read back \"\" raises and sends no prompt." D6's own deselect paragraph (design.md
+    `:526-536`, review 2026-09-28 finding 6) states the mechanism: on any marker-check failure --
+    this file's case (f) exercises the "foreign description" branch of that check
+    (`TestAgentMarkerMismatchFallsBackToResourceBlock`, part 6/N) -- the client additionally sends
+    `session/set_config_option {configId: "agent", value: ""}` before the prompt and reads back
+    `currentValue == ""`; if the deselect is refused or the read-back value is not empty,
+    `run_turn` **raises** before the prompt (D12) with design.md's own verbatim sentence
+    (`:533-535`): "Copilot kept a custom agent named <agent> that AgentWeave did not write
+    selected; this turn was not started." `<agent>` is substituted with the turn's own `agent`
+    argument -- a value this test supplies itself, unlike case (d)'s `<v>`, which design.md never
+    states a literal for -- so the exact string is asserted here, the same discipline
+    `TestVersionGateFailsBeforeAnySessionRequest`'s own known-CLI-version test applies to
+    `"Copilot CLI 1.0.75 is older than..."`.
+
+    **Division of labour confirmed against part 6/N's test, read fresh, not assumed.** That
+    class's own script already includes this same deselect call (`:1015-1024`, its own comment:
+    "case (t)'s territory, unasserted here") so a real implementation can reach the prompt in that
+    test at all, but its assertions never inspect `fake.sent_requests` for the deselect's own
+    params or exercise the raise path (its own docstring: "inventing that coverage under (f)'s
+    name would duplicate (t) before (t) exists") -- confirming both of this case's sub-claims are
+    new coverage, not a duplicate of (f)'s.
+
+    Two independent sub-claims, tasks.md's own semicolon splitting them exactly as case (h)'s and
+    (q)'s bullets did, so each gets its own test here too, per this task's queued caution:
+
+    1. the successful-deselect ordering claim: after a marker mismatch, a **second**
+       `session/set_config_option` request with `configId == "agent"` is sent with `value == ""`,
+       distinct from the first (mismatched) selection, and it precedes `session/prompt`;
+    2. the raises-before-prompt claim: if that second call's own response still reads back a
+       non-empty `currentValue` for the `agent` option (the deselect refused or ignored),
+       `run_turn` raises `CopilotACPError` with the exact message above, and `session/prompt` is
+       never sent.
+
+    Both tests build the marker-mismatch prefix (`initialize` / `session/new` / the first,
+    mismatched `session/set_config_option agent`) the same way part 6/N's own test does, with the
+    same `FOREIGN_DESCRIPTION` fixture, so the only difference between them is the deselect
+    response's own read-back value -- isolating exactly the fact each test is evidence of.
+    """
+
+    FOREIGN_DESCRIPTION = "A custom repository agent, unrelated to AgentWeave"
+
+    def _mismatch_prefix(self):
+        return [
+            {"response": INIT_RESPONSE},
+            {
+                "response": {
+                    "sessionId": SESSION_ID,
+                    "modes": {"currentModeId": AGENT_MODE_URI},
+                    "configOptions": [_mode_option(), _agent_option(""), _allow_all_option()],
+                }
+            },  # session/new
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME, description=self.FOREIGN_DESCRIPTION),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent -- foreign description, D6's check fails
+        ]
+
+    async def test_successful_deselect_sends_set_config_option_agent_empty_before_prompt(
+        self, monkeypatch
+    ):
+        script = self._mismatch_prefix() + [
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(""),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent "" -- the deselect, reads back "" -- this
+            # test's own claim
+            {"response": {}},  # session/set_mode -- D8's posture step, unasserted here
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Anything changed since I left?",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context="## Charter\n- Ship safely.",
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector([]),
+            on_session=_collector([]),
+        )
+
+        agent_call_indices = [
+            i
+            for i, (m, p) in enumerate(fake.sent_requests)
+            if m == "session/set_config_option" and p.get("configId") == "agent"
+        ]
+        assert len(agent_call_indices) == 2, (
+            "the initial (mismatched) selection and the deselect must be two separate "
+            f"session/set_config_option(agent) calls; got {fake.sent_requests}"
+        )
+        i_first, i_deselect = agent_call_indices
+        first_params = fake.sent_requests[i_first][1]
+        deselect_params = fake.sent_requests[i_deselect][1]
+        assert first_params["value"] == AGENT_NAME, first_params
+        assert deselect_params["value"] == "", (
+            "design.md:530-531: the deselect must send configId=agent, value=''; "
+            f"got {deselect_params}"
+        )
+        methods = [m for m, _ in fake.sent_requests]
+        i_prompt = methods.index("session/prompt")
+        assert i_first < i_deselect < i_prompt, (
+            "both agent set_config_option calls must precede session/prompt; " f"got {methods}"
+        )
+        assert outcome.status == "completed"
+        assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
+
+    async def test_deselect_reading_back_nonempty_raises_and_sends_no_prompt(self, monkeypatch):
+        script = self._mismatch_prefix() + [
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME, description=self.FOREIGN_DESCRIPTION),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent "" -- refused/ignored, still reads back
+            # AGENT_NAME (the failure half)
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        with pytest.raises(CopilotACPError) as exc_info:
+            await run_turn(
+                cwd="C:\\work",
+                env=None,
+                prompt="Anything changed since I left?",
+                model=None,
+                resume_session_id=None,
+                agent=AGENT_NAME,
+                per_turn_context="## Workspace\n- root: C:\\work",
+                tool_surface_context="## Tools\n- agentweave-send_message",
+                stable_context="## Charter\n- Ship safely.",
+                control_overrides=None,
+                told_access_path="mcp",
+                permission_mode=None,
+                workspace="C:\\work",
+                restrict_spec_writes=False,
+                extra_flags=None,
+                on_event=_collector([]),
+                on_session=_collector([]),
+            )
+
+        assert str(exc_info.value) == (
+            f"Copilot kept a custom agent named {AGENT_NAME} that AgentWeave did not write "
+            "selected; this turn was not started."
+        ), str(exc_info.value)
+        methods = [m for m, _ in fake.sent_requests]
+        assert "session/prompt" not in methods, (
+            "design.md:532-535: a deselect that does not read back empty must raise before the "
+            f"prompt -- session/prompt must never be sent; got {methods}"
+        )
+        assert fake.closed_with_force is False, "D17: the process is still closed, not forced"
