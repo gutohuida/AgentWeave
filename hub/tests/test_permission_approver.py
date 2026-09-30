@@ -126,6 +126,55 @@ def test_a_decision_is_reached_even_when_reporting_fails(workspace, monkeypatch)
     assert denied["behavior"] == "deny"
 
 
+# --- The workspace/hub_url keywords override the environment (task 1.7, design.md:602-615) -----
+#
+# `_decide` reads `AW_WORKSPACE_DIR` and `HUB_URL` from `os.environ`, which is right in the
+# spawned MCP process and wrong in the Hub process, whose environment is not the run's. Copilot's
+# `decide_permission` calls `_decide` from the Hub process, so `_decide` gains keyword-only
+# `workspace=None, hub_url=None` that must win over whatever the Hub process's own environment
+# names. Fails today: `_decide` takes no such keywords.
+
+
+def test_decide_workspace_keyword_overrides_the_environment(tmp_path, monkeypatch):
+    env_ws = tmp_path / "env-workspace"
+    kw_ws = tmp_path / "kw-workspace"
+    env_ws.mkdir()
+    kw_ws.mkdir()
+    monkeypatch.setenv("AW_WORKSPACE_DIR", str(env_ws))
+    monkeypatch.delenv("AW_RUN_TOKEN", raising=False)
+
+    # Inside the keyword's workspace, outside the environment's: allowed only if the keyword,
+    # not `AW_WORKSPACE_DIR`, is what gets judged against.
+    inside_kw = kw_ws / "a.txt"
+    decision = _decide("Write", {"file_path": str(inside_kw)}, workspace=str(kw_ws))
+    assert decision["allow"] is True
+
+    # Inside the environment's workspace, outside the keyword's: refused only if the keyword wins.
+    inside_env = env_ws / "a.txt"
+    decision = _decide("Write", {"file_path": str(inside_env)}, workspace=str(kw_ws))
+    assert decision["allow"] is False
+
+
+def test_decide_hub_url_keyword_overrides_the_environment_for_a_literal_url(tmp_path, monkeypatch):
+    """The case only `_is_own_hub` decides: a literal URL word, not a `$HUB_URL`/`$env:HUB_URL`
+    reference. `HUB_URL` names the wrong host in the environment; only the `hub_url` keyword names
+    the host the command actually addresses."""
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    monkeypatch.setenv("AW_WORKSPACE_DIR", str(ws))
+    monkeypatch.setenv("HUB_URL", "http://env-wrong-host:9999")
+    monkeypatch.delenv("AW_RUN_TOKEN", raising=False)
+    real_hub = "http://kw-right-host:1234"
+
+    decision = _decide("Bash", {"command": f"curl {real_hub}/x"}, hub_url=real_hub)
+    assert decision["allow"] is True
+
+    # The same command, with no `hub_url` keyword: falls back to the environment's wrong value,
+    # so the literal URL names neither the Hub nor a path inside the workspace.
+    decision = _decide("Bash", {"command": f"curl {real_hub}/x"})
+    assert decision["allow"] is False
+
+
 # --- The decided table (a-url-is-not-a-path, design D2) ---------------------------------------
 #
 # Every row of D2, with its decided answer and, where D2 names one, its reason. The rows were
