@@ -87,7 +87,9 @@
 
 ## 4. Close
 
-- [ ] 4.1 Foot F259 in `scripts/drive/FINDINGS.md`: no product decision reads the flag. The flag
+- [x] 4.1 Foot F259 in `scripts/drive/FINDINGS.md`: no product decision reads the flag. The flag
   stays as API bookkeeping, per D1.
-- [ ] 4.2 Sync the delta into `openspec/specs/agent-loops/spec.md` (run the R-2 collision script)
+  Done 2026-09-30.
+- [x] 4.2 Sync the delta into `openspec/specs/agent-loops/spec.md` (run the R-2 collision script)
   and archive.
+  Done 2026-09-30: `scripts/check_openspec_collisions.py` reports no requirement touched by more than one change; delta applied by `openspec archive`.

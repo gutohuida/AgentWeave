@@ -136,6 +136,21 @@ The catalog default is still what the pill shows when neither field is known (no
 Claude's becomes `workspace`; Codex's stays `acceptEdits`. `DEFAULT_PERMISSION_MODE` (`:344`) is
 deleted; its comment's premise ("an agent with no runner bound at all") is what `null` now says.
 
+### D5 — Copilot is a third provider (verification round at IMPL, 2026-09-30)
+
+`a-copilot-agent-runs-over-acp` (archived 2026-09-30) added `copilot` to `RUNNER_CLIS` and to the
+catalog, with its own `permission_mode` control whose default is `workspace`
+(`model_catalog.py`, `CATALOG["copilot"]`). Its run decides the unset posture in its own function,
+`copilot_acp.posture_for(None, yolo)`: `bypassPermissions` if `yolo`, else `workspace`, whatever the
+access path (*"Copilot has no sandbox of its own to fall back on"*). R1–R3 predate it, so D1 names
+two providers and task 1.1's per-provider assertion would fail on Copilot with no branch to answer.
+
+So `posture_at_rest` gains Copilot's row, and to keep D1's rule (one function for the spawn and
+the display) `posture_for`'s unset branch **calls** `posture_at_rest("copilot", …)` rather than
+keeping its own copy. The access path does not enter Copilot's row. Task 1.1 covers all three
+providers; task 1.2 gains a Copilot case (`posture_for(None, yolo)` equals `posture_at_rest`); task
+1.3 gains a Copilot-bound agent reading `workspace`.
+
 ## Risks
 
 - A committed UI bundle reaches `:8000` on reload, while the Python half (the new field and the

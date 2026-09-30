@@ -19487,7 +19487,7 @@ message"* — and that table is also stale on the route shape, which is project-
 
 ## F259 (B) — nothing in the product ever marks a message read, so the StatusBar's `N msgs` chip only ever counts up
 
-**Status:** open in substance, with its headline struck. The amendment below (2026-09-02, D-5)
+**Status:** fixed (`a-loops-outstanding-mail-is-mail-not-yet-delivered`, 2026-09-30): no product decision reads `Message.read` any more. A loop's outstanding mail and `/status`'s `pending` are derived from each message's inbound entry (queued, or delivered into a creator turn still running); the flag stays as the messages API's own bookkeeping (design D1). Was: open in substance, with its headline struck. The amendment below (2026-09-02, D-5)
 withdraws the consequence, not the finding: `StatusBar.tsx` is imported by nothing and absent from
 the bundle, so no operator sees the chip. What survives is that nothing in the product ever marks a
 message read while `GET /status` and `hub/hub/scheduler.py:420` both depend on the flag -- which is

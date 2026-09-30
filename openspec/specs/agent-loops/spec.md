@@ -349,6 +349,12 @@ unanswered request for more work — a message to the loop's creator, or an unan
 outstanding at that moment, and SHALL record what it found as part of stopping the loop. The loop
 SHALL still stop; an outstanding request SHALL NOT create a third, waiting state.
 
+A message is outstanding while it is waiting to be delivered into one of its recipient's turns, or
+while the turn it was delivered into is still running. A message delivered into a turn that has
+ended is no longer outstanding, and neither is one whose delivery the Hub withdrew or abandoned,
+since it will never arrive. Whether a message is outstanding SHALL be decided from its delivery,
+not from a flag no part of the Hub sets.
+
 #### Scenario: The queue empties with no outstanding request
 
 - **WHEN** a loop's queue empties and no message to its creator or unanswered question is
@@ -358,10 +364,32 @@ SHALL still stop; an outstanding request SHALL NOT create a third, waiting state
 
 #### Scenario: The queue empties while a request for more work is outstanding
 
-- **WHEN** a loop's queue empties while its executor has an unread message to the creator or an
-  unanswered question outstanding
+- **WHEN** a loop's queue empties while its executor has a message to the creator still waiting to
+  be delivered, or an unanswered question outstanding
 - **THEN** the loop still stops
 - **AND** the stop is recorded noting the outstanding request, so it can be reviewed later
+
+#### Scenario: A message the creator is still reading is outstanding
+
+- **GIVEN** a message from the loop's executor to its creator, delivered into a creator turn that
+  is still running
+- **WHEN** the loop's queue empties
+- **THEN** the loop still stops
+- **AND** the stop is recorded noting that message as the outstanding request
+
+#### Scenario: A message the creator has received is not outstanding
+
+- **GIVEN** a message from the loop's executor to its creator that was delivered into one of the
+  creator's turns, and that turn has ended
+- **WHEN** the loop's queue empties
+- **THEN** the stop is recorded with no pending request noted on account of that message
+
+#### Scenario: A message that will never arrive is not outstanding
+
+- **GIVEN** a message from the loop's executor to its creator whose delivery the Hub withdrew or
+  abandoned
+- **WHEN** the loop's queue empties
+- **THEN** the stop is recorded with no pending request noted on account of that message
 
 ### Requirement: A self-created loop's queue accepts additions from its creator only until its first fire
 
@@ -2153,3 +2181,4 @@ who may add to that queue. An agent that could rename a job's agent could take b
 - **WHEN** a run of agent B asks to change that job's agent to B
 - **THEN** the request is refused, saying only the operator can change which agent a job names
 - **AND** the job still names A and nothing is staged
+

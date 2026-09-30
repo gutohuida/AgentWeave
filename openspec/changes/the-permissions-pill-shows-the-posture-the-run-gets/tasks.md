@@ -1,7 +1,9 @@
 ## 0. Before building
 
-- [ ] 0.1 R2 and 0.2 R3: independent re-derivations against `runner_commands.build_command`, `model_catalog`, `launchability.resolve_access_path`, the agents list route and the three UI files; recorded in `spec-queue/tracks/B4.md`
-- [ ] 0.3 The operator answers D4's first half (recommended: `workspace` for Claude) and approves in `APPROVALS.md`
+- [x] 0.1 R2 and 0.2 R3: independent re-derivations against `runner_commands.build_command`, `model_catalog`, `launchability.resolve_access_path`, the agents list route and the three UI files; recorded in `spec-queue/tracks/B4.md`
+- [x] 0.3 The operator answers D4's first half (recommended: `workspace` for Claude) and approves in `APPROVALS.md`
+
+- [x] 0.4 Verification round at IMPL, 2026-09-30 on master after `agents-no-longer-register-themselves`: R2/R3 are recorded in design.md and `spec-queue/tracks/B4.md`, and APPROVALS 2026-09-27 carries the operator's approval (D4 (a)). New since R3: Copilot is a third provider with its own at-rest posture (design D5); tasks 1.1-1.3 and 2.1 cover it.
 
 ## 1. Tests first — each must fail on today's code
 
@@ -15,7 +17,7 @@
 
 ## 2. The fix
 
-- [ ] 2.1 `posture_at_rest` in `hub/hub/runner_commands.py`; `build_command` uses it
+- [ ] 2.1 `posture_at_rest` in `hub/hub/runner_commands.py` (Claude, Codex and, design D5, Copilot); `build_command` uses it, and `copilot_acp.posture_for`'s unset branch calls it
 - [ ] 2.2 `hub/hub/model_catalog.py`: Claude's control default `workspace`; delete `DEFAULT_PERMISSION_MODE`
 - [ ] 2.3 `launchability.agent_config(session_data, agent_name, agent_config)` (R3: the whole merge, lifted from `get_agent_config` unchanged, not a fallback applied after it), used by `get_agent_config` and the list route; `AgentSummary.permission_mode_at_rest` and `permission_mode_built_in` (`hub/hub/schemas/agents.py`; the second is `posture_at_rest(..., yolo=False)`, design D3) and the list serializer (`hub/hub/api/v1/agents.py:595-615`)
 - [ ] 2.4 UI: `api/agents.ts` type and `postureAtRest(agentRow)` (R3), read by `AgentOutputPanel.tsx:393-395` **and** `NewConversationSurface.tsx:201` (R3), and `AgentSettingsControls.tsx:199` (its blank option reads `permission_mode_built_in`, not `permission_mode_at_rest`); update `__tests__/support/modelCatalogFixture.ts` to the new Claude default
