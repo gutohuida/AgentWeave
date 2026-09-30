@@ -3240,3 +3240,226 @@ class TestDeselectOnMarkerMismatch:
             f"prompt -- session/prompt must never be sent; got {methods}"
         )
         assert fake.closed_with_force is False, "D17: the process is still closed, not forced"
+
+
+class TestRunnerFlagWideningStrippedFromArgv:
+    """Tasks.md 1.9(u) (`:286`, review finding 10): "`build_acp_argv` with runner flags `--yolo
+    --allow-tool=shell --add-dir C:\\x --config-dir C:\\y --deny-tool=x` under `workspace` keeps
+    only `--deny-tool=x` and emits one `copilot.runner_flag_removed` per removed flag; under full
+    access it keeps all but `--config-dir`."
+
+    Read design.md `:176-201` fresh (D3, "Runner flags that widen approvals", review 2026-09-28
+    finding 10) rather than trusting this task's own queued figure -- that note guessed "twelve
+    total" for `COPILOT_WIDENING_FLAGS`, itself flagged as unreliable. Recounting directly: the
+    paragraph's own naming sentence lists eight flags Copilot self-approves on
+    (`--yolo`, `--allow-all`, `--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`,
+    `--allow-tool`, `--allow-url`, `--add-dir`), then says `COPILOT_WIDENING_FLAGS` is "those seven,
+    plus `--autopilot`, `--mode`, `--plan`, `--assisted-approval` and `--config-dir`" -- "those
+    seven" undercounts the eight just named by one. `--add-dir` cannot be the omitted one despite
+    that: the SHOULD-FIX ledger entry for this same finding (`:2384-2386`) separately confirms, by
+    code (`app.js`), that `--allow-tool`, `--allow-url` **and** `--add-dir` are all members removed
+    unless full access, and this case's own tasks.md example bundles `--add-dir` in among the
+    flags workspace strips. So the "seven"/"twelve" arithmetic is design.md's own error, not a
+    fact this test derives conclusions from -- what this test needs is only the specific flags
+    case (u)'s own bullet names, not a total count.
+
+    `extra_flags` is confirmed, not guessed, as the keyword that carries a runner's own flags
+    through: `agent_trigger.py:1219-1233` reads `runner_row.flags`, strips `TRANSPORT_SENTINELS`,
+    and passes what remains as `extra_flags=runner_flags` into the RPC turn request D18 describes
+    (design.md `:1528-1531`); this file's every other part already threads that same keyword
+    (always `None` until now) straight to `run_turn`. `test_runner_parsing.py:142,235` confirms the
+    list shape: each argv word is its own list element (`extra_flags=["--effort", "high"]`), so a
+    `--flag value` pair is two elements and a `--flag=value` word is one -- matching exactly how
+    this case's own bullet writes `--add-dir C:\\x` (two words) beside `--allow-tool=shell` (one).
+
+    No diagnostic table row gives `copilot.runner_flag_removed`'s summary a verbatim sentence
+    (`:1020` names only the code and severity, unlike `copilot.full_access_withdrawn`'s quoted
+    text this file's own `TestFullAccessWithoutAllowAllOption` asserts exactly) -- so this test
+    checks only what design.md actually commits to: `code == "copilot.runner_flag_removed"`,
+    `severity == "warning"`, one diagnostic per removed flag, and the removed flag's own name
+    appearing in that diagnostic's `summary` ("naming the flag", `:196`) -- not a full literal
+    sentence a future round would have to invent evidence for.
+
+    Two tests, the workspace half and the full-access half of the same bullet, per this task's own
+    queued caution (case (j) needed four, case (q) two) -- an argv-content assertion and a
+    diagnostic-count assertion could each pass or fail independently, but both halves share the
+    same `extra_flags` fixture and only differ in `permission_mode`, so they are two tests, not
+    four.
+    """
+
+    EXTRA_FLAGS = [
+        "--yolo",
+        "--allow-tool=shell",
+        "--add-dir",
+        "C:\\x",
+        "--config-dir",
+        "C:\\y",
+        "--deny-tool=x",
+    ]
+
+    async def test_workspace_keeps_only_deny_tool_and_diagnoses_every_removal(self, monkeypatch):
+        events = []
+        sessions_bound = []
+        captured_cmds = []
+
+        script = _session_established_script(
+            tail_entry={
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            }
+        )
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake, captured_cmds=captured_cmds)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Anything changed since I left?",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=self.EXTRA_FLAGS,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        assert len(captured_cmds) == 1, "exactly one spawn per turn"
+        cmd = captured_cmds[0]
+        removed = ["--yolo", "--allow-tool=shell", "--add-dir", "C:\\x", "--config-dir", "C:\\y"]
+        for token in removed:
+            assert token not in cmd, (
+                f"design.md:194-196: under workspace every widening flag must be stripped -- "
+                f"{token!r} must not reach the spawn argv; got {cmd!r}"
+            )
+        assert "--deny-tool=x" in cmd, (
+            "--deny-tool is not a widening flag and must reach the spawn argv unchanged -- "
+            f"got {cmd!r}"
+        )
+
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        # The bare flag name, not the "--flag=value" token: design.md says only "naming the
+        # flag" (`:196`), and a diagnostic that quoted `--allow-tool=shell` in full would still
+        # satisfy that wording, but this test does not assume the value rides along -- only the
+        # flag identity is asserted.
+        removed_flag_names = ["--yolo", "--allow-tool", "--add-dir", "--config-dir"]
+        assert len(diagnostics) == len(removed_flag_names), (
+            "design.md:196: one copilot.runner_flag_removed diagnostic per removed flag -- "
+            f"expected {len(removed_flag_names)}, got {diagnostics}"
+        )
+        for payload in (d.payload for d in diagnostics):
+            assert payload["code"] == "copilot.runner_flag_removed", payload
+            assert payload["severity"] == "warning", payload
+        remaining = list(removed_flag_names)
+        for payload in (d.payload for d in diagnostics):
+            named = [f for f in remaining if f in payload["summary"]]
+            assert named, (
+                f"diagnostic summary {payload['summary']!r} must name one of the still-unmatched "
+                f"removed flags {remaining!r}"
+            )
+            remaining.remove(named[0])
+        assert (
+            remaining == []
+        ), f"every removed flag must get its own diagnostic; missing {remaining}"
+
+        assert outcome.status == "completed"
+        assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
+
+    async def test_full_access_keeps_all_but_config_dir(self, monkeypatch):
+        events = []
+        sessions_bound = []
+        captured_cmds = []
+
+        script = [
+            {"response": INIT_RESPONSE},
+            {
+                "response": {
+                    "sessionId": SESSION_ID,
+                    "modes": {"currentModeId": AGENT_MODE_URI},
+                    "configOptions": [_mode_option(), _agent_option(""), _allow_all_option("off")],
+                }
+            },  # session/new
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent
+            {"response": {}},  # session/set_mode #agent -- posture step 1, unasserted here
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("on"),
+                    ]
+                }
+            },  # session/set_config_option allow_all=on -- posture step 2 (D8 full access),
+            # reads back "on"; unasserted here, this case's scope is build_acp_argv, not D8
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake, captured_cmds=captured_cmds)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Anything changed since I left?",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode="bypassPermissions",
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=self.EXTRA_FLAGS,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        assert len(captured_cmds) == 1, "exactly one spawn per turn"
+        cmd = captured_cmds[0]
+        kept = ["--yolo", "--allow-tool=shell", "--add-dir", "C:\\x", "--deny-tool=x"]
+        for token in kept:
+            assert token in cmd, (
+                "design.md:196: under full access every widening flag except --config-dir must "
+                f"reach the spawn argv unchanged -- {token!r} missing from {cmd!r}"
+            )
+        assert "--config-dir" not in cmd and "C:\\y" not in cmd, (
+            "design.md:196: --config-dir is removed under every posture, including full access -- "
+            f"got {cmd!r}"
+        )
+
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        assert len(diagnostics) == 1, (
+            "only --config-dir is removed under full access, so exactly one "
+            f"copilot.runner_flag_removed diagnostic is expected; got {diagnostics}"
+        )
+        payload = diagnostics[0].payload
+        assert payload["code"] == "copilot.runner_flag_removed", payload
+        assert payload["severity"] == "warning", payload
+        assert "--config-dir" in payload["summary"], payload["summary"]
+
+        assert outcome.status == "completed"
+        assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
