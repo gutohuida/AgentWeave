@@ -525,7 +525,7 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - **Done 2026-09-30:** `runner_commands.mcp_tool_prefix(runner)` (`agentweave-` for copilot) used by `_tool_surface_lines` and the turn notice, plus the Copilot host-tool sentence. Task 1.18 passes.
 - [x] 8.4 `api/v1/agents.py` `_display_model` gains `"copilot": agent_meta.get("model", "GitHub Copilot")`
   - **Done 2026-09-30.**
-- [ ] 8.5 CI parity: `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`, `py -3.11 -m pytest hub/tests/ -q`. With `claude` stripped from `PATH`, re-run the Copilot tests to confirm they do not depend on a local CLI (memory: the local suite is green because `claude` is on `PATH`)
+- [x] 8.5 CI parity: `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`, `py -3.11 -m pytest hub/tests/ -q`. With `claude` stripped from `PATH`, re-run the Copilot tests to confirm they do not depend on a local CLI (memory: the local suite is green because `claude` is on `PATH`) — 2026-09-30: CI hub-test (`py -3.11 -m pytest hub/tests/ -q` on ubuntu, no `claude` on PATH) at `27f50ad`: 5446 passed, 20 skipped, 0 failed, 19:35; CLI `pytest tests/` (ubuntu 3.11) 539 passed, 24 skipped; ruff, black, mypy src/, ui lint/vitest jobs all green (run 36712339492). The Copilot tests ran there without `claude` on PATH, which is this task's strip-PATH check.
 
 ## 9. UI
 
@@ -576,4 +576,4 @@ Copilot **Free plan**, Auto only: this group spends **at most four** model promp
   - **Done 2026-09-30:** the drive notes are in design.md's Round log; 5 model prompts spent (one more than planned, by F468's self-message); findings F468 filed; open question 5 measured above.
 ## 12. Archive
 
-- [ ] 12.1 All tasks above checked, or explicitly deferred with a finding. `openspec validate a-copilot-agent-runs-over-acp --strict` passes. Sync the deltas into `openspec/specs/` (`openspec-sync-specs`) and archive (`openspec-archive-change`). Write the handoff per the handoff-cadence rule
+- [x] 12.1 All tasks above checked, or explicitly deferred with a finding. `openspec validate a-copilot-agent-runs-over-acp --strict` passes. Sync the deltas into `openspec/specs/` (`openspec-sync-specs`) and archive (`openspec-archive-change`). Write the handoff per the handoff-cadence rule — 2026-09-30: all 55 tasks above ticked; `openspec validate --strict` passes; deltas synced in `27a06ba` (43/43 specs strict), so archived with `--skip-specs`; handoff 0157 written.
