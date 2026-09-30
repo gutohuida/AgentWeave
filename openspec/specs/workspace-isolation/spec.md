@@ -376,11 +376,6 @@ A request that leaves the setting as it was SHALL NOT be refused on these ground
 - **WHEN** the operator sets a sharing agent to work in its own checkout while it has a turn in progress
 - **THEN** the request is refused, naming the turn
 
-#### Scenario: Re-registering is held to the same rule
-
-- **WHEN** an agent re-registers with a configuration that changes whether it works in its own checkout while it holds an open task
-- **THEN** the registration is refused and nothing about the agent changes
-
 #### Scenario: Replacing the synced session state is held to the same rule
 
 - **WHEN** the synced session state is replaced with an entry that changes whether an agent holding an open task works in its own checkout
