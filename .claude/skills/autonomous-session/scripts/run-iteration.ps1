@@ -268,16 +268,12 @@ iterations - everything you need is on disk.
    to do. A prose next_action that says "stand down" does not do this and costs a full invocation
    every time it fires.
 
-The branch lock is the untracked file <<LOCK>>, holding one ISO instant and nothing else.
-It is gitignored, it is NOT part of the state file, and it must never be committed -- do not write
-a `last_heartbeat` field into STATE.json; that field is retired and only still read as a fallback
-for older layouts. Write the instant into <<LOCK>> when you start, refresh it as you work, and
-DELETE the file once everything is pushed. Deleting is the release: absence means free, so the very
-next firing picks the work up instead of idling a cycle against your own lock.
+The branch lock is the untracked file <<LOCK>>. The driver that launched you writes it before
+you start and deletes it after you exit -- do not write, refresh or delete it yourself, and do not
+write a `last_heartbeat` field into STATE.json; that field is retired.
 
 Stamp every timestamp from PowerShell (Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz') or Python's
-datetime.now().astimezone(). Git Bash `date` on this machine prints UTC but labels it +0100, so a
-lock written from it lands an hour in the future and stalls the loop until real time catches up.
+datetime.now().astimezone(). Git Bash `date` on this machine prints UTC but labels it +0100.
 
 Usage is budgeted: this subscription's weekly limit is shared with the operator. Read files by
 section - Grep for the heading you need, then Read with offset/limit - not whole; that includes the
@@ -307,6 +303,16 @@ $prompt = $prompt.Replace('.claude/autonomous/STATE.json', '<<STATE>>').
 
 Set-Location $Repo
 $startedIso = Get-Date -Format "yyyy-MM-ddTHH:mm:sszzz"
+
+# The driver holds the branch lock for exactly the child's lifetime. It used to ask the agent to
+# write, refresh and delete it; measured 2026-09-29 night, 42 firings in a row never touched it and
+# every one logged "Heartbeat is ~1,800 min old - assuming the session died", reading a sidecar
+# left on 09-28 at 23:51. The gate above was doing nothing. A driver killed mid-run leaves the lock
+# behind, and the next firing takes over once it is older than -HeartbeatGraceMinutes; a firing
+# that is merely long is already covered by the task's MultipleInstances=IgnoreNew.
+try { [System.IO.File]::WriteAllText($heartbeatPath, $startedIso + [Environment]::NewLine, $script:LogEncoding) } catch {
+  Write-Log "Could not write the branch lock $lockRelative - continuing without it: $_"
+}
 if ($Runner -eq "claude") {
   $routeLabel = "model={0}({1}) effort={2}({3}) item={4}" -f $(if ($routeModel) { $routeModel } else { "cli-default" }), $modelFrom,
     $(if ($routeEffort) { $routeEffort } else { "cli-default" }), $effortFrom, $(if ($currentItemId) { $currentItemId } else { "-" })
@@ -362,6 +368,7 @@ try {
   $code = $LASTEXITCODE
 } finally {
   $ErrorActionPreference = $previousErrorActionPreference
+  Remove-Item $heartbeatPath -ErrorAction SilentlyContinue
 }
 
 if ($Runner -ne "claude") {
@@ -391,9 +398,23 @@ if ($result) {
 # The operator's statusline persists the plan's real rate-limit percentages to this file whenever
 # an interactive session renders; headless runs never render one. Carried into the ledger so a
 # week of rows can be read against the weekly bar.
+#
+# Nothing renders a statusline overnight, so the file goes stale: measured 2026-09-29 night, all 42
+# rows carried the 19:20 snapshot (7-day 29%) while real use climbed to 37% by morning. A stale
+# snapshot is recorded as stale -- its instant kept in `snapshot_captured_at`, the percentages
+# dropped -- rather than passed off as a reading taken during this iteration.
 $snapshot = $null
+$snapshotCapturedAt = $null
 $snapshotPath = Join-Path $env:USERPROFILE ".claude\usage-snapshot.json"
 if (Test-Path $snapshotPath) { try { $snapshot = Get-Content $snapshotPath -Raw | ConvertFrom-Json } catch {} }
+if ($snapshot) {
+  try {
+    $snapshotCapturedAt = [string]$snapshot.captured_at
+    $snapshotAge = ([datetimeoffset]::Parse($startedIso, [System.Globalization.CultureInfo]::InvariantCulture) -
+      [datetimeoffset]::Parse($snapshotCapturedAt, [System.Globalization.CultureInfo]::InvariantCulture)).TotalMinutes
+    if ($snapshotAge -gt 30) { $snapshot = $null }
+  } catch { $snapshot = $null }
+}
 
 $modelUsage = [ordered]@{}
 if ($result -and $result.modelUsage) {
@@ -428,6 +449,7 @@ $row = [ordered]@{
   subagents        = $(if ($result -and $result.subagent_stats) { $result.subagent_stats.spawned } else { $null })
   model_usage      = $modelUsage
   snapshot         = $snapshot
+  snapshot_captured_at = $snapshotCapturedAt
 }
 try {
   [System.IO.File]::AppendAllText((Join-Path $autonomousDir "usage-ledger.jsonl"), (($row | ConvertTo-Json -Compress -Depth 8) + [Environment]::NewLine), $script:LogEncoding)

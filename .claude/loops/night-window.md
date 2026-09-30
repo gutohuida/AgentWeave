@@ -161,7 +161,10 @@ Only the first firing of the window does this.
    3. **`APPROVED` rows**, via `openspec-apply-change`.
 
    Size each item to finish inside one firing. If an item ends without a commit, it was too big;
-   split it in the log so the next firing inherits the split.
+   split it in the log so the next firing inherits the split. **Split by task, never below one.**
+   The smallest unit a firing may take is one whole `tasks.md` task, and the normal unit is a
+   vertical slice (see "Implementing", below). See "Pace", below, for what happens when an item
+   uses many firings.
 
 ---
 
@@ -169,6 +172,26 @@ Only the first firing of the window does this.
 
 `openspec-apply-change` is the method. Beyond it, the things that have cost this repository real
 time:
+
+- **Test-first means each test before its own code, not every test before any code.** Many
+  `tasks.md` files put a whole group of failing tests first ("1.x … Task 1.9 passes" appears
+  again under a later group's implementation task). Take them as **vertical slices**: in one
+  firing, write a test task *and* the implementation task that names it, show the test red, then
+  green, and tick both. Captures and probes that spend model calls on another CLI may still run
+  first, as the task list orders them. Do not reorder `tasks.md`; tick each task only when it is
+  really done. Measured 2026-09-29 night: 41 firings and $80 went into
+  `a-copilot-agent-runs-over-acp`'s group 1. That was about 6,200 lines of tests against a
+  `copilot_acp.py` that still does not exist, with no product code changed, nothing driven, and
+  10 of 56 tasks ticked. Those tests also invented an API (`CopilotProbe.record(...)`) that the
+  design never names, and the implementation will now have to fit that guess.
+- **Never split one task into lettered parts across firings.** Task 1.9 took 23 firings, one case
+  (a)…(w) each. Every firing re-read the design, ran the CLI suite and wrote the log again, so a
+  $3 firing produced one or two tests. If a task really is too big for one firing, split it in two,
+  not twenty-three.
+- **Do not build throwaway stand-in implementations to mutation-check tests for a module that does
+  not exist yet.** The real implementation is what gets mutation-checked, once, when it lands
+  (the rule below). A stand-in written, mutated and deleted in every firing checks the tests
+  against the firing's own guess of the code.
 
 - **A green suite agrees with broken behaviour more often than you expect.** Mutation-check anything
   you claim: delete the line the test exists for, and watch a **named** test fail. If nothing fails,
@@ -214,6 +237,20 @@ time:
 - **A change whose last group is done is archived in the same firing** (see compose step 4.1).
   Leaving a finished change in `openspec/changes/` keeps its `tasks.md` under the CLI suite's
   in-flight checks, and a stale header there misleads the next reader.
+
+---
+
+## Pace
+
+**Every firing, after the CI check: count the firings the current item has taken.** One call:
+`grep -c '"item":"<current>"' .claude/autonomous/usage-ledger.jsonl`. The count covers every night
+the item has run. If it is **6 or more**, check the last 6 commits on the branch
+(`git log -6 --stat`). If none of them changes anything under `hub/hub/`, `src/` or `hub/ui/src/`,
+then this firing's job is to re-plan, not to continue.
+Write in the log what the item has cost so far, why no product code has landed, and the new split.
+Then implement the next vertical slice in this same firing. A queue item that uses a whole night
+and changes no product code is the failure this section exists to catch. Nothing caught it on
+2026-09-29.
 
 ---
 
