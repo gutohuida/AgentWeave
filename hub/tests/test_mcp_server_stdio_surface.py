@@ -122,3 +122,63 @@ def test_the_rename_tool_is_served_too():
     ever puts a definition back below it, this is what says so."""
     names = {tool["name"] for tool in _tools_over_stdio()}
     assert "rename_spec_document" in names
+
+
+def test_copilots_discover_probe_before_initialize_is_answered_and_survived():
+    """`a-copilot-agent-runs-over-acp` task 1.17 (design § VERIFIED). **A guard: this passes on the
+    code as it stood.** Copilot sends `server/discover` before `initialize`; the server answers it
+    with a JSON-RPC error (not a crash, not silence), and Copilot then initializes with protocol
+    `2025-11-25`. An fastmcp/mcp upgrade that broke either half would leave every Copilot run
+    without AgentWeave tools, so it fails here first."""
+    env = dict(os.environ, HUB_URL="http://127.0.0.1:9", AW_RUN_TOKEN="aw_run_discover-probe")
+    process = subprocess.Popen(
+        [sys.executable, str(SERVER)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        # Not piped: the unknown method makes the server log, and an undrained stderr pipe would
+        # block it mid-reply (measured: this test hung until it was sent elsewhere).
+        stderr=subprocess.DEVNULL,
+        env=env,
+        text=True,
+        bufsize=1,
+        cwd=str(Path(env.get("TEMP", "/tmp"))),
+    )
+    try:
+
+        def send(message):
+            process.stdin.write(json.dumps(message) + "\n")
+            process.stdin.flush()
+
+        def response(request_id):
+            while True:
+                line = process.stdout.readline()
+                if not line:
+                    pytest.fail(f"no response to request {request_id}")
+                message = json.loads(line)
+                if message.get("id") == request_id and "method" not in message:
+                    return message
+
+        send({"jsonrpc": "2.0", "id": 0, "method": "server/discover", "params": {}})
+        discovered = response(0)
+        assert "error" in discovered, discovered
+        assert process.poll() is None, "the server must survive the unknown method"
+
+        send(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": {"name": "copilot-probe", "version": "1.0.88"},
+                },
+            }
+        )
+        assert "result" in response(1)
+        send({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+        send({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+        names = {tool["name"] for tool in response(2)["result"]["tools"]}
+    finally:
+        process.kill()
+    assert "send_message" in names

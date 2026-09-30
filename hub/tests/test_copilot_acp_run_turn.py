@@ -64,14 +64,6 @@ import time
 
 import pytest
 
-# Written ahead of its module (a-copilot-agent-runs-over-acp, task group 1). Until task 6.2-6.3
-# lands `hub.copilot_acp`, the whole file reports as skipped rather than failing collection; the skip
-# disappears by itself when the module exists.
-pytest.importorskip(
-    "hub.copilot_acp",
-    reason="hub.copilot_acp is not implemented yet (a-copilot-agent-runs-over-acp task 6.2-6.3)",
-)
-
 import hub.copilot_acp as copilot_acp
 from hub.codex_appserver import AppServerError
 from hub.copilot_acp import ACPProcess, CopilotACPError, TurnOutcome, run_turn
@@ -3891,3 +3883,271 @@ class TestExitPlanModeUnanswerableAndPlanModeShipsOff:
             "design.md:884-895 (D9 item 1): --excluded-tools is unconditional on a spec turn "
             f"regardless of SPEC_TURN_USES_PLAN_MODE; got {cmd}"
         )
+
+
+def _raw_event(event_type, data, session_id=SESSION_ID):
+    return {
+        "notification": "github.com/copilot/sessionEvent",
+        "params": {
+            "sessionId": session_id,
+            "type": event_type,
+            "timestamp": "2026-09-30T00:00:10.000Z",
+            "data": data,
+        },
+    }
+
+
+#: The captured shapes (`turn_write_shell_mcp.jsonl` lines 13, 282, 284): the load report names
+#: `agentweave` with no source/transport, the start event names the server, the ACP request is
+#: `kind: "other"` with the bare tool name as its title.
+_LOADED_HUB = _raw_event(
+    "session.mcp_servers_loaded",
+    {"servers": [{"name": "agentweave", "status": "connected"}]},
+)
+_MCP_CALL_ID = "call_GfOgPoS504CrdMt9ry34xI6a"
+_MCP_START = _raw_event(
+    "tool.execution_start",
+    {
+        "toolCallId": _MCP_CALL_ID,
+        "toolName": "agentweave-list_tasks",
+        "arguments": {},
+        "mcpServerName": "agentweave",
+        "mcpConfigSource": "user",
+        "mcpTransport": "stdio",
+        "mcpToolName": "list_tasks",
+    },
+)
+_OPTIONS = [
+    {"optionId": "allow_once", "kind": "allow_once", "name": "Allow once"},
+    {"optionId": "allow_always", "kind": "allow_always", "name": "Always allow"},
+    {"optionId": "reject_once", "kind": "reject_once", "name": "Deny"},
+]
+
+
+def _mcp_permission(request_id=8):
+    return {
+        "server_request": {
+            "id": request_id,
+            "method": "session/request_permission",
+            "params": {
+                "sessionId": SESSION_ID,
+                "toolCall": {
+                    "toolCallId": _MCP_CALL_ID,
+                    "title": "list_tasks",
+                    "kind": "other",
+                    "status": "pending",
+                    "rawInput": {},
+                },
+                "options": _OPTIONS,
+            },
+        }
+    }
+
+
+def _new_with(*early):
+    """`initialize`, then `session/new` with *early* notifications delivered while it is in
+    flight (unarmed), then agent selection and `set_mode`."""
+    return [
+        {"response": INIT_RESPONSE},
+        *early,
+        {
+            "response": {
+                "sessionId": SESSION_ID,
+                "modes": {"currentModeId": AGENT_MODE_URI},
+                "configOptions": [_mode_option(), _agent_option(""), _allow_all_option()],
+            }
+        },
+        {
+            "response": {
+                "configOptions": [_mode_option(), _agent_option(AGENT_NAME), _allow_all_option()]
+            }
+        },
+        {"response": {}},
+    ]
+
+
+_END_TURN = {"response": {"stopReason": "end_turn", "usage": {"inputTokens": 1}}}
+
+
+async def _drive(monkeypatch, script, *, captured_cmds=None, **overrides):
+    events = []
+    fake = _FakeACPSession(script)
+    _patch_spawn(monkeypatch, fake, captured_cmds=captured_cmds)
+    kwargs = {
+        "cwd": "C:\\work",
+        "env": None,
+        "prompt": "List my tasks.",
+        "model": None,
+        "resume_session_id": None,
+        "agent": AGENT_NAME,
+        "per_turn_context": "## Workspace\n- root: C:\\work",
+        "tool_surface_context": "## Tools\n- agentweave-list_tasks",
+        "stable_context": None,
+        "control_overrides": None,
+        "told_access_path": "mcp",
+        "permission_mode": "acceptEdits",
+        "workspace": "C:\\work",
+        "restrict_spec_writes": False,
+        "extra_flags": None,
+        "on_event": _collector(events),
+        "on_session": _collector([]),
+    }
+    kwargs.update(overrides)
+    outcome = await run_turn(**kwargs)
+    return fake, events, outcome
+
+
+class TestHubOwnCallIdentifiedFromRawEvents:
+    """D8 end to end through `run_turn`: the server is taken from the raw `tool.execution_start`
+    (fed into `calls` as it arrives), and the Hub-own allow needs the turn's load report
+    (review, finding 6). The report here arrives while `session/new` is in flight -- before the
+    prompt, unarmed -- which is where `startSessionMcp` puts it; `servers` is fed from spawn on,
+    so it still counts. Under `acceptEdits` a foreign server refuses, so the answer tells the two
+    apart."""
+
+    async def test_a_hub_call_with_the_load_report_is_allowed(self, monkeypatch):
+        script = _new_with(_LOADED_HUB) + [_MCP_START, _mcp_permission(), _END_TURN]
+        fake, events, outcome = await _drive(monkeypatch, script)
+
+        assert fake.sent_responses == [
+            (8, {"outcome": {"outcome": "selected", "optionId": "allow_once"}})
+        ]
+        assert not [e for e in events if e.kind == "diagnostic"], events
+        assert outcome.status == "completed"
+
+    async def test_without_a_load_report_it_is_judged_foreign_and_says_why_once(self, monkeypatch):
+        script = _new_with() + [
+            _MCP_START,
+            _mcp_permission(8),
+            _MCP_START,
+            _mcp_permission(9),
+            _END_TURN,
+        ]
+        fake, events, _outcome = await _drive(monkeypatch, script)
+
+        assert [answer["outcome"]["optionId"] for _, answer in fake.sent_responses] == [
+            "reject_once",
+            "reject_once",
+        ]
+        unverified = [
+            e
+            for e in events
+            if e.kind == "diagnostic" and e.payload["code"] == "copilot.hub_server_unverified"
+        ]
+        assert len(unverified) == 1, "one diagnostic per turn, not one per call"
+
+    async def test_without_the_start_event_the_title_does_not_identify_it(self, monkeypatch):
+        """R3: the request's `title` is model-written; with no raw report the call is
+        unidentified and refused, whatever the title says."""
+        script = _new_with(_LOADED_HUB) + [_mcp_permission(), _END_TURN]
+        fake, _events, _outcome = await _drive(monkeypatch, script)
+        assert fake.sent_responses[0][1]["outcome"]["optionId"] == "reject_once"
+
+
+class TestOperatorCardWiring:
+    """D8 *Operator posture*: under `manual` the request is put to `request_approval` with the
+    Copilot label and the Workspace-only verdict on the subject; the operator's answer is the
+    answer; an operator's refusal is not reported again through `on_refusal`; every answer
+    reaches `on_decision`."""
+
+    def _execute_request(self, command):
+        return {
+            "server_request": {
+                "id": 3,
+                "method": "session/request_permission",
+                "params": {
+                    "sessionId": SESSION_ID,
+                    "toolCall": {
+                        "toolCallId": "call_ps_1",
+                        "title": "Remove things",
+                        "kind": "execute",
+                        "rawInput": {"command": command, "commands": [command]},
+                    },
+                    "options": _OPTIONS,
+                },
+            }
+        }
+
+    @pytest.mark.parametrize("operator_allows", [True, False])
+    async def test_manual_asks_the_operator_with_label_and_verdict(
+        self, monkeypatch, operator_allows
+    ):
+        asked, refusals, decisions = [], [], []
+
+        async def request_approval(method, subject):
+            asked.append((method, subject))
+            return operator_allows
+
+        async def on_refusal(method, subject):
+            refusals.append(subject)
+
+        async def on_decision(method, subject, allowed):
+            decisions.append(allowed)
+
+        start = _raw_event(
+            "tool.execution_start",
+            {"toolCallId": "call_ps_1", "toolName": "powershell", "arguments": {}},
+        )
+        script = _new_with() + [
+            start,
+            self._execute_request("Remove-Item ..\\..\\x"),
+            _END_TURN,
+        ]
+        fake, _events, _outcome = await _drive(
+            monkeypatch,
+            script,
+            permission_mode="manual",
+            request_approval=request_approval,
+            on_refusal=on_refusal,
+            on_decision=on_decision,
+        )
+
+        assert len(asked) == 1
+        method, subject = asked[0]
+        assert method == "session/request_permission"
+        assert subject["tool_name"] == "a command"
+        assert subject["tool_input"]["command"] == "Remove-Item ..\\..\\x"
+        assert subject["workspace_verdict"]["allow"] is False
+        expected = "allow_once" if operator_allows else "reject_once"
+        assert fake.sent_responses == [
+            (3, {"outcome": {"outcome": "selected", "optionId": expected}})
+        ]
+        assert refusals == [], "the operator's own refusal is recorded by the card, not here"
+        assert decisions == [operator_allows]
+
+
+class TestArgvCarriesTheMcpConfigForTheMcpForm:
+    async def test_mcp_command_names_the_homes_config(self, monkeypatch):
+        """D3: `--additional-mcp-config @<COPILOT_HOME>/agentweave-mcp.json`, only for a run
+        given the MCP form; the home comes from the run environment the trigger built."""
+        captured = []
+        home = "C:\\homes\\proj-1\\cop-1"
+        fake, _events, _outcome = await _drive(
+            monkeypatch,
+            _new_with() + [_END_TURN],
+            captured_cmds=captured,
+            env={"COPILOT_HOME": home, "HUB_URL": "http://127.0.0.1:8010"},
+            mcp_command=["py", "mcp_server.py"],
+        )
+        cmd = captured[0]
+        i = cmd.index("--additional-mcp-config")
+        assert cmd[i + 1] == "@" + os.path.join(home, "agentweave-mcp.json")
+        assert "--agent" not in cmd, "--agent does not reach an ACP session (VERIFIED)"
+
+        captured.clear()
+        await _drive(monkeypatch, _new_with() + [_END_TURN], captured_cmds=captured)
+        assert "--additional-mcp-config" not in captured[0]
+
+
+class TestHubServerFailureBeforeArmingStillReported:
+    async def test_a_failed_load_report_during_session_new_reaches_the_timeline(self, monkeypatch):
+        """The load report can arrive before the prompt (unarmed). The mapper only maps armed
+        events, so the report is handed to it when the prompt is written: a run told `mcp` whose
+        Hub server failed still hears `copilot_mcp_server_failed` (D10)."""
+        failed = _raw_event(
+            "session.mcp_servers_loaded",
+            {"servers": [{"name": "agentweave", "status": "failed"}]},
+        )
+        _fake, events, _outcome = await _drive(monkeypatch, _new_with(failed) + [_END_TURN])
+        errors = [e for e in events if e.kind == "error"]
+        assert [e.payload["code"] for e in errors] == ["copilot_mcp_server_failed"]

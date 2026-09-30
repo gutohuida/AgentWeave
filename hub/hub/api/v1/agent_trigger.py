@@ -68,6 +68,7 @@ from ...conversations import (
     name_conversation,
     new_conversation,
 )
+from ...copilot_acp import run_turn as copilot_run_turn
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Agent, Conversation, PermissionRequest, Project, Run, Runner, Task
 from ...inbound_queue import (
@@ -1219,27 +1220,48 @@ async def _trigger_agent_directly(
     use_codex_app_server = uses_app_server(runner, runner_flags)
     runner_flags = [f for f in runner_flags if f not in TRANSPORT_SENTINELS]
 
-    try:
-        cmd = build_command(
-            runner=runner,
-            cli=probe["cli"],
-            prompt=prompt,
+    copilot_turn: Optional[_CopilotTurn] = None
+    if runner == "copilot":
+        # An RPC transport builds its own argv inside its `run_turn` (`a-copilot-agent-runs-over-
+        # acp` D1/D3): nothing here renders Copilot argv, so `build_command` is not asked -- it
+        # would answer 501. What the turn needs instead is prepared, and every refusal is raised,
+        # before the `Run` row exists.
+        copilot_turn = await _prepare_copilot_turn(
+            project_id=project_id,
+            agent=agent,
+            config=config,
             model=model,
-            context_file=context_file,
-            session_id=resume_session_id,
-            yolo=yolo,
-            mcp_command=mcp_command,
-            extra_flags=runner_flags,
-            # F4 (`openspec/changes/2026-08-17-authoring-rigor-and-scope`, design D6): a turn
-            # triggered with a specification document open loses file-write tools, mechanically,
-            # regardless of phase, rigor or permission posture — a role boundary, not a rigor gate.
-            restrict_spec_writes=bool(spec_document),
             control_overrides=control_overrides,
+            rendered_context=rendered_context,
+            described_path=described_path,
+            mcp_command=mcp_command,
+            runner_flags=runner_flags,
+            restrict_spec_writes=bool(spec_document),
         )
-    except UnsupportedRunnerError as exc:
-        raise TriggerAgentError(
-            status.HTTP_501_NOT_IMPLEMENTED, str(exc), request_level=True
-        ) from exc
+        cmd: List[str] = []
+    else:
+        try:
+            cmd = build_command(
+                runner=runner,
+                cli=probe["cli"],
+                prompt=prompt,
+                model=model,
+                context_file=context_file,
+                session_id=resume_session_id,
+                yolo=yolo,
+                mcp_command=mcp_command,
+                extra_flags=runner_flags,
+                # F4 (`openspec/changes/2026-08-17-authoring-rigor-and-scope`, design D6): a turn
+                # triggered with a specification document open loses file-write tools,
+                # mechanically, regardless of phase, rigor or permission posture -- a role
+                # boundary, not a rigor gate.
+                restrict_spec_writes=bool(spec_document),
+                control_overrides=control_overrides,
+            )
+        except UnsupportedRunnerError as exc:
+            raise TriggerAgentError(
+                status.HTTP_501_NOT_IMPLEMENTED, str(exc), request_level=True
+            ) from exc
 
     run_id = f"run-{short_id()}"
     run_token = mint_run_token()
@@ -1311,6 +1333,10 @@ async def _trigger_agent_directly(
     env.pop("DATABASE_URL", None)
     env.pop("AW_BOOTSTRAP_API_KEY", None)
     env.pop("AW_TICKET_SECRET", None)
+    if copilot_turn is not None:
+        # Set last, after `env_vars` were merged, so no entry can move the run out of its
+        # Hub-owned home (D4); the MCP child inherits it with the rest (D3).
+        env["COPILOT_HOME"] = str(copilot_turn.home)
 
     run = Run(
         id=run_id,
@@ -1408,6 +1434,7 @@ async def _trigger_agent_directly(
             # the tests had touched.
             worktree=None if review_context is not None else isolated_workspace,
             use_codex_app_server=use_codex_app_server,
+            copilot_turn=copilot_turn,
             cli=probe["cli"],
             prompt=prompt,
             yolo=yolo,
@@ -2302,6 +2329,7 @@ async def _execute_run(
     mcp_command: Optional[List[str]] = None,
     permission_mode: Optional[str] = None,
     config_overrides: Optional[Dict[str, str]] = None,
+    copilot_turn: Optional["_CopilotTurn"] = None,
 ) -> None:
     """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE.
 
@@ -2327,6 +2355,26 @@ async def _execute_run(
     for the whole run. `None` is a project whose root could not be resolved, and classification
     then stops at *inside or outside this run's workspace*.
     """
+    if copilot_turn is not None:
+        await _execute_copilot_run(
+            project_id=project_id,
+            agent=agent,
+            run_id=run_id,
+            conversation_id=conversation_id,
+            prompt=prompt or "",
+            model=model,
+            work_dir=work_dir,
+            known_session_id=known_session_id,
+            repo_root=repo_root,
+            yolo=yolo,
+            mcp_command=mcp_command,
+            env=env,
+            worktree=worktree,
+            permission_mode=permission_mode,
+            turn=copilot_turn,
+        )
+        return
+
     if use_codex_app_server:
         await _execute_codex_appserver_run(
             project_id=project_id,
@@ -2991,8 +3039,14 @@ async def _await_operator_permission(
     method: str,
     subject: Dict[str, object],
     timeout_seconds: Optional[int] = None,
+    label: Optional[str] = None,
+    tool_input: Optional[Dict[str, object]] = None,
 ) -> bool:
-    """Open a permission request for a Codex approval and wait for the operator.
+    """Open a permission request for an RPC runner's approval and wait for the operator.
+
+    `label` and `tool_input` are what the card shows. Codex passes neither, and its label is
+    looked up from its protocol method; Copilot passes both, because its requests share one method
+    and differ by kind (`a-copilot-agent-runs-over-acp` D8, *Operator posture*).
 
     The Codex counterpart of `mcp_server._ask_operator`, and it holds the same line: a turn is
     suspended, not failed, while this waits, so the wait is bounded and running out denies.
@@ -3007,9 +3061,9 @@ async def _await_operator_permission(
                 agent=agent,
                 run_id=run_id,
                 conversation_id=await conversation_id_for_run(db, run_id),
-                tool_name=_CODEX_APPROVAL_LABELS.get(method, method),
+                tool_name=label or _CODEX_APPROVAL_LABELS.get(method, method),
                 tool_use_id="",
-                tool_input=dict(subject),
+                tool_input=dict(tool_input if tool_input is not None else subject),
                 status="pending",
             )
         )
@@ -3020,7 +3074,7 @@ async def _await_operator_permission(
         {
             "id": request_id,
             "agent": agent,
-            "tool_name": _CODEX_APPROVAL_LABELS.get(method, method),
+            "tool_name": label or _CODEX_APPROVAL_LABELS.get(method, method),
             "run_id": run_id,
         },
     )
@@ -3132,6 +3186,190 @@ async def _execute_codex_appserver_run(
         env=env,
         worktree=worktree,
         repo_root=repo_root,
+    )
+
+
+@dataclass
+class _CopilotTurn:
+    """What `trigger_agent_directly` prepared for one Copilot turn (`a-copilot-agent-runs-over-acp`
+    D4, D5, D18): the fields slice 1's `RpcTurnRequest` would carry, plus the home."""
+
+    home: Path
+    per_turn_context: str
+    tool_surface_context: str
+    stable_context: str
+    control_overrides: Dict[str, str]
+    told_access_path: str
+    restrict_spec_writes: bool
+    extra_flags: List[str]
+    cli: Optional[str]
+    pre_turn_events: List[Any]
+
+
+async def _prepare_copilot_turn(
+    *,
+    project_id: str,
+    agent: str,
+    config: Dict[str, Any],
+    model: Optional[str],
+    control_overrides: Dict[str, str],
+    rendered_context: Dict[str, Any],
+    described_path: str,
+    mcp_command: Optional[List[str]],
+    runner_flags: List[str],
+    restrict_spec_writes: bool,
+) -> _CopilotTurn:
+    """Resolve the executable and make the agent's home current, before any `Run` exists.
+
+    Both refusals are `agent_wide` (D4, R3): an unwritable home or a missing executable stops every
+    turn of this agent and nothing else, so the input is held and no delivery attempt counts
+    against it. An unflagged refusal would withdraw the operator's message at the third attempt
+    for a condition they repair outside the Hub. The home is rewritten here with this turn's
+    model and effort (D4 (c)), so the agent file's frontmatter always equals the spawn flags.
+    """
+    from ...copilot_home import ensure_copilot_home
+    from ...copilot_probe import resolve_copilot_executable
+    from ...launchability import copilot_env_removal_sentence, copilot_guard_env
+    from ...runner_events import diagnostic_event
+
+    cli = config.get("cli")
+    try:
+        resolve_copilot_executable(str(cli) if cli else None)
+    except FileNotFoundError as exc:
+        raise TriggerAgentError(status.HTTP_409_CONFLICT, str(exc), agent_wide=True) from exc
+    try:
+        home = await asyncio.to_thread(
+            ensure_copilot_home,
+            project_id,
+            agent,
+            stable_context=rendered_context.get("stable") or "",
+            model=model,
+            effort=control_overrides.get("effort"),
+            mcp_command=mcp_command,
+        )
+    except (OSError, ValueError) as exc:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            f"Could not write {agent}'s Copilot home: {exc}",
+            agent_wide=True,
+        ) from exc
+
+    events: List[Any] = []
+    _filtered, removed = copilot_guard_env({}, config.get("env_vars") or {})
+    for name in removed:
+        events.append(
+            diagnostic_event(
+                stream="copilot",
+                severity="warning",
+                summary=copilot_env_removal_sentence(name),
+                code="copilot.permission_override_removed",
+                facts={"name": name},
+            )
+        )
+    if home.removed:
+        events.append(
+            diagnostic_event(
+                stream="copilot",
+                severity="warning",
+                summary=(
+                    "Removed from this agent's Copilot home, because AgentWeave did not write "
+                    f"them and they could decide its permissions: {', '.join(home.removed)}."
+                ),
+                code="copilot.home_repaired",
+                facts={"removed": list(home.removed)},
+            )
+        )
+    return _CopilotTurn(
+        home=home.path,
+        per_turn_context=rendered_context.get("per_turn") or "",
+        tool_surface_context=rendered_context.get("tool_surface") or "",
+        stable_context=rendered_context.get("stable") or "",
+        control_overrides=dict(control_overrides),
+        told_access_path=described_path,
+        restrict_spec_writes=restrict_spec_writes,
+        extra_flags=list(runner_flags),
+        cli=str(cli) if cli else None,
+        pre_turn_events=events,
+    )
+
+
+async def _execute_copilot_run(
+    *,
+    project_id: str,
+    agent: str,
+    run_id: str,
+    conversation_id: str,
+    prompt: str,
+    model: Optional[str],
+    work_dir: Optional[str],
+    known_session_id: Optional[str],
+    yolo: bool,
+    mcp_command: Optional[List[str]],
+    env: Optional[Dict[str, str]],
+    worktree: Optional[Path],
+    turn: _CopilotTurn,
+    repo_root: Optional[str] = None,
+    permission_mode: Optional[str] = None,
+) -> None:
+    """A Copilot turn over ACP (`copilot_acp.run_turn`), through the executor it shares with
+    Codex. Only how the turn is started lives here (D18)."""
+
+    async def _start_turn(cb: RpcCallbacks):
+        return await copilot_run_turn(
+            cwd=work_dir,
+            env=env,
+            prompt=prompt,
+            model=model,
+            resume_session_id=known_session_id,
+            agent=agent,
+            per_turn_context=turn.per_turn_context,
+            tool_surface_context=turn.tool_surface_context,
+            stable_context=turn.stable_context,
+            control_overrides=turn.control_overrides,
+            told_access_path=turn.told_access_path,
+            permission_mode=permission_mode,
+            workspace=work_dir,
+            restrict_spec_writes=turn.restrict_spec_writes,
+            extra_flags=turn.extra_flags,
+            cli=turn.cli,
+            mcp_command=mcp_command,
+            yolo=yolo,
+            on_event=cb.on_event,
+            on_usage=cb.on_usage,
+            on_accounting=cb.on_accounting,
+            on_session=cb.on_session,
+            on_session_missing=cb.on_session_missing,
+            should_interrupt=cb.should_interrupt,
+            request_approval=lambda method, subject: _await_operator_permission(
+                project_id=project_id,
+                agent=agent,
+                run_id=run_id,
+                method=method,
+                subject=subject,
+                timeout_seconds=_codex_decision_timeout(env),
+                label=str(subject.get("tool_name") or "a Copilot request"),
+                tool_input=subject.get("tool_input") or {},
+            ),
+            on_refusal=cb.on_refusal,
+            # No `on_decision`: `a-run-records-that-its-calls-were-allowed` has not landed, so
+            # this path records refusals only, as Codex does today (task 7.3).
+        )
+
+    await _execute_rpc_run(
+        runner="copilot",
+        start_turn=_start_turn,
+        refusal_label=lambda method, subject: str(subject.get("tool_name") or "a Copilot request"),
+        project_id=project_id,
+        agent=agent,
+        run_id=run_id,
+        conversation_id=conversation_id,
+        model=model,
+        work_dir=work_dir,
+        known_session_id=known_session_id,
+        env=env,
+        worktree=worktree,
+        repo_root=repo_root,
+        pre_turn_events=turn.pre_turn_events,
     )
 
 
@@ -3304,8 +3542,18 @@ async def _execute_rpc_run(
             # `paths` before `grantRoot`: a refused file change now names the files it wanted
             # (F107), and the root it asked to be granted is the coarser fallback for the case
             # where the turn never saw the item.
+            # Copilot's subject carries the request's own input (`copilot_acp.permission_subject`).
+            copilot_input = subject.get("tool_input")
+            copilot_input = copilot_input if isinstance(copilot_input, dict) else {}
             detail = (
-                subject.get("command") or subject.get("paths") or subject.get("grantRoot") or ""
+                subject.get("command")
+                or subject.get("paths")
+                or subject.get("grantRoot")
+                or copilot_input.get("command")
+                or copilot_input.get("fileName")
+                or copilot_input.get("path")
+                or copilot_input.get("url")
+                or ""
             )
             async with async_session_factory() as db:
                 await persist_event(

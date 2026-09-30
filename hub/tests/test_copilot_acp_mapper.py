@@ -130,16 +130,6 @@ invent a part 7/N.
 import json
 from pathlib import Path
 
-import pytest
-
-# Written ahead of its module (a-copilot-agent-runs-over-acp, task group 1). Until task 6.3
-# lands `hub.copilot_acp`, the whole file reports as skipped rather than failing collection; the skip
-# disappears by itself when the module exists.
-pytest.importorskip(
-    "hub.copilot_acp",
-    reason="hub.copilot_acp is not implemented yet (a-copilot-agent-runs-over-acp task 6.3)",
-)
-
 from hub.copilot_acp import CopilotEventMapper
 
 EVIDENCE_LOG = (
@@ -937,3 +927,78 @@ class TestUserMessageChunkDropped:
         text_events = [e for e in events if e.kind == "text"]
         assert len(text_events) == 1
         assert text_events[0].content == "Hello"  # the dropped chunk's text never joined the block
+
+
+class TestCapturedModelResolution:
+    """Task 6.1, from the 1.1 capture (`turn_write_shell_mcp.jsonl` lines 10-14): Copilot's first
+    model event is `session.model_change` with `newModel: "auto"` at startup -- the *request*, not
+    a resolution -- and only then `session.auto_mode_resolved {chosenModel}`. Taking "the first of
+    the three events" literally would resolve the model to `auto`; the mapper takes the first one
+    naming a concrete model."""
+
+    def test_the_captured_sequence_resolves_to_the_chosen_model(self):
+        mapper = CopilotEventMapper(requested_model="claude-haiku-4.5")
+        events = []
+        for tag, payload in _mcp_fixture_events():
+            if tag == "raw" and payload["type"] in (
+                "session.model_change",
+                "session.auto_mode_resolved",
+                "session.tools_updated",
+            ):
+                events += mapper.on_raw_event(payload["type"], payload["data"], payload)
+
+        assert mapper.resolved_model == "gpt-6-luna"
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        assert len(diagnostics) == 1
+        assert "gpt-6-luna" in diagnostics[0].payload["summary"]
+        assert "claude-haiku-4.5" in diagnostics[0].payload["summary"]
+
+
+class TestCapturedTurnReplay:
+    """The whole 1.1 capture, in recorded order, through one mapper: every one of its nine tool
+    calls opens exactly one `tool_use` and closes with one `tool_result`, and only the one MCP call
+    is labelled `mcp`."""
+
+    def test_every_call_is_used_then_resulted_once_and_only_the_mcp_call_is_mcp(self):
+        mapper = CopilotEventMapper(told_access_path="mcp")
+        events = []
+        for tag, payload in _mcp_fixture_events():
+            if tag == "raw":
+                events += mapper.on_raw_event(payload["type"], payload["data"], payload)
+            else:
+                events += mapper.on_session_update(payload)
+        events += mapper.finish()
+
+        uses = [e for e in events if e.kind == "tool_use"]
+        results = [e for e in events if e.kind == "tool_result"]
+        assert len(uses) == 9 and len(results) == 9
+        for use in uses:
+            (result,) = [r for r in results if r.call_id == use.call_id]
+            assert events.index(use) < events.index(result)
+        assert [u.payload["tool"] for u in uses if u.payload["category"] == "mcp"] == [
+            "agentweave-list_tasks"
+        ]
+        assert {u.payload["tool"] for u in uses if u.payload["category"] != "mcp"} == {
+            "shell",
+            "fetch",
+        }
+        assert any(e.kind == "text" for e in events)
+        assert not any(e.kind == "error" for e in events), "the capture reported no failure"
+
+
+class TestUnmatchedRootErrorIsReportedAtFinish:
+    """A root `session.error` that Copilot never echoes as `Error:` text still reaches the
+    timeline when the prompt completes: it fails the turn (D10, R3), so it must not be silent."""
+
+    def test_finish_reports_an_unechoed_root_error(self):
+        mapper = CopilotEventMapper()
+        data = {"errorType": "model_error", "message": "upstream rate limited"}
+        params = {"sessionId": "s", "type": "session.error", "data": data}
+        assert mapper.on_raw_event("session.error", data, params) == []
+        assert mapper.root_error == "upstream rate limited"
+
+        events = mapper.finish()
+        errors = [e for e in events if e.kind == "error"]
+        assert len(errors) == 1
+        assert errors[0].payload["code"] == "copilot_session_error"
+        assert mapper.finish() == [], "reported once"

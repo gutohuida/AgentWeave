@@ -96,6 +96,15 @@ One open question this slice surfaced rather than guessed an answer to: design.m
 `requestSandboxBypass: true` row (finding 2) only gives `workspace`/`acceptEdits` cells
 (both REJECT); nothing in the doc says what `manual` or full access do with it, so this file
 does not assert either. Recorded in the night log rather than invented here.
+
+Task 5.2 (the implementation) superseded three things above. (1) Finding 6's load-time row is no
+longer blocked: `decide_permission` takes a `servers=` keyword (the per-turn load report,
+design.md:725-727), `_decide` below passes the report Copilot 1.0.88 really sends, and
+`TestHubServerLoadCondition` covers it. (2) An unidentified MCP request under *genuine* Full access
+is ALLOW, not REJECT: design.md:704-707 refuses it "under every posture but `manual` and full
+access", and tasks.md 1.6 says the same; line 583's "full-access fallback" is the run whose
+allow-all was withheld, which is judged as `workspace`. (3) The labels, the never-`allow_always`
+answer and `posture_for` are now tested at the end of this file.
 """
 
 from __future__ import annotations
@@ -103,14 +112,6 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 import pytest
-
-# Written ahead of its module (a-copilot-agent-runs-over-acp, task group 1). Until task 5.2 and 6.3
-# lands `hub.copilot_acp`, the whole file reports as skipped rather than failing collection; the skip
-# disappears by itself when the module exists.
-pytest.importorskip(
-    "hub.copilot_acp",
-    reason="hub.copilot_acp is not implemented yet (a-copilot-agent-runs-over-acp task 5.2 and 6.3)",
-)
 
 from hub.copilot_acp import CallFacts, decide_permission
 from hub.model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
@@ -150,7 +151,14 @@ def _params(
     }
 
 
-def _decide(params, posture, workspace, calls=None, spec_turn=False):
+#: The turn's `session.mcp_servers_loaded` report as Copilot 1.0.88 actually sends it for the Hub's
+#: server (task 1.1's capture, `turn_write_shell_mcp.jsonl` line 14: no `source`, no `transport`).
+#: design.md:725-730 makes this load report part of the Hub-own test, so every case that expects
+#: the Hub's own allow passes it; `TestHubServerLoadCondition` below covers the report failing.
+HUB_SERVERS = {"agentweave": [{"name": "agentweave", "status": "connected"}]}
+
+
+def _decide(params, posture, workspace, calls=None, spec_turn=False, servers=HUB_SERVERS):
     return decide_permission(
         params,
         posture=posture,
@@ -158,6 +166,7 @@ def _decide(params, posture, workspace, calls=None, spec_turn=False):
         hub_url=HUB_URL,
         calls=calls or {},
         spec_turn=spec_turn,
+        servers=servers,
     )
 
 
@@ -402,13 +411,24 @@ class TestMcp:
 
     def test_mcp_request_with_no_identified_server_is_rejected_under_every_posture(self, tmp_path):
         """design.md:583-585, 704-709 — answered at step 1, before any server-specific rule
-        (slice 5's included): REJECT under `workspace`, `acceptEdits` and the full-access
-        fallback; a card under `manual`. Never treated as a foreign server of unknown name."""
+        (slice 5's included): REJECT under `workspace` and `acceptEdits` (and under the
+        full-access *fallback*, where a run whose allow-all was withheld is judged as
+        `workspace`); a card under `manual`. Never treated as a foreign server of unknown name.
+
+        Genuine Full access is the one exception design.md:704-707 states in so many words
+        ("REJECTed ... under every posture but `manual` and full access"): any request that still
+        reaches the client under Full access is answered ALLOW (design.md:807). This file's
+        earlier reading of line 583's "full-access fallback" as genuine Full access conflicted
+        with that sentence and with tasks.md 1.6's own bullet ("REJECT under every posture but
+        full access"); the design wins. A full-access *specification* turn is judged as
+        `workspace`, so it still REJECTs (`TestSpecTurn`)."""
         params = _params(tool_call_id="call_m4", kind="other", raw_input={})
         calls: Dict[str, CallFacts] = {}
-        for posture in (WORKSPACE_PERMISSION_MODE, ACCEPT_EDITS, FULL_ACCESS_PERMISSION_MODE):
+        for posture in (WORKSPACE_PERMISSION_MODE, ACCEPT_EDITS):
             result = _decide(params, posture, tmp_path, calls)
             assert result["outcome"] == "REJECT", posture
+        result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path, calls)
+        assert result["outcome"] == "ALLOW"
         result = _decide(params, MANUAL, tmp_path, calls)
         assert result["outcome"] == "ASK_OPERATOR"
 
@@ -520,12 +540,15 @@ class TestSpecTurn:
         result = _decide(params, FULL_ACCESS_PERMISSION_MODE, tmp_path)
         assert result["outcome"] == "ALLOW"
 
-    def test_foreign_mcp_is_allowed_but_unidentified_mcp_stays_rejected_under_full_access_off_a_spec_turn(
+    def test_foreign_and_unidentified_mcp_are_allowed_under_full_access_off_a_spec_turn(
         self, tmp_path
     ):
-        """The unidentified-MCP request is `decide_permission`'s standing full-access REJECT
-        fallback (design.md:583-585) whether or not it is a spec turn; the foreign server is
-        not that fallback, so off a spec turn it gets full access's ordinary defensive ALLOW."""
+        """Off a spec turn, genuine Full access answers ALLOW to any request that still reaches
+        the client (design.md:807), the unidentified-MCP one included: design.md:704-707 refuses
+        it "under every posture but `manual` and full access". (This test originally asserted
+        REJECT for the unidentified request, reading line 583's "full-access fallback" -- a run
+        whose allow-all was withheld, judged as `workspace` -- as genuine Full access.) On a spec
+        turn both are judged as `workspace`, see the tests above."""
         foreign_params = _params(
             tool_call_id="call_m2",
             kind="other",
@@ -541,7 +564,7 @@ class TestSpecTurn:
 
         unidentified_params = _params(tool_call_id="call_m4", kind="other", raw_input={})
         result = _decide(unidentified_params, FULL_ACCESS_PERMISSION_MODE, tmp_path)
-        assert result["outcome"] == "REJECT"
+        assert result["outcome"] == "ALLOW"
 
 
 class TestReason:
@@ -588,7 +611,8 @@ class TestMcpServerIdentification:
             tool_call_id="call_m5", kind="other", raw_input={}, title="agentweave-send_message"
         )
         calls: Dict[str, CallFacts] = {}
-        for posture in (WORKSPACE_PERMISSION_MODE, ACCEPT_EDITS, FULL_ACCESS_PERMISSION_MODE):
+        # "REJECT under every posture but full access" (tasks.md 1.6; design.md:704-707).
+        for posture in (WORKSPACE_PERMISSION_MODE, ACCEPT_EDITS):
             result = _decide(params, posture, tmp_path, calls)
             assert result["outcome"] == "REJECT", posture
         result = _decide(params, MANUAL, tmp_path, calls)
@@ -602,7 +626,7 @@ class TestMcpServerIdentification:
         inherited from the completed call."""
         params = _params(tool_call_id="call_0", kind="other", raw_input={})
         calls: Dict[str, CallFacts] = {}
-        for posture in (WORKSPACE_PERMISSION_MODE, ACCEPT_EDITS, FULL_ACCESS_PERMISSION_MODE):
+        for posture in (WORKSPACE_PERMISSION_MODE, ACCEPT_EDITS):
             result = _decide(params, posture, tmp_path, calls)
             assert result["outcome"] == "REJECT", posture
         result = _decide(params, MANUAL, tmp_path, calls)
@@ -785,3 +809,293 @@ class TestExecuteDialectSelection:
         calls = {"call_s2": CallFacts(tool_name="local_shell", mcp_server=None, mcp_tool=None)}
         result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path, calls)
         assert result["outcome"] == "REJECT"
+
+
+class TestHubServerLoadCondition:
+    """(review, finding 6; design.md:716-736; tasks.md 1.6's load-time bullet.) A server name is
+    a config key, not an identity, so `agentweave`/`send_message` is the Hub's own only when the
+    turn's `session.mcp_servers_loaded` named exactly one `agentweave`, from a source that is
+    neither `workspace` nor `plugin`, over `stdio`. Otherwise it is judged as foreign, which under
+    `acceptEdits` refuses.
+
+    Part 6/N recorded this row as blocked on a parameter shape the design never names. Task 5.2
+    resolved it with a `servers` keyword on `decide_permission` (the per-turn map design.md:725-727
+    describes, name -> the load report's entries). Task 1.1's capture reports the Hub's server with
+    **no** `source` and **no** `transport` (design.md:2514-2520), so an absent value is accepted and
+    only a present, wrong one refuses -- otherwise every real Hub call would lose its allow.
+    """
+
+    CALLS = {"call_h1": CallFacts(tool_name=None, mcp_server="agentweave", mcp_tool="send_message")}
+
+    def _hub_call(self, tmp_path, servers, calls=None):
+        params = _params(tool_call_id="call_h1", kind="other", raw_input={})
+        return _decide(params, ACCEPT_EDITS, tmp_path, calls or self.CALLS, servers=servers)
+
+    @pytest.mark.parametrize("source", ["workspace", "plugin"])
+    def test_an_agentweave_from_a_workspace_or_plugin_source_is_not_the_hubs_own(
+        self, tmp_path, source
+    ):
+        servers = {"agentweave": [{"name": "agentweave", "status": "connected", "source": source}]}
+        result = self._hub_call(tmp_path, servers)
+        assert result["outcome"] == "REJECT"
+        assert source in result["hub_server_unverified"]
+
+    def test_no_load_report_at_all_is_not_the_hubs_own(self, tmp_path):
+        result = self._hub_call(tmp_path, servers=None)
+        assert result["outcome"] == "REJECT"
+        assert result["hub_server_unverified"]
+
+    def test_two_servers_claiming_agentweave_is_not_the_hubs_own(self, tmp_path):
+        entry = {"name": "agentweave", "status": "connected"}
+        result = self._hub_call(tmp_path, {"agentweave": [entry, dict(entry)]})
+        assert result["outcome"] == "REJECT"
+
+    def test_a_non_stdio_transport_is_not_the_hubs_own(self, tmp_path):
+        servers = {
+            "agentweave": [{"name": "agentweave", "status": "connected", "transport": "http"}]
+        }
+        assert self._hub_call(tmp_path, servers)["outcome"] == "REJECT"
+
+    def test_the_calls_own_config_source_is_checked_too(self, tmp_path):
+        """`tool.execution_start` carries `mcpConfigSource`/`mcpTransport` (captured: `"user"`,
+        `"stdio"` for the Hub's server); a present, wrong one refuses as the load report's would."""
+        calls = {
+            "call_h1": CallFacts(
+                tool_name="agentweave-send_message",
+                mcp_server="agentweave",
+                mcp_tool="send_message",
+                mcp_source="workspace",
+                mcp_transport="stdio",
+            )
+        }
+        assert self._hub_call(tmp_path, HUB_SERVERS, calls)["outcome"] == "REJECT"
+
+    @pytest.mark.parametrize(
+        "entry",
+        [
+            {"name": "agentweave", "status": "connected"},
+            {"name": "agentweave", "status": "connected", "source": "user", "transport": "stdio"},
+        ],
+    )
+    def test_the_hubs_source_over_stdio_is_the_hubs_own(self, tmp_path, entry):
+        result = self._hub_call(tmp_path, {"agentweave": [entry]})
+        assert result["outcome"] == "ALLOW"
+        assert "hub_server_unverified" not in result
+
+
+class TestHubToolSetAgreesWithTheServer:
+    def test_hub_mcp_tools_is_exactly_what_mcp_server_serves(self):
+        """`HUB_MCP_TOOLS` is restated in `copilot_acp` (importing `mcp_server` builds its
+        FastMCP instance); a tool added to the server must be added there too, or its calls lose
+        the Hub-own allow (design.md:723-724)."""
+        import asyncio
+
+        from hub.copilot_acp import HUB_MCP_TOOLS
+        from hub.mcp_server import mcp
+
+        served = {tool.name for tool in asyncio.run(mcp.list_tools())}
+        assert served == HUB_MCP_TOOLS
+
+
+class TestStepOneAnswersBeforeStepThree:
+    """(review, conflict 2; design.md:581-585.) An MCP request whose server is not identified is
+    answered at step 1, so no server-specific rule at step 3 (slice 5's `github-mcp-server` rule
+    included) ever sees it. Stubbed step 3 answers ASK_OPERATOR for everything it is shown."""
+
+    def test_an_unidentified_mcp_request_is_still_rejected_with_step_three_asking(
+        self, tmp_path, monkeypatch
+    ):
+        import hub.copilot_acp as copilot_acp
+
+        monkeypatch.setattr(
+            copilot_acp,
+            "_standing_rules",
+            lambda *a, **k: {"outcome": "ASK_OPERATOR", "reason": "stub"},
+        )
+        unidentified = _params(tool_call_id="call_m9", kind="other", raw_input={})
+        assert _decide(unidentified, WORKSPACE_PERMISSION_MODE, tmp_path)["outcome"] == "REJECT"
+
+        # The stub is live: an identified request does reach it.
+        identified = _params(kind="execute", raw_input={"command": "Get-ChildItem"})
+        assert _decide(identified, WORKSPACE_PERMISSION_MODE, tmp_path)["outcome"] == "ASK_OPERATOR"
+
+
+class TestTotality:
+    def test_an_exception_while_deciding_is_a_reject(self, tmp_path, monkeypatch):
+        """D8: "a client error while deciding answers `reject_once`, never silence"."""
+        import hub.copilot_acp as copilot_acp
+
+        def boom(*a, **k):
+            raise RuntimeError("judge exploded")
+
+        monkeypatch.setattr(copilot_acp, "_decide_permission", boom)
+        params = _params(kind="execute", raw_input={"command": "Get-ChildItem"})
+        for posture in ALL_POSTURES:
+            assert _decide(params, posture, tmp_path)["outcome"] == "REJECT", posture
+
+    def test_malformed_params_are_rejected_not_raised(self, tmp_path):
+        for params in ({}, {"toolCall": "nonsense"}, {"toolCall": {"kind": 7}}):
+            result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path)
+            assert result["outcome"] == "REJECT", params
+
+    @pytest.mark.parametrize("posture", [MANUAL, FULL_ACCESS_PERMISSION_MODE])
+    def test_a_sandbox_bypass_is_refused_under_every_posture(self, tmp_path, posture):
+        """design.md:641: "not something this Hub grants" -- the row gives only two cells; this
+        module reads the sentence as holding under `manual` and Full access too."""
+        params = _params(
+            tool_call_id="call_f1",
+            kind="fetch",
+            raw_input={"url": "https://example.com", "requestSandboxBypass": True},
+        )
+        calls = {"call_f1": CallFacts(tool_name="powershell", mcp_server=None, mcp_tool=None)}
+        assert _decide(params, posture, tmp_path, calls)["outcome"] == "REJECT"
+
+
+class TestPostureFor:
+    """design.md:654-660, the table `posture_for` implements (R2: unset is `workspace`)."""
+
+    @pytest.mark.parametrize(
+        "permission_mode,yolo,expected",
+        [
+            (None, False, WORKSPACE_PERMISSION_MODE),
+            (WORKSPACE_PERMISSION_MODE, False, WORKSPACE_PERMISSION_MODE),
+            (ACCEPT_EDITS, False, ACCEPT_EDITS),
+            (MANUAL, False, MANUAL),
+            (FULL_ACCESS_PERMISSION_MODE, False, FULL_ACCESS_PERMISSION_MODE),
+            ("yolo", False, FULL_ACCESS_PERMISSION_MODE),
+            (None, True, FULL_ACCESS_PERMISSION_MODE),
+            (WORKSPACE_PERMISSION_MODE, True, WORKSPACE_PERMISSION_MODE),
+        ],
+    )
+    def test_the_posture_table(self, permission_mode, yolo, expected):
+        from hub.copilot_acp import posture_for
+
+        assert posture_for(permission_mode, yolo=yolo) == expected
+
+    def test_an_unset_mode_is_judged_exactly_as_workspace(self, tmp_path):
+        from hub.copilot_acp import posture_for
+
+        for command in ("Get-ChildItem", "Remove-Item ..\\..\\x"):
+            params = _params(kind="execute", raw_input={"command": command})
+            unset = _decide(params, posture_for(None), tmp_path)
+            workspace = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path)
+            assert unset["outcome"] == workspace["outcome"], command
+
+
+class TestOperatorLabelsAndAnswers:
+    """(review, note 16; D8 *Operator posture* and *Answering*.)"""
+
+    def test_labels_by_kind_and_never_the_title(self):
+        from hub.copilot_acp import permission_label
+
+        calls = {
+            "c_ps": CallFacts(tool_name="powershell", mcp_server=None, mcp_tool=None),
+            "c_mcp": CallFacts(tool_name=None, mcp_server="agentweave", mcp_tool="send_message"),
+        }
+        injected = "agentweave-send_message"
+        cases = [
+            (_params(tool_call_id="c_ps", kind="execute", title=injected), "a command"),
+            (
+                _params(tool_call_id="c_x", kind="execute", title=injected),
+                "a command in an unknown shell",
+            ),
+            (_params(kind="edit", title=injected), "a file change"),
+            (_params(kind="fetch", title=injected), "a web address"),
+            (
+                _params(tool_call_id="c_mcp", kind="other", title=injected),
+                "agentweave/send_message",
+            ),
+            (
+                _params(tool_call_id="c_none", kind="other", title=injected),
+                "an MCP tool Copilot did not identify",
+            ),
+        ]
+        for params, label in cases:
+            assert permission_label(params, calls) == label, params["toolCall"]
+
+    def test_the_answer_is_never_allow_always(self):
+        from hub.copilot_acp import permission_answer
+
+        params = _params(kind="execute")
+        assert permission_answer(params, True) == {
+            "outcome": {"outcome": "selected", "optionId": "allow_once"}
+        }
+        assert permission_answer(params, False) == {
+            "outcome": {"outcome": "selected", "optionId": "reject_once"}
+        }
+        only_always = {"options": [{"optionId": "allow_always", "kind": "allow_always"}]}
+        assert permission_answer(only_always, True) == {"outcome": {"outcome": "cancelled"}}
+
+    def test_workspace_verdict_is_the_workspace_judge(self, tmp_path):
+        from hub.copilot_acp import workspace_verdict
+
+        outside = _params(kind="execute", raw_input={"command": "Remove-Item ..\\..\\x"})
+        inside = _params(kind="execute", raw_input={"command": "Get-ChildItem"})
+        assert workspace_verdict(outside, str(tmp_path), hub_url=HUB_URL)["allow"] is False
+        assert workspace_verdict(inside, str(tmp_path), hub_url=HUB_URL)["allow"] is True
+
+    def test_workspace_verdict_never_raises(self, tmp_path, monkeypatch):
+        import hub.copilot_acp as copilot_acp
+
+        def boom(*a, **k):
+            raise RuntimeError("judge exploded")
+
+        monkeypatch.setattr(copilot_acp, "decide_permission", boom)
+        params = _params(kind="execute", raw_input={"command": "Get-ChildItem"})
+        assert copilot_acp.workspace_verdict(params, str(tmp_path)) is None
+
+
+class TestTrackingCalls:
+    """design.md:690-714: `calls` is fed from the raw `tool.execution_start` (or, missing that,
+    `permission.requested`), and holds open calls only."""
+
+    def test_start_then_complete_opens_and_closes_the_entry(self):
+        from hub.copilot_acp import track_call
+
+        calls = {}
+        track_call(
+            calls,
+            "tool.execution_start",
+            {
+                "toolCallId": "call_0",
+                "toolName": "agentweave-list_tasks",
+                "mcpServerName": "agentweave",
+                "mcpToolName": "list_tasks",
+                "mcpConfigSource": "user",
+                "mcpTransport": "stdio",
+            },
+        )
+        assert calls["call_0"].mcp_server == "agentweave"
+        assert calls["call_0"].mcp_tool == "list_tasks"
+        track_call(calls, "tool.execution_complete", {"toolCallId": "call_0"})
+        assert calls == {}
+
+    def test_permission_requested_fills_a_missing_mcp_entry_with_the_bare_tool_name(self):
+        """The captured shape (`turn_write_shell_mcp.jsonl` line 286): `permissionRequest.toolName`
+        is `<server>-<tool>`; the bare name is `promptRequest.toolName`."""
+        from hub.copilot_acp import track_call
+
+        calls = {}
+        track_call(
+            calls,
+            "permission.requested",
+            {
+                "permissionRequest": {
+                    "kind": "mcp",
+                    "toolCallId": "call_1",
+                    "serverName": "agentweave",
+                    "toolName": "agentweave-list_tasks",
+                    "toolTitle": "list_tasks",
+                },
+                "promptRequest": {"kind": "mcp", "toolName": "list_tasks"},
+            },
+        )
+        assert calls["call_1"].mcp_server == "agentweave"
+        assert calls["call_1"].mcp_tool == "list_tasks"
+
+    def test_a_blanked_start_event_identifies_nothing(self):
+        from hub.copilot_acp import track_call
+
+        calls = {}
+        track_call(calls, "tool.execution_start", {"omitted": "too-large"})
+        assert calls == {}

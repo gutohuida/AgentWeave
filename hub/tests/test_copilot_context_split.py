@@ -120,9 +120,9 @@ async def test_the_three_parts_hold_every_section_exactly_once(app, auth_headers
     assert len(together) == len(set(together)), together
     # Nothing is dropped or duplicated between sections either: the parts are the context's own
     # lines, redistributed.
-    assert sorted(
-        line for part in parts for line in part.splitlines() if line.strip()
-    ) == sorted(line for line in rendered["context"].splitlines() if line.strip())
+    assert sorted(line for part in parts for line in part.splitlines() if line.strip()) == sorted(
+        line for line in rendered["context"].splitlines() if line.strip()
+    )
 
 
 @pytest.mark.asyncio
