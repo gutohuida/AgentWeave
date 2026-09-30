@@ -18784,7 +18784,7 @@ bundle), and worth queueing with it: both are "the endpoint exists, the UI never
 
 ## F242 (B) — one PATCH moves an agent off isolation mid-task, and its next task-bound turn writes uncommitted into the operator's checkout
 
-**Status:** open. Filed by the row-15 drive (`4488e8f`), never fixed and never specced. [classified 2026-09-09, D-2]
+**Status:** fixed 50e6b16 (`isolation-does-not-change-under-held-work`, 2026-09-30: a change to where an agent works is refused while it has a running turn or an unfinished task, on `PATCH /agents/{name}` and `POST /session/sync`). The flip-independent residual (a read-only agent created that way and assigned a writing task) stays open as the design's Open Question 1 (d). Was: open. Filed by the row-15 drive (`4488e8f`), never fixed and never specced. [classified 2026-09-09, D-2]
 
 `hub/ui/src/components/agents/AgentSettingsPage.tsx:290` states, in writing, why the Isolation row
 is display-only:
