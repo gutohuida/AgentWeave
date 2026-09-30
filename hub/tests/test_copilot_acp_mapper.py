@@ -27,15 +27,35 @@ said "ten", off by one) -- including one real MCP call, `agentweave-list_tasks`
 `"create_task"` anywhere in the file), only `list_tasks`, so `TestMcpToolNaming` below uses the
 real captured name throughout rather than inventing the example's.
 
-Left for a later part, and why: the R3 diagnostic-payload bullets (every `diagnostic` payload
-carries `version`/`stream`/`severity`/`summary`, and the `agentweave` server status `failed` ->
-`copilot.mcp_server_unavailable` case) need a *failed* `session.mcp_servers_loaded`/
-`session.mcp_server_status_changed`, and this fixture's own is `status: "connected"` (line 14,
-checked directly) -- no fixture has a failed one, so that bullet needs a synthetic, CODE-shaped
-notification. The edit/diff bullet and the warning/info/`agentweave`-failed-status bullets are in
-neither fixture (checked directly: no `edit`-kind `tool_call` and no `session.warning`/
-`session.info`/`session.error` event in either file) and need synthetic, CODE-shaped notifications
-too. The subagent-error bullet is likewise synthetic-only.
+Part 3/N adds the two R3 diagnostic-payload bullets: every `diagnostic` payload carries
+`version`/`stream`/`severity`/`summary` (design.md:1005-1007), and an `agentweave` server status
+that is not `connected` becomes the `copilot.mcp_server_unavailable` diagnostic -- not the
+`copilot_mcp_server_failed` error -- when the run's told access path is not `mcp` (design.md:
+1066-1079). Neither fixture has a failed `session.mcp_servers_loaded`/`session.mcp_server_status_
+changed` (both real captures' own `agentweave` entries read `status: "connected"`, checked
+directly: the evidence log at the line quoted above, the 1.1 fixture at its own line 14), so both
+events below are synthetic, built from the real captures' own wire shape for
+`session.mcp_servers_loaded` (`data: {"servers": [{"name", "status", ...}]}`, 1.1 fixture line 14)
+with only `status` changed to a non-connected value (`"failed"`, chosen for symmetry with the
+`copilot_mcp_server_failed`/`copilot.mcp_server_unavailable` codes -- not a captured or
+CODE-cited enum member, since design.md gives no status enum beyond the observed `"connected"`/
+`"disabled"`). `session.mcp_server_status_changed` never appears in either capture at all (it is
+only ever a subscribed event name, never a received one -- checked directly), so its per-server
+(singular, not a `servers` list) shape is INFERRED from `session.mcp_servers_loaded`'s and from
+design.md:727's "updated by `session.mcp_server_status_changed`" language describing a single
+map entry, not cited as CODE -- flagged the same way as this file's other inferred surfaces, for
+a future round to confirm.
+
+`CopilotEventMapper`'s constructor is also given a `told_access_path` keyword here for the first
+time, to carry `RpcTurnRequest.told_access_path` (D18) into the mapper -- the design names the
+field but never the mapper's own surface for receiving it (flagged in the next_action that queued
+this part); a keyword on the existing single-mapper-per-turn constructor is the least invented
+reading available, matching how the rest of this file constructs one mapper per turn.
+
+Left for a later part, and why: the edit/diff bullet and the warning/info/`agentweave`-failed-
+status bullets are in neither fixture (checked directly: no `edit`-kind `tool_call` and no
+`session.warning`/`session.info`/`session.error` event in either file) and need synthetic,
+CODE-shaped notifications too. The subagent-error bullet is likewise synthetic-only.
 """
 
 import json
@@ -306,3 +326,91 @@ class TestOrderingRule:
 
         kinds = [e.kind for e in events]
         assert kinds == ["tool_result", "tool_use"]  # inverted from the real, recorded order
+
+
+class TestMcpServerUnavailableDiagnostic:
+    """Task 1.8 part 3/N, first R3 diagnostic bullet: an `agentweave` server status that is not
+    `connected` becomes the `copilot.mcp_server_unavailable` diagnostic, not the
+    `copilot_mcp_server_failed` error, when the run's told access path is not `mcp`
+    (design.md:1066-1079); the reverse (`told_access_path == "mcp"`) gets the error, not the
+    diagnostic, proving the gating is real and not incidental. Both raw events are synthetic --
+    see the module docstring for why and for their inferred shape -- and both feed `servers` the
+    same way `calls` is fed elsewhere in this file: directly through `on_raw_event`, with no
+    separate "arming" step in the mapper itself (that gate lives in `_on_armed_raw_event`,
+    outside this class, design.md:1112-1116).
+    """
+
+    @staticmethod
+    def _failed_mcp_servers_loaded() -> tuple:
+        data = {"servers": [{"name": "agentweave", "status": "failed"}]}
+        params = {
+            "sessionId": "synthetic-session",
+            "type": "session.mcp_servers_loaded",
+            "timestamp": "2026-09-30T00:00:00.000Z",
+            "data": data,
+        }
+        return "session.mcp_servers_loaded", data, params
+
+    @staticmethod
+    def _failed_mcp_server_status_changed() -> tuple:
+        data = {"name": "agentweave", "status": "failed"}
+        params = {
+            "sessionId": "synthetic-session",
+            "type": "session.mcp_server_status_changed",
+            "timestamp": "2026-09-30T00:00:01.000Z",
+            "data": data,
+        }
+        return "session.mcp_server_status_changed", data, params
+
+    def test_non_mcp_told_path_emits_the_diagnostic_not_the_error(self):
+        mapper = CopilotEventMapper(told_access_path="cli")
+        type_, data, params = self._failed_mcp_servers_loaded()
+        events = mapper.on_raw_event(type_, data, params)
+
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        assert len(diagnostics) == 1
+        assert diagnostics[0].payload["code"] == "copilot.mcp_server_unavailable"
+        assert not any(e.kind == "error" for e in events)
+
+    def test_mcp_told_path_emits_the_error_not_the_diagnostic(self):
+        mapper = CopilotEventMapper(told_access_path="mcp")
+        type_, data, params = self._failed_mcp_servers_loaded()
+        events = mapper.on_raw_event(type_, data, params)
+
+        assert not any(e.kind == "diagnostic" for e in events)
+        errors = [e for e in events if e.kind == "error"]
+        assert len(errors) == 1
+        assert errors[0].payload["code"] == "copilot_mcp_server_failed"
+
+    def test_diagnostic_emitted_once_per_turn_across_both_event_types(self):
+        mapper = CopilotEventMapper(told_access_path="cli")
+        loaded_type, loaded_data, loaded_params = self._failed_mcp_servers_loaded()
+        first = mapper.on_raw_event(loaded_type, loaded_data, loaded_params)
+
+        status_type, status_data, status_params = self._failed_mcp_server_status_changed()
+        second = mapper.on_raw_event(status_type, status_data, status_params)
+
+        assert len([e for e in first if e.kind == "diagnostic"]) == 1
+        # once per turn: the second failure report of the same server names no new diagnostic
+        assert len([e for e in second if e.kind == "diagnostic"]) == 0
+
+
+class TestDiagnosticPayloadShape:
+    """Task 1.8 part 3/N, second R3 bullet: every `diagnostic` payload this mapper produces
+    carries `version`, `stream == "copilot"`, `severity` and `summary` (design.md:1005-1007's
+    `diagnostic_event` builder shape). The only diagnostic this file can trigger so far is
+    `copilot.mcp_server_unavailable` (above); the warning/info-text and model-substitution
+    diagnostics are left for a later part, per the module docstring.
+    """
+
+    def test_mcp_server_unavailable_diagnostic_has_the_full_payload_shape(self):
+        mapper = CopilotEventMapper(told_access_path="cli")
+        type_, data, params = TestMcpServerUnavailableDiagnostic._failed_mcp_servers_loaded()
+        events = mapper.on_raw_event(type_, data, params)
+
+        diagnostic = [e for e in events if e.kind == "diagnostic"][0]
+        payload = diagnostic.payload
+        assert payload["version"] == 1
+        assert payload["stream"] == "copilot"
+        assert payload["severity"] == "warning"
+        assert isinstance(payload["summary"], str) and payload["summary"]
