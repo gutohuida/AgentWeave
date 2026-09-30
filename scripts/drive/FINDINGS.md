@@ -33560,6 +33560,8 @@ Asked to "send me a one-line message with agentweave-send_message", a Copilot ag
 
 Question for the operator: should `send_message` refuse `to_agent` equal to the caller (a 400 naming the reply as the way to reach the operator), or is messaging yourself a legitimate way to schedule follow-up work? Test either way: an agent run's `send_message` to itself, asserting the chosen answer and that no turn starts if refused.
 
+**Operator answered 2026-09-30 (AskUserQuestion, handoff-0158 resume):** refuse it. `send_message` with `to_agent` equal to the caller returns a 400 naming the reply as the way to reach the operator, and no turn starts. Ready to propose.
+
 ## F469 (C) — the app neither shows nor edits a runner's flags
 
 **Status:** open, filed 2026-09-30 by R2 of `a-runner-that-cannot-collaborate-says-so-where-it-is-bound` (design D7), found while writing its task 1.5.
@@ -33567,4 +33569,6 @@ Question for the operator: should `send_message` refuse `to_agent` equal to the 
 `POST` and `PATCH /api/v1/projects/<pid>/runners` accept `flags` (`hub/hub/schemas/runners.py`, `RunnerCreate`/`RunnerUpdate`), and flags change what a run does: `--no-app-server` moves a Codex runner off the app-server transport, and with it off Full access every AgentWeave tool call is refused (`agents.py`, `get_agents_launchability`). The app never renders a runner's `flags` and cannot set them: the UI's `RunnerUpdate` (`hub/ui/src/api/runners.ts`) has only `name` and `model`, and no component reads `flags`. So a flagged runner exists only because something called the API, the operator cannot see why it behaves differently from its twin, and cannot undo it except by deleting it. The cannot-collaborate line now names remedies the app does offer (rebind, or Full access) instead of a flag edit.
 
 Question for the operator: should the Runners page show flags read-only (cheap, removes the invisible state), or edit them (free-form CLI arguments, needs validation per CLI)? Test either way: a runner created with flags through the API shows them on the Runners page.
+
+**Operator answered 2026-09-30 (AskUserQuestion, handoff-0158 resume):** show them read-only. The Runners page renders a runner's `flags`; editing stays with the API (or delete and recreate). Ready to propose.
 

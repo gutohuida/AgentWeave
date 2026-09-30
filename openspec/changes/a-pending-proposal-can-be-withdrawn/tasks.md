@@ -63,8 +63,8 @@ UI, `hub/ui/src/__tests__/specProposalsPanel.test.tsx`:
   Done 2026-09-30: `useProposalDecision` invalidates `specProposals` on settled for accept, reject and withdraw; `useSpecMutation` unchanged.
 - [x] 2.5 (D4) UI: `useWithdrawSpecProposal`, the button, the twin marker (with D4's digest rule), the status union, and `expected_digest` on the type; `_proposal_view` sends `expected_digest`
   Done 2026-09-30.
-- [ ] 2.6 Run group 1; `py -3.11 -m pytest hub/tests/ -q` full count inline; `npm run lint`, `npx vitest run`, `ruff`, `black` clean. `test_mcp_tool_schemas.py` / `test_tool_surface_matches_server.py` pass (a docstring change only)
-  **Open, 2026-09-30.** Group 1 passes: `test_spec_edit_proposals.py` 25, all `test_spec_*.py` 520, `test_mcp_tool_schemas.py`/`test_tool_surface_matches_server.py` 73, `test_surface_ceilings.py` green; vitest's changed files 91/91 alone (a full run failed 1-5 in the dependency-board files under memory pressure, green alone); eslint, tsc, ruff, black clean. The full Hub run was stopped by Claude Code for low system memory, so no full count yet.
+- [x] 2.6 Run group 1; `py -3.11 -m pytest hub/tests/ -q` full count inline; `npm run lint`, `npx vitest run`, `ruff`, `black` clean. `test_mcp_tool_schemas.py` / `test_tool_surface_matches_server.py` pass (a docstring change only)
+  **Open, 2026-09-30.** Group 1 passes: `test_spec_edit_proposals.py` 25, all `test_spec_*.py` 520, `test_mcp_tool_schemas.py`/`test_tool_surface_matches_server.py` 73, `test_surface_ceilings.py` green; vitest's changed files 91/91 alone (a full run failed 1-5 in the dependency-board files under memory pressure, green alone); eslint, tsc, ruff, black clean. The full Hub run was stopped by Claude Code for low system memory, so no full count yet. **Closed 2026-09-30:** CI hub-test at `2f120b4` (run 36748774080, no `claude` on PATH): 5513 passed, 20 skipped, 0 failed, 16:04.
 - [x] 2.7 `npm run build`, `py -3.11 scripts/refresh_ui_bundle.py`; commit source and bundle together
   Done 2026-09-30: `npm run build`, `scripts/refresh_ui_bundle.py`.
 
