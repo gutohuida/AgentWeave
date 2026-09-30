@@ -183,6 +183,47 @@ WORKSPACE_PERMISSION_MODE = "workspace"
 # per-run override the composer sends.
 FULL_ACCESS_PERMISSION_MODE = "bypassPermissions"
 
+# The model ids `copilot help config` printed under `model` (build 1.0.88), in its order.
+_COPILOT_MODEL_IDS: Tuple[str, ...] = (
+    "claude-sonnet-5",
+    "claude-fable-5.1",
+    "claude-fable-5",
+    "claude-opus-5",
+    "claude-opus-4.8",
+    "claude-opus-4.8-fast",
+    "claude-opus-4.7",
+    "claude-sonnet-4.6",
+    "claude-haiku-4.5",
+    "gpt-6-astra",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex",
+    "gpt-5-mini",
+    "mai-code-1.1-flash",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "grok-4.5",
+    "kimi-k3",
+    "kimi-k2.7-code",
+)
+
+_UPPERCASE_WORDS = {"gpt", "mai"}
+
+
+def _copilot_model_label(model_id: str) -> str:
+    """A label derived from the id: `gpt-5.6-sol` -> "GPT 5.6 Sol"."""
+    return " ".join(
+        word.upper() if word in _UPPERCASE_WORDS else word.capitalize()
+        for word in model_id.split("-")
+    )
+
+
 CATALOG: Dict[str, ProviderDescriptor] = {
     "claude": ProviderDescriptor(
         provider="claude",
@@ -292,6 +333,50 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                     ControlValue(id="bypassPermissions", label="Full access"),
                 ),
                 default="acceptEdits",
+                apply=ApplySpec(style="none"),
+            ),
+        ),
+    ),
+    # `a-copilot-agent-runs-over-acp` design D13. The model list is the one `copilot help config`
+    # prints (`openspec/changes/a-copilot-agent-runs-over-acp/evidence/help-config.txt`, build
+    # 1.0.88). It is a literal, not a runtime read: Copilot keeps no model file to read, and printing
+    # the list costs a spawn, which a read route must not do. Drift is checked by
+    # `scripts/check_model_catalog.py --provider copilot`. Every window is `None` because Copilot
+    # reports it per turn (`usage_update.size`, D11). `auto` is an id, not an alias.
+    "copilot": ProviderDescriptor(
+        provider="copilot",
+        label="GitHub Copilot",
+        models=(
+            ModelDescriptor(id="auto", label="Auto", default=True),
+            *(
+                ModelDescriptor(id=model_id, label=_copilot_model_label(model_id))
+                for model_id in _COPILOT_MODEL_IDS
+            ),
+        ),
+        controls=(
+            ControlDescriptor(
+                id="effort",
+                label="Effort",
+                kind="enum",
+                values=_enum("low", "medium", "high", "xhigh", "max"),
+                default="medium",
+                apply=ApplySpec(style="flag", template="--reasoning-effort {value}"),
+            ),
+            # Codex's four values and labels, applied by the Hub over ACP rather than on argv.
+            # The default is Workspace only, not Codex's Edit files: Copilot has no sandbox of its
+            # own to fall back on, so an unset posture is judged as `workspace` (D8), and the
+            # control has to say the same thing the run does.
+            ControlDescriptor(
+                id="permission_mode",
+                label="Permissions",
+                kind="enum",
+                values=(
+                    ControlValue(id="acceptEdits", label="Edit files"),
+                    ControlValue(id=WORKSPACE_PERMISSION_MODE, label="Workspace only"),
+                    ControlValue(id="manual", label="Ask me"),
+                    ControlValue(id="bypassPermissions", label="Full access"),
+                ),
+                default=WORKSPACE_PERMISSION_MODE,
                 apply=ApplySpec(style="none"),
             ),
         ),

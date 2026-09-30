@@ -44,6 +44,16 @@ Usage:
 
 Exit codes: 0 the two agree (or the cache is absent and the check was skipped), 1 something
 drifted, 2 the catalog or the cache could not be read.
+
+**`--provider copilot`** (`a-copilot-agent-runs-over-acp`, design D13). Copilot keeps no model
+file; its list is printed by `copilot help config` (no model call), so this section runs that
+command -- or reads a saved copy with `--help-config FILE` -- and compares model **ids** only:
+Copilot prints no labels or windows, and the catalog declares every Copilot window `None`
+because Copilot reports it per turn. `auto` is the catalog's own default and is not printed, so it
+is left out of the comparison. No `copilot` on PATH and no file given is a skip, as above.
+
+    py -3.11 scripts/check_model_catalog.py --provider copilot
+    py -3.11 scripts/check_model_catalog.py --provider copilot --help-config saved.txt
 """
 
 from __future__ import annotations
@@ -52,6 +62,9 @@ import argparse
 import importlib.util
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
@@ -303,6 +316,119 @@ def report(
     )
 
 
+#: The Copilot catalog's own default, which `copilot help config` does not print.
+COPILOT_AUTO = "auto"
+
+_COPILOT_MODEL_ITEM = re.compile(r'^\s+-\s+"([^"]+)"\s*$')
+
+
+def parse_copilot_models(help_text: str) -> Tuple[str, ...]:
+    """The ids listed under `` `model`: `` in `copilot help config`, in the order printed.
+
+    The section runs from the `` `model`: `` line to the next setting's heading, and each id is
+    a `    - "<id>"` line. An empty result means the format moved, which the caller reports as
+    an error rather than as "every declared model is gone".
+    """
+    ids: List[str] = []
+    in_section = False
+    for line in help_text.splitlines():
+        if line.strip().startswith("`model`:"):
+            in_section = True
+            continue
+        if not in_section:
+            continue
+        match = _COPILOT_MODEL_ITEM.match(line)
+        if match:
+            ids.append(match.group(1))
+        elif line.strip().startswith("`"):
+            break
+    return tuple(ids)
+
+
+def compare_copilot(catalog: CatalogView, listed: Sequence[str]) -> List[Drift]:
+    """Model ids only: Copilot prints no labels or windows to compare."""
+    declared = {m.id for m in catalog.models} - {COPILOT_AUTO}
+    printed = set(listed)
+    drifts: List[Drift] = []
+    if catalog.default_model != COPILOT_AUTO:
+        drifts.append(
+            Drift(
+                "default model",
+                f"the Copilot default is {catalog.default_model!r}, not {COPILOT_AUTO!r}",
+            )
+        )
+    for model_id in sorted(declared - printed):
+        drifts.append(
+            Drift(
+                "declared but gone",
+                f"{model_id!r} is offered by the catalog and not printed by `copilot help config`",
+            )
+        )
+    for model_id in sorted(printed - declared):
+        drifts.append(
+            Drift(
+                "listed but undeclared",
+                f"{model_id!r} is printed by `copilot help config` and unreachable through the"
+                " catalog",
+            )
+        )
+    return drifts
+
+
+def _copilot_help_config() -> Optional[str]:
+    """`copilot help config`'s output, or None when no `copilot` is on PATH."""
+    executable = shutil.which("copilot")
+    if executable is None:
+        return None
+    result = subprocess.run(
+        [executable, "help", "config"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise CatalogError(f"`copilot help config` exited {result.returncode}: {result.stderr}")
+    return result.stdout
+
+
+def main_copilot(catalog_path: Path, help_config: Optional[Path]) -> int:
+    try:
+        if help_config is not None:
+            text: Optional[str] = help_config.read_text(encoding="utf-8")
+            source = str(help_config)
+        else:
+            text = _copilot_help_config()
+            source = "copilot help config"
+        if text is None:
+            print(
+                "SKIPPED: no `copilot` on PATH and no --help-config file given."
+                "\nWith no Copilot CLI there is nothing to compare the catalog against, and that"
+                "\nis not a failure."
+            )
+            return 0
+        listed = parse_copilot_models(text)
+        if not listed:
+            raise CatalogError(f"{source} lists no model under `model`: -- has its format moved?")
+        catalog = read_catalog(catalog_path, provider="copilot")
+    except (CatalogError, OSError, subprocess.SubprocessError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    drifts = compare_copilot(catalog, listed)
+    print(f"catalog: {catalog_path} ({len(catalog.models)} copilot model(s), including auto)")
+    print(f"source:  {source} ({len(listed)} model(s) printed)")
+    if not drifts:
+        print("\nThe committed copilot catalog agrees with the CLI's model list.")
+        return 0
+    print(f"\n{len(drifts)} drift(s):")
+    for drift in drifts:
+        print(f"  [{drift.kind}] {drift.detail}")
+    return 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -316,7 +442,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "--cache", type=Path, default=DEFAULT_CACHE, help=f"default: {DEFAULT_CACHE}"
     )
+    parser.add_argument(
+        "--provider",
+        choices=("codex", "copilot"),
+        default="codex",
+        help="which provider's catalog to check (default: codex)",
+    )
+    parser.add_argument(
+        "--help-config",
+        type=Path,
+        default=None,
+        help="copilot only: a saved `copilot help config` output, instead of running it",
+    )
     args = parser.parse_args(argv)
+
+    if args.provider == "copilot":
+        return main_copilot(args.catalog, args.help_config)
 
     cache_path: Path = args.cache
     if not cache_path.is_file():

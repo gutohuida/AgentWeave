@@ -6,7 +6,6 @@ a runner via PATCH /api/v1/projects/proj-test/agents/{name}.
 """
 
 import pytest
-from sqlalchemy.exc import IntegrityError
 
 # ---------------------------------------------------------------------------
 # Seed
@@ -15,13 +14,14 @@ from sqlalchemy.exc import IntegrityError
 
 @pytest.mark.asyncio
 async def test_default_runners_are_seeded_on_first_boot(app, auth_headers):
-    """The `app` fixture's init_db() call must have already seeded one claude and
-    one codex runner for the bootstrap project — no explicit action needed."""
+    """The `app` fixture's init_db() call must have already seeded one runner per
+    `RUNNER_CLIS` entry (claude, codex, copilot) for the bootstrap project — no explicit
+    action needed."""
     resp = await app.get("/api/v1/projects/proj-test/runners", headers=auth_headers)
     assert resp.status_code == 200
     runners = resp.json()
     clis = sorted(r["cli"] for r in runners)
-    assert clis == ["claude", "codex"]
+    assert clis == ["claude", "codex", "copilot"]
     assert all(r["id"].startswith("runner-") for r in runners)
 
 
@@ -35,7 +35,7 @@ async def test_seeding_does_not_duplicate_on_repeat_init(app, auth_headers):
     resp = await app.get("/api/v1/projects/proj-test/runners", headers=auth_headers)
     assert resp.status_code == 200
     runners = resp.json()
-    assert len(runners) == 2
+    assert len(runners) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -146,11 +146,6 @@ async def test_an_existing_runner_with_an_unrecognised_model_stays_readable_and_
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="a-copilot-agent-runs-over-acp: written ahead of task 2.1-2.2; remove this mark when it lands",
-)
 @pytest.mark.asyncio
 async def test_create_runner_with_copilot_cli_returns_201_and_reads_back(app, auth_headers):
     resp = await app.post(
@@ -169,11 +164,6 @@ async def test_create_runner_with_copilot_cli_returns_201_and_reads_back(app, au
     assert readback.json()["cli"] == "copilot"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=IntegrityError,
-    reason="a-copilot-agent-runs-over-acp: written ahead of task 2.1-2.2; remove this mark when it lands",
-)
 @pytest.mark.asyncio
 async def test_copilot_runner_row_commits_at_the_model_level(app, auth_headers):
     from hub.db.engine import async_session_factory
@@ -211,7 +201,7 @@ async def test_launchability_by_provider_probes_every_catalog_provider_with_no_r
     )
     assert resp.status_code == 200
     providers = resp.json()["providers"]
-    assert set(providers.keys()) == {"claude", "codex"}
+    assert set(providers.keys()) == {"claude", "codex", "copilot"}
     for verdict in providers.values():
         assert "runnable" in verdict
         assert "reason" in verdict

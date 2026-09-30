@@ -399,7 +399,8 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - the charter and project instructions are in `stable`;
   - the workspace is in `per_turn`, and the tool surface only in `tool_surface`;
   - `context` for a Claude run equals a snapshot taken before the change (write the snapshot as the first step of this task, from today's code)
-- [ ] 1.12 `hub/tests/test_model_catalog.py`: `get_provider("copilot")` exists, its default model is `auto` labelled "Auto", every model's `context_window is None`, its Permissions values and labels equal Codex's with default `workspace` (R2), and `validate_overrides("copilot", {"model": "bogus-model"})` is refused
+- [x] 1.12 `hub/tests/test_model_catalog.py`: `get_provider("copilot")` exists, its default model is `auto` labelled "Auto", every model's `context_window is None`, its Permissions values and labels equal Codex's with default `workspace` (R2), and `validate_overrides("copilot", {"model": "bogus-model"})` is refused
+  - **Done 2026-09-30:** `TestCopilotCatalog` (7 tests) in `test_model_catalog.py`, red before 2.4 (8 failures incl. the coverage test naming only claude/codex), green after.
 - [ ] 1.13 `hub/tests/test_workspace_writes.py`: `written_paths("edit", {"locations": [{"path": "C:/elsewhere/x.py"}], …})` returns that path, and `delete`/`move` likewise. `"shell"` returns `()`. `OutsideWriteRecorder` records a Copilot edit outside the workspace
 - [ ] 1.14 `hub/tests/test_worker.py` and `test_conversation_titles.py`:
   - `build_worker_command(cli="copilot", …)` returns design D14's argv (the resolved `.exe`, not the npm shim, with `--no-custom-instructions`);
@@ -432,13 +433,17 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
 
 ## 2. Registry, migration, seeding, catalog
 
-- [ ] 2.1 `db/models.py`: `RUNNER_CLIS = ("claude", "codex", "copilot")`, and the `ck_runners_cli` constraint is written from `RUNNER_CLIS`, so the two cannot drift
-- [ ] 2.2 A new migration, the next free revision after tonight's queue, recreates `runners` with the widened constraint (`batch_alter_table(recreate="always")`) and guards a missing table. Downgrade refuses when a `copilot` row exists. Bump `HEAD_REVISION` in `hub/tests/test_migrations.py` and the head in `hub/tests/test_project_persistence.py` (`.claude/rules/db-migrations.md`)
+- [x] 2.1 `db/models.py`: `RUNNER_CLIS = ("claude", "codex", "copilot")`, and the `ck_runners_cli` constraint is written from `RUNNER_CLIS`, so the two cannot drift
+  - **Done 2026-09-30:** `ck_runners_cli` is built from `RUNNER_CLIS` in `models.py`.
+- [x] 2.2 A new migration, the next free revision after tonight's queue, recreates `runners` with the widened constraint (`batch_alter_table(recreate="always")`) and guards a missing table. Downgrade refuses when a `copilot` row exists. Bump `HEAD_REVISION` in `hub/tests/test_migrations.py` and the head in `hub/tests/test_project_persistence.py` (`.claude/rules/db-migrations.md`)
   - Verify: `py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py hub/tests/test_runners_api.py -q`
-- [ ] 2.3 Confirm both seeders produce `Copilot (default)`. Task 1.4 passes
-- [ ] 2.4 `model_catalog.py`: add `CATALOG["copilot"]` per design D13, taking the model tuple from `evidence/help-config.txt`, with the Permissions default `workspace`. Add `"copilot": "copilot"` to `runner_commands._CATALOG_PROVIDER_BY_RUNNER` (or slice 1's `catalog_provider`) and `copilot` to `SUPPORTED_RUNNERS` (`test_model_catalog.py:16-18` requires it). R2: drift is checked by a `--provider copilot` section in `scripts/check_model_catalog.py` that runs `copilot help config`, **not** by a pytest that skips without the binary (that script's docstring says why). Tasks 1.12 and 1.3 pass
+  - **Done 2026-09-30:** migration `0112_runner_cli_copilot.py` (head was `0111`, not `0110`). Two tests in `test_migrations.py`: at 0111 a `copilot` insert fails `ck_runners_cli`, 0112 admits it with rows kept, downgrade refuses while a `copilot` row exists and succeeds once it is gone; guarded missing table. Heads bumped in both test files.
+- [x] 2.3 Confirm both seeders produce `Copilot (default)`. Task 1.4 passes
+  - **Done 2026-09-30:** both seeders give `Copilot (default)`; asserted in `test_seed_new_project_seeds_copilot_runner`. Three older tests in `test_runners_api.py` that asserted the two-CLI seed were updated to three.
+- [x] 2.4 `model_catalog.py`: add `CATALOG["copilot"]` per design D13, taking the model tuple from `evidence/help-config.txt`, with the Permissions default `workspace`. Add `"copilot": "copilot"` to `runner_commands._CATALOG_PROVIDER_BY_RUNNER` (or slice 1's `catalog_provider`) and `copilot` to `SUPPORTED_RUNNERS` (`test_model_catalog.py:16-18` requires it). R2: drift is checked by a `--provider copilot` section in `scripts/check_model_catalog.py` that runs `copilot help config`, **not** by a pytest that skips without the binary (that script's docstring says why). Tasks 1.12 and 1.3 pass
   - Verify: `py -3.11 -m pytest hub/tests/test_model_catalog.py hub/tests/test_model_catalog_api.py -q`
 
+  - **Done 2026-09-30:** `CATALOG["copilot"]` (auto + the 26 printed ids, every window `None`, Effort as `--reasoning-effort`, Permissions default `workspace`), `SUPPORTED_RUNNERS` and `_CATALOG_PROVIDER_BY_RUNNER` gain `copilot`. `scripts/check_model_catalog.py --provider copilot` added with 7 tests; run live against Copilot 1.0.88 here it reports agreement (exit 0).
 ## 3. Executable, probe, launchability
 
 - [ ] 3.1 `hub/hub/copilot_probe.py`: `resolve_copilot_executable` (design D2). Task 1.5 passes

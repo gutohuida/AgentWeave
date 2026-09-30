@@ -308,7 +308,7 @@ class Agent(Base):
     )
 
 
-RUNNER_CLIS = ("claude", "codex")
+RUNNER_CLIS = ("claude", "codex", "copilot")
 
 
 class Runner(Base):
@@ -337,7 +337,13 @@ class Runner(Base):
     project: Mapped["Project"] = relationship(back_populates="runners")
 
     __table_args__ = (
-        CheckConstraint("cli IN ('claude', 'codex')", name="ck_runners_cli"),
+        # Written from RUNNER_CLIS so the tuple and the constraint cannot drift: a CLI the schema
+        # admits and the database refuses surfaces as `POST /runners`' 409 "already exists"
+        # (its IntegrityError branch), a false sentence. Migration 0112 widened it for copilot.
+        CheckConstraint(
+            "cli IN (" + ", ".join(f"'{cli}'" for cli in RUNNER_CLIS) + ")",
+            name="ck_runners_cli",
+        ),
         Index("ix_runners_project_name", "project_id", "name"),
     )
 

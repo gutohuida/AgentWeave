@@ -24,7 +24,7 @@ class TestCatalogCoverage:
 
     def test_no_unspawnable_provider_is_declared(self):
         for provider in CATALOG:
-            assert provider in ("claude", "codex")
+            assert provider in ("claude", "codex", "copilot")
 
     def test_every_model_has_an_id_and_label(self):
         for entry in CATALOG.values():
@@ -157,3 +157,59 @@ class TestProviderLookup:
         entry = get_provider("codex")
         assert entry is not None
         assert entry.provider == "codex"
+
+
+class TestCopilotCatalog:
+    """`a-copilot-agent-runs-over-acp` design D13 (task 1.12)."""
+
+    def test_copilot_is_declared_with_auto_as_its_default(self):
+        entry = get_provider("copilot")
+        assert entry is not None
+        assert entry.label == "GitHub Copilot"
+        assert entry.models[0].id == "auto"
+        assert entry.models[0].label == "Auto"
+        assert [m.id for m in entry.models if m.default] == ["auto"]
+
+    def test_every_copilot_model_states_its_window_as_unknown(self):
+        # Copilot reports the window per turn (`usage_update.size`, D11); the catalog never
+        # borrows one.
+        entry = get_provider("copilot")
+        assert entry is not None
+        assert len(entry.models) > 1
+        assert all(m.context_window is None for m in entry.models)
+
+    def test_copilot_lists_what_its_cli_printed(self):
+        entry = get_provider("copilot")
+        assert entry is not None
+        ids = {m.id for m in entry.models}
+        # A sample of `evidence/help-config.txt`'s `model` list (build 1.0.88).
+        assert {"claude-haiku-4.5", "gpt-5.5", "mai-code-1.1-flash", "gemini-3.8-flash"} <= ids
+
+    def test_copilot_permissions_match_codex_but_default_to_workspace(self):
+        copilot = get_provider("copilot").control("permission_mode")
+        codex = get_provider("codex").control("permission_mode")
+        assert [(v.id, v.label) for v in copilot.values] == [(v.id, v.label) for v in codex.values]
+        # D8: Copilot has no sandbox of its own to fall back on, so an unset posture is judged
+        # as Workspace only, and the control says so.
+        assert copilot.default == "workspace"
+        assert copilot.apply.style == "none"
+
+    def test_copilot_effort_renders_as_a_flag(self):
+        assert render_control_args("copilot", {"effort": "high"}) == [
+            "--reasoning-effort",
+            "high",
+        ]
+        assert render_control_config("copilot", {"effort": "high"}) == {}
+
+    def test_an_undeclared_copilot_model_is_refused(self):
+        # `session/set_model` accepts anything and `--model` on Free is silently replaced, so the
+        # Hub's own validation is the only backstop.
+        accepted, rejection = validate_overrides("copilot", {"model": "bogus-model"})
+        assert accepted == {}
+        assert rejection is not None and rejection.control == "model"
+
+    def test_auto_is_an_id_not_an_alias(self):
+        entry = get_provider("copilot")
+        assert entry is not None
+        assert all(not m.aliases for m in entry.models)
+        assert validate_overrides("copilot", {"model": "auto"}) == ({"model": "auto"}, None)

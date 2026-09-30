@@ -57,7 +57,7 @@ from .model_catalog import (
 # Live equivalent: RUNNER_CLIS. The 501 gate at agent_trigger.py:686 is unreachable for the
 #   same reason, as is the "claude_proxy"/"native" half of build_command's branch at line 179.
 # Removal: hub/tests/test_runner_parsing.py:104 builds commands for both names directly.
-SUPPORTED_RUNNERS = ("claude", "claude_proxy", "native", "codex")
+SUPPORTED_RUNNERS = ("claude", "claude_proxy", "native", "codex", "copilot")
 
 # The runners `build_command` routes to `_build_claude_command` (`:179` below) — declared once so
 # the prefix a Claude-family run is told its tools by (`agents.py:_tool_surface_lines`) cannot
@@ -118,6 +118,7 @@ _CATALOG_PROVIDER_BY_RUNNER: Dict[str, str] = {
     "claude_proxy": "claude",
     "native": "claude",
     "codex": "codex",
+    "copilot": "copilot",
 }
 
 

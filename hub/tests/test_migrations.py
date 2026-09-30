@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0111"
+HEAD_REVISION = "0112"
 
 
 # ---------------------------------------------------------------------------
@@ -4196,3 +4196,81 @@ def test_migration_0111_is_guarded_when_visibility_is_already_gone(tmp_path) -> 
             HEAD_REVISION
         )
     assert "visibility" not in columns
+
+
+# ---------------------------------------------------------------------------------------------
+# 0112 -- a Copilot agent runs over ACP: `ck_runners_cli` admits `copilot`
+# ---------------------------------------------------------------------------------------------
+
+
+def _insert_runner(conn: sqlite3.Connection, runner_id: str, cli: str) -> None:
+    conn.execute(
+        "INSERT INTO runners (id, project_id, name, cli, created_at, updated_at) "
+        "VALUES (?, 'proj-1', ?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        (runner_id, runner_id, cli),
+    )
+
+
+def test_migration_0112_widens_runner_cli_and_downgrade_refuses_a_copilot_row(tmp_path) -> None:
+    """Design D1: at 0111 the database refuses `copilot`; 0112 admits it with every row kept; a
+    downgrade with a `copilot` runner present refuses rather than deleting it, and succeeds once
+    that runner is gone."""
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "runner_cli_copilot.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('proj-1', 'p', "
+            "'2026-01-01T00:00:00Z')"
+        )
+        _insert_runner(conn, "r-claude", "claude")
+        conn.commit()
+
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0111")
+    with sqlite3.connect(db_file) as conn:
+        with pytest.raises(sqlite3.IntegrityError, match="ck_runners_cli"):
+            _insert_runner(conn, "r-copilot", "copilot")
+
+    _upgrade_to(db_url, "0112")
+    with sqlite3.connect(db_file) as conn:
+        _insert_runner(conn, "r-copilot", "copilot")
+        conn.commit()
+        assert {row[0] for row in conn.execute("SELECT id FROM runners")} == {
+            "r-claude",
+            "r-copilot",
+        }
+
+    with patch.object(settings, "database_url", db_url):
+        with pytest.raises(RuntimeError, match=r"1 runner\(s\) use the copilot CLI"):
+            command.downgrade(cfg, "0111")
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM runners WHERE cli = 'copilot'").fetchone()[0] == 1
+        conn.execute("DELETE FROM runners WHERE cli = 'copilot'")
+        conn.commit()
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0111")
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0111"
+        assert conn.execute("SELECT COUNT(*) FROM runners").fetchone()[0] == 1
+
+
+def test_migration_0112_is_guarded_when_runners_does_not_exist(tmp_path) -> None:
+    """An upgrade starting from an early revision reaches 0112 with only that revision's tables."""
+    db_file = tmp_path / "no_runners_0112.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0111')")
+
+    _upgrade_to(db_url, "0112")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0112"

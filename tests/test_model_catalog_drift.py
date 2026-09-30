@@ -387,3 +387,72 @@ def test_main_exits_two_when_the_cache_is_present_but_unreadable(tmp_path, capsy
     err = capsys.readouterr().err
     assert code == 2
     assert "did not parse" in err
+
+
+# ---------------------------------------------------------------------------
+# --provider copilot (`a-copilot-agent-runs-over-acp`, design D13)
+# ---------------------------------------------------------------------------
+
+HELP_CONFIG = (
+    REPO_ROOT
+    / "openspec"
+    / "changes"
+    / "a-copilot-agent-runs-over-acp"
+    / "evidence"
+    / "help-config.txt"
+)
+
+
+def _help_text(*ids):
+    items = "\n".join(f'    - "{i}"' for i in ids)
+    return (
+        "  `logLevel`: log level.\n\n"
+        f"  `model`: AI model to use.\n{items}\n\n"
+        "  `contextTier`: context window tier.\n"
+        '    - "not-a-model"\n'
+    )
+
+
+def test_parse_copilot_models_reads_only_the_model_section():
+    assert cmc.parse_copilot_models(_help_text("a-1", "b-2")) == ("a-1", "b-2")
+
+
+def test_parse_copilot_models_reads_the_captured_help():
+    ids = cmc.parse_copilot_models(HELP_CONFIG.read_text(encoding="utf-8"))
+    assert len(ids) == 26
+    assert "claude-haiku-4.5" in ids and "mai-code-1.1-flash" in ids
+
+
+def test_copilot_drift_ignores_auto_and_reports_both_directions():
+    catalog = catalog_view([model("auto"), model("a"), model("gone")], default_model="auto")
+    drifts = cmc.compare_copilot(catalog, ("a", "new"))
+    assert kinds(drifts) == ["declared but gone", "listed but undeclared"]
+
+
+def test_copilot_default_other_than_auto_is_reported():
+    catalog = catalog_view([model("auto"), model("a")], default_model="a")
+    assert kinds(cmc.compare_copilot(catalog, ("a",))) == ["default model"]
+
+
+def test_the_real_copilot_catalog_agrees_with_the_captured_help(capsys):
+    """A guard over the committed literal and the committed capture together: the catalog was
+    copied from this file, so a divergence means one was edited without the other."""
+    code = cmc.main(
+        ["--provider", "copilot", "--catalog", str(REAL_CATALOG), "--help-config", str(HELP_CONFIG)]
+    )
+    assert code == 0, capsys.readouterr().out
+
+
+def test_copilot_main_skips_without_a_cli_or_a_file(monkeypatch, capsys):
+    monkeypatch.setattr(cmc.shutil, "which", lambda name: None)
+    assert cmc.main(["--provider", "copilot", "--catalog", str(REAL_CATALOG)]) == 0
+    assert "SKIPPED" in capsys.readouterr().out
+
+
+def test_copilot_main_exits_two_when_the_format_moved(tmp_path):
+    saved = tmp_path / "help.txt"
+    saved.write_text("nothing here\n", encoding="utf-8")
+    code = cmc.main(
+        ["--provider", "copilot", "--catalog", str(REAL_CATALOG), "--help-config", str(saved)]
+    )
+    assert code == 2
