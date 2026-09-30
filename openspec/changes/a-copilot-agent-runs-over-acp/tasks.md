@@ -223,6 +223,29 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
     unchecked: finding 6's load-time-condition row (pending the signature decision above), finding
     1/slice 3's `write_powershell`/`local_shell` shapes, and "the answer never being
     `allow_always`".
+  - **Partial 2026-09-30 (part 6/N, not yet checked):** added `TestExecuteDialectSelection` (2
+    tests) covering the rest of review finding 1/slice 3: design.md:636's dialect-key rule
+    (`powershell` → `"PowerShell"`, `bash` → `"Bash"`, any other name or none known → `"Shell"`,
+    read in both dialects, refused if either refuses). Built a fixture command,
+    `"echo x`..`y"`, and verified it directly against the real `_read_command`/`_decide`
+    (`mcp_server.py`) before writing any assertion: read as Bash it is refused (a backtick pair is
+    bash-only command substitution, `mcp_server.py:1467-1472`, so it excises `..` and separately,
+    recursively judges that text as its own command — an exact `".."` word, refused as the
+    workspace's own parent); read as PowerShell it is allowed (backtick is only PowerShell's
+    escape character there, so `` `..` `` collapses to the literal two characters `..` glued
+    between the surrounding `x`/`y` into one harmless word, `"x..y"`). Confirmed with
+    `_decide("PowerShell", {"command": ...})` → `allow=True` and `_decide("write_powershell", ...)`
+    / `_decide("local_shell", ...)` (both outside `_TOOL_DIALECTS`, so both dialects) → `allow=False`.
+    Both new tests supply this command under `workspace`: one with `CallFacts.tool_name =
+    "write_powershell"`, one with `"local_shell"`, both asserting REJECT — a test that fails if the
+    implementation ever keys either name as `"PowerShell"` alone (R2's platform-guessing rule,
+    already gone per design.md:636's "Review 2026-09-28"). The no-`command`-key half of finding
+    1/slice 3 (`write_powershell`'s real `{shellId, input}` shape) was already covered by part
+    1/N's `test_command_that_is_not_a_non_empty_string_is_rejected`; not repeated here. Still red
+    at collection: `ModuleNotFoundError: No module named 'hub.copilot_acp'`. Left for a later
+    firing, unchecked: finding 6's load-time-condition row (blocked, pending a review-round
+    signature decision) and "the answer never being `allow_always`" (belongs with the
+    RPC-answering step's own tests, not this function's).
 - [ ] 1.7 `hub/tests/test_permission_approver.py`: `_decide(..., workspace=W, hub_url=U)` judges against `W` and `U` when `os.environ` names other values. It fails today because the keywords do not exist
 - [ ] 1.8 `hub/tests/test_copilot_acp_mapper.py` (new): replay `evidence/acp4-turn-mcp-shell-1.0.88.log` and the 1.1 fixture, **in their recorded order**, through `CopilotEventMapper`. Assert:
   - one `text` event per contiguous message block;

@@ -59,6 +59,14 @@ so each case is written with a command that breaks out of the workspace and must
 that fails on R3's `mcp__`-prefixed naming, not just one that passes on the fixed `copilot-mcp:`
 naming.
 
+Part 6 of N (review finding 1/slice 3) adds `TestExecuteDialectSelection` below: an `execute`
+request whose `calls` entry names `write_powershell` or `local_shell` is keyed `"Shell"` (both
+dialects read), never `"PowerShell"` alone — proven with a command verified directly against
+`_read_command`/`_decide` (`mcp_server.py`) to be refused only when read as Bash, never as
+PowerShell, so a `"PowerShell"`-only reading would wrongly ALLOW it. The no-`command`-key half of
+finding 1/slice 3 (`write_powershell`'s real `{shellId, input}` shape) was already covered by part
+1/N's `test_command_that_is_not_a_non_empty_string_is_rejected`; not repeated here.
+
 Still deliberately NOT covered (left for a follow-up sub-task of 1.6):
   - review finding 6's true load-time-condition row (the `agentweave` server's
     `session.mcp_servers_loaded` source+transport check) — genuinely blocked, not merely
@@ -71,8 +79,7 @@ Still deliberately NOT covered (left for a follow-up sub-task of 1.6):
     `calls`", which is the client's own bookkeeping, not a stated argument to this pure function.
     Writing a fixture here means guessing an unstated parameter shape, which is exactly what the
     round discipline exists to catch before code, not paper over in a test. Recorded here and in
-    the night log as an open question for a review round, not guessed;
-  - review finding 1/slice 3's `write_powershell`/`local_shell` execute-shape rows;
+    the night log as an open question for a review round, not guessed — still open after part 6/N;
   - (review, note 16) the operator card's label text ("an MCP tool Copilot did not identify",
     never the title) — that is `RpcTransport.permission_card_label`'s output (D3, design.md:
     778-781), a different function than `decide_permission`, which only returns `{"outcome",
@@ -706,5 +713,67 @@ class TestMcpForeignNameCollision:
                 tool_name=None, mcp_server="agentweave__x", mcp_tool="send_message"
             )
         }
+        result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path, calls)
+        assert result["outcome"] == "REJECT"
+
+
+class TestExecuteDialectSelection:
+    """(review, finding 1/slice 3; design.md:636; tasks.md task 1.6, part 6/N.) The dialect key
+    `_decide` receives for an `execute` request comes from the call's real tool name in `calls`
+    (design.md:636): `powershell` -> `"PowerShell"`, `bash` -> `"Bash"`, and *any other name*
+    (`local_shell`, `write_powershell`, ...) or no name known -> `"Shell"`, a key `_TOOL_DIALECTS`
+    lacks, so `_decide` falls back to reading the command in **both** dialects and refuses if
+    either refuses (`mcp_server.py:1611`). R2's platform rule -- deciding `local_shell` by the
+    OS the Hub happens to run on -- is gone; nothing guarantees that matches the shell Copilot
+    actually spawned (design.md:636, "Review 2026-09-28").
+
+    `_BASH_ONLY_REFUSAL_COMMAND` is refused only when read as Bash, never as PowerShell --
+    verified directly against the real `_read_command`/`_decide` (`mcp_server.py:1430-1619`)
+    before writing these assertions, not assumed:
+
+      - Bash treats a backtick pair as command substitution (`mcp_server.py:1467-1472`, gated
+        `if bash and char == "`"`). It excises the enclosed `..` from the outer word (leaving
+        the harmless placeholder `x$(...)y`, which judges clean by itself) and separately,
+        recursively judges the substitution's own text, `..`, as its own command
+        (`_read_command`'s `nested` loop, `mcp_server.py:1563-1566`) -- an exact `".."` word,
+        refused by rule 4 (`mcp_server.py:1289-1290`) as the workspace's own parent.
+      - PowerShell has no substitution syntax; a backtick is only its escape character
+        (`mcp_server.py:1441`, `escape = "`" if not bash`), so each backtick-and-following-char
+        pair collapses to just that one character, and `` `..` `` becomes the literal two
+        characters `..`, glued between the surrounding `x` and `y` into a single word,
+        `"x..y"` -- not `".."`, and carrying no separator, so rule 4 lets it stand.
+
+    Confirmed directly: `_decide("PowerShell", {"command": ...})` on this text returns
+    `allow=True`; `_decide("write_powershell", ...)` and `_decide("local_shell", ...)` (both
+    outside `_TOOL_DIALECTS`, so both dialects) return `allow=False`. So a `"PowerShell"`-only
+    reading (R2's platform guess) would wrongly ALLOW this exact command; reading both, as the
+    `"Shell"` fallback requires, REJECTs it.
+    """
+
+    _BASH_ONLY_REFUSAL_COMMAND = "echo x`..`y"
+
+    def test_write_powershell_with_a_command_is_keyed_shell_not_powershell(self, tmp_path):
+        """(review, finding 1/slice 3) An `execute` whose tool name is `write_powershell`,
+        carrying a `command`, is judged with the `"Shell"` fallback -- never treated as
+        `"PowerShell"`, which alone would allow this command."""
+        params = _params(
+            tool_call_id="call_s1",
+            kind="execute",
+            raw_input={"command": self._BASH_ONLY_REFUSAL_COMMAND},
+        )
+        calls = {"call_s1": CallFacts(tool_name="write_powershell", mcp_server=None, mcp_tool=None)}
+        result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path, calls)
+        assert result["outcome"] == "REJECT"
+
+    def test_local_shell_is_read_in_both_dialects_not_just_powershell(self, tmp_path):
+        """(R3) `local_shell`'s command is REJECTed because the Bash reading refuses it, proving
+        both dialects are actually read -- not merely PowerShell, which alone would allow this
+        exact command (see class docstring)."""
+        params = _params(
+            tool_call_id="call_s2",
+            kind="execute",
+            raw_input={"command": self._BASH_ONLY_REFUSAL_COMMAND},
+        )
+        calls = {"call_s2": CallFacts(tool_name="local_shell", mcp_server=None, mcp_tool=None)}
         result = _decide(params, WORKSPACE_PERMISSION_MODE, tmp_path, calls)
         assert result["outcome"] == "REJECT"
