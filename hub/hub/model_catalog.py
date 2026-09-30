@@ -339,8 +339,9 @@ CATALOG: Dict[str, ProviderDescriptor] = {
     ),
     # `a-copilot-agent-runs-over-acp` design D13. The model list is the one `copilot help config`
     # prints (build 1.0.88), captured in the archived change's `evidence/help-config.txt`
-    # (`openspec/changes/archive/2026-09-30-a-copilot-agent-runs-over-acp/`). It is a literal, not a runtime read: Copilot keeps no model file to read, and printing
-    # the list costs a spawn, which a read route must not do. Drift is checked by
+    # (`openspec/changes/archive/2026-09-30-a-copilot-agent-runs-over-acp/`). It is a literal,
+    # not a runtime read: Copilot keeps no model file to read, and printing the list costs a
+    # spawn, which a read route must not do. Drift is checked by
     # `scripts/check_model_catalog.py --provider copilot`. Every window is `None` because Copilot
     # reports it per turn (`usage_update.size`, D11). `auto` is an id, not an alias.
     "copilot": ProviderDescriptor(

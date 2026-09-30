@@ -136,7 +136,8 @@ EVIDENCE_LOG = (
     Path(__file__).resolve().parents[2]
     / "openspec"
     / "changes"
-    / "a-copilot-agent-runs-over-acp"
+    / "archive"
+    / "2026-09-30-a-copilot-agent-runs-over-acp"
     / "evidence"
     / "acp4-turn-mcp-shell-1.0.88.log"
 )

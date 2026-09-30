@@ -397,7 +397,8 @@ HELP_CONFIG = (
     REPO_ROOT
     / "openspec"
     / "changes"
-    / "a-copilot-agent-runs-over-acp"
+    / "archive"
+    / "2026-09-30-a-copilot-agent-runs-over-acp"
     / "evidence"
     / "help-config.txt"
 )
