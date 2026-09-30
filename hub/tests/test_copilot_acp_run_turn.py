@@ -2672,3 +2672,81 @@ class TestPromptOrderingAndControlOverridesArgv:
             "the flag style is two words, not one '=' word (that spelling belongs to "
             "--excluded-tools, case (j), a different control)"
         )
+
+
+class TestEmptyContextStillOpensWithHeadNotAMessageSlashCommand:
+    """Tasks.md 1.9(r) (`:283`, review note 15 and the D5 answer): "the first block opens with
+    `COPILOT_TURN_CONTEXT_HEAD`; with `per_turn_context` and `tool_surface_context` both empty
+    and the message `/allow-all on`, the prompt still has two blocks and the first does not
+    start with `/`."
+
+    Design.md `:482-488` (review, finding 15): Copilot runs a one-block prompt starting with `/`
+    as a slash command (`/allow-all`, `/permissions`, `/autopilot` and `/add-dir` exist), so a
+    message from another agent that happens to read `/allow-all on` must never become that one
+    block -- `COPILOT_TURN_CONTEXT_HEAD` "makes the first block non-empty and non-`/` even when
+    `per_turn_context` and `tool_surface_context` are both empty, and the message is always a
+    block of its own after it." This is an invariant about the empty-context edge, not the
+    ordering claim case (q)'s own `TestPromptOrderingAndControlOverridesArgv` already covers (that
+    test's fixtures both have non-empty context strings) -- so it needs its own fixture: empty
+    `per_turn_context`/`tool_surface_context` and a message that literally reads `/allow-all on`.
+    """
+
+    async def test_empty_context_head_line_alone_keeps_two_blocks_first_not_starting_with_slash(
+        self, monkeypatch
+    ):
+        events = []
+        sessions_bound = []
+        message = "/allow-all on"
+
+        script = _session_established_script(
+            tail_entry={
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            }
+        )
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt=message,
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="",
+            tool_surface_context="",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        prompt_calls = [(m, p) for m, p in fake.sent_requests if m == "session/prompt"]
+        assert len(prompt_calls) == 1, "exactly one session/prompt per turn"
+        blocks = prompt_calls[0][1]["prompt"]
+        assert len(blocks) >= 2, (
+            "design.md:482-488: the prompt must never collapse to one block even when both "
+            f"context strings are empty -- got {blocks!r}"
+        )
+        first_text = blocks[0]["text"]
+        assert first_text.startswith(copilot_acp.COPILOT_TURN_CONTEXT_HEAD), (
+            "the head line alone must open the first block regardless of empty context, "
+            f"got {first_text!r}"
+        )
+        assert not first_text.startswith("/"), (
+            "a first block starting with '/' would run as a Copilot slash command, not text -- "
+            f"got {first_text!r}"
+        )
+        assert blocks[-1]["text"] == message, (
+            "the operator's message, even one that reads like a slash command, must reach the "
+            "wire byte-identical as its own block, never merged into the first"
+        )
+        assert not blocks[-1]["text"].startswith(copilot_acp.COPILOT_TURN_CONTEXT_HEAD)
