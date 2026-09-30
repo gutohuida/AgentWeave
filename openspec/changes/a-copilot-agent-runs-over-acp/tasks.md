@@ -317,6 +317,44 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   (checked directly: neither `hub/hub/copilot_acp.py` nor `hub/hub/copilot_probe.py` exist).
   `ruff`/`black --target-version py311` clean; `openspec validate --strict` (via the `openspec`
   CLI directly) passes. Cases (b)-(s), 17 of the 18 lettered cases, remain for later parts.
+
+  2026-09-30 (part 2/N): covered case (b) only. Read D7's *Replay* and *A load that finds nothing*
+  paragraphs fresh, plus the Uncertainties table's own line 96 ("Whether session history replay on
+  `session/load` arrives entirely before the load response | INFERRED (ACP spec) | handled
+  order-independently, D7"). Added `TestResumedSessionSequence` with two tests, not one, because
+  that line's "order-independently" claim is untestable by a single ordering: one delivers both
+  replayed `user_message_chunk`/`agent_message_chunk` `session/update` notifications while
+  `session/load` itself is still in flight (the same slot `r1-probe-load.log:9-10` proves is real
+  for a *different* notification, `available_commands_update`, on case (c)'s own -32002 path, not
+  case (b)); the other delivers them after `session/load`'s response but still before
+  `session/prompt` is written (D7's actual line, "any update before that point ... is dropped" --
+  not "before the load response" specifically). Both assert `events == []`, that `session/load`
+  (not `session/new`) was sent with `sessionId`/`cwd`/`mcpServers: []`, `on_session` binds the
+  resumed id, and the outcome is `TurnOutcome(status="completed")`. Neither evidence log captures a
+  `session/load` that actually finds a session (`r1-probe-load.log`'s two calls both target an
+  unprompted id and get -32002, checked directly), so the replayed-chunk notifications and the
+  `session/load` success response body are synthetic, built from D7's own named update types and
+  the mapper's already-known `session/update` shape, and from `session/new`'s own response shape by
+  symmetry (D7 says nothing about `session/load`'s response body) -- flagged in the new code's own
+  docstrings, not asserted as captured.
+
+  This part also changes `_patch_spawn` (shared with part 1/N's test class): it now forwards
+  whatever `on_notification`/`on_server_request` keywords `run_turn`'s own `ACPProcess.spawn` call
+  supplies onto the fake, instead of ignoring them, because the property under test -- what
+  `run_turn`'s own arming gate does with a delivered update -- is only real if the handler the
+  fake invokes is `run_turn`'s, not a test-written stand-in. `ACPProcess.spawn` taking these two
+  keywords is this file's own least-invented reading (unconfirmed against any design.md citation,
+  same status as `run_turn`'s other inferred surfaces); if the real module wires notification
+  delivery some other way, a script with notification entries fails loudly rather than passing
+  vacuously, flagged for a future part or round to resolve either way. Sanity-checked all four
+  tests in this file (parts 1/N and 2/N together) against a throwaway stand-in `copilot_acp.py`
+  (not committed, deleted after use): first confirmed all four pass against a correct stand-in,
+  then re-confirmed the two new tests fail when the stand-in's arming flag is deliberately broken
+  (started `True` instead of `False`) -- the CLAUDE.md ordering-rule discipline, applied here to an
+  arming gate rather than a method-order fixture. Confirmed still red at the same
+  `ModuleNotFoundError: No module named 'hub.copilot_acp'` after deleting the stand-in;
+  `ruff`/`black --target-version py311` clean; `openspec validate --strict` (via the `openspec` CLI
+  directly) passes. Cases (c)-(s), 16 of 18, remain for later parts.
 - [ ] 1.10 `hub/tests/test_copilot_home.py` (new): `copilot_home_path` is `…/copilot-home/projects/<pid>/<agent>` and refuses a project id of `..`, `a/b`, `a\b` or one resolving outside the root (R2); the worker home is `…/copilot-home/worker`. `ensure_copilot_home` writes `agents/<agent>.agent.md` with frontmatter `name`, `description` (the marker), `tools`, `model` (omitted for `auto`) and `reasoningEffort`, and a body that opens with the precedence statement and holds the stable context. It also writes `agentweave-mcp.json` with no `env` and `timeout == (agents.MAX_WAITING_SECONDS + 60) * 1000`. A second call with the same content does not rewrite the file (mtime unchanged). No file contains an `aw_run_` string. (Review, finding 8) With `hooks/allow.json`, `settings.json`, `mcp-config.json`, `installed-plugins/p/`, `agents/other.agent.md` and a `config.json` holding `trustedFolders` and `firstLaunchAt` placed in the home, `ensure_copilot_home` removes the first five, drops `trustedFolders` and keeps `firstLaunchAt`, leaves `session-state/` alone, and reports what it removed; a hook recorded in `.agentweave-owned.json` survives, and the same path with changed content is removed
 - [ ] 1.11 `hub/tests/test_copilot_context_split.py` (new):
   - `_render_hub_agent_context`'s `stable`, `per_turn` and `tool_surface` (R3) together hold every `##`/`###` section of `context` exactly once;

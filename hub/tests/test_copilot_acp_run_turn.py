@@ -174,7 +174,24 @@ class _FakeACPSession:
 
 
 def _patch_spawn(monkeypatch, fake):
-    async def _fake_spawn(cmd, *, cwd=None, env=None):
+    async def _fake_spawn(cmd, *, cwd=None, env=None, **kwargs):
+        # Part 2/N: forward whatever notification/server-request handlers `run_turn`'s own
+        # `ACPProcess.spawn` call supplies onto the *same* fake the test already built its
+        # script into, overriding the test's own (usually absent) constructor default. This is
+        # necessary, not cosmetic: the property tests like `TestResumedSessionSequence` check is
+        # what run_turn's *own* notification handling does with a delivered update (arm/drop),
+        # so the handler invoked here must be run_turn's real one, not a test-written stand-in
+        # that would make the assertion pass vacuously. `ACPProcess.spawn` taking these two
+        # keywords is this file's own least-invented reading (same status as its other inferred
+        # surfaces, see the module docstring) -- if the real module instead sets a handler via
+        # some other means (e.g. an attribute on the returned object), this forwarding is a
+        # no-op and a script with notification entries fails loudly (`script exhausted` /
+        # `on_notification handler` AssertionError) rather than silently passing for the wrong
+        # reason.
+        if kwargs.get("on_notification") is not None:
+            fake._on_notification = kwargs["on_notification"]
+        if kwargs.get("on_server_request") is not None:
+            fake._on_server_request = kwargs["on_server_request"]
         return fake
 
     monkeypatch.setattr(ACPProcess, "spawn", _fake_spawn)
@@ -322,3 +339,168 @@ class TestNewSessionSequence:
                 < _first("session/set_config_option")
                 < _first("session/prompt")
             )
+
+
+INIT_RESPONSE = {
+    "protocolVersion": 1,
+    "agentCapabilities": {"loadSession": True},
+    "agentInfo": {"name": "Copilot", "title": "Copilot", "version": "1.0.88"},
+}  # same shape as TestNewSessionSequence's, reused so this file has one source for it
+
+RESUME_ID = "b193bf66-5c0d-4cae-aa21-a9f218216191"  # a real session id, r1-probe-load.log:8 --
+# that capture's own session/load call for it gets -32002 (case (c), not this one: that session
+# was never prompted), so only the id's *format* is real here, not this test's outcome for it.
+
+
+def _replay_chunk(session_update, text):
+    """A `session/update` notification's wire envelope for a replayed history chunk. D7 (line
+    549) names the two update types (`user_message_chunk`, `agent_message_chunk`); their
+    `content` shape is the mapper's own known one (`test_copilot_acp_mapper.py`'s
+    `{"sessionUpdate": ..., "content": {"type": "text", "text": ...}}`), not a capture -- neither
+    evidence log has a `session/load` that actually finds a session to replay (checked directly:
+    both of `r1-probe-load.log`'s calls target an unprompted id and get -32002), so this shape is
+    synthetic, flagged the same way parts 3-6 of `test_copilot_acp_mapper.py` flagged their own
+    synthetic fixtures for uncaptured cases."""
+    return {
+        "notification": "session/update",
+        "params": {
+            "sessionId": RESUME_ID,
+            "update": {"sessionUpdate": session_update, "content": {"type": "text", "text": text}},
+        },
+    }
+
+
+def _load_response():
+    """`session/load`'s success response body. Neither evidence log captures one (see
+    `RESUME_ID`'s own comment), and D7 says nothing about its shape beyond the request echoing
+    `mcpServers: []` -- INFERRED by symmetry with `session/new`'s own response (`modes` +
+    `configOptions`), since the agent-selection step right after it (D6/D7 line 500) reads
+    `configOptions` regardless of which of the two calls produced them. No `sessionId` key: unlike
+    `session/new`, the id is already known (it was in the request), so nothing here invents a
+    second, possibly-conflicting source for it."""
+    return {
+        "modes": {"currentModeId": AGENT_MODE_URI},
+        "configOptions": [_mode_option(), _agent_option(""), _allow_all_option()],
+    }
+
+
+class TestResumedSessionSequence:
+    """Tasks.md 1.9(b): `session/load` is used instead of `session/new` when a `resume_session_id`
+    is given, and any history replay delivered before the prompt produces no event -- design.md's
+    own line 96 flags the replay stream's order relative to the load response itself as INFERRED
+    ("handled order-independently", D7), so both orders are tested here rather than just one.
+
+    Wiring note: `_patch_spawn` (module-level, see its own updated docstring) forwards whatever
+    `on_notification` keyword `run_turn`'s real `ACPProcess.spawn` call supplies onto this fake,
+    so the handler a script's notification entries reach is `run_turn`'s own -- the point of
+    these tests is what its arming gate does with a delivered update, not what a test-written
+    stand-in does.
+    """
+
+    async def _run(self, monkeypatch, script):
+        events = []
+        sessions_bound = []
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Anything changed since I left?",
+            model=None,
+            resume_session_id=RESUME_ID,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+        return fake, events, sessions_bound, outcome
+
+    def _assert_load_not_new(self, fake):
+        methods = [m for m, _ in fake.sent_requests]
+        assert "session/new" not in methods, methods
+        load_calls = [(m, p) for m, p in fake.sent_requests if m == "session/load"]
+        assert len(load_calls) == 1, methods
+        load_params = load_calls[0][1]
+        assert load_params["sessionId"] == RESUME_ID
+        assert load_params["cwd"] == "C:\\work"
+        assert load_params["mcpServers"] == []
+
+    async def test_replayed_chunks_before_load_response_produce_no_event(self, monkeypatch):
+        # Both replay notifications pop before `session/load`'s own response entry, so the fake
+        # delivers them while that call is still in flight -- the order r1-probe-load.log:9-10
+        # itself proves is real for a *different* notification (`available_commands_update`,
+        # case (c)'s -32002 path), reused here to place this test's own chunks in the same slot.
+        script = [
+            {"response": INIT_RESPONSE},
+            _replay_chunk("user_message_chunk", "earlier question"),
+            _replay_chunk("agent_message_chunk", "earlier answer"),
+            {"response": _load_response()},
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent
+            {"response": {}},  # session/set_mode -- D8's posture step, unasserted here too
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake, events, sessions_bound, outcome = await self._run(monkeypatch, script)
+
+        self._assert_load_not_new(fake)
+        assert events == [], "replayed history chunks before the prompt must produce no event"
+        assert sessions_bound == [RESUME_ID], "on_session must bind the resumed id before return"
+        assert outcome == TurnOutcome(session_id=RESUME_ID, status="completed", error=None)
+
+    async def test_replayed_chunks_after_load_response_before_prompt_produce_no_event(
+        self, monkeypatch
+    ):
+        # Same two chunks, moved past `session/load`'s response and into the wait for the next
+        # request (`session/set_config_option`) -- still strictly before `session/prompt` is
+        # written, which is D7's actual line: "any update before that point ... is dropped",
+        # not "any update before the load response". This is the other half of "order-
+        # independently" that the previous test's placement does not cover.
+        script = [
+            {"response": INIT_RESPONSE},
+            {"response": _load_response()},
+            _replay_chunk("user_message_chunk", "earlier question"),
+            _replay_chunk("agent_message_chunk", "earlier answer"),
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },  # session/set_config_option agent
+            {"response": {}},  # session/set_mode
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake, events, sessions_bound, outcome = await self._run(monkeypatch, script)
+
+        self._assert_load_not_new(fake)
+        assert events == [], "replayed history chunks before the prompt must produce no event"
+        assert sessions_bound == [RESUME_ID], "on_session must bind the resumed id before return"
+        assert outcome == TurnOutcome(session_id=RESUME_ID, status="completed", error=None)
