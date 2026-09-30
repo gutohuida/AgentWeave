@@ -11296,7 +11296,7 @@ ENABLED` held — the job was disabled and archived, and `GET /jobs` returns `[]
 
 ## F141 (C) — the approval gate probes git, refuses, names the conflicting file, and then forgets it ever happened
 
-**Status:** open, filed not fixed. The repair is a choice between two surfaces and the code carries
+**Status:** fixed 206165f (`the-approval-preview-asks-the-gates-merge-question`, 2026-09-30: the approval preview runs the gate's own conflict probe and names the conflicting paths before Approve and after a refusal; nothing is persisted, per the operator's D12 answer). Was: open, filed not fixed. The repair is a choice between two surfaces and the code carries
 a written argument for the current behaviour, so it is the operator's. Found driving **row 17,
 integration**, which no previous sweep had reached.
 
