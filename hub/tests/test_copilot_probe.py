@@ -1,8 +1,7 @@
 """`resolve_copilot_executable` (design D2): find the real `copilot.exe`, never the npm
 JS shim `pty_runner.resolve_executable` deliberately leaves alone (`pty_runner.py:57-60`).
 
-The module does not exist yet, so every test below fails at collection today
-(`ModuleNotFoundError: No module named 'hub.copilot_probe'`) — task 3.1 adds it.
+Written ahead of the module (task 1.5); task 3.1 added it.
 """
 
 from __future__ import annotations
@@ -10,14 +9,6 @@ from __future__ import annotations
 import shutil
 
 import pytest
-
-# Written ahead of its module (a-copilot-agent-runs-over-acp, task group 1). Until task 3.1
-# lands `hub.copilot_probe`, the whole file reports as skipped rather than failing collection; the skip
-# disappears by itself when the module exists.
-pytest.importorskip(
-    "hub.copilot_probe",
-    reason="hub.copilot_probe is not implemented yet (a-copilot-agent-runs-over-acp task 3.1)",
-)
 
 from hub.copilot_probe import CopilotExecutableNotFound, resolve_copilot_executable
 
@@ -81,3 +72,14 @@ class TestResolveCopilotExecutable:
 
         with pytest.raises(CopilotExecutableNotFound):
             resolve_copilot_executable(str(pinned))
+
+    def test_pinning_the_platform_binary_inside_the_package_is_accepted(self, tmp_path):
+        """The real `copilot.exe` lives under `@github/copilot/node_modules/...`; being inside
+        the package must not make it read as the npm shim."""
+        _shim, pkg_dir = _npm_shim(tmp_path)
+        platform_dir = pkg_dir / "node_modules" / "@github" / "copilot-win32-x64"
+        platform_dir.mkdir(parents=True)
+        real_exe = platform_dir / "copilot.exe"
+        real_exe.write_bytes(b"MZ")
+
+        assert resolve_copilot_executable(str(real_exe)) == real_exe.resolve()

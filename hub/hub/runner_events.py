@@ -228,6 +228,40 @@ def status_event(phase: str, *, summary: Optional[str] = None) -> RunEvent:
     return RunEvent(kind="status", content=readable_summary, payload=payload)
 
 
+def diagnostic_event(
+    *,
+    stream: str,
+    severity: str,
+    summary: str,
+    code: Optional[str] = None,
+    facts: Optional[Dict[str, Any]] = None,
+) -> RunEvent:
+    """Operational detail that is not the agent's output: a notice about how the run was set up
+    or what the runner reported (`agent-stream-events`: *Diagnostic payloads SHALL identify stream
+    and severity*).
+
+    Mirrors the CLI's `agentweave.stream_events.diagnostic_event(*, stream, severity, summary)`,
+    plus an optional stable `code` and structured `facts` (`a-copilot-agent-runs-over-acp` D10,
+    the shape slice 5 builds on). `summary` is bounded like the CLI's and passed through the value
+    rule of `redact_secrets`, as is every string inside `facts`.
+    """
+    safe_summary = redact_secrets(summary)
+    bounded_summary, truncated = _truncate_utf8(safe_summary, MAX_TOOL_RESULT_BYTES)
+    payload: Dict[str, Any] = {
+        "version": PAYLOAD_VERSION,
+        "stream": stream,
+        "severity": severity,
+        "summary": bounded_summary,
+    }
+    if code is not None:
+        payload["code"] = code
+    if facts is not None:
+        payload["facts"] = redact_secrets(facts)
+    if truncated:
+        payload["truncated"] = True
+    return RunEvent(kind="diagnostic", content=bounded_summary, payload=payload)
+
+
 def error_event(
     *, code: str, message: str, exit_code: Optional[int] = None, retryable: bool = False
 ) -> RunEvent:

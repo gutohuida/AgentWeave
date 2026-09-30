@@ -1089,3 +1089,18 @@ def pytest_sessionfinish(session, exitstatus):  # noqa: ANN001
     with contextlib.suppress(Exception):
         asyncio.run(engine.dispose())
     shutil.rmtree(_TEST_DB_DIR, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_copilot_probe(monkeypatch):
+    """`CopilotProbe.verdict()` schedules a model-free ACP handshake with the real `copilot.exe`
+    when its verdict is stale (`a-copilot-agent-runs-over-acp` D15). Every route that lists
+    launchability now reaches it for `copilot` (`RUNNER_CLIS` includes it), so on a machine with
+    Copilot installed the suite would spawn it. Off by default; the probe's own tests switch it
+    back on and replace the handshake with a fake."""
+    from hub.copilot_probe import CopilotProbe
+
+    CopilotProbe.reset()
+    monkeypatch.setattr(CopilotProbe, "refresh_enabled", False)
+    yield
+    CopilotProbe.reset()

@@ -121,23 +121,6 @@ class TestProbeAgent:
         assert result["authorized"] is True
         assert result["runnable"] is True
 
-    def test_copilot_requires_a_github_token(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/copilot")
-        for var in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
-            monkeypatch.delenv(var, raising=False)
-        result = probe_agent("copilot-agent", {"runner": "copilot"})
-        assert result["authorized"] is False
-        assert "GitHub auth token" in result["reason"]
-
-    def test_copilot_runnable_with_any_recognized_token_var(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/copilot")
-        monkeypatch.delenv("COPILOT_GITHUB_TOKEN", raising=False)
-        monkeypatch.delenv("GH_TOKEN", raising=False)
-        monkeypatch.setenv("GITHUB_TOKEN", "ghp_test")
-        result = probe_agent("copilot-agent", {"runner": "copilot"})
-        assert result["authorized"] is True
-        assert result["runnable"] is True
-
 
 @pytest.mark.asyncio
 async def test_launchability_endpoint_reports_configured_agents(app, auth_headers, monkeypatch):
@@ -743,3 +726,166 @@ def test_spec_turn_notice_is_unchanged_for_a_path_without_an_at_sign() -> None:
     notice = spec_turn_notice("exploring", path="spec/pale-otter.html", is_unwritten=True)
     assert MENTION_NOTICE not in notice
     assert "`spec/pale-otter.html`" in notice and "path='spec/pale-otter.html'" in notice
+
+
+# ---------------------------------------------------------------------------------------------
+# Copilot launchability is read from Copilot itself (`a-copilot-agent-runs-over-acp` task 1.15,
+# design D15). The env-token branch these replace was wrong both ways: the operator's login lives
+# in the Windows Credential Manager, and an ambient token silently overrides it.
+# ---------------------------------------------------------------------------------------------
+
+
+class TestCopilotProbeVerdict:
+    @pytest.fixture(autouse=True)
+    def _probe(self, tmp_path, monkeypatch):
+        from hub import copilot_probe
+
+        exe = tmp_path / "copilot.exe"
+        exe.write_bytes(b"MZ")
+        monkeypatch.setattr(copilot_probe.shutil, "which", lambda name: str(exe))
+        for var in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+            monkeypatch.delenv(var, raising=False)
+        copilot_probe.CopilotProbe.reset()
+        monkeypatch.setattr(copilot_probe.CopilotProbe, "refresh_enabled", True)
+        self.scheduled = []
+        monkeypatch.setattr(
+            copilot_probe.CopilotProbe,
+            "_schedule",
+            classmethod(lambda cls, key, path: self.scheduled.append(key)),
+        )
+        self.exe = exe
+        yield copilot_probe
+        copilot_probe.CopilotProbe.reset()
+
+    def _cache(self, copilot_probe, **fields):
+        import time
+
+        key = copilot_probe._key(self.exe.resolve())
+        fields.setdefault("computed_at", time.monotonic())
+        copilot_probe.CopilotProbe._verdicts[key] = copilot_probe._Verdict(**fields)
+        return key
+
+    def test_signed_in_needs_no_token(self, _probe):
+        self._cache(_probe, present=True, authorized=True, reason=None, version="1.0.88")
+        result = probe_agent("cop-1", {"runner": "copilot"})
+        assert result["runnable"] is True
+        assert result["reason"] is None
+        assert result["cli"] == str(self.exe.resolve())
+        assert "GitHub auth token" not in str(result)
+
+    def test_not_signed_in_names_copilot_login(self, _probe):
+        self._cache(_probe, present=True, authorized=False, reason=_probe.NOT_SIGNED_IN_REASON)
+        result = probe_agent("cop-1", {"runner": "copilot"})
+        assert result["authorized"] is False and result["runnable"] is False
+        assert "copilot login" in result["reason"]
+
+    def test_too_old_names_the_version(self, _probe):
+        self._cache(
+            _probe,
+            present=True,
+            authorized=False,
+            reason=_probe.too_old_reason("1.0.75"),
+            version="1.0.75",
+        )
+        result = probe_agent("cop-1", {"runner": "copilot"})
+        assert result["runnable"] is False
+        assert "1.0.75" in result["reason"] and "1.0.81" in result["reason"]
+
+    def test_pending_is_runnable_and_says_so(self, _probe):
+        result = probe_agent("cop-1", {"runner": "copilot"})
+        assert result["runnable"] is True
+        assert result["verdict_pending"] is True
+        assert len(self.scheduled) == 1
+
+    def test_a_negative_verdict_is_always_stale(self, _probe, monkeypatch):
+        """Finding 11: `copilot login` changes neither the path nor the mtime, so a negative
+        verdict younger than the TTL is returned and a refresh is scheduled."""
+        self._cache(_probe, present=True, authorized=False, reason=_probe.NOT_SIGNED_IN_REASON)
+        result = probe_agent("cop-1", {"runner": "copilot"})
+        assert result["runnable"] is False
+        assert len(self.scheduled) == 1
+
+    def test_a_fresh_positive_verdict_schedules_nothing(self, _probe):
+        self._cache(_probe, present=True, authorized=True, reason=None)
+        probe_agent("cop-1", {"runner": "copilot"})
+        assert self.scheduled == []
+
+    def test_an_unresolvable_cli_is_not_present(self, _probe, monkeypatch):
+        monkeypatch.setattr(_probe.shutil, "which", lambda name: None)
+        result = probe_agent("cop-1", {"runner": "copilot"})
+        assert result["present"] is False and result["runnable"] is False
+        assert "was not found" in result["reason"]
+
+
+class TestCopilotProbeRefresh:
+    """The refresh itself, against a fake process: debounce, and failures that gate nothing."""
+
+    @pytest.fixture(autouse=True)
+    def _probe(self, tmp_path, monkeypatch):
+        from hub import copilot_probe
+
+        exe = tmp_path / "copilot.exe"
+        exe.write_bytes(b"MZ")
+        monkeypatch.setattr(copilot_probe.shutil, "which", lambda name: str(exe))
+        copilot_probe.CopilotProbe.reset()
+        monkeypatch.setattr(copilot_probe.CopilotProbe, "refresh_enabled", True)
+        self.exe = exe
+        yield copilot_probe
+        copilot_probe.CopilotProbe.reset()
+
+    @pytest.mark.asyncio
+    async def test_a_second_read_within_five_seconds_schedules_no_refresh(
+        self, _probe, monkeypatch
+    ):
+        import asyncio
+
+        calls = []
+
+        async def _fake_probe(path):
+            calls.append(path)
+            return _probe._Verdict(True, False, _probe.NOT_SIGNED_IN_REASON)
+
+        monkeypatch.setattr(_probe, "probe_copilot", _fake_probe)
+        probe_agent("cop-1", {"runner": "copilot"})
+        await asyncio.sleep(0)
+        await asyncio.gather(*list(_probe.CopilotProbe._tasks))
+        first = probe_agent("cop-1", {"runner": "copilot"})
+        assert first["runnable"] is False  # the refreshed negative verdict
+        await asyncio.sleep(0)
+        assert len(calls) == 1  # the negative verdict is stale, but a refresh just finished
+
+    @pytest.mark.asyncio
+    async def test_an_unclassified_failure_leaves_the_verdict_and_adds_probe_error(
+        self, _probe, monkeypatch
+    ):
+        import asyncio
+        import time
+
+        key = _probe._key(self.exe.resolve())
+        _probe.CopilotProbe._verdicts[key] = _probe._Verdict(
+            True, True, None, computed_at=time.monotonic() - _probe.POSITIVE_TTL_SECONDS - 1
+        )
+
+        async def _boom(path):
+            raise TimeoutError("probe timed out")
+
+        monkeypatch.setattr(_probe, "probe_copilot", _boom)
+        probe_agent("cop-1", {"runner": "copilot"})
+        await asyncio.gather(*list(_probe.CopilotProbe._tasks))
+        result = probe_agent("cop-1", {"runner": "copilot"})
+        assert result["runnable"] is True
+        assert result["reason"] is None
+        assert result["probe_error"] == "probe timed out"
+
+    def test_the_probe_argv_disables_builtin_mcps(self, _probe):
+        argv = _probe.probe_argv(self.exe)
+        assert argv[0] == str(self.exe)
+        assert "--disable-builtin-mcps" in argv
+        assert "--acp" in argv and "--no-auto-update" in argv
+
+    def test_record_writes_the_turns_verdict(self, _probe):
+        _probe.CopilotProbe.record(
+            present=True, authorized=False, reason=_probe.NOT_SIGNED_IN_REASON
+        )
+        result = probe_agent("cop-1", {"runner": "copilot"})
+        assert result["runnable"] is False and "copilot login" in result["reason"]

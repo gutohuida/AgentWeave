@@ -135,11 +135,6 @@ def test_a_decision_is_reached_even_when_reporting_fails(workspace, monkeypatch)
 # names. Fails today: `_decide` takes no such keywords.
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=TypeError,
-    reason="a-copilot-agent-runs-over-acp: written ahead of task 5.1; remove this mark when it lands",
-)
 def test_decide_workspace_keyword_overrides_the_environment(tmp_path, monkeypatch):
     env_ws = tmp_path / "env-workspace"
     kw_ws = tmp_path / "kw-workspace"
@@ -160,11 +155,6 @@ def test_decide_workspace_keyword_overrides_the_environment(tmp_path, monkeypatc
     assert decision["allow"] is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=TypeError,
-    reason="a-copilot-agent-runs-over-acp: written ahead of task 5.1; remove this mark when it lands",
-)
 def test_decide_hub_url_keyword_overrides_the_environment_for_a_literal_url(tmp_path, monkeypatch):
     """The case only `_is_own_hub` decides: a literal URL word, not a `$HUB_URL`/`$env:HUB_URL`
     reference. `HUB_URL` names the wrong host in the environment; only the `hub_url` keyword names
@@ -1416,3 +1406,26 @@ def test_codex_posture_mapping():
     assert _codex_posture(WORKSPACE_PERMISSION_MODE) == WORKSPACE_PERMISSION_MODE
     assert _codex_posture("acceptEdits") is None
     assert _codex_posture(None) is None
+
+
+def test_decide_hub_url_keyword_reaches_a_reference_and_refuses_the_environments_hub(
+    tmp_path, monkeypatch
+):
+    """`hub_url` is threaded to every reader of `HUB_URL` (design D8, R2: five functions), so a
+    `$HUB_URL` reference resolves to the keyword's address, and the Hub process's own `HUB_URL`
+    no longer counts as the run's Hub."""
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    monkeypatch.setenv("AW_WORKSPACE_DIR", str(ws))
+    monkeypatch.setenv("HUB_URL", "http://env-hub:8000")
+    monkeypatch.delenv("AW_RUN_TOKEN", raising=False)
+    real_hub = "http://run-hub:1234"
+
+    reference = _decide("Bash", {"command": "curl $HUB_URL/api/x"}, hub_url=real_hub)
+    assert reference["allow"] is True
+
+    envs_hub = _decide("Bash", {"command": "curl http://env-hub:8000/x"}, hub_url=real_hub)
+    assert envs_hub["allow"] is False
+
+    nested = _decide("Bash", {"command": "echo $(curl http://env-hub:8000/x)"}, hub_url=real_hub)
+    assert nested["allow"] is False

@@ -53,7 +53,7 @@ from .model_catalog import (
 # Why: build_command's only caller is api/v1/agent_trigger.py:1106, inside
 #   trigger_agent_directly (line 586-1341), where `runner` is probe_agent's echo of a config
 #   whose "runner" was just overwritten with the bound Runner.cli (agent_trigger.py:677), and
-#   Runner.cli is validated against RUNNER_CLIS = ("claude", "codex") (db/models.py:311).
+#   Runner.cli is validated against RUNNER_CLIS = ("claude", "codex", "copilot") (db/models.py).
 # Live equivalent: RUNNER_CLIS. The 501 gate at agent_trigger.py:686 is unreachable for the
 #   same reason, as is the "claude_proxy"/"native" half of build_command's branch at line 179.
 # Removal: hub/tests/test_runner_parsing.py:104 builds commands for both names directly.
@@ -106,8 +106,8 @@ OPERATOR_POSTURE = "operator"
 # DEAD (2026-09-20): the "claude_proxy" and "native" rows below can never be looked up.
 # Why: the sole caller of catalog_provider_for_runner outside this module is
 #   agent_trigger.py:1291, in the same function whose `runner` is the bound Runner.cli —
-#   validated against RUNNER_CLIS = ("claude", "codex") (db/models.py:311). See SUPPORTED_RUNNERS.
-# Live equivalent: the "claude" and "codex" rows, which are the whole live surface.
+#   validated against RUNNER_CLIS = ("claude", "codex", "copilot") (db/models.py). See SUPPORTED_RUNNERS.
+# Live equivalent: the "claude", "codex" and "copilot" rows, which are the whole live surface.
 # Removal: hub/tests/test_model_catalog.py:18 asserts every catalog provider is in
 #   SUPPORTED_RUNNERS, so these two must go together with that tuple's legacy entries.
 # claude_proxy and native both invoke the claude CLI (see _build_claude_command) under a

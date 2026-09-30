@@ -11,21 +11,23 @@ from __future__ import annotations
 
 import os
 import shutil
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .file_mentions import MENTION_NOTICE, neutralise_file_mentions
 
-# DEAD (2026-09-20): 7 of these 9 keys name runner kinds no agent can be bound to any more.
-# Why: a Runner's `cli` is validated against RUNNER_CLIS = ("claude", "codex")
-#   (db/models.py:311, schemas/runners.py:22) and RunnerUpdate has no `cli` field at all
+# DEAD (2026-09-20): 6 of these 8 keys name runner kinds no agent can be bound to any more.
+# Why: a Runner's `cli` is validated against RUNNER_CLIS = ("claude", "codex", "copilot")
+#   (db/models.py, schemas/runners.py:22) and RunnerUpdate has no `cli` field at all
 #   (schemas/runners.py:27), so no runner row can hold another value; every spawn overwrites
 #   config["runner"] from the bound Runner (api/v1/agent_trigger.py:677) before probing.
-# Live equivalent: RUNNER_CLIS in hub/hub/db/models.py:311 — the only registry that binds.
+# Live equivalent: RUNNER_CLIS in hub/hub/db/models.py — the only registry that binds.
+#   `copilot` has no row here: `probe_agent` asks `CopilotProbe` before this table is read
+#   (`a-copilot-agent-runs-over-acp` D15, which deleted the row and its env-token branch).
 # Removal: "native" still backs probe_agent's default at line 63 and "manual" still arrives
-#   from legacy session.json, so neither is removable; kimi/opencode/copilot/codex_mcp/
+#   from legacy session.json, so neither is removable; kimi/opencode/codex_mcp/
 #   claude_proxy have no writer but a hand-made POST /session/sync (session_sync.py:46) or
 #   /agents/register payload (api/v1/agents.py:2209), plus hub/tests/test_launchability.py.
 # Runner -> CLI binary name. Mirrors the "cli" field of RUNNER_CONFIGS in
@@ -39,7 +41,6 @@ RUNNER_CLI: Dict[str, Optional[str]] = {
     "codex": "codex",
     "codex_mcp": "codex",
     "manual": None,
-    "copilot": "copilot",
 }
 
 #: Not a runner, and deliberately not a key of `RUNNER_CLI`: the value `get_agent_config` reports
@@ -89,6 +90,13 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     cli_override = config.get("cli")
+    if runner == "copilot":
+        # Read from Copilot itself (`a-copilot-agent-runs-over-acp` D15): a cached verdict from a
+        # model-free ACP handshake, refreshed in the background. Never spawns here, never raises.
+        from .copilot_probe import CopilotProbe
+
+        return CopilotProbe.verdict(str(cli_override) if cli_override else None)
+
     cli = str(cli_override) if cli_override else (RUNNER_CLI.get(runner) or name)
 
     if cli_override:
@@ -113,17 +121,6 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
                 f"Required proxy API key variable ${api_key_var} is not set "
                 "in the Hub's environment."
             )
-    elif runner == "copilot":
-        has_token = bool(
-            os.environ.get("COPILOT_GITHUB_TOKEN")
-            or os.environ.get("GH_TOKEN")
-            or os.environ.get("GITHUB_TOKEN")
-        )
-        if not has_token:
-            authorized = False
-            auth_reason = (
-                "No GitHub auth token found (COPILOT_GITHUB_TOKEN / GH_TOKEN / GITHUB_TOKEN)."
-            )
 
     if not present:
         reason = missing_reason
@@ -140,6 +137,88 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
         "runnable": present and authorized,
         "reason": reason,
     }
+
+
+#: GitHub tokens Copilot reads. An ambient one silently overrides the operator's stored Copilot
+#: login (appendix A §E), so a Copilot spawn carries one only when the agent's own `env_vars` name
+#: it. The ambient-`ANTHROPIC_BASE_URL` rule below is the same idea for Claude.
+COPILOT_TOKEN_ENV_NAMES: Tuple[str, ...] = ("GH_TOKEN", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN")
+
+#: Variables that make Copilot approve on its own account or trust the folder (loading its hooks,
+#: MCP servers and extensions). Removed from every Copilot spawn -- inherited or named in
+#: `env_vars` -- whatever the posture: a per-agent variable must not be a hidden fifth posture
+#: (review 2026-09-28, finding 3). Full access is the posture that lets Copilot approve.
+COPILOT_TRUST_ENV_NAMES: Tuple[str, ...] = (
+    "COPILOT_ALLOW_ALL",
+    "COPILOT_ASSISTED_APPROVAL",
+    "COPILOT_PLAN_THEN_AUTOPILOT",
+    "GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS",
+    "GITHUB_COPILOT_PROMPT_MODE_WORKSPACE_MCP",
+    "GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS",
+)
+
+#: A prefix, not a list: the 1.0.88 bundle reads 15 such names. With `COPILOT_MODEL` and
+#: `COPILOT_OFFLINE`, removed from every spawn of a runner without a provider -- which, until
+#: slice 5's BYOK, is every Copilot spawn. An ambient `COPILOT_PROVIDER_BASE_URL` would otherwise
+#: silently turn a subscription run into a BYOK one.
+COPILOT_PROVIDER_ENV_PREFIX = "COPILOT_PROVIDER_"
+COPILOT_MODEL_ENV_NAMES: Tuple[str, ...] = ("COPILOT_MODEL", "COPILOT_OFFLINE")
+
+
+def copilot_env_removal_sentence(name: str) -> str:
+    """The `copilot.permission_override_removed` diagnostic's sentence for one removed name."""
+    if name.upper().startswith(COPILOT_PROVIDER_ENV_PREFIX) or name.upper() in (
+        COPILOT_MODEL_ENV_NAMES
+    ):
+        return (
+            f"{name} was removed from this agent's environment; Copilot's model and provider "
+            "come from its runner."
+        )
+    return (
+        f"{name} was removed from this agent's environment; use the Full access posture to let "
+        "Copilot approve on its own."
+    )
+
+
+def _copilot_always_stripped(name: str) -> bool:
+    upper = name.upper()
+    return (
+        upper in COPILOT_TRUST_ENV_NAMES
+        or upper in COPILOT_MODEL_ENV_NAMES
+        or upper.startswith(COPILOT_PROVIDER_ENV_PREFIX)
+    )
+
+
+def copilot_guard_env(
+    proc_env: Dict[str, str], env_vars: Dict[str, Any]
+) -> Tuple[Dict[str, str], List[str]]:
+    """The one Copilot environment filter (design D3; slice 1's `guard_env`). Every Copilot spawn
+    -- the turn, the one-shot calls, the launchability probe -- goes through it.
+
+    Removes the GitHub tokens unless `env_vars` name them, and the trust, provider and model
+    variables unconditionally, from the inherited environment **and** from `env_vars`. Also drops
+    `COPILOT_HOME`: the Hub sets it after this, so no entry can move the run out of the
+    Hub-owned home. Returns the filtered environment and the `env_vars` names it removed, which
+    the turn reports as `copilot.permission_override_removed` diagnostics.
+    """
+    named = {str(key).upper() for key in env_vars}
+    removed: List[str] = []
+    result: Dict[str, str] = {}
+    for key, value in proc_env.items():
+        upper = key.upper()
+        if upper == "COPILOT_HOME":
+            continue
+        if upper in COPILOT_TOKEN_ENV_NAMES and upper not in named:
+            continue
+        if _copilot_always_stripped(key):
+            if upper in named and key not in removed:
+                removed.append(key)
+            continue
+        result[key] = value
+    for key in env_vars:
+        if _copilot_always_stripped(str(key)) and str(key) not in removed:
+            removed.append(str(key))
+    return result, removed
 
 
 def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str, str]]:
@@ -193,6 +272,11 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
             proc_env = dict(base)
             proc_env.pop("ANTHROPIC_BASE_URL", None)
 
+    if runner == "copilot":
+        # Always a full environment: the strips below apply to the inherited one too.
+        base = proc_env if proc_env is not None else dict(os.environ)
+        proc_env, _removed = copilot_guard_env(base, env_vars)
+
     return proc_env
 
 
@@ -222,12 +306,13 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
 # DEAD (2026-09-20): "claude_proxy"/"native" here, and the non-injectable branch at line 245.
 # Why: resolve_access_path's only caller is api/v1/agent_trigger.py:1008, inside
 #   trigger_agent_directly, whose `runner` is the bound Runner.cli (agent_trigger.py:677) —
-#   validated against RUNNER_CLIS = ("claude", "codex") (db/models.py:311). Both live values
-#   are already in this set, so the `not in` arm cannot be taken by any run.
+#   validated against RUNNER_CLIS = ("claude", "codex", "copilot") (db/models.py). All three live
+#   values are in this set (copilot since `a-copilot-agent-runs-over-acp` D1, without which no
+#   Copilot run would be given the Hub's server), so the `not in` arm cannot be taken by any run.
 # Live equivalent: none needed — every spawnable runner is MCP-injectable.
 # Removal: hub/tests/test_launchability.py:421 asserts the branch using runner "kimi", which
 #   no Runner row can hold; that test goes with it.
-MCP_INJECTABLE_RUNNERS = {"claude", "claude_proxy", "native", "codex"}
+MCP_INJECTABLE_RUNNERS = {"claude", "claude_proxy", "native", "codex", "copilot"}
 
 
 def resolve_access_path(runner: str, override: Optional[str] = None) -> str:

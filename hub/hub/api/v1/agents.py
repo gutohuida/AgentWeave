@@ -182,8 +182,10 @@ async def get_agents_launchability(
     and, for an agent the Hub can actually trigger directly, whether it is
     collaboration-ready (task 6).
 
-    Read-only and side-effect-free — this checks PATH, environment variables, and DB
-    rows visible to the Hub process; it never spawns anything (task 6.2). Feeds
+    Read-only — this checks PATH, environment variables, and DB rows visible to the Hub
+    process; it never spawns an agent run (task 6.2). A stale Copilot verdict schedules a
+    model-free ACP handshake in the background (`a-copilot-agent-runs-over-acp` D15), which
+    starts no conversation and makes no model call. Feeds
     launchability indicators in the agent/runner selector.
 
     For an agent bound to a Hub Runner (`Agent.runner_id` set), the Runner's own

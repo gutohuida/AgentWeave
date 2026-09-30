@@ -1207,7 +1207,17 @@ def _effective_port(parts: urllib.parse.SplitResult) -> Optional[int]:
     return parts.port if parts.port is not None else _DEFAULT_PORTS.get(parts.scheme.lower())
 
 
-def _is_own_hub(url: str) -> bool:
+def _hub_base(hub_url: Optional[str]) -> str:
+    """The run's own Hub address: the caller's `hub_url` when given, else this process's `HUB_URL`.
+
+    The spawned MCP process has the run's environment, so the default is right there. The Hub
+    process judging a Copilot request in-process (`copilot_acp.decide_permission`) does not: its
+    environment names whatever the Hub itself was started with, so it passes the run's address.
+    """
+    return (hub_url if hub_url is not None else os.environ.get("HUB_URL", "")).strip()
+
+
+def _is_own_hub(url: str, hub_url: Optional[str] = None) -> bool:
     """Whether a URL names the run's own Hub: the approver's `HUB_URL` scheme (ignoring case), host
     and effective port, with no userinfo.
 
@@ -1215,7 +1225,7 @@ def _is_own_hub(url: str) -> bool:
     token, which reaches only the agent-action surface. `localhost` is not equated with
     `127.0.0.1`; that would be a DNS claim this cannot check.
     """
-    base = os.environ.get("HUB_URL", "").strip()
+    base = _hub_base(hub_url)
     if not base:
         return False
     try:
@@ -1232,7 +1242,9 @@ def _is_own_hub(url: str) -> bool:
         return False
 
 
-def _judge_url(word: str, root: str, argument: str, continues: bool) -> Optional[Dict[str, Any]]:
+def _judge_url(
+    word: str, root: str, argument: str, continues: bool, hub_url: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
     """Rule 1. A `file:` URL is judged as the path it names. The run's own Hub may be named, and is
     still judged as the relative path it spells, because the shell does not know it is a URL
     (`echo hi > http://hub/../../x` writes through a directory called `http:`). Any other address
@@ -1249,7 +1261,7 @@ def _judge_url(word: str, root: str, argument: str, continues: bool) -> Optional
         except (OSError, ValueError):
             return _refuse(word, _UNRESOLVED)
         return _judge_path(path, root, word, argument, continues)
-    if not _is_own_hub(word):
+    if not _is_own_hub(word, hub_url):
         return _refuse(word, _NETWORK)
     if _expands(word):
         return _refuse(word, _UNCHECKED)
@@ -1257,15 +1269,21 @@ def _judge_url(word: str, root: str, argument: str, continues: bool) -> Optional
 
 
 def _judge_word(
-    word: str, argument: str, continues: bool, root: str, dialect: str, trusted: bool
+    word: str,
+    argument: str,
+    continues: bool,
+    root: str,
+    dialect: str,
+    trusted: bool,
+    hub_url: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Judge one word by the first of the six rules that matches it; None when it may stand."""
     if _URL_SCHEME_RE.match(word):  # 1: a URL
-        return _judge_url(word, root, argument, continues)
+        return _judge_url(word, root, argument, continues, hub_url)
     reference = _HUB_REFERENCE_RE[dialect].match(word)
     if reference:  # 2: a reference to the run's own Hub
         rest = word[reference.end() :]
-        base = os.environ.get("HUB_URL", "").strip()
+        base = _hub_base(hub_url)
         if trusted and base and (not rest or rest[0] in "/?#") and not _expands(rest):
             # Also the path it spells, once the shell has put the approver's value in its place.
             return _judge_path(base + rest, root, word, argument, continues)
@@ -1533,7 +1551,12 @@ def _words(arguments: List[str]) -> List[Tuple[str, str, bool]]:
 
 
 def _read_command(
-    command: str, root: str, dialect: str, reading: str, depth: int = 0
+    command: str,
+    root: str,
+    dialect: str,
+    reading: str,
+    depth: int = 0,
+    hub_url: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """The first refusal that reading `command` in `dialect` under `reading` finds, or None.
 
@@ -1557,17 +1580,23 @@ def _read_command(
     # every way of reassigning it first (`HUB_URL=`, `export`, `$env:HUB_URL =`) without a list.
     trusted = 0 < references == len(re.findall(r"(?i)HUB_URL", command))
     for word, argument, continues in words:
-        refusal = _judge_word(word, argument, continues, root, dialect, trusted)
+        refusal = _judge_word(word, argument, continues, root, dialect, trusted, hub_url)
         if refusal:
             return refusal
     for inner in nested:
-        refusal = _read_command(inner, root, dialect, reading, depth + 1)
+        refusal = _read_command(inner, root, dialect, reading, depth + 1, hub_url)
         if refusal:
             return refusal
     return None
 
 
-def _decide(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
+def _decide(
+    tool_name: str,
+    tool_input: Dict[str, Any],
+    *,
+    workspace: Optional[str] = None,
+    hub_url: Optional[str] = None,
+) -> Dict[str, Any]:
     """Decide one permission request. Pure and total: every input maps to a decision.
 
     Mirrors `codex_appserver.decide_approval`'s contract for the Codex side — an unanswered
@@ -1580,11 +1609,18 @@ def _decide(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
     earlier call is not seen, and a path built at run time never appears as a word, so this is a
     boundary, not a sandbox. Nor does it govern network access: it rules only on which address a
     shell command's text may name, and a fetch tool's URL is not read at all.
+
+    `workspace` and `hub_url` default to this process's `AW_WORKSPACE_DIR` and `HUB_URL`, which are
+    the run's own in the spawned MCP process. A caller judging in the Hub process (Copilot's ACP
+    client, `a-copilot-agent-runs-over-acp` D8) passes the run's values instead: the Hub's own
+    environment names neither. `hub_url` is threaded to every reader of `HUB_URL` below.
     """
     if tool_name.startswith("mcp__agentweave__"):
         return {"allow": True, "reason": "the Hub's own tools"}
 
-    workspace = os.environ.get("AW_WORKSPACE_DIR", "").strip()
+    workspace = (
+        workspace if workspace is not None else os.environ.get("AW_WORKSPACE_DIR", "")
+    ).strip()
     if not workspace:
         return {
             "allow": False,
@@ -1612,7 +1648,7 @@ def _decide(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
             # Two passes, unconditionally: a `$'...'` escape from 0x100 to 0x7FFFFFFF renders
             # differently by locale, and both renderings must be judged (design D1, Round 4).
             for reading in ("c", "utf8"):
-                refusal = _read_command(command, root, dialect, reading)
+                refusal = _read_command(command, root, dialect, reading, hub_url=hub_url)
                 if refusal:
                     return refusal
 
