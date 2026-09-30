@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import func, select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Charter, EventLog, Project, Run, Runner
+from hub.db.models import RUNNER_CLIS, Charter, EventLog, Project, Run, Runner
 from hub.project_lifecycle import ProjectLifecycleService
 from hub.project_workspace import PROJECT_MARKER_PATH, ProjectIdentityConflict, ProjectPathError
 
@@ -42,7 +42,7 @@ async def test_open_existing_registers_atomically_and_seeds_project_defaults(app
     assert stored.directory_state == "available"
     assert stored.last_opened_at is not None
     assert stored.last_seen_at is not None
-    assert runner_count == 2
+    assert runner_count == len(RUNNER_CLIS)
     assert charter_count and charter_count > 0
 
 
@@ -128,7 +128,7 @@ async def test_orphaned_marker_is_adopted_under_its_own_id(app, tmp_path) -> Non
         )
     assert stored is not None
     assert stored.working_directory == str(directory.resolve())
-    assert runner_count == 2
+    assert runner_count == len(RUNNER_CLIS)
     assert charter_count and charter_count > 0
 
 
@@ -197,7 +197,7 @@ async def test_deleted_project_directory_is_adopted_back_under_the_same_id(app, 
         runner_count = await session.scalar(
             select(func.count()).select_from(Runner).where(Runner.project_id == original_id)
         )
-    assert runner_count == 2
+    assert runner_count == len(RUNNER_CLIS)
 
 
 @pytest.mark.asyncio
@@ -420,7 +420,7 @@ async def test_create_new_creates_exactly_one_directory_and_registers_it(app, tm
         charter_count = await session.scalar(
             select(func.count()).select_from(Charter).where(Charter.project_id == project.id)
         )
-    assert runner_count == 2
+    assert runner_count == len(RUNNER_CLIS)
     assert charter_count and charter_count > 0
 
     async with async_session_factory() as session:
