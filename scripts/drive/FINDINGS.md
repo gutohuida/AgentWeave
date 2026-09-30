@@ -21994,7 +21994,7 @@ its place.
 - **Not fixed:** the hard-link hole this entry records is unrelated and untouched.
 
 ## F283 (B) - the Permissions pill sits on "Edit files" while the run it describes is spawned under "Workspace only"
-**Status:** open
+**Status:** fixed 8d16d8f (`the-permissions-pill-shows-the-posture-the-run-gets`, 2026-09-30: one `posture_at_rest` read by the spawn, Copilot, the roster and both pills; Claude's catalog default is `workspace`). Was: open
 
 **Found 2026-09-04 (night N-21)** while documenting the postures (task 7.1). **Filed, not fixed** -
 it is outside `a-write-outside-the-workspace-is-recorded`, whose scope is observing writes, not

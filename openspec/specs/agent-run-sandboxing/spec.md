@@ -50,7 +50,9 @@ that defers every decision to an absent answerer denies everything and is indist
 broken run.
 
 Isolation SHALL continue to be carried by the agent's workspace boundary, not by withholding
-permission inside it.
+permission inside it. The default posture SHALL NOT widen what an agent can affect outside its own
+workspace. Where the default posture is the one in which the Hub decides each tool call against the
+workspace, it narrows it: a call the Hub judges to reach outside the workspace is refused.
 
 #### Scenario: A newly created agent can edit files in its own workspace
 
@@ -64,10 +66,12 @@ permission inside it.
 - **WHEN** no operator-facing approval surface exists for a provider
 - **THEN** the Hub does not default that provider's runs to a posture that asks for approval
 
-#### Scenario: The workspace boundary is unchanged
+#### Scenario: The default posture never widens the workspace boundary
 
 - **WHEN** an agent acts under the default posture
-- **THEN** its ability to affect anything outside its own workspace is unchanged by that posture
+- **THEN** its ability to affect anything outside its own workspace is not widened by that posture
+- **AND** where the default is the posture in which the Hub decides each tool call, a call the Hub
+  judges to reach outside the workspace is refused
 
 ### Requirement: The operator chooses a conversation's permission posture
 
@@ -187,32 +191,6 @@ a decision already reached, never a precondition of reaching it.
 - **AND** the run continues
 
 ---
-
-### Requirement: Introducing an enforced posture does not change existing runs
-
-The default posture SHALL NOT change as a consequence of an enforced posture becoming available, and
-runs that do not select it SHALL be spawned exactly as before.
-
-A posture that decides each tool call is new machinery on the path of every action. Adopting it is a
-deliberate choice, made per conversation, not a change imposed on every existing agent's next run.
-
-Flags that serve the enforced posture SHALL be emitted only for that posture, and only where the
-mechanism answering them is present.
-
-#### Scenario: The default is unchanged
-
-- **WHEN** a non-yolo run is spawned with no posture selected
-- **THEN** it uses the same default posture as before the enforced posture existed
-
-#### Scenario: Other postures carry no enforcement machinery
-
-- **WHEN** a run selects a posture other than the enforced one
-- **THEN** its command carries nothing referring to the enforcement mechanism
-
-#### Scenario: No enforcement is claimed without an answerer
-
-- **WHEN** the enforced posture is selected but no mechanism is present to answer its requests
-- **THEN** the command does not claim enforcement it cannot perform
 
 ### Requirement: A permission request does not outlive the wait it represents
 
@@ -1220,3 +1198,33 @@ one, the run's timeline SHALL say it was removed.
 - **WHEN** a Copilot agent's configured environment names `COPILOT_ALLOW_ALL`
 - **THEN** the spawned Copilot process's environment has no `COPILOT_ALLOW_ALL`
 - **AND** the run's timeline says it was removed and names the Full access posture
+
+### Requirement: The built-in posture a run receives is the posture shown for it
+
+The built-in posture a run receives when neither its conversation nor its agent states one SHALL be decided in one place per provider, and every surface that shows a posture at rest SHALL show that posture.
+
+For a run the Hub can answer, that posture is the one in which the Hub decides each tool call
+against the run's workspace. A posture that accepts edits but leaves execution to a prompt nobody
+can answer lets an agent write code and never run it. A run the Hub cannot answer receives the
+posture that accepts edits, and a provider whose own default already confines the run to its
+workspace keeps that default.
+
+Flags that serve the enforced posture SHALL be emitted only for that posture, and only where the
+mechanism answering them is present.
+
+#### Scenario: The default spawned is the default shown
+
+- **WHEN** a non-yolo run is spawned with no posture selected by its conversation or its agent
+- **THEN** it is spawned under the built-in posture for its provider
+- **AND** that is the posture the app showed for it at rest
+
+#### Scenario: Other postures carry no enforcement machinery
+
+- **WHEN** a run selects a posture other than the enforced one
+- **THEN** its command carries nothing referring to the enforcement mechanism
+
+#### Scenario: No enforcement is claimed without an answerer
+
+- **WHEN** the enforced posture is selected but no mechanism is present to answer its requests
+- **THEN** the command does not claim enforcement it cannot perform
+

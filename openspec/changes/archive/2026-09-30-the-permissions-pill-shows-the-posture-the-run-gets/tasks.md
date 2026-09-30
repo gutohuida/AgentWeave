@@ -39,4 +39,5 @@
 
 ## 3. Close
 
-- [ ] 3.1 F283 → `fixed <sha>`; backlog regenerated; `openspec validate the-permissions-pill-shows-the-posture-the-run-gets --strict`; archive
+- [x] 3.1 F283 → `fixed <sha>`; backlog regenerated; `openspec validate the-permissions-pill-shows-the-posture-the-run-gets --strict`; archive
+  Done 2026-09-30: F283 footed `fixed 8d16d8f`; validate --strict passes; archived. The backlog page is regenerated once at the end of this session's batch rather than per change.
