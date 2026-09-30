@@ -2125,13 +2125,19 @@ class TestProcessTerminatedWithForceOnAFailedTurnToo:
         )
 
 
-def _session_established_script(*, tail_entry):
+def _session_established_script(*, tail_entry=None, tail_entries=None):
     """The four waypoints every case in this file scripts before a turn can fail *after* the
     prompt is written -- `initialize` / `session/new` / `session/set_config_option agent` /
     `session/set_mode` -- exactly as `TestProcessTerminatedWithForceOnAFailedTurnToo` (part
-    13/N) scripts them, plus whichever single entry `tail_entry` is standing in for
-    `session/prompt` itself. Factored out here because this case's two scenarios differ in
-    nothing else."""
+    13/N) scripts them, plus whatever stands in for `session/prompt` itself: either a single
+    `tail_entry` (part 14/N's shape, kept for its two already-committed call sites) or an
+    ordered `tail_entries` list (part 15/N: case (o) needs an armed `session.error` notification
+    delivered *during* the still-pending `session/prompt` call, ahead of its own response entry
+    -- the same in-flight-notification mechanism `TestStopSendsSessionCancelAndInterrupts`
+    (part 6/N) already relies on, not a new one). Exactly one of the two must be given. Factored
+    out here because every case built on top of this helper differs in nothing else."""
+    if (tail_entry is None) == (tail_entries is None):
+        raise AssertionError("pass exactly one of tail_entry or tail_entries")
     return [
         {"response": INIT_RESPONSE},
         {
@@ -2151,7 +2157,7 @@ def _session_established_script(*, tail_entry):
             }
         },
         {"response": {}},  # session/set_mode -- D8's posture step, unasserted here
-        tail_entry,
+        *([tail_entry] if tail_entries is None else tail_entries),
     ]
 
 
@@ -2287,4 +2293,140 @@ class TestPostPromptFailuresReturnFailedOutcomeNotRaise:
         assert fake.is_running() is False, (
             "the fake's own process_exited entry already marks it dead -- run_turn must not "
             "re-resurrect it, e.g. by unconditionally setting _running back to True somewhere"
+        )
+
+
+class TestArmedSessionErrorFailsUnlessStopWins:
+    """Tasks.md 1.9(o): "an armed raw `session.error` followed by `stopReason: end_turn` returns
+    `status == "failed"` with the event's `message`. With `stopReason: cancelled` it is
+    `interrupted`."
+
+    Design.md's own statement of the rule (`:1040-1046`, "A session error fails the turn (R3)"):
+    a raw `session.error` armed in this turn ends the turn `TurnOutcome(status="failed",
+    error=<its message>)`, *whatever stop reason `session/prompt` returns, unless the stop
+    reason is `cancelled`* -- "a stop wins, D17" (`:1043`, also restated at `:1209-1210`, "A stop
+    still wins, and gives `interrupted` (D17)"). Copilot turns the error into message text and
+    may still answer `end_turn` (`:1044`) -- the whole reason this rule exists is that, without
+    it, a turn where the model call itself failed would otherwise read `completed`.
+
+    This case's `session.error` is the **root** agent's: its envelope carries no `agentId`, so
+    D10's separate "only a root `session.error` fails the turn" carve-out (`:1053-1059`, "review
+    finding 8", cited by tasks.md's own case list as bullet 19 of the *Provided to slices 3-5*
+    section, not case (o)) does not apply here and is not this case's to test -- a subagent's
+    envelope shape belongs with whichever later part covers that finding.
+
+    Both scenarios below arm the raw event the same way `TestUsageUpdateProducesMeasuredSample
+    WithResolvedModel` (part 9/N) armed `session.tools_updated`: a `notification` script entry
+    for `github.com/copilot/sessionEvent` delivered *during* the still-in-flight `session/prompt`
+    call, immediately before that call's own response entry -- the one point this fake's
+    strictly-ordered script can deliver anything to `run_turn` while `session/prompt` is still
+    pending (this file's module docstring). Neither scenario calls `should_interrupt`: (o)'s own
+    text ties the `interrupted` outcome to `session/prompt`'s returned `stopReason` alone, not to
+    the client having requested a stop, so `run_turn` is given no reason to send `session/cancel`
+    itself, and neither test asserts on it.
+
+    `_session_established_script`'s `tail_entries` (part 15/N's own extension, above) supplies
+    the four pre-prompt waypoints and this case's two-entry tail in one call; case (n)'s two
+    already-committed tests keep using its single-entry `tail_entry` form unchanged.
+    """
+
+    @staticmethod
+    def _armed_session_error_notification(message):
+        return {
+            "notification": "github.com/copilot/sessionEvent",
+            "params": {
+                "sessionId": SESSION_ID,
+                "type": "session.error",
+                "timestamp": "2026-09-30T00:00:09.000Z",
+                "data": {"errorType": "model_error", "message": message},
+            },
+        }
+
+    async def test_armed_session_error_then_end_turn_returns_failed_with_events_message(
+        self, monkeypatch
+    ):
+        events = []
+        sessions_bound = []
+        message = "Model call failed: upstream rate limited"
+
+        script = _session_established_script(
+            tail_entries=[
+                self._armed_session_error_notification(message),
+                {
+                    "response": {
+                        "stopReason": "end_turn",
+                        "usage": {"inputTokens": 1, "outputTokens": 1},
+                    }
+                },  # session/prompt's own eventual result -- Copilot still answers end_turn
+            ]
+        )
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Summarise the failing build.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        assert outcome.status == "failed", (
+            "design.md:1040-1046: an armed session.error fails the turn whatever stopReason "
+            f"session/prompt returns, including end_turn -- got status {outcome.status!r}"
+        )
+        assert outcome.session_id == SESSION_ID
+        assert outcome.error is not None and message in outcome.error, (
+            "the event's own message must reach outcome.error, " f"got {outcome.error!r}"
+        )
+
+    async def test_armed_session_error_then_cancelled_returns_interrupted(self, monkeypatch):
+        events = []
+        sessions_bound = []
+        message = "Model call failed: upstream rate limited"
+
+        script = _session_established_script(
+            tail_entries=[
+                self._armed_session_error_notification(message),
+                {"response": {"stopReason": "cancelled"}},  # a stop wins over the armed error
+            ]
+        )
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Summarise the failing build.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        assert outcome == TurnOutcome(session_id=SESSION_ID, status="interrupted", error=None), (
+            "design.md:1043, 1209-1210: 'a stop wins' -- stopReason cancelled must give "
+            f"interrupted even with an armed session.error pending, got {outcome!r}"
         )
