@@ -480,6 +480,9 @@ A project that has granted no agent SHALL still be able to accept evidence, as t
 Where an agent has no bound runner and nothing else supplies one, the Hub SHALL report that no runner
 is bound. It SHALL NOT report a missing executable derived from the agent's own name.
 
+This SHALL hold for every agent, whatever created it. The Hub SHALL NOT exempt an agent from the
+unbound verdict on the strength of how it joined the project.
+
 Measured on the trial Hub 2026-08-21: an agent whose `runner_id` was null was reported as
 `Runner CLI 'probe-norunner' was not found in PATH.`, sending the operator to look for a binary named
 after their own agent. The masking is recorded as already-fixed for the *bound* case in the Hub's own
@@ -507,6 +510,13 @@ works.
 - **GIVEN** an agent whose bound runner and synchronised configuration name different runners
 - **WHEN** the Hub reports which runner it would use
 - **THEN** it reports the bound runner, because that is what would actually be launched
+
+#### Scenario: No agent is exempt by origin
+
+- **GIVEN** any agent in the project with no bound runner and no runner in its synchronised configuration
+- **WHEN** the Hub reports whether it can be launched, and when input for it is queued
+- **THEN** both the launchability reason and the queue's waiting reason state that no runner is bound
+- **AND** neither names an executable derived from the agent's name
 
 ### Requirement: An agent that cannot be archived SHALL be told what to clear
 

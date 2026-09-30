@@ -56,4 +56,5 @@
   Done 2026-09-30: `py -3.11 -m pytest hub/tests/ -q -n 8` with `claude` off PATH (PowerShell, npm dir removed): 5451 passed, 87 skipped, 0 failed, 7:11. `tests/` 560 passed, 3 skipped. ruff (src/ hub/ tests/, and scripts/ bug rules), black, mypy src/, eslint, tsc clean.
 - [x] 3.2 Drive on a trial Hub (`:8010` or a scratch profile, never `:8000`): create an agent through the UI's route, `PATCH` its `runner_id` to null (F136's step 2), trigger it, and read the three surfaces F111 named (launchability, queue status, composer line). Record the sentences verbatim
   Done 2026-09-30 on a throwaway Hub (`:8033`, profile `drive0930c`, project `proj-dfcbff3c399e`, no model call): register 405; create 201 with no watchdog fields; after `runner_id: null`, launchability, the trigger's `waiting_reason` and `GET /queue/worker/status` all read "No runner is bound to this agent. Bind one in the Hub UI before it can run."; the roster carries none of the fields; PATCH `contact_mode` 400. The composer line reads the same queue status.
-- [ ] 3.3 Reconcile `openspec/specs/` (sync the three deltas) and archive
+- [x] 3.3 Reconcile `openspec/specs/` (sync the three deltas) and archive
+  Done 2026-09-30: the three deltas applied by `openspec archive`; F111, F136 and F3 footed as fixed `5ee4cb6`.

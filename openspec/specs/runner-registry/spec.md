@@ -4,9 +4,7 @@
 
 Define project-scoped, Hub-owned runner records that separate reusable execution capability from
 agent identity and provide explicit, operator-managed agent bindings.
-
 ## Requirements
-
 ### Requirement: Runners are project-scoped Hub records
 
 The Hub SHALL persist runner definitions as project-scoped database rows, each identifying a
@@ -234,12 +232,9 @@ An agent's reported launchability SHALL be derived from the runner bound to it w
 bound, regardless of how the agent came to exist. The probe and the spawn SHALL NOT be able to
 disagree about the same agent.
 
-Today the bound-runner merge is gated on the agent not having self-registered. That exemption's
-intent — a self-registered agent manages its own execution and legitimately has no runner — is
-sound, but it is written as an assumption and never enforced: an agent that is both self-registered
-and bound to a runner is reachable through two ordinary API calls. Such an agent is reported
-unlaunchable, naming a CLI after the agent itself, while triggering it works normally. The probe is
-the one the operator sees.
+No agent is exempt from this by how it came to exist. Every agent is created by the operator or
+by a governed agent request; there is no self-registered agent that manages its own execution, so
+there is no population for which an absent runner is legitimate rather than unbound.
 
 **The probe SHALL report the same set of agents the roster offers.** An agent the roster excludes
 by lifecycle SHALL NOT appear in a launchability report that did not ask for that lifecycle, and
@@ -257,8 +252,8 @@ An agent excluded by lifecycle SHALL be excluded from the report entirely rather
 a lifecycle reason inside its verdict. Lifecycle is the roster's fact and the roster states it; a
 second statement of it inside the probe would be a second vocabulary for one condition.
 
-#### Scenario: A self-registered agent with a runner bound
-- **WHEN** launchability is probed for a self-registered agent that has a runner bound
+#### Scenario: An agent with a runner bound
+- **WHEN** launchability is probed for an agent that has a runner bound
 - **THEN** the verdict SHALL describe that runner
 - **AND** the agent SHALL be reported launchable if that runner is launchable
 
@@ -480,3 +475,4 @@ next read of it, so that signing in or updating is seen without waiting for the 
 
 - **WHEN** an operator creates a Copilot agent before the Hub has finished its first Copilot probe
 - **THEN** creation is not refused on that account
+

@@ -96,7 +96,7 @@ The Hub Logs UI SHALL expose diagnostics in a way that reflects the current proj
 
 #### Scenario: Agent filter includes actual agents
 - **WHEN** the Hub Logs view is opened
-- **THEN** the agent filter includes agents from configured session data, self-registered agents, or returned log entries, including custom agents and proxy agents
+- **THEN** the agent filter includes agents from configured session data, the project's agents, or returned log entries, including custom agents and proxy agents
 
 #### Scenario: Diagnostic category filters exist
 - **WHEN** diagnostic events exist in the log stream
@@ -105,8 +105,6 @@ The Hub Logs UI SHALL expose diagnostics in a way that reflects the current proj
 #### Scenario: Log detail remains secret-safe
 - **WHEN** a log entry contains diagnostic data derived from env vars, transport config, or runner commands
 - **THEN** the UI does not display secret values
-
----
 
 ### Requirement: Job failure diagnostics
 The system SHALL make scheduled and manually fired job failures durable and visible.

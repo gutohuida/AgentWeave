@@ -661,7 +661,7 @@ word — "UTC" — not a timezone feature.
 
 ## F3 (C) — `contact_mode` still defaults to `"watchdog-spawn"`
 
-**Status:** open — **failed the no-spec carve-out gate, 2026-09-06 (night N-4). Spec-loop work, jointly
+**Status:** fixed 5ee4cb6 (`agents-no-longer-register-themselves`, 2026-09-30: the register route, the four watchdog-era agent columns and the launchability exemption are deleted; every agent with no runner is reported unbound). Was: open — **failed the no-spec carve-out gate, 2026-09-06 (night N-4). Spec-loop work, jointly
 with F111.** Nothing was changed. See *The gate, run and failed* below.
 
 Every agent created through `POST /projects/{id}/agents` comes back with
@@ -7958,7 +7958,7 @@ decision rather than a repair.
 
 ## F111 (B) — a self-registered agent with no runner is told to install a binary named after itself
 
-**Status:** open. The wrong sentence still ships: `POST /agents/register` is live at
+**Status:** fixed 5ee4cb6 (`agents-no-longer-register-themselves`, 2026-09-30: the register route, the four watchdog-era agent columns and the launchability exemption are deleted; every agent with no runner is reported unbound). Was: open. The wrong sentence still ships: `POST /agents/register` is live at
 `hub/hub/api/v1/agents.py:2144` (verified 2026-09-09). The operator's 2026-08-29 decision settled
 the *route* out -- delete self-registration, alongside F3 -- rather than taking it. That deletion
 is unimplemented, and F3 is itself still open. [classified 2026-09-09, D-2]
@@ -10674,7 +10674,7 @@ positives whose cost is paid by whoever reads the report.
 
 ## F136 (B) — the fix that stopped the Hub naming a binary after your agent does not cover the agents that most need it
 
-**Status:** open. This entry says so itself -- *"they are not fixed"* -- and it shares a root
+**Status:** fixed 5ee4cb6 (`agents-no-longer-register-themselves`, 2026-09-30: the register route, the four watchdog-era agent columns and the launchability exemption are deleted; every agent with no runner is reported unbound). Was: open. This entry says so itself -- *"they are not fixed"* -- and it shares a root
 with F111: the `self_registered` guard in `get_agent_config`. Both close by deleting
 self-registration, which is unimplemented. [classified 2026-09-09, D-2]
 
