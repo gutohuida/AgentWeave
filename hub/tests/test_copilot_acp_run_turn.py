@@ -43,8 +43,12 @@ unconditionally right after agent selection on every turn including this one, is
 real response is a bare `{}`, VERIFIED at `r1-probe-plan.log:12`) so a real implementation calling
 it does not exhaust the script, but this part makes no assertion about it -- that is D8's posture
 step, not case (a)'s own four waypoints, and asserting its params here would invent a second
-task's coverage under this one's name. Cases (b)-(s) (18 lettered cases total, a-s) remain, all of
-them, for later parts; this part covers (a) only, nothing else in tasks.md 1.9's list.
+task's coverage under this one's name. Cases (b)-(w) remain, all of them, for later parts; this
+part covers (a) only, nothing else in tasks.md 1.9's list. (Part 5/N correction: this paragraph
+originally said "18 lettered cases total, a-s" and tasks.md's own part 4/N note repeated that
+miscount ("cases (e)-(s), 14 of 18, remain") -- re-counting tasks.md's Assert list directly, fresh,
+while writing part 5/N found it actually runs `(a)` through `(w)`, 23 cases, not 18. Both counts are
+corrected here and in tasks.md's part 5/N note; do not carry the "18"/"a-s" figure forward.)
 
 Confirmed red: `pytest hub/tests/test_copilot_acp_run_turn.py -q` fails at collection,
 `ModuleNotFoundError: No module named 'hub.copilot_acp'`.
@@ -717,3 +721,143 @@ class TestVersionGateFailsBeforeAnySessionRequest:
             len(fake.sent_requests) == 1 and fake.sent_requests[0][0] == "initialize"
         ), "a missing version must fail the gate before any session/* request too"
         assert fake.closed_with_force is False, "D17: the process is still closed, not forced"
+
+
+class TestFullAccessWithNoAllowAllOption:
+    """Tasks.md 1.9(e): full access with no `allow_all` option -- a diagnostic, and requests are
+    judged as `workspace`. D8 (design.md:794-813): after session/new (or load) and agent selection,
+    under full access (design.md:654-660's mapping table sends `permission_mode="bypassPermissions"`
+    there), the client tries to turn `allow_all` on. "If `allow_all` is absent, or the set fails
+    ..., the run does not answer every request with ALLOW. That would grant through the Hub what
+    the organisation withheld from Copilot. The run instead proceeds under `workspace` and emits a
+    `diagnostic` event" (`:798-801`), with the exact sentence design.md quotes (`:804-806`):
+    "Copilot did not grant Full access (<Copilot's error message, or "no allow-all option was
+    offered">); this run is deciding each action against its workspace instead." Here the option is
+    simply missing from `configOptions` (not present-but-failing-to-set), so the bracketed half is
+    the literal "no allow-all option was offered" -- design.md never states the other half's
+    wording, since that depends on whatever error Copilot itself would raise, which this case does
+    not exercise. `configOptions` omits `allow_all` from both `session/new`'s own response and
+    `session/set_config_option agent`'s, since design.md's "after session/new/load" wording and its
+    later, unified posture-step listing (`:815-844`, "after new/load and agent selection") do not
+    agree on which call's `configOptions` is the one actually consulted -- omitting it from both
+    makes the test's absence-check true regardless of which the real implementation reads.
+
+    `copilot.full_access_withdrawn` / `warning` is the code/severity design.md's own diagnostic
+    table gives this row (`:1016`), the same convention `TestSessionLoadNotFoundRebinds` already
+    uses for `copilot.session_missing` / `info`.
+
+    Proof that the request is actually judged as `workspace`, not defensively ALLOWed (D8's other
+    full-access rule, `:807-813`, for a request that reaches the handler despite `allow_all`
+    genuinely being on): the scripted `session/request_permission` is an `edit` naming a path
+    *outside* `workspace`, which `workspace`'s judge (`_decide("Write", ...)`, design.md:637)
+    REJECTs and full access's own defensive ALLOW would not -- the same distinguishing technique
+    `test_codex_appserver_run_turn.py`'s `test_an_outside_workspace_decline_is_reported` already
+    uses for Codex. The `toolCall`/`options` shapes are CODE-only (design.md:60-61) -- neither
+    evidence log has a captured `session/request_permission` at all (design.md:74, "`acp4…log`
+    holds no `session/request_permission`"), so this fixture is synthetic, flagged the same way
+    `test_copilot_acp_mapper.py`'s `TestEditDiffToolUse` flags its own synthetic edit fixture.
+    """
+
+    EDIT_CALL_ID = "call_synthetic_full_access_edit_1"
+    OUTSIDE_PATH = "C:\\other\\evil.txt"
+
+    async def test_diagnostic_and_outside_workspace_edit_rejected(self, monkeypatch):
+        events = []
+        sessions_bound = []
+
+        script = [
+            {"response": INIT_RESPONSE},
+            {
+                "response": {
+                    "sessionId": SESSION_ID,
+                    "modes": {"currentModeId": AGENT_MODE_URI},
+                    "configOptions": [_mode_option(), _agent_option("")],  # no allow_all option
+                }
+            },
+            {
+                "response": {
+                    "configOptions": [_mode_option(), _agent_option(AGENT_NAME)]
+                }  # session/set_config_option agent -- still no allow_all option
+            },
+            {"response": {}},  # session/set_mode -- D8's posture step, unasserted here
+            {
+                "server_request": {
+                    "id": 1,
+                    "method": "session/request_permission",
+                    "params": {
+                        "sessionId": SESSION_ID,
+                        "toolCall": {
+                            "toolCallId": self.EDIT_CALL_ID,
+                            "title": "Edit evil.txt",
+                            "kind": "edit",
+                            "rawInput": {"fileName": self.OUTSIDE_PATH},
+                            "locations": [{"path": self.OUTSIDE_PATH}],
+                        },
+                        "options": [
+                            {"optionId": "allow_once", "name": "Allow", "kind": "allow_once"},
+                            {
+                                "optionId": "allow_always",
+                                "name": "Always Allow",
+                                "kind": "allow_always",
+                            },
+                            {"optionId": "reject_once", "name": "Reject", "kind": "reject_once"},
+                        ],
+                    },
+                }
+            },
+            {
+                "response": {
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 1, "outputTokens": 1},
+                }
+            },  # session/prompt
+        ]
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd="C:\\work",
+            env=None,
+            prompt="Please edit a file outside the workspace.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode="bypassPermissions",
+            workspace="C:\\work",
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector(events),
+            on_session=_collector(sessions_bound),
+        )
+
+        allow_all_sets = [
+            (m, p)
+            for m, p in fake.sent_requests
+            if m == "session/set_config_option" and p.get("configId") == "allow_all"
+        ]
+        assert (
+            allow_all_sets == []
+        ), "an absent allow_all option must not be set -- there is nothing there to set"
+
+        diagnostics = [e for e in events if e.kind == "diagnostic"]
+        assert len(diagnostics) == 1, events
+        payload = diagnostics[0].payload
+        assert payload["code"] == "copilot.full_access_withdrawn", payload
+        assert payload["severity"] == "warning", payload
+        assert payload["summary"] == (
+            "Copilot did not grant Full access (no allow-all option was offered); this run is "
+            "deciding each action against its workspace instead."
+        ), payload["summary"]
+
+        assert fake.sent_responses == [
+            (1, {"outcome": {"outcome": "selected", "optionId": "reject_once"}})
+        ], "an edit outside the workspace must be REJECTed once judged as workspace, not ALLOWed"
+
+        assert sessions_bound == [SESSION_ID]
+        assert outcome == TurnOutcome(session_id=SESSION_ID, status="completed", error=None)
+        assert fake.closed_with_force is False, "D17: ACPProcess.close() on every exit, not forced"
