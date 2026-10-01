@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "db1a331",
     "stop_at":  "2026-10-02T07:00:00+01:00",
-    "iteration":  1,
+    "iteration":  2,
     "log_file":  ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
     "current":  "a-dialog-takes-the-keyboard-when-its-opens-impl",
-    "next_action":  "Read gh CI verdict for the sha this firing inherits first. Then open openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md: rounds (0.1-0.3) and APPROVALS (B11/F307, 09-24) are already done, no blocker. Take task 1.1 (focus harness test, red) together with its implementing tasks 2.1+2.2 (useDialogFocus.ts's D1 move, tabIndex=-1 on panels) as one vertical slice -- write the test, show it red, implement, show it green, tick both. Run hub/ui's vitest once first to confirm the baseline (no prior run recorded tonight).",
+    "next_action":  "Continue openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md group 1/2. Tasks 1.1/2.1/2.2 are done (commit 68f11b4): D1's focus move, tabIndex=-1 on all 8 panelRef elements (grep found an 8th, StartFlowDialog, not in design's 7 -- noted in design.md's round log, fold into task 2.9's re-grep). Next: task 1.2 (mark on the second button -> focus lands there) and 1.3 (no mark -> first focusable) in useDialogFocus.test.tsx's new 'initial focus on open (D1)' describe block -- both should already be GREEN since D1's implementation is generic (marked ?? first ?? panel); write them, confirm green, tick. Then task 1.4 (every control disabled -> focus the panel) as its own slice, since it needs its own harness variant. Run hub/ui vitest for useDialogFocus.test.tsx after each.",
     "queue":  [
                   {
                       "id":  "a-dialog-takes-the-keyboard-when-its-opens-impl",
