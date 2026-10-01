@@ -1,11 +1,13 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
-- [ ] 0.1 R2: re-derive the proposal independently against `hub/hub/mcp_server.py` (`_hub_own_call`,
+- [x] 0.1 R2: re-derive the proposal independently against `hub/hub/mcp_server.py` (`_hub_own_call`,
   `_hub_own_command`, `_plain_calls_path`, `_inside_hub_calls_root`, rule 6 of `_judge_word`) and
   `hub/hub/copilot_acp.py:515-540`. Re-run the proposal's table, and do not trust R1's numbers. Confirm or refute
   that F478 is rule 6 and not rule 1. Re-read `the-shell-judge-reads-a-word-whole` D2 and say again whether the
   two changes are independent. Check slice 3's drive logs for a bash write of an arguments file (Open
   question 1).
+  - **Done 2026-10-02** (night iteration 5): see design.md's round log, R2. Table confirmed; rule 6 confirmed;
+    9.10's exact bytes fit D2; independence re-derived; no bash write in any drive. Three corrections made.
 - [ ] 0.2 R3: a second independent re-derivation, measuring D2's grammar traps on PowerShell 5.1 again (smart
   quotes, here-strings, `-Value` arrays, parameter prefixes, `--%`). `openspec validate
   an-arguments-file-written-from-powershell-is-the-hubs-own --strict` passes.
@@ -39,9 +41,11 @@
   (`test_a_junctioned_calls_directory_gives_no_standing`). The 9.10 form falls through.
 - [ ] 1.7 Controls (PASS today, must keep passing): the whole existing file; `hub/tests/test_permission_approver.py`;
   `hub/tests/test_copilot_acp_run_turn.py`; `hub/tests/test_copilot_acp_decide.py`.
-- [ ] 1.8 A Copilot-path test in `hub/tests/test_copilot_acp_decide.py`, beside slice 3's `_hub_own` tests (`:368`, `:1201`): an
-  `execute` request of the 9.10 form on a **spec turn** is answered ALLOW with "the Hub's own tools" before the
-  judge, in each posture.
+- [ ] 1.8 A Copilot-path test in `hub/tests/test_copilot_acp_decide.py`, beside slice 3's call-command tests (`:1140`,
+  `:1146`, `:1201`): an `execute` request of the 9.10 form on a **spec turn** is answered ALLOW with "the Hub's own
+  tools" before the judge, in each posture. (R2) Its `calls` map holds `CallFacts(tool_name="powershell", …)` for
+  the call id, as the captured start event reports and as `:1140` does. Controls: the same request with no facts,
+  and with `tool_name="write_powershell"`, is keyed `Shell` and falls through to the judge.
 
 ## 2. The fix
 

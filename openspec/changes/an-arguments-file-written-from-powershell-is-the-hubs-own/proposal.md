@@ -1,8 +1,8 @@
 # Proposal — an arguments file written from PowerShell is the Hub's own
 
 **Round 1, 2026-10-02** (night window; the operator's explicit exception in `spec-queue/APPROVALS.md`
-`## 2026-10-01`). Finding: **F478 (B)**. **Nothing here is implemented.** R2 and R3 must each re-derive it
-against the code before any task starts. An adversarial review follows, then the operator approves it.
+`## 2026-10-01`). Finding: **F478 (B)**. **Nothing here is implemented.** R2 (2026-10-02, night iteration 5)
+re-derived it against the code; R3 must do so again before any task starts. An adversarial review follows, then the operator approves it.
 
 ## Why
 
@@ -29,6 +29,12 @@ on this Windows host:
 | the same with `{"path":"../x.html"}`, `{"path":"/etc/x"}` | deny `'/x.html'`, `'/etc/x'` |
 | the same with `{"url":"https://example.com/x"}` | deny `'s://example.com/x'` (the `s:` read as a drive) |
 | bash `echo '{"path":"spec/x.html"}' > .agentweave/calls/r.json` | deny `'/x.html'` |
+| **(R2)** 9.10's exact bytes, from the trial Hub's `agent_outputs`: `Set-Content -Path '.agentweave/calls/read-spec.json' -Value '{"path":"spec/changes/ivory-hydra/spec.html"}' -Encoding utf8`, as `PowerShell` or `Shell` | deny `'/changes/ivory-hydra/spec.html'` |
+
+R2 re-ran every row above with its own probe (`.claude/autonomous/tmp/f478_r2_probe.py`) at `9efdfd8`, and
+each matched. It also measured `{"path": "../x.html"}` (a space after the colon) still refused as `'../x.html'`,
+`{"path": "C:\x"}` refused, and `{"body": "see https://example.com/x"}` refused as a network address. So the
+argument values this change calls data are refused today in either spacing.
 
 The finding calls the culprit the *URL reader* and suggests treating a scheme only when `//` follows it.
 **That is not the mechanism, and the suggested behaviour is already in place.** Rule 1 (`_URL_SCHEME_RE`,
@@ -38,7 +44,10 @@ backstop** (`:1359-1364`), which the archived `a-url-is-not-a-path` also built:
 - After `_words` trims the edges, the word is `path":"spec/x.html`.
 - It holds a separator. It is not plain, because `_PLAIN_RELATIVE_RE` (`:1109-1122`) refuses a colon in the
   first segment, by design: *"a colon in the first segment is where a host or a revision goes, and those are
-  left to the backstop"*.
+  left to the backstop"*. **(R2)** It also refuses the `"` left inside the word, which
+  `_PLAIN_RELATIVE_EVERYWHERE` excludes at every position. So the JSON word reaches rule 6 even without its
+  colon: R2 measured `path""spec/x.html` refused `'/x.html'` too. The colon is the only reason for
+  `echo 'a:b/c'`.
 - So it falls to rule 6. Rule 6's `_ABSOLUTE_PATH_RE` (`:1103-1106`) opens a candidate at the first separator
   and judges `/x.html` as a path at the root of the drive.
 
@@ -111,7 +120,11 @@ is fourth from last in tonight's ORDER, and with its sibling it is about 72 task
 - **Code:** `hub/hub/mcp_server.py` gets a new `_hub_own_powershell_write(command, workspace)`, called from
   `_hub_own_call`'s shell branch after `_hub_own_command`. Its docstring and D8's "three cases" become four.
   Copilot's ACP handler already reaches it through `_hub_own_call` (`copilot_acp.py:535`), so nothing changes
-  there.
+  there. **(R2)** It reaches case 4 only under the key `PowerShell`, which `_shell_key` (`copilot_acp.py:444-453`)
+  gives only when Copilot's `tool.execution_start` reported `toolName: "powershell"` before the permission
+  request. Any other name (`write_powershell`), or none, is the key `Shell`, which never earns standing, as for
+  case 2. That holds in production: the captured fixture (`turn_write_shell_mcp.jsonl`) orders the start event
+  first, and slice 3's 9.4 (`run-000e23023de9`, "Ask me") got case 2's standing on Copilot with no card.
 - **Tests:** `hub/tests/test_hub_own_call.py`.
 - **Spec:** `agent-run-sandboxing`, **MODIFIED** "The Hub's own call command is decided like the Hub's own
   tools". That requirement is slice 3's ADDED one and is not yet synced. **This change archives only after slice

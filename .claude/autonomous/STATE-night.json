@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F478-r2",
-    "next_action": "F478 R2 on openspec/changes/an-arguments-file-written-from-powershell-is-the-hubs-own/: an independent re-derivation against hub/hub/mcp_server.py (_hub_own_call, _hub_own_command, _plain_calls_path, rule 6) and copilot_acp.py:515-540. A fresh comparison, not a re-read of R1: re-measure the proposal's table yourself, confirm or refute 'rule 6 not rule 1', re-check independence from the-shell-judge-reads-a-word-whole, look for a bash args-file write in slice 3's drive evidence (Open question 1). Fix the proposal where it is wrong, tick tasks.md 0.1, add an R2 entry to design.md's round log. No code.",
+    "current": "F478-r3",
+    "next_action": "F478 R3 on openspec/changes/an-arguments-file-written-from-powershell-is-the-hubs-own/: a second independent re-derivation, not a re-read of R1/R2. Re-measure D2's grammar traps on real PowerShell 5.1 (smart quotes U+2018-U+201B closing and doubling a literal, @'...'@ here-strings, -Value 'a','b' arrays, parameter prefixes -Val/-Enc, --%, 'a'b with no space after the literal, en-dash parameter dashes U+2013/U+2014), and ask what each route returns when the predicate raises. Fix the proposal where wrong, tick tasks.md 0.2, add an R3 entry to design.md's round log, openspec validate --strict. No code.",
     "queue": [
         {
             "id": "F479-fix",
@@ -29,9 +29,9 @@
         },
         {
             "id": "F478-r2",
-            "status": "open",
+            "status": "done",
             "title": "F478 R2: independent re-derivation against the code",
-            "detail": "Change: openspec/changes/an-arguments-file-written-from-powershell-is-the-hubs-own/. Fresh comparison against the code, not a re-read of R1: re-run the proposal's table (.claude/autonomous/tmp/f478_probe.py exists but write your own cases too), re-derive rule 6 vs rule 1, re-read the-shell-judge-reads-a-word-whole D2, check slice 3's drive logs for a bash args-file write (Open question 1). Tick tasks.md 0.1 and log in design.md's round log."
+            "detail": "Done iter 5: table, line refs and rule-6 mechanism confirmed with an own probe; 9.10's exact bytes (trial DB, run-b30d4295abaf seq 5) fit D2's grammar and decode via _decode_args_file. Corrected: word non-plain via quote too; Unicode is 5.1 and decodable; Copilot reaches case 4 only under key PowerShell (shown to hold by 9.4). OQ1: no bash args-file write in any drive DB. Task 1.8 fixed. 0.1 ticked."
         },
         {
             "id": "F478-r3",

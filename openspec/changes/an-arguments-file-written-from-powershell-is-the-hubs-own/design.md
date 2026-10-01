@@ -94,9 +94,12 @@ Each rule, and what it closes:
   *inside* the literal is content (measured: `'line1<LF>line2'` wrote two lines).
 - **Wildcards.** `-Path` expands wildcards and `-LiteralPath` does not. The plain set excludes `*`, `?`, `[` and
   `]`, so both read the same path.
-- **`-Encoding` is `utf8` only.** The shim decodes a UTF-8 BOM first (slice 3 D3). `utf8NoBOM`, `utf8BOM` and
-  `Unicode` (PowerShell 7 names) fall through. An encoding the shim cannot decode would only produce a usage
-  error, but the notice names `utf8`, and exactness costs nothing.
+- **`-Encoding` is `utf8` only.** The shim decodes a UTF-8 BOM first (slice 3 D3). `utf8NoBOM` and `utf8BOM`
+  (PowerShell 7 names: 5.1 refuses `utf8NoBOM` at parameter binding, measured by R2) and `Unicode` fall through.
+  **(R2)** `Unicode` is a 5.1 name, not a 7 one. It writes UTF-16LE with a BOM (`FF FE`, measured), which
+  `_decode_args_file` (`mcp_server.py:2438-2456`) decodes. So it falls through for exactness, not because the
+  shim cannot read it. An encoding the shim cannot decode would only produce a usage error, but the notice names
+  `utf8`, and exactness costs nothing.
 
 ### D3 — Where the write lands
 
@@ -119,7 +122,14 @@ location change lands only where a `.agentweave/calls/` already exists, which is
   rule 6 *after* `_hub_own_call` has run, so a case-4 command never reaches it. After both are built, a near miss
   of case 4 (`-Value "…"`, say) is judged by the new rule 6 like any command.
 - **Slices 4 and 5** (`a-copilot-run-shows-its-credits`, `a-copilot-agent-uses-hooks-and-its-own-agents`): they do
-  not touch `_hub_own_call` (R1 grep of both changes' tasks; R2 to confirm).
+  not touch `_hub_own_call` (R1 grep of both changes' tasks). **R2 confirmed it**: no file of either change
+  names `_hub_own_call`, `_hub_own_command` or `_standing_rules`.
+- **R2 on independence from the shell judge.** That change's files never name `_hub_own*`, and its new D5 runs
+  before rule 3 on whole words, but neither of its patterns (`_SCP_ADDRESS_RE`, `_HOST_PORT_RE`) matches
+  `path":"spec/x.html`. One more reason for D1(a)'s rejection, **read from its design, not measured**: its
+  bounds section names a quoted JSON array of about nine or more two-key objects as refused by its bash
+  reading, as too many brace alternatives. Case 4 runs before the judge, so a PowerShell write of such a
+  payload keeps its standing after that change ships. A near miss does not.
 
 ## Risks
 
@@ -147,7 +157,10 @@ route changes its return shape.
 
 1. **A bash form?** The notice names only PowerShell. Claude has `Write` on every turn, including spec turns that
    are told `shim` (slice 3 D16). Copilot on a POSIX host has `create`. **R1 recommends leaving it out** until a
-   drive shows a bash write of an arguments file being refused. R2 should check slice 3's drive logs for one.
+   drive shows a bash write of an arguments file being refused. **R2 checked**: across the `agent_outputs` of every drive
+   profile on this machine (nine, read `mode=ro`), exactly three tool calls wrote an arguments file: Copilot's
+   `apply_patch` (`run-000e23023de9`), Claude's `Write` (`run-5ffb0bac65e3`), and 9.10's PowerShell
+   `Set-Content`. None was bash. R2 agrees with leaving it out.
 2. **The location residual** (Risks, first bullet). Accept it as part of the persistent-session class (R1's
    recommendation), or ask the operator. An alternative that closes it: accept only an **absolute** `-Path`
    equal to a file in the calls root, and change the notice to print that absolute path. That costs a notice
@@ -162,3 +175,19 @@ route changes its return shape.
   the two changes. Not measured: the shell judge's outcomes (it is unbuilt), and whether Copilot's
   `rawInput.command` for 9.10's write matches the grammar byte for byte. The finding quotes it abbreviated
   (`-Value '{"path":"spec/..."}'`); task 3.2 captures it.
+- **R2, 2026-10-02** (night iteration 5, at `9efdfd8`). A fresh comparison with its own probe
+  (`.claude/autonomous/tmp/f478_r2_probe.py`), not R1's. **Confirmed:** every row of the proposal's table; every
+  line reference (`mcp_server.py` 1103-1122, 1359-1364, 1707-1775, 1803, 2007; `copilot_acp.py` 535; the three
+  notice sites); and rule 6, not rule 1. `_lex`/`_words` give the word `path":"spec/x.html` (`continues` true),
+  `_URL_SCHEME_RE` does not match it, and `_ABSOLUTE_PATH_RE` yields `/x.html`. **Measured what R1 could not:**
+  9.10's exact command, recovered from the trial Hub's `agent_outputs` (`run-b30d4295abaf`, sequence 5, read
+  `mode=ro`), fits D2's grammar byte for byte (`-Path '…'`, `-Value '…'`, bare `utf8`, in that order).
+  `_decide` refuses it under both `PowerShell` and `Shell`. Real PowerShell 5.1.26100.9444 writes it as
+  `EF BB BF` + the JSON + CRLF, and `_decode_args_file` + `json.loads` returns the dict. So the fix reaches the
+  instance it is for. **Corrected:** (1) the word is not plain for two reasons, not one (its `"` as well as its
+  colon; proposal). (2) `Unicode` is a 5.1 encoding the shim decodes, not a PowerShell 7 name (D2). (3) The
+  Copilot route reaches case 4 only under the key `PowerShell`, which needs Copilot's start event to name
+  `powershell`. Shown to hold in production by 9.4 (proposal, Impact). Task 1.8 now builds its facts that way,
+  and its line reference is fixed. **Answered:** Open question 1 (no bash write in any drive) and D4's slices
+  4/5 check. **Re-derived independence** from `the-shell-judge-reads-a-word-whole` (D4). Not re-measured
+  (left to R3): D2's smart-quote, here-string, array and prefix traps.
