@@ -123,7 +123,10 @@ SPEC_TURN_USES_PLAN_MODE = False
 #: Copilot's write tools except `create`, excluded on a specification turn (D3, D9 item 1). One
 #: comma-joined argv word: `app.js`'s filter splits the value on commas. `create` stays, because a
 #: spec turn told `shim` must write its args file; the handler refuses every other edit (item 1a).
-SPEC_TURN_EXCLUDED_TOOLS = ("apply_patch", "edit", "str_replace", "str_replace_editor")
+#: `str_replace` dropped (F479): 1.0.88 does not know that tool name and logs an "Unknown tool
+#: name in the tool excludedlist" diagnostic for it every spec turn; `str_replace_editor` is the
+#: name 1.0.88 actually reports disabling, and stays excluded.
+SPEC_TURN_EXCLUDED_TOOLS = ("apply_patch", "edit", "str_replace_editor")
 
 MODE_URI_PREFIX = "https://agentclientprotocol.com/protocol/session-modes#"
 AGENT_MODE = MODE_URI_PREFIX + "agent"

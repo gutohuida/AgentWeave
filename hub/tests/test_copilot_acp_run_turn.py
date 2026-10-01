@@ -1603,9 +1603,11 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
 
     async def test_spawn_argv_excludes_copilots_edit_tools_but_keeps_create(self, monkeypatch):
         """Design.md:181-186 (D3), :211-218: one comma-joined argv word,
-        `--excluded-tools=apply_patch,edit,str_replace,str_replace_editor`, sent unconditionally
+        `--excluded-tools=apply_patch,edit,str_replace_editor`, sent unconditionally
         for a spec turn, including under full access -- and `create` is never in it, since a spec
-        turn's own `shim` access path must still write its args file (D9 item 1)."""
+        turn's own `shim` access path must still write its args file (D9 item 1). `str_replace`
+        is not in the list (F479): 1.0.88 does not know that tool name and logged an "Unknown
+        tool name in the tool excludedlist" diagnostic for it on every spec turn."""
         events = []
         sessions_bound = []
         captured_cmds = []
@@ -1645,9 +1647,10 @@ class TestSpecTurnRestrictsWritesAndAllowAll:
         assert len(captured_cmds) == 1, "exactly one spawn per turn"
         cmd = captured_cmds[0]
         excluded_flags = [a for a in cmd if a.startswith("--excluded-tools=")]
-        assert excluded_flags == [
-            "--excluded-tools=apply_patch,edit,str_replace,str_replace_editor"
-        ], cmd
+        assert excluded_flags == ["--excluded-tools=apply_patch,edit,str_replace_editor"], cmd
+        assert "str_replace" not in excluded_flags[0].split("=", 1)[1].split(
+            ","
+        ), "str_replace is not a tool name 1.0.88 knows (F479) -- only str_replace_editor stays"
         assert "create" not in excluded_flags[0].split("=", 1)[1].split(","), (
             "create is never excluded on a spec turn -- the shim access path must still write "
             "its own args file (D9 item 1)"
@@ -3890,9 +3893,7 @@ class TestExitPlanModeUnanswerableAndPlanModeShipsOff:
 
         cmd = captured_cmds[0]
         excluded_flags = [a for a in cmd if a.startswith("--excluded-tools=")]
-        assert excluded_flags == [
-            "--excluded-tools=apply_patch,edit,str_replace,str_replace_editor"
-        ], (
+        assert excluded_flags == ["--excluded-tools=apply_patch,edit,str_replace_editor"], (
             "design.md:884-895 (D9 item 1): --excluded-tools is unconditional on a spec turn "
             f"regardless of SPEC_TURN_USES_PLAN_MODE; got {cmd}"
         )
