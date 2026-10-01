@@ -235,6 +235,9 @@ def build_command(
             context_file=context_file,
             session_id=session_id,
             yolo=yolo,
+            # Truthiness-derived, exactly as today (design D4/D6, review 8.1): a server is
+            # injected, and the approver axis follows, iff `mcp_command` is non-empty.
+            approvals="mcp_permission_tool" if mcp_command else "none",
             mcp_command=mcp_command,
             extra_flags=extra_flags,
             control_args=control_args,
@@ -247,6 +250,30 @@ def build_command(
     )
 
 
+def _claude_mcp_args(mcp_command: Optional[List[str]], *, yolo: bool) -> List[str]:
+    """The argv fragment that starts the Hub's MCP server for a Claude run (design D1).
+
+    `ClaudeStreamTransport.inject_mcp` calls this directly; `_build_claude_command` calls it at
+    the same position. Returns `[]` when no server is configured — every caller treats a
+    non-empty result as "a server is injected" (design D1: "guarded by it being non-empty").
+    """
+    if not mcp_command:
+        return []
+    config = {
+        "mcpServers": {
+            "agentweave": {
+                "type": "stdio",
+                "command": mcp_command[0],
+                "args": mcp_command[1:],
+            }
+        }
+    }
+    args = ["--mcp-config", json.dumps(config)]
+    if not yolo:
+        args += ["--allowedTools", "mcp__agentweave__*"]
+    return args
+
+
 def _build_claude_command(
     *,
     cli: str,
@@ -255,6 +282,7 @@ def _build_claude_command(
     context_file: Optional[Path],
     session_id: Optional[str],
     yolo: bool,
+    approvals: str,
     mcp_command: Optional[List[str]] = None,
     extra_flags: Optional[List[str]] = None,
     control_args: Optional[List[str]] = None,
@@ -286,7 +314,7 @@ def _build_claude_command(
     # The posture this run falls back to, decided before the flags are assembled because two
     # places need it: the approver flag below, and the mode flag at the end. `workspace` only
     # works where the Hub's server is there to answer it.
-    default_posture = posture_at_rest("claude", "mcp" if mcp_command else "cli", False)
+    default_posture = posture_at_rest("claude", "mcp" if approvals != "none" else "cli", False)
     defaults_to_approver = (
         not operator_set_permission_mode
         and not yolo
@@ -294,30 +322,22 @@ def _build_claude_command(
     )
     if context_file is not None and context_file.exists():
         cmd += ["--append-system-prompt-file", str(context_file)]
-    if mcp_command:
-        config = {
-            "mcpServers": {
-                "agentweave": {
-                    "type": "stdio",
-                    "command": mcp_command[0],
-                    "args": mcp_command[1:],
-                }
-            }
-        }
-        cmd += ["--mcp-config", json.dumps(config)]
-        if not yolo:
-            cmd += ["--allowedTools", "mcp__agentweave__*"]
-        # The "Workspace only" posture is `manual` plus an answerer. Emitted here rather than from
-        # the catalog because only this function knows whether the server that answers is even
-        # configured: naming an approver that will not be there makes every tool call fail, which
-        # the model reports as a broken approval system. Guarded by
-        # `operator_set_permission_mode` for the same reason the default posture below is — an
-        # approver flag must not outlive the posture that asked for it.
-        if (
+    mcp_args = _claude_mcp_args(mcp_command, yolo=yolo)
+    cmd += mcp_args
+    # The "Workspace only" posture is `manual` plus an answerer. Emitted here rather than from the
+    # catalog because only this function knows whether the server that answers is even configured:
+    # naming an approver that will not be there makes every tool call fail, which the model
+    # reports as a broken approval system. Guarded by `mcp_args` being non-empty and by
+    # `operator_set_permission_mode` for the same reason the default posture below is — an
+    # approver flag must not outlive the posture that asked for it.
+    if mcp_args and (
+        (
             operator_set_permission_mode
             and (control_overrides or {}).get("permission_mode") in APPROVER_PERMISSION_MODES
-        ) or defaults_to_approver:
-            cmd += ["--permission-prompt-tool", CLAUDE_PERMISSION_PROMPT_TOOL]
+        )
+        or defaults_to_approver
+    ):
+        cmd += ["--permission-prompt-tool", CLAUDE_PERMISSION_PROMPT_TOOL]
     if not operator_set_permission_mode:
         if yolo:
             cmd += ["--dangerously-skip-permissions"]
