@@ -120,7 +120,7 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - the stub never answers → exit 0 with `answered: false`, and the stub saw `POST /questions/wait-ended`.
   - **Done 2026-10-01** (same file): `AW_QUESTION_TIMEOUT=10`; answered on the second poll in order; unanswered
     ends `answered: false` with `POST /questions/wait-ended` seen.
-- [ ] 1.6 `hub/tests/test_permission_approver.py`: `_hub_own_call` table (design D8). For each row assert the
+- [x] 1.6 `hub/tests/test_permission_approver.py`: `_hub_own_call` table (design D8). For each row assert the
   predicate result, and assert that `_decide` and `approve_tool_call` agree with the posture. Under `operator`,
   monkeypatch `_ask_operator` and assert whether it was called.
   - **Allowed** (reason "the Hub's own tools"):
@@ -171,6 +171,16 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - R3 row, **allowed**: `aw-tool create_task .AgentWeave/Calls/1.json` on Windows (case-insensitive paths,
     compared with `normcase`).
   - Fails today: every "allowed" row under `operator` calls `_ask_operator`.
+  - **Done 2026-10-01**, in its own file, `hub/tests/test_hub_own_call.py` (the table is long, so it is kept out of
+    `test_permission_approver.py`): every row of the task, red first. Allowed rows assert the predicate, `_decide`
+    and `approve_tool_call` under the operator posture with no card asked; fall-through rows assert one card
+    asked. Copilot's absolute `edit` paths are allowed rows by `path` (verification finding 7: case 3 does not
+    reuse case 2's relative-path rule). Junction rows run on Windows via `mklink /J` (no privilege); the
+    file-symlink row skips without the symlink privilege. Mutations: dropping the character allow-list fails 6;
+    widening case 2 to tools outside `_TOOL_DIALECTS` fails 3. Dropping the root-is-itself check fails nothing,
+    and cannot: every path is resolved and compared against the *unresolved* root, so a link at `.agentweave` or
+    `calls` already moves the resolved path outside it. The check is the design's belt and braces, redundant by
+    construction.
 - [x] 1.7 `hub/tests/test_tool_server_pin.py`: `PIN.launcher_dir()` (design D5):
   - it holds `aw-tool.cmd` (CRLF, naming `sys.executable`, `-I -S` and the pinned path, `--call %*`) and `aw-tool`
     (sh, `exec … -I -S … --call "$@"`);
@@ -454,7 +464,7 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
 
 ## 6. The approver recognises the call command (design D8)
 
-- [ ] 6.1 `_hub_own_call(tool_name, tool_input, *, workspace=None)` in `mcp_server.py`. It uses:
+- [x] 6.1 `_hub_own_call(tool_name, tool_input, *, workspace=None)` in `mcp_server.py`. It uses:
   - the character allow-list;
   - `_lex`;
   - the callable set from 3.1;
@@ -462,6 +472,12 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - `workspace`, defaulting to `AW_WORKSPACE_DIR`.
   `_decide` and `approve_tool_call`'s operator branch call it in place of their `mcp__agentweave__` lines. Test 1.6
   passes.
+  - **Done 2026-10-01**: `_hub_own_call` with `_hub_calls_root`, `_inside_hub_calls_root`, `_plain_calls_path`,
+    `_hub_own_command`, `_hub_own_write`, `_PLAIN_COMMAND_CHARS` (+ `\` for PowerShell) and `_HUB_OWN_WRITE_TOOLS`
+    in `mcp_server.py`; total (any exception is None). `_decide` and `approve_tool_call`'s operator branch call it
+    in place of their `mcp__agentweave__` lines. Case 2 and 3 need a known workspace (an empty one gives no
+    standing). Test 1.6 passes; the approver suites (`test_permission_approver.py`, `test_copilot_acp_decide.py`,
+    `test_ask_me_card_verdicts.py`, `test_mcp_server.py`) still pass: 515 with the new files.
 - [ ] 6.2 Slice 2's ACP permission handler calls `_hub_own_call(..., workspace=<run work dir>)` before `_decide` or
   the card, in every posture, on its normalised `(tool_name, tool_input)`. It reports the allow like any other
   decision (`on_decision`, if `a-run-records-that-its-calls-were-allowed` has landed).

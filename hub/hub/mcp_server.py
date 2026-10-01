@@ -1637,6 +1637,144 @@ def _read_command(
     return None
 
 
+# --- The Hub's own call command (`a-run-reaches-the-hub-without-mcp`, design D8) -----------------
+
+_HUB_OWN_REASON = "the Hub's own tools"
+
+# Claude's write tools and the key each names its file by. Restated, not imported -- see the note
+# at the top of this file; `test_hub_own_call.py` asserts it equals
+# `hub.workspace_writes.CLAUDE_WRITE_TOOLS`. Every `_PATH_KEYS` entry present is read, so slice 2's
+# `("Write", {"path": p})` judging of a Copilot edit is read too.
+_HUB_OWN_WRITE_TOOLS = {
+    "Write": "file_path",
+    "Edit": "file_path",
+    "MultiEdit": "file_path",
+    "NotebookEdit": "notebook_path",
+}
+
+# Every character an invocation of the call command needs, and nothing else (R2): an allow-list,
+# never a list of refused syntax, which fails open the next time it misses something (`(...)` was
+# such a miss). Explicit ASCII: `isalnum`, `isspace` and regex classes accept non-ASCII letters,
+# digits and spaces, and `_lex` splits at any `isspace` character.
+_PLAIN_COMMAND_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/ "
+)
+_PLAIN_COMMAND_CHARS_POWERSHELL = _PLAIN_COMMAND_CHARS | {"\\"}
+_CALL_COMMAND_FLAGS = ("--list", "--help")
+
+
+def _hub_calls_root(workspace: str) -> Optional[str]:
+    """The calls root, or None when it is not itself (review fix 1).
+
+    Built on the workspace's realpath and **not resolved further**: when `.agentweave` or `calls`
+    is a link or a junction, the root differs from its own realpath and nothing is inside it. The
+    workspace itself may be a link -- its realpath is what the root is built on. Compared this way
+    rather than with `os.path.islink`, which is False for a directory junction on 3.11.
+    """
+    root = os.path.join(os.path.realpath(workspace), ".agentweave", "calls")
+    if os.path.normcase(os.path.realpath(root)) != os.path.normcase(root):
+        return None
+    return root
+
+
+def _inside_hub_calls_root(path: str, workspace: str) -> bool:
+    """A `.json` file whose real path is inside the calls root (the calls-root rule). A relative
+    path resolves against the workspace; a file-level link out, `..` and another drive fail."""
+    root = _hub_calls_root(workspace)
+    if root is None:
+        return False
+    base = os.path.realpath(workspace)
+    real = os.path.realpath(path if os.path.isabs(path) else os.path.join(base, path))
+    normal_real, normal_root = os.path.normcase(real), os.path.normcase(root)
+    return (
+        normal_real != normal_root
+        and os.path.commonpath([normal_real, normal_root]) == normal_root
+        and normal_real.endswith(".json")
+    )
+
+
+def _plain_calls_path(word: str, workspace: str) -> bool:
+    """Case 2's file word: a plain relative path (no leading separator or `-`, no drive, no `~`,
+    no `..`), inside the calls root. The leading `-` is refused because PowerShell 5.1 splits a
+    native argument that starts with `-` and holds a `.` into two (R3)."""
+    if not word or word[0] in "-/\\~" or ":" in word:
+        return False
+    if ".." in re.split(r"[/\\]", word):
+        return False
+    return _inside_hub_calls_root(word, workspace)
+
+
+def _hub_own_command(tool_name: str, command: str, workspace: str) -> bool:
+    """Case 2: exactly one invocation of the call command, in the tool's own dialect."""
+    dialects = _TOOL_DIALECTS.get(tool_name)
+    if not dialects or not command:
+        return False
+    powershell = dialects[0] == "powershell"
+    plain = _PLAIN_COMMAND_CHARS_POWERSHELL if powershell else _PLAIN_COMMAND_CHARS
+    if any(char not in plain for char in command):
+        return False
+    words, nested = _lex(command, not powershell, "c")
+    if nested or not 2 <= len(words) <= 3:
+        return False
+    # PowerShell compares command names case-insensitively and bash case-sensitively. A path to
+    # the launcher does not match: the Hub cannot tell it from a file the agent wrote.
+    names = ("aw-tool", "aw-tool.cmd") if powershell else ("aw-tool",)
+    if (words[0].lower() if powershell else words[0]) not in names:
+        return False
+    if words[1] in _CALL_COMMAND_FLAGS:
+        return len(words) == 2
+    if words[1] not in _CALLABLE_TOOLS:
+        return False
+    return len(words) == 2 or _plain_calls_path(words[2], workspace)
+
+
+def _hub_own_write(tool_name: str, tool_input: Dict[str, Any], workspace: str) -> bool:
+    """Case 3: a write tool whose declared paths are all `.json` files inside the calls root, and
+    that declares at least one (every path of none is vacuously true, R3)."""
+    if tool_name not in _HUB_OWN_WRITE_TOOLS or "command" in tool_input:
+        return False
+    paths = [tool_input[key] for key in _PATH_KEYS if key in tool_input]
+    if not paths or not all(isinstance(path, str) and path for path in paths):
+        return False
+    return all(_inside_hub_calls_root(path, workspace) for path in paths)
+
+
+def _hub_own_call(
+    tool_name: str, tool_input: Dict[str, Any], *, workspace: Optional[str] = None
+) -> Optional[str]:
+    """`"the Hub's own tools"` when this request is the Hub's own, else None (design D8).
+
+    True in exactly three cases: the Hub's MCP tools; a `Bash`/`PowerShell` command that is
+    exactly one `aw-tool` invocation (a callable tool, at most one plain relative `.json` path in
+    the calls root); a write tool writing only `.json` files in the calls root. Those operations
+    were never subject to the posture -- they are bounded by the run's own credential -- and the
+    call command reaches exactly them. Anything else is None, and the caller decides as it always
+    has: a near miss is never denied by this rule. Total: any failure is None, because a raise
+    would turn a fall-through into a refusal in both callers. `workspace` defaults to
+    `AW_WORKSPACE_DIR`; a caller in the Hub process passes the run's.
+    """
+    try:
+        if tool_name.startswith("mcp__agentweave__"):
+            return _HUB_OWN_REASON
+        if not isinstance(tool_input, dict):
+            return None
+        workspace = (
+            workspace if workspace is not None else os.environ.get("AW_WORKSPACE_DIR", "")
+        ).strip()
+        if not workspace:
+            return None
+        if tool_name in _TOOL_DIALECTS:
+            command = tool_input.get("command")
+            if isinstance(command, str) and _hub_own_command(tool_name, command, workspace):
+                return _HUB_OWN_REASON
+            return None
+        if _hub_own_write(tool_name, tool_input, workspace):
+            return _HUB_OWN_REASON
+        return None
+    except Exception:  # noqa: BLE001 -- total by contract
+        return None
+
+
 def _decide(
     tool_name: str,
     tool_input: Dict[str, Any],
@@ -1662,8 +1800,9 @@ def _decide(
     client, `a-copilot-agent-runs-over-acp` D8) passes the run's values instead: the Hub's own
     environment names neither. `hub_url` is threaded to every reader of `HUB_URL` below.
     """
-    if tool_name.startswith("mcp__agentweave__"):
-        return {"allow": True, "reason": "the Hub's own tools"}
+    own = _hub_own_call(tool_name, tool_input, workspace=workspace)
+    if own:
+        return {"allow": True, "reason": own}
 
     workspace = (
         workspace if workspace is not None else os.environ.get("AW_WORKSPACE_DIR", "")
@@ -1863,9 +2002,11 @@ def approve_tool_call(
     if os.environ.get("AW_PERMISSION_POSTURE", "").strip() == OPERATOR_POSTURE:
         # The Hub's own tools are still decided here rather than put to the operator: asking a
         # human to approve each `send_message` would make collaboration unusable, and those calls
-        # are already bounded by the run's own credential.
-        if tool_name.startswith("mcp__agentweave__"):
-            decision = {"allow": True, "reason": "the Hub's own tools"}
+        # are already bounded by the run's own credential. The call command and its arguments
+        # file are the same operations by another route (D8), so they are decided here too.
+        own = _hub_own_call(tool_name, tool_input)
+        if own:
+            decision = {"allow": True, "reason": own}
         else:
             decision = _ask_operator(tool_name, tool_input, tool_use_id)
     else:
