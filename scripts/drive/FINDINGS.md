@@ -33725,7 +33725,7 @@ call; no card, task created by the run (`run-000e23023de9`). The approver was no
 
 **Status:** open, found 2026-10-01 by drive 9.10 of `a-run-reaches-the-hub-without-mcp`. **Ready:** R1 proposed
 2026-10-02 as `an-arguments-file-written-from-powershell-is-the-hubs-own` (the arguments-file half; R2 done
-2026-10-02 -- 9.10's exact command fits its grammar; R3/review and approval owed). R1 measured that the refusal is rule 6's backstop, not the URL rule (rule 1 already needs `://`), so
+2026-10-02 -- 9.10's exact command fits its grammar; R3 done 2026-10-02 -- BMP-wide tokenizer sweep, every grammar trap run on 5.1, one safety rule made explicit; review and approval owed). R1 measured that the refusal is rule 6's backstop, not the URL rule (rule 1 already needs `://`), so
 the general half (`echo 'a:b/c'`) is F362's mechanism, owned by `the-shell-judge-reads-a-word-whole` D2.
 
 `_decide("PowerShell", {"command": "echo 'a:b/c'"}, workspace=W)` refuses *"'/c' is outside your workspace"*; so does

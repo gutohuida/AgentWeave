@@ -8,9 +8,12 @@
   question 1).
   - **Done 2026-10-02** (night iteration 5): see design.md's round log, R2. Table confirmed; rule 6 confirmed;
     9.10's exact bytes fit D2; independence re-derived; no bash write in any drive. Three corrections made.
-- [ ] 0.2 R3: a second independent re-derivation, measuring D2's grammar traps on PowerShell 5.1 again (smart
+- [x] 0.2 R3: a second independent re-derivation, measuring D2's grammar traps on PowerShell 5.1 again (smart
   quotes, here-strings, `-Value` arrays, parameter prefixes, `--%`). `openspec validate
   an-arguments-file-written-from-powershell-is-the-hubs-own --strict` passes.
+  - **Done 2026-10-02** (night iteration 6): see design.md's round log, R3. A BMP-wide tokenizer sweep found the
+    closer set complete. Every trap was run. One safety rule was made explicit (nothing joined to the literal),
+    the NUL rule's reason was corrected, and 1.3's example was replaced by one that parses.
 - [ ] 0.3 The adversarial Opus review, recorded under `spec-queue/tracks/reviews/`.
 - [ ] 0.4 The operator approves the change in `spec-queue/APPROVALS.md`, and answers Open questions 1 and 2.
 - [ ] 0.5 Before any code: tell the operator that `mcp_server.py` reaches `:8000`'s agents on their next run
@@ -27,11 +30,15 @@
 - [ ] 1.2 `test_the_literal_is_not_read`: values holding `../x`, `/etc/x`, `C:\x`, `https://example.com/x`,
   `a; rm x`, `$(Write-Output x)`, `$env:X`, a backtick, `it''s`, a newline, and `{"a":"b/c"}`. Each has standing.
 - [ ] 1.3 `test_a_typographic_quote_is_not_one_literal`: for each of U+2018, U+2019, U+201A and U+201B,
-  `-Value 'a<q>; Remove-Item x; <q>'` has no standing, and `_decide`'s answer equals today's answer for the same
-  text. Also a NUL in the value.
+  `-Value 'a<q>; Set-Content pwned.txt x; Write-Output <q>' -Encoding utf8` has no standing, and `_decide`'s
+  answer equals today's answer for the same text. (R3: this is the form that ran its second command on 5.1. The
+  earlier `'a<q>; Remove-Item x; <q>' -Encoding utf8` does not parse there.) Also a NUL in the value. A control:
+  U+201C, U+201D and U+201E in the value keep standing, because they do not end a single-quoted literal.
 - [ ] 1.4 `test_a_near_miss_of_the_write_falls_through`, parametrised: `-Val`, `-Enc`, `-Pa`; a positional value;
   `-Force`; `-NoNewline`; `-Stream x`; `-Value "…"`; `-Value 'a','b'`; `-Value @'…'@`; `-Value $x`;
-  `-Value ('a')`; `-Encoding utf8NoBOM`; `-Encoding Unicode`; a parameter given twice; `; aw-tool …` chained;
+  `-Value ('a')`; (R3) `-Value 'a'(Write-Output x)`, `-Value 'a'b` and `-Value 'a'$x` (text joined to the
+  literal); `-Value 'a' ,'b'`; `-Value:'a'`; `-PSPath`; a `--%`; a parameter dash U+2013, U+2014 or U+2015; a
+  tab or U+00A0 between the parts; `-Encoding utf8NoBOM`; `-Encoding Unicode`; a parameter given twice; `; aw-tool …` chained;
   a leading `&`; a path outside the calls root, with `..`, absolute, with `*`, not `.json`, or beginning with `-`;
   `Add-Content` and `Out-File`. Under the operator posture, each is asked (`asked` has one entry), and `_decide`'s
   answer equals the answer with `_hub_own_powershell_write` patched to return False.

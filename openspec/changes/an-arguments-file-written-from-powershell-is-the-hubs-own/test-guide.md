@@ -10,7 +10,8 @@
 3. **The smart-quote trap is closed.** Task 1.3 passes. Then, as a mutation, delete the U+2018–U+201B exclusion
    from the literal pattern and confirm 1.3 fails. Restore it.
 4. **Near misses are unchanged.** Task 1.4 passes. Each row's `_decide` answer equals the answer with the new
-   predicate patched off.
+   predicate patched off. (R3) As a mutation, drop the "space or end after the closing quote" requirement and
+   confirm that 1.4's `-Value 'a'(Write-Output x)` row fails. On 5.1 that form runs its subexpression.
 5. **Only PowerShell.** Task 1.5 passes.
 6. **9.10 is met.** Task 3.2: a Copilot spec turn told `shim` writes its arguments file from PowerShell or with
    `create`, runs `aw-tool`, and the submission is recorded. If Copilot's form misses the grammar, that is

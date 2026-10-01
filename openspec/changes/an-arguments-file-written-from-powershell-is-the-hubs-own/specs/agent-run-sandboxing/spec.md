@@ -25,7 +25,9 @@ The Hub tells a run it may write the arguments file from PowerShell, as a comman
 `Set-Content` and the UTF-8 encoding. That write is the same operation as the file write above by
 another route, and it has the same standing. "Exactly one write" is read from the command's text: the
 command name `Set-Content`, then exactly the path, value and encoding parameters, each once and by its
-full name, in any order, separated by spaces, and nothing else. The path, bare or in single quotes, is
+full name, in any order, separated by spaces, and nothing else. Nothing is joined to the value literal: text
+written directly after its closing quote is another argument, which PowerShell evaluates, so it would run before
+the write could fail. The path, bare or in single quotes, is
 a plain relative path to a `.json` file inside the run's calls directory, held to the same characters
 as a call's arguments file. The encoding is UTF-8. The value is one single-quoted literal, which
 PowerShell writes verbatim, without expanding anything in it, so what it holds is data and is not read
@@ -161,14 +163,15 @@ inside the calls directory, which is narrower than the workspace.
 #### Scenario: A typographic quote ends the literal
 
 - **WHEN** a run's PowerShell write of an arguments file has a value holding a typographic single quote, such as
-  `-Value 'a’; Remove-Item x; ’'`
+  `-Value 'a’; Set-Content pwned.txt x; Write-Output ’' -Encoding utf8`
 - **THEN** the request is decided as it would be without this rule
 
 #### Scenario: A near miss of the write is decided as before
 
 - **WHEN** the write abbreviates a parameter name, adds any other parameter, gives the value in double quotes or
-  as more than one literal, names an encoding other than UTF-8, chains another command, or names a path outside
-  the calls directory
+  as more than one literal, joins any text to the value literal without a space, writes a parameter's dash as
+  anything but the ASCII hyphen or separates the parts with anything but ASCII spaces, names an encoding other
+  than UTF-8, chains another command, or names a path outside the calls directory
 - **THEN** the request is decided as it would be without this rule
 
 #### Scenario: The write has standing only in PowerShell

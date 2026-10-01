@@ -65,13 +65,14 @@ quoting removed, and case 4 depends on *where* the literal was. Its shape:
 ```
 Set-Content <p1> <p2> <p3>      each <p> one of:
   -Path <path> | -LiteralPath <path>       <path>  = bare or '…', _PLAIN_COMMAND_CHARS_POWERSHELL less space
-  -Value '<literal>'                       <literal> = ( [^'‘-‛\x00] | '' )*
+  -Value '<literal>'                       <literal> = ( [^'‘-‛\x00] | '' )*, its closing ' then a space or the end
   -Encoding <utf8>                         <utf8> = utf8 or 'utf8', any case
 ```
 
 The command name and the parameter names may be in any case, because PowerShell compares them case-insensitively.
 Each parameter appears exactly once, in any order, separated by one or more ASCII spaces, with only ASCII spaces
-before and after the whole command.
+before and after the whole command. **(R3)** In particular, the literal's closing `'` is followed by an ASCII space
+or by the end of the text, and nothing else (see "Nothing joined to the literal" below).
 
 Each rule, and what it closes:
 
@@ -80,16 +81,45 @@ Each rule, and what it closes:
   single quotes, both to close a literal and to double one. A literal holding any of them falls through, and so
   does a path holding any of them, which the plain set already excludes. Without this rule, a "literal" could
   close early and run a second command under standing. This is the case's one real hazard, and it gets a test of
-  its own (task 1.3).
+  its own (task 1.3). **(R3)** The set is complete, not a list of candidates: R3 passed every BMP character
+  through 5.1's own tokenizer (`Parser::ParseInput("Write-Output 'a<c>b'")`), and exactly U+0027 and U+2018 to
+  U+201B end the literal. The typographic *double* quotes U+201C to U+201E do not. Inside a single-quoted literal
+  they are content (measured: written verbatim), so the grammar allows them. R3 also ran the hazard in the
+  grammar's own shape, `Set-Content -Path '.agentweave/calls/q.json' -Value 'a<q>; Set-Content pwned.txt x;
+  Write-Output <q>' -Encoding utf8`. For each of the four quotes, `pwned.txt` was created.
+- **Nothing joined to the literal. (R3, measured.)** In argument mode, text joined to a closing `'` with no space
+  is a second argument, and it is evaluated before the binding fails. `-Value 'a'(Write-Output INJECTED)` ran the
+  subexpression (the error names its output, `INJECTED`), `-Value 'a'$env:USERNAME` expanded the variable, and
+  `-Value 'a'b` passed `b`. Each failed only at parameter binding, so no file was written, but the subexpression
+  had already run. So an implementation that matched `-Value '…'` without requiring a space or the end after the
+  closing quote would give standing to a command that runs code. `'a''b'` is the one exception, because `''` is
+  the escaped quote: it wrote `a'b`. Because no single `'` is content, the literal's extent is unambiguous.
 - **A NUL** falls through: the text a harness hands to the shell may be cut at a NUL, so the predicate would be
-  judging something other than what runs.
+  judging something other than what runs. **(R3)** That cut is not measured. PowerShell itself kept the NUL,
+  given the text through `-EncodedCommand`: it wrote `a\x00b`. The rule stays anyway, because it costs nothing:
+  a raw NUL is not valid inside a JSON string, so no arguments file the shim can read holds one.
 - **Only full parameter names.** `-Val`, `-Enc`, `-Pa` and positional values fall through. PowerShell's
-  prefix matching is not modelled, because a missed prefix only means a card.
+  prefix matching is not modelled, because a missed prefix only means a card. **(R3, measured on 5.1:)** `-Val`
+  and `-Enc` bind. `-Pa` is refused as ambiguous (`-Path`, `-PassThru`). The alias `-PSPath` binds and falls
+  through. `-LP` is not a 5.1 alias. The colon form `-Value:'v'` binds and falls through.
+- **ASCII dashes and ASCII spaces only. (R3, measured.)** The tokenizer sweep shows that PowerShell also takes
+  U+2013, U+2014 and U+2015 as a parameter's dash, and that it separates words at the tab, VT, FF, CR, LF,
+  U+0085, U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F and U+3000. The en-dash and em-dash
+  forms of the write, and the NBSP and tab forms, each wrote the file. The grammar accepts none of them outside
+  the literal, so each falls through to today's answer. `_decide` refuses the 9.10 write in its en-dash, NBSP and
+  `-Value:` forms (`'/x.html'`). That means a card or a refusal, never standing. An en dash in the *name*
+  (`Set–Content`) is not the cmdlet at all ("not recognized").
 - **No other parameter.** `-Force`, `-NoNewline`, `-Stream`, `-Credential`, `-Filter`, `-Include`, `-Exclude`,
   `-PassThru` and `-WhatIf` fall through. `-Stream` would write an alternate data stream. The others are not in
   the notice's form.
 - **A `-Value` that is not one literal** falls through. This covers `'a','b'` (an array, through a comma that is
-  not in the grammar), `"…"` (expandable), `$x`, `(…)`, `@(...)` and `@'…'@` (a here-string).
+  not in the grammar), `"…"` (expandable), `$x`, `(…)`, `@(...)` and `@'…'@` (a here-string). **(R3, measured.)**
+  `'a' ,'b'`, with a space before the comma, is an array too: both forms wrote two lines. So after the literal's
+  space, the next text must be one of the other two parameters or the end, not just any token. A single-quoted
+  here-string is verbatim as well (`@'<LF>x $env:USERNAME<LF>'@` wrote `x $env:USERNAME`). It falls through for
+  exactness, not for safety.
+- **`--%`**, the stop-parsing token, is not a parameter of the three, so it falls through. **(R3)** On 5.1,
+  `Set-Content --% -Path … -Value 'v' -Encoding utf8` wrote nothing and surfaced no error.
 - **Nothing chained.** A `;`, `|`, `&`, newline or redirect outside the literal is not in the grammar. A newline
   *inside* the literal is content (measured: `'line1<LF>line2'` wrote two lines).
 - **Wildcards.** `-Path` expands wildcards and `-LiteralPath` does not. The plain set excludes `*`, `?`, `[` and
@@ -191,3 +221,27 @@ route changes its return shape.
   and its line reference is fixed. **Answered:** Open question 1 (no bash write in any drive) and D4's slices
   4/5 check. **Re-derived independence** from `the-shell-judge-reads-a-word-whole` (D4). Not re-measured
   (left to R3): D2's smart-quote, here-string, array and prefix traps.
+- **R3, 2026-10-02** (night iteration 6, at `afa5a39`). A second fresh comparison. It does not re-run R1's or R2's
+  rows: its probes are new (`.claude/autonomous/tmp/f478_r3_sweep.ps1`, `f478_r3_run.py`, `f478_r3_run2.py`,
+  `f478_r3_decide.py`). **Measured, not enumerated:** every BMP character through PowerShell 5.1.26100.9444's own
+  tokenizer. The closers of a `'…'` literal are exactly U+0027 and U+2018 to U+201B, so D2's exclusion is
+  complete. The parameter dashes are `-` and U+2013 to U+2015, and the word separators are a list of 33
+  characters, of which the grammar admits only the ASCII space (D2). **Ran every trap D2 names** through
+  `-EncodedCommand`, in a scratch workspace. A typographic quote in the grammar's own shape ran a second command
+  for all four quotes. The array (with or without a space before the comma), here-string, prefix, alias, colon,
+  `--%`, en-dash, NBSP and tab forms each behave as D2 now states. **Added to D2 (1):** the closing quote must be
+  followed by a space or the end. `-Value 'a'(Write-Output INJECTED)` ran its subexpression before the binding
+  failed, so this is a safety rule, not exactness. It was implicit in "separated by spaces" and is now explicit,
+  with tests (task 1.4). **Corrected (2):** the NUL rule's stated reason is not measured. PowerShell keeps a NUL,
+  so the rule is kept as cost-free (a raw NUL cannot be in a JSON string). **Corrected (3):** task 1.3's and the
+  scenario's example, `-Value 'a’; Remove-Item x; ’' -Encoding utf8`, does not parse in PowerShell (`’'` closes
+  an empty literal, and `-Encoding` after it is an unexpected token), so it cannot demonstrate the hazard. They
+  now use the measured form. **Checked, no change:** `_lex` has no typographic-quote handling, but today's judge
+  is not escaped through it. It reads a quoted literal's words as paths and reads `$` as an expansion even in a
+  literal, so `'a’; Remove-Item $env:USERPROFILE\zz; ’'` is refused, and `../../pwned.txt` inside the literal is
+  refused. This is not a finding. **What each route returns when the predicate raises:** re-traced at
+  `mcp_server.py:1742-1775`, `:1803`, `:2007` and `copilot_acp.py:533-539`; the "What each changed route returns"
+  section holds. Every line reference in the proposal still holds at `afa5a39`. **Not measured:** PowerShell 7
+  (`pwsh` is not installed on this host). Its tokenizer is believed to share the same quote and dash sets, and
+  its `-Encoding utf8` is believed to write no BOM, which the shim's strict UTF-8 step would read. Both are
+  unverified.

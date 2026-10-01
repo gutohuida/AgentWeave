@@ -1,8 +1,9 @@
 # Proposal — an arguments file written from PowerShell is the Hub's own
 
 **Round 1, 2026-10-02** (night window; the operator's explicit exception in `spec-queue/APPROVALS.md`
-`## 2026-10-01`). Finding: **F478 (B)**. **Nothing here is implemented.** R2 (2026-10-02, night iteration 5)
-re-derived it against the code; R3 must do so again before any task starts. An adversarial review follows, then the operator approves it.
+`## 2026-10-01`). Finding: **F478 (B)**. **Nothing here is implemented.** R2 and R3 (2026-10-02, night
+iterations 5 and 6) each re-derived it against the code and against real PowerShell 5.1. An adversarial review
+follows, then the operator approves it.
 
 ## Why
 
@@ -92,7 +93,10 @@ is fourth from last in tonight's ORDER, and with its sibling it is about 72 task
    - `-Encoding`'s value is `utf8` (any case), bare or in single quotes.
    - `-Value`'s value is **one** single-quoted PowerShell literal. An ASCII `'` opens and closes it, and `''`
      inside is an escaped quote. It contains none of U+2018, U+2019, U+201A and U+201B, because PowerShell
-     reads each of them as a single quote (measured: design D2). It contains no NUL either.
+     reads each of them as a single quote (measured: design D2; R3 swept the whole BMP and found no others). It
+     contains no NUL either. **(R3)** The closing quote is followed by a space or the end of the command. Text
+     joined to it is a second argument that PowerShell evaluates: `-Value 'a'(Write-Output INJECTED)` ran the
+     subexpression before the binding failed.
 
    Its content is not read at all, because a single-quoted PowerShell literal is verbatim: no variable, no
    subexpression and no escape. **Measured** on 5.1.26100: `-Value 'it''s {"path":"spec/x.html"}
