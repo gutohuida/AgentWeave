@@ -385,7 +385,7 @@ def test_the_copilot_rendering_names_every_tool_by_its_copilot_name():
     `<server>-<tool>`, so a Copilot run told the MCP form is told `agentweave-<tool>`, with the
     Copilot host-tool sentence, and the turn notice names them the same way."""
     from hub.launchability import access_path_notice
-    from hub.runner_commands import mcp_tool_prefix
+    from hub.runner_adapters import get_adapter
 
     text = "\n".join(_tool_surface_lines(runner="copilot", access_path="mcp"))
     named = set(re.findall(r"`agentweave-(\w+)\(", text))
@@ -393,7 +393,7 @@ def test_the_copilot_rendering_names_every_tool_by_its_copilot_name():
     assert "mcp__agentweave__" not in text
     assert "only way to reach AgentWeave agents or the operator" in text
 
-    notice = access_path_notice("mcp", tool_prefix=mcp_tool_prefix("copilot"))
+    notice = access_path_notice("mcp", tool_prefix=get_adapter("copilot").mcp_tool_prefix)
     assert "agentweave-send_message" in notice and "agentweave-ask_user" in notice
 
     # Told the HTTP form, a Copilot run is told the requests, never a prefixed tool name.

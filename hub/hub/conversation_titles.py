@@ -80,19 +80,14 @@ def build_title_command(*, cli: str, model: Optional[str], prompt: str) -> Optio
     `--restricted` and `--setting-sources ""` both drop that memory as well, so neither is used.
     The project's own settings hooks still run, as they do in its sessions. `--strict-mcp-config`
     (with no `--mcp-config`) also removes the account's claude.ai connectors, which `--tools ""`
-    leaves; measured 2026-09-24 to keep `CLAUDE.md` (F447). Copilot has no adapter in this slice
-    (D1) and keeps its own branch here until one lands.
+    leaves; measured 2026-09-24 to keep `CLAUDE.md` (F447).
     """
     adapter = get_adapter(cli)
     if adapter is not None:
+        # Copilot's raises `FileNotFoundError` when its executable cannot be resolved, and keeps
+        # the project's custom instructions, since the titler runs there so its memory applies
+        # (`a-copilot-agent-runs-over-acp` D14).
         return adapter.one_shot("title", model=model, prompt=prompt)
-    if cli == "copilot":
-        # The worker's no-tool invocation, keeping the project's custom instructions: the titler
-        # runs in the project's directory so that its memory applies (`a-copilot-agent-runs-over-
-        # acp` D14). Raises `FileNotFoundError` when Copilot cannot be resolved.
-        from .worker import copilot_one_shot_command
-
-        return copilot_one_shot_command(prompt=prompt, model=model, custom_instructions=True)
     return None
 
 
@@ -249,7 +244,7 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
             return None
 
         runner = await _resolve_runner(db, project, conversation.agent)
-        if runner is None or (get_adapter(runner.cli) is None and runner.cli != "copilot"):
+        if runner is None or get_adapter(runner.cli) is None:
             return None
         agent_name = conversation.agent
 

@@ -700,6 +700,19 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-10-01 — `each-runner-cli-is-one-adapter` builds `CopilotAdapter` (F471)
+
+- DECIDED   f471-copilot-adapter  **Build `CopilotAdapter` in this change, now.** The night of
+  2026-09-30 finished the change's groups 1–3 with three conformance tests red: design D1 built
+  a two-row `ADAPTERS` on the premise that slice 2 (`a-copilot-agent-runs-over-acp`) would add
+  Copilot's adapter, but slice 2 landed first, without one, and had already widened `RUNNER_CLIS`,
+  `CATALOG` and `WRITE_TOOLS` to Copilot. No queued change would ever add the adapter. Put to the
+  operator in the morning-briefing session with three options: pin the gap as a strict, named
+  exception and file a follow-up (recommended); build the adapter now; or `xfail` the three tests.
+  The operator chose to build it now. Done as task 3.7, with each member delegating to the function
+  slice 2 ships, so a Copilot run is unchanged and every `runner == "copilot"` carve-out (F473) is
+  gone. Design amended at *What is verified*.
+
 ### 2026-09-24 — a pending proposal can be withdrawn: W3 (recorded 2026-09-30)
 
 - DECIDED   f213-w3  **W3: de-duplicate at submission and give the operator a withdraw.** A repeat

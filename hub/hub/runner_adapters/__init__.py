@@ -1,9 +1,9 @@
 """Per-runner-CLI adapters (design `each-runner-cli-is-one-adapter`, D1).
 
-`ADAPTERS` carries `"claude"` and `"codex"` for this slice ("this change touches no Copilot
-code", design D1) -- `get_adapter`, `build_command` (design D6) and `resolve_access_axes` (design
-D4) are all generic over `ADAPTERS`'s contents, so a later slice's `CopilotAdapter` is one more
-row, not a shape change.
+`ADAPTERS` names every `RUNNER_CLIS` member, in its order (design D2). Design D1 left Copilot to
+`a-copilot-agent-runs-over-acp`, which shipped first and without one, so `CopilotAdapter` landed
+here instead (F471) -- one more row, as D1 intended: `get_adapter`, `build_command` (design D6)
+and `resolve_access_axes` (design D4) are all generic over `ADAPTERS`'s contents.
 
 Nothing in this package may import `hub.db`, `hub.worker`, `hub.launchability` or `hub.api` (D1):
 a run's command line has to be buildable without a database connection.
@@ -18,10 +18,12 @@ from ..runner_commands import UnsupportedRunnerError
 from .base import AccessAxes, LaunchRequest, RunnerAdapter
 from .claude import ClaudeAdapter
 from .codex import CodexAdapter
+from .copilot import CopilotAdapter
 
 ADAPTERS: Mapping[str, RunnerAdapter] = {
     "claude": ClaudeAdapter(),
     "codex": CodexAdapter(),
+    "copilot": CopilotAdapter(),
 }
 
 

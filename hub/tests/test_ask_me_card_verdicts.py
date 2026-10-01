@@ -130,7 +130,7 @@ async def test_a_copilot_card_stores_the_verdict_its_turn_worked_out(
         await kwargs["request_approval"]("session/request_permission", subject)
         return TurnOutcome(session_id="sess-1", status="completed")
 
-    with patch("hub.api.v1.agent_trigger.copilot_run_turn", AsyncMock(side_effect=_run)):
+    with patch("hub.copilot_acp.run_turn", AsyncMock(side_effect=_run)):
         response = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
             json={"agent": "askme-copilot", "message": "hi", "session_mode": "new"},

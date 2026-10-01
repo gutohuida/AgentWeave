@@ -32,8 +32,10 @@ TICKED = re.compile(r"^[ \t]*[-*] \[[xX]\] ")
 PYTEST = re.compile(r"\bpytest\b")
 # The argument that makes a pytest run a whole suite: a test *directory*, however it is spelled.
 SUITE_PATH = re.compile(r"(?<![\w./\\-])(?:\./)?(?:hub[/\\])?tests[/\\]?(?=[\s`]|$)")
-# A run narrowed to some tests is not the suite, whatever directory it names.
-NARROWED = re.compile(r"(?:^|\s)-k(?:\s|=)|::")
+# A run narrowed to some tests is not the suite, whatever directory it names. Nor is a
+# `--collect-only`, which runs nothing: "5937 collected, 0 errors" is not a suite result and
+# claims none (2026-10-01: eight task notes quoting a collection check turned CI red).
+NARROWED = re.compile(r"(?:^|\s)(?:-k(?:\s|=)|--collect-only\b|--co\b)|::")
 SUITE_IN_WORDS = re.compile(
     r"(?<!no )(?<!not )\b(?:full|whole|entire)[- ](?:test[- ])?suite\b", re.I
 )
@@ -153,6 +155,8 @@ CLEAN = [
     "- [x] 7.1 `pytest hub/tests/ -q`\n      -- **4474 passed, 86 skipped** at 8508377.\n",
     "- [x] 7.1 `cd hub && pytest tests/ -q` -- 4474 passed, 86 skipped.\n",
     "- [ ] 7.1 `pytest hub/tests/ -q` -- full suite green.\n",
+    "- [x] 7.1 `pytest hub/tests/x.py` passes. `pytest hub/tests/ -q --collect-only`: 5937 collected.\n",
+    "- [x] 7.1 `pytest hub/tests/x.py` passes. `pytest --co -q hub/tests/`: 5937 collected.\n",
 ]
 
 # Deliberately flagged, though no run happened: a ticked task that writes the suite command

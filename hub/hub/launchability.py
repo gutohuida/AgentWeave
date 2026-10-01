@@ -10,11 +10,20 @@ runner->CLI table instead of ``agentweave.constants.RUNNER_CONFIGS``.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# `copilot_env` holds Copilot's filter so its adapter can reach it (D1); re-exported here.
+from .copilot_env import (  # noqa: F401
+    COPILOT_MODEL_ENV_NAMES,
+    COPILOT_PROVIDER_ENV_PREFIX,
+    COPILOT_TOKEN_ENV_NAMES,
+    COPILOT_TRUST_ENV_NAMES,
+    copilot_env_removal_sentence,
+    copilot_guard_env,
+)
 from .file_mentions import MENTION_NOTICE, neutralise_file_mentions
 from .runner_adapters import get_adapter
 from .runner_adapters.base import probe_binary
@@ -92,13 +101,8 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     cli_override = config.get("cli")
-    if runner == "copilot":
-        # Read from Copilot itself (`a-copilot-agent-runs-over-acp` D15): a cached verdict from a
-        # model-free ACP handshake, refreshed in the background. Never spawns here, never raises.
-        from .copilot_probe import CopilotProbe
-
-        return CopilotProbe.verdict(str(cli_override) if cli_override else None)
-
+    # Copilot's adapter reads its verdict from Copilot itself (`a-copilot-agent-runs-over-acp`
+    # D15): a cached, model-free ACP handshake that never spawns here and never raises.
     adapter = get_adapter(runner)
     if adapter is not None:
         return adapter.launchability(name, config)
@@ -138,88 +142,6 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-#: GitHub tokens Copilot reads. An ambient one silently overrides the operator's stored Copilot
-#: login (appendix A §E), so a Copilot spawn carries one only when the agent's own `env_vars` name
-#: it. The ambient-`ANTHROPIC_BASE_URL` rule below is the same idea for Claude.
-COPILOT_TOKEN_ENV_NAMES: Tuple[str, ...] = ("GH_TOKEN", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN")
-
-#: Variables that make Copilot approve on its own account or trust the folder (loading its hooks,
-#: MCP servers and extensions). Removed from every Copilot spawn -- inherited or named in
-#: `env_vars` -- whatever the posture: a per-agent variable must not be a hidden fifth posture
-#: (review 2026-09-28, finding 3). Full access is the posture that lets Copilot approve.
-COPILOT_TRUST_ENV_NAMES: Tuple[str, ...] = (
-    "COPILOT_ALLOW_ALL",
-    "COPILOT_ASSISTED_APPROVAL",
-    "COPILOT_PLAN_THEN_AUTOPILOT",
-    "GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS",
-    "GITHUB_COPILOT_PROMPT_MODE_WORKSPACE_MCP",
-    "GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS",
-)
-
-#: A prefix, not a list: the 1.0.88 bundle reads 15 such names. With `COPILOT_MODEL` and
-#: `COPILOT_OFFLINE`, removed from every spawn of a runner without a provider -- which, until
-#: slice 5's BYOK, is every Copilot spawn. An ambient `COPILOT_PROVIDER_BASE_URL` would otherwise
-#: silently turn a subscription run into a BYOK one.
-COPILOT_PROVIDER_ENV_PREFIX = "COPILOT_PROVIDER_"
-COPILOT_MODEL_ENV_NAMES: Tuple[str, ...] = ("COPILOT_MODEL", "COPILOT_OFFLINE")
-
-
-def copilot_env_removal_sentence(name: str) -> str:
-    """The `copilot.permission_override_removed` diagnostic's sentence for one removed name."""
-    if name.upper().startswith(COPILOT_PROVIDER_ENV_PREFIX) or name.upper() in (
-        COPILOT_MODEL_ENV_NAMES
-    ):
-        return (
-            f"{name} was removed from this agent's environment; Copilot's model and provider "
-            "come from its runner."
-        )
-    return (
-        f"{name} was removed from this agent's environment; use the Full access posture to let "
-        "Copilot approve on its own."
-    )
-
-
-def _copilot_always_stripped(name: str) -> bool:
-    upper = name.upper()
-    return (
-        upper in COPILOT_TRUST_ENV_NAMES
-        or upper in COPILOT_MODEL_ENV_NAMES
-        or upper.startswith(COPILOT_PROVIDER_ENV_PREFIX)
-    )
-
-
-def copilot_guard_env(
-    proc_env: Dict[str, str], env_vars: Dict[str, Any]
-) -> Tuple[Dict[str, str], List[str]]:
-    """The one Copilot environment filter (design D3; slice 1's `guard_env`). Every Copilot spawn
-    -- the turn, the one-shot calls, the launchability probe -- goes through it.
-
-    Removes the GitHub tokens unless `env_vars` name them, and the trust, provider and model
-    variables unconditionally, from the inherited environment **and** from `env_vars`. Also drops
-    `COPILOT_HOME`: the Hub sets it after this, so no entry can move the run out of the
-    Hub-owned home. Returns the filtered environment and the `env_vars` names it removed, which
-    the turn reports as `copilot.permission_override_removed` diagnostics.
-    """
-    named = {str(key).upper() for key in env_vars}
-    removed: List[str] = []
-    result: Dict[str, str] = {}
-    for key, value in proc_env.items():
-        upper = key.upper()
-        if upper == "COPILOT_HOME":
-            continue
-        if upper in COPILOT_TOKEN_ENV_NAMES and upper not in named:
-            continue
-        if _copilot_always_stripped(key):
-            if upper in named and key not in removed:
-                removed.append(key)
-            continue
-        result[key] = value
-    for key in env_vars:
-        if _copilot_always_stripped(str(key)) and str(key) not in removed:
-            removed.append(str(key))
-    return result, removed
-
-
 def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str, str]]:
     """Build the subprocess environment for spawning *runner*, resolving provider
     credentials from the Hub's own process environment (task 3.11).
@@ -256,19 +178,15 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
                 else:
                     proc_env.pop(var_name, None)
 
-    if runner == "copilot":
-        # Always a full environment: the strips below apply to the inherited one too.
-        base = proc_env if proc_env is not None else dict(os.environ)
-        proc_env, _removed = copilot_guard_env(base, env_vars)
-
     # Claude must not silently inherit a proxy's ANTHROPIC_BASE_URL from whatever shell the Hub
     # itself happened to be started from — its own auth and endpoint selection are Claude Code's
     # to make, not the Hub's. `ClaudeAdapter.guard_env` strips only an *ambient* value (present in
     # the Hub's own os.environ but not explicitly set by this agent's own `env_vars`) — an agent
     # that explicitly configures its own ANTHROPIC_BASE_URL (e.g. a proxy provider) is deliberately
-    # opting in, and that must survive. `CodexAdapter.guard_env` is the identity (design D10); an
-    # unadapted runner (`claude_proxy`, `native`, `kimi`, `opencode`, `codex_mcp`, `copilot`, whose
-    # own filter already ran above) gets no further guard.
+    # opting in, and that must survive. `CodexAdapter.guard_env` is the identity (design D10);
+    # `CopilotAdapter.guard_env` is Copilot's one filter (`copilot_env.copilot_guard_env`), over
+    # the inherited environment too. An unadapted runner (`claude_proxy`, `native`, `kimi`,
+    # `opencode`, `codex_mcp`) gets no further guard.
     adapter = get_adapter(runner)
     if adapter is not None:
         proc_env = adapter.guard_env(proc_env, config)

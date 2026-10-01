@@ -46,12 +46,18 @@ from pydantic import BaseModel, ValidationError
 
 from .db.engine import async_session_factory
 from .db.models import WorkerInvocation
-from .file_mentions import neutralise_file_mentions, restore_file_mentions
+from .file_mentions import restore_file_mentions
 from .model_catalog import get_provider, undeclared_model_reason
 from .pty_runner import resolve_executable
 from .runner_adapters import get_adapter
 from .runner_adapters.claude import parse_claude_envelope  # noqa: F401
 from .runner_adapters.codex import parse_codex_envelope  # noqa: F401
+from .runner_adapters.copilot import (  # noqa: F401
+    COPILOT_ONE_SHOT_FLAGS,
+    copilot_one_shot_command,
+    copilot_one_shot_env,
+    parse_copilot_envelope,
+)
 from .runner_adapters.one_shot import WorkerUsage, _int_or_none, extract_json_object  # noqa: F401
 from .subprocess_windows import no_console_kwargs
 from .utils import short_id
@@ -102,61 +108,10 @@ class WorkerResult:
         return self.outcome == "ok"
 
 
-#: A Copilot one-shot call, offered **no tool** (`a-copilot-agent-runs-over-acp` D14). Tools
-#: are removed by `--excluded-tools`, which always wins; `--available-tools=` is never used, because
-#: an empty value means *no filter* (`app.js`'s `Y0`) and, with `--allow-all-tools`, would approve
-#: every built-in tool on an untrusted transcript (F420). `--allow-all-tools` is required for `-p`,
-#: and with every tool excluded it grants nothing. Task 1.2's capture confirmed zero tools.
-COPILOT_ONE_SHOT_FLAGS: Tuple[str, ...] = (
-    "--output-format",
-    "json",
-    "--no-auto-update",
-    "--disable-builtin-mcps",
-    "--no-ask-user",
-    "--excluded-tools=builtin:*,mcp:*,custom:*",
-    "--allow-all-tools",
-)
-
-
-def copilot_one_shot_command(
-    *, prompt: str, model: Optional[str], custom_instructions: bool
-) -> List[str]:
-    """`copilot -p` for a one-shot call. `cmd[0]` is the absolute platform executable, never the
-    bare `copilot` that `resolve_executable` would resolve to the npm shim. Raises
-    `CopilotExecutableNotFound` (a `FileNotFoundError`) when there is none; the callers turn that
-    into their own "could not spawn" outcome.
-
-    `custom_instructions=False` adds `--no-custom-instructions`: the worker wants none, while the
-    titler runs in the project's directory precisely so the project's memory applies.
-    """
-    from .copilot_probe import resolve_copilot_executable
-
-    cmd = [str(resolve_copilot_executable(None)), "-p", neutralise_file_mentions(prompt)]
-    cmd += list(COPILOT_ONE_SHOT_FLAGS)
-    if not custom_instructions:
-        cmd.append("--no-custom-instructions")
-    if model and model != "auto":
-        cmd += ["--model", model]
-    return cmd
-
-
-def copilot_one_shot_env(config: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
-    """The Hub's environment through the one Copilot filter, under the worker home (D14): no
-    GitHub token, no allow-all or trust variable, no provider override. `config` is the runner's,
-    for slice 5's providers; nothing reads it yet."""
-    from .copilot_home import copilot_worker_home
-    from .launchability import copilot_guard_env
-
-    home = copilot_worker_home()
-    home.mkdir(parents=True, exist_ok=True, mode=0o700)
-    env, _removed = copilot_guard_env(dict(os.environ), {})
-    env["COPILOT_HOME"] = str(home)
-    return env
-
-
 def one_shot_env(cli: str) -> Optional[Dict[str, str]]:
-    """The environment a one-shot spawn of *cli* gets: None (inherit the Hub's) except Copilot."""
-    return copilot_one_shot_env() if cli == "copilot" else None
+    """The environment a one-shot spawn of *cli* gets: its adapter's, or None (inherit the Hub's)."""
+    adapter = get_adapter(cli)
+    return adapter.one_shot_env("worker") if adapter is not None else None
 
 
 def build_worker_command(
@@ -172,16 +127,13 @@ def build_worker_command(
     chosen over plain text for both CLIs because it is the only way the call reports what it cost,
     and because it puts the answer at a fixed address instead of at the end of a stream of prose.
 
-    Claude and Codex go through their adapter's `one_shot` (design D8); Copilot has no adapter in
-    this slice (D1) and keeps its own branch here until one lands.
+    Every runner goes through its adapter's `one_shot` (design D8).
     """
     adapter = get_adapter(cli)
     if adapter is not None:
         return adapter.one_shot(
             "worker", model=model, prompt=prompt, output_schema_path=output_schema_path
         )
-    if cli == "copilot":
-        return copilot_one_shot_command(prompt=prompt, model=model, custom_instructions=False)
     return None
 
 
@@ -228,51 +180,11 @@ def strict_output_schema(output_model: Type[BaseModel]) -> Dict[str, Any]:
     return schema
 
 
-def parse_copilot_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
-    """(answer text, usage, error) from `copilot -p --output-format json`.
-
-    JSONL, one session event per line (task 1.2's capture): the answer is the last
-    `assistant.message`'s `content`, a failure is a `session.error`, and the closing `result` line
-    carries the session id. Usage stays empty: premium requests and credits are slice 4's.
-    """
-    answer: Optional[str] = None
-    failure: Optional[str] = None
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            event = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(event, dict):
-            continue
-        data = event.get("data") if isinstance(event.get("data"), dict) else {}
-        kind = event.get("type")
-        if kind == "assistant.message":
-            content = data.get("content")
-            if isinstance(content, str) and content.strip():
-                answer = content
-        elif kind == "session.error":
-            message = data.get("message")
-            failure = (
-                f"copilot reported an error: {message or data.get('errorType') or 'no detail'}"
-            )
-    if failure is not None:
-        return None, WorkerUsage(), failure
-    if answer is None:
-        return None, WorkerUsage(), "copilot produced no assistant message"
-    return answer, WorkerUsage(), None
-
-
 def parse_envelope(cli: str, stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
-    """Thin wrapper over `get_adapter(cli).parse_one_shot` (design D8). Copilot has no adapter in
-    this slice (D1) and keeps its own parser here."""
+    """Thin wrapper over `get_adapter(cli).parse_one_shot` (design D8)."""
     adapter = get_adapter(cli)
     if adapter is not None:
         return adapter.parse_one_shot(stdout)
-    if cli == "copilot":
-        return parse_copilot_envelope(stdout)
     return None, WorkerUsage(), f"no envelope parser for {cli!r}"
 
 

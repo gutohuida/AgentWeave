@@ -70,7 +70,7 @@ async def test_a_copilot_turn_reaches_run_turn_with_the_mcp_server_and_its_conte
 ):
     await _copilot_agent(app, auth_headers, bind_runner)
     fake = _fake_turn()
-    with patch("hub.api.v1.agent_trigger.copilot_run_turn", fake):
+    with patch("hub.copilot_acp.run_turn", fake):
         response = await _trigger(app, auth_headers, session_mode="new")
         assert response.status_code == 200, response.text
         await await_background_runs()
@@ -103,14 +103,14 @@ async def test_a_missing_saved_session_is_rebound_to_the_new_one(app, auth_heade
     """D7: `session/load` answered -32002, so the stored id named nothing; the new session takes
     its place, the stated exception to the first-writer rule."""
     await _copilot_agent(app, auth_headers, bind_runner)
-    with patch("hub.api.v1.agent_trigger.copilot_run_turn", _fake_turn(session_id="sess-1")):
+    with patch("hub.copilot_acp.run_turn", _fake_turn(session_id="sess-1")):
         first = await _trigger(app, auth_headers, session_mode="new")
         assert first.status_code == 200, first.text
         await await_background_runs()
     conversation_id = first.json()["conversation_id"]
 
     resumed = _fake_turn(session_id="sess-2", missing="sess-1")
-    with patch("hub.api.v1.agent_trigger.copilot_run_turn", resumed):
+    with patch("hub.copilot_acp.run_turn", resumed):
         second = await _trigger(app, auth_headers, conversation_id=conversation_id)
         assert second.status_code == 200, second.text
         await await_background_runs()
@@ -141,7 +141,7 @@ async def test_an_unwritable_home_holds_the_input_without_counting_an_attempt(
 
     monkeypatch.setattr("hub.copilot_home.ensure_copilot_home", _boom)
     fake = _fake_turn()
-    with patch("hub.api.v1.agent_trigger.copilot_run_turn", fake):
+    with patch("hub.copilot_acp.run_turn", fake):
         response = await _trigger(app, auth_headers, session_mode="new")
         await await_background_runs()
 
@@ -172,7 +172,7 @@ async def test_a_missing_executable_holds_the_input_with_the_probes_sentence(
 
     monkeypatch.setattr("hub.copilot_probe.resolve_copilot_executable", _missing)
     fake = _fake_turn()
-    with patch("hub.api.v1.agent_trigger.copilot_run_turn", fake):
+    with patch("hub.copilot_acp.run_turn", fake):
         response = await _trigger(app, auth_headers, session_mode="new")
         await await_background_runs()
 
@@ -190,7 +190,7 @@ async def test_an_env_var_that_would_widen_approvals_is_removed_and_said(
     the run's timeline says it was removed."""
     await _copilot_agent(app, auth_headers, bind_runner, env_vars={"COPILOT_ALLOW_ALL": "true"})
     fake = _fake_turn()
-    with patch("hub.api.v1.agent_trigger.copilot_run_turn", fake):
+    with patch("hub.copilot_acp.run_turn", fake):
         response = await _trigger(app, auth_headers, session_mode="new")
         assert response.status_code == 200, response.text
         await await_background_runs()

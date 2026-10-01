@@ -46,26 +46,9 @@ from typing import Dict, List, Optional
 from .model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
 
 # Copilot names an MCP tool `<server>-<tool>` (VERIFIED: `hubprobe-ping`), so a Copilot run's
-# callable names are known too (`a-copilot-agent-runs-over-acp` D16). Slice 1 moves this onto the
-# adapter as its `mcp_tool_prefix` ClassVar.
+# callable names are known too (`a-copilot-agent-runs-over-acp` D16). `CopilotAdapter` reads it as
+# its `mcp_tool_prefix`, the member every caller asks (`each-runner-cli-is-one-adapter` D3).
 COPILOT_MCP_TOOL_PREFIX = "agentweave-"
-
-
-def mcp_tool_prefix(runner: Optional[str]) -> str:
-    """The full callable-name prefix of the Hub's tools for a run of *runner* that was injected
-    the Hub's server, or "" where it is unknown (the harness *may* prefix; F139).
-
-    `each-runner-cli-is-one-adapter` D3 moves the Claude value onto `ClaudeAdapter.mcp_tool_prefix`
-    (a `ClassVar`, not a registry) — reproduced here as a literal rather than `CLAUDE_FAMILY_RUNNERS`
-    (deleted, task 3.1): that tuple's only reachable member was `"claude"`, `claude_proxy`/`native`
-    being unreachable for the same reason `SUPPORTED_RUNNERS` was (see git history). Copilot has no
-    adapter yet this slice (F473), so its branch stays a literal runner check too.
-    """
-    if runner == "claude":
-        return "mcp__agentweave__"
-    if runner == "copilot":
-        return COPILOT_MCP_TOOL_PREFIX
-    return ""
 
 
 # The posture a non-yolo Claude run gets when the operator has chosen none.

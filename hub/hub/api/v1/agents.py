@@ -55,7 +55,7 @@ from ...model_catalog import (
 from ...output_recording import record_agent_output, record_context_usage
 from ...review_turn import ReviewContext, verdict_evidence_sentence
 from ...runner_adapters import get_adapter
-from ...runner_commands import mcp_tool_prefix, posture_at_rest
+from ...runner_commands import posture_at_rest
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -250,8 +250,7 @@ async def get_agents_launchability(
             else:
                 # Derived from the same adapter member the trigger path asks to pick the
                 # transport, so what the operator is told and what actually runs cannot drift
-                # apart. `get_adapter` has no `CopilotAdapter` yet this slice (F473): a
-                # copilot-bound runner keeps today's unconditional "ready" verdict.
+                # apart. A runner with no adapter (none a `Runner` row can name) is ready.
                 adapter = get_adapter(runner_row.cli)
                 if adapter is None:
                     collaboration_ready = True
@@ -553,15 +552,8 @@ async def list_agents(
         # falls back to, over the config the spawn reads (`get_agent_config`'s merge, not
         # `agent_meta`, whose precedence differs for `hub_client`). F283.
         permission_mode_at_rest = permission_mode_built_in = None
-        # `get_adapter` has no `CopilotAdapter` yet this slice (F473): a copilot-bound runner's
-        # provider is still the literal "copilot", matching the deleted
-        # `_CATALOG_PROVIDER_BY_RUNNER`'s identity row for it.
         _bound_adapter = get_adapter(bound_runner.cli) if bound_runner else None
-        provider = (
-            _bound_adapter.catalog_provider
-            if _bound_adapter
-            else ("copilot" if bound_runner and bound_runner.cli == "copilot" else None)
-        )
+        provider = _bound_adapter.catalog_provider if _bound_adapter else None
         if provider is not None:
             spawn_config = agent_config(
                 session_data, agent_name, agent_row.config if agent_row else None
@@ -588,7 +580,6 @@ async def list_agents(
                 "manual": "Manual",
                 "opencode": agent_meta.get("model", "OpenCode"),
                 "codex_mcp": agent_meta.get("model", "Codex MCP"),
-                "copilot": agent_meta.get("model", "GitHub Copilot"),
             }.get(_runner, agent_meta.get("model", _runner.replace("_", " ").title()))
 
         summaries.append(
@@ -1539,14 +1530,6 @@ def _http_lines(operation: _Operation) -> List[str]:
     return lines
 
 
-# Copilot's counterpart (`a-copilot-agent-runs-over-acp` D16): its own task tool dispatches a
-# subagent, which is not an AgentWeave agent.
-_COPILOT_HOST_TOOLS_NOTE = (
-    "Copilot has its own tools with similar purposes (such as its task tool); these AgentWeave "
-    "tools are the only way to reach AgentWeave agents or the operator."
-)
-
-
 def _tool_surface_lines(
     *, has_peers: bool = True, access_path: str = "mcp", runner: Optional[str] = None
 ) -> List[str]:
@@ -1593,14 +1576,11 @@ def _tool_surface_lines(
     """
     over_mcp = access_path == "mcp"
     # `each-runner-cli-is-one-adapter` D3/task 3.6: the adapter carries both `mcp_tool_prefix` and
-    # `host_tool_note`. Copilot has no adapter yet this slice (F473), so it keeps its own literal
-    # branches below.
+    # `host_tool_note`.
     adapter = get_adapter(runner)
     # Known for a Claude-family run and, since `a-copilot-agent-runs-over-acp` D16, for Copilot.
     if over_mcp:
-        tool_prefix = (
-            adapter.mcp_tool_prefix or "" if adapter is not None else mcp_tool_prefix(runner)
-        )
+        tool_prefix = (adapter.mcp_tool_prefix if adapter is not None else None) or ""
     else:
         tool_prefix = ""
     if tool_prefix:
@@ -1632,8 +1612,6 @@ def _tool_surface_lines(
     lines = ["## Your tools", "", preamble]
     if adapter is not None and adapter.host_tool_note:
         lines.append(adapter.host_tool_note)
-    elif runner == "copilot":
-        lines.append(_COPILOT_HOST_TOOLS_NOTE)
     lines.append("")
     for operation in _operations():
         lines.extend(render(operation))

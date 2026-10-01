@@ -11,10 +11,11 @@ This replaces the message-tag protocol (Decision 2): no synthetic `Message` row,
 some other process might eventually pick the request up. Session identity is a typed field
 on the run record (`Run.session_id`), never text embedded in a message body.
 
-Only claude and codex have a `RunnerAdapter` (`hub.runner_adapters`, design `each-runner-cli-is-
-one-adapter`); Copilot is spawned through its own ACP path below (`_prepare_copilot_turn`). Kimi
-and OpenCode are refused with a stated 501 rather than silently mishandled — there is no fallback
-runtime for them. Extending the adapter list to cover every runner is future work.
+Claude, Codex and Copilot each have a `RunnerAdapter` (`hub.runner_adapters`, design
+`each-runner-cli-is-one-adapter`); a Copilot turn's home and context are prepared below
+(`_prepare_copilot_turn`) and the turn runs through its adapter's ACP transport. Kimi and OpenCode
+are refused with a stated 501 rather than silently mishandled — there is no fallback runtime for
+them.
 """
 
 from __future__ import annotations
@@ -64,7 +65,6 @@ from ...conversations import (
     name_conversation,
     new_conversation,
 )
-from ...copilot_acp import run_turn as copilot_run_turn
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Agent, Conversation, PermissionRequest, Project, Run, Runner, Task
 from ...inbound_queue import (
@@ -119,10 +119,10 @@ from ...run_task_binding import (
     spec_document_for_task,
     tasks_held_by_a_running_turn,
 )
-from ...runner_adapters import ADAPTERS, AccessAxes, build_command, get_adapter, resolve_access_axes
+from ...runner_adapters import ADAPTERS, build_command, get_adapter, resolve_access_axes
 from ...runner_adapters.base import RpcCallbacks as TransportRpcCallbacks
 from ...runner_adapters.base import RpcTransport, RpcTurnRequest, RunnerAdapter, StreamTransport
-from ...runner_commands import OPERATOR_POSTURE, UnsupportedRunnerError, mcp_tool_prefix
+from ...runner_commands import OPERATOR_POSTURE, UnsupportedRunnerError
 from ...runner_events import AccountingSample
 from ...scheduler import (
     REVIEWABLE_LOOP_TASK_STATUSES,
@@ -764,18 +764,12 @@ async def _trigger_agent_directly(
     # more fundamental, permanent gate than whether its CLI happens to be on PATH right
     # now, and keeps the response deterministic regardless of what's installed on the Hub
     # host (an unimplemented runner is still unimplemented even if its CLI is present).
-    #
-    # `runner != "copilot"` is a deliberate carve-out, not the design's literal
-    # `get_adapter(runner) is None` (F473): Copilot has its own RPC path below
-    # (`_prepare_copilot_turn`) and is already spawnable, but `ADAPTERS` has no `CopilotAdapter`
-    # yet this slice (`a-copilot-agent-runs-over-acp`'s own adapter is a later ORDER item) — the
-    # literal design text would 501 a runner that works today.
     adapter = get_adapter(runner)
-    if adapter is None and runner != "copilot":
+    if adapter is None:
         raise TriggerAgentError(
             status.HTTP_501_NOT_IMPLEMENTED,
             f"Direct spawn for runner {runner!r} is not implemented yet "
-            f"(supported: {', '.join([*ADAPTERS, 'copilot'])}). "
+            f"(supported: {', '.join(ADAPTERS)}). "
             "This runner has no Hub-owned execution adapter.",
             request_level=True,
         )
@@ -1110,18 +1104,7 @@ async def _trigger_agent_directly(
     # **raw** `Runner.flags` (design D4): axis 2 for a Codex app-server run depends on whether the
     # opt-out sentinel is present, which the strip would already have removed.
     runner_flags = list(runner_row.flags or [])
-    if adapter is not None:
-        axes = resolve_access_axes(adapter, hub_client=hub_client, flags=runner_flags)
-    else:
-        # Copilot has no `RunnerAdapter` in this slice (`a-copilot-agent-runs-over-acp` adds its
-        # own, as a later ORDER item) — reproduce `resolve_access_axes`'s rule directly rather
-        # than call a member it does not have. `approvals` is unread for Copilot below.
-        tool_surface = "none" if hub_client == "cli" else "mcp"
-        axes = AccessAxes(
-            tool_surface=tool_surface,
-            approvals="none",
-            plane="mcp" if tool_surface == "mcp" else "cli",
-        )
+    axes = resolve_access_axes(adapter, hub_client=hub_client, flags=runner_flags)
     described_path = described_access_path(
         axes.plane,
         override=hub_client,
@@ -1193,7 +1176,7 @@ async def _trigger_agent_directly(
     # the context materialization, which needs the same value. The prefix is grounded the same way
     # the tool list's is: known only for a Claude-family run described as having the injected surface
     # (F139).
-    notice_prefix = mcp_tool_prefix(runner) if described_path == "mcp" else ""
+    notice_prefix = (adapter.mcp_tool_prefix or "") if described_path == "mcp" else ""
     notices = [access_path_notice(described_path, tool_prefix=notice_prefix)]
     # F52: told once, up front, rather than discovered turn after turn by an agent that treats a
     # refused git command as work lost. `review_context is None` matches the condition `worktree`
@@ -1234,7 +1217,7 @@ async def _trigger_agent_directly(
     # is a real CLI argument, and either would otherwise leak into `build_command`'s argv
     # unchanged.
     use_codex_app_server = uses_app_server(runner, runner_flags)
-    run_transport = adapter.transport(runner_flags) if adapter is not None else None
+    run_transport = adapter.transport(runner_flags)
     runner_flags = [f for f in runner_flags if f not in _TRANSPORT_SENTINELS]
 
     copilot_turn: Optional[_CopilotTurn] = None
@@ -1469,7 +1452,7 @@ async def _trigger_agent_directly(
             # renders above; the app-server path merges it into `thread/start`'s `config`.
             config_overrides=(
                 render_control_config(
-                    (adapter.catalog_provider if adapter else "copilot") or "",
+                    adapter.catalog_provider,
                     control_overrides,
                 )
                 if control_overrides
@@ -2377,7 +2360,7 @@ async def _execute_run(
     class (F99).
 
     *adapter*/*transport* are the trigger's own `get_adapter(runner)`/`adapter.transport(flags)`
-    (design D9) — `None` for Copilot, which has no `RunnerAdapter` in this slice. On the stream
+    (design D9); a Copilot turn hands *transport* to `_execute_copilot_run`. On the stream
     path, *transport* supplies `spawn_kind`, `map_events` and `usage_from`, so this function reads
     no runner literal to pick between Claude and Codex's `exec` transport.
 
@@ -2390,7 +2373,9 @@ async def _execute_run(
     then stops at *inside or outside this run's workspace*.
     """
     if copilot_turn is not None:
+        assert transport is not None and transport.kind == "rpc"
         await _execute_copilot_run(
+            transport=transport,
             project_id=project_id,
             agent=agent,
             run_id=run_id,
@@ -3155,9 +3140,9 @@ async def _prepare_copilot_turn(
     for a condition they repair outside the Hub. The home is rewritten here with this turn's
     model and effort (D4 (c)), so the agent file's frontmatter always equals the spawn flags.
     """
+    from ...copilot_env import copilot_env_removal_sentence, copilot_guard_env
     from ...copilot_home import ensure_copilot_home
     from ...copilot_probe import resolve_copilot_executable
-    from ...launchability import copilot_env_removal_sentence, copilot_guard_env
     from ...runner_events import diagnostic_event
 
     cli = config.get("cli")
@@ -3223,6 +3208,7 @@ async def _prepare_copilot_turn(
 
 async def _execute_copilot_run(
     *,
+    transport: RpcTransport,
     project_id: str,
     agent: str,
     run_id: str,
@@ -3239,56 +3225,62 @@ async def _execute_copilot_run(
     repo_root: Optional[str] = None,
     permission_mode: Optional[str] = None,
 ) -> None:
-    """A Copilot turn over ACP (`copilot_acp.run_turn`), through the executor it shares with
-    Codex. Only how the turn is started lives here (D18)."""
+    """A Copilot turn over ACP, through *transport* (`CopilotAdapter`'s, so
+    `copilot_acp.run_turn`) and the executor it shares with Codex. Only how the turn is started
+    lives here (D18): Copilot's request carries the context `_prepare_copilot_turn` rendered, and
+    its card carries the request's own input, which Codex's does not."""
+    request = RpcTurnRequest(
+        cli=turn.cli,
+        cwd=work_dir,
+        env=env,
+        prompt=prompt,
+        model=model,
+        resume_session_id=known_session_id,
+        yolo=yolo,
+        mcp_command=mcp_command,
+        config_overrides=None,
+        permission_mode=permission_mode,
+        workspace=work_dir,
+        extra_flags=turn.extra_flags,
+        restrict_spec_writes=turn.restrict_spec_writes,
+        agent=agent,
+        per_turn_context=turn.per_turn_context,
+        tool_surface_context=turn.tool_surface_context,
+        stable_context=turn.stable_context,
+        control_overrides=turn.control_overrides,
+        told_access_path=turn.told_access_path,
+    )
 
     async def _start_turn(cb: RpcCallbacks):
-        return await copilot_run_turn(
-            cwd=work_dir,
-            env=env,
-            prompt=prompt,
-            model=model,
-            resume_session_id=known_session_id,
-            agent=agent,
-            per_turn_context=turn.per_turn_context,
-            tool_surface_context=turn.tool_surface_context,
-            stable_context=turn.stable_context,
-            control_overrides=turn.control_overrides,
-            told_access_path=turn.told_access_path,
-            permission_mode=permission_mode,
-            workspace=work_dir,
-            restrict_spec_writes=turn.restrict_spec_writes,
-            extra_flags=turn.extra_flags,
-            cli=turn.cli,
-            mcp_command=mcp_command,
-            yolo=yolo,
-            on_event=cb.on_event,
-            on_usage=cb.on_usage,
-            on_accounting=cb.on_accounting,
-            on_session=cb.on_session,
-            on_session_missing=cb.on_session_missing,
-            should_interrupt=cb.should_interrupt,
-            request_approval=lambda method, subject: _await_operator_permission(
-                project_id=project_id,
-                agent=agent,
-                run_id=run_id,
-                method=method,
-                subject=subject,
-                timeout_seconds=_decision_timeout(env),
-                label=str(subject.get("tool_name") or "a Copilot request"),
-                tool_input=subject.get("tool_input") or {},
-                # Worked out by the turn with Copilot's own Workspace-only judge (D5).
-                workspace_verdict=subject.get("workspace_verdict"),
+        return await transport.run_turn(
+            request,
+            TransportRpcCallbacks(
+                on_event=cb.on_event,
+                on_usage=cb.on_usage,
+                on_accounting=cb.on_accounting,
+                on_session=cb.on_session,
+                on_session_missing=cb.on_session_missing,
+                should_interrupt=cb.should_interrupt,
+                on_refusal=cb.on_refusal,
+                request_approval=lambda method, subject: _await_operator_permission(
+                    project_id=project_id,
+                    agent=agent,
+                    run_id=run_id,
+                    method=method,
+                    subject=subject,
+                    timeout_seconds=_decision_timeout(env),
+                    label=transport.permission_card_label(method, subject),
+                    tool_input=subject.get("tool_input") or {},
+                    # Worked out by the turn with Copilot's own Workspace-only judge (D5).
+                    workspace_verdict=transport.workspace_verdict(method, subject, work_dir),
+                ),
             ),
-            on_refusal=cb.on_refusal,
-            # No `on_decision`: `a-run-records-that-its-calls-were-allowed` has not landed, so
-            # this path records refusals only, as Codex does today (task 7.3).
         )
 
     await _execute_rpc_run(
         runner="copilot",
         start_turn=_start_turn,
-        refusal_label=lambda method, subject: str(subject.get("tool_name") or "a Copilot request"),
+        refusal_label=transport.refusal_label,
         project_id=project_id,
         agent=agent,
         run_id=run_id,
@@ -3349,10 +3341,11 @@ async def _execute_rpc_run(
     *start_turn*/*refusal_label* directly: given a real `RunnerAdapter` and its `RpcTransport`
     (Codex `app-server` today), this function builds the `RpcTurnRequest`/`RpcCallbacks` itself
     and drives `transport.run_turn`, so a caller with an adapter does not hand-build a closure
-    that reimplements what the transport already knows how to do. Copilot has no `RunnerAdapter`
-    in this slice, so `_execute_copilot_run` keeps passing `runner`/`start_turn`/`refusal_label`
-    explicitly (`a-copilot-agent-runs-over-acp` D11/D18) -- the two styles are mutually exclusive,
-    never both given.
+    that reimplements what the transport already knows how to do. `_execute_copilot_run` passes
+    `runner`/`start_turn`/`refusal_label` instead, because a Copilot request carries the context
+    `_prepare_copilot_turn` rendered and its card carries the request's input
+    (`a-copilot-agent-runs-over-acp` D11/D18); its `start_turn` still drives its adapter's
+    `transport.run_turn`. The two styles are mutually exclusive, never both given.
     """
     if adapter is not None and transport is not None:
         runner = adapter.name

@@ -336,7 +336,7 @@ def probe_argv(path: Path) -> list[str]:
 
 def probe_env(home: Path) -> Dict[str, str]:
     """The probe's environment: the Copilot guard over the Hub's own, under the worker home."""
-    from .launchability import copilot_guard_env
+    from .copilot_env import copilot_guard_env
 
     env, _removed = copilot_guard_env(dict(os.environ), {})
     env["COPILOT_HOME"] = str(home)

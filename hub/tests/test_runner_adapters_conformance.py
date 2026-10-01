@@ -7,14 +7,12 @@ module's own exports (`ADAPTERS`, `write_tool_kinds`, `instruction_channel`,
 landing. This file fails on `ModuleNotFoundError: hub.runner_adapters` until group 2 lands;
 that is correct per tasks.md's ordering (goldens/tests first, group 2 second).
 
-**Filed as F471** (`scripts/drive/FINDINGS.md`) while writing this: `RUNNER_CLIS` and `CATALOG`
-are already 3-wide (`claude`, `codex`, `copilot` -- migration 0112, `a-copilot-agent-runs-over-acp`,
-archived 2026-09-30) although this slice's `ADAPTERS` (design D1) is explicitly 2-wide
-(`{"claude": ClaudeAdapter(), "codex": CodexAdapter()}` -- "this change touches no Copilot
-code"). Checks (a) and (c) are written here exactly as tasks.md states them, against today's
-real registries -- not a hand-shrunk copy of them -- so once group 2 finishes building a
-2-member `ADAPTERS` these fail as an assertion, not a collection error, which is group 2/3's
-signal to resolve a drift design.md (its R1-R3 passes predate migration 0112) never saw.
+**F471**: `RUNNER_CLIS` and `CATALOG` were already 3-wide (`claude`, `codex`, `copilot` --
+migration 0112, `a-copilot-agent-runs-over-acp`, archived 2026-09-30) when design D1 specified a
+2-wide `ADAPTERS`. Checks (a)-(c) were written against the real registries rather than a
+hand-shrunk copy, so they failed as assertions once group 2 built the two adapters; the operator
+resolved it on 2026-10-01 by having this change build `CopilotAdapter` too. The checks are
+unchanged and now hold over all three runners.
 """
 
 from __future__ import annotations
@@ -91,6 +89,10 @@ _WELL_FORMED_INPUT = {
     "MultiEdit": {"file_path": "/tmp/a.txt"},
     "NotebookEdit": {"notebook_path": "/tmp/a.ipynb"},
     "apply_patch": {"changes": [{"path": "a.py", "diff": "patch"}]},
+    # Copilot's ACP `tool_call`s name their files under `locations[].path` (slice 2 D10).
+    "edit": {"locations": [{"path": "a.py"}]},
+    "delete": {"locations": [{"path": "a.py"}]},
+    "move": {"locations": [{"path": "a.py"}, {"path": "b.py"}]},
 }
 
 
@@ -124,8 +126,13 @@ def _build_launch(adapter, *, context_present: bool, tmp_path: Path):
     return transport, transport.build_launch(req), str(context_file)
 
 
+# Copilot has no stream transport, so no argv to check its channel against (it is ACP's agent
+# selection; `test_copilot_instruction_channel_is_the_agent_file` below).
+_STREAM_CLIS = [cli for cli, adapter in ADAPTERS.items() if adapter.stream_transport() is not None]
+
+
 @pytest.mark.parametrize("context_present", [True, False])
-@pytest.mark.parametrize("cli", list(ADAPTERS))
+@pytest.mark.parametrize("cli", _STREAM_CLIS)
 def test_instruction_channel_agrees_with_argv(cli, context_present, tmp_path):
     adapter = get_adapter(cli)
     transport, argv, context_path = _build_launch(
@@ -140,6 +147,16 @@ def test_codex_app_server_transport_has_no_instruction_channel():
     from hub.runner_adapters.codex import CodexAppServerTransport
 
     assert CodexAppServerTransport().instruction_channel is None
+
+
+def test_copilot_instruction_channel_is_the_agent_file():
+    """Copilot's only transport is ACP: the stable context reaches the model as the Hub-written
+    custom agent file, selected with `session/set_config_option` (slice 2 D4/D6)."""
+    adapter = get_adapter("copilot")
+    assert adapter.stream_transport() is None
+    transport = adapter.transport(None)
+    assert transport.kind == "rpc"
+    assert transport.instruction_channel == "session/set_config_option agent"
 
 
 # --- (e) context_window_source holds against each transport's recorded usage (design D13) -----

@@ -23,6 +23,16 @@ edit the site R2 marked (they do; round log). The contract the later slices buil
 ## What is verified, and about what
 
 This change touches no Copilot code, and its proof is about Claude and Codex only.
+
+> **Amended 2026-10-01 (operator's decision, F471; task 3.7).** The sentence above held while
+> slice 2 was expected to land after this change and add `CopilotAdapter` itself. Slice 2
+> (`a-copilot-agent-runs-over-acp`) landed first, on 2026-09-30, with no adapter, and widened
+> `RUNNER_CLIS`/`CATALOG`/`WRITE_TOOLS` to Copilot (migration 0112), so D2's equalities could not
+> hold over a two-row `ADAPTERS`. This change therefore also builds `CopilotAdapter`
+> (`runner_adapters/copilot.py`), member for member as slice 2's "Slice 1 member names" table
+> specifies, each member delegating to the function slice 2 ships. Copilot behaviour is unchanged;
+> what changes is that every call site reaches it through `get_adapter` (F473's carve-outs are
+> gone). Group 5's drive covers Claude and Codex as written; a Copilot turn is not driven here.
 - **VERIFIED (read today):** every statement below about AgentWeave code, with its `file:line`.
 - **Not measured:** Codex runs. Codex is undrivable because the plan was cancelled on 2026-08-29, so Codex equivalence is
   proved by golden files and unit tests, never by a run.

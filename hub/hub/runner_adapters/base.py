@@ -31,6 +31,7 @@ from typing import (
     List,
     Literal,
     Mapping,
+    NotRequired,
     Optional,
     Sequence,
     Tuple,
@@ -51,6 +52,11 @@ class LaunchVerdict(TypedDict):
     authorized: bool
     runnable: bool
     reason: Optional[str]
+    # Copilot's, read from Copilot itself (`a-copilot-agent-runs-over-acp` D15): the cached
+    # verdict is still being refreshed, the version it reported, and why the probe failed.
+    verdict_pending: NotRequired[bool]
+    version: NotRequired[str]
+    probe_error: NotRequired[str]
 
 
 def probe_binary(
@@ -124,6 +130,14 @@ class RpcTurnRequest:
     workspace: Optional[str]
     extra_flags: Optional[List[str]]
     restrict_spec_writes: bool
+    # Copilot's (`a-copilot-agent-runs-over-acp` D18): the agent the turn runs as, and the context
+    # its ACP transport sends rather than renders into argv. Codex's app-server reads none of them.
+    agent: Optional[str] = None
+    per_turn_context: Optional[str] = None
+    tool_surface_context: Optional[str] = None
+    stable_context: Optional[str] = None
+    control_overrides: Optional[Dict[str, str]] = None
+    told_access_path: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -137,6 +151,9 @@ class RpcCallbacks:
     should_interrupt: Callable[[], bool]
     request_approval: Callable[..., Awaitable[bool]]
     on_refusal: Callable[..., Awaitable[None]]
+    #: Copilot's D7: the saved session named nothing that exists, so a new one is being started and
+    #: the conversation's old binding may be replaced. Codex's app-server never calls it.
+    on_session_missing: Optional[Callable[[str], Awaitable[None]]] = None
 
 
 class StreamTransport(ABC):
@@ -218,7 +235,8 @@ class RpcTransport(ABC):
         notification onto `cb.on_event`/`on_usage`/`on_accounting`. Call `cb.on_session(id)`
         before the first `on_event`. Honour `cb.should_interrupt()` within one poll interval and
         leave no process behind. Raises only `FileNotFoundError`, `OSError`,
-        `asyncio.TimeoutError`, or `AppServerError`."""
+        `asyncio.TimeoutError`, or the transport's own protocol error (`AppServerError`,
+        `CopilotACPError`)."""
 
 
 class RunnerAdapter(ABC):
@@ -282,8 +300,14 @@ class RunnerAdapter(ABC):
     ) -> List[str]:
         """A no-tools, one-prompt invocation's argv. Receives `prompt` **raw** and neutralises it
         itself with `file_mentions.neutralise_file_mentions`, as today's builders do. Raises only
-        `FileNotFoundError`, when the executable cannot be resolved — in this slice neither adapter
-        raises it."""
+        `FileNotFoundError`, when the executable cannot be resolved — only Copilot's does."""
+
+    def one_shot_env(
+        self, purpose: Literal["worker", "title"], config: Optional[Mapping[str, Any]] = None
+    ) -> Optional[Dict[str, str]]:
+        """The environment a one-shot spawn gets, or `None` to inherit the Hub's (Claude and
+        Codex). `config` is the runner's (`a-copilot-agent-runs-over-acp` D14)."""
+        return None
 
     @abstractmethod
     def parse_one_shot(self, stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
