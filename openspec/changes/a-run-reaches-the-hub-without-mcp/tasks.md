@@ -67,7 +67,7 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - `None` for a non-init line.
   Fixture shapes come from F340's table and from the raw PTY capture in
   `openspec/changes/archive/2026-09-13-an-absent-approver-is-not-named/evidence/a-hub-plain-raw-pty.txt`.
-- [ ] 1.3 `hub/tests/test_mcp_call_mode.py` (new): spawn the **pinned** file (`tool_server.PIN.path()`) as
+- [x] 1.3 `hub/tests/test_mcp_call_mode.py` (new): spawn the **pinned** file (`tool_server.PIN.path()`) as
   `sys.executable <pin> --call --list`, from a `tmp_path` cwd.
   - The listed names equal the tools `test_mcp_server_stdio_surface.py` reads over stdio, minus
     `approve_tool_call`.
@@ -78,7 +78,12 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     exits 0 (design D5, R3).
   - (review note 12) `mcp_server._CALLABLE_TOOLS`'s names, imported in-process, equal the listed names, and equal
     the fastmcp-registered set minus `approve_tool_call` (design D3, *How the set is known in both modes*).
-- [ ] 1.4 Same file: call mode against a stdlib `http.server` stub Hub bound to `127.0.0.1:0` in a thread, with
+  - **Done 2026-10-01**: `hub/tests/test_mcp_call_mode.py`, spawning a `ToolServerPin` copy under `tmp_path` (not the
+    Hub user's pin root). `--list` names equal the stdio-served set minus `approve_tool_call`; `_CALLABLE_TOOLS`
+    in-process equals it too; a poisoned `fastmcp` on `PYTHONPATH`, spawned without `-I`, still exits 0; a
+    poisoned `json.py` under `-I -S` exits 0. The launcher spawn of that last case is added with 1.7, once the
+    launcher exists. Red first (`--list` unknown). Mutation: forcing the fastmcp import in call mode fails it.
+- [x] 1.4 Same file: call mode against a stdlib `http.server` stub Hub bound to `127.0.0.1:0` in a thread, with
   `HUB_URL` and `AW_RUN_TOKEN` in the child's env.
   - `create_task` with an args file → the stub saw `POST /api/v1/agent-actions/tasks`, `Authorization: Bearer
     <token>`, and the body the MCP tool sends. Stdout is exactly one JSON object `{"ok": true, ...}`, exit 0.
@@ -103,10 +108,18 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     - `.agentweave/calls` a directory junction (Windows, `New-Item -ItemType Junction`, no privilege needed) or a
       symlink (POSIX) to another workspace directory holding the file.
     The same file inside a real calls directory works (design D3, *Where the file may be*).
-- [ ] 1.5 Same file, `ask_user` through call mode against the stub (design D7), with `AW_QUESTION_TIMEOUT=10`. It
+  - **Done 2026-10-01** (same file): the stub Hub is a `ThreadingHTTPServer` in a thread. The `create_task` body is
+    compared against what the MCP function sends in-process (its `_hub_request` captured), not restated. Every
+    usage case asserts the stub saw no request; the cp1252 `0x97` case runs where the code page is cp1252, and
+    the undecodable case runs `call_main` in-process with `locale.getencoding` patched to `ascii`. The calls-root
+    rows (outside, `..`, no `AW_WORKSPACE_DIR`, drifted cwd, a junction made with `mklink /J`) all fail closed.
+    Mutation: `call_main` announcing fails the never-announces row.
+- [x] 1.5 Same file, `ask_user` through call mode against the stub (design D7), with `AW_QUESTION_TIMEOUT=10`. It
   takes about 10 s; there is no `slow` marker in this repo, so do not add one:
   - the stub answers on the second poll → the answers come back in order;
   - the stub never answers → exit 0 with `answered: false`, and the stub saw `POST /questions/wait-ended`.
+  - **Done 2026-10-01** (same file): `AW_QUESTION_TIMEOUT=10`; answered on the second poll in order; unanswered
+    ends `answered: false` with `POST /questions/wait-ended` seen.
 - [ ] 1.6 `hub/tests/test_permission_approver.py`: `_hub_own_call` table (design D8). For each row assert the
   predicate result, and assert that `_decide` and `approve_tool_call` agree with the posture. Under `operator`,
   monkeypatch `_ask_operator` and assert whether it was called.
@@ -301,13 +314,16 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
 
 ## 3. The call mode (design D3, D4, D6, D7)
 
-- [ ] 3.1 In `mcp_server.py`, before the fastmcp import:
+- [x] 3.1 In `mcp_server.py`, before the fastmcp import:
   - `_CALL_MODE` and the `_CallRegistry` stand-in (import `sys` at the top);
   - (review note 12) `_CALLABLE_TOOLS` and the `_tool()` decorator that records the function and applies
     `mcp.tool()`; every `@mcp.tool()` becomes `@_tool()` (design D3);
   - keep the `ImportError` message for server mode;
   - re-read `.claude/rules/mcp-server.md` first, and keep `approve_tool_call` without a return annotation.
-- [ ] 3.2 `call_main(argv) -> int`:
+  - **Done 2026-10-01**: `_CALL_MODE`, `_CallRegistry`, `_CALLABLE_TOOLS`/`_NOT_CALLABLE` and `_tool()` in
+    `mcp_server.py`; all 27 `@mcp.tool()` became `@_tool()`; `approve_tool_call` keeps no return annotation.
+    New stdlib imports: `codecs`, `inspect`, `locale`, `sys`.
+- [x] 3.2 `call_main(argv) -> int`:
   - `--list` / `--help`;
   - bind with `inspect.signature`;
   - read the file only when the calls-root rule holds (design D3, *Where the file may be*; D8), else `usage`;
@@ -320,11 +336,21 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - refuse `approve_tool_call`.
   The entry guard at the end of the file dispatches to `call_main(sys.argv[2:])` in call mode (keep it the last
   block; its comment explains why).
-- [ ] 3.3 Tests 1.3–1.5 pass. Then `py -3.11 -m pytest hub/tests/test_mcp_server_stdio_surface.py
+  - **Done 2026-10-01**: `call_main(argv)`: `--list`/`--help`, options refused (so `--token x` is usage), at most
+    one file, `approve_tool_call` and unknown names refused, `_read_call_args` (calls-root rule, then D3's decode
+    order), `inspect.signature().bind`, the envelope kinds with exit codes 0/1/2/2/64/70, `ensure_ascii` output, no
+    announce. The entry guard dispatches `call_main(sys.argv[2:])` and stays the last block.
+- [x] 3.3 Tests 1.3–1.5 pass. Then `py -3.11 -m pytest hub/tests/test_mcp_server_stdio_surface.py
   hub/tests/test_mcp_server.py hub/tests/test_fastmcp_api_contract.py hub/tests/test_mcp_tool_schemas.py -q`
   (server mode unchanged).
-- [ ] 3.4 Update `.claude/rules/mcp-server.md`, one bullet: call mode exists, is decided before the fastmcp import,
+  - **Done 2026-10-01**: tests 1.3-1.5, 30 passed. Server mode unchanged: `test_mcp_server_stdio_surface.py`,
+    `test_mcp_server.py`, `test_fastmcp_api_contract.py`, `test_mcp_tool_schemas.py` (plus
+    `test_copilot_acp_decide.py`, `test_permission_approver.py`, `test_tool_surface_matches_server.py`): 487
+    passed, 1 skipped.
+- [x] 3.4 Update `.claude/rules/mcp-server.md`, one bullet: call mode exists, is decided before the fastmcp import,
   and a new tool is callable through it automatically.
+  - **Done 2026-10-01**: `.claude/rules/mcp-server.md` gains the call-mode bullet, and its step 1 now says
+    `@_tool()` (verification finding 14: step 1 named `@mcp.tool()`).
 
 ## 4. The launcher, the run's PATH and the calls directory (design D5, D14)
 

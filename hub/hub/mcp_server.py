@@ -5,20 +5,47 @@ outbound intent: messaging, task-ledger work, operator questions, governed agent
 and operator-gated scheduled-work mutations.
 """
 
+import codecs
 import contextlib
+import inspect
 import json
+import locale
 import os
 import re
+import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
-try:
-    from fastmcp import FastMCP
-except ImportError as exc:
-    raise ImportError("fastmcp is required. Install it with: pip install fastmcp") from exc
+# Call mode (`a-run-reaches-the-hub-without-mcp`, design D3/D4): the same file, spawned as
+# `<python> -I -S <this file> --call <tool> [<args.json>]` by the `aw-tool` launcher, calls one
+# tool function and prints one JSON envelope. It is decided **before** the fastmcp import, which
+# alone costs ~1.4 s per process against ~0.1 s for the stdlib, and every call pays it. Tests
+# import the module (`__name__ != "__main__"`), so they always take the fastmcp path.
+_CALL_MODE = __name__ == "__main__" and sys.argv[1:2] == ["--call"]
+
+
+class _CallRegistry:
+    """The stdlib stand-in for `FastMCP` in call mode: `.tool()` registers nothing and returns the
+    function unchanged, which is what fastmcp 3.1's own decorator returns too."""
+
+    def __init__(self, name: str, instructions: str = "") -> None:
+        self.name = name
+        self.instructions = instructions
+
+    def tool(self, *args: Any, **kwargs: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return lambda fn: fn
+
+
+if _CALL_MODE:
+    FastMCP: Any = _CallRegistry
+else:
+    try:
+        from fastmcp import FastMCP
+    except ImportError as exc:
+        raise ImportError("fastmcp is required. Install it with: pip install fastmcp") from exc
 
 # Constrained parameter values, declared as `Literal` so the generated tool schema carries an
 # `enum` every client can read before calling. A bare `str` advertises nothing: Codex agents
@@ -61,6 +88,26 @@ mcp = FastMCP(
         "Identity is bound by the Hub process that started this connection."
     ),
 )
+
+#: Every tool an agent can call, by name: what `--list`, `call_main` and the approver's
+#: recognition of the call command read (design D3, review note 12). Filled by `_tool()`, so a tool
+#: added with it is callable through the call command automatically, and the set is a plain dict in
+#: both modes -- enumerating fastmcp's registry is async or private. `approve_tool_call` is a
+#: runtime endpoint, not an agent operation, and is left out by name.
+_CALLABLE_TOOLS: Dict[str, Callable[..., Any]] = {}
+_NOT_CALLABLE = frozenset({"approve_tool_call"})
+
+
+def _tool() -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """`@mcp.tool()`, recording the function as callable through the call command."""
+    register = mcp.tool()
+
+    def decorate(fn: Callable[..., Any]) -> Callable[..., Any]:
+        if fn.__name__ not in _NOT_CALLABLE:
+            _CALLABLE_TOOLS[fn.__name__] = fn
+        return register(fn)
+
+    return decorate
 
 
 class UnboundIdentityError(RuntimeError):
@@ -200,7 +247,7 @@ def _hub_request(
         raise HubUnreachableError(url, method, path, str(exc.reason)) from exc
 
 
-@mcp.tool()
+@_tool()
 def send_message(
     to_agent: str,
     subject: str,
@@ -253,7 +300,7 @@ def send_message(
     return reply
 
 
-@mcp.tool()
+@_tool()
 def create_task(
     title: str,
     description: str = "",
@@ -300,7 +347,7 @@ def create_task(
     )
 
 
-@mcp.tool()
+@_tool()
 def list_tasks(
     agent: Optional[str] = None,
     limit: Optional[int] = None,
@@ -321,13 +368,13 @@ def list_tasks(
     return _hub_request("GET", "/tasks", params={"agent": agent, "limit": limit, "offset": offset})
 
 
-@mcp.tool()
+@_tool()
 def get_task(task_id: str) -> Dict[str, Any]:
     """Read one task-ledger entry by ID."""
     return _hub_request("GET", f"/tasks/{task_id}")
 
 
-@mcp.tool()
+@_tool()
 def task_history(task_id: str) -> Dict[str, Any]:
     """Who moved this task, when, and from what status to what.
 
@@ -344,7 +391,7 @@ def task_history(task_id: str) -> Dict[str, Any]:
     return _hub_request("GET", f"/tasks/{task_id}/transitions")
 
 
-@mcp.tool()
+@_tool()
 def update_task(
     task_id: str,
     status: Optional[TaskStatus] = None,
@@ -379,7 +426,7 @@ def update_task(
     return _hub_request("PATCH", f"/tasks/{task_id}", body)
 
 
-@mcp.tool()
+@_tool()
 def ask_user(
     questions: List[Dict[str, Any]],
     blocking: bool = True,
@@ -546,7 +593,7 @@ def ask_user(
     return payload
 
 
-@mcp.tool()
+@_tool()
 def get_answer(question_id: str) -> Dict[str, Any]:
     """Check whether the operator answered a previously asked question.
 
@@ -566,7 +613,7 @@ def get_answer(question_id: str) -> Dict[str, Any]:
     }
 
 
-@mcp.tool()
+@_tool()
 def submit_checkpoint_notes(
     intent: str,
     suspicions: Optional[List[str]] = None,
@@ -605,7 +652,7 @@ def submit_checkpoint_notes(
     )
 
 
-@mcp.tool()
+@_tool()
 def list_checkpoints(agent: Optional[str] = None) -> List[Dict[str, Any]]:
     """The checkpoints you may open, newest first — yours, and any peer's you are granted.
 
@@ -622,7 +669,7 @@ def list_checkpoints(agent: Optional[str] = None) -> List[Dict[str, Any]]:
     return _hub_request("GET", f"/checkpoints{query}")
 
 
-@mcp.tool()
+@_tool()
 def read_checkpoint(checkpoint_id: str) -> Dict[str, Any]:
     """One checkpoint in full, exactly as an agent continuing that conversation receives it.
 
@@ -633,7 +680,7 @@ def read_checkpoint(checkpoint_id: str) -> Dict[str, Any]:
     return _hub_request("GET", f"/checkpoints/{checkpoint_id}")
 
 
-@mcp.tool()
+@_tool()
 def recall(observation_id: str) -> Dict[str, Any]:
     """Retrieve one recorded observation a checkpoint cited, exactly as it was recorded.
 
@@ -647,7 +694,7 @@ def recall(observation_id: str) -> Dict[str, Any]:
     return _hub_request("GET", f"/recall/{observation_id}")
 
 
-@mcp.tool()
+@_tool()
 def request_agent(name: str, template: str, task: str) -> Dict[str, Any]:
     """Request a new agent, modelled on an existing open agent of this project.
 
@@ -664,7 +711,7 @@ def _job_effect(method: str, path: str, body: Optional[Dict[str, Any]] = None) -
     return _hub_request(method, path, body)
 
 
-@mcp.tool()
+@_tool()
 def create_job(
     name: str,
     agent: str,
@@ -705,7 +752,7 @@ def create_job(
     )
 
 
-@mcp.tool()
+@_tool()
 def create_loop(
     name: str,
     agent: str,
@@ -790,7 +837,7 @@ def create_loop(
     )
 
 
-@mcp.tool()
+@_tool()
 def create_flow(
     name: str,
     agent: str,
@@ -895,7 +942,7 @@ def create_flow(
     )
 
 
-@mcp.tool()
+@_tool()
 def archive_job(job_id: str) -> Dict[str, Any]:
     """Archive recurring work. Nothing is deleted; the job simply stops running.
 
@@ -946,7 +993,7 @@ def archive_job(job_id: str) -> Dict[str, Any]:
     return _job_effect("POST", path)
 
 
-@mcp.tool()
+@_tool()
 def toggle_job(job_id: str, enabled: bool) -> Dict[str, Any]:
     """Enable or disable recurring work.
 
@@ -958,7 +1005,7 @@ def toggle_job(job_id: str, enabled: bool) -> Dict[str, Any]:
     return _job_effect("PATCH", f"/jobs/{job_id}", {"enabled": enabled})
 
 
-@mcp.tool()
+@_tool()
 def run_job(job_id: str) -> Dict[str, Any]:
     """Trigger recurring work immediately.
 
@@ -1805,7 +1852,7 @@ def _await_decision(request_id: str) -> Dict[str, Any]:
     }
 
 
-@mcp.tool()
+@_tool()
 def approve_tool_call(
     tool_name: str,
     input: Dict[str, Any],  # noqa: A002 - Claude sends this key; the name is not ours to choose
@@ -1848,7 +1895,7 @@ SPEC_SCHEMA_VERSION = 1
 EvidenceDecision = Literal["accepted", "rejected"]
 
 
-@mcp.tool()
+@_tool()
 def create_spec_document(title: Optional[str] = None) -> Dict[str, Any]:
     """Start a specification document when you need one — you do not need the operator to start it.
 
@@ -1876,7 +1923,7 @@ def create_spec_document(title: Optional[str] = None) -> Dict[str, Any]:
     return _hub_request("POST", "/spec/documents/create", body)
 
 
-@mcp.tool()
+@_tool()
 def submit_spec_document(
     path: str,
     title: str,
@@ -2013,7 +2060,7 @@ def submit_spec_document(
     return _hub_request("POST", "/spec/documents", {"path": path, "document": document})
 
 
-@mcp.tool()
+@_tool()
 def rename_spec_document(path: str, subject: str) -> Dict[str, Any]:
     """Rename the specification document once you know what it is about.
 
@@ -2036,7 +2083,7 @@ def rename_spec_document(path: str, subject: str) -> Dict[str, Any]:
     return _hub_request("POST", "/spec/documents/rename", {"path": path, "subject": subject})
 
 
-@mcp.tool()
+@_tool()
 def read_spec_document(
     path: str, include: Literal["requirements", "full"] = "requirements"
 ) -> Dict[str, Any]:
@@ -2066,7 +2113,7 @@ def read_spec_document(
     return _hub_request("GET", "/spec/documents", params={"path": path, "include": include})
 
 
-@mcp.tool()
+@_tool()
 def record_evidence(
     identifier: str,
     summary: str = "",
@@ -2120,7 +2167,7 @@ def record_evidence(
     )
 
 
-@mcp.tool()
+@_tool()
 def list_evidence(
     identifier: str = "", document: str = "", review_state: str = ""
 ) -> Dict[str, Any]:
@@ -2150,7 +2197,7 @@ def list_evidence(
     )
 
 
-@mcp.tool()
+@_tool()
 def decide_evidence(
     evidence_id: str, decision: EvidenceDecision, reason: str = ""
 ) -> Dict[str, Any]:
@@ -2208,6 +2255,188 @@ def main() -> None:
     mcp.run(transport="stdio", show_banner=False)
 
 
+# --- Call mode: `aw-tool <tool> [<args.json>]` (design D3, D4, D6, D7) ----------------------------
+
+#: Exit codes by envelope kind. 64 and 70 are sysexits' EX_USAGE and EX_SOFTWARE.
+_CALL_EXIT_CODES = {"rejected": 1, "unreachable": 2, "unbound": 2, "usage": 64, "internal": 70}
+
+_CALL_HELP = (
+    "aw-tool <tool> [<args-file>]  call one AgentWeave tool; <args-file> is a .json file inside "
+    "this workspace's .agentweave/calls/ directory holding a JSON object of the tool's arguments. "
+    "aw-tool --list  print the callable tools and their parameters. The run's credential is read "
+    "from the environment; there is no option for it. The result is one JSON object, the last line "
+    "of output."
+)
+
+
+class _CallUsageError(Exception):
+    """The call itself is malformed; nothing was sent to the Hub."""
+
+
+def _call_emit(payload: Dict[str, Any]) -> None:
+    # `ensure_ascii` stays on (R3): PowerShell 5.1 decodes a native command's stdout with the
+    # console code page, so escaped output is the only form identical in every shell.
+    sys.stdout.write(json.dumps(payload, default=str) + "\n")
+    sys.stdout.flush()
+
+
+def _call_fail(kind: str, detail: str, **extra: Any) -> int:
+    _call_emit({"ok": False, "error": {"kind": kind, "detail": detail, **extra}})
+    return _CALL_EXIT_CODES[kind]
+
+
+def _calls_root() -> Optional[str]:
+    """`<realpath(AW_WORKSPACE_DIR)>/.agentweave/calls`, not resolved further: a link at either
+    component must show up as a difference between this and its own realpath (design D8)."""
+    workspace = os.environ.get("AW_WORKSPACE_DIR", "").strip()
+    if not workspace:
+        return None
+    return os.path.join(os.path.realpath(workspace), ".agentweave", "calls")
+
+
+def _decode_args_file(data: bytes) -> str:
+    """D3's order: a BOM decides; else strict UTF-8; else, on Windows only, the ANSI code page --
+    what a bare PowerShell 5.1 `Set-Content` writes (review fix 3); else a usage error."""
+    try:
+        if data.startswith(codecs.BOM_UTF8):
+            return data[len(codecs.BOM_UTF8) :].decode("utf-8")
+        if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+            return data.decode("utf-16")
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    if os.name == "nt":
+        with contextlib.suppress(UnicodeDecodeError, LookupError):
+            return data.decode(locale.getencoding())
+    raise _CallUsageError(
+        "The arguments file could not be decoded as text. Write it with your file tool, or from "
+        "PowerShell with `Set-Content -Encoding utf8`."
+    )
+
+
+def _read_call_args(arg: str) -> Dict[str, Any]:
+    """The arguments file, read only from inside the calls directory (design D3, review fix 8).
+
+    Resolved against this process's working directory, as the shell meant it. Refused when the
+    workspace is unknown, when `.agentweave` or `calls` is a link or junction, when the file's real
+    path is not inside the calls directory, or when it is not a `.json` file -- the same rule the
+    approver applies, so both mean the same thing and a drifted `cd` fails closed.
+    """
+    root = _calls_root()
+    where = (
+        "The arguments file must be a .json file inside this workspace's .agentweave/calls/ "
+        "directory, named by a relative path such as .agentweave/calls/1.json, from the "
+        "workspace root."
+    )
+    if root is None:
+        raise _CallUsageError(f"{where} AW_WORKSPACE_DIR is not set, so there is none.")
+    try:
+        normal_root = os.path.normcase(root)
+        if os.path.normcase(os.path.realpath(root)) != normal_root:
+            raise _CallUsageError(f"{where} .agentweave/calls is a link, not that directory.")
+        real = os.path.realpath(os.path.abspath(arg))
+        normal_real = os.path.normcase(real)
+        inside = (
+            normal_real != normal_root
+            and os.path.commonpath([normal_real, normal_root]) == normal_root
+        )
+    except (OSError, ValueError) as exc:
+        raise _CallUsageError(where) from exc
+    if not inside or not normal_real.endswith(".json"):
+        raise _CallUsageError(f"{where} {arg!r} is not.")
+    try:
+        with open(real, "rb") as handle:
+            data = handle.read()
+    except OSError as exc:
+        raise _CallUsageError(f"{where} {arg!r} could not be read: {exc.strerror}.") from exc
+    try:
+        parsed = json.loads(_decode_args_file(data))
+    except ValueError as exc:
+        raise _CallUsageError(f"The arguments file {arg!r} is not valid JSON: {exc}.") from exc
+    if not isinstance(parsed, dict):
+        raise _CallUsageError(f"The arguments file {arg!r} must hold a JSON object.")
+    return parsed
+
+
+def _call_parameters(fn: Callable[..., Any]) -> Tuple[List[str], List[str]]:
+    params = inspect.signature(fn).parameters
+    names = list(params)
+    required = [name for name, p in params.items() if p.default is inspect.Parameter.empty]
+    return names, required
+
+
+def _call_listing() -> Dict[str, Any]:
+    tools = []
+    for name in sorted(_CALLABLE_TOOLS):
+        fn = _CALLABLE_TOOLS[name]
+        parameters, required = _call_parameters(fn)
+        summary = (inspect.getdoc(fn) or "").split("\n", 1)[0]
+        tools.append(
+            {"name": name, "parameters": parameters, "required": required, "summary": summary}
+        )
+    return {"tools": tools}
+
+
+def call_main(argv: List[str]) -> int:
+    """Call one tool and print one envelope; return the exit code (design D3).
+
+    Reads `AW_RUN_TOKEN`/`HUB_URL` from the environment only, never from argv or a file (D6), and
+    never announces: an announce from here would record `connected` for a harness that refused the
+    MCP server (D4). No exception escapes as a traceback.
+    """
+    try:
+        if not argv:
+            raise _CallUsageError(_CALL_HELP)
+        if argv[0] in ("--help", "-h"):
+            _call_emit({"ok": True, "result": {"usage": _CALL_HELP}})
+            return 0
+        if argv[0] == "--list":
+            _call_emit({"ok": True, "result": _call_listing()})
+            return 0
+        name, rest = argv[0], argv[1:]
+        if name.startswith("-") or any(arg.startswith("-") for arg in rest):
+            raise _CallUsageError(
+                "aw-tool takes no options besides --list and --help; the run's credential is read "
+                f"from the environment. {_CALL_HELP}"
+            )
+        if len(rest) > 1:
+            raise _CallUsageError(f"aw-tool takes one arguments file at most. {_CALL_HELP}")
+        fn = _CALLABLE_TOOLS.get(name)
+        if fn is None:
+            raise _CallUsageError(f"{name!r} is not a callable tool; `aw-tool --list` names them.")
+        args = _read_call_args(rest[0]) if rest else {}
+        parameters, required = _call_parameters(fn)
+        accepted = (
+            f"{name} accepts {', '.join(parameters) or 'no arguments'}"
+            f"{'; required: ' + ', '.join(required) if required else ''}."
+        )
+        unknown = sorted(set(args) - set(parameters))
+        if unknown:
+            raise _CallUsageError(f"Unknown argument(s) {', '.join(unknown)}. {accepted}")
+        try:
+            bound = inspect.signature(fn).bind(**args)
+        except TypeError as exc:
+            raise _CallUsageError(f"{exc}. {accepted}") from exc
+    except _CallUsageError as exc:
+        return _call_fail("usage", str(exc))
+    try:
+        result = fn(*bound.args, **bound.kwargs)
+    except HubAPIError as exc:
+        return _call_fail("rejected", exc.detail, status=exc.status_code, data=exc.data)
+    except HubUnreachableError as exc:
+        return _call_fail("unreachable", str(exc))
+    except UnboundIdentityError as exc:
+        return _call_fail("unbound", str(exc))
+    except Exception as exc:  # noqa: BLE001 -- the envelope is the contract; no traceback leaks
+        return _call_fail(
+            "internal",
+            f"{type(exc).__name__}: {exc}. The outcome is unknown: the Hub may have recorded "
+            "this call. Check with `aw-tool list_tasks` or `aw-tool get_task` before retrying.",
+        )
+    _call_emit({"ok": True, "result": result})
+    return 0
+
+
 # MUST stay the last thing in this file. `mcp.run()` does not return, so anything defined below
 # this guard is never reached when the server is spawned as a script — which is exactly how the
 # Hub spawns it. `submit_spec_document` was added after this block and was therefore invisible to
@@ -2216,6 +2445,9 @@ def main() -> None:
 # scope, and reported the tool "not available in this session".
 #
 # `test_mcp_server_stdio_surface.py` spawns this file the way the Hub does and lists the tools over
-# the wire, which is the only check that can see this class of mistake.
+# the wire, which is the only check that can see this class of mistake. Call mode (`--call`) is
+# dispatched here too, for the same reason: `call_main` and every tool must be defined above.
 if __name__ == "__main__":
+    if _CALL_MODE:
+        sys.exit(call_main(sys.argv[2:]))
     main()
