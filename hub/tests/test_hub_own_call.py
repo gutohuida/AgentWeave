@@ -69,7 +69,13 @@ def _shell(command):
 ALLOWED = [
     ("Bash", {"command": "aw-tool create_task .agentweave/calls/1.json"}),
     ("PowerShell", {"command": "aw-tool create_task .agentweave/calls/1.json"}),
-    ("PowerShell", {"command": "aw-tool.cmd create_task .agentweave\\calls\\1.json"}),
+    pytest.param(
+        "PowerShell",
+        {"command": "aw-tool.cmd create_task .agentweave\\calls\\1.json"},
+        # A backslash separates paths only on Windows. On POSIX that word is one file name outside
+        # the calls root, and the shim reads it the same way, so both refuse it there.
+        marks=pytest.mark.skipif(os.name != "nt", reason="backslash paths are Windows paths"),
+    ),
     ("PowerShell", {"command": "AW-TOOL list_tasks"}),
     ("PowerShell", {"command": "AW-TOOL.CMD --list"}),
     ("Bash", {"command": "aw-tool list_tasks"}),

@@ -3421,11 +3421,12 @@ async def test_a_pin_that_cannot_be_made_refuses_every_run(app, auth_headers, bi
 def test_the_launchers_go_first_on_an_existing_path_key_whatever_its_spelling(tmp_path):
     import os
 
-    env = {"Path": "C:\\Windows" + os.pathsep + "C:\\bin", "OTHER": "x"}
+    # Neutral entries: a Windows path holds `:`, which is the separator on POSIX (CI).
+    env = {"Path": "first-dir" + os.pathsep + "second-dir", "OTHER": "x"}
     agent_trigger.prepend_run_path(env, tmp_path)
 
     assert list(env) == ["Path", "OTHER"]
-    assert env["Path"].split(os.pathsep) == [str(tmp_path), "C:\\Windows", "C:\\bin"]
+    assert env["Path"].split(os.pathsep) == [str(tmp_path), "first-dir", "second-dir"]
 
     bare = {"OTHER": "x"}
     agent_trigger.prepend_run_path(bare, tmp_path)
