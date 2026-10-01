@@ -107,6 +107,9 @@ class LaunchRequest:
     extra_flags: Optional[List[str]] = None
     control_overrides: Optional[Dict[str, str]] = None
     restrict_spec_writes: bool = False
+    # What the run is told it reaches the Hub with (`a-run-reaches-the-hub-without-mcp` D16): a
+    # Claude spec turn told `shim` keeps `Write`, for its call command's arguments file.
+    described_access_path: str = "mcp"
 
 
 @dataclass(frozen=True)
@@ -154,6 +157,9 @@ class RpcCallbacks:
     #: Copilot's D7: the saved session named nothing that exists, so a new one is being started and
     #: the conversation's old binding may be replaced. Codex's app-server never calls it.
     on_session_missing: Optional[Callable[[str], Awaitable[None]]] = None
+    #: `a-run-reaches-the-hub-without-mcp` D1: the harness's own report about the Hub's tool
+    #: server (`connected` or `failed`), for a run given it. Codex's app-server calls it.
+    on_mcp_status: Optional[Callable[[str], Awaitable[Any]]] = None
 
 
 class StreamTransport(ABC):
@@ -252,6 +258,10 @@ class RunnerAdapter(ABC):
     mcp_env_names: ClassVar[Optional[Tuple[str, ...]]] = None
     write_tool_kinds: ClassVar[Mapping[str, str]]
     one_shot_takes_schema: ClassVar[bool] = False
+    # Whether this runner's shell may be sandboxed away from the Hub's address, so a run told
+    # the call command is told it may report `unreachable` (`a-run-reaches-the-hub-without-mcp`
+    # D10). True for Codex, whose `workspace-write` sandbox's network default is unverified.
+    shell_may_lack_network: ClassVar[bool] = False
 
     @abstractmethod
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:

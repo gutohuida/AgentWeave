@@ -27,6 +27,11 @@ class TestBuildCommandClaude:
             "--output-format",
             "stream-json",
             "--verbose",
+            # `a-run-reaches-the-hub-without-mcp` D13: the call command is pre-allowed on every
+            # non-yolo run, MCP or not.
+            "--allowedTools",
+            "Bash(aw-tool:*)",
+            "PowerShell(aw-tool:*)",
             "--permission-mode",
             "acceptEdits",
             "-p",
@@ -77,9 +82,12 @@ class TestBuildCommandClaude:
         (server_key,) = config["mcpServers"].keys()
         assert cmd[cmd.index("--allowedTools") + 1] == f"mcp__{server_key}__*"
 
-    def test_no_yolo_with_no_mcp_command_omits_allowlist(self):
+    def test_no_yolo_with_no_mcp_command_allows_only_the_call_command(self):
+        """No MCP rule without an MCP server; the call command's rules either way (D13)."""
         cmd = build_command(runner="claude", cli="claude", prompt="hi", yolo=False)
-        assert "--allowedTools" not in cmd
+        start = cmd.index("--allowedTools") + 1
+        assert cmd[start : start + 2] == ["Bash(aw-tool:*)", "PowerShell(aw-tool:*)"]
+        assert "mcp__agentweave__*" not in cmd
 
     def test_yolo_with_mcp_command_omits_allowlist(self):
         cmd = build_command(
@@ -527,3 +535,55 @@ def test_codex_rollout_accounting_uses_latest_request_delta(tmp_path):
 
 def test_codex_rollout_accounting_returns_none_when_session_is_missing(tmp_path):
     assert read_codex_rollout_accounting("missing", codex_home=tmp_path) is None
+
+
+# --- `a-run-reaches-the-hub-without-mcp` task 1.2: Claude's `system`/`init` names its servers ------
+# Shapes from F340's table and the raw PTY capture in
+# `openspec/changes/archive/2026-09-13-an-absent-approver-is-not-named/evidence/a-hub-plain-raw-pty.txt`,
+# whose `init` lists three claude.ai connectors and no `agentweave` at all.
+
+
+def _init(servers):
+    line = {"type": "system", "subtype": "init", "session_id": "s-init", "tools": []}
+    if servers is not None:
+        line["mcp_servers"] = servers
+    return json.dumps(line)
+
+
+@pytest.mark.parametrize(
+    "servers, expected",
+    [
+        ([{"name": "agentweave", "status": "connected"}], "connected"),
+        ([{"name": "agentweave", "status": "failed"}], "failed"),
+        (
+            [
+                {"name": "claude.ai Google Drive", "status": "needs-auth"},
+                {"name": "claude.ai Gmail", "status": "needs-auth"},
+            ],
+            "absent",
+        ),
+        ([], "absent"),
+        # R3: a status the Hub does not recognise is not a report (design D1).
+        ([{"name": "agentweave", "status": "pending"}], None),
+        # No server list at all says nothing.
+        (None, None),
+    ],
+)
+def test_claude_init_reports_the_hubs_server(servers, expected):
+    from hub.runner_parsing import parse_claude_line
+
+    parsed = parse_claude_line(_init(servers))
+    assert parsed.harness_mcp_status == expected
+    assert parsed.session_id == "s-init"
+    assert parsed.events == []
+
+
+def test_a_line_that_is_not_init_reports_nothing():
+    from hub.runner_parsing import parse_claude_line
+
+    for line in (
+        json.dumps({"type": "system", "subtype": "compact", "mcp_servers": []}),
+        json.dumps({"type": "assistant", "message": {"content": "hi"}}),
+        "not json",
+    ):
+        assert parse_claude_line(line).harness_mcp_status is None

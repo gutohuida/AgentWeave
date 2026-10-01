@@ -297,70 +297,37 @@ async def latest_mcp_test(db: AsyncSession, project_id: str, agent: str) -> Opti
     return result.scalars().first()
 
 
-async def harness_has_honoured_mcp(db: AsyncSession, project_id: str, agent: str) -> bool:
-    """Has this agent's harness ever actually started a server the Hub injected?
-
-    The one measurement behind `described_access_path`'s grounds. True from the moment any run of
-    this agent has an `mcp_adapter_online_at` — the adapter announcing itself before it serves.
-
-    **Per agent, not per CLI, and that is narrower than the fact it stands for.** Whether a harness
-    honours MCP is a property of the machine and the policy on it, so a second agent on the same
-    proven `claude` installation starts from no grounds and reads the HTTP form on its first turn.
-    A per-CLI grain would need a join through `Agent` to `Runner` for a value that self-corrects on
-    the next spawn, and it would also make one agent's harness speak for another's — a per-agent
-    runner override is ordinary. The narrow answer is the conservative one in the only direction
-    that matters: it under-describes, never over-describes.
-
-    Positive evidence only. There is no negative form to record: a harness that ignores the
-    configuration is silent, and silence is exactly what "no grounds" means.
-    """
-    from .db.models import Run
-
-    result = await db.execute(
-        select(Run.id)
-        .where(
-            Run.project_id == project_id,
-            Run.agent == agent,
-            Run.mcp_adapter_online_at.is_not(None),
-        )
-        .limit(1)
-    )
-    return result.scalars().first() is not None
-
-
 def described_access_path(
     access_path: str,
     *,
     override: Optional[str] = None,
-    harness_honoured_mcp: bool = False,
+    latest: Optional[str] = None,
 ) -> str:
-    """Choose the path the run is **told** about — never one there are no grounds for.
+    """What the run is **told** it reaches the Hub with: `"mcp"` or `"shim"`, never anything else.
 
-    Grounds are one of two things, and an absence of both is not a tie-break in favour of
-    asserting the surface:
+    `a-run-reaches-the-hub-without-mcp` D1. The MCP form is told only on grounds, and grounds are
+    one of two things:
 
-    * the operator said so (`hub_client: "mcp"`). A declaration about their own deployment
-      outranks anything the Hub can observe, and what the run is *given* already honours the
-      other direction.
-    * the harness has been *seen* honouring an injected server — the MCP adapter reported in
-      from a previous run of this agent (`Run.mcp_adapter_online_at`). Providing a harness with
-      a server is not the same as that harness offering it: a deployment may forbid
-      tool-protocol servers by policy, take the `--mcp-config` and do nothing with it.
+    * the operator said so (`hub_client: "mcp"`), a declaration about their own deployment;
+    * the latest *tested* run of this agent found the harness `connected`
+      (`latest_mcp_test`). Not "any run ever": a policy that arrives after the first success is
+      seen by the next test, which the permanent grounds never noticed (F340). An unrecognised
+      status is no grounds.
 
-    A run given no server (`access_path == "cli"`) is never described as having one, whatever
-    else is true.
+    Otherwise the run is told the call command (`aw-tool`), which every run has: it is the pinned
+    server in call mode, on every run's `PATH` (D5), so telling it never asserts a surface the run
+    lacks. A run given no server (`access_path != "mcp"`) is told the call command whatever else
+    is true. A runner that tests its own run before the first prompt (Copilot, D9) decides from
+    that test instead of from here.
 
-    The first run against a fresh harness therefore reads the HTTP form while the server is in
-    fact injected and its tools are in the model's tool list. That is deliberate and it is the
-    safe direction of the two: under-describing a surface costs convenience for one turn, and
-    the adapter announces itself at startup rather than waiting for a tool call, so a permitted
-    harness earns its grounds on that first spawn rather than never.
+    What the run is *given* is not decided here and does not move with this answer: nothing that
+    decides containment reads it.
     """
     if access_path != "mcp":
-        return access_path
+        return "shim"
     if override == "mcp":
         return "mcp"
-    return "mcp" if harness_honoured_mcp else "cli"
+    return "mcp" if latest == "connected" else "shim"
 
 
 def spec_turn_notice(
@@ -447,17 +414,23 @@ def spec_turn_notice(
     return "\n".join(lines)
 
 
-def access_path_notice(access_path: str, tool_prefix: str = "") -> str:
+def access_path_notice(
+    access_path: str, tool_prefix: str = "", *, shell_may_lack_network: bool = False
+) -> str:
     """What the agent is told, at turn start, about how it reaches the capability plane.
 
-    Two renderings of one fact, not a capability and a denial: the MCP branch names the tools,
-    and the branch without MCP names the HTTP contract those tools adapt. Neither branch ever
-    interpolates a credential — see the comment on the second branch.
+    Exactly two forms (`a-run-reaches-the-hub-without-mcp` D11): the MCP tools, or the call
+    command. Any other value raises `ValueError`, so a caller still passing the retired `cli`
+    fails loudly instead of rendering the HTTP form no run is told any more -- following that form
+    puts the credential into a command the harness stores.
 
-    `tool_prefix` names the tools by the same full callable name
-    `agents.py:_tool_surface_lines` uses for a Claude-family run whose access path is described as
-    MCP — empty everywhere else, which reproduces the previous, unprefixed sentence exactly
-    (`2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`, F139).
+    Neither form names or interpolates a credential: the call command reads `AW_RUN_TOKEN` and
+    `HUB_URL` from its own environment, and this text is prepended to the turn prompt, which is
+    durable.
+
+    `tool_prefix` names the MCP tools by the full callable name `agents.py:_tool_surface_lines`
+    uses for a run whose harness's naming is known (F139); empty reproduces the bare names.
+    `shell_may_lack_network` is the adapter's caveat that its shell may not reach the Hub (D10).
     """
     if access_path == "mcp":
         return (
@@ -465,31 +438,62 @@ def access_path_notice(access_path: str, tool_prefix: str = "") -> str:
             f"{tool_prefix}send_message / {tool_prefix}create_task / {tool_prefix}update_task / "
             f"{tool_prefix}ask_user directly."
         )
-    # This branch names no CLI commands, and that part has not changed: it used to instruct
-    # `agentweave msg send`, `task create`, `question ask` and `agent request`, and
-    # `2026-08-03-single-runtime` reduced the CLI to five app-lifecycle commands, so every one of
-    # those instructions was wrong. What was wrong was the conclusion drawn from it — that the
-    # run therefore has no way to reach the plane. It has: the MCP tools are a thin adapter over
-    # the HTTP contract, the run's credential and the Hub's own address are already in the
-    # spawned process's environment (`agent_trigger.py`'s `AW_RUN_TOKEN` / `HUB_URL`), and this
-    # branch is exactly the deployment the equal-capability requirement was written for.
-    #
-    # Variables are NAMED here and their values are NEVER interpolated. This text is prepended to
-    # the turn prompt, which is the durable record of the turn, so a credential written into it is
-    # a credential in stored turn text. The agent can read its own environment, so the name
-    # discloses nothing it does not already hold; the value would be a leak. The difference is one
-    # f-string, which is why the spec states it as a prohibition rather than a preference.
-    return (
-        "[AgentWeave] Tool access: the AgentWeave capability "
-        "plane is reachable over HTTP, and this run is already authenticated for it. Its base "
-        "address is the value of the `HUB_URL` environment variable, and its operations live "
-        "under the route prefix `/api/v1/agent-actions`, so a request goes to "
-        "`$HUB_URL/api/v1/agent-actions/...`. Authenticate every request with the run "
-        "credential in the `AW_RUN_TOKEN` environment variable, presented as the header "
-        "`Authorization: Bearer $AW_RUN_TOKEN`. Read both values from your own process "
-        "environment; they are deliberately not written here. Inbound content is already "
+    if access_path != "shim":
+        raise ValueError(f"a run is told 'mcp' or 'shim', not {access_path!r}")
+    notice = (
+        "[AgentWeave] Tool access: reach AgentWeave with the `aw-tool` command, which is on your "
+        "PATH and already authenticated for this run. Write the tool's arguments as one JSON "
+        "object to a `.json` file inside `.agentweave/calls/` in your workspace — with your file "
+        "tool, or from PowerShell only with `Set-Content -Encoding utf8` — then run "
+        "`aw-tool <tool> .agentweave/calls/<file>.json` from the workspace root, for example "
+        "`aw-tool create_task .agentweave/calls/1.json`. A tool with no required argument needs "
+        "no file (`aw-tool list_tasks`), and `aw-tool --list` names every tool and its arguments. "
+        "The result is one JSON object, the last line of the output. Inbound content is already "
         "included in this turn; no retrieval is needed."
     )
+    if shell_may_lack_network:
+        notice += (
+            " Your shell's sandbox may not allow network access to the Hub. If `aw-tool` reports "
+            "`unreachable`, say so in your reply rather than retrying."
+        )
+    return notice
+
+
+def plane_surface_summary(
+    status: str,
+    told: Optional[str],
+    *,
+    declared_mcp: bool = False,
+    quoted: Optional[str] = None,
+) -> str:
+    """The one status event a run gets when its harness did not start the Hub's server (D12).
+
+    The wording follows what the run was **told** (R3): a run told `aw-tool` reached the Hub
+    anyway; a run told the MCP tools, from an earlier `connected` or the operator's declaration,
+    did not have them, and its next turn is told the call command -- unless the agent is declared
+    `hub_client: "mcp"`, whose next turn follows the declaration (review fix 7). `quoted` is the
+    runner's own sentence about the server (Copilot's `/mcp list`), shown verbatim.
+    """
+    if told == "mcp":
+        summary = (
+            f"The AgentWeave MCP server did not start for this run ({status}), although the run "
+            "was told to use it."
+        )
+        if declared_mcp:
+            summary += (
+                ' This agent is declared to use MCP (`hub_client: "mcp"`), so its next turn is '
+                "told the same; change the declaration to stop that."
+            )
+        else:
+            summary += " Its next turn is told `aw-tool`."
+        return summary
+    summary = (
+        f"The AgentWeave MCP server did not start for this run ({status}); the run was told to "
+        "reach the Hub with `aw-tool`."
+    )
+    if quoted:
+        summary += f" The runner reported: {quoted}"
+    return summary
 
 
 def auto_snapshot_notice() -> str:

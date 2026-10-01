@@ -155,6 +155,14 @@ def _claude_mcp_args(mcp_command: Optional[List[str]], *, yolo: bool) -> List[st
     return args
 
 
+#: The Hub's call command, pre-allowed on every non-yolo Claude run
+#: (`a-run-reaches-the-hub-without-mcp` D13): where no approver answers -- the `cli` path, or a
+#: blocked MCP server under F299's condition A -- a prompt for it would be denied. Claude's prefix
+#: rules are shell-operator-aware, so `aw-tool x && y` does not match. They restrict no path;
+#: the call command's own calls-root check does (D3).
+CLAUDE_CALL_COMMAND_RULES = ("Bash(aw-tool:*)", "PowerShell(aw-tool:*)")
+
+
 def _build_claude_command(
     *,
     cli: str,
@@ -169,6 +177,7 @@ def _build_claude_command(
     control_args: Optional[List[str]] = None,
     control_overrides: Optional[Dict[str, str]] = None,
     restrict_spec_writes: bool = False,
+    described_access_path: str = "mcp",
 ) -> List[str]:
     cmd = [cli, "--output-format", "stream-json", "--verbose"]
     if model:
@@ -186,7 +195,17 @@ def _build_claude_command(
         # `MultiEdit` is Claude's default tool for a multi-hunk edit, so leaving it out (F277) let
         # the most ordinary way to change a file through silently -- a model reaching for it never
         # learned it was meant to propose. A nudge, not a sandbox: `Bash` is not named either.
-        cmd += ["--disallowedTools", "Edit,MultiEdit,Write,NotebookEdit"]
+        #
+        # A spec turn told the call command keeps `Write` (`a-run-reaches-the-hub-without-mcp`
+        # D16): it must write `.agentweave/calls/*.json` to call `submit_spec_document`, and
+        # Claude's rules have no negation to confine `Write` to that directory, so the nudge
+        # against `Write` is weaker for that turn, stated rather than hidden.
+        removed = (
+            "Edit,MultiEdit,NotebookEdit"
+            if described_access_path == "shim"
+            else "Edit,MultiEdit,Write,NotebookEdit"
+        )
+        cmd += ["--disallowedTools", removed]
     # An operator's `permission_mode` control arrives inside `control_args`, which is spliced in
     # above; the default posture below is appended *after* it and would win. Suppress the default
     # whenever the override supplied one, or the composer's Permissions pill would appear to work
@@ -205,6 +224,14 @@ def _build_claude_command(
         cmd += ["--append-system-prompt-file", str(context_file)]
     mcp_args = _claude_mcp_args(mcp_command, yolo=yolo)
     cmd += mcp_args
+    if not yolo:
+        # One `--allowedTools` occurrence, whose values run to the next flag: after the MCP rule
+        # when there is one, else a new option. Kept out of `_claude_mcp_args`, which is the MCP
+        # injection and would otherwise carry an unrelated rule (verification 2026-10-01, 7.1).
+        if "--allowedTools" in mcp_args:
+            cmd += list(CLAUDE_CALL_COMMAND_RULES)
+        else:
+            cmd += ["--allowedTools", *CLAUDE_CALL_COMMAND_RULES]
     # The "Workspace only" posture is `manual` plus an answerer. Emitted here rather than from the
     # catalog because only this function knows whether the server that answers is even configured:
     # naming an approver that will not be there makes every tool call fail, which the model

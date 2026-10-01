@@ -79,3 +79,39 @@ def test_codex_yolo_without_restriction_is_unchanged_from_before_this_change():
     command = build_command(runner="codex", cli="codex", prompt="hello", yolo=True)
     assert "--dangerously-bypass-approvals-and-sandbox" in command
     assert "--sandbox" not in command
+
+
+# --- `a-run-reaches-the-hub-without-mcp` task 1.15 (Claude half), design D16 ---------------------
+
+
+def _disallowed(command):
+    return command[command.index("--disallowedTools") + 1]
+
+
+def test_a_spec_turn_told_the_call_command_keeps_write_for_its_args_file():
+    """D16: the args-file write is the one write a spec turn told `aw-tool` keeps, or it could not
+    call `submit_spec_document`. Claude's rules have no negation, so `Write` stays whole; the other
+    three are still removed, and a run told MCP keeps today's four."""
+    for yolo in (False, True):
+        shim = build_command(
+            runner="claude",
+            cli="claude",
+            prompt="hello",
+            yolo=yolo,
+            restrict_spec_writes=True,
+            described_access_path="shim",
+        )
+        assert _disallowed(shim) == "Edit,MultiEdit,NotebookEdit"
+        told_mcp = build_command(
+            runner="claude",
+            cli="claude",
+            prompt="hello",
+            yolo=yolo,
+            restrict_spec_writes=True,
+            described_access_path="mcp",
+        )
+        assert _disallowed(told_mcp) == "Edit,MultiEdit,Write,NotebookEdit"
+        default = build_command(
+            runner="claude", cli="claude", prompt="hello", yolo=yolo, restrict_spec_writes=True
+        )
+        assert _disallowed(default) == "Edit,MultiEdit,Write,NotebookEdit"

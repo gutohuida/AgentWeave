@@ -23,6 +23,8 @@ fields they actually accept and require.
 import asyncio
 import re
 
+import pytest
+
 from hub.api.v1.agents import (
     _AGENT_ACTIONS_PREFIX,
     UNDESCRIBED_ARGUMENTS,
@@ -31,9 +33,10 @@ from hub.api.v1.agents import (
 )
 from hub.mcp_server import mcp
 
-# Anything that is not `"mcp"` selects the HTTP rendering. `"cli"` is the value
-# `resolve_access_axes(...).plane` actually returns for a run without an injected server.
-HTTP_PATH = "cli"
+# The HTTP rendering is reached only by naming it (`a-run-reaches-the-hub-without-mcp` D11): no run
+# is told it any more, but it stays rendered because these tests are the only check that each
+# described operation's method, path and fields match a mounted route.
+HTTP_PATH = "http"
 
 
 def _served() -> set:
@@ -447,3 +450,40 @@ def test_the_http_rendering_states_how_an_archive_is_directed():
     assert f"{_AGENT_ACTIONS_PREFIX}/permission-requests/" in described
     # The rule itself is in the shared description, so both renderings carry it.
     assert "whatever this run's permission posture is" in "\n".join(_tool_surface_lines())
+
+
+# --- `a-run-reaches-the-hub-without-mcp` task 1.9: the call-command rendering ----------------------
+
+_SHIM_HEAD_RE = re.compile(r"^- `aw-tool (\w+)` — arguments: `([^`]*)` — ")
+
+
+def test_the_call_command_rendering_describes_every_operation():
+    """The same operations as the other renderings, each as `aw-tool <tool>` with its MCP argument
+    list (which the agreement checks above already hold against the tool signatures)."""
+    lines = _tool_surface_lines(access_path="shim", question_timeout=37)
+    named = {m.group(1) for line in lines if (m := _SHIM_HEAD_RE.match(line))}
+    assert named == _described()
+    assert named == _served() - set(UNDESCRIBED_TOOLS)
+    text = "\n".join(lines)
+    assert "is called as `aw-tool <name> <args-file>`" in text  # the short-name mapping sentence
+    assert "37 seconds" in text  # this run's own question wait
+    assert ".agentweave/calls/" in text
+
+
+def test_the_call_command_rendering_carries_no_credential(monkeypatch):
+    monkeypatch.setenv("AW_RUN_TOKEN", "aw-run-SURFACELEAKCHECK")
+    monkeypatch.setenv("HUB_URL", "http://127.0.0.1:65432")
+    text = "\n".join(_tool_surface_lines(access_path="shim"))
+    for absent in ("AW_RUN_TOKEN", "Bearer", "$HUB_URL", "aw-run-SURFACELEAKCHECK", "65432"):
+        assert absent not in text, absent
+
+
+def test_the_question_wait_defaults_to_the_restated_240():
+    assert "240 seconds" in "\n".join(_tool_surface_lines(access_path="shim"))
+
+
+def test_the_rendering_takes_exactly_mcp_shim_or_http():
+    """D11 (R2): `cli` used to select HTTP silently; now any other value fails loudly."""
+    with pytest.raises(ValueError):
+        _tool_surface_lines(access_path="cli")
+    assert _tool_surface_lines(access_path="http") != _tool_surface_lines(access_path="shim")

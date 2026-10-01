@@ -82,6 +82,7 @@ class ClaudeStreamTransport(StreamTransport):
             control_args=control_args,
             control_overrides=req.control_overrides,
             restrict_spec_writes=req.restrict_spec_writes,
+            described_access_path=req.described_access_path,
         )
 
     def inject_mcp(self, mcp_command: List[str], *, yolo: bool) -> List[str]:

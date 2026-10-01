@@ -16,7 +16,6 @@ from sqlalchemy import select
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Run
-from hub.launchability import harness_has_honoured_mcp
 
 
 async def _actor(agent: str = "adapter-agent", run_id: str = "run-adapter") -> dict[str, str]:
@@ -96,37 +95,39 @@ async def test_identity_comes_from_the_credential_and_nothing_else(app):
 
 @pytest.mark.asyncio
 async def test_grounds_are_read_per_agent_and_only_from_a_report(app):
-    """`harness_has_honoured_mcp` is what `described_access_path` consults, and the two halves are
-    asserted together: before any report it is False, after one it is True, and another agent in
-    the same project is unaffected by its neighbour's harness."""
-    await _actor(agent="grounded", run_id="run-grounded")
+    """`latest_mcp_test` is what `described_access_path` consults (`a-run-reaches-the-hub-without-
+    mcp` D1, replacing `harness_has_honoured_mcp`): no grounds before a report, `connected` after
+    the announce, and another agent in the same project is unaffected by its neighbour's harness."""
+    from hub.launchability import latest_mcp_test
+
+    grounded = await _actor(agent="grounded", run_id="run-grounded")
     await _actor(agent="ungrounded", run_id="run-ungrounded")
 
     async with async_session_factory() as session:
-        assert await harness_has_honoured_mcp(session, "proj-test", "grounded") is False
+        assert await latest_mcp_test(session, "proj-test", "grounded") is None
 
-        row = await session.get(Run, "run-grounded")
-        assert row is not None
-        row.mcp_adapter_online_at = datetime.now(timezone.utc)
-        await session.commit()
+    resp = await app.post("/api/v1/agent-actions/mcp-adapter-online", headers=grounded)
+    assert resp.status_code == 204
 
     async with async_session_factory() as session:
-        assert await harness_has_honoured_mcp(session, "proj-test", "grounded") is True
-        assert await harness_has_honoured_mcp(session, "proj-test", "ungrounded") is False
-        assert await harness_has_honoured_mcp(session, "proj-other", "grounded") is False
+        assert await latest_mcp_test(session, "proj-test", "grounded") == "connected"
+        assert await latest_mcp_test(session, "proj-test", "ungrounded") is None
+        assert await latest_mcp_test(session, "proj-other", "grounded") is None
 
 
 @pytest.mark.asyncio
-async def test_a_stamped_run_is_the_only_kind_the_query_counts(app):
+async def test_a_tested_run_is_the_only_kind_the_query_counts(app):
     """The query filters on the column rather than on the run's existence. Delete the
     `is_not(None)` clause and this fails while every test above still passes."""
+    from hub.launchability import latest_mcp_test
+
     await _actor(agent="silent", run_id="run-silent-1")
     await _actor(agent="silent", run_id="run-silent-2")
 
     async with async_session_factory() as session:
         found = await session.execute(select(Run).where(Run.agent == "silent"))
         assert len(found.scalars().all()) == 2
-        assert await harness_has_honoured_mcp(session, "proj-test", "silent") is False
+        assert await latest_mcp_test(session, "proj-test", "silent") is None
 
 
 def test_the_adapter_announces_before_it_serves():

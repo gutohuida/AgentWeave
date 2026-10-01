@@ -506,21 +506,22 @@ class TestAccessPath:
     def test_an_explicit_cli_statement_is_what_the_run_is_given(self):
         """The operator's declaration is the only thing that moves the injected server — and it
         moves it in the direction that removes the unanswerable approver flag, not only the
-        wording."""
+        wording. A run given no server is told the call command (`a-run-reaches-the-hub-without-
+        mcp` D1), never the `cli`/HTTP form."""
         axes = resolve_access_axes(get_adapter("claude"), hub_client="cli", flags=[])
         assert axes.plane == "cli"
         assert axes.tool_surface == "none"
-        assert described_access_path("cli", override="cli") == "cli"
+        assert described_access_path("cli", override="cli") == "shim"
 
     def test_an_explicit_mcp_statement_is_grounds_on_its_own(self):
-        """Nothing has been observed about this harness, and the operator has still settled it.
+        """Nothing has been tested about this harness, and the operator has still settled it.
 
-        The distinguishing half: with the same absent observation and no statement, the run is
-        told the HTTP form. Delete the `override == "mcp"` branch and this test fails while the
-        one below it passes.
+        The distinguishing half: with the same absent test and no statement, the run is told the
+        call command. Delete the `override == "mcp"` branch and this test fails while the one
+        below it passes.
         """
-        assert described_access_path("mcp", override="mcp", harness_honoured_mcp=False) == "mcp"
-        assert described_access_path("mcp", override=None, harness_honoured_mcp=False) == "cli"
+        assert described_access_path("mcp", override="mcp", latest=None) == "mcp"
+        assert described_access_path("mcp", override=None, latest=None) == "shim"
 
     def test_auto_is_treated_as_unset_and_therefore_as_no_statement(self):
         """`auto` is the CLI's default value for `hub_client`, and it means the operator has said
@@ -528,28 +529,36 @@ class TestAccessPath:
         only on grounds."""
         axes = resolve_access_axes(get_adapter("claude"), hub_client="auto", flags=[])
         assert axes.plane == "mcp"
-        assert described_access_path("mcp", override="auto", harness_honoured_mcp=False) == "cli"
-        assert described_access_path("mcp", override="auto", harness_honoured_mcp=True) == "mcp"
+        assert described_access_path("mcp", override="auto", latest=None) == "shim"
+        assert described_access_path("mcp", override="auto", latest="connected") == "mcp"
 
     def test_injectable_runner_needs_no_global_registration(self):
-        """Kept from before §4, and updated deliberately rather than by accident.
-
-        It pins the post-`d279d22` behaviour: the Hub injects its server for any injectable runner
-        without asking whether the operator registered one by hand. That is still true and is now
-        the *only* thing this function decides — the second assertion is what §4 added, and it is
-        the one that stops the same value from also asserting the tools are there.
-        """
+        """The Hub injects its server for any injectable runner without asking whether the
+        operator registered one by hand; that injection still does not assert the tools are there
+        (D10: no grounds, the call command)."""
         axes = resolve_access_axes(get_adapter("codex"), hub_client=None, flags=[])
         assert axes.plane == "mcp"
-        assert described_access_path("mcp", override=None, harness_honoured_mcp=False) == "cli"
+        assert described_access_path("mcp", override=None, latest=None) == "shim"
 
     def test_a_run_given_no_server_is_never_described_as_having_one(self):
-        """Grounds cannot manufacture a surface that was not injected. A harness that honoured MCP
-        on an earlier run says nothing about a run the operator has moved to `cli`."""
-        assert described_access_path("cli", override=None, harness_honoured_mcp=True) == "cli"
+        """Grounds cannot manufacture a surface that was not injected. A harness that connected on
+        an earlier run says nothing about a run the operator has moved to `cli`."""
+        assert described_access_path("cli", override=None, latest="connected") == "shim"
+        assert described_access_path("cli", override="mcp", latest="connected") == "shim"
 
-    def test_an_observed_harness_is_described_as_having_the_tools(self):
-        assert described_access_path("mcp", override=None, harness_honoured_mcp=True) == "mcp"
+    def test_the_latest_test_decides_what_the_run_is_told(self):
+        """F340: only a latest test of `connected` grounds the MCP form. `absent`, `failed`, an
+        unrecognised string and no test at all are no grounds."""
+        assert described_access_path("mcp", override=None, latest="connected") == "mcp"
+        for latest in ("absent", "failed", "weird", None):
+            assert described_access_path("mcp", override=None, latest=latest) == "shim", latest
+
+    def test_a_run_is_never_described_as_cli_or_http(self):
+        for plane in ("mcp", "cli"):
+            for override in (None, "mcp", "cli", "auto"):
+                for latest in (None, "connected", "absent", "failed"):
+                    told = described_access_path(plane, override=override, latest=latest)
+                    assert told in ("mcp", "shim"), (plane, override, latest, told)
 
     def test_the_probe_is_gone_and_stays_gone(self):
         """`probe_mcp_registered` shelled `<cli> mcp list` in a separate process with no
@@ -562,6 +571,13 @@ class TestAccessPath:
         assert not hasattr(launchability, "probe_mcp_registered")
         assert not hasattr(launchability, "_probe_cache")
 
+    def test_the_permanent_grounds_are_gone(self):
+        """F340: "any run ever announced" was positive-only and never revoked. It is replaced by
+        `latest_mcp_test`, and must not come back beside it."""
+        import hub.launchability as launchability
+
+        assert not hasattr(launchability, "harness_has_honoured_mcp")
+
 
 class TestAccessPathNotice:
     def test_access_path_notice_names_the_available_tools(self):
@@ -570,56 +586,64 @@ class TestAccessPathNotice:
     def test_access_path_notice_offers_no_removed_cli_commands(self):
         """The fallback used to instruct `agentweave msg send`, `task create`, `question ask`
         and `agent request`; 2026-08-03-single-runtime left five app-lifecycle commands, so all
-        of those were wrong. Naming none of them is still right — what changed in
-        `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing` is the conclusion that was
-        drawn from it, which used to be a flat denial of capability."""
-        notice = access_path_notice("cli")
+        of those were wrong. Naming none of them is still right."""
+        notice = access_path_notice("shim")
         for removed in ("agentweave msg", "agentweave task", "agentweave question"):
             assert removed not in notice
 
-    def test_a_run_without_mcp_is_told_the_plane_is_reachable_over_http(self):
-        """Task 1.1: the four things the notice owes a run that cannot use MCP. This assertion
-        replaces one that required the words "no AgentWeave tool surface is available" — a green
-        test pinning the false sentence this change exists to remove."""
-        notice = access_path_notice("cli")
-        assert "HUB_URL" in notice
-        assert "AW_RUN_TOKEN" in notice
-        assert "Authorization: Bearer" in notice
-        assert "/api/v1/agent-actions" in notice
+    def test_a_run_without_mcp_is_told_the_call_command(self):
+        """`a-run-reaches-the-hub-without-mcp` D11: the raw HTTP form is no longer described to
+        runs, because following it puts the credential into stored command text. The run is told
+        the call command and where its arguments file goes, and nothing about the credential."""
+        notice = access_path_notice("shim")
+        assert "aw-tool" in notice
+        assert ".agentweave/calls/" in notice
+        assert "-Encoding utf8" in notice  # review fix 3: PowerShell 5.1's bare Set-Content
+        assert "last line" in notice  # review note 9: the envelope is the last line
+        for absent in ("AW_RUN_TOKEN", "Bearer", "$HUB_URL", "/api/v1/agent-actions"):
+            assert absent not in notice, absent
         assert "no AgentWeave tool surface is available" not in notice
 
     def test_a_run_without_mcp_is_not_told_it_cannot_act(self):
         """The delta's first scenario has two halves, and this is the second: the notice must
         not go on stating the denial in other words. An agent that is authenticated and told it
         is not will not try."""
-        notice = access_path_notice("cli").lower()
+        notice = access_path_notice("shim").lower()
         for denial in (
             "no agentweave tool surface",
             "cannot send messages",
             "report what you would have sent",
-            # Added by `a-first-turn-is-not-told-it-has-nothing`. This test was written to stop
-            # exactly this class of sentence and the shipped clause walked straight past it,
-            # because the list only held the *older* wordings. A denial in new words is still a
-            # denial; the list is what makes that check real rather than nominal.
             "no mcp tools this turn",
         ):
             assert denial not in notice
 
-    def test_the_notice_names_the_credential_variable_and_never_its_value(self, monkeypatch):
-        """Delta scenario "The credential is named and not disclosed", and design D4.
-
-        The notice is prepended to the turn prompt, which is the durable record of the turn, so
-        an interpolated credential is a credential in stored text. The distance between correct
-        and a leak is one f-string, so the test renders with the real environment variables set
-        to known sentinels and asserts neither value appears. Rendering with the variables
-        *unset* would pass against an interpolating implementation."""
+    def test_the_notice_carries_no_credential_or_address_value(self, monkeypatch):
+        """Rendered with the real variables set to sentinels: neither value appears in either
+        form. Rendering with them unset would pass against an interpolating implementation."""
         monkeypatch.setenv("AW_RUN_TOKEN", "aw-run-tok-SENTINEL-2f4b9c")
         monkeypatch.setenv("HUB_URL", "http://127.0.0.1:65432")
-        notice = access_path_notice("cli")
-        assert "AW_RUN_TOKEN" in notice
-        assert "aw-run-tok-SENTINEL-2f4b9c" not in notice
-        assert "HUB_URL" in notice
-        assert "65432" not in notice
+        for told in ("mcp", "shim"):
+            notice = access_path_notice(told)
+            assert "aw-run-tok-SENTINEL-2f4b9c" not in notice
+            assert "65432" not in notice
+
+    def test_the_notice_takes_exactly_mcp_or_shim(self):
+        """D11 (R2): a caller still passing `cli` fails loudly instead of rendering the form this
+        change stops telling runs."""
+        for value in ("cli", "http", ""):
+            with pytest.raises(ValueError):
+                access_path_notice(value)
+
+    def test_a_shell_that_may_lack_network_is_told_so(self):
+        """D10 / review fix 6: keyed on the adapter's `shell_may_lack_network`, true for Codex,
+        whose sandboxed shell may not reach the Hub; no other runner's notice carries it."""
+        from hub.runner_adapters import ADAPTERS
+
+        sentence = "If `aw-tool` reports `unreachable`, say so in your reply rather than retrying."
+        assert sentence not in access_path_notice("shim")
+        assert sentence in access_path_notice("shim", shell_may_lack_network=True)
+        assert sentence not in access_path_notice("mcp", shell_may_lack_network=True)
+        assert [name for name, a in ADAPTERS.items() if a.shell_may_lack_network] == ["codex"]
 
     def test_f52_auto_snapshot_notice_says_the_agent_need_not_commit(self):
         """F52 (`scripts/drive/FINDINGS.md`, 2026-08-26): two live runs each spent most of a

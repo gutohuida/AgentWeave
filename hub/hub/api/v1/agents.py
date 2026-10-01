@@ -1530,8 +1530,29 @@ def _http_lines(operation: _Operation) -> List[str]:
     return lines
 
 
+def _shim_lines(operation: _Operation) -> List[str]:
+    """The call-command rendering (`a-run-reaches-the-hub-without-mcp` D11): the operation's tool
+    name as the call command's first argument, and its MCP argument list as the JSON keys -- the
+    keys are the tool function's parameter names, which is what `aw-tool` binds them to."""
+    lines = [f"- `aw-tool {operation.tool}` — arguments: `{operation.args}` — {operation.text}"]
+    if operation.detail:
+        lines.append(f"  {operation.detail}")
+    return lines
+
+
+#: Restated from `mcp_server.QUESTION_ANSWER_TIMEOUT`'s default, for a run whose agent configures
+#: no question wait.
+DEFAULT_QUESTION_WAIT_SECONDS = 240
+
+_TOOL_SURFACE_FORMS = ("mcp", "shim", "http")
+
+
 def _tool_surface_lines(
-    *, has_peers: bool = True, access_path: str = "mcp", runner: Optional[str] = None
+    *,
+    has_peers: bool = True,
+    access_path: str = "mcp",
+    runner: Optional[str] = None,
+    question_timeout: Optional[int] = None,
 ) -> List[str]:
     """Describe every operation an agent can perform, in the idiom of its own access path.
 
@@ -1574,6 +1595,13 @@ def _tool_surface_lines(
     regardless of which form is used, because the run has the host's tools in its list either
     way (F139).
     """
+    if access_path not in _TOOL_SURFACE_FORMS:
+        # `a-run-reaches-the-hub-without-mcp` D11 (R2): anything other than "mcp" used to render
+        # HTTP silently. Runs are told "mcp" or "shim"; "http" is rendered only when named, which
+        # only the tests that check each operation against a mounted route do.
+        raise ValueError(
+            f"the tool surface is rendered as {_TOOL_SURFACE_FORMS}, not {access_path!r}"
+        )
     over_mcp = access_path == "mcp"
     # `each-runner-cli-is-one-adapter` D3/task 3.6: the adapter carries both `mcp_tool_prefix` and
     # `host_tool_note`.
@@ -1594,6 +1622,23 @@ def _tool_surface_lines(
             "Names below are as declared; your harness may show them with a prefix such as "
             "`mcp__agentweave__`."
         )
+    elif access_path == "shim":
+        wait = question_timeout if question_timeout is not None else DEFAULT_QUESTION_WAIT_SECONDS
+        preamble = (
+            "Each capability below is called with the `aw-tool` command, which is on your PATH "
+            "and already authenticated for this run. Write the arguments as one JSON object, with "
+            "the keys listed, to a `.json` file inside `.agentweave/calls/` in your workspace (use "
+            "your file tool; from PowerShell only `Set-Content -Encoding utf8`), then run "
+            "`aw-tool <tool> .agentweave/calls/<file>.json` from the workspace root. A tool with "
+            "no required argument needs no file. Every AgentWeave operation named anywhere in "
+            "this turn by its short name — `create_task`, `submit_spec_document`, … — is called "
+            "as `aw-tool <name> <args-file>`. The result is one JSON object on the last line of "
+            'the output: `{"ok": true, "result": ...}`, or `{"ok": false, "error": {"kind": ..., '
+            '"detail": ...}}`. `ask_user` waits up to '
+            f"{wait} seconds for the operator's answer, and `archive_job` waits for their "
+            "direction: give either command a timeout longer than that, or run it in the "
+            "background and read its output when it finishes."
+        )
     else:
         # The variables are NAMED and their values are never interpolated, for the same reason
         # `access_path_notice` never interpolates them (`design.md` D4): this text is written into
@@ -1608,7 +1653,12 @@ def _tool_surface_lines(
             "value you substitute. Requests and responses are JSON, and a refusal comes back as "
             "an HTTP status with a `detail` saying why."
         )
-    render = (lambda op: _mcp_lines(op, tool_prefix=tool_prefix)) if over_mcp else _http_lines
+    if over_mcp:
+        render = lambda op: _mcp_lines(op, tool_prefix=tool_prefix)  # noqa: E731
+    elif access_path == "shim":
+        render = _shim_lines
+    else:
+        render = _http_lines
     lines = ["## Your tools", "", preamble]
     if adapter is not None and adapter.host_tool_note:
         lines.append(adapter.host_tool_note)
@@ -1728,6 +1778,7 @@ async def _render_hub_agent_context(
     review: Optional[ReviewContext] = None,
     access_path: str = "mcp",
     runner: Optional[str] = None,
+    question_timeout: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Render the canonical model-facing context for one agent.
 
@@ -2244,7 +2295,12 @@ async def _render_hub_agent_context(
         lines.append("")
         _part("tool_surface")
         lines.extend(
-            _tool_surface_lines(has_peers=bool(peers), access_path=access_path, runner=runner)
+            _tool_surface_lines(
+                has_peers=bool(peers),
+                access_path=access_path,
+                runner=runner,
+                question_timeout=question_timeout,
+            )
         )
     else:
         _part("per_turn")

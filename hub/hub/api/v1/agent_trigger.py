@@ -79,8 +79,10 @@ from ...launchability import (
     auto_snapshot_notice,
     described_access_path,
     get_agent_config,
-    harness_has_honoured_mcp,
+    latest_mcp_test,
+    plane_surface_summary,
     probe_agent,
+    record_harness_mcp_status,
     resolve_agent_env,
     spec_turn_notice,
 )
@@ -122,7 +124,7 @@ from ...runner_adapters import ADAPTERS, build_command, get_adapter, resolve_acc
 from ...runner_adapters.base import RpcCallbacks as TransportRpcCallbacks
 from ...runner_adapters.base import RpcTransport, RpcTurnRequest, RunnerAdapter, StreamTransport
 from ...runner_commands import OPERATOR_POSTURE, UnsupportedRunnerError
-from ...runner_events import AccountingSample
+from ...runner_events import AccountingSample, status_event
 from ...scheduler import (
     REVIEWABLE_LOOP_TASK_STATUSES,
     WITH_REVIEWER_LOOP_TASK_STATUSES,
@@ -142,6 +144,37 @@ from ...usage_accounting import record_turn_usage
 from ...utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
+
+
+async def _latest_mcp_test_or_none(
+    session: AsyncSession, project_id: str, agent: str
+) -> Optional[str]:
+    """`latest_mcp_test`, total: a failed read is no grounds, so the run is told the call command.
+
+    The trigger route catches only `TriggerAgentError`, so anything else raised here would answer
+    500 after the operator's message was committed (verification 2026-10-01, finding 13).
+    """
+    try:
+        return await latest_mcp_test(session, project_id, agent)
+    except Exception:  # noqa: BLE001 -- no grounds is the safe answer
+        logger.warning("reading %s's latest MCP test failed", agent, exc_info=True)
+        return None
+
+
+async def _record_harness_report(run_id: str, status: str) -> Optional[str]:
+    """Record a harness's own report about the Hub's server for this run (D1, source `harness`),
+    and return what the run was told (`Run.plane_surface`). Never raises: a failing record leaves
+    the run untested, the safe direction, and must not fail the run (R3)."""
+    try:
+        async with async_session_factory() as db:
+            await record_harness_mcp_status(db, run_id, status, source="harness")
+            run = await db.get(Run, run_id)
+            told = run.plane_surface if run is not None else None
+            await db.commit()
+        return told
+    except Exception:  # noqa: BLE001
+        logger.warning("recording run %s's harness MCP status failed", run_id, exc_info=True)
+        return None
 
 
 def prepend_run_path(env: Dict[str, str], directory: Path) -> None:
@@ -1151,7 +1184,7 @@ async def _trigger_agent_directly(
     described_path = described_access_path(
         axes.plane,
         override=hub_client,
-        harness_honoured_mcp=await harness_has_honoured_mcp(session, project_id, agent),
+        latest=await _latest_mcp_test_or_none(session, project_id, agent),
     )
 
     # Build context from current Hub-owned state for every turn. Runners consume a file,
@@ -1172,6 +1205,8 @@ async def _trigger_agent_directly(
         # How this run reaches the capability plane, so the tool section describes the operations
         # the way this run can actually perform them (injected calls, or HTTP requests).
         access_path=described_path,
+        # This run's own question wait, which the call-command form states (D7).
+        question_timeout=effective_question_wait(agent_row),
         # The directory the run will actually execute in. Passed rather than recomputed so the
         # text an agent reads cannot disagree with the process's own cwd — agents were resolving
         # paths against the project root while running in a worktree, and every such read and
@@ -1229,7 +1264,13 @@ async def _trigger_agent_directly(
     # the tool list's is: known only for a Claude-family run described as having the injected surface
     # (F139).
     notice_prefix = (adapter.mcp_tool_prefix or "") if described_path == "mcp" else ""
-    notices = [access_path_notice(described_path, tool_prefix=notice_prefix)]
+    notices = [
+        access_path_notice(
+            described_path,
+            tool_prefix=notice_prefix,
+            shell_may_lack_network=adapter.shell_may_lack_network,
+        )
+    ]
     # F52: told once, up front, rather than discovered turn after turn by an agent that treats a
     # refused git command as work lost. `review_context is None` matches the condition `worktree`
     # is computed under below (a review checkout is read-only and never snapshotted); an agent with
@@ -1311,6 +1352,8 @@ async def _trigger_agent_directly(
                 # mechanically, regardless of phase, rigor or permission posture -- a role
                 # boundary, not a rigor gate.
                 restrict_spec_writes=bool(spec_document),
+                # D16: a spec turn told the call command keeps the write its arguments file needs.
+                described_access_path=described_path,
                 control_overrides=control_overrides,
             )
         except UnsupportedRunnerError as exc:
@@ -1417,6 +1460,9 @@ async def _trigger_agent_directly(
         # finalisation because the Claude/Codex split happens later and *inside* `_execute_run`,
         # so there is one write and no way for the two spawn paths to differ.
         workspace_dir=effective_work_dir,
+        # What this run was told it reaches the Hub with (`a-run-reaches-the-hub-without-mcp` D1),
+        # the same value its notice and tool section were rendered from above.
+        plane_surface=described_path,
     )
 
     # The binding, and the automatic move it causes, are staged here — before delivery, which is
@@ -1497,6 +1543,9 @@ async def _trigger_agent_directly(
             copilot_turn=copilot_turn,
             adapter=adapter,
             transport=run_transport,
+            # A run told the MCP form by declaration keeps being told it; D12's event says so.
+            declared_mcp=hub_client == "mcp",
+            told_access_path=described_path,
             cli=probe["cli"],
             prompt=prompt,
             yolo=yolo,
@@ -2396,6 +2445,8 @@ async def _execute_run(
     copilot_turn: Optional["_CopilotTurn"] = None,
     adapter: Optional[RunnerAdapter] = None,
     transport: Optional[StreamTransport | RpcTransport] = None,
+    declared_mcp: bool = False,
+    told_access_path: Optional[str] = None,
 ) -> None:
     """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE.
 
@@ -2470,6 +2521,7 @@ async def _execute_run(
             worktree=worktree,
             permission_mode=permission_mode,
             config_overrides=config_overrides,
+            told_access_path=told_access_path,
         )
         return
 
@@ -2588,9 +2640,10 @@ async def _execute_run(
         accounting_sample: Optional[AccountingSample] = None
         sequence = 0
         buffer = ""
+        plane_event_stored = False
 
         async def _flush_line(raw_line: str) -> None:
-            nonlocal accounting_sample, binding_conflict, session_id, sequence
+            nonlocal accounting_sample, binding_conflict, plane_event_stored, session_id, sequence
             # ConPTY output is control-sequence-laden, not plain text (live-verified — see
             # pty_runner.strip_ansi_escapes's docstring) — every line needs stripping before
             # a JSON-parse attempt, not just the first (e.g. a trailing cursor-restore
@@ -2654,7 +2707,24 @@ async def _execute_run(
                 )
                 if binding_conflict is not None:
                     return
-            for event in parsed.events:
+            # The harness's own report about the Hub's server (`a-run-reaches-the-hub-without-mcp`
+            # D1): Claude's `init`. Only for a run given the server -- one given none was never
+            # tested, whatever its harness loads from elsewhere. A negative adds one status event
+            # saying how this run reached the Hub (D12), worded for what it was told.
+            events = list(parsed.events)
+            if parsed.harness_mcp_status is not None and mcp_command:
+                told = await _record_harness_report(run_id, parsed.harness_mcp_status)
+                if parsed.harness_mcp_status in ("absent", "failed") and not plane_event_stored:
+                    plane_event_stored = True
+                    events.append(
+                        status_event(
+                            "plane_surface",
+                            summary=plane_surface_summary(
+                                parsed.harness_mcp_status, told, declared_mcp=declared_mcp
+                            ),
+                        )
+                    )
+            for event in events:
                 sequence += 1
                 await _record_observation(
                     lambda db, event=event, sequence=sequence: record_agent_output(
@@ -3376,6 +3446,7 @@ async def _execute_rpc_run(
     extra_flags: Optional[List[str]] = None,
     restrict_spec_writes: bool = False,
     pre_turn_events: Sequence[Any] = (),
+    told_access_path: Optional[str] = None,
 ) -> None:
     """The executor every RPC transport shares (Codex `app-server`, Copilot ACP).
 
@@ -3420,6 +3491,12 @@ async def _execute_rpc_run(
             # turn keeps its write tools on this path (filed, task 6.2).
             extra_flags=extra_flags or [],
             restrict_spec_writes=restrict_spec_writes,
+            # What this run was told (D12): the runner's own MCP failure message is worded for it.
+            told_access_path=told_access_path,
+        )
+        # The harness's report about the Hub's server, recorded only for a run given it (D1).
+        on_mcp_status = (
+            (lambda status: _record_harness_report(run_id, status)) if mcp_command else None
         )
 
         async def _adapter_start_turn(cb: RpcCallbacks) -> Any:
@@ -3432,6 +3509,7 @@ async def _execute_rpc_run(
                     on_session=cb.on_session,
                     should_interrupt=cb.should_interrupt,
                     on_refusal=cb.on_refusal,
+                    on_mcp_status=on_mcp_status,
                     request_approval=lambda method, subject: _await_operator_permission(
                         project_id=project_id,
                         agent=agent,

@@ -263,3 +263,40 @@ async def test_the_roster_reads_hub_client_the_way_the_spawn_does(
 
     assert postures["inherits"] == ("acceptEdits", "acceptEdits")
     assert postures["overridden"] == ("acceptEdits", "acceptEdits")
+
+
+# --- `a-run-reaches-the-hub-without-mcp` task 1.13 (group 7), design D13 ---------------------------
+
+
+def _allowed_tools(command):
+    """Every value of the one `--allowedTools` option (variadic: values run to the next flag)."""
+    from itertools import takewhile
+
+    assert command.count("--allowedTools") <= 1
+    if "--allowedTools" not in command:
+        return []
+    rest = command[command.index("--allowedTools") + 1 :]
+    return list(takewhile(lambda token: not token.startswith("-"), rest))
+
+
+@pytest.mark.parametrize("mcp_command", [None, ["py", "mcp_server.py"]])
+def test_a_claude_run_pre_allows_the_call_command(mcp_command):
+    """D13: where no approver answers (the `cli` path, F299's condition A), the call command must
+    still run; a prefix rule is allowed in every permission mode but bypass."""
+    from hub.runner_adapters import build_command
+
+    command = build_command(runner="claude", cli="claude", prompt="hi", mcp_command=mcp_command)
+    allowed = _allowed_tools(command)
+    assert "Bash(aw-tool:*)" in allowed and "PowerShell(aw-tool:*)" in allowed
+    if mcp_command:
+        assert allowed[0] == "mcp__agentweave__*"
+
+
+@pytest.mark.parametrize("mcp_command", [None, ["py", "mcp_server.py"]])
+def test_a_yolo_claude_run_carries_no_allow_rule(mcp_command):
+    from hub.runner_adapters import build_command
+
+    command = build_command(
+        runner="claude", cli="claude", prompt="hi", mcp_command=mcp_command, yolo=True
+    )
+    assert "--allowedTools" not in command

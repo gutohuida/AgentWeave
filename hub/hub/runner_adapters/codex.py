@@ -209,6 +209,8 @@ class CodexAppServerTransport(RpcTransport):
             workspace=req.workspace,
             request_approval=cb.request_approval,
             on_refusal=cb.on_refusal,
+            told_access_path=req.told_access_path,
+            on_mcp_status=cb.on_mcp_status,
         )
 
 
@@ -226,6 +228,7 @@ class CodexAdapter(RunnerAdapter):
     mcp_env_names = runner_commands.CODEX_MCP_ENV_NAMES
     write_tool_kinds = {CODEX_WRITE_TOOL: "changes[].path"}
     one_shot_takes_schema = True
+    shell_may_lack_network = True
 
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:
         cli, present, reason = probe_binary(self.binary, config.get("cli"), agent)

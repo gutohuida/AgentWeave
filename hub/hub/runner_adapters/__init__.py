@@ -59,6 +59,7 @@ def build_command(
     extra_flags: Optional[List[str]] = None,
     control_overrides: Optional[Dict[str, str]] = None,
     restrict_spec_writes: bool = False,
+    described_access_path: str = "mcp",
 ) -> List[str]:
     """Build one turn's full CLI invocation (design D6). Keeps `build_command`'s today's
     signature, including `cli` — unused here, because no golden case's `cli` ever differs from
@@ -95,5 +96,6 @@ def build_command(
         extra_flags=extra_flags,
         control_overrides=control_overrides,
         restrict_spec_writes=restrict_spec_writes,
+        described_access_path=described_access_path,
     )
     return transport.build_launch(req)

@@ -737,8 +737,10 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
     # against a prompt that lost the notice altogether (design D5).
     assert "no MCP tools this turn" not in prompt
     assert "the `agentweave` MCP tools are available" not in prompt
-    assert "$HUB_URL/api/v1/agent-actions/..." in prompt
-    assert "Authorization: Bearer $AW_RUN_TOKEN" in prompt
+    # Told the call command (`a-run-reaches-the-hub-without-mcp` D10/D11), never the HTTP form,
+    # which would have the model write the credential into stored command text.
+    assert "aw-tool" in prompt and ".agentweave/calls/" in prompt
+    assert "Authorization: Bearer" not in prompt
     assert captured_kwargs["mcp_command"][-1].endswith("mcp_server.py")
     _assert_names_the_pinned_server(captured_kwargs["mcp_command"])
 
@@ -900,7 +902,7 @@ async def test_trigger_honours_an_explicit_mcp_statement_with_nothing_observed(
 
 
 @pytest.mark.asyncio
-async def test_trigger_tells_a_run_with_no_grounds_the_http_form(app, auth_headers, bind_runner):
+async def test_trigger_tells_a_run_with_no_grounds_the_call_command(app, auth_headers, bind_runner):
     """Task 4.6, and the case the operator's own deployment actually produces.
 
     A `claude` agent, `hub_client` unset, and no run of it has ever had a harness start the
@@ -909,8 +911,9 @@ async def test_trigger_tells_a_run_with_no_grounds_the_http_form(app, auth_heade
     `--mcp-config` and starts nothing, and the run reads its first line and calls tools that are
     not there.
 
-    The mirror of §1.5: that test proved the HTTP text is right when it is rendered, this one
-    proves a real trigger renders it.
+    The mirror of §1.5: that test proved the text is right when it is rendered, this one proves
+    a real trigger renders it. Since `a-run-reaches-the-hub-without-mcp` D10 that text is the call
+    command, not the HTTP form, and the new run records what it was told.
     """
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",
@@ -925,8 +928,17 @@ async def test_trigger_tells_a_run_with_no_grounds_the_http_form(app, auth_heade
     )
     prompt = captured["prompt"]
     assert "the `agentweave` MCP tools are available" not in prompt
-    assert "/api/v1/agent-actions" in prompt
-    assert "AW_RUN_TOKEN" in prompt
+    assert "aw-tool create_task .agentweave/calls/1.json" in prompt
+    assert "AW_RUN_TOKEN" not in prompt
+
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    async with async_session_factory() as db:
+        found = await db.execute(select(Run).where(Run.agent == "unstated-claude"))
+        assert [run.plane_surface for run in found.scalars()] == ["shim"]
 
 
 @pytest.mark.asyncio
@@ -935,9 +947,11 @@ async def test_an_observed_harness_earns_the_mcp_description_for_the_next_run(
 ):
     """The grounds are a measurement, and this is the measurement being made and then read.
 
-    Stamp `Run.mcp_adapter_online_at` the way `POST /agent-actions/mcp-adapter-online` does, and
-    the *next* run of that agent is described as having the tools. Before the stamp it is not.
-    Both halves are here because either alone is satisfiable by a constant.
+    Record `connected` the way `POST /agent-actions/mcp-adapter-online` does, and the *next* run of
+    that agent is described as having the tools; before it, it is not. Then a newer run's own test
+    comes back `absent`, and the run after that is told the call command again: the latest test
+    decides, not "any run ever" (F340, `a-run-reaches-the-hub-without-mcp` D1). Every half is here
+    because any one alone is satisfiable by a constant.
     """
     from datetime import datetime, timezone
 
@@ -963,13 +977,30 @@ async def test_an_observed_harness_earns_the_mcp_description_for_the_next_run(
         found = await db.execute(select(Run).where(Run.agent == "observed-claude"))
         run = found.scalars().first()
         assert run is not None
-        run.mcp_adapter_online_at = datetime.now(timezone.utc)
+        run.mcp_adapter_online_at = datetime(2026, 10, 1, 9, tzinfo=timezone.utc)
+        run.harness_mcp_status = "connected"
+        run.started_at = datetime(2026, 10, 1, 9, tzinfo=timezone.utc)
         await db.commit()
 
     second = await _trigger_and_capture_build_command(
         app, auth_headers, "observed-claude", session_suffix="observed-2"
     )
     assert "the `agentweave` MCP tools are available" in second["prompt"]
+
+    async with async_session_factory() as db:
+        found = await db.execute(
+            select(Run).where(Run.agent == "observed-claude").order_by(Run.started_at.desc())
+        )
+        newest = found.scalars().first()
+        assert newest is not None and newest.plane_surface == "mcp"
+        newest.harness_mcp_status = "absent"  # this run's own harness did not start the server
+        await db.commit()
+
+    third = await _trigger_and_capture_build_command(
+        app, auth_headers, "observed-claude", session_suffix="observed-3"
+    )
+    assert "the `agentweave` MCP tools are available" not in third["prompt"]
+    assert "aw-tool" in third["prompt"]
 
 
 @pytest.mark.asyncio
@@ -1003,7 +1034,8 @@ async def test_a_run_holding_the_tools_is_not_told_it_is_empty(app, auth_headers
     )
 
     # The experimental condition, asserted rather than assumed: no run of this agent carries the
-    # column `harness_has_honoured_mcp` reads, so there were no grounds when the turn was
+    # stamp the announce writes (so no `harness_mcp_status` `latest_mcp_test` reads), so there
+    # were no grounds when the turn was
     # described.
     async with async_session_factory() as db:
         grounded = await db.execute(
@@ -1018,8 +1050,10 @@ async def test_a_run_holding_the_tools_is_not_told_it_is_empty(app, auth_headers
     prompt = captured["prompt"]
     assert "no MCP tools this turn" not in prompt
     assert "the `agentweave` MCP tools are available" not in prompt
-    assert "$HUB_URL/api/v1/agent-actions/..." in prompt
-    assert "Authorization: Bearer $AW_RUN_TOKEN" in prompt
+    # Told the call command (`a-run-reaches-the-hub-without-mcp` D10/D11), never the HTTP form,
+    # which would have the model write the credential into stored command text.
+    assert "aw-tool" in prompt and ".agentweave/calls/" in prompt
+    assert "Authorization: Bearer" not in prompt
 
 
 @pytest.mark.asyncio
@@ -2964,12 +2998,12 @@ async def test_a_run_without_mcp_is_described_the_operations_it_can_actually_per
                 await _await_background_run()
 
     # The resolved path reached the renderer at all — the half the hoist exists for.
-    assert seen["access_path"] == "cli"
+    assert seen["access_path"] == "shim"
 
     context = seen["context"]
-    # Described as requests, with a real route an agent can address.
-    assert "POST /api/v1/agent-actions/messages" in context
-    assert "Authorization: Bearer $AW_RUN_TOKEN" in context
+    # Described as call-command invocations (`a-run-reaches-the-hub-without-mcp` D11).
+    assert "`aw-tool send_message`" in context
+    assert "Authorization: Bearer" not in context
     # And not as injected calls, which is what it would have said before the hoist.
     assert "`send_message(to_agent" not in context
     assert "prefixed `mcp__agentweave__`" not in context
@@ -2991,7 +3025,7 @@ async def test_a_run_without_mcp_is_described_the_operations_it_can_actually_per
     # and neither asserts a tool surface, in either direction.
     assert "no MCP tools this turn" not in captured_kwargs["prompt"]
     assert "the `agentweave` MCP tools are available" not in captured_kwargs["prompt"]
-    assert "$HUB_URL/api/v1/agent-actions/..." in captured_kwargs["prompt"]
+    assert "aw-tool" in captured_kwargs["prompt"]
 
 
 @pytest.mark.asyncio
@@ -3453,3 +3487,160 @@ def test_a_plain_file_where_calls_belongs_is_replaced(tmp_path):
     agent_trigger.prepare_calls_dir(str(work))
 
     assert (work / ".agentweave" / "calls").is_dir()
+
+
+# --- `a-run-reaches-the-hub-without-mcp` 2.5/5.5: Claude's `init` is recorded, and a negative is
+# stated once, worded for what the run was told (design D1, D12) -----------------------------------
+
+
+async def _trigger_with_init(app, auth_headers, agent, servers, *, session_suffix):
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import AgentOutput, Run
+
+    init = json.dumps(
+        {
+            "type": "system",
+            "subtype": "init",
+            "session_id": f"sess-{session_suffix}",
+            "mcp_servers": servers,
+        }
+    )
+    result = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "session_id": f"sess-{session_suffix}",
+        }
+    )
+    fake_spawn = _fake_pty([init + "\n", result + "\n"])
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": agent, "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200, resp.text
+            run_id = resp.json()["run_id"]
+            await _await_background_run()
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        found = await db.execute(
+            select(AgentOutput).where(AgentOutput.run_id == run_id, AgentOutput.kind == "status")
+        )
+        statuses = [o for o in found.scalars() if (o.payload or {}).get("phase") == "plane_surface"]
+        return run, statuses
+
+
+async def _claude_agent(app, auth_headers, bind_runner, agent, config):
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {agent: config}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner(agent, cli="claude")
+
+
+@pytest.mark.asyncio
+async def test_a_claude_init_without_the_server_is_absent_and_said_once(
+    app, auth_headers, bind_runner
+):
+    await _claude_agent(app, auth_headers, bind_runner, "init-absent", {"runner": "claude"})
+    servers = [{"name": "claude.ai Gmail", "status": "needs-auth"}]
+
+    run, statuses = await _trigger_with_init(
+        app, auth_headers, "init-absent", servers, session_suffix="ia"
+    )
+
+    assert run.harness_mcp_status == "absent"
+    assert run.plane_surface == "shim"
+    (event,) = statuses
+    assert event.payload["summary"] == (
+        "The AgentWeave MCP server did not start for this run (absent); the run was told to "
+        "reach the Hub with `aw-tool`."
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_run_told_mcp_whose_init_omits_the_server_says_so(app, auth_headers, bind_runner):
+    """R3: the stale-`connected` case. The run was told MCP from history and its own test came
+    back negative; the event must not claim it was told `aw-tool`."""
+    from datetime import datetime, timezone
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    await _claude_agent(app, auth_headers, bind_runner, "init-stale", {"runner": "claude"})
+    async with async_session_factory() as db:
+        db.add(
+            Run(
+                id="run-init-stale-old",
+                project_id="proj-test",
+                agent="init-stale",
+                status="completed",
+                turn_depth=0,
+                started_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+                harness_mcp_status="connected",
+            )
+        )
+        await db.commit()
+
+    run, statuses = await _trigger_with_init(
+        app, auth_headers, "init-stale", [], session_suffix="is"
+    )
+
+    assert run.plane_surface == "mcp"
+    assert run.harness_mcp_status == "absent"
+    (event,) = statuses
+    assert event.payload["summary"] == (
+        "The AgentWeave MCP server did not start for this run (absent), although the run was "
+        "told to use it. Its next turn is told `aw-tool`."
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_declared_mcp_agent_is_told_its_next_turn_follows_the_declaration(
+    app, auth_headers, bind_runner
+):
+    await _claude_agent(
+        app, auth_headers, bind_runner, "init-declared", {"runner": "claude", "hub_client": "mcp"}
+    )
+    failed = [{"name": "agentweave", "status": "failed"}]
+
+    run, statuses = await _trigger_with_init(
+        app, auth_headers, "init-declared", failed, session_suffix="id"
+    )
+
+    assert run.harness_mcp_status == "failed"
+    (event,) = statuses
+    assert "declared to use MCP" in event.payload["summary"]
+
+
+@pytest.mark.asyncio
+async def test_a_connected_init_records_connected_and_says_nothing(app, auth_headers, bind_runner):
+    await _claude_agent(app, auth_headers, bind_runner, "init-ok", {"runner": "claude"})
+    ok = [{"name": "agentweave", "status": "connected"}]
+
+    run, statuses = await _trigger_with_init(app, auth_headers, "init-ok", ok, session_suffix="io")
+
+    assert run.harness_mcp_status == "connected"
+    assert statuses == []
+
+
+@pytest.mark.asyncio
+async def test_a_run_given_no_server_is_not_tested_by_its_init(app, auth_headers, bind_runner):
+    """D9/R3: a run given no tool server was not tested, whatever its harness loads from its own
+    configuration (this machine's operator config registers an `agentweave` server)."""
+    await _claude_agent(
+        app, auth_headers, bind_runner, "init-cli", {"runner": "claude", "hub_client": "cli"}
+    )
+    ok = [{"name": "agentweave", "status": "connected"}]
+
+    run, statuses = await _trigger_with_init(app, auth_headers, "init-cli", ok, session_suffix="ic")
+
+    assert run.harness_mcp_status is None
+    assert statuses == []

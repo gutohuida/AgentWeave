@@ -1217,3 +1217,81 @@ class TestApprovalLabel:
 
     def test_an_unknown_method_is_passed_through_rather_than_hidden(self):
         assert codex_appserver.approval_label("future/method") == "future/method"
+
+
+class TestRunTurnRecordsTheHubsServer:
+    """`a-run-reaches-the-hub-without-mcp` 2.6 (design D1, D12): Codex app-server's own
+    `mcpServer/startupStatus/updated` for the Hub's server is a harness report -- `ready` is
+    `connected`, `failed` is `failed` -- and its failure message is worded for what the run was
+    told. Every other status, and every other server, reports nothing."""
+
+    async def _drive(self, monkeypatch, notifications, *, told=None, on_mcp_status=None):
+        fake = TestRunTurnMcpStartupFailure._fake(notifications)
+        _patch_spawn(monkeypatch, fake)
+        events = []
+        outcome = await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=["python", "mcp_server.py"],
+            on_event=_collector(events),
+            told_access_path=told,
+            on_mcp_status=on_mcp_status,
+        )
+        return outcome, events
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "status, reported",
+        [("ready", ["connected"]), ("failed", ["failed"]), ("starting", []), ("cancelled", [])],
+    )
+    async def test_the_own_servers_status_is_reported(self, monkeypatch, status, reported):
+        seen = []
+
+        async def record(value):
+            seen.append(value)
+
+        startup = TestRunTurnMcpStartupFailure._startup
+        await self._drive(
+            monkeypatch,
+            [startup("agentweave", status, "x"), startup("other", "ready")],
+            on_mcp_status=record,
+        )
+        assert seen == reported
+
+    @pytest.mark.asyncio
+    async def test_a_raising_recorder_never_fails_the_turn(self, monkeypatch):
+        async def boom(value):
+            raise RuntimeError("database is locked")
+
+        startup = TestRunTurnMcpStartupFailure._startup
+        outcome, _ = await self._drive(
+            monkeypatch, [startup("agentweave", "ready")], on_mcp_status=boom
+        )
+        assert outcome.status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_a_run_told_the_call_command_is_not_told_it_had_no_tools(self, monkeypatch):
+        """Review fix 6: "this turn had no AgentWeave tools" is false for a run told `aw-tool`."""
+        startup = TestRunTurnMcpStartupFailure._startup
+        _, events = await self._drive(
+            monkeypatch, [startup("agentweave", "failed", "connection closed")], told="shim"
+        )
+        (event,) = events
+        assert event.payload["code"] == "codex_mcp_server_failed"
+        assert "aw-tool" in event.content
+        assert "no AgentWeave tools" not in event.content
+        assert "connection closed" in event.content
+
+    @pytest.mark.asyncio
+    async def test_a_run_told_mcp_keeps_todays_message(self, monkeypatch):
+        startup = TestRunTurnMcpStartupFailure._startup
+        _, events = await self._drive(
+            monkeypatch, [startup("agentweave", "failed", "connection closed")], told="mcp"
+        )
+        (event,) = events
+        assert "no AgentWeave tools" in event.content

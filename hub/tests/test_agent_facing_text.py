@@ -159,7 +159,7 @@ class TestTurnPreamble:
     def test_fallback_branch_offers_no_removed_commands(self):
         """It used to instruct `agentweave msg send`, `task create`, `question ask` and
         `agent request`, none of which survived the reduction to five commands."""
-        notice = access_path_notice("cli")
+        notice = access_path_notice("shim")
         for removed in (
             "agentweave msg",
             "agentweave task",
@@ -197,22 +197,22 @@ class TestClaudeRunToldFullNames:
         assert "SendMessage" in text
         assert "Names below are as injected" not in text
 
-    def test_a_first_claude_run_described_as_http_still_gets_the_host_tool_sentence(self):
+    def test_a_first_claude_run_told_the_call_command_still_gets_the_host_tool_sentence(self):
         """Task 1.1a, operator review 'The first run': the server is injected and the host's
-        `SendMessage` is in the model's tool list even when the run is described in the HTTP form
-        (a fresh agent's first spawn, before the harness has been observed honouring MCP) — so the
-        collision is available and the sentence is rendered anyway. No MCP tool is named, prefixed
-        or bare, because this rendering names operations, not tools to call."""
+        `SendMessage` is in the model's tool list even when the run is told the call command (a
+        fresh agent's first spawn, before its harness has been tested) — so the collision is
+        available and the sentence is rendered anyway. No MCP tool is named, prefixed or bare,
+        because this rendering names `aw-tool` calls, not tools to call."""
         from hub.api.v1.agents import _tool_surface_lines
 
-        text = "\n".join(_tool_surface_lines(runner="claude", access_path="cli"))
+        text = "\n".join(_tool_surface_lines(runner="claude", access_path="shim"))
         assert "SendMessage" in text
         assert "mcp__agentweave__" not in text
 
-    def test_a_first_codex_run_described_as_http_gets_neither(self):
+    def test_a_first_codex_run_told_the_call_command_gets_neither(self):
         from hub.api.v1.agents import _tool_surface_lines
 
-        text = "\n".join(_tool_surface_lines(runner="codex", access_path="cli"))
+        text = "\n".join(_tool_surface_lines(runner="codex", access_path="shim"))
         assert "SendMessage" not in text
         assert "mcp__agentweave__" not in text
 

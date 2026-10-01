@@ -553,7 +553,9 @@ def map_plan_update(params: Dict[str, Any]) -> RunEvent:
     return status_event("plan", summary=summary)
 
 
-def map_mcp_server_failure(params: Dict[str, Any], *, own_server_name: str) -> RunEvent:
+def map_mcp_server_failure(
+    params: Dict[str, Any], *, own_server_name: str, told_access_path: Optional[str] = None
+) -> RunEvent:
     """Map a failed `mcpServer/startupStatus/updated` to the standard error event.
 
     Names which server it was, because the consequence differs entirely: the Hub's own server
@@ -565,7 +567,14 @@ def map_mcp_server_failure(params: Dict[str, Any], *, own_server_name: str) -> R
     reason = params.get("failureReason")
     if reason:
         detail = f"{detail} ({reason})"
-    if name == own_server_name:
+    if name == own_server_name and told_access_path == "shim":
+        # `a-run-reaches-the-hub-without-mcp` D12 (review fix 6): a run told the call command still
+        # reaches every operation, so "no AgentWeave tools" would be false for it.
+        message = (
+            f"The AgentWeave MCP server ({name}) failed to start; this run was told to reach the "
+            f"Hub with `aw-tool`: {detail}"
+        )
+    elif name == own_server_name:
         message = (
             f"The AgentWeave MCP server ({name}) failed to start, so this turn had no "
             f"AgentWeave tools -- no messages, evidence, task updates or questions: {detail}"
@@ -932,6 +941,8 @@ async def run_turn(
     workspace: Optional[str] = None,
     request_approval: "Optional[Callable[[str, Dict[str, Any]], Awaitable[bool]]]" = None,
     on_refusal: "Optional[Callable[[str, Dict[str, Any]], Awaitable[None]]]" = None,
+    told_access_path: Optional[str] = None,
+    on_mcp_status: "Optional[Callable[[str], Awaitable[Any]]]" = None,
 ) -> TurnOutcome:
     """Drive one Codex turn over `app-server`: spawn, initialize, start-or-resume a thread,
     start a turn, answer every server request, map every item/usage notification to the
@@ -1162,11 +1173,23 @@ async def run_turn(
                 if plan_event.content != last_plan_summary:
                     last_plan_summary = plan_event.content
                     await on_event(plan_event)
-            elif (
-                method == "mcpServer/startupStatus/updated"
-                and params.get("status") == "failed"
-                and params.get("name") not in reported_mcp_failures
-            ):
+            elif method == "mcpServer/startupStatus/updated":
+                # The harness's own report about the Hub's server (`a-run-reaches-the-hub-without-
+                # mcp` D1): `ready` is `connected` and `failed` is `failed`; `starting` and
+                # `cancelled` are not reports. Never fails the turn: a record that cannot be written
+                # leaves the run untested, the safe direction.
+                startup_status = params.get("status")
+                if (
+                    on_mcp_status is not None
+                    and params.get("name") == own_server_name
+                    and startup_status in ("ready", "failed")
+                ):
+                    try:
+                        await on_mcp_status("connected" if startup_status == "ready" else "failed")
+                    except Exception:  # noqa: BLE001
+                        logger.warning("recording the MCP server's status failed", exc_info=True)
+                if startup_status != "failed" or params.get("name") in reported_mcp_failures:
+                    continue
                 # `McpServerStartupState` is starting | ready | failed | cancelled, and this
                 # notification used to be dropped wholesale as carrying "no timeline-relevant
                 # content". For the Hub's own server that is exactly backwards: if `agentweave`
@@ -1183,7 +1206,11 @@ async def run_turn(
                 # reported: a failing server passes through it on its way to `failed`, so it
                 # would only report the same failure twice.
                 reported_mcp_failures.add(params.get("name"))
-                await on_event(map_mcp_server_failure(params, own_server_name=own_server_name))
+                await on_event(
+                    map_mcp_server_failure(
+                        params, own_server_name=own_server_name, told_access_path=told_access_path
+                    )
+                )
             # Anything else carries no timeline-relevant content for this pass. The list is
             # MEASURED, not remembered (2026-08-28, CLI 0.146.0, one turn that planned, wrote a
             # file and ran a command): thread/started, thread/status/changed,

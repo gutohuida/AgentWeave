@@ -53,6 +53,32 @@ class ParsedLine:
     usage: Optional[ContextUsageSample] = None
     accounting: Optional[AccountingSample] = None
     session_id: Optional[str] = None
+    # Whether the harness started the Hub's tool server, when this line says
+    # (`a-run-reaches-the-hub-without-mcp` D1): `connected`, `failed` or `absent`; None when the
+    # line says nothing, including a vendor status the Hub does not recognise.
+    harness_mcp_status: Optional[str] = None
+
+
+#: The name the Hub injects its tool server under (`runner_commands._claude_mcp_args`).
+HUB_MCP_SERVER_NAME = "agentweave"
+
+
+def _claude_init_mcp_status(data: Dict[str, Any]) -> Optional[str]:
+    """What Claude's `system`/`init` line says about the Hub's server (F340's table).
+
+    `connected` and `failed` are reports; an `init` that lists servers but not the Hub's means
+    the harness did not start it (a `deniedMcpServers` policy omits it), so `absent`. Any other
+    status (`pending`, `needs-auth`) is not a report and gives None (design D1, R3): stored as
+    `failed` it would outrank a real announce. No server list at all says nothing either.
+    """
+    servers = data.get("mcp_servers")
+    if not isinstance(servers, list):
+        return None
+    for entry in servers:
+        if isinstance(entry, dict) and entry.get("name") == HUB_MCP_SERVER_NAME:
+            status = entry.get("status")
+            return status if status in ("connected", "failed") else None
+    return "absent"
 
 
 def _token_int(value: Any) -> Optional[int]:
@@ -360,6 +386,9 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
             accounting=accounting,
             session_id=session_id,
         )
+
+    if msg_type == "system" and data.get("subtype") == "init":
+        return ParsedLine(session_id=session_id, harness_mcp_status=_claude_init_mcp_status(data))
 
     if msg_type == "rate_limit_event":
         allowance = data.get("rate_limit_info") or data.get("rate_limit")
