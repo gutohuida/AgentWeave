@@ -16,6 +16,40 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-10-01
+
+No review page today. **Written in an interactive session with the operator present**, before the
+22:55 arm. The operator asked to prepare tonight's run and answered three questions (AskUserQuestion,
+verbatim choices quoted). This restates the 2026-09-30 `ORDER:` for tonight, with what finished
+today taken out and three changes to it:
+
+- **Done since 09-30, not queued:** `each-runner-cli-is-one-adapter` (slice 1, archived `eec4085`).
+  `a-run-reaches-the-hub-without-mcp` (slice 3) is built, driven and CI-green (`db1a331`) but **not
+  in the queue**: its open tasks are 10.1 (the operator's work-PC checks), 10.2 (archive, after 10.1)
+  and 9.10 (blocked by F478). Do not tick, waive or archive any of them.
+- **`ghcp-d5-order` is relaxed for tonight only** — *"Build on unarchived slice 3 (Recommended)"*:
+  slice 4 (`a-copilot-run-shows-its-credits`) may start on slice 3 as it stands in the tree, built
+  but unarchived. Slice 5 still comes only after slice 4 is **archived** (a slice left unfinished
+  stops the ghcp run; go on to the 09-27 remainder). Slice 4's and 5's archives sync their deltas
+  on top of `openspec/specs/` as it stands; where a delta touches a requirement slice 3's
+  unsynced delta also changes, stop that archive and say so in the log rather than merge by hand.
+  Slice 5's task 7.6 is still skipped (spends real money; needs the operator's capped key).
+- **F479 first** — *"Yes, first item (Recommended)"*: the one-line fix (drop `str_replace` from
+  slice 2's Copilot spec-turn `--excluded-tools`, with a test), footed in `scripts/drive/FINDINGS.md`.
+- **F478's design rounds next** — *"Queue R1–R3, first (Recommended)"*: R1 explores and writes a
+  proposal under `openspec/changes/` (it is the URL reader of the archived `a-url-is-not-a-path`; check
+  whether `the-shell-judge-reads-a-word-whole`, also queued below, already owns that code and say how
+  the two order); R2 and R3 each independently re-derive it against the code; `-rev` is the
+  adversarial Opus review. The night window normally writes no proposals; these four items are the
+  operator's explicit exception for tonight (as `who-owns-a-loops-queue-R1..R3` were on 09-14).
+  **No `-impl` tonight**: the operator approves it first. It unblocks slice
+  3's task 9.10.
+
+`an-agent-can-be-paused-and-keeps-its-input` is still `REVISING` and not in the queue.
+
+ORDER: F479, F478-r1, F478-r2, F478-r3, F478-rev, a-copilot-run-shows-its-credits, a-copilot-agent-uses-hooks-and-its-own-agents, the-corpus-is-indexed-arranged-and-adopted-from-the-app, a-specification-is-read-in-results-that-fit, input-the-hub-accepted-is-answered-as-accepted, charters-are-named-once-and-an-empty-one-says-so, a-dialog-takes-the-keyboard-when-it-opens, the-app-window-keeps-the-operators-preferences, a-run-records-that-its-calls-were-allowed, drift-is-scanned-and-answered-on-the-document, a-retried-firing-records-how-its-work-ended, a-task-checkout-catches-up-with-its-approved-prerequisites, stop-clears-a-run-an-earlier-hub-left-running, worker-spend-counts-against-the-budget, every-event-the-hub-sends-reaches-the-app, a-flow-stages-its-review-in-the-dispatch, the-shell-judge-reads-a-word-whole, a-drive-or-a-home-variable-names-a-directory-by-itself, drift-watches-the-files-its-evidence-is-about, a-name-a-caller-chooses-reaches-its-own-resource, a-file-path-is-not-redacted-as-a-credential, a-refused-first-send-leaves-no-exploration-behind
+
+
 ## 2026-09-30
 
 No review page today. **Written in an interactive session with the operator present**, at 22:30.
