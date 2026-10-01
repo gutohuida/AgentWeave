@@ -25359,6 +25359,10 @@ claude -p --model haiku --permission-mode manual \
 
 ---
 
+**Foot 2026-10-01 (`a-run-reaches-the-hub-without-mcp`).** Answered for Copilot by construction (its approver is the ACP
+handler, not an MCP tool) and given a plane by the shim (drives 9.3/9.4). Open for Claude: under condition A file
+writes still die with no approver, and the containment choice stays the operator's (`DECISIONS.md` 2026-09-13).
+
 ## F300 (A) — the Hub's own workspace approver denies every shell command containing a URL, including the one its own notice instructs
 
 **Status:** fixed `612b9c9` by `a-url-is-not-a-path` (tasks §2: the reader, and D4's run's-own-Hub
@@ -25548,6 +25552,13 @@ Two facts, one read from code and one driven:
   the run. So on this machine, for `proj-d85a82bf4216`, a "cli" Claude run is not tool-less, and
   `harness_has_honoured_mcp` can be set by a server the Hub never injected. A re-measurement of this
   finding must use a project outside this repository, or remove that registration first.
+
+**Fixed 2026-10-01 for Claude and Copilot (`a-run-reaches-the-hub-without-mcp`, drives 9.3 and 9.8).** A Claude run with
+`hub_client: "cli"` -- no MCP server, no approver, in a project outside this repository -- wrote
+`.agentweave/calls/create_task.json` with `Write` and ran `aw-tool create_task .agentweave/calls/create_task.json`;
+the pre-allowed `Bash(aw-tool:*)` let it through and the task was created by the run (`run-5ffb0bac65e3`). A first
+turn with a one-line prompt asked for the missing task fields instead of acting (`run-f0a07b42b88f`), a model choice,
+not a refusal. Copilot with MCP blocked reached the plane the same way (9.3, 9.4).
 
 ## F302 (B) — an agent's *first* turn is told "no MCP tools this turn" while it is holding them, and one measured turn believed it
 
@@ -28545,6 +28556,13 @@ depends on it.
 - For the harness side, `py -3.11 scripts/drive/t_d4_0913_f299_slow_server.py S_0 S_crash` (each a
   separate invocation) and `py -3.11 scripts/drive/t_d2_0913_f299_harness.py A_hub --env plain`.
   Read `init_agentweave` in each.
+
+**Foot 2026-10-01 (`a-run-reaches-the-hub-without-mcp`, drive group 9).** Fixed for Claude, Copilot and Codex
+app-server runs that report their servers: `Run.harness_mcp_status` records each run's own test and the latest tested
+run decides what the next is told. Driven on one Copilot agent: `connected` (9.2) -> `absent` under
+`--disable-mcp-server agentweave` (9.3) -> `connected` again in the same, resumed conversation (9.5/9.6); and on Claude
+with `deniedMcpServers`, whose `init` omits the server: `absent`, told `aw-tool` (9.7). Still open for Codex `exec`
+and a Codex app-server run that reports nothing (no negative source; design D1).
 
 ## F341 (A) — every message to a Claude agent opens a Windows Terminal window, and it stays open
 
@@ -33685,3 +33703,46 @@ Adding them while closing the change would be design without a round. **Fix:** d
 members (Copilot slice 3, `a-copilot-agent-uses-hooks-and-its-own-agents`, already touches the
 trigger's Copilot preparation), move the branches onto them, and widen `test_no_runner_literals.py`
 to every key of `ADAPTERS`, so the scan covers whatever runners exist rather than a hard-coded two.
+
+## F477 (B) — the shim notice invited a compound shell command the approver cannot give standing to, so "Ask me" carded every Copilot call
+
+**Status:** fixed in the commit that files it (2026-10-01), found by drive 9.4 of `a-run-reaches-the-hub-without-mcp`.
+
+The notice and tool section said to write the args file *"with your file tool, or from PowerShell only with
+`Set-Content -Encoding utf8`"*. Copilot (1.0.88, Auto model) took the second route and joined both steps into one
+PowerShell command (`$body = @{…} | ConvertTo-Json; Set-Content -Path '.agentweave\calls\create-s3-ask.json' …;
+aw-tool create_task '.agentweave\calls\create-s3-ask.json'`, `run-88cb9324104b`). D8's standing covers a file-tool
+write and a lone, unquoted `aw-tool` invocation, deliberately not a compound, so under "Ask me" the request fell
+through to a card (it expired; no task). Under "Workspace only" the same compound was allowed by the workspace judge
+on its words (`run-55f0cb12de64`, 9.3), which is why only 9.4 showed it.
+
+**Fix:** both texts now say two separate tool calls: the file-writing tool for the args file (the shell only as a
+command of its own), then `aw-tool <tool> .agentweave/calls/<file>.json` run alone, unquoted, nothing chained,
+"which needs no approval in any posture". Re-driven: Copilot wrote the file with `apply_patch` and ran the bare
+call; no card, task created by the run (`run-000e23023de9`). The approver was not widened.
+
+## F478 (B) — the workspace judge reads `key:value/path` inside a shell string as a URL whose path is outside the workspace
+
+**Status:** open, found 2026-10-01 by drive 9.10 of `a-run-reaches-the-hub-without-mcp`. **Ready:** needs design (it
+is the URL reader of `a-url-is-not-a-path`).
+
+`_decide("PowerShell", {"command": "echo 'a:b/c'"}, workspace=W)` refuses *"'/c' is outside your workspace"*; so does
+`Set-Content -Path '.agentweave/calls/r.json' -Value '{"path":"spec/x.html"}' -Encoding utf8` (`'/x.html'`), while
+the same write with `{"title":"x"}` is allowed. A `word:word/…` token is read as `scheme:authority/path`. It predates
+the shim, but the shim's fallback (write the JSON args file from PowerShell) now meets it whenever an argument value
+holds a slash -- every spec-document path does. In 9.10 a Copilot specification turn told `aw-tool` tried exactly
+that (`run-b30d4295abaf`, to call `read_spec_document`), was refused, and gave up: the spec flow over the shim was
+**not** demonstrated on Copilot. A file-tool write is unaffected (it has a declared path), and F477's rewording now
+steers runs to it; but a spec turn's only file tool on Copilot is `create`, which that turn did not reach for.
+Options for the design: read a single-quoted PowerShell literal (or a bash `'…'`) as data, not as words; or treat a
+scheme only when followed by `//`. Either is a judge change with its own round.
+
+## F479 (D) — slice 2's spec-turn exclusion list names a tool Copilot 1.0.88 does not have
+
+**Status:** open, observed 2026-10-01 in drive 9.10 (`run-b30d4295abaf`). **Ready:** ready (one-line fix + test).
+
+Every Copilot specification turn now stores the diagnostic `copilot.configuration` *"Unknown tool name in the tool
+excludedlist: \"str_replace\""*: `--excluded-tools=apply_patch,edit,str_replace,str_replace_editor` names
+`str_replace`, which 1.0.88 does not know (it reported `Disabled tools: edit` for the rest). Harmless to the run,
+noise in every spec turn's timeline. Fix in `a-copilot-agent-runs-over-acp`'s argv builder: drop `str_replace`, or
+keep it only behind a version check, and assert the list against a captured 1.0.88 tool inventory.

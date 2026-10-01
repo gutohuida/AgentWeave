@@ -255,11 +255,41 @@ def f340():
 
 
 def f301():
+    """Its own project **outside this repository**: under the repo root, Claude loads the
+    operator's local-scope `agentweave` server into a `hub_client: "cli"` run, which would then
+    not be tool-less (DEAD-ENDS 2026-10-01), confounding the measurement."""
+    import tempfile
+
     s = load()
-    A = f"/projects/{s['pid']}"
+    root = pathlib.Path(tempfile.gettempdir()) / "aw-shim-drive" / time.strftime("f301-%H%M%S")
+    root.mkdir(parents=True)
+    (root / "README.md").write_text("f301 drive\n", encoding="utf-8")
+    for cmd in (
+        ["git", "init", "-b", "main"],
+        ["git", "config", "user.email", "d@example.invalid"],
+        ["git", "config", "user.name", "d"],
+        ["git", "add", "README.md"],
+        ["git", "commit", "-m", "x"],
+    ):
+        subprocess.run(cmd, cwd=root, check=True, capture_output=True)
+    _, proj = api("POST", "/projects/open", {"path": str(root), "name": root.name})
+    pid = proj["id"]
+    A = f"/projects/{pid}"
+    _, haiku = api("POST", f"{A}/runners", {"name": "Haiku", "cli": "claude", "model": HAIKU})
+    show("agent", *api("POST", f"{A}/agents", {"name": F301, "runner_id": haiku["id"]}))
+    sync_hub_client(pid, F301, "cli")
+    s["f301_pid"], s["f301_root"] = pid, str(root)
+    save(s)
     trigger(A, F301, {"message": "Create an AgentWeave task titled S3-F301, then stop."})
-    wait_idle(s["pid"], F301)
-    report(s["pid"], F301, "S3-F301")
+    wait_idle(pid, F301)
+    run = last_run(pid, F301)
+    print("run:", json.dumps(run, default=str))
+    rows = timeline(pid, run["id"])
+    for kind, content, payload in rows:
+        if kind == "tool_use":
+            print("  input:", str(json.loads(payload).get("input"))[:300])
+    tasks = ro("select title, created_by_run_id from tasks where project_id=?", (pid,))
+    print("tasks:", tasks)
 
 
 def spec():

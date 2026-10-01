@@ -600,6 +600,9 @@ class TestAccessPathNotice:
         assert ".agentweave/calls/" in notice
         assert "-Encoding utf8" in notice  # review fix 3: PowerShell 5.1's bare Set-Content
         assert "last line" in notice  # review note 9: the envelope is the last line
+        # F477 (drive 9.4): the shape the approver gives standing to, said in so many words.
+        assert "with your file-writing tool" in notice
+        assert "on its own" in notice and "unquoted" in notice
         for absent in ("AW_RUN_TOKEN", "Bearer", "$HUB_URL", "/api/v1/agent-actions"):
             assert absent not in notice, absent
         assert "no AgentWeave tool surface is available" not in notice

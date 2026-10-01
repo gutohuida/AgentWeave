@@ -1817,6 +1817,9 @@ disappears is indistinguishable from one that was forgotten.
   root, and agent worktrees (`.agentweave/worktrees/<name>/`) sit inside it, so Claude loads that
   server; it reads the run's `AW_RUN_TOKEN` and sets `Run.mcp_adapter_online_at` though the Hub injected
   nothing. Measure MCP-less behaviour on a project outside this repo (F301 addendum).
+  `testbed/scratch/` is inside the repo root too, so it inherits the same server; use `%TEMP%`.
+- **2026-10-01 — `Git\usr\bin\bash.exe` launched bare from Python does not translate the Windows
+  `PATH`** (a command on it exits 127). Use `Git\bin\bash.exe`, the wrapper, which sets it up.
 - **2026-10-01 — `POST /session/sync` takes `{"data": {...}}` and replaces both the stored session
   data and the roster** (any agent row missing from `data.agents` is deleted). `GET /agents` omits archived
   agents, which the sync still deletes if unnamed, so build the payload from `project_sessions.data` plus every `agents`

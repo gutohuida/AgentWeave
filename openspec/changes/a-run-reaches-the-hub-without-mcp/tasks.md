@@ -604,10 +604,15 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
 
 ## 8. Gates (what CI runs)
 
-- [ ] 8.1 `ruff check src/ hub/ tests/`
-- [ ] 8.2 `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`
-- [ ] 8.3 `mypy src/` (unchanged by this change, but it is CI's)
-- [ ] 8.4 `py -3.11 -m pytest hub/tests/ -q` and `py -3.11 -m pytest tests/ -q`, all green. Record the counts.
+- [x] 8.1 `ruff check src/ hub/ tests/`
+  - **Done 2026-10-01**: `ruff check src/ hub/ tests/` all checks passed (and `scripts/` with CI's bug rules).
+- [x] 8.2 `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`
+  - **Done 2026-10-01**: `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` clean.
+- [x] 8.3 `mypy src/` (unchanged by this change, but it is CI's)
+  - **Done 2026-10-01**: `mypy src/`: no issues in 22 source files.
+- [x] 8.4 `py -3.11 -m pytest hub/tests/ -q` and `py -3.11 -m pytest tests/ -q`, all green. Record the counts.
+  - **Done 2026-10-01**: Hub suite at `ca7107e`, `claude` removed from `PATH`: **6042 passed, 88 skipped, 0 failed**
+    (14:35); `pytest tests/`: **560 passed, 3 skipped**.
 
 ## 9. Drive on the trial Hub `:8010`
 
@@ -618,15 +623,26 @@ prompt one tiny sentence and the turns to the ones listed**. Claude turns are on
 read `runs.harness_mcp_status`, `runs.plane_surface`, the run's events and the tasks it created with `mode=ro`
 SQLite reads of the trial profile's database.
 
-- [ ] 9.1 Start the Hub and confirm, from its startup log, the database it serves and the pinned tool-server path.
+- [x] 9.1 Start the Hub and confirm, from its startup log, the database it serves and the pinned tool-server path.
   List `<digest>/bin/<exe>/` and confirm both launchers. From a PowerShell and a Git Bash with that dir on `PATH`,
   `aw-tool --list` prints the tool list with no token set, and `aw-tool list_tasks` prints `kind: unbound`.
   (No model call.)
-- [ ] 9.2 **Copilot, MCP permitted** (1 prompt): *"Create an AgentWeave task titled S3-MCP, then stop."* Expect
+  - **Done 2026-10-01**: trial Hub from `hub/` on the trial profile; startup line names it (pid 18136) and alembic ran
+    `0114 -> 0115`. A throwaway project, `testbed/scratch/shim-drive/proj-191014` (`proj-47d7dcf6f191`), three
+    agents. Launchers at `~/.agentweave/hub/tool-server/829b47f1ac48f6c0/bin/3a0eb157/` (`aw-tool`, `aw-tool.cmd`).
+    PowerShell `aw-tool --list` exit 0 (the tool list); `aw-tool list_tasks` `kind: unbound`, exit 2 through `cmd`
+    (PowerShell `-Command` itself reports 1 for any native failure). Git Bash (`Git\bin\bash.exe`): `--list` 0,
+    `list_tasks` unbound 2. (`Git\usr\bin\bash.exe` launched bare does not translate the Windows `PATH`: 127.)
+- [x] 9.2 **Copilot, MCP permitted** (1 prompt): *"Create an AgentWeave task titled S3-MCP, then stop."* Expect
   `connected` + `mcp`, the task created by an `agentweave-create_task` tool call, and no `plane_surface` status
   event. Record the time from `session/new` returning to the announce (open question 2), and the literal raw
   `mcp_servers_loaded` status string for `agentweave` (review note 10).
-- [ ] 9.3 **Copilot, MCP blocked locally** (1 prompt). Add `--disable-mcp-server agentweave` to the Copilot
+  - **Done 2026-10-01**: `run-2c82c8c3e141`, `connected` + `mcp`, task S3-MCP created by an `agentweave-create_task`
+    call and attributed to the run, no `plane_surface` event, 0 stored events holding `aw_run_`. Announce 3.5 s after
+    the run started (spawn, `initialize`, `session/new` included; open question 2: well inside 15 s). The raw
+    `mcp_servers_loaded` string for a connected server is not stored (the mapper skips transient statuses and the
+    report records only `connected`/`failed`), so review note 10's literal is not available from the record.
+- [x] 9.3 **Copilot, MCP blocked locally** (1 prompt). Add `--disable-mcp-server agentweave` to the Copilot
   runner's flags (VERIFIED today: the server is never started, and `/mcp list` says `agentweave (disabled)`).
   Same prompt with `S3-SHIM`. Expect:
   - `absent` + `shim`;
@@ -636,15 +652,30 @@ SQLite reads of the trial profile's database.
   - the task's `created_by_run_id` is the run;
   - `grep -c aw_run_` over the run's stored events is **0**.
   If Copilot never asks (it auto-allowed the command), record that instead: it answers D15's INFERRED row.
-- [ ] 9.4 **Copilot, blocked, "Ask me" posture** (1 prompt): the same with `S3-ASK`. Expect **no** permission
+  - **Done 2026-10-01**: `run-55f0cb12de64` under `--disable-mcp-server agentweave`: `absent` + `shim`; one status
+    event *"... (absent); the run was told to reach the Hub with `aw-tool`. The runner reported: - agentweave
+    (disabled)"*; the slice-2 diagnostic now names `aw-tool`; `.agentweave/calls/create-s3-shim.json` written; task
+    created by the run; no card; 0 `aw_run_`. **Shape:** Copilot wrote the file and called `aw-tool` in **one**
+    PowerShell command, allowed under Workspace only by the judge on its words, not by D8's standing (see 9.4,
+    F477). Its first try failed on a curly apostrophe PowerShell 5.1 reads as a quote; it retried.
+- [x] 9.4 **Copilot, blocked, "Ask me" posture** (1 prompt): the same with `S3-ASK`. Expect **no** permission
   card for the args-file write or the `aw-tool` call. Any card that does open is answered by the driver, and it is
   a defect to record.
-- [ ] 9.5 **Not latched** (1 prompt): remove the runner flag, then *"Create a task titled S3-BACK."* Expect
+  - **Done 2026-10-01, after a fix.** First run `run-88cb9324104b`: the compound command opened a card (expired; no
+    task) -- the notice had offered `Set-Content` from PowerShell. **F477** filed and fixed: notice and tool section
+    now say two separate calls, the file tool for the args file, then `aw-tool` alone and unquoted. Re-driven on a
+    restarted Hub, `run-000e23023de9`: `apply_patch` wrote `create-s3-ask.json`, then `aw-tool create_task
+    .agentweave/calls/create-s3-ask.json`; **no card**, task S3-ASK created by the run.
+- [x] 9.5 **Not latched** (1 prompt): remove the runner flag, then *"Create a task titled S3-BACK."* Expect
   `connected` + `mcp` again. This is F340 in both directions on one agent.
-- [ ] 9.6 **Resume.** 9.5 must be the second turn of 9.3's conversation, so it resumes through `session/load`.
+  - **Done 2026-10-01**: flag removed; `run-fe05dd7214d8`, `connected` + `mcp`, S3-BACK by `agentweave-create_task`.
+    With 9.2 and 9.3: `connected` -> `absent` -> `connected` on one agent (F340 both ways).
+- [x] 9.6 **Resume.** 9.5 must be the second turn of 9.3's conversation, so it resumes through `session/load`.
   Record whether the announce arrived after `session/load` (design D9 "Resume", INFERRED). If it did not, file a
   finding and keep the change: the shim still works.
-- [ ] 9.7 **Claude, F340** (Haiku, 2 turns). A Claude agent whose runner flags carry `--settings
+  - **Done 2026-10-01**: 9.5 was the second turn of 9.3's conversation (`conv-4cd582cf401a`), resumed through
+    `session/load`; the announce arrived 2.5 s after start, so the wait saw it. D9's "Resume" row is now VERIFIED.
+- [x] 9.7 **Claude, F340** (Haiku, 2 turns). A Claude agent whose runner flags carry `--settings
   '{"deniedMcpServers":[{"serverName":"agentweave"}]}'`. F340 measured its `init` omitting the server; F299 says
   the run then dies at its first approval-needing call, so the prompt needs none: *"Reply with the word ok."*
   Expect `absent`, and one `plane_surface` status event with the wording for the surface the first turn was told.
@@ -653,18 +684,39 @@ SQLite reads of the trial profile's database.
   The second turn, *"Reply ok."*, is recorded `plane_surface = shim`, and its `.agentweave/context/<agent>.md`
   holds the `aw-tool` tool section. R3: the Hub stores no composed prompt (`agent_trigger.py:1194` builds it,
   `:1217`/`:1403` pass it, and `Run` has no prompt column), so "read the stored prompt" could not be done.
-- [ ] 9.8 **Claude, F301** (group 7; Haiku, 1 turn). A Claude agent with `config.hub_client = "cli"`: *"Create an
+  - **Done 2026-10-01**: `cl-f340` (Haiku, `--settings {"deniedMcpServers":[{"serverName":"agentweave"}]}`):
+    `run-d402128a9927` and `run-c239238cec19`, both `absent` + `shim`; Claude's `init` **omits** `agentweave` (it also
+    prints *"Warning: MCP server blocked by enterprise policy: agentweave"*), so no `pending` was seen; one status event
+    each, in the `aw-tool` wording (the first turn was already told `shim`, having no grounds); the worktree's
+    `.agentweave/context/cl-f340.md` holds the `aw-tool` section.
+- [x] 9.8 **Claude, F301** (group 7; Haiku, 1 turn). A Claude agent with `config.hub_client = "cli"`: *"Create an
   AgentWeave task titled S3-F301, then stop."* Expect the task created through `aw-tool` with no denial.
   - If it holds, F301 is closed for Claude.
   - If the harness refuses the command, record the refusal verbatim, F301 stays open for Claude, and group 7 is
     reported rather than reverted.
+  - **Done 2026-10-01 -- F301 closed for Claude.** In a project **outside this repository** (`%TEMP%/aw-shim-drive/`):
+    under the repo root Claude loads the operator's local-scope `agentweave` server into a `cli` run (DEAD-ENDS
+    2026-10-01). `run-f0a07b42b88f` (the one-line prompt) asked for the missing task fields instead of acting, a model
+    choice; `run-5ffb0bac65e3` with the fields given: `Write` to `.agentweave/calls/create_task.json`, then `aw-tool
+    create_task .agentweave/calls/create_task.json`, no denial (`Bash(aw-tool:*)`), task S3-F301 created by the run;
+    status NULL (untested), told `shim`.
 - [ ] 9.10 (review finding 4, design D16) **Copilot spec turn told `shim`** (1 prompt), on 9.3's blocked agent, with
   a specification document open: *"Submit this document unchanged, then stop."* Expect `absent` + `shim`; the model
   wrote `.agentweave/calls/*.json` with `create` (allowed by standing, no card) and ran `aw-tool
   submit_spec_document …`; the document's submission recorded; any other write in the turn refused. If Copilot never
   sends the `create` request, record what it did instead.
-- [ ] 9.9 Append the outcome to `scripts/drive/FINDINGS.md`: the F340 status line (fixed), F301 (fixed for Copilot;
+  - **Not met 2026-10-01** (`run-b30d4295abaf`, on the blocked agent, a document open): `absent` + `shim`, the
+    event quoting `(disabled)`; the turn's file `edit` was disabled as slice 2 intends. Copilot wrote an args file
+    for `read_spec_document` from PowerShell (`Set-Content ... -Value '{"path":"spec/..."}' -Encoding utf8`), and
+    the Hub refused it: the workspace judge reads `"path":"spec/..."` as a URL whose path is outside the workspace
+    (**F478**, reproduced by `_decide` alone; predates this change). The turn then stopped; no submission. Left open:
+    the spec flow over the shim on Copilot needs F478's judge fix (its own round) or a spec turn that uses `create`.
+- [x] 9.9 Append the outcome to `scripts/drive/FINDINGS.md`: the F340 status line (fixed), F301 (fixed for Copilot;
   Claude per 9.8), and F299 (answered for Copilot; open for Claude). File any new defect as a new finding.
+  - **Done 2026-10-01**: `scripts/drive/FINDINGS.md`: F340 footed (fixed for runs that report; open for Codex
+    `exec`), F301 footed (fixed for Claude and Copilot), F299 footed (answered for Copilot, open for Claude); new
+    F477 (fixed: the notice invited a compound command), F478 (open: the judge reads `key:value/path` in a shell
+    string as a URL; blocks 9.10), F479 (open: slice 2's exclusion list names `str_replace`).
 
 ## 10. Archive
 
