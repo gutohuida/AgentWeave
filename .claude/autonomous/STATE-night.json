@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "a-dialog-takes-the-keyboard-when-its-opens-impl",
-    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-impl: openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md task 1.2 (useDialogFocus harness with data-dialog-initial-focus on the SECOND button: focus lands on the second; must fail if the hook uses DOM order), then 1.3 and 1.4 if they fit (no mark -> first focusable, FAILS today; all disabled -> panel, FAILS today). Vitest under hub/ui. Read the iteration 2 log entry first: 1.1, 2.1 and 2.2 are done (68f11b4). No bundle refresh until 2.11.",
+    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-impl: openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md task 1.5 (per confirm-only dialog -- DeleteCharterDialog, ClearInstructionsDialog, ArchiveConfirmDialog -- in each component's own test file or a new confirmDialogInitialFocus.test.tsx: on open, focus is on Cancel, and a keydown Enter followed by the click the browser would dispatch calls onCancel, not onConfirm. Record that each FAILS today since 2.3 (marking Cancel) is not done yet). Vitest under hub/ui. 1.2/1.3/1.4 done iter 8: all three passed immediately, since 2.1/2.2's `marked ?? first ?? panel` already implements the mark-then-DOM-order-then-panel fallback -- no implementation work was needed, only the tests. No bundle refresh until 2.11.",
     "queue": [
         {
             "id": "F479-fix",

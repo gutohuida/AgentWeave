@@ -139,16 +139,22 @@ describe('useDialogFocus — the first Tab (F307)', () => {
 // F307: today the effect never moves focus on open, so a dialog opened from a trigger that holds
 // focus leaves the keyboard on the trigger, behind the scrim.
 describe('useDialogFocus — initial focus on open (D1)', () => {
-  function mountFocusHarness() {
+  function mountFocusHarness(opts: { mark?: 'first' | 'second' | 'none'; disableAll?: boolean } = {}) {
+    const { mark = 'first', disableAll = false } = opts
     const trigger = document.createElement('button')
     trigger.textContent = 'Open'
     const panel = document.createElement('div')
     panel.tabIndex = -1
     const first = document.createElement('button')
     first.textContent = 'First'
-    first.setAttribute('data-dialog-initial-focus', '')
     const second = document.createElement('button')
     second.textContent = 'Second'
+    if (mark === 'first') first.setAttribute('data-dialog-initial-focus', '')
+    if (mark === 'second') second.setAttribute('data-dialog-initial-focus', '')
+    if (disableAll) {
+      first.disabled = true
+      second.disabled = true
+    }
     panel.append(first, second)
     document.body.append(trigger, panel)
     mounted.push(trigger, panel)
@@ -163,6 +169,30 @@ describe('useDialogFocus — initial focus on open (D1)', () => {
     renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
 
     expect(document.activeElement).toBe(first)
+  })
+
+  it('moves focus to the second control when it holds the mark, not the first by DOM order', () => {
+    const { trigger, second, panelRef } = mountFocusHarness({ mark: 'second' })
+    trigger.focus()
+    renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
+
+    expect(document.activeElement).toBe(second)
+  })
+
+  it('moves focus to the first focusable control when nothing is marked', () => {
+    const { trigger, first, panelRef } = mountFocusHarness({ mark: 'none' })
+    trigger.focus()
+    renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
+
+    expect(document.activeElement).toBe(first)
+  })
+
+  it('moves focus to the panel when every control is disabled', () => {
+    const { trigger, panel, panelRef } = mountFocusHarness({ mark: 'first', disableAll: true })
+    trigger.focus()
+    renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
+
+    expect(document.activeElement).toBe(panel)
   })
 })
 

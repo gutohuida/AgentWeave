@@ -9,9 +9,9 @@
 In `hub/ui/src/__tests__/useDialogFocus.test.tsx` unless named otherwise.
 
 - [x] 1.1 A harness dialog with two buttons, the first marked `data-dialog-initial-focus`, opened from a trigger button that holds focus: after mount, `document.activeElement` is the marked button. Record that it FAILS today (it is the trigger) — confirmed red (`hub/ui/src/__tests__/useDialogFocus.test.tsx`, "initial focus on open (D1)"), then green after 2.1/2.2
-- [ ] 1.2 The same harness with the mark on the **second** button: focus lands on the second. Fails if the implementation uses DOM order instead of the mark
-- [ ] 1.3 No mark: focus lands on the first focusable control. Record that it FAILS today
-- [ ] 1.4 Every control disabled: `document.activeElement` is the panel. Record that it FAILS today
+- [x] 1.2 The same harness with the mark on the **second** button: focus lands on the second. Fails if the implementation uses DOM order instead of the mark. Passes today — 2.1/2.2 already implement `marked ?? first ?? panel`
+- [x] 1.3 No mark: focus lands on the first focusable control. Passes today, same reason as 1.2
+- [x] 1.4 Every control disabled: `document.activeElement` is the panel. Passes today, same reason as 1.2
 - [ ] 1.5 Per confirm-only dialog (`DeleteCharterDialog`, `ClearInstructionsDialog`, `ArchiveConfirmDialog`), in each component's own test file or a new `confirmDialogInitialFocus.test.tsx`: on open, focus is on Cancel, and a `keydown` Enter followed by the click the browser would dispatch calls `onCancel`, not `onConfirm`. Record that each FAILS today
 - [ ] 1.6 **Measure D3 first.** Render a trigger button, focus it, open `AgentCreateDialog` (its `autoFocus` input), close it with Escape: record where `document.activeElement` is. If it is `<body>` (the inference), this is the failing test for D3; if it is the trigger, record that and mark D3's restore claim refuted in the round log
 - [ ] 1.7 After the fix, 1.6's sequence leaves focus on the trigger, and the input still had focus while the dialog was open
