@@ -33582,11 +33582,19 @@ Group 2 of `each-runner-cli-is-one-adapter` (not yet reached tonight — group 1
 
 ## F471 (D) — `each-runner-cli-is-one-adapter`'s D2 assumed `RUNNER_CLIS`/`CATALOG` stay 2-wide; migration 0112 already widened both
 
-**Status:** open (a record, not a defect), filed 2026-10-01 from the night window's ORDER 1/24 task 1.5, writing `hub/tests/test_runner_adapters_conformance.py`.
+**Status:** fixed bfdc72a (task 3.7, `CopilotAdapter`; operator's decision 2026-10-01, DECISIONS `f471-copilot-adapter`), filed 2026-10-01 from the night window's ORDER 1/24 task 1.5, writing `hub/tests/test_runner_adapters_conformance.py`.
 
 Design D2 (R1-R3, last touched 2026-09-28) states: *"`RUNNER_CLIS = ("claude", "codex")` (`db/models.py:311`) stays where it is"*, and task 1.5(a)/(b) spell out the same 2-tuple literally (`["claude", "codex"]`). D1 builds `ADAPTERS` as exactly `{"claude": ClaudeAdapter(), "codex": CodexAdapter()}` for this slice — "this change touches no Copilot code" is D8's own words. But on today's tree `RUNNER_CLIS = ("claude", "codex", "copilot")` (`db/models.py:296`), `ck_runners_cli` is now *generated from* `RUNNER_CLIS` rather than a separately-maintained literal (`", ".join(f"'{cli}'" for cli in RUNNER_CLIS)`, widened by migration 0112), and `model_catalog.CATALOG` already carries a `"copilot"` entry (`model_catalog.py:350`) — all landed by `a-copilot-agent-runs-over-acp` (archived 2026-09-30), the same change F470 already flagged for pre-building `RpcCallbacks`/`_execute_rpc_run`. `workspace_writes.WRITE_TOOLS` has the identical shape: `COPILOT_WRITE_TOOLS` is already folded into it (`workspace_writes.py:55-61`), ahead of any Copilot adapter existing to declare it. An existing test already depends on the 3-wide set: `test_runners_api.py:204`, `assert set(providers.keys()) == {"claude", "codex", "copilot"}`.
 
 So three of D2/D7's equalities — task 1.5(a) (`tuple(ADAPTERS) == RUNNER_CLIS == tuple(CATALOG)`), 1.5(b) (the route's key order), and 1.5(c) (the union of `write_tool_kinds` equals `WRITE_TOOLS`) — are written in `test_runner_adapters_conformance.py` **against today's real 3-wide registries**, not a hand-shrunk 2-tuple, per the principle F470 set: pin the contradiction, do not quietly resolve it. Once group 2 finishes building the literal 2-member `ADAPTERS` design D1 specifies, all three will fail as an **assertion**, not the `ModuleNotFoundError` group 1 expects — group 2 (or, per D2's own "For slice 2" note, whichever slice actually adds `CopilotAdapter`) has to either land a `CopilotAdapter` stub alongside `ClaudeAdapter`/`CodexAdapter` in this same change, or revise D1/D2/tasks.md's 2-tuple text to acknowledge the registries already moved. Re-read `db/models.py:296`, `model_catalog.py:227-388` and `workspace_writes.py:40-61` fresh at group 2's IMPL rather than trusting D1/D2/D7's text, which predates migration 0112.
+
+**Resolution, 2026-10-01.** The three cases stayed red on CI for the whole night: 17 consecutive
+failed runs, which no firing's log recorded. Put to the operator with three options: pin the gap
+as a strict named exception, build the adapter, or `xfail`. They chose to build it. `CopilotAdapter`
+(`hub/hub/runner_adapters/copilot.py`) implements slice 2's "Slice 1 member names" table, with
+each member delegating to the function slice 2 ships, so all three equalities hold unchanged.
+F473's and F475's carve-outs were removed in the same commit, since each existed only because
+this adapter did not.
 
 ## F472 (D) — `each-runner-cli-is-one-adapter` task 2.3's own bullet says to delete `codex_appserver.uses_app_server`; its two real callers live in files tasks 3.3/3.6 own, not 2.3's
 
