@@ -113,6 +113,12 @@ async def list_provider_launchability(
     no runner exists yet to probe at that point.
     """
     del project
+    # Not `ADAPTERS` (F471/F475): `ADAPTERS` is 2-wide this slice (design D1, no `CopilotAdapter`
+    # yet), but `copilot` is a live, already-spawnable `RUNNER_CLIS` member with its own shipped
+    # launchability probe (`test_runners_api.py`'s `..._with_no_runner_needed`). Iterating
+    # `ADAPTERS` here, as task 3.6's text literally says, would drop Copilot from this endpoint —
+    # a real regression to a shipped feature, the same shape of mistake F473/F474 found and
+    # carved around rather than implemented verbatim.
     from ...db.models import RUNNER_CLIS
 
     return {"providers": {cli: probe_agent(cli, {"runner": cli}) for cli in RUNNER_CLIS}}

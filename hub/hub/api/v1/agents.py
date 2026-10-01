@@ -21,7 +21,6 @@ from ...agent_lifecycle import unarchive as unarchive_agent_row
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...checkpoint_policy import CHECKPOINT_MODES, threshold_error
-from ...codex_appserver import APP_SERVER_OPT_OUT_FLAG, uses_app_server
 from ...context_readings import usable_context_reading as _usable_context_reading
 from ...conversations import new_conversation
 from ...db.engine import get_session
@@ -248,27 +247,19 @@ async def get_agents_launchability(
                     "triggered run could not reach it — trigger any run once first, or "
                     "set HUB_URL explicitly."
                 )
-            elif runner_row.cli == "codex":
-                # Derived from the same helper the trigger path uses to pick the transport, so
-                # what the operator is told and what actually runs cannot drift apart.
-                yolo = bool(merged.get("yolo"))
-                if uses_app_server(runner_row.cli, runner_row.flags) or yolo:
+            else:
+                # Derived from the same adapter member the trigger path asks to pick the
+                # transport, so what the operator is told and what actually runs cannot drift
+                # apart. `get_adapter` has no `CopilotAdapter` yet this slice (F473): a
+                # copilot-bound runner keeps today's unconditional "ready" verdict.
+                adapter = get_adapter(runner_row.cli)
+                if adapter is None:
                     collaboration_ready = True
                 else:
-                    collaboration_ready = False
-                    # The remedies are ones the app offers, named as it labels them: `yolo` is
-                    # the legacy spelling of the Full access posture, and no screen shows the word
-                    # or edits a runner's flags (F469), so the flag is left by rebinding.
-                    collaboration_reason = (
-                        "This Codex agent's runner opted out of the app-server transport "
-                        f'(flags: ["{APP_SERVER_OPT_OUT_FLAG}"]) and the agent does not have '
-                        "Full access, so it falls back to classic exec — AgentWeave tool calls "
-                        "(send_message, etc.) will be silently denied with no operator "
-                        f"present to approve them. Bind a runner without {APP_SERVER_OPT_OUT_FLAG}, "
-                        "or set this agent's permissions to Full access."
+                    yolo = bool(merged.get("yolo"))
+                    collaboration_ready, collaboration_reason = adapter.collaboration(
+                        runner_row.flags, yolo=yolo
                     )
-            else:
-                collaboration_ready = True
 
         results[name] = {
             **probe,
@@ -584,16 +575,21 @@ async def list_agents(
             permission_mode_built_in = posture_at_rest(provider, access_path, False)
 
         _runner = agent_meta.get("runner", "native")
-        _display_model = {
-            "claude": agent_meta.get("model", "Claude"),
-            "claude_proxy": agent_meta.get("model", "Claude Proxy"),
-            "kimi": agent_meta.get("model", "Kimi"),
-            "manual": "Manual",
-            "opencode": agent_meta.get("model", "OpenCode"),
-            "codex": agent_meta.get("model", "Codex"),
-            "codex_mcp": agent_meta.get("model", "Codex MCP"),
-            "copilot": agent_meta.get("model", "GitHub Copilot"),
-        }.get(_runner, agent_meta.get("model", _runner.replace("_", " ").title()))
+        _runner_adapter = get_adapter(_runner)
+        if _runner_adapter is not None:
+            # `.get` semantics kept exactly (review 5): a stored `None`/`""` is returned as is,
+            # and the fallback applies only when the key is absent. `.get("model") or …` is a
+            # different function and must not be written here.
+            _display_model = agent_meta.get("model", _runner_adapter.display_name)
+        else:
+            _display_model = {
+                "claude_proxy": agent_meta.get("model", "Claude Proxy"),
+                "kimi": agent_meta.get("model", "Kimi"),
+                "manual": "Manual",
+                "opencode": agent_meta.get("model", "OpenCode"),
+                "codex_mcp": agent_meta.get("model", "Codex MCP"),
+                "copilot": agent_meta.get("model", "GitHub Copilot"),
+            }.get(_runner, agent_meta.get("model", _runner.replace("_", " ").title()))
 
         summaries.append(
             AgentSummary(
@@ -1543,11 +1539,6 @@ def _http_lines(operation: _Operation) -> List[str]:
     return lines
 
 
-_HOST_TOOLS_NOTE = (
-    "Your host also has tools with similar names — `SendMessage` continues a subagent you "
-    "started — which cannot reach AgentWeave agents or the operator."
-)
-
 # Copilot's counterpart (`a-copilot-agent-runs-over-acp` D16): its own task tool dispatches a
 # subagent, which is not an AgentWeave agent.
 _COPILOT_HOST_TOOLS_NOTE = (
@@ -1596,17 +1587,22 @@ def _tool_surface_lines(
     (`runner_commands._build_claude_command`), so its callable names are known
     (`mcp__agentweave__<tool>`) and asserting the prefix is grounded — every other runner's MCP
     naming is either different (Codex) or unmeasured, so it is told the harness only *may* prefix.
-    The host tool collision (`_HOST_TOOLS_NOTE`) is rendered for a Claude-family run regardless of
-    which form is used, because the run has the host's tools in its list either way (F139).
+    The host tool collision (`adapter.host_tool_note`) is rendered for a Claude-family run
+    regardless of which form is used, because the run has the host's tools in its list either
+    way (F139).
     """
     over_mcp = access_path == "mcp"
-    # `CLAUDE_FAMILY_RUNNERS` (deleted, `each-runner-cli-is-one-adapter` task 3.1) covered
-    # "claude"/"claude_proxy"/"native", of which only "claude" was ever reachable (`runner` is
-    # the bound `Runner.cli`, validated against `RUNNER_CLIS`) — same reasoning as
-    # `runner_commands.mcp_tool_prefix`.
-    is_claude_family = runner == "claude"
+    # `each-runner-cli-is-one-adapter` D3/task 3.6: the adapter carries both `mcp_tool_prefix` and
+    # `host_tool_note`. Copilot has no adapter yet this slice (F473), so it keeps its own literal
+    # branches below.
+    adapter = get_adapter(runner)
     # Known for a Claude-family run and, since `a-copilot-agent-runs-over-acp` D16, for Copilot.
-    tool_prefix = mcp_tool_prefix(runner) if over_mcp else ""
+    if over_mcp:
+        tool_prefix = (
+            adapter.mcp_tool_prefix or "" if adapter is not None else mcp_tool_prefix(runner)
+        )
+    else:
+        tool_prefix = ""
     if tool_prefix:
         preamble = (
             "These are AgentWeave's tools, named below by their full callable names. Elsewhere "
@@ -1634,8 +1630,8 @@ def _tool_surface_lines(
         )
     render = (lambda op: _mcp_lines(op, tool_prefix=tool_prefix)) if over_mcp else _http_lines
     lines = ["## Your tools", "", preamble]
-    if is_claude_family:
-        lines.append(_HOST_TOOLS_NOTE)
+    if adapter is not None and adapter.host_tool_note:
+        lines.append(adapter.host_tool_note)
     elif runner == "copilot":
         lines.append(_COPILOT_HOST_TOOLS_NOTE)
     lines.append("")

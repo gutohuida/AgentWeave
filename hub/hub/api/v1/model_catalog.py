@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends
 
 from ...auth import get_operator
 from ...db.models import OperatorCredential
-from ...model_catalog import codex_catalog_source, providers
+from ...model_catalog import catalog_source, providers
 from ...schemas.model_catalog import ModelCatalogResponse, ProviderDescriptorResponse
 
 router = APIRouter(tags=["model-catalog"])
@@ -22,9 +22,7 @@ async def get_model_catalog(
     del operator
     return ModelCatalogResponse(
         providers=[
-            ProviderDescriptorResponse.from_descriptor(
-                p, source=codex_catalog_source() if p.provider == "codex" else None
-            )
+            ProviderDescriptorResponse.from_descriptor(p, source=catalog_source(p.provider))
             for p in providers()
         ]
     )

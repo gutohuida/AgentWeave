@@ -510,6 +510,15 @@ def codex_catalog_source() -> CatalogSource:
     )
 
 
+def catalog_source(provider: str) -> Optional[CatalogSource]:
+    """Where *provider*'s currently offered models came from, or `None` for a provider with no
+    cache-backed source (design D2). The one knowledge of which provider is cache-backed stays
+    here, not in a runner-name comparison at the route."""
+    if provider == _CACHE_BACKED_PROVIDER:
+        return codex_catalog_source()
+    return None
+
+
 def providers() -> List[ProviderDescriptor]:
     return list(_effective_catalog().values())
 

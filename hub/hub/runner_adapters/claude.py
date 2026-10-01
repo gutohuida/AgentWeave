@@ -110,6 +110,10 @@ class ClaudeAdapter(RunnerAdapter):
     display_name = "Claude"
     catalog_provider = "claude"
     mcp_tool_prefix = "mcp__agentweave__"
+    host_tool_note = (
+        "Your host also has tools with similar names — `SendMessage` continues a subagent you "
+        "started — which cannot reach AgentWeave agents or the operator."
+    )
     write_tool_kinds = CLAUDE_WRITE_TOOLS
 
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:
