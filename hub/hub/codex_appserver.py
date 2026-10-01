@@ -38,7 +38,7 @@ from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional
 
 from .model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
 from .pty_runner import resolve_executable
-from .runner_commands import OPERATOR_POSTURE
+from .runner_commands import CODEX_MCP_ENV_NAMES, OPERATOR_POSTURE
 from .runner_events import (
     AccountingSample,
     ContextUsageSample,
@@ -990,13 +990,7 @@ async def run_turn(
             config["mcp_servers"] = {
                 own_server_name: mcp_server_config(
                     mcp_command,
-                    env_vars=[
-                        "AW_RUN_TOKEN",
-                        "AW_AGENT_IDENTITY",
-                        "AW_RUN_ID",
-                        "AW_TURN_DEPTH",
-                        "HUB_URL",
-                    ],
+                    env_vars=list(CODEX_MCP_ENV_NAMES),
                 )
             }
         if config:

@@ -119,6 +119,20 @@ APPROVER_PERMISSION_MODES = (WORKSPACE_PERMISSION_MODE, "manual")
 # `test_permission_approver.py` asserts the two agree.
 OPERATOR_POSTURE = "operator"
 
+# The run variables forwarded to the Hub's MCP server child process for a Codex run -- Codex
+# resolves values from its own environment, so no secret is ever embedded in argv or config.
+# Declared once here, not in `codex_appserver.py` (design D12, R3): that module already imports
+# `OPERATOR_POSTURE` from this one, and the reverse import would be the cycle D1 forbids.
+# `_codex_exec_mcp_args` reads it in place; `codex_appserver.run_turn` reads it through its
+# existing `from .runner_commands import` line.
+CODEX_MCP_ENV_NAMES = (
+    "AW_RUN_TOKEN",
+    "AW_AGENT_IDENTITY",
+    "AW_RUN_ID",
+    "AW_TURN_DEPTH",
+    "HUB_URL",
+)
+
 # DEAD (2026-09-20): the "claude_proxy" and "native" rows below can never be looked up.
 # Why: the sole caller of catalog_provider_for_runner outside this module is
 #   agent_trigger.py:1291, in the same function whose `runner` is the bound Runner.cli —
@@ -355,6 +369,22 @@ def _build_claude_command(
     return cmd
 
 
+def _codex_exec_mcp_args(mcp_command: Optional[List[str]]) -> List[str]:
+    """The three `-c mcp_servers.agentweave.*` flags that start the Hub's MCP server for a Codex
+    `exec` run (design D1). Returns `[]` when no server is configured -- `CodexExecTransport
+    .inject_mcp` calls this directly; `_build_codex_command` calls it at the same position.
+
+    Codex filters the environment inherited by dynamically configured stdio MCP servers, so only
+    `CODEX_MCP_ENV_NAMES` is forwarded: Codex resolves their values from its own local environment.
+    """
+    if not mcp_command:
+        return []
+    args = ["-c", f"mcp_servers.agentweave.command={json.dumps(mcp_command[0])}"]
+    args += ["-c", f"mcp_servers.agentweave.args={json.dumps(mcp_command[1:])}"]
+    args += ["-c", f"mcp_servers.agentweave.env_vars={json.dumps(list(CODEX_MCP_ENV_NAMES))}"]
+    return args
+
+
 def _build_codex_command(
     *,
     cli: str,
@@ -381,19 +411,7 @@ def _build_codex_command(
     """
     cmd = [cli, "exec"]
     cmd += ["--json", "--skip-git-repo-check"]
-    if mcp_command:
-        cmd += ["-c", f"mcp_servers.agentweave.command={json.dumps(mcp_command[0])}"]
-        cmd += ["-c", f"mcp_servers.agentweave.args={json.dumps(mcp_command[1:])}"]
-        # Codex filters environment inherited by dynamically configured stdio MCP servers.
-        # Forward names only: Codex resolves their values from its own local environment.
-        forwarded = [
-            "AW_RUN_TOKEN",
-            "AW_AGENT_IDENTITY",
-            "AW_RUN_ID",
-            "AW_TURN_DEPTH",
-            "HUB_URL",
-        ]
-        cmd += ["-c", f"mcp_servers.agentweave.env_vars={json.dumps(forwarded)}"]
+    cmd += _codex_exec_mcp_args(mcp_command)
     if context_file is not None and context_file.exists():
         cmd += ["-c", f"model_instructions_file={context_file}"]
     if model:

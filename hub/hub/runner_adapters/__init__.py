@@ -1,9 +1,9 @@
 """Per-runner-CLI adapters (design `each-runner-cli-is-one-adapter`, D1).
 
-`ADAPTERS` is built up as `claude.py` and `codex.py` land (tasks 2.2/2.3). It carries only
-`"claude"` until task 2.3 adds `"codex"` — `get_adapter`, `build_command` (design D6) and
-`resolve_access_axes` (design D4) are all generic over `ADAPTERS`'s contents, so nothing here
-changes shape when the second entry is added, only the table itself grows.
+`ADAPTERS` carries `"claude"` and `"codex"` for this slice ("this change touches no Copilot
+code", design D1) -- `get_adapter`, `build_command` (design D6) and `resolve_access_axes` (design
+D4) are all generic over `ADAPTERS`'s contents, so a later slice's `CopilotAdapter` is one more
+row, not a shape change.
 
 Nothing in this package may import `hub.db`, `hub.worker`, `hub.launchability` or `hub.api` (D1):
 a run's command line has to be buildable without a database connection.
@@ -17,9 +17,11 @@ from typing import Dict, List, Mapping, Optional, Sequence
 from ..runner_commands import UnsupportedRunnerError
 from .base import AccessAxes, LaunchRequest, RunnerAdapter
 from .claude import ClaudeAdapter
+from .codex import CodexAdapter
 
 ADAPTERS: Mapping[str, RunnerAdapter] = {
     "claude": ClaudeAdapter(),
+    "codex": CodexAdapter(),
 }
 
 
