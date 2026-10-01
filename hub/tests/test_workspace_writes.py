@@ -148,7 +148,7 @@ def test_restrict_spec_writes_is_not_the_definition_of_a_write_tool():
     Asserted as an inequality so that closing the gap upstream does not silently make this file
     start depending on the two lists agreeing.
     """
-    from hub.runner_commands import build_command
+    from hub.runner_adapters import build_command
 
     command = build_command(runner="claude", cli="claude", prompt="hi", restrict_spec_writes=True)
     disallowed = set(command[command.index("--disallowedTools") + 1].split(","))

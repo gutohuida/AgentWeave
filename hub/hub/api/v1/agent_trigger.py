@@ -11,10 +11,10 @@ This replaces the message-tag protocol (Decision 2): no synthetic `Message` row,
 some other process might eventually pick the request up. Session identity is a typed field
 on the run record (`Run.session_id`), never text embedded in a message body.
 
-Only claude/claude_proxy/native and codex are wired to an actual spawn path today —
-`runner_commands.py`'s scope. Kimi, OpenCode, and Copilot are refused with a stated 501 rather than
-silently mishandled. There is no fallback runtime for them. Extending the Hub adapter list to cover
-every runner is future work.
+Only claude and codex have a `RunnerAdapter` (`hub.runner_adapters`, design `each-runner-cli-is-
+one-adapter`); Copilot is spawned through its own ACP path below (`_prepare_copilot_turn`). Kimi
+and OpenCode are refused with a stated 501 rather than silently mishandled — there is no fallback
+runtime for them. Extending the adapter list to cover every runner is future work.
 """
 
 from __future__ import annotations
@@ -127,14 +127,8 @@ from ...run_task_binding import (
     spec_document_for_task,
     tasks_held_by_a_running_turn,
 )
-from ...runner_commands import (
-    OPERATOR_POSTURE,
-    SUPPORTED_RUNNERS,
-    UnsupportedRunnerError,
-    build_command,
-    catalog_provider_for_runner,
-    mcp_tool_prefix,
-)
+from ...runner_adapters import ADAPTERS, build_command, get_adapter
+from ...runner_commands import OPERATOR_POSTURE, UnsupportedRunnerError, mcp_tool_prefix
 from ...runner_events import AccountingSample
 from ...runner_parsing import (
     parse_claude_line,
@@ -774,11 +768,18 @@ async def _trigger_agent_directly(
     # more fundamental, permanent gate than whether its CLI happens to be on PATH right
     # now, and keeps the response deterministic regardless of what's installed on the Hub
     # host (an unimplemented runner is still unimplemented even if its CLI is present).
-    if runner not in SUPPORTED_RUNNERS:
+    #
+    # `runner != "copilot"` is a deliberate carve-out, not the design's literal
+    # `get_adapter(runner) is None` (F473): Copilot has its own RPC path below
+    # (`_prepare_copilot_turn`) and is already spawnable, but `ADAPTERS` has no `CopilotAdapter`
+    # yet this slice (`a-copilot-agent-runs-over-acp`'s own adapter is a later ORDER item) — the
+    # literal design text would 501 a runner that works today.
+    adapter = get_adapter(runner)
+    if adapter is None and runner != "copilot":
         raise TriggerAgentError(
             status.HTTP_501_NOT_IMPLEMENTED,
             f"Direct spawn for runner {runner!r} is not implemented yet "
-            f"(supported: {', '.join(SUPPORTED_RUNNERS)}). "
+            f"(supported: {', '.join([*ADAPTERS, 'copilot'])}). "
             "This runner has no Hub-owned execution adapter.",
             request_level=True,
         )
@@ -1146,9 +1147,9 @@ async def _trigger_agent_directly(
         # because an agent that does not know there is no repository proposes branches,
         # offers to commit, and reads a failed `git status` as a broken environment.
         isolation_unavailable=worktrees.is_writing_agent(config) and not project_is_repo,
-        # Which family the harness belongs to, so the tool list names each tool by its actual
-        # callable name where that name is known (`CLAUDE_FAMILY_RUNNERS`) rather than leaving
-        # the reader to apply a prefix that collides with a same-named host tool (F139).
+        # Which harness this is, so the tool list names each tool by its actual callable name
+        # where that name is known (`agents.py`'s `is_claude_family`) rather than leaving the
+        # reader to apply a prefix that collides with a same-named host tool (F139).
         runner=runner,
         # Which specification document the operator has open, when the message came from the
         # specification workspace. Deliberately here and not prepended to `message`: the message
@@ -1446,7 +1447,10 @@ async def _trigger_agent_directly(
             # passed separately (F99). Rendered from the same catalog declaration `build_command`
             # renders above; the app-server path merges it into `thread/start`'s `config`.
             config_overrides=(
-                render_control_config(catalog_provider_for_runner(runner) or "", control_overrides)
+                render_control_config(
+                    (adapter.catalog_provider if adapter else "copilot") or "",
+                    control_overrides,
+                )
                 if control_overrides
                 else {}
             ),
@@ -2506,7 +2510,9 @@ async def _execute_run(
         # it was watched and found clean. Writes `[]`; see `OutsideWriteRecorder.watch`.
         await outside_writes.watch()
 
-        parse_line = parse_claude_line if runner in ("claude", "claude_proxy", "native") else None
+        # `claude_proxy`/`native` were never reachable here (`runner` is the bound `Runner.cli`,
+        # validated against `RUNNER_CLIS`) — task 3.1 drops the dead branch, not the behaviour.
+        parse_line = parse_claude_line if runner == "claude" else None
 
         session_id = known_session_id
         binding_conflict: Optional[str] = None

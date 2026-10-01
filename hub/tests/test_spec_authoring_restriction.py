@@ -6,7 +6,7 @@ which is exactly the case round 2 of that change's spec review found unaddressed
 most worth a regression test here.
 """
 
-from hub.runner_commands import build_command
+from hub.runner_adapters import build_command
 
 
 def test_claude_gets_disallowed_tools_when_spec_document_is_open():

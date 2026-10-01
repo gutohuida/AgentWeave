@@ -56,12 +56,8 @@ from ...model_catalog import (
 )
 from ...output_recording import record_agent_output, record_context_usage
 from ...review_turn import ReviewContext, verdict_evidence_sentence
-from ...runner_commands import (
-    CLAUDE_FAMILY_RUNNERS,
-    catalog_provider_for_runner,
-    mcp_tool_prefix,
-    posture_at_rest,
-)
+from ...runner_adapters import get_adapter
+from ...runner_commands import mcp_tool_prefix, posture_at_rest
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -567,7 +563,15 @@ async def list_agents(
         # falls back to, over the config the spawn reads (`get_agent_config`'s merge, not
         # `agent_meta`, whose precedence differs for `hub_client`). F283.
         permission_mode_at_rest = permission_mode_built_in = None
-        provider = catalog_provider_for_runner(bound_runner.cli) if bound_runner else None
+        # `get_adapter` has no `CopilotAdapter` yet this slice (F473): a copilot-bound runner's
+        # provider is still the literal "copilot", matching the deleted
+        # `_CATALOG_PROVIDER_BY_RUNNER`'s identity row for it.
+        _bound_adapter = get_adapter(bound_runner.cli) if bound_runner else None
+        provider = (
+            _bound_adapter.catalog_provider
+            if _bound_adapter
+            else ("copilot" if bound_runner and bound_runner.cli == "copilot" else None)
+        )
         if provider is not None:
             spawn_config = agent_config(
                 session_data, agent_name, agent_row.config if agent_row else None
@@ -1586,8 +1590,8 @@ def _tool_surface_lines(
     this session"*, and stopped without writing the document it had just spent three rounds
     designing. A silently incomplete inventory is worse than none, because the agent believes it.
 
-    `runner` is the Claude-family question, not the access-path one: a harness in
-    `CLAUDE_FAMILY_RUNNERS` is injected the server under the name `agentweave`
+    `runner` is the Claude-family question, not the access-path one: a `"claude"` harness is
+    injected the server under the name `agentweave`
     (`runner_commands._build_claude_command`), so its callable names are known
     (`mcp__agentweave__<tool>`) and asserting the prefix is grounded — every other runner's MCP
     naming is either different (Codex) or unmeasured, so it is told the harness only *may* prefix.
@@ -1595,7 +1599,11 @@ def _tool_surface_lines(
     which form is used, because the run has the host's tools in its list either way (F139).
     """
     over_mcp = access_path == "mcp"
-    is_claude_family = runner in CLAUDE_FAMILY_RUNNERS
+    # `CLAUDE_FAMILY_RUNNERS` (deleted, `each-runner-cli-is-one-adapter` task 3.1) covered
+    # "claude"/"claude_proxy"/"native", of which only "claude" was ever reachable (`runner` is
+    # the bound `Runner.cli`, validated against `RUNNER_CLIS`) — same reasoning as
+    # `runner_commands.mcp_tool_prefix`.
+    is_claude_family = runner == "claude"
     # Known for a Claude-family run and, since `a-copilot-agent-runs-over-acp` D16, for Copilot.
     tool_prefix = mcp_tool_prefix(runner) if over_mcp else ""
     if tool_prefix:

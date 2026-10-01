@@ -28,7 +28,7 @@ from hub.codex_appserver import (
     decide_approval,
 )
 from hub.model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
-from hub.runner_commands import build_command
+from hub.runner_adapters import build_command
 
 OWN_SERVER = "agentweave"
 WORKSPACE = r"C:\proj\.agentweave\worktrees\coder"

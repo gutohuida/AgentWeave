@@ -19,11 +19,11 @@ import pytest
 
 from hub.mcp_server import _decide
 from hub.model_catalog import WORKSPACE_PERMISSION_MODE, get_provider, render_control_args
+from hub.runner_adapters import build_command
 from hub.runner_commands import (
     CLAUDE_PERMISSION_PROMPT_TOOL,
     DEFAULT_CLAUDE_PERMISSION_MODE,
     DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER,
-    build_command,
 )
 
 MCP_SERVER = Path(__file__).resolve().parents[1] / "hub" / "mcp_server.py"

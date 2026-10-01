@@ -1,6 +1,6 @@
 """Run-token forwarding into dynamically configured runner tool servers."""
 
-from hub.runner_commands import build_command
+from hub.runner_adapters import build_command
 
 
 def test_codex_mcp_server_whitelists_run_identity_environment():

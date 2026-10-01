@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from hub.model_catalog import get_provider, undeclared_model_reason, validate_overrides
-from hub.runner_commands import build_command
+from hub.runner_adapters import build_command
 from hub.worker import model_is_declared
 
 P = "/api/v1/projects/proj-test"

@@ -75,7 +75,7 @@ def test_cli_mcp_module_reexports_the_canonical_hub_surface():
 
 
 def test_runner_commands_inject_one_stdio_surface_for_claude_and_codex():
-    from hub.runner_commands import build_command
+    from hub.runner_adapters import build_command
 
     mcp_command = ["python", "C:/agentweave/hub/mcp_server.py"]
     claude = build_command(runner="claude", cli="claude", prompt="work", mcp_command=mcp_command)

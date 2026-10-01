@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 
 from .. import runner_commands
 from ..file_mentions import neutralise_file_mentions
+from ..model_catalog import render_control_args
 from ..runner_parsing import AccountingSample, ParsedLine, parse_claude_line
 from ..workspace_writes import CLAUDE_WRITE_TOOLS
 from .base import (
@@ -66,9 +67,7 @@ class ClaudeStreamTransport(StreamTransport):
 
     def build_launch(self, req: LaunchRequest) -> List[str]:
         control_args = (
-            runner_commands.render_control_args("claude", req.control_overrides)
-            if req.control_overrides
-            else []
+            render_control_args("claude", req.control_overrides) if req.control_overrides else []
         )
         return runner_commands._build_claude_command(
             cli=ClaudeAdapter.binary,

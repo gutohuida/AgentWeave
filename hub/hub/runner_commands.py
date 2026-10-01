@@ -4,9 +4,10 @@ The Hub owns command construction independently from the lifecycle CLI. Every fl
 verified against the supported runner CLIs. Claude runs through `PtySession`; Codex's
 non-interactive JSONL mode runs through `PipeSession` (see `pty_runner.py`).
 
-Kimi, OpenCode, and Copilot are explicitly out of scope for this task (per-runner command
-construction for them is deferred) — `build_command` raises `UnsupportedRunnerError` for
-anything else so the caller gets a clear, stated reason rather than a silently wrong command.
+Kimi and OpenCode are explicitly out of scope for this module (per-runner command construction
+for them is deferred) — `runner_adapters.build_command` (design D6) raises `UnsupportedRunnerError`
+for a runner with no adapter, so the caller gets a clear, stated reason rather than a silently
+wrong command.
 
 Codex has two transports. The default is `codex app-server` (see `codex_appserver.py`), where the
 Hub answers each approval itself and can accept its own MCP server without weakening the sandbox.
@@ -42,28 +43,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .model_catalog import (
-    FULL_ACCESS_PERMISSION_MODE,
-    PERMISSION_MODE_CONTROL,
-    WORKSPACE_PERMISSION_MODE,
-    render_control_args,
-)
-
-# DEAD (2026-09-20): "claude_proxy" and "native" can never be the `runner` this is asked about.
-# Why: build_command's only caller is api/v1/agent_trigger.py:1106, inside
-#   trigger_agent_directly (line 586-1341), where `runner` is probe_agent's echo of a config
-#   whose "runner" was just overwritten with the bound Runner.cli (agent_trigger.py:677), and
-#   Runner.cli is validated against RUNNER_CLIS = ("claude", "codex", "copilot") (db/models.py).
-# Live equivalent: RUNNER_CLIS. The 501 gate at agent_trigger.py:686 is unreachable for the
-#   same reason, as is the "claude_proxy"/"native" half of build_command's branch at line 179.
-# Removal: hub/tests/test_runner_parsing.py:104 builds commands for both names directly.
-SUPPORTED_RUNNERS = ("claude", "claude_proxy", "native", "codex", "copilot")
-
-# The runners `build_command` routes to `_build_claude_command` (`:179` below) — declared once so
-# the prefix a Claude-family run is told its tools by (`agents.py:_tool_surface_lines`) cannot
-# drift from the set that actually gets the Claude CLI's MCP invocation
-# (`2026-09-29-a-claude-run-is-told-its-agentweave-tools-by-their-full-names`).
-CLAUDE_FAMILY_RUNNERS = ("claude", "claude_proxy", "native")
+from .model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
 
 # Copilot names an MCP tool `<server>-<tool>` (VERIFIED: `hubprobe-ping`), so a Copilot run's
 # callable names are known too (`a-copilot-agent-runs-over-acp` D16). Slice 1 moves this onto the
@@ -73,8 +53,15 @@ COPILOT_MCP_TOOL_PREFIX = "agentweave-"
 
 def mcp_tool_prefix(runner: Optional[str]) -> str:
     """The full callable-name prefix of the Hub's tools for a run of *runner* that was injected
-    the Hub's server, or "" where it is unknown (the harness *may* prefix; F139)."""
-    if runner in CLAUDE_FAMILY_RUNNERS:
+    the Hub's server, or "" where it is unknown (the harness *may* prefix; F139).
+
+    `each-runner-cli-is-one-adapter` D3 moves the Claude value onto `ClaudeAdapter.mcp_tool_prefix`
+    (a `ClassVar`, not a registry) — reproduced here as a literal rather than `CLAUDE_FAMILY_RUNNERS`
+    (deleted, task 3.1): that tuple's only reachable member was `"claude"`, `claude_proxy`/`native`
+    being unreachable for the same reason `SUPPORTED_RUNNERS` was (see git history). Copilot has no
+    adapter yet this slice (F473), so its branch stays a literal runner check too.
+    """
+    if runner == "claude":
         return "mcp__agentweave__"
     if runner == "copilot":
         return COPILOT_MCP_TOOL_PREFIX
@@ -133,36 +120,15 @@ CODEX_MCP_ENV_NAMES = (
     "HUB_URL",
 )
 
-# DEAD (2026-09-20): the "claude_proxy" and "native" rows below can never be looked up.
-# Why: the sole caller of catalog_provider_for_runner outside this module is
-#   agent_trigger.py:1291, in the same function whose `runner` is the bound Runner.cli —
-#   validated against RUNNER_CLIS = ("claude", "codex", "copilot") (db/models.py). See SUPPORTED_RUNNERS.
-# Live equivalent: the "claude", "codex" and "copilot" rows, which are the whole live surface.
-# Removal: hub/tests/test_model_catalog.py:18 asserts every catalog provider is in
-#   SUPPORTED_RUNNERS, so these two must go together with that tuple's legacy entries.
-# claude_proxy and native both invoke the claude CLI (see _build_claude_command) under a
-# different auth/proxy setup — their catalog identity for control-override rendering is
-# still "claude", the provider the catalog actually declares controls for.
-_CATALOG_PROVIDER_BY_RUNNER: Dict[str, str] = {
-    "claude": "claude",
-    "claude_proxy": "claude",
-    "native": "claude",
-    "codex": "codex",
-    "copilot": "copilot",
-}
-
-
-def catalog_provider_for_runner(runner: str) -> Optional[str]:
-    return _CATALOG_PROVIDER_BY_RUNNER.get(runner)
-
 
 def posture_at_rest(provider: str, access_path: str, yolo: bool) -> str:
     """The permission posture a run gets when neither the conversation nor the agent chose one.
 
     The one answer the spawn and every display read (`the-permissions-pill-shows-the-posture-the-
-    run-gets`, design D1): `build_command` falls back to it, Copilot's `posture_for` returns it for
-    an unset mode, and the agents list serves it as `permission_mode_at_rest`, so the Permissions
-    pill cannot say one thing while the run does another (F283).
+    run-gets`, design D1): `ClaudeAdapter`/`CodexAdapter.posture_at_rest` (design D3) delegate to
+    this, Copilot's `posture_for` returns it for an unset mode, and the agents list serves it as
+    `permission_mode_at_rest`, so the Permissions pill cannot say one thing while the run does
+    another (F283).
 
     - Claude: Full access under `yolo`; `workspace` when the Hub's server is there to answer it
       (`access_path == "mcp"`); otherwise `acceptEdits`, which needs no answerer.
@@ -185,83 +151,11 @@ def posture_at_rest(provider: str, access_path: str, yolo: bool) -> str:
 
 
 class UnsupportedRunnerError(ValueError):
-    """Raised when asked to build a command for a runner this module doesn't cover yet."""
+    """Raised when asked to build a command for a runner this module doesn't cover yet.
 
-
-def build_command(
-    *,
-    runner: str,
-    cli: str,
-    prompt: str,
-    model: Optional[str] = None,
-    context_file: Optional[Path] = None,
-    session_id: Optional[str] = None,
-    yolo: bool = False,
-    mcp_command: Optional[List[str]] = None,
-    extra_flags: Optional[List[str]] = None,
-    control_overrides: Optional[Dict[str, str]] = None,
-    restrict_spec_writes: bool = False,
-) -> List[str]:
-    """Build the full CLI invocation for one turn.
-
-    ``cli`` is the resolved binary name/path (see `launchability.RUNNER_CLI` /
-    `pty_runner.resolve_executable`) — this function only builds the argument list.
-    ``session_id`` set means resume; unset means a new session. Raises
-    ``UnsupportedRunnerError`` for any runner other than claude/claude_proxy/native/codex.
-
-    ``control_overrides`` (control id -> value, e.g. ``{"effort": "high"}``) must already be
-    validated against the model catalog by the caller (`model_catalog.validate_overrides`) —
-    this function only renders each control's declared `ApplySpec` into argv
-    (`model_catalog.render_control_args`); it does not itself reject an invalid value. Model
-    selection is not part of this dict — it stays the dedicated ``model`` parameter above,
-    which every runner already threads through its own command shape.
-
-    ``restrict_spec_writes`` set means this turn was triggered with a specification document open
-    (`openspec/changes/2026-08-17-authoring-rigor-and-scope` F4/design D6): the spawned run must
-    not be able to write or edit files, regardless of ``yolo`` — a role-boundary restriction, not a
-    permission posture, so it is applied unconditionally rather than folded into the yolo/no-yolo
-    branching each runner already does for its own, unrelated flags.
+    `build_command` itself moved to `hub.runner_adapters` (design D6, task 3.1) — this class
+    stays here (`hub.runner_adapters` imports it) since it is not a registry D5 names for deletion.
     """
-    provider = catalog_provider_for_runner(runner)
-    control_args = (
-        render_control_args(provider, control_overrides) if provider and control_overrides else []
-    )
-    if runner == "codex":
-        return _build_codex_command(
-            cli=cli,
-            prompt=prompt,
-            model=model,
-            context_file=context_file,
-            session_id=session_id,
-            yolo=yolo,
-            full_access=(control_overrides or {}).get(PERMISSION_MODE_CONTROL)
-            == FULL_ACCESS_PERMISSION_MODE,
-            mcp_command=mcp_command,
-            extra_flags=extra_flags,
-            control_args=control_args,
-            restrict_spec_writes=restrict_spec_writes,
-        )
-    if runner in CLAUDE_FAMILY_RUNNERS:
-        return _build_claude_command(
-            cli=cli,
-            prompt=prompt,
-            model=model,
-            context_file=context_file,
-            session_id=session_id,
-            yolo=yolo,
-            # Truthiness-derived, exactly as today (design D4/D6, review 8.1): a server is
-            # injected, and the approver axis follows, iff `mcp_command` is non-empty.
-            approvals="mcp_permission_tool" if mcp_command else "none",
-            mcp_command=mcp_command,
-            extra_flags=extra_flags,
-            control_args=control_args,
-            control_overrides=control_overrides,
-            restrict_spec_writes=restrict_spec_writes,
-        )
-    raise UnsupportedRunnerError(
-        f"runner {runner!r} is not yet supported for direct Hub spawn "
-        f"(supported: {', '.join(SUPPORTED_RUNNERS)})"
-    )
 
 
 def _claude_mcp_args(mcp_command: Optional[List[str]], *, yolo: bool) -> List[str]:

@@ -5,7 +5,7 @@ declares, and a resumed Codex invocation keeps its flags before `resume` — the
 `--sandbox` already required.
 """
 
-from hub.runner_commands import build_command
+from hub.runner_adapters import build_command
 
 
 def test_claude_effort_renders_as_a_flag_before_the_prompt():
@@ -46,18 +46,6 @@ def test_codex_control_args_precede_resume_subcommand():
         if item == "-c" and command[i + 1] == "model_reasoning_effort=high"
     )
     assert effort_pair_index < resume_index
-
-
-def test_claude_proxy_and_native_render_claude_controls():
-    for runner in ("claude_proxy", "native"):
-        command = build_command(
-            runner=runner,
-            cli="claude",
-            prompt="hello",
-            control_overrides={"effort": "max"},
-        )
-        assert "--effort" in command
-        assert command[command.index("--effort") + 1] == "max"
 
 
 def test_no_overrides_renders_no_extra_argv():

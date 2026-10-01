@@ -9,14 +9,9 @@ from hub.model_catalog import (
     render_control_config,
     validate_overrides,
 )
-from hub.runner_commands import SUPPORTED_RUNNERS
 
 
 class TestCatalogCoverage:
-    def test_every_declared_provider_is_spawnable(self):
-        for provider in CATALOG:
-            assert provider in SUPPORTED_RUNNERS
-
     def test_every_declared_provider_matches_a_runner_cli(self):
         # The catalog's keys are exactly RUNNER_CLIS — a provider the Hub cannot bind a
         # Runner to must not appear in the catalog, and vice versa.

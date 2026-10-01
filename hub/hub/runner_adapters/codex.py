@@ -31,6 +31,7 @@ from ..model_catalog import (
     FULL_ACCESS_PERMISSION_MODE,
     PERMISSION_MODE_CONTROL,
     WORKSPACE_PERMISSION_MODE,
+    render_control_args,
 )
 from ..runner_parsing import (
     AccountingSample,
@@ -115,9 +116,7 @@ class CodexExecTransport(StreamTransport):
 
     def build_launch(self, req: LaunchRequest) -> List[str]:
         control_args = (
-            runner_commands.render_control_args("codex", req.control_overrides)
-            if req.control_overrides
-            else []
+            render_control_args("codex", req.control_overrides) if req.control_overrides else []
         )
         full_access = (req.control_overrides or {}).get(
             PERMISSION_MODE_CONTROL
