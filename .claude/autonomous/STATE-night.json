@@ -8,20 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F479-fix",
-    "next_action": "OPERATOR REDIRECT: the queue was rewritten from spec-queue/APPROVALS.md ## 2026-10-01 (operator redirect, written in session before 23:00, committed e566446 after compose ran). Read that section first. Then F479-fix. The a-dialog-takes-the-keyboard items resume after F478-rev; their prior next_action said: Continue openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md group 1/2. Tasks 1.1/2.1/2.2 are done (commit 68f11b4): D1's focus move, tabIndex=-1 on all 8 panelRef elements (grep found an 8th, StartFlowDialog, not in design's 7 -- noted in design.md's round log, fold into task 2.9's re-grep). Next: task 1.2 (mark on the second button -> focus lands there) and 1.3 (no mark -> first focusable) in useDialogFocus.test.tsx's new 'initial focus on open (D1)' describe block -- both should already be GREEN since D1's implementation is generic (marked ?? first ?? panel); write them, confirm green, tick. Then task 1.4 (every control disabled -> focus the panel) as its own slice, since it needs its own harness variant. Run hub/ui vitest for useDialogFocus.test.tsx after each.",
+    "current": "F478-r1",
+    "next_action": "F478 R1: explore the PowerShell args-file write in a-run-reaches-the-hub-without-mcp's task 9.10 (the judge reads \"path\":\"spec/...\" inside the args-file JSON as a URL outside the workspace) and write a proposal under openspec/changes/ for the URL reader (this is the same code family as the archived a-url-is-not-a-path). Before writing, check whether the-shell-judge-reads-a-word-whole (queued later tonight, not yet proposed) already owns this exact code path, and say explicitly in the proposal how the two order (does one supersede the other, or are they independent). This unblocks slice 3's task 9.10. R2/R3 (iterations after this one) each independently re-derive the proposal against the code -- fresh comparisons, not re-reads. -rev is the adversarial Opus review; no -impl tonight, the operator approves first (leave an OPEN DECISIONS.md row).",
     "queue": [
         {
             "id": "F479-fix",
-            "status": "open",
+            "status": "done",
             "title": "F479: drop str_replace from slice 2's Copilot spec-turn --excluded-tools, with a test",
-            "model": "sonnet",
-            "effort": "high",
-            "detail": "First item per spec-queue/APPROVALS.md ## 2026-10-01 (operator redirect, written in session before 23:00, committed e566446 after compose ran). One-line fix + test; foot F479 in scripts/drive/FINDINGS.md as fixed <sha>."
+            "detail": "Done iter 3, commit f2f3bd9. Dropped from SPEC_TURN_EXCLUDED_TOOLS (hub/hub/copilot_acp.py:126); updated both assertions in test_copilot_acp_run_turn.py; 49/49 in that file; ruff/black clean. FINDINGS.md F479 footed fixed f2f3bd9. Full hub/tests/ suite backgrounded, not blocked on (see iter 3 log); next firing checks its tail before touching Python."
         },
         {
             "id": "F478-r1",

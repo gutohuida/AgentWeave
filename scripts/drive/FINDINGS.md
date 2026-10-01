@@ -33739,7 +33739,7 @@ scheme only when followed by `//`. Either is a judge change with its own round.
 
 ## F479 (D) — slice 2's spec-turn exclusion list names a tool Copilot 1.0.88 does not have
 
-**Status:** open, observed 2026-10-01 in drive 9.10 (`run-b30d4295abaf`). **Ready:** ready (one-line fix + test).
+**Status:** fixed f2f3bd9. Was: open, observed 2026-10-01 in drive 9.10 (`run-b30d4295abaf`).
 
 Every Copilot specification turn now stores the diagnostic `copilot.configuration` *"Unknown tool name in the tool
 excludedlist: \"str_replace\""*: `--excluded-tools=apply_patch,edit,str_replace,str_replace_editor` names
