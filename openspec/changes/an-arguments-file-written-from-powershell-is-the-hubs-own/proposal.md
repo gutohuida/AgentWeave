@@ -2,8 +2,9 @@
 
 **Round 1, 2026-10-02** (night window; the operator's explicit exception in `spec-queue/APPROVALS.md`
 `## 2026-10-01`). Finding: **F478 (B)**. **Nothing here is implemented.** R2 and R3 (2026-10-02, night
-iterations 5 and 6) each re-derived it against the code and against real PowerShell 5.1. An adversarial review
-follows, then the operator approves it.
+iterations 5 and 6) each re-derived it against the code and against real PowerShell 5.1. The adversarial review
+(iteration 7, `spec-queue/tracks/reviews/F478-2026-10-02.md`) approved it with fixes, and those fixes are applied
+here. The operator's approval is owed.
 
 ## Why
 
@@ -43,7 +44,7 @@ The finding calls the culprit the *URL reader* and suggests treating a scheme on
 backstop** (`:1359-1364`), which the archived `a-url-is-not-a-path` also built:
 
 - After `_words` trims the edges, the word is `path":"spec/x.html`.
-- It holds a separator. It is not plain, because `_PLAIN_RELATIVE_RE` (`:1109-1122`) refuses a colon in the
+- It holds a separator. It is not plain, because `_PLAIN_RELATIVE_RE` (`:1118-1122`, its comment above) refuses a colon in the
   first segment, by design: *"a colon in the first segment is where a host or a revision goes, and those are
   left to the backstop"*. **(R2)** It also refuses the `"` left inside the word, which
   `_PLAIN_RELATIVE_EVERYWHERE` excludes at every position. So the JSON word reaches rule 6 even without its
@@ -87,14 +88,19 @@ is fourth from last in tonight's ORDER, and with its sibling it is about 72 task
    - The command name is `Set-Content` (any case). It is followed by exactly the three parameters `-Path` (or
      `-LiteralPath`), `-Value` and `-Encoding`, each once and by its full name (any case), in any order. ASCII
      spaces separate them, and nothing but ASCII spaces comes before or after.
+   - **(Review)** Nothing is joined to any part. The name, each parameter name, the path, the literal and the
+     encoding are each followed by one or more ASCII spaces or by the end, and each value begins after a space.
+     On 5.1 a joined `New-Item` ran after the path, after the encoding, inside a bare path, after a parameter
+     name and after the command name (measured, design D2).
    - `-Path`'s value, bare or in single quotes, passes the existing `_plain_calls_path`: a plain relative `.json`
      path inside the calls root, by the calls-root rule. It holds only `_PLAIN_COMMAND_CHARS_POWERSHELL`
-     characters, less the space.
+     characters, less the space. **(Review)** That character allow-list is a safety rule: `_plain_calls_path` by
+     itself accepts `.agentweave/calls/$(New-Item x).json` (measured).
    - `-Encoding`'s value is `utf8` (any case), bare or in single quotes.
    - `-Value`'s value is **one** single-quoted PowerShell literal. An ASCII `'` opens and closes it, and `''`
      inside is an escaped quote. It contains none of U+2018, U+2019, U+201A and U+201B, because PowerShell
      reads each of them as a single quote (measured: design D2; R3 swept the whole BMP and found no others). It
-     contains no NUL either. **(R3)** The closing quote is followed by a space or the end of the command. Text
+     contains no NUL, no other control character but TAB, LF and CR, and no DEL either (review). **(R3)** The closing quote is followed by a space or the end of the command. Text
      joined to it is a second argument that PowerShell evaluates: `-Value 'a'(Write-Output INJECTED)` ran the
      subexpression before the binding failed.
 
@@ -104,7 +110,11 @@ is fourth from last in tonight's ORDER, and with its sibling it is about 72 task
    $(Write-Output NO)`, with a UTF-8 BOM, which the shim decodes (slice 3 D3).
 2. **Anything that is not exactly that falls through**, as every near miss does today. The workspace judge or the
    operator's card decides it, unchanged.
-3. **The notice text is unchanged.** It already names this form. Only the Hub's decision about it changes.
+3. **The notice spells the form out (review; design D5).** Today it names only `Set-Content -Encoding utf8`, with
+   no `-Path` or `-Value`, and Copilot has been seen writing `Set-Content` positionally. The three sites
+   (`agents.py:1628-1632`, `launchability.py:445-449`, `mcp_server.py:2452-2455`) say
+   `Set-Content -Path '.agentweave/calls/<file>.json' -Value '<json>' -Encoding utf8`, so the instructed form is
+   the one the grammar accepts. The file tool stays the preferred route.
 
 ## What does not change
 
@@ -129,7 +139,10 @@ is fourth from last in tonight's ORDER, and with its sibling it is about 72 task
   request. Any other name (`write_powershell`), or none, is the key `Shell`, which never earns standing, as for
   case 2. That holds in production: the captured fixture (`turn_write_shell_mcp.jsonl`) orders the start event
   first, and slice 3's 9.4 (`run-000e23023de9`, "Ask me") got case 2's standing on Copilot with no card.
-- **Tests:** `hub/tests/test_hub_own_call.py`.
+- **Tests:** `hub/tests/test_hub_own_call.py`, `hub/tests/test_copilot_acp_decide.py`, and the notice-text tests
+  of the three sites (D5).
+- **Findings filed:** F480, against slice 3's calls-root rule: a hard-linked calls file passes it (review,
+  measured). This change does not fix it.
 - **Spec:** `agent-run-sandboxing`, **MODIFIED** "The Hub's own call command is decided like the Hub's own
   tools". That requirement is slice 3's ADDED one and is not yet synced. **This change archives only after slice
   3 has archived.** Its code may land earlier, so that 9.10 can be re-driven first (design, Order).

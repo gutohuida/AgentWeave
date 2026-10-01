@@ -22,18 +22,22 @@ requirement was reviewed: a parenthesised path, which PowerShell runs as a comma
 directory is the Hub's own, and the repository ignores it.
 
 The Hub tells a run it may write the arguments file from PowerShell, as a command of its own, with
-`Set-Content` and the UTF-8 encoding. That write is the same operation as the file write above by
+`Set-Content` naming its path, value and encoding parameters and the UTF-8 encoding, and it spells that
+form out. That write is the same operation as the file write above by
 another route, and it has the same standing. "Exactly one write" is read from the command's text: the
 command name `Set-Content`, then exactly the path, value and encoding parameters, each once and by its
-full name, in any order, separated by spaces, and nothing else. Nothing is joined to the value literal: text
-written directly after its closing quote is another argument, which PowerShell evaluates, so it would run before
-the write could fail. The path, bare or in single quotes, is
+full name, in any order, separated by spaces, and nothing else. Nothing is joined to any part of the
+command: text written directly before or after the name, a parameter, the path, the value or the
+encoding is another argument, which PowerShell evaluates, so it would run before the write could fail.
+The path, bare or in single quotes, is
 a plain relative path to a `.json` file inside the run's calls directory, held to the same characters
-as a call's arguments file. The encoding is UTF-8. The value is one single-quoted literal, which
+as a call's arguments file. Those characters are a list of what is allowed, not of what is refused,
+because a path that merely resolves inside the calls directory can still hold a subexpression that
+PowerShell runs. The encoding is UTF-8. The value is one single-quoted literal, which
 PowerShell writes verbatim, without expanding anything in it, so what it holds is data and is not read
 as paths, addresses or commands: the arguments are judged by the tool they are handed to. PowerShell
 also closes a single-quoted literal at a typographic single quote, so a value holding one is not one
-literal, and neither is a value holding a NUL character. The shell resolves the path from its current
+literal, and neither is a value holding a control character other than a tab or a line break. The shell resolves the path from its current
 location, not from the workspace. A command that moved that location was itself decided under the
 run's posture, and is part of the persistent-session residual stated below.
 
@@ -57,9 +61,10 @@ The call command runs its interpreter ignoring the interpreter's own environment
 site and site customisation, so that an interpreter setting made earlier in the same shell cannot
 change what the allowed invocation runs. That is all it isolates. The shell that resolves the
 command's name is not isolated: in a shell session that persists between a run's commands, an earlier
-command can define a function or alias of the same name, import a module that does, put another
+command can define a function or alias named `aw-tool` or `Set-Content`, import a module that does, put another
 directory ahead on the search path (as activating a virtual environment does), or change the program
-Windows uses to run command scripts, and the same text then runs something else. A machine's
+Windows uses to run command scripts, and the same text then runs something else. For the arguments-file
+write, the value literal this rule never reads is then handed to whatever that name now runs. A machine's
 command-processor start-up setting also runs before every call. This rule cannot see that, and it
 does not claim to; the earlier command was itself decided under the run's posture. Under the posture
 that asks the operator, this means the operator's approval of one such earlier command also decides
@@ -169,10 +174,24 @@ inside the calls directory, which is narrower than the workspace.
 #### Scenario: A near miss of the write is decided as before
 
 - **WHEN** the write abbreviates a parameter name, adds any other parameter, gives the value in double quotes or
-  as more than one literal, joins any text to the value literal without a space, writes a parameter's dash as
-  anything but the ASCII hyphen or separates the parts with anything but ASCII spaces, names an encoding other
-  than UTF-8, chains another command, or names a path outside the calls directory
+  as more than one literal, joins any text to any part of the command without a space, writes a parameter's dash
+  as anything but the ASCII hyphen or separates the parts with anything but ASCII spaces, names an encoding other
+  than UTF-8, chains another command, names a path outside the calls directory, or gives a path holding any
+  character outside the call command's set
 - **THEN** the request is decided as it would be without this rule
+
+#### Scenario: Text joined to the path or the encoding is not the write
+
+- **WHEN** a run's PowerShell write of an arguments file has text joined to its path or its encoding, such as
+  `-Path '.agentweave/calls/1.json'(Write-Output x)`, `-Path .agentweave/calls/$(Write-Output x).json` or
+  `-Encoding utf8(Write-Output x)`
+- **THEN** the request is decided as it would be without this rule
+
+#### Scenario: The Hub's notice spells the write out
+
+- **WHEN** the Hub tells a run how to write an arguments file from PowerShell
+- **THEN** the form it gives names the path, value and encoding parameters, as
+  `Set-Content -Path '.agentweave/calls/<file>.json' -Value '<json>' -Encoding utf8`
 
 #### Scenario: The write has standing only in PowerShell
 

@@ -33,6 +33,31 @@ DECIDED. Absence is not consent.
   machine. Waive it, or do it and record the answer in the Round log, and 10.2 (strict validate,
   then archive) can run.
 
+### `an-arguments-file-written-from-powershell-is-the-hubs-own` (F478) is ready for approval -- 2026-10-02 night, OPEN
+
+R1, R2 and R3 are done. The adversarial Opus review (`spec-queue/tracks/reviews/F478-2026-10-02.md`) approved it with
+fixes, and all nine fixes are applied (the change's design.md round log lists them). No code is written. The change
+gives one exact PowerShell `Set-Content -Path '<calls file>' -Value '<json>' -Encoding utf8` command the same
+standing as a file-tool write of the arguments file. That unblocks slice 3's task 9.10, and it also makes the notice
+spell that form out.
+
+- OPEN      F478-approve  **Approve the change for implementation, or send it back.** The one security-relevant
+  grant is in design D2. Read its "Nothing joined to any part" and "The path's character set is a safety rule"
+  bullets: the review measured that text joined to any part of the command runs code on PowerShell 5.1, and the
+  grammar now refuses every such form. Its code (`mcp_server.py`) reaches `:8000`'s agents on their next run.
+- OPEN      F478-oq1-bash  **Leave out a bash form of the write (design Open question 1)?** R1, R2, R3 and the
+  reviewer all recommend leaving it out. No drive has ever produced a bash arguments-file write (R2 swept nine
+  profiles), and a bash grammar brings its own trap classes (`$'…'`, redirection forms, `echo`/`printf`
+  interpretation). After `the-shell-judge-reads-a-word-whole` ships, such a write is carded under "Ask me", not
+  refused.
+- OPEN      F478-oq2-location  **Accept the location residual (design Open question 2)?** After an earlier allowed
+  location change, a relative `-Path` can land in another workspace's existing calls directory. The likeliest case
+  is a sibling agent's worktree in the same project, two `Split-Path` steps away. That allows a timed overwrite of
+  that agent's arguments file, under "Ask me", after you approved the location change. Under "Workspace only" it
+  adds nothing, because the judge already allows any relative write after a run-time `cd`. The recommendation is
+  to accept it. Closing it by requiring an absolute path would stop the fix firing for the relative form 9.10
+  actually wrote. If you want it closed later, per-run arguments-file names in slice 3 would remove the collision.
+
 ### The MISREPORT ratchet measures a decayed table -- 2026-09-21 night, OPEN
 
 - OPEN      F396-rekey  **How should `RENDERS` be re-anchored, and who triages the 18 sites that

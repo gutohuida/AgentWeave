@@ -55,7 +55,8 @@ does allow a request that the workspace decision refuses. That is deliberate, an
 say so. The refusal it overrides is always a reading of the `-Value` literal. The `-Path` must pass the
 calls-root rule, which is stricter than the workspace decision's reading of it, and every other character of the
 command is fixed by the grammar. So no refusal of anything *the command does* is overridden: it writes one file,
-inside the calls root. The invariant still holds for cases 2 and 3, and for every near miss of case 4.
+inside the calls root, short of the persistent-state residuals that case 3 shares (a hard link, a shadowed
+`Set-Content`, a moved location; Risks). The invariant still holds for cases 2 and 3, and for every near miss of case 4.
 
 ### D2 — The grammar, and the traps it closes
 
@@ -65,14 +66,18 @@ quoting removed, and case 4 depends on *where* the literal was. Its shape:
 ```
 Set-Content <p1> <p2> <p3>      each <p> one of:
   -Path <path> | -LiteralPath <path>       <path>  = bare or '…', _PLAIN_COMMAND_CHARS_POWERSHELL less space
-  -Value '<literal>'                       <literal> = ( [^'‘-‛\x00] | '' )*, its closing ' then a space or the end
+  -Value '<literal>'                       <literal> = ( [^'‘-‛\x00-\x08\x0b\x0c\x0e-\x1f\x7f] | '' )*
   -Encoding <utf8>                         <utf8> = utf8 or 'utf8', any case
+every part followed by one or more ASCII spaces or by the end of the text
 ```
 
 The command name and the parameter names may be in any case, because PowerShell compares them case-insensitively.
 Each parameter appears exactly once, in any order, separated by one or more ASCII spaces, with only ASCII spaces
-before and after the whole command. **(R3)** In particular, the literal's closing `'` is followed by an ASCII space
-or by the end of the text, and nothing else (see "Nothing joined to the literal" below).
+before and after the whole command. **(Review, replacing R3's literal-only sentence.)** Every part (the command
+name, each parameter name, the path bare or quoted, the value literal, and the encoding bare or quoted) is followed
+by one or more ASCII spaces or by the end of the text, and each parameter's value begins after one or more ASCII
+spaces. Measured on 5.1: text joined to any part, before or after it, is a further argument that PowerShell
+evaluates (see "Nothing joined to any part" below).
 
 Each rule, and what it closes:
 
@@ -87,15 +92,34 @@ Each rule, and what it closes:
   they are content (measured: written verbatim), so the grammar allows them. R3 also ran the hazard in the
   grammar's own shape, `Set-Content -Path '.agentweave/calls/q.json' -Value 'a<q>; Set-Content pwned.txt x;
   Write-Output <q>' -Encoding utf8`. For each of the four quotes, `pwned.txt` was created.
-- **Nothing joined to the literal. (R3, measured.)** In argument mode, text joined to a closing `'` with no space
-  is a second argument, and it is evaluated before the binding fails. `-Value 'a'(Write-Output INJECTED)` ran the
+- **Nothing joined to any part. (R3 for the literal, the review for every other part; measured.)** In argument
+  mode, text joined to a closing `'` with no space is a second argument, and it is evaluated before the binding
+  fails. `-Value 'a'(Write-Output INJECTED)` ran the
   subexpression (the error names its output, `INJECTED`), `-Value 'a'$env:USERNAME` expanded the variable, and
   `-Value 'a'b` passed `b`. Each failed only at parameter binding, so no file was written, but the subexpression
   had already run. So an implementation that matched `-Value '…'` without requiring a space or the end after the
   closing quote would give standing to a command that runs code. `'a''b'` is the one exception, because `''` is
   the escaped quote: it wrote `a'b`. Because no single `'` is content, the literal's extent is unambiguous.
-- **A NUL** falls through: the text a harness hands to the shell may be cut at a NUL, so the predicate would be
-  judging something other than what runs. **(R3)** That cut is not measured. PowerShell itself kept the NUL,
+  **(Review, measured on 5.1.26100, `.claude/autonomous/tmp/f478_review/ps_probe.py`.)** The literal is not
+  special: a joined `New-Item` ran in every other position too. It ran after the path's closing quote
+  (`'<p>'(…)`, `'<p>'$(…)`), after the encoding quoted or bare (`'utf8'(…)`, `utf8(…)`, `utf8$(…)`), inside a
+  bare path (`.agentweave/calls/$(…).json`, `…/a(…).json`), straight after a parameter name (`-Path(…)`,
+  `-Value$(…)`), and straight after the command name (`Set-Content(…)`). Only `-Value'x'` (no space, no
+  subexpression) ran nothing. Today's `_decide` allows the joined-path and joined-encoding forms under
+  "Workspace only", so the workspace judge is no backstop for them.
+- **The path's character set is a safety rule, not exactness. (Review, measured.)**
+  `_plain_calls_path(".agentweave/calls/$(New-Item -ItemType File inj.txt).json", ws)` returns True, because
+  `_inside_hub_calls_root` only resolves a name. Only the `_PLAIN_COMMAND_CHARS_POWERSHELL` check keeps a
+  subexpression out of a bare path. So it must be an allow-list of characters, never a list of refused ones: a
+  blacklist of `*?[]` would admit `$(…)`.
+- **A NUL, any other C0 control except TAB, LF and CR, or DEL** falls through. **(Review)** The NUL rule's
+  reasoning covers every control character a transport might interpret, such as a line editor (PSReadLine reads
+  Escape as RevertLine in Windows mode, and DEL as a backspace). Through `-EncodedCommand`, 5.1 writes ESC
+  verbatim (measured), so any hazard is in the transport. For Copilot that transport is unknown: its `rawInput`
+  carries `initial_wait`, which suggests a session-based tool (inferred). RFC 8259 allows no raw C0 character
+  other than TAB, LF and CR in a JSON text, so excluding them costs nothing. For a NUL in particular, the text a
+  harness hands to the shell may be cut at a NUL, so the predicate would be judging something other than what
+  runs. **(R3)** That cut is not measured. PowerShell itself kept the NUL,
   given the text through `-EncodedCommand`: it wrote `a\x00b`. The rule stays anyway, because it costs nothing:
   a raw NUL is not valid inside a JSON string, so no arguments file the shim can read holds one.
 - **Only full parameter names.** `-Val`, `-Enc`, `-Pa` and positional values fall through. PowerShell's
@@ -129,7 +153,10 @@ Each rule, and what it closes:
   **(R2)** `Unicode` is a 5.1 name, not a 7 one. It writes UTF-16LE with a BOM (`FF FE`, measured), which
   `_decode_args_file` (`mcp_server.py:2438-2456`) decodes. So it falls through for exactness, not because the
   shim cannot read it. An encoding the shim cannot decode would only produce a usage error, but the notice names
-  `utf8`, and exactness costs nothing.
+  `utf8`, and exactness costs nothing. **(Review, measured.)** `-Encoding` is also what makes the write fail at
+  parameter binding under a non-FileSystem location. After `Set-Location Function:`, `Variable:` or `Env:`, each
+  allowed by `_decide`, the write fails with *"A parameter cannot be found that matches parameter name
+  'Encoding'"*, and nothing is written. So it stays required.
 
 ### D3 — Where the write lands
 
@@ -147,7 +174,11 @@ location change lands only where a `.agentweave/calls/` already exists, which is
 - **Slice 3** (`a-run-reaches-the-hub-without-mcp`): this change's delta MODIFIES slice 3's ADDED requirement. The
   code may land while slice 3 is unarchived, after which 9.10 is re-driven. Slice 3's 10.2 then archives and syncs
   its requirement, and only then does this change archive. If this change reached archive first, its MODIFIED would
-  name a requirement that `openspec/specs/` does not yet hold. Task 4.1 gates on that.
+  name a requirement that `openspec/specs/` does not yet hold. Task 4.1 gates on that. **(Review)** Existence is
+  not enough. A MODIFIED replaces the whole text, and this delta's base is slice 3's unarchived ADDED text (an
+  exact copy plus the case-4 additions, measured by diff). If slice 3, or a follow-up its 10.1 raises, alters the
+  requirement before this change archives, archiving this one would silently revert that edit. So 4.1 also checks
+  that the synced text equals this delta's text with its additions removed, and re-bases the delta if not.
 - **`the-shell-judge-reads-a-word-whole`**: independent (proposal). Disjoint functions. That change rewrites
   rule 6 *after* `_hub_own_call` has run, so a case-4 command never reaches it. After both are built, a near miss
   of case 4 (`-Value "…"`, say) is judged by the new rule 6 like any command.
@@ -161,17 +192,50 @@ location change lands only where a `.agentweave/calls/` already exists, which is
   reading, as too many brace alternatives. Case 4 runs before the judge, so a PowerShell write of such a
   payload keeps its standing after that change ships. A near miss does not.
 
+### D5 — The notice spells the form out (review)
+
+The notice names only `Set-Content -Encoding utf8`, with no `-Path` or `-Value`, at all three sites
+(`agents.py:1628-1632`, `launchability.py:445-449`, `mcp_server.py:2452-2455`). 9.10's model happened to name its
+parameters, but Copilot has also been seen writing `Set-Content` positionally (Risks). If the notice is left as it
+is, the fix depends on the model's habit. So the three sites spell out the exact form the grammar accepts:
+`Set-Content -Path '.agentweave/calls/<file>.json' -Value '<json>' -Encoding utf8`. Then "the form the notice
+instructs" (Goals) is literally true. The alternative was to narrow the goal to "the named-parameter form 9.10
+used" and accept positional writes as carded. That was rejected because it leaves the notice and the grammar
+disagreeing, and the notice change is three strings. The notice still prefers the file tool, and the PowerShell
+route stays the fallback.
+
 ## Risks
 
 - **A write into another workspace's calls directory**, after a location change that an earlier decision allowed.
   The file is inert data. It is read only when that other run names it in its own `aw-tool` call, and then under
   that run's credential. A run that wins the race between another run's write and call could substitute that
   run's arguments. That needs (1) an earlier allowed location change into another workspace and (2) a
-  file-name collision at the right moment. Under "Workspace only", (1) is refused today: `cd ../..` is a word
-  outside. Under "Ask me", (1) was a card the operator approved. Accepted as part of the persistent-session
-  residual. Open question 2 asks whether it is.
-- **A function or alias named `Set-Content`** defined earlier in a persistent session: the same residual, already
-  stated in slice 3's requirement for `aw-tool`.
+  file-name collision at the right moment. **(Review, corrected; measured.)** Under "Workspace only", (1) needs no
+  card. A literal `cd ../..` is refused, but a location built at run time, such as `cd (Split-Path
+  (Get-Location))` or `Set-Location (Join-Path (Split-Path (Get-Location)) 'other')`, is allowed. There, though,
+  the judge already allows any plain relative write after the move (`Set-Content -Path x.txt -Value 'hello'
+  -Encoding utf8`), so case 4 adds nothing. Under "Ask me", (1) is a card. The nearest other calls directories
+  are sibling agents' worktrees, `<project>/.agentweave/worktrees/<agent>/.agentweave/calls/` (9.4's `edit`
+  result), two `Split-Path` steps away. So the race on another run's arguments is realistic between the agents
+  of one project, after an approved location change. Accepted as part of the persistent-session residual. Open
+  question 2 asks whether it is.
+- **A function or alias named `Set-Content`** defined earlier in a persistent session: the same residual class as
+  `aw-tool` in slice 3's requirement, and the MODIFIED requirement now names `Set-Content` too (the review found it
+  did not). **Its consequence is code (review, measured):** `function Set-Content { param($Path,$Value,$Encoding)
+  Invoke-Expression $Value }` is allowed by `_decide` under "Workspace only", and the case-4 write after it ran its
+  literal, `New-Item -ItemType File inj.txt`. That is not a new capability under "Workspace only", because
+  `iex (Get-Content .agentweave/calls/x.json -Raw)` is allowed today after a case-3 write. Under "Ask me", the
+  function definition is a card.
+- **A hard link breaks "it writes one file, inside the calls root" (review, measured; shared with case 3).**
+  `_inside_hub_calls_root` returns True for `.agentweave/calls/hl.json` when it is hard-linked to a file outside
+  the workspace, and `New-Item -ItemType HardLink -Path .agentweave/calls/r.json -Target (Join-Path $HOME x.txt)`
+  is allowed under "Workspace only". There a plain relative write is already allowed, so nothing is added. Under
+  "Ask me", the link is a card. It is part of the persistent-state residual, and is filed against slice 3's
+  calls-root rule as F480 (the cheap close: an existing target with `st_nlink > 1` is not inside).
+- **A positional write is not the form.** Copilot has been seen to write `Set-Content probe2.txt hi` with no
+  parameter names (`turn_write_shell_mcp.jsonl` line 73). A positional arguments-file write falls through, and is
+  carded under "Ask me". D5 makes the notice name the parameters, so that the instructed form is the one the
+  grammar accepts.
 - **Copilot's own measured forms might not match the grammar** (for example with `-Force`, or a double-quoted
   value). Then the write falls through exactly as today: no regression, and no fix for that form. Task 3.2's drive
   records the form Copilot actually sends.
@@ -180,7 +244,8 @@ location change lands only where a `.agentweave/calls/` already exists, which is
 
 `_hub_own_powershell_write` is called inside `_hub_own_call`'s `try`, so any raise there is `None` and the
 request falls through. Callers: `_decide` (the workspace judge then decides), `approve_tool_call` under the
-operator posture (a card), and Copilot's `_hub_own` (`copilot_acp.py:533-539`; its own `try`, then the judge). No
+operator posture (a card), and Copilot's `_standing_rules` (`copilot_acp.py:509-539`, the call at `:535`; its own
+`try`, then the judge). No
 route changes its return shape.
 
 ## Open questions
@@ -190,11 +255,21 @@ route changes its return shape.
    drive shows a bash write of an arguments file being refused. **R2 checked**: across the `agent_outputs` of every drive
    profile on this machine (nine, read `mode=ro`), exactly three tool calls wrote an arguments file: Copilot's
    `apply_patch` (`run-000e23023de9`), Claude's `Write` (`run-5ffb0bac65e3`), and 9.10's PowerShell
-   `Set-Content`. None was bash. R2 agrees with leaving it out.
+   `Set-Content`. None was bash. R2 agrees with leaving it out. **The review agrees too**, and adds that a bash
+   grammar is not a translation of this one. `$'…'` decodes escapes. The target is a redirection, so `>`, `>>`,
+   `>|`, `&>` and noclobber come into it. And `echo`/`printf` interpret their arguments. Each is a trap class
+   needing its own R3-style sweep. After the shell judge ships, such a write is carded under "Ask me", not refused.
 2. **The location residual** (Risks, first bullet). Accept it as part of the persistent-session class (R1's
    recommendation), or ask the operator. An alternative that closes it: accept only an **absolute** `-Path`
    equal to a file in the calls root, and change the notice to print that absolute path. That costs a notice
    change in two places and diverges from case 2's relative form. Operator's call; R1 recommends accepting it.
+   **The review agrees, with Risks' corrected text.** The absolute-only alternative would stop the fix firing for
+   the relative form 9.10 actually wrote, and accepting both forms keeps the hole. The exposure is bounded. The
+   write lands only in an existing calls directory. It fails at binding under a non-FileSystem location. The file
+   is inert JSON. Under "Workspace only", case 4 adds nothing after a run-time `cd`. What remains is a timed
+   overwrite of a sibling agent's arguments file, under "Ask me", after the operator approved a location change.
+   If the operator wants it closed later, that is a slice-3 follow-up on how runs name their arguments files
+   (per-run names remove the collision), not a change to this predicate.
 
 ## Round log
 
@@ -245,3 +320,16 @@ route changes its return shape.
   (`pwsh` is not installed on this host). Its tokenizer is believed to share the same quote and dash sets, and
   its `-Encoding utf8` is believed to write no BOM, which the shim's strict UTF-8 step would read. Both are
   unverified.
+- **Adversarial review (task 0.3), 2026-10-02** (night iteration 7, Opus, at `88b56e9`;
+  `spec-queue/tracks/reviews/F478-2026-10-02.md`). **Verdict: APPROVE WITH FIXES.** All nine findings accepted
+  and applied in this firing. (1, BLOCKING) "Nothing joined" generalised from the literal to every part, and the
+  path's character set labelled a safety rule (D2). The night window re-measured the path half itself:
+  `_plain_calls_path(".agentweave/calls/$(New-Item x).json", ws)` is True. (2) The Risks text on location changes
+  was corrected, and `-Encoding` is recorded as load-bearing under a non-FileSystem location (D2). (3) The shadowed
+  `Set-Content` residual is now named in the requirement, with its code consequence. (4) C0 controls and DEL are
+  excluded from the literal. (5) Gate 4.1 checks the synced text, not only existence (D4). (6) New D5: the notice
+  spells the form out (the preferred fix). (7) The hard-link residual is added to Risks and filed as F480 against
+  slice 3. (8) Test rows were added to 1.2, 1.3, 1.4 and the totality test. (9) References fixed: Copilot's
+  function is `_standing_rules`, task 1.8's `:1201` is now `:1193`, and `_PLAIN_RELATIVE_RE` is at `:1118-1122`.
+  The reviewer and the night window both recommend accepting Open questions 1 and 2 as R1 proposed. Both are left
+  to the operator (`spec-queue/DECISIONS.md`).

@@ -12,6 +12,13 @@
 4. **Near misses are unchanged.** Task 1.4 passes. Each row's `_decide` answer equals the answer with the new
    predicate patched off. (R3) As a mutation, drop the "space or end after the closing quote" requirement and
    confirm that 1.4's `-Value 'a'(Write-Output x)` row fails. On 5.1 that form runs its subexpression.
+   (Review) Repeat the mutation for the path's boundary and then the encoding's, and confirm that a 1.4 row fails
+   each time (`-Path '<p>'(Write-Output x)`, then `-Encoding utf8(Write-Output x)`). Then replace the path's
+   character allow-list with a `*?[]` blacklist, and confirm that the `-Path .agentweave/calls/$(Write-Output x).json`
+   row fails. Restore each one.
+7. **The notice names the form.** Task 1.10 passes: each of the three sites spells out
+   `Set-Content -Path '.agentweave/calls/<file>.json' -Value '<json>' -Encoding utf8`, and that text, once filled
+   in, has standing.
 5. **Only PowerShell.** Task 1.5 passes.
 6. **9.10 is met.** Task 3.2: a Copilot spec turn told `shim` writes its arguments file from PowerShell or with
    `create`, runs `aw-tool`, and the submission is recorded. If Copilot's form misses the grammar, that is

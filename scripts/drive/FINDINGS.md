@@ -33725,7 +33725,7 @@ call; no card, task created by the run (`run-000e23023de9`). The approver was no
 
 **Status:** open, found 2026-10-01 by drive 9.10 of `a-run-reaches-the-hub-without-mcp`. **Ready:** R1 proposed
 2026-10-02 as `an-arguments-file-written-from-powershell-is-the-hubs-own` (the arguments-file half; R2 done
-2026-10-02 -- 9.10's exact command fits its grammar; R3 done 2026-10-02 -- BMP-wide tokenizer sweep, every grammar trap run on 5.1, one safety rule made explicit; review and approval owed). R1 measured that the refusal is rule 6's backstop, not the URL rule (rule 1 already needs `://`), so
+2026-10-02 -- 9.10's exact command fits its grammar; R3 done 2026-10-02 -- BMP-wide tokenizer sweep, every grammar trap run on 5.1, one safety rule made explicit; adversarial review done 2026-10-02 -- APPROVE WITH FIXES, all nine applied, "nothing joined" generalised to every part, notice now spells the form out; operator approval owed, DECISIONS.md `F478-approve`). R1 measured that the refusal is rule 6's backstop, not the URL rule (rule 1 already needs `://`), so
 the general half (`echo 'a:b/c'`) is F362's mechanism, owned by `the-shell-judge-reads-a-word-whole` D2.
 
 `_decide("PowerShell", {"command": "echo 'a:b/c'"}, workspace=W)` refuses *"'/c' is outside your workspace"*; so does
@@ -33748,3 +33748,21 @@ excludedlist: \"str_replace\""*: `--excluded-tools=apply_patch,edit,str_replace,
 `str_replace`, which 1.0.88 does not know (it reported `Disabled tools: edit` for the rest). Harmless to the run,
 noise in every spec turn's timeline. Fix in `a-copilot-agent-runs-over-acp`'s argv builder: drop `str_replace`, or
 keep it only behind a version check, and assert the list against a captured 1.0.88 tool inventory.
+
+## F480 (C) — a hard-linked file inside the calls directory passes the calls-root rule
+
+**Status:** open, found 2026-10-02 by the adversarial review of `an-arguments-file-written-from-powershell-is-the-hubs-own`
+(`spec-queue/tracks/reviews/F478-2026-10-02.md`, finding 7); measured by the reviewer, not yet re-measured by a
+drive. **Ready:** no change owns it. It belongs to slice 3's (`a-run-reaches-the-hub-without-mcp`) calls-root rule.
+
+`_inside_hub_calls_root` (`hub/hub/mcp_server.py:1680-1693`) resolves a name with `os.path.realpath`, which follows
+symbolic links and junctions but cannot see a hard link. So `.agentweave/calls/hl.json`, hard-linked to a file
+outside the workspace, counts as inside, and a case-3 file-tool write (or a case-4 PowerShell write, once that
+change is built) to it has standing and writes the outside file. Creating the link,
+`New-Item -ItemType HardLink -Path .agentweave/calls/r.json -Target (Join-Path $HOME x.txt)`, is allowed by `_decide`
+under "Workspace only" (measured), where a plain relative write is already allowed, so nothing is added there. Under
+"Ask me" the link is a card, so this is the persistent-state residual: one approved command makes every later
+"own" write to that name a write elsewhere, unasked. The cheap close the reviewer proposes: an existing target with
+`st_nlink > 1` is not inside. It needs a design round (the requirement text says "taken as named and not by
+following links", which a hard link sidesteps) and a decision on whether the Hub's turn-start reset of the calls
+directory should also remove multiply-linked files.
