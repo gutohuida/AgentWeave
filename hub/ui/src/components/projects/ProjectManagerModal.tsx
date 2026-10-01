@@ -123,7 +123,7 @@ export function ProjectManagerModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }} role="dialog" aria-modal="true" aria-labelledby="project-manager-title">
-      <div ref={panelRef} className="lifted-surface surface-enter w-[min(520px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
+      <div ref={panelRef} tabIndex={-1} className="lifted-surface surface-enter w-[min(520px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
         <h2 id="project-manager-title" className="text-sm font-semibold">{mode === 'create' ? 'Create new project' : 'Add project'}</h2>
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
           {isCreate

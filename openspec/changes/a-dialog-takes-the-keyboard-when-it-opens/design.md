@@ -170,3 +170,12 @@ None. The decision is recorded in the operator review above.
   `TaskDetailDrawer.tsx:212-223`, and the four dialogs' lines all match. The `role="dialog"` /
   `aria-modal` grep lists 11 hand-built dialogs: the seven hook users plus the four D5 moves.
   `DirectoryPicker.tsx:108` carries `role="dialog"` without `aria-modal` and restores its own focus.
+- Impl 2026-10-01 (tasks 1.1, 2.1, 2.2): `grep "useDialogFocus("` now finds an **eighth** call site,
+  `StartFlowDialog.tsx:31`, not in R2/R3's seven or in this document's context table or D5 — added to
+  the hook after the 2026-09-24 rounds. It already has its own `panelRef` on a `role="dialog"` element,
+  so it took `tabIndex={-1}` alongside the other seven; task 2.9's re-grep should fold it into the
+  D5-shape list explicitly. Also: D1 firing on mount moves focus into the panel's first focusable
+  control before any Tab is pressed, which changed the starting state two of `useDialogFocus.test.tsx`'s
+  existing Tab-wrap controls (task 1.8) assumed (focus still on the trigger when `tab()` is called) —
+  both now call `trigger.focus()` again after the hook mounts, to put focus back outside the panel and
+  still exercise the "Tab recovers focus from outside" path the tests are named for.

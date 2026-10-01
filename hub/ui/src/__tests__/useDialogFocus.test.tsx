@@ -90,6 +90,9 @@ describe('useDialogFocus — the first Tab (F307)', () => {
     const { trigger, cancel, panelRef } = mountDialog()
     trigger.focus()
     renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
+    // D1 already moved focus into the panel on mount; refocus the trigger to put focus back
+    // outside, as if it had escaped the panel some other way, and check Tab still recovers it.
+    trigger.focus()
 
     const event = tab()
 
@@ -101,6 +104,9 @@ describe('useDialogFocus — the first Tab (F307)', () => {
     const { trigger, confirm, panelRef } = mountDialog()
     trigger.focus()
     renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
+    // Same reason as the Tab case above: put focus back outside the panel after D1's mount-time
+    // move, so this still exercises "from outside", not the first-control shift-wrap.
+    trigger.focus()
 
     tab(true)
 
@@ -127,6 +133,36 @@ describe('useDialogFocus — the first Tab (F307)', () => {
     // which sees focus outside its panel, must not claim it.
     expect(tab().defaultPrevented).toBe(false)
     expect(document.activeElement).toBe(inner.cancel)
+  })
+})
+
+// F307: today the effect never moves focus on open, so a dialog opened from a trigger that holds
+// focus leaves the keyboard on the trigger, behind the scrim.
+describe('useDialogFocus — initial focus on open (D1)', () => {
+  function mountFocusHarness() {
+    const trigger = document.createElement('button')
+    trigger.textContent = 'Open'
+    const panel = document.createElement('div')
+    panel.tabIndex = -1
+    const first = document.createElement('button')
+    first.textContent = 'First'
+    first.setAttribute('data-dialog-initial-focus', '')
+    const second = document.createElement('button')
+    second.textContent = 'Second'
+    panel.append(first, second)
+    document.body.append(trigger, panel)
+    mounted.push(trigger, panel)
+    const panelRef = createRef<HTMLElement>()
+    ;(panelRef as { current: HTMLElement | null }).current = panel
+    return { trigger, panel, first, second, panelRef }
+  }
+
+  it('moves focus to the control marked data-dialog-initial-focus', () => {
+    const { trigger, first, panelRef } = mountFocusHarness()
+    trigger.focus()
+    renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
+
+    expect(document.activeElement).toBe(first)
   })
 })
 

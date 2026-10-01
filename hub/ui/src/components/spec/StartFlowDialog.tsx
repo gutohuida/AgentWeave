@@ -93,6 +93,7 @@ export function StartFlowDialog({
     >
       <div
         ref={panelRef}
+        tabIndex={-1}
         className="lifted-surface max-h-[90vh] w-full max-w-md overflow-y-auto p-5"
         style={{ background: 'var(--surface)' }}
       >

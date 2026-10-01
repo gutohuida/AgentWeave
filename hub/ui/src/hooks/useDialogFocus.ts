@@ -28,6 +28,15 @@ export function useDialogFocus(
     const returnFocusTo = document.activeElement as HTMLElement | null
     const token = {}
     openDialogs.push(token)
+    // D1: focus moves into the dialog on open. The marked control wins over DOM order so a later
+    // restyle that reorders controls does not silently move focus onto the wrong one; the panel
+    // itself is the last resort, for a dialog whose every control is disabled.
+    const panel = panelRef.current
+    if (panel && !panel.contains(document.activeElement)) {
+      const marked = panel.querySelector<HTMLElement>('[data-dialog-initial-focus]:not([disabled])')
+      const first = panel.querySelector<HTMLElement>(FOCUSABLE)
+      ;(marked ?? first ?? panel).focus()
+    }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         // Something nearer the key has already answered it — a nested picker, a menu, an input

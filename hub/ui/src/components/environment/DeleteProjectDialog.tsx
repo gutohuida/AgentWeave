@@ -52,7 +52,7 @@ export function DeleteProjectDialog({
       aria-modal="true"
       aria-labelledby="delete-project-title"
     >
-      <div ref={panelRef} className="lifted-surface w-[min(440px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
+      <div ref={panelRef} tabIndex={-1} className="lifted-surface w-[min(440px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
         <h2 id="delete-project-title" className="text-sm font-semibold" style={{ color: 'var(--red)' }}>
           Delete “{project.name}”
         </h2>

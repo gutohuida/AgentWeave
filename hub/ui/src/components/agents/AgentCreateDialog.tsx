@@ -196,7 +196,7 @@ export function AgentCreateDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }} role="dialog" aria-modal="true" aria-labelledby="agent-create-title">
-      <div ref={panelRef} className="lifted-surface w-[min(480px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
+      <div ref={panelRef} tabIndex={-1} className="lifted-surface w-[min(480px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
         <h2 id="agent-create-title" className="text-sm font-semibold">Create agent</h2>
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Choose a provider and model — the Hub provisions the runner for you.</p>
 

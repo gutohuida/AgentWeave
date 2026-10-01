@@ -8,7 +8,7 @@
 
 In `hub/ui/src/__tests__/useDialogFocus.test.tsx` unless named otherwise.
 
-- [ ] 1.1 A harness dialog with two buttons, the first marked `data-dialog-initial-focus`, opened from a trigger button that holds focus: after mount, `document.activeElement` is the marked button. Record that it FAILS today (it is the trigger)
+- [x] 1.1 A harness dialog with two buttons, the first marked `data-dialog-initial-focus`, opened from a trigger button that holds focus: after mount, `document.activeElement` is the marked button. Record that it FAILS today (it is the trigger) — confirmed red (`hub/ui/src/__tests__/useDialogFocus.test.tsx`, "initial focus on open (D1)"), then green after 2.1/2.2
 - [ ] 1.2 The same harness with the mark on the **second** button: focus lands on the second. Fails if the implementation uses DOM order instead of the mark
 - [ ] 1.3 No mark: focus lands on the first focusable control. Record that it FAILS today
 - [ ] 1.4 Every control disabled: `document.activeElement` is the panel. Record that it FAILS today
@@ -24,8 +24,12 @@ In `hub/ui/src/__tests__/useDialogFocus.test.tsx` unless named otherwise.
 
 ## 2. The fix
 
-- [ ] 2.1 `useDialogFocus.ts`: after recording `returnFocusTo`, design D1's focus move
-- [ ] 2.2 Add `tabIndex={-1}` to each call site's panel element
+- [x] 2.1 `useDialogFocus.ts`: after recording `returnFocusTo`, design D1's focus move
+- [x] 2.2 Add `tabIndex={-1}` to each call site's panel element — 8 call sites, not R2/R3's 7:
+      `grep "useDialogFocus("` today also finds `StartFlowDialog.tsx:31`, added after the 2026-09-24
+      rounds and not in design's context table or D5. It already follows the same `panelRef`/`role="dialog"`
+      shape as the other seven, so it got `tabIndex={-1}` here too; flagged for 2.9's re-grep, not a
+      blocker for this slice
 - [ ] 2.3 Mark Cancel with `data-dialog-initial-focus` in the three confirm-only dialogs
 - [ ] 2.4 Replace `autoFocus` with `data-dialog-initial-focus` in `AgentCreateDialog`, `DeleteProjectDialog`, `ProjectManagerModal`
 - [ ] 2.5 `CharterForm` and `RunnerForm`: a `panelRef` on the `role="dialog"` element with `tabIndex={-1}`, `useDialogFocus(true, panelRef, onCancel)`, and `data-dialog-initial-focus` on the Name input (design D5)

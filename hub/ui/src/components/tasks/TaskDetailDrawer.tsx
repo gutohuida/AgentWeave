@@ -314,6 +314,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
     >
       <div
         ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`task-drawer-title-wrap-${task.id}`}

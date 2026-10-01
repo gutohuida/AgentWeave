@@ -54,6 +54,7 @@ export function ClearInstructionsDialog({
     >
       <div
         ref={panelRef}
+        tabIndex={-1}
         className="lifted-surface w-[min(440px,calc(100vw-32px))] p-5"
         style={{ background: 'var(--surface)' }}
       >
