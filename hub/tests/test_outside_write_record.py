@@ -755,7 +755,7 @@ async def test_a_codex_app_server_turn_records_it_the_same_way(app, auth_headers
     await _bind_codex_app_server_runner(app, auth_headers)(agent)
 
     fake = _fake_run_turn(events=[_write_event(stray, tool="apply_patch")])
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake):
+    with patch("hub.codex_appserver.run_turn", fake):
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",

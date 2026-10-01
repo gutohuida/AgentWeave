@@ -3,13 +3,12 @@
 
 `CodexExecTransport` delegates argv construction and line parsing to `runner_commands` and
 `runner_parsing`, same as `claude.py` (design D1, "Why the existing modules stay").
-`CodexAppServerTransport` wraps `codex_appserver.run_turn` with today's own arguments
-(`agent_trigger.py`'s `_execute_codex_appserver_run._start_turn`, unchanged). `posture_for`,
-`_CODEX_APPROVAL_LABELS` and `parse_codex_envelope`/one-shot builders are copied here from
-`agent_trigger.py`/`worker.py`/`conversation_titles.py`'s existing Codex branches -- **by copy,
-not cut**: those modules keep their own originals until task 3.4/3.5 re-point them at this adapter
-and delete them, so this file lands without moving any existing caller (same precedent as
-`claude.py`, task 2.2).
+`CodexAppServerTransport` wraps `codex_appserver.run_turn` with the same arguments
+`agent_trigger.py`'s own `_execute_codex_appserver_run._start_turn` used to build by hand; task 3.4
+re-pointed `agent_trigger._execute_rpc_run` at `transport.run_turn` and deleted that duplicate, so
+`posture_for`, `_CODEX_APPROVAL_LABELS` and `parse_codex_envelope`/one-shot builders here are now
+the only copies (`worker.py`/`conversation_titles.py` keep their own originals until task 3.5
+re-points them at this adapter, same precedent as `claude.py`, task 2.2).
 
 `CodexAdapter.transport`'s body is `codex_appserver.uses_app_server`'s today (minus its
 `runner_cli != "codex"` guard, which the adapter lookup replaces) -- design D5 marks that function
@@ -153,10 +152,11 @@ class CodexExecTransport(StreamTransport):
 
 _STREAM_TRANSPORT = CodexExecTransport()
 
-# How Codex's approval methods read on the operator's card. Copied from `agent_trigger.py`'s
-# `_CODEX_APPROVAL_LABELS` (not cut, same precedent as this module's other copies): the raw method
-# names ("item/commandExecution/requestApproval") are protocol, not something to put in front of a
-# person deciding in seconds.
+# How Codex's approval methods read on the operator's card. `agent_trigger.py`'s own
+# `_CODEX_APPROVAL_LABELS` was deleted by task 3.4 once `_await_operator_permission`'s callers all
+# supplied their own label (`permission_card_label` here is the one copy now): the raw method names
+# ("item/commandExecution/requestApproval") are protocol, not something to put in front of a person
+# deciding in seconds.
 _CODEX_APPROVAL_LABELS = {
     codex_appserver.COMMAND_APPROVAL_METHOD: "a command",
     codex_appserver.FILE_CHANGE_APPROVAL_METHOD: "a file change",
@@ -170,8 +170,8 @@ class CodexAppServerTransport(RpcTransport):
     context_window_source = "reported"
 
     def posture_for(self, permission_mode: Optional[str]) -> Optional[str]:
-        """Maps the operator's chosen posture onto what `decide_approval` reads. Copied from
-        `agent_trigger._codex_posture`, unchanged (design D3)."""
+        """Maps the operator's chosen posture onto what `decide_approval` reads. The one copy of
+        this mapping since task 3.4 deleted `agent_trigger._codex_posture` (design D9)."""
         if permission_mode == "manual":
             return runner_commands.OPERATOR_POSTURE
         if permission_mode == WORKSPACE_PERMISSION_MODE:

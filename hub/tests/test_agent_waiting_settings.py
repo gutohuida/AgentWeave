@@ -164,6 +164,6 @@ def test_the_tool_and_the_api_agree_on_the_bounds(monkeypatch):
 )
 def test_the_codex_wait_reads_the_same_variable(env, expected):
     """One carrier for one setting, so the two transports cannot drift apart."""
-    from hub.api.v1.agent_trigger import _codex_decision_timeout
+    from hub.api.v1.agent_trigger import _decision_timeout
 
-    assert _codex_decision_timeout(env) == expected
+    assert _decision_timeout(env) == expected

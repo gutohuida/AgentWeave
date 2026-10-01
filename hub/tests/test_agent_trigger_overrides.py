@@ -385,7 +385,7 @@ async def test_a_config_style_override_reaches_the_app_server_transport(
     await bind_runner("override-appserver", cli="codex")
 
     fake_run_turn = _fake_run_turn()
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+    with patch("hub.codex_appserver.run_turn", fake_run_turn):  # noqa: SIM117
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             response = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",

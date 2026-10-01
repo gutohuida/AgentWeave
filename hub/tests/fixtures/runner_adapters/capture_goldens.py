@@ -354,7 +354,8 @@ def _rpc_env(*, decision_timeout: Optional[str] = None) -> Dict[str, str]:
 
 def _rpc_cases() -> List[Dict[str, Any]]:
     """Task 1.4's inputs: the main cross product plus its one-axis variations, each a full set
-    of keyword arguments for `_execute_codex_appserver_run`. `refusal_method` is not one of the
+    of keyword arguments for `_execute_rpc_run(get_adapter("codex"), CodexAppServerTransport(),
+    **inputs)` (design D9, task 3.4). `refusal_method` is not one of the
     executor's own parameters -- it tells the capture driver which of `codex_appserver
     ._REFUSAL_LABELS` this case's recorder should additionally invoke `on_refusal` for (task
     1.4's behaviour 2); `None` means the case only exercises behaviours 1/3/4.
@@ -407,13 +408,17 @@ def _rpc_cases() -> List[Dict[str, Any]]:
 
 async def _drive_rpc_case(case: Dict[str, Any]) -> Dict[str, Any]:
     """Drive one case of task 1.4's RPC golden: seed a Conversation/Run, patch
-    `codex_run_turn`/`_await_operator_permission` with recorders, call today's
-    `_execute_codex_appserver_run(**inputs)`, and read back what it recorded.
+    `hub.codex_appserver.run_turn`/`_await_operator_permission` with recorders, call
+    `_execute_rpc_run(get_adapter("codex"), CodexAppServerTransport(), **inputs)` (design D9's
+    adapter/transport shape, task 3.4), and read back what it recorded.
     """
     import hub.api.v1.agent_trigger as agent_trigger
+    from hub import codex_appserver
     from hub.codex_appserver import FILE_CHANGE_APPROVAL_METHOD, TurnOutcome
     from hub.db.engine import async_session_factory
     from hub.db.models import Conversation, EventLog, Run
+    from hub.runner_adapters import get_adapter
+    from hub.runner_adapters.codex import CodexAppServerTransport
 
     case_id = case["id"]
     slug = case_id.replace("/", "_").replace("=", "-")
@@ -494,7 +499,7 @@ async def _drive_rpc_case(case: Dict[str, Any]) -> Dict[str, Any]:
 
         return TurnOutcome(thread_id=thread_id, status="completed")
 
-    with patch.object(agent_trigger, "codex_run_turn", AsyncMock(side_effect=_recorder)):
+    with patch.object(codex_appserver, "run_turn", AsyncMock(side_effect=_recorder)):
         with patch.object(
             agent_trigger,
             "_await_operator_permission",
@@ -503,7 +508,9 @@ async def _drive_rpc_case(case: Dict[str, Any]) -> Dict[str, Any]:
             with patch.object(
                 agent_trigger.sse_manager, "broadcast", AsyncMock(side_effect=_fake_broadcast)
             ):
-                await agent_trigger._execute_codex_appserver_run(
+                await agent_trigger._execute_rpc_run(
+                    get_adapter("codex"),
+                    CodexAppServerTransport(),
                     project_id=project_id,
                     agent=agent,
                     run_id=run_id,
@@ -574,8 +581,8 @@ async def _build_rpc_kwargs_cases_async() -> List[Dict[str, Any]]:
 
 
 def build_rpc_kwargs_cases() -> List[Dict[str, Any]]:
-    """Task 1.4's capture half: drive `_execute_codex_appserver_run` for every case and record
-    what reaches `codex_appserver.run_turn`, plus the four behaviours the design names. Needs
+    """Task 1.4's capture half: drive `_execute_rpc_run` for every case and record what reaches
+    `codex_appserver.run_turn`, plus the four behaviours the design names. Needs
     `DATABASE_URL` in the environment (set for this run only -- see task 1.3's own note above),
     pointed at a throwaway sqlite file, since this drives the real executor end to end.
     """

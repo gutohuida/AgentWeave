@@ -19,7 +19,6 @@ carrying the label "Full access".
 
 import pytest
 
-from hub.api.v1.agent_trigger import _codex_posture
 from hub.codex_appserver import (
     COMMAND_APPROVAL_METHOD,
     FILE_CHANGE_APPROVAL_METHOD,
@@ -29,6 +28,9 @@ from hub.codex_appserver import (
 )
 from hub.model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
 from hub.runner_adapters import build_command
+from hub.runner_adapters.codex import CodexAppServerTransport
+
+_posture_for = CodexAppServerTransport().posture_for
 
 OWN_SERVER = "agentweave"
 WORKSPACE = r"C:\proj\.agentweave\worktrees\coder"
@@ -60,7 +62,7 @@ class TestPostureSurvivesTheMapping:
 
     def test_full_access_is_not_dropped(self):
         # The regression itself: this returned None, and None is the default posture.
-        assert _codex_posture(FULL_ACCESS_PERMISSION_MODE) == FULL_ACCESS_PERMISSION_MODE
+        assert _posture_for(FULL_ACCESS_PERMISSION_MODE) == FULL_ACCESS_PERMISSION_MODE
 
     @pytest.mark.parametrize(
         "chosen",
@@ -68,10 +70,10 @@ class TestPostureSurvivesTheMapping:
     )
     def test_every_posture_that_is_not_the_default_is_distinguishable(self, chosen):
         """`acceptEdits` maps to None on purpose — it *is* the default. Nothing else may."""
-        assert _codex_posture(chosen) is not None
+        assert _posture_for(chosen) is not None
 
     def test_accept_edits_maps_to_the_default_deliberately(self):
-        assert _codex_posture("acceptEdits") is None
+        assert _posture_for("acceptEdits") is None
 
 
 class TestThreadPolicyOrdering:
@@ -81,23 +83,23 @@ class TestThreadPolicyOrdering:
         # Reached through the real mapping, not by passing the constant in by hand: the branch
         # for this posture existed all along and was unreachable, so a test that calls
         # `_thread_policy` directly with the string would have passed against the defect.
-        posture = _codex_posture(FULL_ACCESS_PERMISSION_MODE)
+        posture = _posture_for(FULL_ACCESS_PERMISSION_MODE)
         assert _thread_policy(yolo=False, posture=posture) == ("danger-full-access", "never")
 
     def test_full_access_does_not_depend_on_the_legacy_yolo_flag(self):
         """`yolo=False` is what a per-run override carries; the agent-default route sets it."""
-        with_flag = _thread_policy(yolo=True, posture=_codex_posture(FULL_ACCESS_PERMISSION_MODE))
-        without = _thread_policy(yolo=False, posture=_codex_posture(FULL_ACCESS_PERMISSION_MODE))
+        with_flag = _thread_policy(yolo=True, posture=_posture_for(FULL_ACCESS_PERMISSION_MODE))
+        without = _thread_policy(yolo=False, posture=_posture_for(FULL_ACCESS_PERMISSION_MODE))
         assert with_flag == without == ("danger-full-access", "never")
 
     def test_full_access_is_not_the_same_thread_as_the_default_posture(self):
         """The exact confusion the defect was: indistinguishable from choosing nothing."""
         assert _thread_policy(
-            yolo=False, posture=_codex_posture(FULL_ACCESS_PERMISSION_MODE)
-        ) != _thread_policy(yolo=False, posture=_codex_posture("acceptEdits"))
+            yolo=False, posture=_posture_for(FULL_ACCESS_PERMISSION_MODE)
+        ) != _thread_policy(yolo=False, posture=_posture_for("acceptEdits"))
 
     def test_ask_me_remains_the_strictest_pair(self):
-        assert _thread_policy(yolo=False, posture=_codex_posture("manual")) == (
+        assert _thread_policy(yolo=False, posture=_posture_for("manual")) == (
             "read-only",
             "untrusted",
         )
@@ -108,7 +110,7 @@ class TestApprovalOrdering:
 
     @pytest.mark.parametrize("method", SANDBOX_METHODS)
     def test_full_access_accepts_inside_the_workspace(self, method):
-        assert _decide(method, _codex_posture(FULL_ACCESS_PERMISSION_MODE), cwd=WORKSPACE) == {
+        assert _decide(method, _posture_for(FULL_ACCESS_PERMISSION_MODE), cwd=WORKSPACE) == {
             "decision": "accept"
         }
 
@@ -116,15 +118,15 @@ class TestApprovalOrdering:
     def test_full_access_accepts_what_workspace_only_refuses(self, method):
         """The inversion, stated directly: outside the workspace, "Workspace only" declines and
         "Full access" — which the operator picked *because* it is wider — must not."""
-        narrow = _decide(method, _codex_posture(WORKSPACE_PERMISSION_MODE), cwd=OUTSIDE)
-        wide = _decide(method, _codex_posture(FULL_ACCESS_PERMISSION_MODE), cwd=OUTSIDE)
+        narrow = _decide(method, _posture_for(WORKSPACE_PERMISSION_MODE), cwd=OUTSIDE)
+        wide = _decide(method, _posture_for(FULL_ACCESS_PERMISSION_MODE), cwd=OUTSIDE)
         assert narrow == {"decision": "decline"}
         assert wide == {"decision": "accept"}
 
     @pytest.mark.parametrize("method", SANDBOX_METHODS)
     def test_full_access_accepts_without_the_legacy_flag(self, method):
         assert _decide(
-            method, _codex_posture(FULL_ACCESS_PERMISSION_MODE), cwd=OUTSIDE, yolo=False
+            method, _posture_for(FULL_ACCESS_PERMISSION_MODE), cwd=OUTSIDE, yolo=False
         ) == {"decision": "accept"}
 
     def test_full_access_grants_the_permissions_request(self):
@@ -133,23 +135,21 @@ class TestApprovalOrdering:
             {},
             yolo=False,
             own_server_name=OWN_SERVER,
-            posture=_codex_posture(FULL_ACCESS_PERMISSION_MODE),
+            posture=_posture_for(FULL_ACCESS_PERMISSION_MODE),
         )
         assert result["permissions"], "full access answered a permissions request with nothing"
 
     @pytest.mark.parametrize("method", SANDBOX_METHODS)
     def test_ask_me_still_reaches_the_operator_rather_than_being_decided_here(self, method):
         """Full access must not have swallowed the posture that has to ask a person."""
-        decision = _decide(method, _codex_posture("manual"), cwd=WORKSPACE)
+        decision = _decide(method, _posture_for("manual"), cwd=WORKSPACE)
         assert decision["decision"] == "__ask_operator__"
 
     @pytest.mark.parametrize("method", SANDBOX_METHODS)
     def test_the_default_posture_still_refuses_an_escalation(self, method):
-        """Unchanged by the fix, and asserted so a later widening of `_codex_posture` cannot
+        """Unchanged by the fix, and asserted so a later widening of `posture_for` cannot
         quietly take `acceptEdits` with it."""
-        assert _decide(method, _codex_posture("acceptEdits"), cwd=OUTSIDE) == {
-            "decision": "decline"
-        }
+        assert _decide(method, _posture_for("acceptEdits"), cwd=OUTSIDE) == {"decision": "decline"}
 
 
 class TestExecTransportHasTheSameOrdering:

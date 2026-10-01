@@ -1414,7 +1414,7 @@ async def test_an_app_server_run_that_ended_releases_its_queue_when_its_tail_rai
         return await real_report(db, project_id, agent, run_id)
 
     with patch(  # noqa: SIM117
-        "hub.api.v1.agent_trigger.codex_run_turn", AsyncMock(side_effect=_hold_the_first_turn_open)
+        "hub.codex_appserver.run_turn", AsyncMock(side_effect=_hold_the_first_turn_open)
     ):
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             with patch.object(
@@ -1524,7 +1524,7 @@ async def test_an_app_server_turn_that_raises_before_its_terminal_write_is_not_a
         return await later_turns(**kwargs)
 
     with patch(  # noqa: SIM117
-        "hub.api.v1.agent_trigger.codex_run_turn",
+        "hub.codex_appserver.run_turn",
         AsyncMock(side_effect=_raise_once_before_the_terminal_write),
     ):
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
@@ -2468,7 +2468,7 @@ async def test_codex_defaults_to_app_server_with_no_flags_at_all(app, auth_heade
     await bind_runner("default-codex", cli="codex")
 
     fake_run_turn = _fake_run_turn()
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+    with patch("hub.codex_appserver.run_turn", fake_run_turn):  # noqa: SIM117
         with patch("hub.api.v1.agent_trigger.PipeSession.spawn") as pipe_spawn:
             with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
                 resp = await app.post(
@@ -2529,7 +2529,7 @@ async def test_codex_app_server_opt_in_flag_selects_run_turn_not_exec(app, auth_
     await _bind_codex_app_server_runner(app, auth_headers)("appserver-codex")
 
     fake_run_turn = _fake_run_turn()
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+    with patch("hub.codex_appserver.run_turn", fake_run_turn):  # noqa: SIM117
         with patch("hub.api.v1.agent_trigger.PipeSession.spawn") as pipe_spawn:
             with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
                 resp = await app.post(
@@ -2579,7 +2579,7 @@ async def test_codex_app_server_records_output_events_and_usage(app, auth_header
             source="codex_appserver", input_tokens=7, output_tokens=3, total_tokens=10
         ),
     )
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+    with patch("hub.codex_appserver.run_turn", fake_run_turn):  # noqa: SIM117
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
@@ -2626,7 +2626,7 @@ async def test_codex_app_server_resume_passes_known_session_id_as_resume_thread_
     await _bind_codex_app_server_runner(app, auth_headers)("appserver-resume")
 
     fake_run_turn = _fake_run_turn(thread_id="thread-appserver-1")
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+    with patch("hub.codex_appserver.run_turn", fake_run_turn):  # noqa: SIM117
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             first = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
@@ -2681,7 +2681,7 @@ async def test_codex_app_server_binding_conflict_fails_run(app, auth_headers):
         conversation_id = conversation.id
 
     fake_run_turn = _fake_run_turn(thread_id="thread-different")
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+    with patch("hub.codex_appserver.run_turn", fake_run_turn):  # noqa: SIM117
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
@@ -2722,7 +2722,7 @@ async def test_codex_app_server_spawn_failure_fails_run_and_returns_queue_entrie
     await _bind_codex_app_server_runner(app, auth_headers)("appserver-missing")
 
     failing_run_turn = AsyncMock(side_effect=FileNotFoundError("codex not found in PATH"))
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", failing_run_turn):  # noqa: SIM117
+    with patch("hub.codex_appserver.run_turn", failing_run_turn):  # noqa: SIM117
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
@@ -2766,7 +2766,7 @@ async def test_codex_app_server_stop_signals_should_interrupt(app, auth_headers)
         return TurnOutcome(thread_id="thread-stop-1", status="interrupted")
 
     fake_run_turn = AsyncMock(side_effect=_run_until_interrupted)
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+    with patch("hub.codex_appserver.run_turn", fake_run_turn):  # noqa: SIM117
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             trigger = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",

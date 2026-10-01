@@ -426,7 +426,7 @@ async def test_an_app_server_run_that_was_stopped_persists_its_terminal_status_l
     await _bind_codex_app_server_runner(app, auth_headers)(agent)
 
     fake_run_turn = _fake_run_turn(thread_id="thread-p2-stop", status="interrupted")
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+    with patch("hub.codex_appserver.run_turn", fake_run_turn):  # noqa: SIM117
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
@@ -457,7 +457,7 @@ async def test_an_app_server_run_that_failed_persists_its_terminal_status_line(a
     fake_run_turn = _fake_run_turn(
         thread_id="thread-p2-fail", status="failed", error="the runtime went away"
     )
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+    with patch("hub.codex_appserver.run_turn", fake_run_turn):  # noqa: SIM117
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
@@ -552,7 +552,7 @@ async def test_a_completed_codex_run_gains_its_first_settled_signal(app, auth_he
 
     plan = status_event("plan", summary="read the file; change it")
     fake_run_turn = _fake_run_turn(thread_id="thread-p2-codex", status="completed", events=(plan,))
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+    with patch("hub.codex_appserver.run_turn", fake_run_turn):  # noqa: SIM117
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",

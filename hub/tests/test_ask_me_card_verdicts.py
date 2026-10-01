@@ -26,7 +26,7 @@ from ._background_runs import await_background_runs
 @pytest.fixture(autouse=True)
 def _answer_nobody_quickly(monkeypatch):
     """The operator never answers here; the wait runs out at once and the row stays to be read."""
-    monkeypatch.setattr("hub.api.v1.agent_trigger._codex_decision_timeout", lambda env: 0.1)
+    monkeypatch.setattr("hub.api.v1.agent_trigger._decision_timeout", lambda env: 0.1)
     monkeypatch.setattr("hub.api.v1.agent_trigger.CODEX_OPERATOR_POLL_SECONDS", 0.02)
 
 
@@ -85,7 +85,7 @@ async def test_a_codex_card_stores_the_verdict(app, auth_headers, bind_runner):
         await kwargs["request_approval"](method, {"cwd": outside, "command": "ls"})
         return codex_appserver.TurnOutcome(thread_id="t-1", status="completed", error=None)
 
-    with patch("hub.api.v1.agent_trigger.codex_run_turn", AsyncMock(side_effect=_run)):
+    with patch("hub.codex_appserver.run_turn", AsyncMock(side_effect=_run)):
         with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             response = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",

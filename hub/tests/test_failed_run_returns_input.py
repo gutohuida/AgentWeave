@@ -211,7 +211,7 @@ async def test_a_failed_app_server_run_returns_its_input_and_counts_the_attempt(
     await _bind_app_server_codex(app, auth_headers, "returns-appserver")
 
     with _patched(
-        patch("hub.api.v1.agent_trigger.codex_run_turn", _fake_run_turn(status="failed")),
+        patch("hub.codex_appserver.run_turn", _fake_run_turn(status="failed")),
         patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"),
         patch("hub.turn_scheduler.schedule_agent", _schedule_after_the_first()),
     ):
@@ -344,7 +344,7 @@ async def test_a_stopped_run_does_not_return_its_input(app, auth_headers):
     # conflict, which fails the run and would mask what this test is about.
     with _patched(
         patch(
-            "hub.api.v1.agent_trigger.codex_run_turn",
+            "hub.codex_appserver.run_turn",
             _fake_run_turn(status="interrupted", thread_id="thread-stopped-1"),
         ),
         patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"),
@@ -648,7 +648,7 @@ async def test_a_pre_spawn_app_server_failure_schedules_the_agent(app, auth_head
     scheduled = _schedule_after_the_first()
     with _patched(
         patch(
-            "hub.api.v1.agent_trigger.codex_run_turn",
+            "hub.codex_appserver.run_turn",
             AsyncMock(side_effect=AppServerError("app-server process ended", exit_code=-1)),
         ),
         patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"),

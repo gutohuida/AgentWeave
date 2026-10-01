@@ -51,13 +51,9 @@ from ...auth import get_project
 from ...checkpoint_handover import consider_handover_from_run_end
 from ...codex_appserver import (
     AppServerError,
-    TurnOutcome,
     readable_exit_code,
     uses_app_server,
 )
-from ...codex_appserver import approval_label as codex_approval_label
-from ...codex_appserver import run_turn as codex_run_turn
-from ...codex_appserver import workspace_verdict as codex_workspace_verdict
 from ...conversation_titles import maybe_generate_title
 from ...conversations import (
     conversation_for_provider_session,
@@ -90,9 +86,7 @@ from ...launchability import (
     spec_turn_notice,
 )
 from ...model_catalog import (
-    FULL_ACCESS_PERMISSION_MODE,
     PERMISSION_MODE_CONTROL,
-    WORKSPACE_PERMISSION_MODE,
     render_control_config,
     validate_overrides,
 )
@@ -126,13 +120,10 @@ from ...run_task_binding import (
     tasks_held_by_a_running_turn,
 )
 from ...runner_adapters import ADAPTERS, AccessAxes, build_command, get_adapter, resolve_access_axes
+from ...runner_adapters.base import RpcCallbacks as TransportRpcCallbacks
+from ...runner_adapters.base import RpcTransport, RpcTurnRequest, RunnerAdapter, StreamTransport
 from ...runner_commands import OPERATOR_POSTURE, UnsupportedRunnerError, mcp_tool_prefix
 from ...runner_events import AccountingSample
-from ...runner_parsing import (
-    parse_claude_line,
-    parse_codex_line,
-    read_codex_rollout_accounting,
-)
 from ...scheduler import (
     REVIEWABLE_LOOP_TASK_STATUSES,
     WITH_REVIEWER_LOOP_TASK_STATUSES,
@@ -1465,6 +1456,8 @@ async def _trigger_agent_directly(
             worktree=None if review_context is not None else isolated_workspace,
             use_codex_app_server=use_codex_app_server,
             copilot_turn=copilot_turn,
+            adapter=adapter,
+            transport=run_transport,
             cli=probe["cli"],
             prompt=prompt,
             yolo=yolo,
@@ -2126,8 +2119,8 @@ async def _record_run_failure_tail(
 ) -> None:
     """The tail an abnormally-ended run needs, shared by both transports (design D3).
 
-    One body, two callers -- `_execute_run`'s read loop and `_execute_codex_appserver_run` --
-    because the differences that would justify duplicating it are not in this body. What
+    One body, two callers -- `_execute_run`'s read loop and `_execute_rpc_run` -- because the
+    differences that would justify duplicating it are not in this body. What
     genuinely differs between the transports is each caller's `finally` (`active_ptys` against
     `active_app_server_runs`), and that is deliberately left where it is.
 
@@ -2363,6 +2356,8 @@ async def _execute_run(
     permission_mode: Optional[str] = None,
     config_overrides: Optional[Dict[str, str]] = None,
     copilot_turn: Optional["_CopilotTurn"] = None,
+    adapter: Optional[RunnerAdapter] = None,
+    transport: Optional[StreamTransport | RpcTransport] = None,
 ) -> None:
     """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE.
 
@@ -2372,14 +2367,19 @@ async def _execute_run(
     it once the run ends (task 5.3's conflict detection needs real commits to compare).
 
     *use_codex_app_server* (task 2.8) selects a completely separate execution path —
-    `_execute_codex_appserver_run` below — since the app-server transport has no PTY/pipe
-    subprocess for this function's own read/wait loop to drive; `cli`/`prompt`/`yolo`/
-    `mcp_command` are only meaningful for that path (`cmd` is empty for it — the caller builds
-    argv only for a stream transport, design D6; app-server has no argv, it speaks JSON-RPC).
-    Anything the caller renders *into* that argv therefore has to arrive here by its own
-    parameter or it reaches nothing: `permission_mode` was rescued by hand, and
+    `_execute_rpc_run` below, given *adapter*/*transport* (design D9) — since the app-server
+    transport has no PTY/pipe subprocess for this function's own read/wait loop to drive;
+    `cli`/`prompt`/`yolo`/`mcp_command` are only meaningful for that path (`cmd` is empty for it —
+    the caller builds argv only for a stream transport, design D6; app-server has no argv, it
+    speaks JSON-RPC). Anything the caller renders *into* that argv therefore has to arrive here by
+    its own parameter or it reaches nothing: `permission_mode` was rescued by hand, and
     `config_overrides` — every config-style control, Codex's Effort today — is the rest of that
     class (F99).
+
+    *adapter*/*transport* are the trigger's own `get_adapter(runner)`/`adapter.transport(flags)`
+    (design D9) — `None` for Copilot, which has no `RunnerAdapter` in this slice. On the stream
+    path, *transport* supplies `spawn_kind`, `map_events` and `usage_from`, so this function reads
+    no runner literal to pick between Claude and Codex's `exec` transport.
 
     *repo_root* is the project's own root directory, `ProjectWorkspace`'s answer as the trigger
     body already computed it. It arrives by parameter for the same reason as everything above and
@@ -2410,7 +2410,10 @@ async def _execute_run(
         return
 
     if use_codex_app_server:
-        await _execute_codex_appserver_run(
+        assert adapter is not None and transport is not None and transport.kind == "rpc"
+        await _execute_rpc_run(
+            adapter,
+            transport,
             project_id=project_id,
             agent=agent,
             run_id=run_id,
@@ -2430,10 +2433,11 @@ async def _execute_run(
         )
         return
 
+    assert transport is not None and transport.kind == "stream"
     loop = asyncio.get_running_loop()
 
     try:
-        if runner == "codex":
+        if transport.spawn_kind == "pipe":
             pty = await loop.run_in_executor(
                 None,
                 lambda: PipeSession.spawn(cmd, cwd=work_dir, env=env),
@@ -2539,10 +2543,6 @@ async def _execute_run(
         # it was watched and found clean. Writes `[]`; see `OutsideWriteRecorder.watch`.
         await outside_writes.watch()
 
-        # `claude_proxy`/`native` were never reachable here (`runner` is the bound `Runner.cli`,
-        # validated against `RUNNER_CLIS`) — task 3.1 drops the dead branch, not the behaviour.
-        parse_line = parse_claude_line if runner == "claude" else None
-
         session_id = known_session_id
         binding_conflict: Optional[str] = None
         accounting_sample: Optional[AccountingSample] = None
@@ -2558,9 +2558,7 @@ async def _execute_run(
             line = strip_ansi_escapes(raw_line.rstrip("\r"))
             if not line.strip():
                 return
-            parsed = (
-                parse_line(line) if parse_line is not None else parse_codex_line(line, model=model)
-            )
+            parsed = transport.map_events(line, model=model)
             # Resolve session_id from *this* line before writing its own events, so the row
             # that establishes the session carries it too, not just subsequent rows.
             if parsed.session_id:
@@ -2664,19 +2662,16 @@ async def _execute_run(
 
         exit_code = await loop.run_in_executor(None, pty.wait)
 
-        if runner == "codex" and session_id:
-            codex_home = Path(env["CODEX_HOME"]) if env and env.get("CODEX_HOME") else None
-            rollout_accounting = await loop.run_in_executor(
+        if session_id:
+            post_run_accounting = await loop.run_in_executor(
                 None,
-                lambda: read_codex_rollout_accounting(
-                    session_id, codex_home=codex_home, model=model
-                ),
+                lambda: transport.usage_from(session_id=session_id, env=env, model=model),
             )
-            if rollout_accounting is not None:
+            if post_run_accounting is not None:
                 accounting_sample = (
-                    rollout_accounting
+                    post_run_accounting
                     if accounting_sample is None
-                    else accounting_sample.merged(rollout_accounting)
+                    else accounting_sample.merged(post_run_accounting)
                 )
 
         snapshot_sha: Optional[str] = None
@@ -3007,45 +3002,7 @@ async def _execute_run(
             await _announce_run_end_to_open_views(project_id, run_id)
 
 
-# How Codex's approval methods read on the operator's card. The raw method names
-# ("item/commandExecution/requestApproval") are protocol, not something to put in front of a
-# person deciding in seconds.
-_CODEX_APPROVAL_LABELS = {
-    "item/commandExecution/requestApproval": "a command",
-    "item/fileChange/requestApproval": "a file change",
-}
-
-
-def _codex_posture(permission_mode: Optional[str]) -> Optional[str]:
-    """Map the operator's chosen posture onto what `decide_approval` understands.
-
-    "manual" is the operator-answered posture for both providers; the value differs only
-    because Claude's spelling is its CLI's own.
-
-    Every posture that changes a Codex decision has to survive this mapping. "Full access" used
-    to fall through to `None`, and `None` is the *default* posture — so a thread the operator had
-    put under full access started `workspace-write`/`on-request` and declined every approval it
-    then raised, which is strictly less than "Workspace only" grants. It only ever appeared to
-    work because setting an agent's *default* posture also writes the legacy `config["yolo"]`
-    flag, and `yolo` reaches `_thread_policy` by its own route; the composer's per-run override
-    writes no such flag, so the same choice made there did the opposite. Measured live on both
-    surfaces, 2026-08-28: the agent-default run wrote outside its worktree, the per-run-override
-    run was refused by the sandbox.
-
-    `acceptEdits` stays mapped to `None` deliberately. It *is* the default posture, and its
-    Codex meaning — edit freely inside the workspace, refuse an escalation out of it — is what
-    the default pair already produces.
-    """
-    if permission_mode == "manual":
-        return OPERATOR_POSTURE
-    if permission_mode == WORKSPACE_PERMISSION_MODE:
-        return WORKSPACE_PERMISSION_MODE
-    if permission_mode == FULL_ACCESS_PERMISSION_MODE:
-        return FULL_ACCESS_PERMISSION_MODE
-    return None
-
-
-def _codex_decision_timeout(env: Optional[Dict[str, str]]) -> int:
+def _decision_timeout(env: Optional[Dict[str, str]]) -> int:
     """This run's permission wait, from the same environment variable the Claude path uses.
 
     Read from `env` rather than threaded as another parameter because the trigger already put it
@@ -3081,9 +3038,11 @@ async def _await_operator_permission(
 ) -> bool:
     """Open a permission request for an RPC runner's approval and wait for the operator.
 
-    `label` and `tool_input` are what the card shows. Codex passes neither, and its label is
-    looked up from its protocol method; Copilot passes both, because its requests share one method
-    and differ by kind (`a-copilot-agent-runs-over-acp` D8, *Operator posture*).
+    `label` and `tool_input` are what the card shows. Every caller passes `label` — Codex's from
+    `CodexAppServerTransport.permission_card_label` (design D9), Copilot's from its own request's
+    `tool_name`, because Copilot's requests share one method and differ by kind
+    (`a-copilot-agent-runs-over-acp` D8, *Operator posture*) — `method` is the fallback for a
+    caller that cannot supply one.
 
     `workspace_verdict` is what "Workspace only" would decide, from the runner's own check, stored
     for the card as advice (`an-ask-me-card-says-what-workspace-only-would-decide`, D1/D5). It
@@ -3102,7 +3061,7 @@ async def _await_operator_permission(
                 agent=agent,
                 run_id=run_id,
                 conversation_id=await conversation_id_for_run(db, run_id),
-                tool_name=label or _CODEX_APPROVAL_LABELS.get(method, method),
+                tool_name=label or method,
                 tool_use_id="",
                 tool_input=dict(tool_input if tool_input is not None else subject),
                 workspace_verdict=workspace_verdict,
@@ -3116,7 +3075,7 @@ async def _await_operator_permission(
         {
             "id": request_id,
             "agent": agent,
-            "tool_name": label or _CODEX_APPROVAL_LABELS.get(method, method),
+            "tool_name": label or method,
             "run_id": run_id,
         },
     )
@@ -3156,80 +3115,6 @@ class RpcCallbacks:
     on_session_missing: Callable[[str], Awaitable[None]]
     should_interrupt: Callable[[], bool]
     on_refusal: Callable[[str, Dict[str, Any]], Awaitable[None]]
-
-
-async def _execute_codex_appserver_run(
-    *,
-    project_id: str,
-    agent: str,
-    run_id: str,
-    conversation_id: str,
-    cli: str,
-    prompt: str,
-    model: Optional[str],
-    work_dir: Optional[str],
-    known_session_id: Optional[str],
-    yolo: bool,
-    mcp_command: Optional[List[str]],
-    env: Optional[Dict[str, str]],
-    worktree: Optional[Path],
-    repo_root: Optional[str] = None,
-    permission_mode: Optional[str] = None,
-    config_overrides: Optional[Dict[str, str]] = None,
-) -> None:
-    """Codex `app-server` (task 2.8) counterpart to `_execute_run`'s PTY/pipe read loop above.
-
-    `codex_appserver.run_turn` owns the actual subprocess and JSON-RPC exchange internally (see
-    its own docstring). Everything this transport shares with Copilot's ACP one -- recording,
-    broadcasts, the run's end -- is `_execute_rpc_run`; this function says only how a Codex turn
-    is started.
-    """
-
-    async def _start_turn(cb: RpcCallbacks) -> TurnOutcome:
-        return await codex_run_turn(
-            cli=cli,
-            posture=_codex_posture(permission_mode),
-            workspace=work_dir,
-            request_approval=lambda method, subject: _await_operator_permission(
-                project_id=project_id,
-                agent=agent,
-                run_id=run_id,
-                method=method,
-                subject=subject,
-                timeout_seconds=_codex_decision_timeout(env),
-                workspace_verdict=codex_workspace_verdict(subject, work_dir),
-            ),
-            cwd=work_dir,
-            env=env,
-            prompt=prompt,
-            model=model,
-            resume_thread_id=known_session_id,
-            yolo=yolo,
-            mcp_command=mcp_command,
-            config_overrides=config_overrides,
-            on_event=cb.on_event,
-            on_usage=cb.on_usage,
-            on_accounting=cb.on_accounting,
-            on_thread_started=cb.on_session,
-            should_interrupt=cb.should_interrupt,
-            on_refusal=cb.on_refusal,
-        )
-
-    await _execute_rpc_run(
-        runner="codex",
-        start_turn=_start_turn,
-        refusal_label=lambda method, subject: codex_approval_label(method),
-        project_id=project_id,
-        agent=agent,
-        run_id=run_id,
-        conversation_id=conversation_id,
-        model=model,
-        work_dir=work_dir,
-        known_session_id=known_session_id,
-        env=env,
-        worktree=worktree,
-        repo_root=repo_root,
-    )
 
 
 @dataclass
@@ -3389,7 +3274,7 @@ async def _execute_copilot_run(
                 run_id=run_id,
                 method=method,
                 subject=subject,
-                timeout_seconds=_codex_decision_timeout(env),
+                timeout_seconds=_decision_timeout(env),
                 label=str(subject.get("tool_name") or "a Copilot request"),
                 tool_input=subject.get("tool_input") or {},
                 # Worked out by the turn with Copilot's own Workspace-only judge (D5).
@@ -3419,20 +3304,30 @@ async def _execute_copilot_run(
 
 
 async def _execute_rpc_run(
+    adapter: Optional[RunnerAdapter] = None,
+    transport: Optional[RpcTransport] = None,
     *,
-    runner: str,
-    start_turn: Callable[[RpcCallbacks], Awaitable[Any]],
-    refusal_label: Callable[[str, Dict[str, Any]], str],
+    runner: Optional[str] = None,
+    start_turn: Optional[Callable[[RpcCallbacks], Awaitable[Any]]] = None,
+    refusal_label: Optional[Callable[[str, Dict[str, Any]], str]] = None,
     project_id: str,
     agent: str,
     run_id: str,
     conversation_id: str,
-    model: Optional[str],
-    work_dir: Optional[str],
-    known_session_id: Optional[str],
-    env: Optional[Dict[str, str]],
-    worktree: Optional[Path],
+    cli: Optional[str] = None,
+    prompt: Optional[str] = None,
+    model: Optional[str] = None,
+    work_dir: Optional[str] = None,
+    known_session_id: Optional[str] = None,
+    yolo: bool = False,
+    mcp_command: Optional[List[str]] = None,
+    env: Optional[Dict[str, str]] = None,
+    worktree: Optional[Path] = None,
     repo_root: Optional[str] = None,
+    permission_mode: Optional[str] = None,
+    config_overrides: Optional[Dict[str, str]] = None,
+    extra_flags: Optional[List[str]] = None,
+    restrict_spec_writes: bool = False,
     pre_turn_events: Sequence[Any] = (),
 ) -> None:
     """The executor every RPC transport shares (Codex `app-server`, Copilot ACP).
@@ -3449,7 +3344,66 @@ async def _execute_rpc_run(
     run's own timeline rather than in a log.
 
     *repo_root* is `_execute_run`'s own parameter, passed straight through — see its docstring.
+
+    *adapter*/*transport* (design D9) are the caller's alternative to passing *runner*/
+    *start_turn*/*refusal_label* directly: given a real `RunnerAdapter` and its `RpcTransport`
+    (Codex `app-server` today), this function builds the `RpcTurnRequest`/`RpcCallbacks` itself
+    and drives `transport.run_turn`, so a caller with an adapter does not hand-build a closure
+    that reimplements what the transport already knows how to do. Copilot has no `RunnerAdapter`
+    in this slice, so `_execute_copilot_run` keeps passing `runner`/`start_turn`/`refusal_label`
+    explicitly (`a-copilot-agent-runs-over-acp` D11/D18) -- the two styles are mutually exclusive,
+    never both given.
     """
+    if adapter is not None and transport is not None:
+        runner = adapter.name
+        request = RpcTurnRequest(
+            cli=cli,
+            cwd=work_dir,
+            env=env,
+            prompt=prompt,
+            model=model,
+            resume_session_id=known_session_id,
+            yolo=yolo,
+            mcp_command=mcp_command,
+            config_overrides=config_overrides,
+            permission_mode=permission_mode,
+            workspace=work_dir,
+            # Declared gap (design D11): neither reaches an RPC transport yet, so a specification
+            # turn keeps its write tools on this path (filed, task 6.2).
+            extra_flags=extra_flags or [],
+            restrict_spec_writes=restrict_spec_writes,
+        )
+
+        async def _adapter_start_turn(cb: RpcCallbacks) -> Any:
+            return await transport.run_turn(
+                request,
+                TransportRpcCallbacks(
+                    on_event=cb.on_event,
+                    on_usage=cb.on_usage,
+                    on_accounting=cb.on_accounting,
+                    on_session=cb.on_session,
+                    should_interrupt=cb.should_interrupt,
+                    on_refusal=cb.on_refusal,
+                    request_approval=lambda method, subject: _await_operator_permission(
+                        project_id=project_id,
+                        agent=agent,
+                        run_id=run_id,
+                        method=method,
+                        subject=subject,
+                        timeout_seconds=_decision_timeout(env),
+                        label=transport.permission_card_label(method, subject),
+                        workspace_verdict=transport.workspace_verdict(method, subject, work_dir),
+                    ),
+                ),
+            )
+
+        def _adapter_refusal_label(method: str, subject: Dict[str, Any]) -> str:
+            return transport.refusal_label(method, subject)
+
+        start_turn = _adapter_start_turn
+        refusal_label = _adapter_refusal_label
+
+    assert runner is not None and start_turn is not None and refusal_label is not None
     run_liveness.active_app_server_runs.add(run_id)
     # The same recorder `_execute_run` builds, for the same run-long reasons — this transport
     # never reaches `_flush_line`, so without its own instance and its own `note` call below the

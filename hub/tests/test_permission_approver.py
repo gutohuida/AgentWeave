@@ -1475,13 +1475,14 @@ def test_codex_approval_subject_carries_what_the_operator_needs():
 
 
 def test_codex_posture_mapping():
-    from hub.api.v1.agent_trigger import _codex_posture
+    from hub.runner_adapters.codex import CodexAppServerTransport
     from hub.runner_commands import OPERATOR_POSTURE
 
-    assert _codex_posture("manual") == OPERATOR_POSTURE
-    assert _codex_posture(WORKSPACE_PERMISSION_MODE) == WORKSPACE_PERMISSION_MODE
-    assert _codex_posture("acceptEdits") is None
-    assert _codex_posture(None) is None
+    posture_for = CodexAppServerTransport().posture_for
+    assert posture_for("manual") == OPERATOR_POSTURE
+    assert posture_for(WORKSPACE_PERMISSION_MODE) == WORKSPACE_PERMISSION_MODE
+    assert posture_for("acceptEdits") is None
+    assert posture_for(None) is None
 
 
 def test_decide_hub_url_keyword_reaches_a_reference_and_refuses_the_environments_hub(
