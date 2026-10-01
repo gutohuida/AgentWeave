@@ -185,6 +185,13 @@ class RunFacts(BaseModel):
     # drop the second on the floor at serialisation time. Every element carries `kind`, which is
     # what a reader dispatches on.
     outside_workspace_writes: Optional[List[Dict[str, Any]]] = None
+    # How this run reached the Hub (`a-run-reaches-the-hub-without-mcp`, D1/D12), the row's own
+    # values: whether its harness started the tool server it was given (`connected`, `failed`,
+    # `absent`, or None for never tested), and what it was told to use (`mcp` or `shim`, None for a
+    # run that predates the record). No defaults beyond None, for `outside_workspace_writes`'s
+    # reason: an invented value would be indistinguishable from a recorded one.
+    harness_mcp_status: Optional[str] = Field(default=None, max_length=16)
+    plane_surface: Optional[str] = Field(default=None, max_length=8)
 
     model_config = {"from_attributes": True}
 

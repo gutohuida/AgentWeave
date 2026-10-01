@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0114"
+HEAD_REVISION = "0115"
 
 
 # ---------------------------------------------------------------------------
@@ -4469,3 +4469,65 @@ def test_migration_0114_is_guarded_when_permission_requests_does_not_exist(tmp_p
 
     with sqlite3.connect(db_file) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0114"
+
+
+# ---------------------------------------------------------------------------------------------
+# 0115 -- a run reaches the Hub without MCP: runs.harness_mcp_status, runs.plane_surface
+# ---------------------------------------------------------------------------------------------
+
+
+def test_migration_0115_adds_both_columns_and_backfills_connected_from_the_stamp(tmp_path) -> None:
+    """`a-run-reaches-the-hub-without-mcp`, design D1: an agent with grounds today keeps them on
+    the first turn after the upgrade, so a run already stamped `mcp_adapter_online_at` is recorded
+    `connected`; a run never stamped stays NULL (untested), and `plane_surface` is not guessed."""
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "harness_mcp_status.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0114")
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(runs)")}
+        assert "harness_mcp_status" not in columns and "plane_surface" not in columns
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p', 'p', '2026-10-01 09:00:00')"
+        )
+        conn.execute(
+            "INSERT INTO runs (id, project_id, agent, status, started_at, initiator, "
+            "mcp_adapter_online_at) VALUES ('stamped', 'p', 'a', 'completed', "
+            "'2026-10-01 10:00:00', 'operator', '2026-10-01 10:00:01')"
+        )
+        conn.execute(
+            "INSERT INTO runs (id, project_id, agent, status, started_at, initiator) "
+            "VALUES ('silent', 'p', 'a', 'completed', '2026-10-01 11:00:00', 'operator')"
+        )
+
+    _upgrade_to(db_url, "0115")
+    with sqlite3.connect(db_file) as conn:
+        info = {row[1]: row for row in conn.execute("PRAGMA table_info(runs)")}
+        assert info["harness_mcp_status"][3] == 0  # nullable
+        assert info["plane_surface"][3] == 0
+        rows = dict(conn.execute("SELECT id, harness_mcp_status FROM runs").fetchall())
+        assert rows == {"stamped": "connected", "silent": None}
+        assert (
+            conn.execute("SELECT COUNT(*) FROM runs WHERE plane_surface IS NOT NULL").fetchone()[0]
+            == 0
+        )
+
+
+def test_migration_0115_is_guarded_when_runs_does_not_exist(tmp_path) -> None:
+    db_file = tmp_path / "no_runs_0115.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0114')")
+
+    _upgrade_to(db_url, "0115")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0115"

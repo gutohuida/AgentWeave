@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import run_liveness
+from ... import mcp_announce, run_liveness
 from ...agent_auth import AgentActor, get_agent_actor
 from ...checkpoint_access import (
     AccessDeniedError,
@@ -25,6 +25,7 @@ from ...checkpoint_access import (
 from ...conversations import conversation_id_for_run
 from ...db.engine import get_session
 from ...db.models import Agent, CheckpointNote, Question, Run, Task
+from ...launchability import record_harness_mcp_status
 from ...run_task_binding import (
     announce_block,
     block_task_for_question,
@@ -478,9 +479,18 @@ async def report_mcp_adapter_online(
     behaviour depends on the answer — an adapter that cannot report in must still serve.
     """
     run = await session.get(Run, actor.run_id)
-    if run is not None and run.mcp_adapter_online_at is None:
+    if run is None:
+        return
+    # `a-run-reaches-the-hub-without-mcp` D1: the stamp and `harness_mcp_status = connected` (by
+    # its precedence: never over a harness's `failed`) in one commit, and a Copilot wait woken only
+    # after it. Should recording or the commit raise, the route answers 500 having written
+    # nothing; the adapter swallows that, a waiter times out, and the run is told the call command
+    # -- a false negative in the safe direction.
+    if run.mcp_adapter_online_at is None:
         run.mcp_adapter_online_at = datetime.now(timezone.utc)
-        await session.commit()
+    await record_harness_mcp_status(session, actor.run_id, "connected", source="announce")
+    await session.commit()
+    mcp_announce.notify(actor.run_id)
 
 
 @router.get("/recall/{output_id}")

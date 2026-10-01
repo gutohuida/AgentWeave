@@ -349,6 +349,8 @@ async def _run_facts_for(
             # coalescing the first into the second would be the one mistake this column exists
             # to prevent.
             outside_workspace_writes=run.outside_workspace_writes,
+            harness_mcp_status=run.harness_mcp_status,
+            plane_surface=run.plane_surface,
             error=fit_run_error(run.error),
         )
         for run in run_res.scalars()

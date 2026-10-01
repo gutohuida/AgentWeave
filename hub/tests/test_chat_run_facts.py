@@ -57,11 +57,15 @@ async def _add_run(
     started_at: datetime | None = None,
     ended_at: datetime | None = None,
     outside_workspace_writes: list | None = None,
+    harness_mcp_status: str | None = None,
+    plane_surface: str | None = None,
 ) -> None:
     async with async_session_factory() as session:
         await _conversation(session, project_id, agent, conversation_id)
         session.add(
             Run(
+                harness_mcp_status=harness_mcp_status,
+                plane_surface=plane_surface,
                 id=run_id,
                 project_id=project_id,
                 agent=agent,
@@ -259,6 +263,50 @@ async def test_outside_workspace_writes_never_none_becomes_empty_list(app, auth_
     runs = resp.json()["runs"]
     assert runs["run-rf1c-unseen"]["outside_workspace_writes"] is None
     assert runs["run-rf1c-clean"]["outside_workspace_writes"] == []
+
+
+@pytest.mark.asyncio
+async def test_run_facts_carry_how_each_run_reached_the_hub(app, auth_headers):
+    """`a-run-reaches-the-hub-without-mcp` task 1.11: `plane_surface` and `harness_mcp_status`, the
+    row's own values, on both routes that serve `RunFacts`; NULL stays null (never tested, never
+    recorded), not a default."""
+    project_id = await _project_id(app, auth_headers)
+    agent = "agent_rf1d"
+    rows = {
+        "run-rf1d-mcp": ("connected", "mcp"),
+        "run-rf1d-shim": ("absent", "shim"),
+        "run-rf1d-old": (None, None),
+    }
+    for i, (run_id, (status, surface)) in enumerate(rows.items()):
+        await _add_run(
+            project_id,
+            run_id=run_id,
+            agent=agent,
+            conversation_id="conv-rf1d",
+            harness_mcp_status=status,
+            plane_surface=surface,
+        )
+        await _add_output(
+            project_id,
+            out_id=f"o-rf1d-{i}",
+            agent=agent,
+            conversation_id="conv-rf1d",
+            run_id=run_id,
+        )
+        await _add_lifecycle_events(project_id, agent=agent, run_id=run_id, count=2)
+
+    chat = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/conv-rf1d", headers=auth_headers
+    )
+    timeline = await app.get(
+        f"/api/v1/projects/proj-test/agents/{agent}/timeline", headers=auth_headers
+    )
+    for resp in (chat, timeline):
+        assert resp.status_code == 200, resp.text
+        runs = resp.json()["runs"]
+        for run_id, (status, surface) in rows.items():
+            assert runs[run_id]["harness_mcp_status"] == status, (resp.url, run_id)
+            assert runs[run_id]["plane_surface"] == surface, (resp.url, run_id)
 
 
 # ---------------------------------------------------------------------------

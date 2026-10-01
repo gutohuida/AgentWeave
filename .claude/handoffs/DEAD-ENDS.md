@@ -1821,3 +1821,11 @@ disappears is indistinguishable from one that was forgotten.
   data and the roster** (any agent row missing from `data.agents` is deleted). `GET /agents` omits archived
   agents, which the sync still deletes if unnamed, so build the payload from `project_sessions.data` plus every `agents`
   row name read `mode=ro` (`scripts/drive/d1001_adapter_claude_unchanged.py`, `roster_sync`).
+- **2026-10-01 — `/tmp` is two different directories here.** Git Bash's `/tmp` is
+  `%LOCALAPPDATA%\Temp`; Python's `Path("/tmp/x")` on Windows is `C:\tmp\x`. A backup written by
+  one and restored by the other copied a **stale** file from an older session over
+  `hub/hub/launchability.py` (caught on the next read, restored from `C:\tmp`). Back up and restore
+  in the same tool, with a path under the repo or the session scratchpad.
+- **2026-10-01 — Python `write_text` on Windows writes CRLF.** It turns `\n` into `\r\n` unless
+  given `newline=""`, and this repo is LF (`eol=lf`). Use `read_bytes`/`write_bytes` or the Edit
+  tool, and normalise anything a script touched before committing.

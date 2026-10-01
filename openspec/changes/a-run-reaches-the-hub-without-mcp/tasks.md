@@ -42,6 +42,11 @@
     use; (b) and (d) rejected. Open question 11: (c), a full-access spec turn's non-`edit` requests judged as
     `workspace`.
 
+- [x] 0.4 IMPL verification round, 2026-10-01, against master `eec4085` (slices 1 and 2 archived; the 09-27
+  ORDER changes this design names archived except `a-run-records-that-its-calls-were-allowed`). An independent Opus
+  comparison of `design.md`/`tasks.md` against the tree, written to `verification-2026-10-01.md` beside this file
+  (moved references, per-task verdicts, broken premises, what each touched route returns when its callee raises).
+  Applied as the tasks are built; each task line names what it took from it.
 ## 1. Tests first — each fails on today's code
 
 Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
@@ -182,7 +187,7 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     form (design D11);
   - `described_access_path` never returns `"cli"` or `"http"` for a run. This includes
     `described_access_path("cli", override="cli") == "shim"`.
-- [ ] 1.10 `hub/tests/test_mcp_announce.py` (new), with an in-process app:
+- [x] 1.10 `hub/tests/test_mcp_announce.py` (new), with an in-process app:
   - `wait(run_id, 1.0)` returns True at once when `mcp_adapter_online_at` is already set;
   - it returns True within ~0.1 s when the announce route is called during the wait;
   - it returns False after the timeout otherwise;
@@ -195,9 +200,19 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     check-then-register it times out, so the test fails on R3's order;
   - (review fix 5) the stamp written directly to the row with no notify during the wait → `wait` returns True within
     one poll interval.
-- [ ] 1.11 `RunFacts` carries `plane_surface` and `harness_mcp_status` from the row. Extend the test that asserts
+  - **Done 2026-10-01**: `hub/tests/test_mcp_announce.py`, 24 tests, written red (import error) before
+    2.2/2.3. Precedence parametrised over six source orders plus the announce route over NULL/`absent`/`failed`;
+    `ValueError` for a value no source reports (`pending`, an announce of `absent`, a wait of `connected`, an
+    unknown source). The route's 500 is asserted through a client with `raise_app_exceptions=False` (the test
+    client otherwise re-raises), with neither the stamp nor the status written. Mutation checks: an announce that
+    writes over anything fails 2; **R3's check-then-register-then-wait order fails the race row** (a first
+    mutation that re-checked right after registering did not, correctly: that order is as safe as the fix).
+- [x] 1.11 `RunFacts` carries `plane_surface` and `harness_mcp_status` from the row. Extend the test that asserts
   `outside_workspace_writes` on the agent timeline / chat run facts (`grep -rn outside_workspace_writes
   hub/tests`), using the ordering the route returns.
+  - **Done 2026-10-01**: `test_chat_run_facts.py::test_run_facts_carry_how_each_run_reached_the_hub`, both
+    routes that serve `RunFacts` (chat conversation and `/agents/{name}/timeline`), rows `connected/mcp`,
+    `absent/shim` and NULL/NULL; red on `KeyError` first.
 - ~~1.12~~ **Cut by R3 with group 6** (design D8, open question 4). Codex's `decide_approval` is not a caller of the
   predicate. No Codex approval test is added.
 - [ ] 1.13 (group 7) `hub/tests/test_agent_default_permission_mode.py` (there is no `test_runner_commands*.py`): a non-yolo Claude
@@ -236,21 +251,33 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
 
 ## 2. The per-run record (design D1)
 
-- [ ] 2.1 Migration (next free number at build time; read `.claude/rules/db-migrations.md`):
+- [x] 2.1 Migration (next free number at build time; read `.claude/rules/db-migrations.md`):
   - add nullable `runs.harness_mcp_status` (String(16)) and `runs.plane_surface` (String(8)), guarded for a missing
     table;
   - backfill `harness_mcp_status='connected'` where `mcp_adapter_online_at IS NOT NULL`;
   - bump the head assertions in `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py`;
   - add the fields to `db/models.py` `Run` with a comment in the house style.
   - Verify: `py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py -q`.
-- [ ] 2.2 `record_harness_mcp_status(session, run_id, status, *, source)` in `launchability.py` (or a new small
+  - **Done 2026-10-01**: migration **0115** (`0115_run_harness_mcp_status_and_plane_surface.py`), guarded for a
+    missing `runs`, backfill only over NULL; `plane_surface` not backfilled (what an older run was told was never
+    recorded). Two tests in `test_migrations.py` (backfill of a stamped vs an unstamped run; the guard), red
+    first; head bumped in both files. Verify: `test_migrations.py` + `test_project_persistence.py` 124 passed.
+- [x] 2.2 `record_harness_mcp_status(session, run_id, status, *, source)` in `launchability.py` (or a new small
   module), with `source` one of `harness` / `announce` / `wait`. It enforces design D1's precedence (R3, replacing
   "`connected` is final" and unknown→`failed`). Callers outside the announce route call it inside a `try` that logs,
   because a failing record must never fail a run. The announce route (`agent_actions.py:459-483`)
   writes the stamp and the status in one commit, then calls `mcp_announce.notify(run_id)`. If either raises, the
   route returns 500 and writes nothing (design D1).
-- [ ] 2.3 `hub/hub/mcp_announce.py`: the per-run event registry and `wait(run_id, timeout)`, which checks the row
+  - **Done 2026-10-01**: `launchability.record_harness_mcp_status(db, run_id, status, *, source)`, which does not
+    commit (the announce route commits stamp and status together; executor callers commit in a `try`). The
+    announce route (`agent_actions.report_mcp_adapter_online`) records `connected` by precedence in the stamp's
+    commit, then `mcp_announce.notify`. Verification finding 13 applied: `notify` is total, so a write that landed
+    is never answered 500.
+- [x] 2.3 `hub/hub/mcp_announce.py`: the per-run event registry and `wait(run_id, timeout)`, which checks the row
   first (design D9). Registry entries are removed when the wait returns or the run ends.
+  - **Done 2026-10-01**: `hub/hub/mcp_announce.py` (`MCP_ANNOUNCE_WAIT_SECONDS = 15.0`, `POLL_SECONDS = 0.25`):
+    registers, then checks; re-checks the row every poll; honours `should_interrupt`; total (a failing check is
+    "not yet"); the registration is removed when the wait returns. Test 1.10 passes.
 - [ ] 2.4 Replace `harness_has_honoured_mcp` with `latest_mcp_test`, and change `described_access_path` to take
   `latest` and to return `mcp` | `shim`. Update the call at `agent_trigger.py:1107-1112`. Tests 1.1 and 1.9 pass.
 - [ ] 2.5 Claude: `ParsedLine.harness_mcp_status` and the `system`/`init` branch in `parse_claude_line`. The claude
@@ -267,8 +294,10 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     message says the run was told to reach the Hub with `aw-tool` and contains no "no AgentWeave tools"; for `"mcp"`
     it is today's text; the code and once-per-turn rule are unchanged. `run_turn` passes the request's told surface.
     Test: the same class, a `failed` status with each told surface.
-- [ ] 2.7 `RunFacts` gains the two fields at both construction sites (`agents.py:898`, `agent_chat.py:341` at R2). Test
+- [x] 2.7 `RunFacts` gains the two fields at both construction sites (`agents.py:898`, `agent_chat.py:341` at R2). Test
   1.11 passes.
+  - **Done 2026-10-01**: `RunFacts.harness_mcp_status`/`plane_surface` (`schemas/agents.py`), set at both
+    construction sites (`agents.py` timeline, `agent_chat.py` chat). Test 1.11 passes.
 
 ## 3. The call mode (design D3, D4, D6, D7)
 

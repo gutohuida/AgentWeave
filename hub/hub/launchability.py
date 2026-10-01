@@ -224,6 +224,79 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
 # ---------------------------------------------------------------------------
 
 
+#: What a source may report about whether this run's harness started the Hub's tool server
+#: (`a-run-reaches-the-hub-without-mcp`, design D1). Anything else -- a vendor's `pending`, a
+#: Codex `cancelled` -- is not a report, and its caller does not pass it here.
+HARNESS_MCP_STATUSES = ("connected", "failed", "absent")
+_SOURCE_REPORTS = {
+    "harness": frozenset(HARNESS_MCP_STATUSES),  # the harness's own recognised report
+    "announce": frozenset({"connected"}),  # the adapter's `POST /mcp-adapter-online`
+    "wait": frozenset({"absent"}),  # a runner that tests before its first prompt timed out
+}
+
+
+async def record_harness_mcp_status(
+    db: AsyncSession, run_id: str, status: str, *, source: str
+) -> None:
+    """Record what one source says about this run's tool server, by D1's precedence.
+
+    The result does not depend on the order the sources arrive in:
+
+    1. the harness's own report decides, and a later one replaces an earlier one (Copilot's
+       `mcp_server_status_changed` can move a server twice);
+    2. otherwise the announce decides `connected`, over NULL and `absent`, never over `failed` --
+       it is posted before the server answers `initialize`, so it proves the process started and
+       no more, and a harness that then failed the connection has already produced it;
+    3. otherwise the wait decides `absent`, over NULL only.
+
+    One column suffices: `failed` only ever comes from a harness report. Does not commit; the
+    announce route writes its stamp and this in one commit, and an executor's caller commits in a
+    `try` that logs, because a failing record must never fail a run. A run that does not exist is
+    left alone. An unrecognised status, or one its source never reports, raises `ValueError`.
+    """
+    allowed = _SOURCE_REPORTS.get(source)
+    if allowed is None or status not in allowed:
+        raise ValueError(f"{source!r} does not report harness MCP status {status!r}")
+    from .db.models import Run
+
+    run = await db.get(Run, run_id)
+    if run is None:
+        return
+    current = run.harness_mcp_status
+    if source == "harness":
+        run.harness_mcp_status = status
+    elif source == "announce":
+        if current in (None, "absent"):
+            run.harness_mcp_status = status
+    elif current is None:
+        run.harness_mcp_status = status
+
+
+async def latest_mcp_test(db: AsyncSession, project_id: str, agent: str) -> Optional[str]:
+    """The `harness_mcp_status` of this agent's most recent *tested* run, or None.
+
+    What the next run is told reads this (`described_access_path`), replacing "any run ever
+    announced", which a policy arriving after the first success never revoked (F340). Untested runs
+    (NULL) are skipped, so a run that was never given the server, or ended before any source
+    reported, neither grants nor revokes grounds. Most recent by `started_at`, then `id`, so two
+    runs started in one clock tick still give one answer. Per agent, for the reason
+    `harness_has_honoured_mcp` gives below.
+    """
+    from .db.models import Run
+
+    result = await db.execute(
+        select(Run.harness_mcp_status)
+        .where(
+            Run.project_id == project_id,
+            Run.agent == agent,
+            Run.harness_mcp_status.is_not(None),
+        )
+        .order_by(Run.started_at.desc(), Run.id.desc())
+        .limit(1)
+    )
+    return result.scalars().first()
+
+
 async def harness_has_honoured_mcp(db: AsyncSession, project_id: str, agent: str) -> bool:
     """Has this agent's harness ever actually started a server the Hub injected?
 

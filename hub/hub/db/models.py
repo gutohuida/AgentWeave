@@ -1234,6 +1234,23 @@ class Run(Base):
     # run that was never given one. It is read only through `described_access_path`, and only as
     # a fact about the *next* run — the notice for this run is composed before it is spawned.
     mcp_adapter_online_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    # Whether this run's harness started the Hub's tool server it was given: `connected`,
+    # `failed`, `absent`, or NULL for a run never tested (`a-run-reaches-the-hub-without-mcp`, D1).
+    #
+    # `mcp_adapter_online_at` above is positive-only and, read as "any run ever", permanent: a
+    # policy that arrives after the first success was never noticed (F340). The harness is not in
+    # fact silent -- Claude's `init` line lists its servers, Codex reports each server's startup,
+    # Copilot's wait times out -- so the negatives are recorded here too, and what an agent's next
+    # run is told reads the latest *tested* run (`launchability.latest_mcp_test`), never this
+    # run's own value. One writer, `record_harness_mcp_status`, enforces a source precedence: the
+    # harness's own report outranks the announce, which outranks Copilot's wait.
+    #
+    # Read only to decide what a run is *told*. Nothing that decides containment reads it.
+    harness_mcp_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # What this run was told it reaches the Hub with: `mcp` (the tool server's tools) or `shim`
+    # (the `aw-tool` call command). Written once the run's prompt is composed; NULL for runs that
+    # predate the column, whose notice nobody recorded.
+    plane_surface: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
 
     __table_args__ = (
         CheckConstraint("initiator IN ('operator', 'autonomous')", name="ck_runs_initiator"),

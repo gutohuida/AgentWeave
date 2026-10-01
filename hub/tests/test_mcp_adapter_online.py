@@ -189,3 +189,70 @@ def test_the_adapter_posts_exactly_once_to_the_announce_route(monkeypatch):
     monkeypatch.setattr(mcp_server, "_hub_request", lambda *a, **k: calls.append(a))
     mcp_server._announce_adapter_online()
     assert calls == [("POST", "/mcp-adapter-online")]
+
+
+# --- `a-run-reaches-the-hub-without-mcp` D1: the latest tested run decides (F340) ----------------
+
+
+async def _planted(run_id: str, agent: str, started_at: datetime, status) -> None:
+    """`started_at` is written into the row: patching a clock does not freeze it (DEAD-ENDS)."""
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id=run_id,
+                project_id="proj-test",
+                agent=agent,
+                status="completed",
+                turn_depth=0,
+                started_at=started_at,
+                harness_mcp_status=status,
+            )
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "older, newer, expected",
+    [
+        ("connected", "absent", "absent"),
+        ("absent", "connected", "connected"),
+        ("connected", "failed", "failed"),
+    ],
+)
+async def test_the_latest_tested_run_decides(app, older, newer, expected):
+    """F340's measured one-off: an older `connected` must not outlive a newer negative test."""
+    from hub.launchability import latest_mcp_test
+
+    agent = f"g-{older}-{newer}"
+    await _planted(f"{agent}-1", agent, datetime(2026, 10, 1, 9, tzinfo=timezone.utc), older)
+    await _planted(f"{agent}-2", agent, datetime(2026, 10, 1, 10, tzinfo=timezone.utc), newer)
+
+    async with async_session_factory() as session:
+        assert await latest_mcp_test(session, "proj-test", agent) == expected
+
+
+@pytest.mark.asyncio
+async def test_an_untested_run_is_skipped(app):
+    from hub.launchability import latest_mcp_test
+
+    await _planted("g-skip-1", "g-skip", datetime(2026, 10, 1, 9, tzinfo=timezone.utc), "connected")
+    await _planted("g-skip-2", "g-skip", datetime(2026, 10, 1, 10, tzinfo=timezone.utc), None)
+
+    async with async_session_factory() as session:
+        assert await latest_mcp_test(session, "proj-test", "g-skip") == "connected"
+        assert await latest_mcp_test(session, "proj-test", "nobody") is None
+        assert await latest_mcp_test(session, "proj-other", "g-skip") is None
+
+
+@pytest.mark.asyncio
+async def test_a_tie_on_started_at_is_broken_by_id(app):
+    """Two runs stamped in one clock tick (~15.6 ms here) still give one answer."""
+    from hub.launchability import latest_mcp_test
+
+    tick = datetime(2026, 10, 1, 9, tzinfo=timezone.utc)
+    await _planted("g-tie-a", "g-tie", tick, "connected")
+    await _planted("g-tie-b", "g-tie", tick, "absent")
+
+    async with async_session_factory() as session:
+        assert await latest_mcp_test(session, "proj-test", "g-tie") == "absent"
