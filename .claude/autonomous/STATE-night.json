@@ -8,33 +8,51 @@
     "parent_branch":  "master",
     "parent_sha":  "db1a331",
     "stop_at":  "2026-10-02T07:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "current":  "a-dialog-takes-the-keyboard-when-its-opens-impl",
+    "next_action":  "Read gh CI verdict for the sha this firing inherits first. Then open openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md: rounds (0.1-0.3) and APPROVALS (B11/F307, 09-24) are already done, no blocker. Take task 1.1 (focus harness test, red) together with its implementing tasks 2.1+2.2 (useDialogFocus.ts's D1 move, tabIndex=-1 on panels) as one vertical slice -- write the test, show it red, implement, show it green, tick both. Run hub/ui's vitest once first to confirm the baseline (no prior run recorded tonight).",
     "queue":  [
                   {
-                      "id":  "compose",
+                      "id":  "a-dialog-takes-the-keyboard-when-its-opens-impl",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "Implement a-dialog-takes-the-keyboard-when-it-opens (B11, F307), task by task, vertical slices",
+                      "model":  "sonnet",
+                      "effort":  "high",
+                      "detail":  "Approved (APPROVALS.md lines ~130/243), rounds 0.1-0.3 done, no dependency gate. 26 of 29 tasks remain across group 1 (tests) and group 2 (the fix: useDialogFocus.ts, tabIndex, data-dialog-initial-focus marks, SetupModal, ArchiveConfirmDialog/JobForm D6), ending in 2.11 (vitest+lint+build+refresh_ui_bundle, one commit with hub/hub/static/ui). Never below one task per firing; split further in the log if a task is too big."
+                  },
+                  {
+                      "id":  "a-dialog-takes-the-keyboard-when-its-opens-drive",
+                      "status":  "open",
+                      "title":  "Drive the change in a browser against the served bundle",
+                      "model":  "sonnet",
+                      "effort":  "medium",
+                      "detail":  "Group 3 of the same tasks.md. UI change: must be driven in a real browser against the rebuilt bundle on a fresh drive port/profile, not a transcription. Record in scripts/drive/FINDINGS.md if it disproves or confirms F307."
+                  },
+                  {
+                      "id":  "a-dialog-takes-the-keyboard-when-its-opens-archive",
+                      "status":  "open",
+                      "title":  "openspec validate --strict, then archive the change",
+                      "model":  "sonnet",
+                      "effort":  "medium",
+                      "detail":  "Only after -impl and -drive are both done. Set F307's FINDINGS.md Status line to fixed <sha> and correct the open-severity list, per night-window.md step 4.1."
                   }
               ],
     "decisions_for_user":  [
-
+                               "a-run-reaches-hub-10.1"
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }

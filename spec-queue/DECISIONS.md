@@ -20,6 +20,19 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### `a-run-reaches-the-hub-without-mcp` task 10.1 needs the operator on the work PC -- 2026-10-01 night, OPEN
+
+- OPEN      a-run-reaches-hub-10.1  **Do the human-only checks in this change's `test-guide.md`,
+  or explicitly waive them, so task 10.2 (archive) can proceed.** The change is at 55/58 tasks:
+  group 9 is done (9.9 footed F340/F301/F299's outcomes into `FINDINGS.md`; 9.10 is separately
+  blocked, below). Task 10.1 names step 8's answer -- whether Copilot's shell sessions persist
+  between a run's commands on the work PC, and whether any run activated a venv, imported a
+  module or set `ComSpec` before an `aw-tool` call -- as the trigger for a follow-up
+  detect-and-degrade change (design open question 7, decided (a) now / (c) as a follow-up,
+  2026-09-28). Nothing in this window can run that check; it is scoped to the operator's own
+  machine. Waive it, or do it and record the answer in the Round log, and 10.2 (strict validate,
+  then archive) can run.
+
 ### The MISREPORT ratchet measures a decayed table -- 2026-09-21 night, OPEN
 
 - OPEN      F396-rekey  **How should `RENDERS` be re-anchored, and who triages the 18 sites that
