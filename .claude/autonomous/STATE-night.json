@@ -1,58 +1,240 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-10-01-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "db1a331",
-    "stop_at":  "2026-10-02T07:00:00+01:00",
-    "iteration":  2,
-    "log_file":  ".claude/autonomous/2026-10-01-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "a-dialog-takes-the-keyboard-when-its-opens-impl",
-    "next_action":  "Continue openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md group 1/2. Tasks 1.1/2.1/2.2 are done (commit 68f11b4): D1's focus move, tabIndex=-1 on all 8 panelRef elements (grep found an 8th, StartFlowDialog, not in design's 7 -- noted in design.md's round log, fold into task 2.9's re-grep). Next: task 1.2 (mark on the second button -> focus lands there) and 1.3 (no mark -> first focusable) in useDialogFocus.test.tsx's new 'initial focus on open (D1)' describe block -- both should already be GREEN since D1's implementation is generic (marked ?? first ?? panel); write them, confirm green, tick. Then task 1.4 (every control disabled -> focus the panel) as its own slice, since it needs its own harness variant. Run hub/ui vitest for useDialogFocus.test.tsx after each.",
-    "queue":  [
-                  {
-                      "id":  "a-dialog-takes-the-keyboard-when-its-opens-impl",
-                      "status":  "open",
-                      "title":  "Implement a-dialog-takes-the-keyboard-when-it-opens (B11, F307), task by task, vertical slices",
-                      "model":  "sonnet",
-                      "effort":  "high",
-                      "detail":  "Approved (APPROVALS.md lines ~130/243), rounds 0.1-0.3 done, no dependency gate. 26 of 29 tasks remain across group 1 (tests) and group 2 (the fix: useDialogFocus.ts, tabIndex, data-dialog-initial-focus marks, SetupModal, ArchiveConfirmDialog/JobForm D6), ending in 2.11 (vitest+lint+build+refresh_ui_bundle, one commit with hub/hub/static/ui). Never below one task per firing; split further in the log if a task is too big."
-                  },
-                  {
-                      "id":  "a-dialog-takes-the-keyboard-when-its-opens-drive",
-                      "status":  "open",
-                      "title":  "Drive the change in a browser against the served bundle",
-                      "model":  "sonnet",
-                      "effort":  "medium",
-                      "detail":  "Group 3 of the same tasks.md. UI change: must be driven in a real browser against the rebuilt bundle on a fresh drive port/profile, not a transcription. Record in scripts/drive/FINDINGS.md if it disproves or confirms F307."
-                  },
-                  {
-                      "id":  "a-dialog-takes-the-keyboard-when-its-opens-archive",
-                      "status":  "open",
-                      "title":  "openspec validate --strict, then archive the change",
-                      "model":  "sonnet",
-                      "effort":  "medium",
-                      "detail":  "Only after -impl and -drive are both done. Set F307's FINDINGS.md Status line to fixed <sha> and correct the open-severity list, per night-window.md step 4.1."
-                  }
-              ],
-    "decisions_for_user":  [
-                               "a-run-reaches-hub-10.1"
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-10-01-daily",
+    "parent_branch": "master",
+    "parent_sha": "db1a331",
+    "stop_at": "2026-10-02T07:00:00+01:00",
+    "iteration": 2,
+    "log_file": ".claude/autonomous/2026-10-01-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "F479-fix",
+    "next_action": "OPERATOR REDIRECT: the queue was rewritten from spec-queue/APPROVALS.md ## 2026-10-01 (operator redirect, written in session before 23:00, committed e566446 after compose ran). Read that section first. Then F479-fix. The a-dialog-takes-the-keyboard items resume after F478-rev; their prior next_action said: Continue openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md group 1/2. Tasks 1.1/2.1/2.2 are done (commit 68f11b4): D1's focus move, tabIndex=-1 on all 8 panelRef elements (grep found an 8th, StartFlowDialog, not in design's 7 -- noted in design.md's round log, fold into task 2.9's re-grep). Next: task 1.2 (mark on the second button -> focus lands there) and 1.3 (no mark -> first focusable) in useDialogFocus.test.tsx's new 'initial focus on open (D1)' describe block -- both should already be GREEN since D1's implementation is generic (marked ?? first ?? panel); write them, confirm green, tick. Then task 1.4 (every control disabled -> focus the panel) as its own slice, since it needs its own harness variant. Run hub/ui vitest for useDialogFocus.test.tsx after each.",
+    "queue": [
+        {
+            "id": "F479-fix",
+            "status": "open",
+            "title": "F479: drop str_replace from slice 2's Copilot spec-turn --excluded-tools, with a test",
+            "model": "sonnet",
+            "effort": "high",
+            "detail": "First item per spec-queue/APPROVALS.md ## 2026-10-01 (operator redirect, written in session before 23:00, committed e566446 after compose ran). One-line fix + test; foot F479 in scripts/drive/FINDINGS.md as fixed <sha>."
+        },
+        {
+            "id": "F478-r1",
+            "status": "open",
+            "title": "F478 R1: explore and propose (the URL reader of archived a-url-is-not-a-path)",
+            "detail": "Per spec-queue/APPROVALS.md ## 2026-10-01 (operator redirect, written in session before 23:00, committed e566446 after compose ran): operator's explicit exception, the night writes this proposal. Check whether the-shell-judge-reads-a-word-whole owns the same code and say how the two order. Unblocks slice 3 task 9.10."
+        },
+        {
+            "id": "F478-r2",
+            "status": "open",
+            "title": "F478 R2: independent re-derivation against the code",
+            "detail": "Fresh comparison, not a re-read of R1."
+        },
+        {
+            "id": "F478-r3",
+            "status": "open",
+            "title": "F478 R3: independent re-derivation against the code",
+            "detail": "Fresh comparison, not a re-read of R2."
+        },
+        {
+            "id": "F478-rev",
+            "status": "open",
+            "title": "F478 adversarial Opus review of the proposal",
+            "detail": "No -impl tonight: the operator approves it first. Leave an OPEN DECISIONS.md row for approval."
+        },
+        {
+            "id": "a-dialog-takes-the-keyboard-when-its-opens-impl",
+            "status": "open",
+            "title": "Implement a-dialog-takes-the-keyboard-when-it-opens (B11, F307), task by task, vertical slices",
+            "model": "sonnet",
+            "effort": "high",
+            "detail": "Approved (APPROVALS.md lines ~130/243), rounds 0.1-0.3 done, no dependency gate. 26 of 29 tasks remain across group 1 (tests) and group 2 (the fix: useDialogFocus.ts, tabIndex, data-dialog-initial-focus marks, SetupModal, ArchiveConfirmDialog/JobForm D6), ending in 2.11 (vitest+lint+build+refresh_ui_bundle, one commit with hub/hub/static/ui). Never below one task per firing; split further in the log if a task is too big."
+        },
+        {
+            "id": "a-dialog-takes-the-keyboard-when-its-opens-drive",
+            "status": "open",
+            "title": "Drive the change in a browser against the served bundle",
+            "model": "sonnet",
+            "effort": "medium",
+            "detail": "Group 3 of the same tasks.md. UI change: must be driven in a real browser against the rebuilt bundle on a fresh drive port/profile, not a transcription. Record in scripts/drive/FINDINGS.md if it disproves or confirms F307."
+        },
+        {
+            "id": "a-dialog-takes-the-keyboard-when-its-opens-archive",
+            "status": "open",
+            "title": "openspec validate --strict, then archive the change",
+            "model": "sonnet",
+            "effort": "medium",
+            "detail": "Only after -impl and -drive are both done. Set F307's FINDINGS.md Status line to fixed <sha> and correct the open-severity list, per night-window.md step 4.1."
+        },
+        {
+            "id": "a-copilot-run-shows-its-credits-impl",
+            "status": "open",
+            "title": "Implement a-copilot-run-shows-its-credits",
+            "detail": "ghcp-d5-order relaxed tonight: builds on slice 3 built-but-unarchived (see spec-queue/APPROVALS.md ## 2026-10-01 (operator redirect, written in session before 23:00, committed e566446 after compose ran))."
+        },
+        {
+            "id": "a-copilot-run-shows-its-credits-drive",
+            "status": "open",
+            "title": "Drive a-copilot-run-shows-its-credits",
+            "detail": "Haiku turns only."
+        },
+        {
+            "id": "a-copilot-run-shows-its-credits-archive",
+            "status": "open",
+            "title": "Archive a-copilot-run-shows-its-credits",
+            "detail": "If a delta collides with slice 3's unsynced delta, stop and log it; do not merge by hand."
+        },
+        {
+            "id": "a-copilot-agent-uses-hooks-and-its-own-agents-impl",
+            "status": "open",
+            "title": "Implement a-copilot-agent-uses-hooks-and-its-own-agents",
+            "detail": "Only after slice 4 is ARCHIVED; if slice 4 is unfinished, skip to the next item. Task 7.6 skipped (real money)."
+        },
+        {
+            "id": "a-copilot-agent-uses-hooks-and-its-own-agents-drive",
+            "status": "open",
+            "title": "Drive a-copilot-agent-uses-hooks-and-its-own-agents",
+            "detail": "Haiku turns only."
+        },
+        {
+            "id": "a-copilot-agent-uses-hooks-and-its-own-agents-archive",
+            "status": "open",
+            "title": "Archive a-copilot-agent-uses-hooks-and-its-own-agents",
+            "detail": "If a delta collides with slice 3's unsynced delta, stop and log it; do not merge by hand."
+        },
+        {
+            "id": "the-corpus-is-indexed-arranged-and-adopted-from-the-app-impl",
+            "status": "open",
+            "title": "Implement the-corpus-is-indexed-arranged-and-adopted-from-the-app",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "a-specification-is-read-in-results-that-fit-impl",
+            "status": "open",
+            "title": "Implement a-specification-is-read-in-results-that-fit",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "input-the-hub-accepted-is-answered-as-accepted-impl",
+            "status": "open",
+            "title": "Implement input-the-hub-accepted-is-answered-as-accepted",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "charters-are-named-once-and-an-empty-one-says-so-impl",
+            "status": "open",
+            "title": "Implement charters-are-named-once-and-an-empty-one-says-so",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "the-app-window-keeps-the-operators-preferences-impl",
+            "status": "open",
+            "title": "Implement the-app-window-keeps-the-operators-preferences",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "a-run-records-that-its-calls-were-allowed-impl",
+            "status": "open",
+            "title": "Implement a-run-records-that-its-calls-were-allowed",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "drift-is-scanned-and-answered-on-the-document-impl",
+            "status": "open",
+            "title": "Implement drift-is-scanned-and-answered-on-the-document",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "a-retried-firing-records-how-its-work-ended-impl",
+            "status": "open",
+            "title": "Implement a-retried-firing-records-how-its-work-ended",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "a-task-checkout-catches-up-with-its-approved-prerequisites-impl",
+            "status": "open",
+            "title": "Implement a-task-checkout-catches-up-with-its-approved-prerequisites",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "stop-clears-a-run-an-earlier-hub-left-running-impl",
+            "status": "open",
+            "title": "Implement stop-clears-a-run-an-earlier-hub-left-running",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "worker-spend-counts-against-the-budget-impl",
+            "status": "open",
+            "title": "Implement worker-spend-counts-against-the-budget",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "every-event-the-hub-sends-reaches-the-app-impl",
+            "status": "open",
+            "title": "Implement every-event-the-hub-sends-reaches-the-app",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "a-flow-stages-its-review-in-the-dispatch-impl",
+            "status": "open",
+            "title": "Implement a-flow-stages-its-review-in-the-dispatch",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "the-shell-judge-reads-a-word-whole-impl",
+            "status": "open",
+            "title": "Implement the-shell-judge-reads-a-word-whole",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "a-drive-or-a-home-variable-names-a-directory-by-itself-impl",
+            "status": "open",
+            "title": "Implement a-drive-or-a-home-variable-names-a-directory-by-itself",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "drift-watches-the-files-its-evidence-is-about-impl",
+            "status": "open",
+            "title": "Implement drift-watches-the-files-its-evidence-is-about",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "a-name-a-caller-chooses-reaches-its-own-resource-impl",
+            "status": "open",
+            "title": "Implement a-name-a-caller-chooses-reaches-its-own-resource",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "a-file-path-is-not-redacted-as-a-credential-impl",
+            "status": "open",
+            "title": "Implement a-file-path-is-not-redacted-as-a-credential",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        },
+        {
+            "id": "a-refused-first-send-leaves-no-exploration-behind-impl",
+            "status": "open",
+            "title": "Implement a-refused-first-send-leaves-no-exploration-behind",
+            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
+        }
+    ],
+    "decisions_for_user": [
+        "a-run-reaches-hub-10.1"
+    ],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
 }
