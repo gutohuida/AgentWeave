@@ -35,8 +35,9 @@ from .db.models import (
     Project,
     Runner,
 )
-from .file_mentions import neutralise_file_mentions, restore_file_mentions
+from .file_mentions import restore_file_mentions
 from .pty_runner import resolve_executable
+from .runner_adapters import get_adapter
 from .subprocess_windows import no_console_kwargs
 from .utils import persist_event
 
@@ -63,10 +64,6 @@ _PROMPT = (
     "--- conversation ---\n{excerpt}\n--- end ---"
 )
 
-# Runners whose CLI can answer a one-shot text prompt. Anything else is a no-op rather than a
-# guessed invocation — the same line `runner_commands.build_command` holds.
-_SUPPORTED_CLIS = ("claude", "codex", "copilot")
-
 
 def build_title_command(*, cli: str, model: Optional[str], prompt: str) -> Optional[List[str]]:
     """The one-shot invocation, or None when this CLI has no supported one.
@@ -74,25 +71,21 @@ def build_title_command(*, cli: str, model: Optional[str], prompt: str) -> Optio
     Deliberately not `runner_commands.build_command`: that builds an *agent turn* — streaming
     JSON, an MCP server, a permission posture, a context file. None of it applies to a process
     that reads one prompt and prints one line.
+
+    Claude and Codex go through their adapter's `one_shot` (design D8) — no tools, on either CLI
+    (F195's review). Since F195 the titler runs in the project's own directory on an excerpt of
+    the transcript, which is untrusted text -- a prompt injection in it must find nothing to act
+    with. `--tools ""` removes every built-in tool and still reads the project's `CLAUDE.md`,
+    which is the point of running there; measured 2026-09-23 with F195's ZEBRA control,
+    `--restricted` and `--setting-sources ""` both drop that memory as well, so neither is used.
+    The project's own settings hooks still run, as they do in its sessions. `--strict-mcp-config`
+    (with no `--mcp-config`) also removes the account's claude.ai connectors, which `--tools ""`
+    leaves; measured 2026-09-24 to keep `CLAUDE.md` (F447). Copilot has no adapter in this slice
+    (D1) and keeps its own branch here until one lands.
     """
-    # No tools, on either CLI (F195's review). Since F195 the titler runs in the project's own
-    # directory on an excerpt of the transcript, which is untrusted text -- a prompt injection in it
-    # must find nothing to act with. `--tools ""` removes every built-in tool and still reads the
-    # project's `CLAUDE.md`, which is the point of running there; measured 2026-09-23 with F195's
-    # ZEBRA control, `--restricted` and `--setting-sources ""` both drop that memory as well, so
-    # neither is used. The project's own settings hooks still run, as they do in its sessions.
-    # `--strict-mcp-config` (with no `--mcp-config`) also removes the account's claude.ai
-    # connectors, which `--tools ""` leaves; measured 2026-09-24 to keep `CLAUDE.md` (F447).
-    if cli == "claude":
-        cmd = [cli, "--tools", "", "--strict-mcp-config"]
-        if model:
-            cmd += ["--model", model]
-        return cmd + ["-p", neutralise_file_mentions(prompt)]
-    if cli == "codex":
-        cmd = [cli, "exec", "--skip-git-repo-check", "--sandbox", "read-only"]
-        if model:
-            cmd += ["--model", model]
-        return cmd + [neutralise_file_mentions(prompt)]
+    adapter = get_adapter(cli)
+    if adapter is not None:
+        return adapter.one_shot("title", model=model, prompt=prompt)
     if cli == "copilot":
         # The worker's no-tool invocation, keeping the project's custom instructions: the titler
         # runs in the project's directory so that its memory applies (`a-copilot-agent-runs-over-
@@ -256,7 +249,7 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
             return None
 
         runner = await _resolve_runner(db, project, conversation.agent)
-        if runner is None or runner.cli not in _SUPPORTED_CLIS:
+        if runner is None or (get_adapter(runner.cli) is None and runner.cli != "copilot"):
             return None
         agent_name = conversation.agent
 

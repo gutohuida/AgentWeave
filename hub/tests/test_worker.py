@@ -461,7 +461,7 @@ from pathlib import Path  # noqa: E402
 
 import hub.worker as worker_module  # noqa: E402
 from hub.copilot_probe import CopilotExecutableNotFound  # noqa: E402
-from hub.worker import SUPPORTED_CLIS, parse_copilot_envelope  # noqa: E402
+from hub.worker import parse_copilot_envelope  # noqa: E402
 
 ONESHOT_FIXTURE = Path(__file__).parent / "fixtures" / "copilot_acp" / "oneshot_ok.jsonl"
 FAKE_EXE = "C:/npm/node_modules/@github/copilot/node_modules/@github/copilot-win32-x64/copilot.exe"
@@ -488,10 +488,6 @@ def test_the_copilot_worker_command_offers_no_tool(copilot_exe):
         "--model",
         "gpt-5.5",
     ]
-
-
-def test_copilot_is_a_supported_one_shot_cli():
-    assert "copilot" in SUPPORTED_CLIS
 
 
 def test_the_captured_copilot_envelope_yields_its_answer():

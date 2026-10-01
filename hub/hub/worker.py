@@ -49,6 +49,10 @@ from .db.models import WorkerInvocation
 from .file_mentions import neutralise_file_mentions, restore_file_mentions
 from .model_catalog import get_provider, undeclared_model_reason
 from .pty_runner import resolve_executable
+from .runner_adapters import get_adapter
+from .runner_adapters.claude import parse_claude_envelope  # noqa: F401
+from .runner_adapters.codex import parse_codex_envelope  # noqa: F401
+from .runner_adapters.one_shot import WorkerUsage, _int_or_none, extract_json_object  # noqa: F401
 from .subprocess_windows import no_console_kwargs
 from .utils import short_id
 
@@ -65,11 +69,6 @@ WORKER_TIMEOUT_SECONDS = 180
 MAX_CONCURRENT_WORKER_RUNS = 2
 _gate = asyncio.Semaphore(MAX_CONCURRENT_WORKER_RUNS)
 
-# CLIs with a supported one-shot invocation. Anything else is refused with a stated outcome
-# rather than a guessed invocation — the line `runner_commands.build_command` and
-# `conversation_titles.build_title_command` both hold.
-SUPPORTED_CLIS = ("claude", "codex", "copilot")
-
 # Every way a worker call can end. "ok" is the only success; the rest are distinguished because
 # "it failed" is not diagnosable — a timeout, a CLI that is not installed, and a model that
 # answered in prose are three different problems with three different fixes.
@@ -83,23 +82,6 @@ OUTCOMES = (
     "unparseable",
     "schema_invalid",
 )
-
-
-@dataclass(frozen=True)
-class WorkerUsage:
-    """What one invocation consumed, normalised across providers. All fields optional.
-
-    A provider that does not report a dimension leaves it None rather than reporting zero:
-    "no reasoning tokens" and "this CLI does not tell us about reasoning tokens" are different
-    facts, and only the second one should stop anybody trying to add up a bill.
-    """
-
-    input_tokens: Optional[int] = None
-    output_tokens: Optional[int] = None
-    cache_read_tokens: Optional[int] = None
-    cache_write_tokens: Optional[int] = None
-    reasoning_tokens: Optional[int] = None
-    cost_usd_micros: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -189,26 +171,15 @@ def build_worker_command(
     Deliberately not `runner_commands.build_command`: that builds an *agent turn*. JSON mode is
     chosen over plain text for both CLIs because it is the only way the call reports what it cost,
     and because it puts the answer at a fixed address instead of at the end of a stream of prose.
+
+    Claude and Codex go through their adapter's `one_shot` (design D8); Copilot has no adapter in
+    this slice (D1) and keeps its own branch here until one lands.
     """
-    # No tools (F420), exactly as `conversation_titles.build_title_command` does since F195. Both
-    # prompts this builder carries -- a checkpoint's transcript and a probe's rendered checkpoint --
-    # are untrusted text, and both ask only for a JSON object written from that text, so nothing
-    # needs a tool. `--tools ""` removes every built-in one, and `--strict-mcp-config` (with no
-    # `--mcp-config`) removes the account's claude.ai connectors, which `--tools ""` leaves (F447,
-    # measured 2026-09-24). Codex gets its read-only sandbox below.
-    if cli == "claude":
-        cmd = ["claude", "--tools", "", "--strict-mcp-config", "--output-format", "json"]
-        if model:
-            cmd += ["--model", model]
-        return cmd + ["-p", neutralise_file_mentions(prompt)]
-    if cli == "codex":
-        cmd = ["codex", "exec", "--skip-git-repo-check", "--json"]
-        cmd += ["--ephemeral", "--sandbox", "read-only"]
-        if output_schema_path:
-            cmd += ["--output-schema", output_schema_path]
-        if model:
-            cmd += ["--model", model]
-        return cmd + [neutralise_file_mentions(prompt)]
+    adapter = get_adapter(cli)
+    if adapter is not None:
+        return adapter.one_shot(
+            "worker", model=model, prompt=prompt, output_schema_path=output_schema_path
+        )
     if cli == "copilot":
         return copilot_one_shot_command(prompt=prompt, model=model, custom_instructions=False)
     return None
@@ -257,128 +228,6 @@ def strict_output_schema(output_model: Type[BaseModel]) -> Dict[str, Any]:
     return schema
 
 
-def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
-    """The last balanced **top-level** JSON object in *text*, or None.
-
-    Models append rather than prepend: asked for JSON and nothing else, one that disobeys says
-    "Here is the object:" first, or wraps it in a fenced block. Taking the last complete object
-    handles both, and handles neither being present by returning None. Same instinct as
-    `conversation_titles.title_from_output` taking the last non-empty line.
-
-    "Top-level" is the whole difficulty. A scan that considers every `{` finds the *nested* ones
-    too, and since they come later, "last" would return the innermost trailing object — for
-    `{"a": {"b": 1}}` it would answer `{"b": 1}`. So a candidate that parses advances the cursor
-    past its own end rather than to the next character.
-    """
-    decoder = json.JSONDecoder()
-    found: Optional[Dict[str, Any]] = None
-    index = 0
-    while index < len(text):
-        if text[index] != "{":
-            index += 1
-            continue
-        try:
-            candidate, end = decoder.raw_decode(text, index)
-        except ValueError:
-            index += 1
-            continue
-        if isinstance(candidate, dict):
-            found = candidate
-            index = end
-        else:  # pragma: no cover — raw_decode at a "{" yields a dict or raises
-            index += 1
-    return found
-
-
-def _int_or_none(value: Any) -> Optional[int]:
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
-
-
-def parse_claude_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
-    """(answer text, usage, error) from `claude --output-format json`.
-
-    The envelope is one object whose `result` is the answer. `usage.input_tokens` counts only
-    what was not served from cache — it read 2 input tokens against 47091 cache reads in the
-    captured sample — so cache dimensions are carried separately rather than folded in.
-    """
-    envelope = extract_json_object(stdout)
-    if envelope is None:
-        return None, WorkerUsage(), "claude produced no JSON envelope"
-
-    raw_usage = envelope.get("usage")
-    usage = WorkerUsage()
-    if isinstance(raw_usage, dict):
-        cost = envelope.get("total_cost_usd")
-        usage = WorkerUsage(
-            input_tokens=_int_or_none(raw_usage.get("input_tokens")),
-            output_tokens=_int_or_none(raw_usage.get("output_tokens")),
-            cache_read_tokens=_int_or_none(raw_usage.get("cache_read_input_tokens")),
-            cache_write_tokens=_int_or_none(raw_usage.get("cache_creation_input_tokens")),
-            cost_usd_micros=round(cost * 1_000_000) if isinstance(cost, (int, float)) else None,
-        )
-
-    if envelope.get("is_error"):
-        subtype = envelope.get("subtype") or envelope.get("api_error_status")
-        return None, usage, f"claude reported an error: {subtype}"
-
-    result = envelope.get("result")
-    if not isinstance(result, str) or not result.strip():
-        return None, usage, "claude envelope carried no result text"
-    return result, usage, None
-
-
-def parse_codex_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
-    """(answer text, usage, error) from `codex exec --json`.
-
-    JSONL. The answer arrives as an `item.completed` whose item is an `agent_message`; usage
-    arrives separately on `turn.completed`. Unparseable lines are skipped rather than failing the
-    call — the stream is a event log, and a future CLI adding an event we do not understand is
-    not a reason to discard an answer we do.
-    """
-    answer: Optional[str] = None
-    usage = WorkerUsage()
-    failure: Optional[str] = None
-
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            event = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(event, dict):
-            continue
-
-        kind = event.get("type")
-        if kind == "item.completed":
-            item = event.get("item")
-            if isinstance(item, dict) and item.get("type") == "agent_message":
-                text = item.get("text")
-                if isinstance(text, str) and text.strip():
-                    answer = text
-        elif kind == "turn.completed":
-            raw_usage = event.get("usage")
-            if isinstance(raw_usage, dict):
-                usage = WorkerUsage(
-                    input_tokens=_int_or_none(raw_usage.get("input_tokens")),
-                    output_tokens=_int_or_none(raw_usage.get("output_tokens")),
-                    cache_read_tokens=_int_or_none(raw_usage.get("cached_input_tokens")),
-                    cache_write_tokens=_int_or_none(raw_usage.get("cache_write_input_tokens")),
-                    reasoning_tokens=_int_or_none(raw_usage.get("reasoning_output_tokens")),
-                )
-        elif kind == "turn.failed":
-            error = event.get("error")
-            detail = error.get("message") if isinstance(error, dict) else None
-            failure = f"codex turn failed: {detail or 'no detail'}"
-
-    if failure is not None:
-        return None, usage, failure
-    if answer is None:
-        return None, usage, "codex produced no agent message"
-    return answer, usage, None
-
-
 def parse_copilot_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
     """(answer text, usage, error) from `copilot -p --output-format json`.
 
@@ -417,10 +266,11 @@ def parse_copilot_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Opt
 
 
 def parse_envelope(cli: str, stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
-    if cli == "claude":
-        return parse_claude_envelope(stdout)
-    if cli == "codex":
-        return parse_codex_envelope(stdout)
+    """Thin wrapper over `get_adapter(cli).parse_one_shot` (design D8). Copilot has no adapter in
+    this slice (D1) and keeps its own parser here."""
+    adapter = get_adapter(cli)
+    if adapter is not None:
+        return adapter.parse_one_shot(stdout)
     if cli == "copilot":
         return parse_copilot_envelope(stdout)
     return None, WorkerUsage(), f"no envelope parser for {cli!r}"
@@ -541,15 +391,14 @@ async def run_worker(
     never spawn — an operator asking why no checkpoint appeared should find the answer in one
     place regardless of how early it failed.
     """
-    if cli not in SUPPORTED_CLIS:
-        result = WorkerResult("unsupported_cli", error=f"{cli!r} has no one-shot invocation")
-    elif not model_is_declared(cli, model):
+    if not model_is_declared(cli, model):
         result = WorkerResult("unknown_model", error=undeclared_model_reason(cli, model))
     else:
+        adapter = get_adapter(cli)
         worker_dir_context = tempfile.TemporaryDirectory(prefix="agentweave-worker-")
         worker_dir = worker_dir_context.name
         schema_path = None
-        if cli == "codex":
+        if adapter is not None and adapter.one_shot_takes_schema:
             schema_path = os.path.join(worker_dir, "output-schema.json")
             with open(schema_path, "w", encoding="utf-8") as schema_file:
                 json.dump(strict_output_schema(output_model), schema_file)
@@ -570,7 +419,7 @@ async def run_worker(
             unspawnable = WorkerResult("spawn_failed", error=str(exc))
         if unspawnable is not None:
             result = unspawnable
-        elif cmd is None:  # pragma: no cover — SUPPORTED_CLIS and the builder agree
+        elif cmd is None:  # a CLI with no adapter and no Copilot branch (D8)
             result = WorkerResult("unsupported_cli", error=f"no command for {cli!r}")
         else:
             started = asyncio.get_running_loop().time()

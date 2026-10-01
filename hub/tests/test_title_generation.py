@@ -12,6 +12,7 @@ from hub.conversation_titles import build_title_command, title_from_output
 from hub.conversations import get_conversation_by_id
 from hub.db.engine import async_session_factory
 from hub.db.models import Project
+from hub.runner_adapters import get_adapter
 
 # ---------------------------------------------------------------------------
 # The pure pieces
@@ -214,7 +215,7 @@ def test_an_unsupported_cli_is_unreachable_today_and_still_guarded() -> None:
     """`ck_runners_cli` and the runner API both refuse anything but claude/codex, so the
     titler's own check cannot fire from a stored row. It is kept for the day a third CLI is
     wired in, and covered where it can be exercised: the command builder returns nothing."""
-    assert "kimi" not in conversation_titles._SUPPORTED_CLIS
+    assert get_adapter("kimi") is None
     assert build_title_command(cli="kimi", model=None, prompt="P") is None
 
 
@@ -665,7 +666,7 @@ def test_the_copilot_title_command_keeps_the_projects_instructions(monkeypatch) 
     assert "--no-custom-instructions" not in cmd, "the titler runs there for the project memory"
     assert "--excluded-tools=builtin:*,mcp:*,custom:*" in cmd
     assert not any(arg.startswith("--available-tools") for arg in cmd)
-    assert "copilot" in conversation_titles._SUPPORTED_CLIS
+    assert cmd is not None, "copilot still has a one-shot title invocation without an adapter"
 
 
 async def _copilot_conversation(app, auth_headers, bind_runner):
