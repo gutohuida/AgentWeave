@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F478-r1",
-    "next_action": "F478 R1: explore the PowerShell args-file write in a-run-reaches-the-hub-without-mcp's task 9.10 (the judge reads \"path\":\"spec/...\" inside the args-file JSON as a URL outside the workspace) and write a proposal under openspec/changes/ for the URL reader (this is the same code family as the archived a-url-is-not-a-path). Before writing, check whether the-shell-judge-reads-a-word-whole (queued later tonight, not yet proposed) already owns this exact code path, and say explicitly in the proposal how the two order (does one supersede the other, or are they independent). This unblocks slice 3's task 9.10. R2/R3 (iterations after this one) each independently re-derive the proposal against the code -- fresh comparisons, not re-reads. -rev is the adversarial Opus review; no -impl tonight, the operator approves first (leave an OPEN DECISIONS.md row).",
+    "current": "F478-r2",
+    "next_action": "F478 R2 on openspec/changes/an-arguments-file-written-from-powershell-is-the-hubs-own/: an independent re-derivation against hub/hub/mcp_server.py (_hub_own_call, _hub_own_command, _plain_calls_path, rule 6) and copilot_acp.py:515-540. A fresh comparison, not a re-read of R1: re-measure the proposal's table yourself, confirm or refute 'rule 6 not rule 1', re-check independence from the-shell-judge-reads-a-word-whole, look for a bash args-file write in slice 3's drive evidence (Open question 1). Fix the proposal where it is wrong, tick tasks.md 0.1, add an R2 entry to design.md's round log. No code.",
     "queue": [
         {
             "id": "F479-fix",
@@ -23,27 +23,27 @@
         },
         {
             "id": "F478-r1",
-            "status": "open",
+            "status": "done",
             "title": "F478 R1: explore and propose (the URL reader of archived a-url-is-not-a-path)",
-            "detail": "Per spec-queue/APPROVALS.md ## 2026-10-01 (operator redirect, written in session before 23:00, committed e566446 after compose ran): operator's explicit exception, the night writes this proposal. Check whether the-shell-judge-reads-a-word-whole owns the same code and say how the two order. Unblocks slice 3 task 9.10."
+            "detail": "Done iter 4: openspec/changes/an-arguments-file-written-from-powershell-is-the-hubs-own/ written, validate --strict valid. Measured: F478 is rule 6's backstop (F362's mechanism), not the URL rule. General half owned by the-shell-judge-reads-a-word-whole D2; this change gives the exact PowerShell Set-Content arguments-file write standing (case 4). Independent of the shell judge; archives after slice 3."
         },
         {
             "id": "F478-r2",
             "status": "open",
             "title": "F478 R2: independent re-derivation against the code",
-            "detail": "Fresh comparison, not a re-read of R1."
+            "detail": "Change: openspec/changes/an-arguments-file-written-from-powershell-is-the-hubs-own/. Fresh comparison against the code, not a re-read of R1: re-run the proposal's table (.claude/autonomous/tmp/f478_probe.py exists but write your own cases too), re-derive rule 6 vs rule 1, re-read the-shell-judge-reads-a-word-whole D2, check slice 3's drive logs for a bash args-file write (Open question 1). Tick tasks.md 0.1 and log in design.md's round log."
         },
         {
             "id": "F478-r3",
             "status": "open",
             "title": "F478 R3: independent re-derivation against the code",
-            "detail": "Fresh comparison, not a re-read of R2."
+            "detail": "Change: openspec/changes/an-arguments-file-written-from-powershell-is-the-hubs-own/. Fresh comparison, not a re-read of R2: re-measure D2's grammar traps on PowerShell 5.1 (smart quotes, here-strings, -Value arrays, parameter prefixes, --%). Tick 0.2."
         },
         {
             "id": "F478-rev",
             "status": "open",
             "title": "F478 adversarial Opus review of the proposal",
-            "detail": "No -impl tonight: the operator approves it first. Leave an OPEN DECISIONS.md row for approval."
+            "detail": "Change: openspec/changes/an-arguments-file-written-from-powershell-is-the-hubs-own/. Adversarial Opus subagent (foreground). Record under spec-queue/tracks/reviews/. No -impl tonight. Leave OPEN DECISIONS.md rows: approval, plus design Open questions 1 (bash form) and 2 (location residual); put only those row ids in decisions_for_user."
         },
         {
             "id": "a-dialog-takes-the-keyboard-when-its-opens-impl",

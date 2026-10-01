@@ -33723,8 +33723,10 @@ call; no card, task created by the run (`run-000e23023de9`). The approver was no
 
 ## F478 (B) — the workspace judge reads `key:value/path` inside a shell string as a URL whose path is outside the workspace
 
-**Status:** open, found 2026-10-01 by drive 9.10 of `a-run-reaches-the-hub-without-mcp`. **Ready:** needs design (it
-is the URL reader of `a-url-is-not-a-path`).
+**Status:** open, found 2026-10-01 by drive 9.10 of `a-run-reaches-the-hub-without-mcp`. **Ready:** R1 proposed
+2026-10-02 as `an-arguments-file-written-from-powershell-is-the-hubs-own` (the arguments-file half; R2/R3/review and
+approval owed). R1 measured that the refusal is rule 6's backstop, not the URL rule (rule 1 already needs `://`), so
+the general half (`echo 'a:b/c'`) is F362's mechanism, owned by `the-shell-judge-reads-a-word-whole` D2.
 
 `_decide("PowerShell", {"command": "echo 'a:b/c'"}, workspace=W)` refuses *"'/c' is outside your workspace"*; so does
 `Set-Content -Path '.agentweave/calls/r.json' -Value '{"path":"spec/x.html"}' -Encoding utf8` (`'/x.html'`), while
