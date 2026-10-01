@@ -654,7 +654,7 @@ async def test_the_dispatch_itself_names_the_remedy_exactly_once(app, auth_heade
         session.add(conversation)
         await session.commit()
 
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with pytest.raises(TriggerAgentError) as excinfo:
                 await trigger_agent_directly(
                     project_id="proj-test",

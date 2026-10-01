@@ -32,7 +32,7 @@ from hub.api.v1.agents import (
 from hub.mcp_server import mcp
 
 # Anything that is not `"mcp"` selects the HTTP rendering. `"cli"` is the value
-# `resolve_access_path` actually returns for a run without an injected server.
+# `resolve_access_axes(...).plane` actually returns for a run without an injected server.
 HTTP_PATH = "cli"
 
 

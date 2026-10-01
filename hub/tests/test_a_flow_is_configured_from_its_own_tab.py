@@ -356,7 +356,7 @@ async def test_a_staged_agent_is_applied_by_the_next_firing_and_moves_no_task(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh = await db.get(AIJob, job_id)

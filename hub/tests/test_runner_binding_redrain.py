@@ -107,7 +107,7 @@ async def test_binding_a_runner_delivers_the_message_that_was_waiting_for_one(
 
     with (
         patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty()),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         bound = await app.patch(
             "/api/v1/projects/proj-test/agents/claude",

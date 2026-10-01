@@ -31,7 +31,7 @@ async def test_post_runners_accepts_the_alias_and_stores_it_as_written(app, auth
 
 @pytest.mark.asyncio
 async def test_post_agents_accepts_the_alias_and_stores_it_as_written(app, auth_headers):
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         created = await app.post(
             P + "/agents",
             json={"name": "a-alias", "provider": "claude", "model": ALIAS},
@@ -122,7 +122,7 @@ async def test_an_unknown_model_is_still_refused(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_an_alias_created_runner_is_named_for_the_alias_not_its_target(app, auth_headers):
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         created = await app.post(
             P + "/agents",
             json={"name": "a-alias-name", "provider": "claude", "model": ALIAS},

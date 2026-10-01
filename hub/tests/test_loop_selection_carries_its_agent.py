@@ -170,7 +170,7 @@ async def test_a_selection_naming_another_agent_is_who_actually_gets_fired(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=_fake_pty())
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch("hub.scheduler.decide_firing", _decision_naming_other):
                 scheduler = JobScheduler()
                 async with async_session_factory() as db:

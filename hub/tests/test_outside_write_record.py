@@ -640,7 +640,7 @@ async def test_a_claude_turn_that_writes_outside_its_workspace_records_it(
         write_call_line(again, call_id="call_w2"),
     ]
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty(lines)):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
                 json={"agent": agent, "message": "hi", "session_mode": "new"},
@@ -678,7 +678,7 @@ async def test_a_claude_turn_that_stays_inside_ends_watched_and_clean(
     await bind_runner(agent, cli="claude")
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([write_call_line(inside)])):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
                 json={"agent": agent, "message": "hi", "session_mode": "new"},
@@ -722,7 +722,7 @@ async def test_a_turn_writing_into_a_neighbours_checkout_names_it_because_the_ro
 
     line = write_call_line(neighbour / "note.txt")
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([line])):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
                 json={"agent": agent, "message": "hi", "session_mode": "new"},
@@ -756,7 +756,7 @@ async def test_a_codex_app_server_turn_records_it_the_same_way(app, auth_headers
 
     fake = _fake_run_turn(events=[_write_event(stray, tool="apply_patch")])
     with patch("hub.api.v1.agent_trigger.codex_run_turn", fake):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
                 json={"agent": agent, "message": "hi", "session_mode": "new"},
@@ -873,7 +873,7 @@ async def test_a_run_killed_mid_turn_keeps_the_destination_it_already_reached(
             "hub.api.v1.agent_trigger.PtySession.spawn",
             _pty_that_stalls_after(lines, stalled, gate),
         ):
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 trigger = await app.post(
                     f"{BASE}/agent/trigger",
                     json={"agent": agent, "message": "hi", "session_mode": "new"},
@@ -944,7 +944,7 @@ async def test_the_timeline_reports_what_a_run_wrote_outside_its_workspace(
         with patch(
             "hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([write_call_line(target)])
         ):
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 trigger = await app.post(
                     f"{BASE}/agent/trigger",
                     json={"agent": agent, "message": "hi", "session_mode": "new"},

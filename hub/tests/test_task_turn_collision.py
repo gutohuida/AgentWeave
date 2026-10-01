@@ -165,7 +165,7 @@ async def _spawned_cwd(*, agent: str, **kwargs) -> Optional[str]:
 
     async with async_session_factory() as session:
         with patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn):  # noqa: SIM117
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 await trigger_agent_directly(session=session, agent=agent, **kwargs)
                 for _ in range(1000):
                     if "cwd" in captured:
@@ -208,7 +208,7 @@ async def test_a_second_agent_is_refused_while_another_holds_the_tasks_checkout(
     await _holding_run(HOLDER, HELD_TASK)
 
     async with async_session_factory() as session:
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with pytest.raises(TriggerAgentError) as excinfo:
                 await trigger_agent_directly(
                     project_id="proj-test",
@@ -434,7 +434,7 @@ async def test_a_collision_leaves_the_entry_queued_and_delivers_it_when_the_task
         # machine with no `claude` on PATH the turn is refused for *that* reason instead, and that
         # refusal is terminal — so the collision this test is about never gets to fire. CI is such
         # a machine, which is how this passed locally and failed there.
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             result = await schedule_agent("proj-test", CHALLENGER)
         assert result.terminal_failure is False
         assert HOLDER in (result.waiting_reason or "")
@@ -472,7 +472,7 @@ async def test_a_collision_leaves_the_entry_queued_and_delivers_it_when_the_task
         raise RuntimeError("stop here: delivery is what this test is about")
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch("hub.api.v1.agent_trigger.deliver_entries_with_run", _record_delivery):
                 result = await schedule_agent("proj-test", CHALLENGER)
                 for _ in range(1000):
@@ -535,7 +535,7 @@ async def test_the_status_route_reports_the_collision_the_trigger_refused_on(
 
     # `which` patched for this file's usual reason: without it the turn is refused for a missing
     # CLI instead, and that refusal is both terminal and one the status route can already see.
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         result = await schedule_agent("proj-test", CHALLENGER)
         assert result.terminal_failure is False
 
@@ -557,7 +557,7 @@ async def test_the_status_route_reports_the_collision_the_trigger_refused_on(
         raise RuntimeError("stop here: delivery is what clears the reason")
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             await schedule_agent("proj-test", CHALLENGER)
             while agent_trigger._background_runs:
                 await asyncio.gather(*list(agent_trigger._background_runs), return_exceptions=True)
@@ -710,7 +710,7 @@ async def test_a_run_ending_redrains_the_agents_it_was_holding_back(
 
     async with async_session_factory() as session:
         with patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn):  # noqa: SIM117
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 await trigger_agent_directly(
                     project_id="proj-test",
                     agent=HOLDER,
@@ -826,7 +826,7 @@ async def test_a_holder_whose_tail_raises_still_releases_the_task_it_held(
 
     async with async_session_factory() as session:
         with patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn):  # noqa: SIM117
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 with patch.object(
                     agent_trigger, "_report_abandoned_entries", _raise_once_for_the_holder
                 ):

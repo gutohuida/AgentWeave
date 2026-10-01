@@ -127,7 +127,7 @@ async def test_provider_binding_updates_conversation_without_changing_identity(
     )
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             response = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "claude", "message": "first"},

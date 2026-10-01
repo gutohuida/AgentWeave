@@ -23,7 +23,7 @@ PROJECT = "proj-test"
 async def _create_hub_owned(app, auth_headers, name: str) -> None:
     runners = await app.get(f"/api/v1/projects/{PROJECT}/runners", headers=auth_headers)
     # Creating an agent checks its runner CLI is on PATH; CI runners have no `claude`.
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         resp = await app.post(
             f"/api/v1/projects/{PROJECT}/agents",
             json={"name": name, "runner_id": runners.json()[0]["id"]},

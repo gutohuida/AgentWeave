@@ -46,7 +46,6 @@ from ...launchability import (
     get_agent_config,
     isolation_change_refusal,
     probe_agent,
-    resolve_access_path,
 )
 from ...model_catalog import (
     FULL_ACCESS_PERMISSION_MODE,
@@ -576,7 +575,9 @@ async def list_agents(
             spawn_config = agent_config(
                 session_data, agent_name, agent_row.config if agent_row else None
             )
-            access_path = resolve_access_path(bound_runner.cli, spawn_config.get("hub_client"))
+            # Every spawnable runner is MCP-injectable; `launchability`'s now-deleted
+            # `resolve_access_path` reduced to exactly this for any live `Runner.cli` (F474).
+            access_path = "cli" if spawn_config.get("hub_client") == "cli" else "mcp"
             permission_mode_at_rest = posture_at_rest(
                 provider, access_path, bool(spawn_config.get("yolo"))
             )
@@ -1700,7 +1701,6 @@ async def write_copilot_home_after_commit(
 
     from ... import tool_server
     from ...copilot_home import ensure_copilot_home
-    from ...launchability import resolve_access_path
 
     try:
         if agent_row.runner_id is None:
@@ -1717,7 +1717,9 @@ async def write_copilot_home_after_commit(
             runner="copilot",
         )
         mcp_command = None
-        if resolve_access_path("copilot", (agent_row.config or {}).get("hub_client")) == "mcp":
+        # Every spawnable runner is MCP-injectable; `launchability`'s now-deleted
+        # `resolve_access_path` reduced to exactly this for any live `Runner.cli` (F474).
+        if (agent_row.config or {}).get("hub_client") != "cli":
             mcp_command = [sys.executable, str(tool_server.pinned_server_path())]
         await asyncio.to_thread(
             ensure_copilot_home,

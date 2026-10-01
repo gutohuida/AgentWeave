@@ -498,7 +498,7 @@ async def test_dispatching_the_evidence_author_as_reviewer_is_refused_before_the
     with patch.object(
         agent_trigger.review_turn, "prepare_review_turn", autospec=True
     ) as provisioning:
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             response = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": AUTHOR, "message": f"review {task.id}", "review_task_id": task.id},
@@ -544,7 +544,7 @@ async def test_the_direct_dispatch_refuses_the_evidence_author_before_the_checko
         with patch.object(
             agent_trigger.review_turn, "prepare_review_turn", autospec=True
         ) as provisioning:
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 with pytest.raises(TriggerAgentError) as refused:
                     await trigger_agent_directly(
                         project_id="proj-test",

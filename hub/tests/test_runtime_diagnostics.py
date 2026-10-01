@@ -21,7 +21,7 @@ async def test_agent_trigger_reports_missing_cli_directly(app, auth_headers, bin
     assert sync.status_code == 200
     await bind_runner("diag-no-such-cli", cli="claude")
 
-    with patch("hub.launchability.shutil.which", return_value=None):
+    with patch("hub.runner_adapters.base.shutil.which", return_value=None):
         resp = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
             json={"agent": "diag-no-such-cli", "message": "hello", "session_mode": "new"},

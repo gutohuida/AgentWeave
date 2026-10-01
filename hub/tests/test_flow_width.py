@@ -439,7 +439,7 @@ async def test_two_firings_of_one_flow_count_as_two_however_many_agents_each_sta
     completion, so the second firing's availability depends only on task state, exactly as
     `_agents_that_are_free` reads it.
 
-    `hub.launchability.shutil.which` is patched away for both firings so neither queued entry
+    `hub.runner_adapters.base.shutil.which` is patched away for both firings so neither queued entry
     ever spawns a real turn — this test is only about `run_count`, and a real (or real-looking)
     spawn would leave the agent `running` past the firing, hiding it from the second firing's
     `_agents_that_are_free` read for reasons this test does not care about."""
@@ -452,7 +452,7 @@ async def test_two_firings_of_one_flow_count_as_two_however_many_agents_each_sta
         await _task(db, loop, "twice-b")
 
     scheduler = JobScheduler()
-    with patch("hub.launchability.shutil.which", return_value=None):
+    with patch("hub.runner_adapters.base.shutil.which", return_value=None):
         async with async_session_factory() as db:
             fresh_job = await db.get(AIJob, job.id)
             await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)

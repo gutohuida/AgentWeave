@@ -40,7 +40,7 @@ async def _conversation_title_for(agent):
 
 async def _fire(job_id):
     scheduler = JobScheduler()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         async with async_session_factory() as db:
             fresh_job = await db.get(AIJob, job_id)
             await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)

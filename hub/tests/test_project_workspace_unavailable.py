@@ -296,7 +296,7 @@ async def test_queued_entry_survives_and_pause_is_attributed_when_workspace_beco
     # directory-state check, so the `queue_agent_paused` event this test looks for is
     # never written and `scalar_one()` raises NoResultFound. Green on any machine with
     # the CLI installed, red on every other.
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         scheduled = await turn_scheduler.schedule_agent("proj-test", "claude")
     assert scheduled.response is None
 
@@ -361,7 +361,7 @@ async def test_job_fire_pauses_without_failing_when_workspace_unavailable(
     # directory-state check, so the `queue_agent_paused` event this test looks for is
     # never written and `scalar_one()` raises NoResultFound. Green on any machine with
     # the CLI installed, red on every other.
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         async with async_session_factory() as db:
             fresh_job = await db.get(AIJob, job.id)
             success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
@@ -447,7 +447,7 @@ async def test_relocate_repairs_and_redrains_queued_work(
 
     with (
         patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         response = await app.post(
             "/api/v1/projects/proj-test/relocate",

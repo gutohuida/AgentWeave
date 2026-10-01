@@ -993,7 +993,7 @@ async def test_the_operator_is_told_through_the_event_and_the_stream_not_only_th
         broadcasts.append((event_type, payload))
 
     scheduler = JobScheduler()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         with patch("hub.scheduler.sse_manager.broadcast", _capture):
             async with async_session_factory() as db:
                 fired = await scheduler._fire_job_internal(
@@ -1039,7 +1039,7 @@ async def test_the_event_fires_before_the_refusal_decides_anything(app, auth_hea
         await _task(db, loop, suffix="alongside-open")
 
     scheduler = JobScheduler()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         async with async_session_factory() as db:
             decision = await decide_firing(db, await db.get(Loop, loop.id), default_agent=WORKER)
             assert decision.kind == "claim", "there is ordinary work to do alongside"

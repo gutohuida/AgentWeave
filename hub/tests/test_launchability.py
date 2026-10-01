@@ -11,9 +11,9 @@ from hub.launchability import (
     described_access_path,
     get_agent_config,
     probe_agent,
-    resolve_access_path,
     resolve_agent_env,
 )
+from hub.runner_adapters import get_adapter, resolve_access_axes
 from tests.test_agent_trigger import _await_background_run, _fake_pty
 
 
@@ -21,7 +21,7 @@ class TestProbeAgent:
     def test_an_unbound_agent_says_so_instead_of_naming_a_cli_after_itself(self, monkeypatch):
         """The masking measured on the trial Hub 2026-08-21, and the reason `native` is not enough.
 
-        An agent with `runner_id IS NULL` used to reach the `RUNNER_CLI["native"] is None` fallback
+        An agent with `runner_id IS NULL` used to reach the `LEGACY_RUNNER_CLI["native"] is None` fallback
         at the bottom of `probe_agent`, whose default CLI is **the agent's own name** — so the queue
         status read `Runner CLI 'probe-norunner' was not found in PATH.` and sent the operator
         looking for a binary that was never meant to exist. `inbound_queue.py`'s own comment records
@@ -30,7 +30,7 @@ class TestProbeAgent:
         `which` is made to succeed for everything, so a fallthrough would report runnable rather
         than merely a different message — the assertion fails loudly instead of subtly.
         """
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/" + cli)
+        monkeypatch.setattr("hub.runner_adapters.base.shutil.which", lambda cli: "/usr/bin/" + cli)
         result = probe_agent("probe-norunner", {"runner": RUNNER_UNBOUND})
         assert result["runnable"] is False
         assert result["cli"] is None
@@ -45,7 +45,7 @@ class TestProbeAgent:
         assert "manual" in result["reason"].lower()
 
     def test_cli_present_and_no_auth_requirement_is_runnable(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/claude")
+        monkeypatch.setattr("hub.runner_adapters.base.shutil.which", lambda cli: "/usr/bin/claude")
         result = probe_agent("claude", {"runner": "claude"})
         assert result["present"] is True
         assert result["authorized"] is True
@@ -54,7 +54,7 @@ class TestProbeAgent:
         assert result["cli"] == "claude"
 
     def test_cli_missing_from_path(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: None)
+        monkeypatch.setattr("hub.runner_adapters.base.shutil.which", lambda cli: None)
         result = probe_agent("kimi", {"runner": "kimi"})
         assert result["present"] is False
         assert result["runnable"] is False
@@ -63,7 +63,7 @@ class TestProbeAgent:
     def test_native_runner_falls_back_to_agent_name_as_cli(self, monkeypatch):
         seen = {}
         monkeypatch.setattr(
-            "hub.launchability.shutil.which",
+            "hub.runner_adapters.base.shutil.which",
             lambda cli: seen.setdefault("cli", cli) and "/usr/bin/mycli",
         )
         result = probe_agent("mycli", {"runner": "native"})
@@ -76,7 +76,7 @@ class TestProbeAgent:
         def _boom(cli):
             raise AssertionError("shutil.which should not be called for a pinned cli")
 
-        monkeypatch.setattr("hub.launchability.shutil.which", _boom)
+        monkeypatch.setattr("hub.runner_adapters.base.shutil.which", _boom)
 
         missing = tmp_path / "nonexistent-binary"
         result = probe_agent("claude", {"runner": "claude", "cli": str(missing)})
@@ -84,13 +84,13 @@ class TestProbeAgent:
         assert "not an executable file" in result["reason"]
 
     def test_claude_proxy_requires_base_url_and_api_key_var(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/claude")
+        monkeypatch.setattr("hub.runner_adapters.base.shutil.which", lambda cli: "/usr/bin/claude")
         result = probe_agent("minimax", {"runner": "claude_proxy"})
         assert result["authorized"] is False
         assert "ANTHROPIC_BASE_URL" in result["reason"]
 
     def test_claude_proxy_requires_the_api_key_env_var_to_be_set(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/claude")
+        monkeypatch.setattr("hub.runner_adapters.base.shutil.which", lambda cli: "/usr/bin/claude")
         monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
         result = probe_agent(
             "minimax",
@@ -106,7 +106,7 @@ class TestProbeAgent:
         assert "MINIMAX_API_KEY" in result["reason"]
 
     def test_claude_proxy_runnable_once_env_var_is_set(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/claude")
+        monkeypatch.setattr("hub.runner_adapters.base.shutil.which", lambda cli: "/usr/bin/claude")
         monkeypatch.setenv("MINIMAX_API_KEY", "sk-test")
         result = probe_agent(
             "minimax",
@@ -124,7 +124,7 @@ class TestProbeAgent:
 
 @pytest.mark.asyncio
 async def test_launchability_endpoint_reports_configured_agents(app, auth_headers, monkeypatch):
-    monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: None)
+    monkeypatch.setattr("hub.runner_adapters.base.shutil.which", lambda cli: None)
 
     sync_resp = await app.post(
         "/api/v1/projects/proj-test/session/sync",
@@ -220,7 +220,7 @@ async def test_every_agent_the_default_probe_calls_runnable_is_not_refused_as_ar
     )
     assert archived.status_code == 200
 
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         probe = await app.get(
             "/api/v1/projects/proj-test/agents/launchability", headers=auth_headers
         )
@@ -239,7 +239,7 @@ async def test_every_agent_the_default_probe_calls_runnable_is_not_refused_as_ar
         ]
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             for name in runnable_names:
                 resp = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
@@ -262,7 +262,7 @@ class TestCollaborationReadiness:
 
     @pytest.fixture(autouse=True)
     def _cli_present(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: f"/usr/bin/{cli}")
+        monkeypatch.setattr("hub.runner_adapters.base.shutil.which", lambda cli: f"/usr/bin/{cli}")
 
     async def _probe(self, app, auth_headers, name):
         resp = await app.get(
@@ -422,7 +422,7 @@ class TestCollaborationReadiness:
     async def test_not_runnable_agent_has_no_collaboration_verdict(
         self, app, auth_headers, bind_runner, monkeypatch
     ):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: None)
+        monkeypatch.setattr("hub.runner_adapters.base.shutil.which", lambda cli: None)
         sync = await app.post(
             "/api/v1/projects/proj-test/session/sync",
             json={"data": {"agents": {"claude-missing-cli": {}}}},
@@ -490,10 +490,13 @@ class TestResolveAgentEnv:
 
 
 class TestAccessPath:
-    """Two questions, two functions — `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`
-    §4. `resolve_access_path` answers what the run is *given* (and so what its permission posture
-    is); `described_access_path` answers what the run is *told*, and refuses to assert a tool
-    surface the Hub has no grounds to believe the harness will honour.
+    """Two questions — `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing` §4.
+    `resolve_access_axes` (`runner_adapters`) answers what the run is *given* (and so what its
+    permission posture is, via `.plane` and `.tool_surface`) — `launchability.resolve_access_path`
+    used to answer the first half, and was deleted once every live runner had become
+    unconditionally injectable (`each-runner-cli-is-one-adapter` task 3.2); `described_access_path`
+    answers what the run is *told*, and refuses to assert a tool surface the Hub has no grounds to
+    believe the harness will honour.
 
     This class used to be introduced by a docstring saying the path "is probed per runner rather
     than assumed". Nothing was probed; the probe had had no caller since `d279d22`, and two of the
@@ -504,7 +507,9 @@ class TestAccessPath:
         """The operator's declaration is the only thing that moves the injected server — and it
         moves it in the direction that removes the unanswerable approver flag, not only the
         wording."""
-        assert resolve_access_path("claude", override="cli") == "cli"
+        axes = resolve_access_axes(get_adapter("claude"), hub_client="cli", flags=[])
+        assert axes.plane == "cli"
+        assert axes.tool_surface == "none"
         assert described_access_path("cli", override="cli") == "cli"
 
     def test_an_explicit_mcp_statement_is_grounds_on_its_own(self):
@@ -517,14 +522,12 @@ class TestAccessPath:
         assert described_access_path("mcp", override="mcp", harness_honoured_mcp=False) == "mcp"
         assert described_access_path("mcp", override=None, harness_honoured_mcp=False) == "cli"
 
-    def test_unprobeable_runner_defaults_to_cli(self):
-        assert resolve_access_path("kimi", override=None) == "cli"
-
     def test_auto_is_treated_as_unset_and_therefore_as_no_statement(self):
         """`auto` is the CLI's default value for `hub_client`, and it means the operator has said
         nothing. It must not read as an assertion that MCP is there: injected, yes — described,
         only on grounds."""
-        assert resolve_access_path("claude", override="auto") == "mcp"
+        axes = resolve_access_axes(get_adapter("claude"), hub_client="auto", flags=[])
+        assert axes.plane == "mcp"
         assert described_access_path("mcp", override="auto", harness_honoured_mcp=False) == "cli"
         assert described_access_path("mcp", override="auto", harness_honoured_mcp=True) == "mcp"
 
@@ -536,7 +539,8 @@ class TestAccessPath:
         the *only* thing this function decides — the second assertion is what §4 added, and it is
         the one that stops the same value from also asserting the tools are there.
         """
-        assert resolve_access_path("codex", override=None) == "mcp"
+        axes = resolve_access_axes(get_adapter("codex"), hub_client=None, flags=[])
+        assert axes.plane == "mcp"
         assert described_access_path("mcp", override=None, harness_honoured_mcp=False) == "cli"
 
     def test_a_run_given_no_server_is_never_described_as_having_one(self):

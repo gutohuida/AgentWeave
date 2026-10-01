@@ -181,7 +181,7 @@ async def test_a_failed_exec_run_returns_its_input_and_counts_the_attempt(
 
     with _patched(
         patch("hub.api.v1.agent_trigger.PtySession.spawn", _fresh_failing_pty()),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
         patch("hub.turn_scheduler.schedule_agent", _schedule_after_the_first()),
     ):
         resp = await app.post(
@@ -212,7 +212,7 @@ async def test_a_failed_app_server_run_returns_its_input_and_counts_the_attempt(
 
     with _patched(
         patch("hub.api.v1.agent_trigger.codex_run_turn", _fake_run_turn(status="failed")),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"),
         patch("hub.turn_scheduler.schedule_agent", _schedule_after_the_first()),
     ):
         resp = await app.post(
@@ -245,7 +245,7 @@ async def test_a_completed_run_does_not_return_its_input(app, auth_headers, bind
 
     with _patched(
         patch("hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=session)),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
         patch("hub.turn_scheduler.schedule_agent", _schedule_after_the_first()),
     ):
         resp = await app.post(
@@ -292,7 +292,7 @@ async def test_a_binding_conflict_does_not_return_its_input(app, auth_headers, b
 
     with _patched(
         patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn_reporting("provider-1")),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         first = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
@@ -305,7 +305,7 @@ async def test_a_binding_conflict_does_not_return_its_input(app, auth_headers, b
     # The same conversation, a provider that now reports a different session id.
     with _patched(
         patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn_reporting("provider-2")),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         second = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
@@ -347,7 +347,7 @@ async def test_a_stopped_run_does_not_return_its_input(app, auth_headers):
             "hub.api.v1.agent_trigger.codex_run_turn",
             _fake_run_turn(status="interrupted", thread_id="thread-stopped-1"),
         ),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"),
         patch("hub.turn_scheduler.schedule_agent", _schedule_after_the_first()),
     ):
         resp = await app.post(
@@ -382,7 +382,7 @@ async def test_a_returned_entry_is_retried_without_anyone_asking(app, auth_heade
     spawn = _fresh_failing_pty()
     with _patched(
         patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         resp = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
@@ -412,7 +412,7 @@ async def test_three_failures_abandon_the_entry_with_a_reason(app, auth_headers,
 
     with _patched(
         patch("hub.api.v1.agent_trigger.PtySession.spawn", _fresh_failing_pty()),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         resp = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
@@ -450,7 +450,7 @@ async def test_giving_up_lets_the_agent_accept_new_input(app, auth_headers, bind
 
     with _patched(
         patch("hub.api.v1.agent_trigger.PtySession.spawn", _fresh_failing_pty()),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         first = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
@@ -466,7 +466,7 @@ async def test_giving_up_lets_the_agent_accept_new_input(app, auth_headers, bind
     session.wait.return_value = 0
     with _patched(
         patch("hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=session)),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         second = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
@@ -621,7 +621,7 @@ async def test_a_pre_spawn_failure_schedules_the_agent(app, auth_headers, bind_r
             "hub.api.v1.agent_trigger.PtySession.spawn",
             MagicMock(side_effect=FileNotFoundError("claude was not found in PATH")),
         ),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
         patch("hub.turn_scheduler.schedule_agent", scheduled),
     ):
         resp = await app.post(
@@ -651,7 +651,7 @@ async def test_a_pre_spawn_app_server_failure_schedules_the_agent(app, auth_head
             "hub.api.v1.agent_trigger.codex_run_turn",
             AsyncMock(side_effect=AppServerError("app-server process ended", exit_code=-1)),
         ),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"),
         patch("hub.turn_scheduler.schedule_agent", scheduled),
     ):
         resp = await app.post(
@@ -681,7 +681,7 @@ async def test_divergence_is_not_evaluated_when_the_input_went_back(app, auth_he
     evaluate = AsyncMock()
     with _patched(
         patch("hub.api.v1.agent_trigger.PtySession.spawn", _fresh_failing_pty()),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
         patch("hub.api.v1.agent_trigger.evaluate_run_end", evaluate),
         patch("hub.turn_scheduler.schedule_agent", _schedule_after_the_first()),
     ):
@@ -712,7 +712,7 @@ async def test_divergence_is_still_evaluated_when_nothing_went_back(app, auth_he
     evaluate = AsyncMock()
     with _patched(
         patch("hub.api.v1.agent_trigger.PtySession.spawn", _fresh_failing_pty()),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
         patch("hub.api.v1.agent_trigger.evaluate_run_end", evaluate),
     ):
         resp = await app.post(
@@ -805,7 +805,7 @@ async def test_the_second_failure_clears_the_conversations_provider_session(
 
     with _patched(
         patch("hub.api.v1.agent_trigger.PtySession.spawn", _fresh_failing_pty()),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         resp = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",

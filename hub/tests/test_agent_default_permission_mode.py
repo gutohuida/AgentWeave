@@ -113,7 +113,7 @@ async def test_the_agents_default_reaches_a_run_that_states_no_posture(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "posture-applied", "message": "hi", "session_mode": "new"},
@@ -146,7 +146,7 @@ async def test_a_conversations_own_choice_beats_the_agents_default(app, auth_hea
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={
@@ -182,7 +182,7 @@ async def test_an_agent_with_no_default_is_unchanged(app, auth_headers, bind_run
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "posture-none", "message": "hi", "session_mode": "new"},

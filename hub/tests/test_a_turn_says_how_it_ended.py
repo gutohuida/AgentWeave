@@ -347,7 +347,7 @@ async def test_a_stopped_run_persists_its_terminal_status_line(app, auth_headers
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
                 json={"agent": agent, "message": "hi", "session_mode": "new"},
@@ -387,7 +387,7 @@ async def test_a_failed_run_persists_its_terminal_status_line(app, auth_headers,
         exit_code=1,
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
                 json={"agent": agent, "message": "hi", "session_mode": "new"},
@@ -427,7 +427,7 @@ async def test_an_app_server_run_that_was_stopped_persists_its_terminal_status_l
 
     fake_run_turn = _fake_run_turn(thread_id="thread-p2-stop", status="interrupted")
     with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
                 json={"agent": agent, "message": "hi", "session_mode": "new"},
@@ -458,7 +458,7 @@ async def test_an_app_server_run_that_failed_persists_its_terminal_status_line(a
         thread_id="thread-p2-fail", status="failed", error="the runtime went away"
     )
     with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
                 json={"agent": agent, "message": "hi", "session_mode": "new"},
@@ -508,7 +508,7 @@ async def test_a_completed_claude_run_carries_the_pair_and_only_one_holds_the_ex
         ]
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
                 json={"agent": agent, "message": "hi", "session_mode": "new"},
@@ -553,7 +553,7 @@ async def test_a_completed_codex_run_gains_its_first_settled_signal(app, auth_he
     plan = status_event("plan", summary="read the file; change it")
     fake_run_turn = _fake_run_turn(thread_id="thread-p2-codex", status="completed", events=(plan,))
     with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             trigger = await app.post(
                 f"{BASE}/agent/trigger",
                 json={"agent": agent, "message": "hi", "session_mode": "new"},
@@ -748,7 +748,7 @@ async def test_a_status_line_that_cannot_be_written_leaves_a_lock_the_outcome_in
         lambda: OperationalError("stmt", {}, Exception("database is locked"))
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch("hub.api.v1.agent_trigger.record_agent_output", failing_write):
                 with caplog.at_level("WARNING"):
                     trigger = await app.post(
@@ -794,7 +794,7 @@ async def test_a_status_line_write_that_raises_a_non_lock_error_also_leaves_the_
     )
     failing_write = _failing_status_write(lambda: RuntimeError("disk is full"))
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch("hub.api.v1.agent_trigger.record_agent_output", failing_write):
                 with caplog.at_level("ERROR"):
                     trigger = await app.post(

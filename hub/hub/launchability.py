@@ -10,13 +10,14 @@ runner->CLI table instead of ``agentweave.constants.RUNNER_CONFIGS``.
 from __future__ import annotations
 
 import os
-import shutil
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .file_mentions import MENTION_NOTICE, neutralise_file_mentions
+from .runner_adapters import get_adapter
+from .runner_adapters.base import probe_binary
 
 # DEAD (2026-09-20): 6 of these 8 keys name runner kinds no agent can be bound to any more.
 # Why: a Runner's `cli` is validated against RUNNER_CLIS = ("claude", "codex", "copilot")
@@ -30,9 +31,10 @@ from .file_mentions import MENTION_NOTICE, neutralise_file_mentions
 #   from legacy session.json, so neither is removable; kimi/opencode/codex_mcp/
 #   claude_proxy have no writer but a hand-made POST /session/sync (session_sync.py:46) or
 #   /agents/register payload (api/v1/agents.py:2209), plus hub/tests/test_launchability.py.
-# Runner -> CLI binary name. Mirrors the "cli" field of RUNNER_CONFIGS in
+# Runner -> CLI binary name, for a runner string with no adapter (design D14: `probe_agent` asks
+# `get_adapter` first and only falls here otherwise). Mirrors the "cli" field of RUNNER_CONFIGS in
 # agentweave.constants (kept independent — see module docstring).
-RUNNER_CLI: Dict[str, Optional[str]] = {
+LEGACY_RUNNER_CLI: Dict[str, Optional[str]] = {
     "claude": "claude",
     "native": None,  # falls back to the agent name
     "claude_proxy": "claude",
@@ -43,12 +45,12 @@ RUNNER_CLI: Dict[str, Optional[str]] = {
     "manual": None,
 }
 
-#: Not a runner, and deliberately not a key of `RUNNER_CLI`: the value `get_agent_config` reports
-#: for a roster agent that has **no** `Runner` bound at all. Distinct from `"native"`, whose
-#: `RUNNER_CLI` entry is `None` and therefore falls back to the agent's own name — which is exactly
-#: the masking this exists to end. Measured on the trial Hub 2026-08-21: an agent with
-#: `runner_id IS NULL` was reported as `Runner CLI 'probe-norunner' was not found in PATH`, sending
-#: the operator to look for a binary named after their own agent.
+#: Not a runner, and deliberately not a key of `LEGACY_RUNNER_CLI`: the value `get_agent_config`
+#: reports for a roster agent that has **no** `Runner` bound at all. Distinct from `"native"`,
+#: whose `LEGACY_RUNNER_CLI` entry is `None` and therefore falls back to the agent's own name —
+#: which is exactly the masking this exists to end. Measured on the trial Hub 2026-08-21: an agent
+#: with `runner_id IS NULL` was reported as `Runner CLI 'probe-norunner' was not found in PATH`,
+#: sending the operator to look for a binary named after their own agent.
 RUNNER_UNBOUND = "unbound"
 
 
@@ -97,14 +99,11 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
 
         return CopilotProbe.verdict(str(cli_override) if cli_override else None)
 
-    cli = str(cli_override) if cli_override else (RUNNER_CLI.get(runner) or name)
+    adapter = get_adapter(runner)
+    if adapter is not None:
+        return adapter.launchability(name, config)
 
-    if cli_override:
-        present = os.path.isfile(cli_override) and os.access(cli_override, os.X_OK)
-        missing_reason = f"Pinned runner CLI {cli_override!r} is not an executable file."
-    else:
-        present = shutil.which(cli) is not None
-        missing_reason = f"Runner CLI {cli!r} was not found in PATH."
+    cli, present, missing_reason = probe_binary(LEGACY_RUNNER_CLI.get(runner), cli_override, name)
 
     authorized = True
     auth_reason: Optional[str] = None
@@ -257,25 +256,22 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
                 else:
                     proc_env.pop(var_name, None)
 
-    # Claude must not silently inherit a proxy's ANTHROPIC_BASE_URL from whatever shell
-    # the Hub itself happened to be started from — its own auth and endpoint selection
-    # are Claude Code's to make, not the Hub's. This must strip only an *ambient* value
-    # (present in the Hub's own os.environ but not explicitly set by this agent's own
-    # env_vars) — an agent that explicitly configures its own ANTHROPIC_BASE_URL (e.g. a
-    # proxy provider) is deliberately opting in, and that must survive regardless of
-    # which runner-agent-charter-separation Runner record this agent is bound to (Runner
-    # only distinguishes `claude` vs `codex`, not the old claude/claude_proxy/native
-    # runner-type taxonomy this guard predates).
-    if runner == "claude" and "ANTHROPIC_BASE_URL" not in env_vars:
-        base = proc_env if proc_env is not None else os.environ
-        if base.get("ANTHROPIC_BASE_URL"):
-            proc_env = dict(base)
-            proc_env.pop("ANTHROPIC_BASE_URL", None)
-
     if runner == "copilot":
         # Always a full environment: the strips below apply to the inherited one too.
         base = proc_env if proc_env is not None else dict(os.environ)
         proc_env, _removed = copilot_guard_env(base, env_vars)
+
+    # Claude must not silently inherit a proxy's ANTHROPIC_BASE_URL from whatever shell the Hub
+    # itself happened to be started from — its own auth and endpoint selection are Claude Code's
+    # to make, not the Hub's. `ClaudeAdapter.guard_env` strips only an *ambient* value (present in
+    # the Hub's own os.environ but not explicitly set by this agent's own `env_vars`) — an agent
+    # that explicitly configures its own ANTHROPIC_BASE_URL (e.g. a proxy provider) is deliberately
+    # opting in, and that must survive. `CodexAdapter.guard_env` is the identity (design D10); an
+    # unadapted runner (`claude_proxy`, `native`, `kimi`, `opencode`, `codex_mcp`, `copilot`, whose
+    # own filter already ran above) gets no further guard.
+    adapter = get_adapter(runner)
+    if adapter is not None:
+        proc_env = adapter.guard_env(proc_env, config)
 
     return proc_env
 
@@ -283,12 +279,18 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
 # ---------------------------------------------------------------------------
 # Access path: tool-protocol (MCP) vs. plain HTTP requests
 #
-# Two questions, deliberately answered by two functions, because conflating them is what
+# Two questions, deliberately answered separately, because conflating them is what
 # `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing` §4 exists to end:
 #
-#   `resolve_access_path`   — what the run is *given*. Decides whether the Hub injects its
-#                             canonical MCP server, and through that (see D9) the run's
-#                             permission posture. Moved only by the operator.
+#   what the run is *given*   — does the Hub inject its canonical MCP server, and through that
+#                               (see D9) the run's permission posture. Moved only by the
+#                               operator's `hub_client`, never inferred (an inference would move
+#                               containment as a side effect, which `agent-capability-plane`
+#                               forbids). `resolve_access_path` used to answer this; every live
+#                               runner was unconditionally injectable, so it reduced to `"cli" if
+#                               override == "cli" else "mcp"`, which each caller now computes
+#                               inline (`each-runner-cli-is-one-adapter` task 3.2, F474) pending
+#                               `resolve_access_axes` taking it over in task 3.3.
 #   `described_access_path` — what the run is *told*. Never asserts a tool-protocol surface
 #                             the system has no grounds to believe the harness will honour.
 #
@@ -302,36 +304,6 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
 # "will this harness honour the server we are about to inject", and `mcp list` answers neither
 # on a permitted machine nor on a policy-blocked one.
 # ---------------------------------------------------------------------------
-
-# DEAD (2026-09-20): "claude_proxy"/"native" here, and the non-injectable branch at line 245.
-# Why: resolve_access_path's only caller is api/v1/agent_trigger.py:1008, inside
-#   trigger_agent_directly, whose `runner` is the bound Runner.cli (agent_trigger.py:677) —
-#   validated against RUNNER_CLIS = ("claude", "codex", "copilot") (db/models.py). All three live
-#   values are in this set (copilot since `a-copilot-agent-runs-over-acp` D1, without which no
-#   Copilot run would be given the Hub's server), so the `not in` arm cannot be taken by any run.
-# Live equivalent: none needed — every spawnable runner is MCP-injectable.
-# Removal: hub/tests/test_launchability.py:421 asserts the branch using runner "kimi", which
-#   no Runner row can hold; that test goes with it.
-MCP_INJECTABLE_RUNNERS = {"claude", "claude_proxy", "native", "codex", "copilot"}
-
-
-def resolve_access_path(runner: str, override: Optional[str] = None) -> str:
-    """Choose the path the run is **given**: does the Hub inject its canonical MCP server?
-
-    Unconditional for an injectable runner since `d279d22`, and still unconditional, because
-    the Hub adds the server to the command line itself. The operator's `hub_client` is the
-    only thing that moves it — and it must stay that way, because this value also decides the
-    run's permission posture (`runner_commands.build_command` emits `--permission-prompt-tool`
-    only when a server is injected, and falls back to `acceptEdits` when one is not). An
-    *inference* that moved this would move containment as a side effect, which the
-    `agent-capability-plane` requirement forbids; a *declaration* by the operator is theirs to
-    make. What the run is told is `described_access_path`'s answer, not this one.
-    """
-    if override == "cli":
-        return "cli"
-    if runner not in MCP_INJECTABLE_RUNNERS:
-        return "cli"
-    return "mcp"
 
 
 async def harness_has_honoured_mcp(db: AsyncSession, project_id: str, agent: str) -> bool:
@@ -377,7 +349,7 @@ def described_access_path(
     asserting the surface:
 
     * the operator said so (`hub_client: "mcp"`). A declaration about their own deployment
-      outranks anything the Hub can observe, and `resolve_access_path` already honours the
+      outranks anything the Hub can observe, and what the run is *given* already honours the
       other direction.
     * the harness has been *seen* honouring an injected server — the MCP adapter reported in
       from a previous run of this agent (`Run.mcp_adapter_online_at`). Providing a harness with
@@ -661,7 +633,7 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
     (`api/v1/agents.py` and `api/v1/inbound_queue.py`, which carried byte-identical blocks
     loading the `Agent`, loading its `Runner`, and overwriting `runner`/`model`). Both patched
     the *bound* case only, so the **unbound** case — `runner_id IS NULL` — still fell through
-    `RUNNER_CLI["native"] is None` to the agent-name fallback, and reported a missing CLI named
+    `LEGACY_RUNNER_CLI["native"] is None` to the agent-name fallback, and reported a missing CLI named
     after the agent. Doing it here fixes both surfaces at once and gives the unbound case a name
     of its own (`RUNNER_UNBOUND`) rather than a wrong one.
 

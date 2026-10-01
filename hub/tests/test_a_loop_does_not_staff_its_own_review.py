@@ -309,7 +309,7 @@ async def test_the_operator_can_still_review_a_loops_completed_task_by_hand(
         conversation = new_conversation(project_id="proj-test", agent=REVIEWER, origin="operator")
         db.add(conversation)
         await db.commit()
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             await trigger_agent_directly(
                 project_id="proj-test",
                 agent=REVIEWER,

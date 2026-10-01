@@ -111,7 +111,7 @@ async def test_direct_trigger_materializes_context_in_its_own_project_directory(
         # iterator — reusing one across two runs starves the second run's read loop.
         fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
         with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 resp = await app.post(
                     f"/api/v1/projects/{project_id}/agent/trigger",
                     json={"agent": "reader", "message": "hi", "session_mode": "new"},
@@ -157,7 +157,7 @@ async def test_concurrent_writing_agents_get_isolated_worktrees_per_project(
         # test above for why reusing one across two runs hangs the second run's read loop.
         fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
         with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 resp = await app.post(
                     f"/api/v1/projects/{project_id}/agent/trigger",
                     json={"agent": "writer", "message": "write", "session_mode": "new"},
@@ -258,7 +258,7 @@ async def test_work_dir_accepts_a_contained_relative_path(
     fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "reader", "message": "hi", "work_dir": "sub"},

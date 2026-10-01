@@ -61,10 +61,10 @@ def probe_binary(
     Shared by `RunnerAdapter.launchability` and `launchability.probe_agent`'s legacy path, so a
     pinned-override check and a PATH lookup cannot drift between them. `cli_override`, when set, is
     checked as a file directly; otherwise `binary` (falling back to `name` when falsy, exactly as
-    the legacy table's `RUNNER_CLI.get(runner) or name` does) is looked up on PATH. Calls
+    the legacy table's `LEGACY_RUNNER_CLI.get(runner) or name` does) is looked up on PATH. Calls
     `shutil.which`/`os.path.isfile` through the module attribute, never a `from shutil import
-    which` — the ~220 existing test patches of `hub.launchability.shutil.which` keep working once
-    retargeted here (design D6, review 4).
+    which` — the ~220 test patches that used to target `hub.launchability.shutil.which` now target
+    `hub.runner_adapters.base.shutil.which` instead (design D6, review 4; moved by task 3.2).
     """
     cli = str(cli_override) if cli_override else (binary or name)
     if cli_override:

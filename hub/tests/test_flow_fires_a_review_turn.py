@@ -135,7 +135,7 @@ async def test_a_flow_staffing_a_completed_task_queues_a_review(
         job, _loop = await _flow(db, suffix="queues", task_id="task-1")
 
     scheduler = JobScheduler()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         async with async_session_factory() as db:
             fresh_job = await db.get(AIJob, job.id)
             await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
@@ -181,7 +181,7 @@ async def test_a_flow_review_briefing_reads_the_reviewers_own_grant(
         job, _loop = await _flow(db, suffix="grant", task_id="task-1")
 
     scheduler = JobScheduler()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         async with async_session_factory() as db:
             fresh_job = await db.get(AIJob, job.id)
             await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
@@ -221,7 +221,7 @@ async def test_a_flow_fired_reviewer_reads_a_file_that_is_not_on_main(
     fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
     scheduler = JobScheduler()
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
                 await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
@@ -263,7 +263,7 @@ async def test_a_firing_that_staffs_ordinary_work_carries_no_review_task_id(
         await db.commit()
 
     scheduler = JobScheduler()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         async with async_session_factory() as db:
             fresh_job = await db.get(AIJob, job.id)
             await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
@@ -295,7 +295,7 @@ async def test_a_plain_job_with_no_loop_still_fires(app, auth_headers, bind_runn
         await db.commit()
 
     scheduler = JobScheduler()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         async with async_session_factory() as db:
             fresh_job = await db.get(AIJob, "job-plain")
             await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
@@ -346,7 +346,7 @@ async def test_the_checkout_belongs_to_the_agent_the_ladder_resolved(
     fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
     scheduler = JobScheduler()
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
                 await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
@@ -384,7 +384,7 @@ async def test_an_unstaffable_review_is_surfaced_and_the_job_stays_scheduled(
         job, _loop = await _flow(db, suffix="unstaffed", task_id="task-1")
 
     scheduler = JobScheduler()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         async with async_session_factory() as db:
             fresh_job = await db.get(AIJob, job.id)
             fired = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
@@ -443,7 +443,7 @@ async def test_an_unstaffable_review_does_not_stop_the_flow_doing_other_work(
         await db.commit()
 
     scheduler = JobScheduler()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         async with async_session_factory() as db:
             fresh_job = await db.get(AIJob, job.id)
             fired = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
@@ -520,7 +520,7 @@ async def test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn
     fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
     scheduler = JobScheduler()
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
                 await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)

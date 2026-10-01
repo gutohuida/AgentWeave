@@ -161,7 +161,7 @@ async def _dispatch_review(db, *, reviewer, task_id, suffix):
     conversation = new_conversation(project_id="proj-test", agent=reviewer, origin="operator")
     db.add(conversation)
     await db.commit()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         return await trigger_agent_directly(
             project_id="proj-test",
             agent=reviewer,
@@ -395,7 +395,7 @@ async def _post_review(app, auth_headers, agent, task_id):
     # `agent_trigger.py:505`, ahead of the staffing at `:650`. On a machine with no `claude` on
     # PATH the turn is refused there for that reason, the task is never staffed, and the test reads
     # `("completed", None)`. CI is such a machine.
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         return await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
             json={"agent": agent, "message": f"review {task_id}", "review_task_id": task_id},

@@ -85,7 +85,7 @@ MISSING_COMMIT = "e" * 40
 
 
 def _which():
-    return patch("hub.launchability.shutil.which", return_value="/usr/bin/claude")
+    return patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude")
 
 
 def _head_of(repo: Path) -> str:

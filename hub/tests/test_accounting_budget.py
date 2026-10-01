@@ -153,7 +153,7 @@ async def test_operator_turn_starts_while_budget_is_exhausted(
         patch(
             "hub.api.v1.agent_trigger.PtySession.spawn", _completed_claude_spawn("operator-session")
         ),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         scheduled = await schedule_agent("proj-test", name)
         assert scheduled.response is not None
@@ -179,7 +179,7 @@ async def test_autonomous_turn_below_budget_persists_initiator(
             "hub.api.v1.agent_trigger.PtySession.spawn",
             _completed_claude_spawn("autonomous-session"),
         ),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         scheduled = await schedule_agent("proj-test", name)
         assert scheduled.response is not None
@@ -204,7 +204,7 @@ async def test_increasing_budget_reschedules_retained_autonomous_work(
         patch(
             "hub.api.v1.agent_trigger.PtySession.spawn", _completed_claude_spawn("resumed-session")
         ),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         response = await app.patch(
             "/api/v1/projects/proj-test/accounting/budget",

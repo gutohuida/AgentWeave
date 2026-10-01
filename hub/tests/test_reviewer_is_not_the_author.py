@@ -189,7 +189,7 @@ async def _flow(db, *, task_id, agent=AUTHOR):
 
 async def _fire(job_id):
     scheduler = JobScheduler()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         async with async_session_factory() as db:
             await scheduler._fire_job_internal(
                 await db.get(AIJob, job_id), trigger="scheduled", session=db

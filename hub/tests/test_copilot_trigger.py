@@ -2,8 +2,9 @@
 (`a-copilot-agent-runs-over-acp` task 7.2, design D1, D4 (c), D7, D18).
 
 Every test enters through `POST /agent/trigger`, never the executor: three gates outside the
-transport refused `copilot` (`SUPPORTED_RUNNERS`, `build_command`, `MCP_INJECTABLE_RUNNERS`), and a
-test that started below them would pass while the route still answered 501 (design, Risks).
+transport used to refuse `copilot` (`SUPPORTED_RUNNERS`, `build_command`, `MCP_INJECTABLE_RUNNERS`
+— all deleted since, `each-runner-cli-is-one-adapter` tasks 3.1/3.2), and a test that started below
+them would pass while the route still answered 501 (design, Risks).
 `copilot_acp.run_turn` is replaced by a fake that drives the executor's callbacks the way a real
 turn does.
 """
@@ -76,7 +77,8 @@ async def test_a_copilot_turn_reaches_run_turn_with_the_mcp_server_and_its_conte
 
     fake.assert_called_once()
     kwargs = fake.call_args.kwargs
-    # MCP_INJECTABLE_RUNNERS admits copilot, or the Hub's server would never be injected.
+    # Every spawnable runner is MCP-injectable, copilot included, or the Hub's server would
+    # never be injected.
     assert kwargs["mcp_command"] is not None
     assert kwargs["agent"] == "cop-1"
     assert "### Your workspace" in kwargs["per_turn_context"]

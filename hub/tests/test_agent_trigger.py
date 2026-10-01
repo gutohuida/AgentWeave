@@ -237,7 +237,7 @@ async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers, b
     # Nested rather than combined: SIM117 is disabled for this suite as a style choice
     # (see pyproject.toml's per-file-ignores), not a compatibility requirement.
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "trigger-claude", "message": "hi", "session_mode": "new"},
@@ -317,7 +317,7 @@ async def test_trigger_command_uses_bound_runner_model_and_flags(app, auth_heade
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             response = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "runner-options", "message": "hi", "session_mode": "new"},
@@ -362,7 +362,7 @@ async def test_trigger_materializes_bound_charter_context(app, auth_headers, bin
 
     fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             response = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "chartered", "message": "verify context", "session_mode": "new"},
@@ -412,7 +412,7 @@ async def test_writing_agent_worktree_exists_before_first_spawn(
     )
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             response = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "writer", "message": "write"},
@@ -454,7 +454,7 @@ async def test_f52_writing_agent_gets_the_auto_snapshot_notice(
         return real_build_command(**kwargs)
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
                 response = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
@@ -496,7 +496,7 @@ async def test_f52_read_only_agent_gets_no_auto_snapshot_notice(
         return real_build_command(**kwargs)
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
                 response = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
@@ -528,7 +528,7 @@ async def test_read_only_agent_spawns_in_primary_checkout(
     )
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             response = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "reader", "message": "inspect"},
@@ -554,7 +554,7 @@ async def test_writing_agent_cannot_bypass_isolation_with_work_dir(
     )
     assert sync.status_code == 200
 
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         response = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
             json={"agent": "writer", "message": "write", "work_dir": "."},
@@ -581,7 +581,7 @@ async def test_writing_agent_runs_in_place_when_the_project_is_not_a_repository(
     assert sync.status_code == 200
     await bind_runner("writer", cli="claude")
 
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         response = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
             json={"agent": "writer", "message": "write"},
@@ -615,7 +615,7 @@ async def test_writing_agent_is_not_spawned_when_a_real_repository_cannot_be_pre
     assert sync.status_code == 200
     await bind_runner("writer", cli="claude")
 
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         response = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
             json={"agent": "writer", "message": "write"},
@@ -643,7 +643,7 @@ async def test_work_dir_is_accepted_for_a_writer_when_there_is_no_isolation_to_o
     assert sync.status_code == 200
     await bind_runner("writer", cli="claude")
 
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         response = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
             json={"agent": "writer", "message": "write", "work_dir": "sub"},
@@ -687,7 +687,7 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
         return real_build_command(**kwargs)
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
                 resp = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
@@ -775,7 +775,7 @@ async def test_trigger_stamps_the_new_run_with_this_hub_instances_id(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-instance-1"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "instance-claude", "message": "do the thing"},
@@ -821,7 +821,7 @@ async def _trigger_and_capture_build_command(app, auth_headers, agent, *, sessio
         return real_build_command(**kwargs)
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
                 resp = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
@@ -852,7 +852,7 @@ async def test_a_tool_server_that_cannot_be_pinned_refuses_the_trigger(
     await bind_runner("pin-claude", cli="claude")
 
     with patch("hub.tool_server.pinned_server_path", side_effect=OSError("disk full")):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "pin-claude", "message": "hi", "session_mode": "new"},
@@ -977,7 +977,7 @@ async def test_a_run_holding_the_tools_is_not_told_it_is_empty(app, auth_headers
     """The delta's scenario `A run holding the tools is not told it is empty`.
 
     A brand-new agent has no run carrying `mcp_adapter_online_at`, so `described_access_path`
-    has no grounds and the turn is described the HTTP form. `resolve_access_path` injects the
+    has no grounds and the turn is described the HTTP form. The trigger's `access_path` injects the
     server anyway, because injection follows the operator's declaration and never an inference.
     Both are true of this single turn, and that is exactly why the denial which used to open its
     notice was false: the tools it was told it did not have are on its own command line.
@@ -1083,7 +1083,7 @@ async def test_codex_exec_trigger_uses_headless_pipe_instead_of_pty(app, auth_he
     )
     with patch("hub.api.v1.agent_trigger.PipeSession.spawn", fake_spawn):  # noqa: SIM117
         with patch("hub.api.v1.agent_trigger.PtySession.spawn") as pty_spawn:
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
                 resp = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
                     json={"agent": "trigger-codex", "message": "hi", "session_mode": "new"},
@@ -1125,7 +1125,7 @@ async def test_run_without_usage_records_unavailable_once(app, auth_headers, bin
     )
     with (
         patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
     ):
         response = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",
@@ -1185,7 +1185,7 @@ async def test_second_trigger_while_first_is_running_is_queued(app, auth_headers
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=hanging_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             try:
                 first = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
@@ -1289,7 +1289,7 @@ async def test_a_run_that_ended_releases_its_queue_even_when_its_tail_raises(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(side_effect=_spawn)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch.object(
                 agent_trigger, "_report_abandoned_entries", _raise_once_inside_the_window
             ):
@@ -1416,7 +1416,7 @@ async def test_an_app_server_run_that_ended_releases_its_queue_when_its_tail_rai
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.codex_run_turn", AsyncMock(side_effect=_hold_the_first_turn_open)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             with patch.object(
                 agent_trigger, "_report_abandoned_entries", _raise_once_inside_the_window
             ):
@@ -1527,7 +1527,7 @@ async def test_an_app_server_turn_that_raises_before_its_terminal_write_is_not_a
         "hub.api.v1.agent_trigger.codex_run_turn",
         AsyncMock(side_effect=_raise_once_before_the_terminal_write),
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "f286-wedge", "message": "hi", "session_mode": "new"},
@@ -1670,7 +1670,7 @@ async def test_a_second_release_charges_a_refused_entry_at_most_twice(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([], exit_code=0)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch.object(agent_trigger, "trigger_agent_directly", _refuse_the_second_agent):
                 with patch.object(
                     turn_scheduler, "redrain_queued_agents", _raise_after_the_first_release
@@ -1722,7 +1722,7 @@ async def test_spawn_failure_marks_run_failed(app, auth_headers, bind_runner):
         "hub.api.v1.agent_trigger.PtySession.spawn",
         MagicMock(side_effect=FileNotFoundError("claude was not found in PATH")),
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "missing-claude", "message": "hi", "session_mode": "new"},
@@ -1801,7 +1801,7 @@ async def test_successful_run_broadcasts_started_and_completed_lifecycle_events(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-lc-1"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "lifecycle-claude", "message": "hi", "session_mode": "new"},
@@ -1863,7 +1863,7 @@ async def test_nonzero_exit_broadcasts_run_failed_not_run_completed(app, auth_he
         exit_code=1,
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "failing-claude", "message": "hi", "session_mode": "new"},
@@ -1903,7 +1903,7 @@ async def test_an_unexpectedly_failed_run_still_gets_an_accounting_outcome(
         "hub.api.v1.agent_trigger.PtySession.spawn",
         MagicMock(side_effect=RuntimeError("something nobody wrote a branch for")),
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "unexpected-boom", "message": "hi", "session_mode": "new"},
@@ -1944,7 +1944,7 @@ async def test_spawn_failure_broadcasts_run_failed_event(app, auth_headers, bind
         "hub.api.v1.agent_trigger.PtySession.spawn",
         MagicMock(side_effect=FileNotFoundError("claude was not found in PATH")),
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "missing-claude-2", "message": "hi", "session_mode": "new"},
@@ -2024,7 +2024,7 @@ async def test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             trigger = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "stoppable-claude", "message": "hi", "session_mode": "new"},
@@ -2147,7 +2147,7 @@ async def test_shutdown_terminates_all_active_runs(app, auth_headers, bind_runne
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch(
                 "hub.api.v1.agent_trigger.terminate_process_tree",
                 side_effect=_fake_terminate_process_tree,
@@ -2208,7 +2208,7 @@ async def test_trigger_resolves_claude_proxy_env_at_spawn_time(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-env-1"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "minimax-env-agent", "message": "hi", "session_mode": "new"},
@@ -2253,7 +2253,7 @@ async def test_trigger_derives_hub_url_from_observed_address_not_configured_port
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-bound-1"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch("hub.bound_address.get", return_value=("127.0.0.1", 9310)):
                 resp = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
@@ -2290,7 +2290,7 @@ async def test_trigger_prefers_explicit_hub_url_over_observed_address(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-explicit-1"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch("hub.bound_address.get", return_value=("127.0.0.1", 9310)):
                 resp = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
@@ -2340,7 +2340,7 @@ async def test_trigger_directly_refuses_when_no_address_is_known(
         # below reads "Runner CLI 'claude' was not found in PATH" instead of the address error the
         # test exists to pin. Green on any developer machine, red anywhere else.
         with patch(
-            "hub.launchability.shutil.which", return_value="/usr/bin/claude"
+            "hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"
         ):  # noqa: SIM117
             with patch("hub.bound_address.get", return_value=None):
                 with pytest.raises(agent_trigger.TriggerAgentError) as excinfo:
@@ -2412,7 +2412,7 @@ async def test_trigger_reports_its_own_conversation_when_an_older_one_is_schedul
 
     executed = AsyncMock()
     with patch("hub.api.v1.agent_trigger._execute_run", executed):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "backlog-claude", "message": "FRESH INPUT"},
@@ -2470,7 +2470,7 @@ async def test_codex_defaults_to_app_server_with_no_flags_at_all(app, auth_heade
     fake_run_turn = _fake_run_turn()
     with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
         with patch("hub.api.v1.agent_trigger.PipeSession.spawn") as pipe_spawn:
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
                 resp = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
                     json={"agent": "default-codex", "message": "hi", "session_mode": "new"},
@@ -2501,7 +2501,7 @@ async def test_codex_exec_argv_never_carries_a_transport_sentinel(app, auth_head
         ]
     )
     with patch("hub.api.v1.agent_trigger.PipeSession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "sentinel-codex", "message": "hi", "session_mode": "new"},
@@ -2531,7 +2531,7 @@ async def test_codex_app_server_opt_in_flag_selects_run_turn_not_exec(app, auth_
     fake_run_turn = _fake_run_turn()
     with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
         with patch("hub.api.v1.agent_trigger.PipeSession.spawn") as pipe_spawn:
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
                 resp = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
                     json={"agent": "appserver-codex", "message": "hi", "session_mode": "new"},
@@ -2580,7 +2580,7 @@ async def test_codex_app_server_records_output_events_and_usage(app, auth_header
         ),
     )
     with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "appserver-output", "message": "hi", "session_mode": "new"},
@@ -2627,7 +2627,7 @@ async def test_codex_app_server_resume_passes_known_session_id_as_resume_thread_
 
     fake_run_turn = _fake_run_turn(thread_id="thread-appserver-1")
     with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             first = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "appserver-resume", "message": "hi", "session_mode": "new"},
@@ -2682,7 +2682,7 @@ async def test_codex_app_server_binding_conflict_fails_run(app, auth_headers):
 
     fake_run_turn = _fake_run_turn(thread_id="thread-different")
     with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={
@@ -2723,7 +2723,7 @@ async def test_codex_app_server_spawn_failure_fails_run_and_returns_queue_entrie
 
     failing_run_turn = AsyncMock(side_effect=FileNotFoundError("codex not found in PATH"))
     with patch("hub.api.v1.agent_trigger.codex_run_turn", failing_run_turn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "appserver-missing", "message": "hi", "session_mode": "new"},
@@ -2767,7 +2767,7 @@ async def test_codex_app_server_stop_signals_should_interrupt(app, auth_headers)
 
     fake_run_turn = AsyncMock(side_effect=_run_until_interrupted)
     with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             trigger = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "appserver-stoppable", "message": "hi", "session_mode": "new"},
@@ -2866,7 +2866,7 @@ async def test_a_batch_naming_a_review_and_work_is_refused(app, auth_headers, bi
         )
         await session.commit()
 
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with pytest.raises(TriggerAgentError) as excinfo:
                 await trigger_agent_directly(
                     project_id="proj-test",
@@ -2904,16 +2904,18 @@ async def test_a_run_without_mcp_is_described_the_operations_it_can_actually_per
 ):
     """The notice and the tool description are two halves of one fact, so one value produces both.
 
-    Task 2.2 of `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`. `resolve_access_path`
-    used to be called 46 lines *after* the canonical context was materialized, so the context could
-    only ever be written in MCP wording — an agent on the HTTP path was told, in the same turn,
-    that it had no injected tools and then handed a list of injected tools to call. The call was
-    hoisted above the materialization and its single value threaded into the renderer; this asserts
-    both ends of that, on the text the run actually receives.
+    Task 2.2 of `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`. Resolving
+    `access_path` used to happen 46 lines *after* the canonical context was materialized, so the
+    context could only ever be written in MCP wording — an agent on the HTTP path was told, in the
+    same turn, that it had no injected tools and then handed a list of injected tools to call. The
+    resolution was hoisted above the materialization and its single value threaded into the
+    renderer; this asserts both ends of that, on the text the run actually receives.
 
     **Driven from configuration since §4, not patched.** This test used to monkeypatch
-    `resolve_access_path` to `"cli"`, because the real function returned `"mcp"` unconditionally
-    and no configuration could reach the branch. It can now: a `claude` agent with `hub_client`
+    `resolve_access_path` (since deleted, `each-runner-cli-is-one-adapter` task 3.2 — every live
+    runner is unconditionally injectable, so the trigger now computes `access_path` inline) to
+    `"cli"`, because the real function returned `"mcp"` unconditionally and no configuration could
+    reach the branch. It can now: a `claude` agent with `hub_client`
     unset whose harness has never reported the adapter in has no grounds, so it is *described* the
     HTTP form while still being given the server. That is the ordinary case, and it is what the
     threading is exercised against here.
@@ -2951,7 +2953,7 @@ async def test_a_run_without_mcp_is_described_the_operations_it_can_actually_per
         return real_build_command(**kwargs)
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
                 resp = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
@@ -3034,7 +3036,7 @@ async def test_a_run_with_mcp_is_still_described_the_injected_tools(
         return real_build_command(**kwargs)
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
                 resp = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
@@ -3110,7 +3112,7 @@ async def _f359_trigger(app, auth_headers, bind_runner, agent, spawn, record):
     assert sync.status_code == 200
     await bind_runner(agent, cli="claude")
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch.object(agent_trigger, "record_agent_output", record):
                 # `create=True` so this file also runs against code that predates the constant,
                 # which is how these tests were checked to fail for the right reason.

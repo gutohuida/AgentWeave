@@ -114,7 +114,7 @@ async def test_an_over_budget_entry_is_not_delivered_beside_an_admitted_one(
 
     spawn = MagicMock(return_value=_completed_session(7101, "bound-1"))
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             result = await schedule_agent("proj-test", "bound-target")
             assert result.response is not None
             await _drain()
@@ -163,7 +163,7 @@ async def test_the_turn_depth_is_the_admitting_entrys_not_the_batch_minimum(
         "hub.api.v1.agent_trigger.PtySession.spawn",
         MagicMock(return_value=_completed_session(7102, "depth-1")),
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             result = await schedule_agent("proj-test", "depth-target")
             assert result.response is not None
             run_id = result.response.run_id
@@ -204,7 +204,7 @@ async def test_an_outbound_message_is_deeper_than_the_entry_that_admitted_the_tu
         "hub.api.v1.agent_trigger.PtySession.spawn",
         MagicMock(return_value=_completed_session(7103, "outbound-1")),
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             result = await schedule_agent("proj-test", "outbound-target")
             run_id = result.response.run_id
             await _drain()
@@ -273,7 +273,7 @@ async def test_an_operator_message_does_not_release_a_held_chain_in_its_own_conv
         "hub.api.v1.agent_trigger.PtySession.spawn",
         MagicMock(return_value=_completed_session(7104, "f5-1")),
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             result = await schedule_agent("proj-test", "f5-target")
             assert result.response is not None
             run_id = result.response.run_id
@@ -326,7 +326,7 @@ async def test_releasing_a_held_entry_delivers_it_on_the_next_turn(app, auth_hea
 
     spawn = MagicMock(return_value=_completed_session(7201, "release-1"))
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             released = await app.post(
                 f"/api/v1/projects/proj-test/queue/entries/{entry_id}/release",
                 headers=auth_headers,
@@ -351,7 +351,7 @@ async def test_releasing_a_held_entry_records_what_it_was_released_from(
         "hub.api.v1.agent_trigger.PtySession.spawn",
         MagicMock(return_value=_completed_session(7202, "record-1")),
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             await app.post(
                 f"/api/v1/projects/proj-test/queue/entries/{entry_id}/release",
                 headers=auth_headers,
@@ -418,7 +418,7 @@ async def test_raising_the_budget_releases_a_held_entry_without_an_explicit_acti
 
     spawn = MagicMock(return_value=_completed_session(7203, "raise-1"))
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             saved = await app.put(
                 "/api/v1/projects/proj-test/settings",
                 json={"hop_budget": 4, "turn_delivery_cap": 10},
@@ -453,7 +453,7 @@ async def test_redrain_delivers_a_held_entry_once_the_budget_admits_it(
         "hub.api.v1.agent_trigger.PtySession.spawn",
         MagicMock(return_value=_completed_session(7204, "redrain-1")),
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             await redrain_queued_agents("proj-test")
             await _drain()
 

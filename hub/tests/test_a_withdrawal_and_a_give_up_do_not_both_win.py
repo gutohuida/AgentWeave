@@ -238,7 +238,7 @@ async def test_a_delivery_that_loses_its_claim_is_a_transient_refusal_to_the_sch
         raise QueueChangedError("queue changed before atomic delivery")
 
     with (
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
         patch("hub.api.v1.agent_trigger.deliver_entries_with_run", lose_the_claim),
     ):
         await schedule_agent("proj-test", agent)

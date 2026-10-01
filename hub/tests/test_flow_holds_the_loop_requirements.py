@@ -89,7 +89,7 @@ async def _fire(job_id):
     scheduler = JobScheduler()
     spawn = _fake_pty([_SUCCESS_LINE])
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             async with async_session_factory() as db:
                 job = await db.get(AIJob, job_id)
                 fired = await scheduler._fire_job_internal(job, trigger="scheduled", session=db)

@@ -174,14 +174,14 @@ async def _stage_collision(app, auth_headers, bind_runner, bind_project_workspac
             )
         )
         await session.commit()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         result = await schedule_agent("proj-test", CHALLENGER)
         assert result.terminal_failure is False
     return run_id
 
 
 async def _status(app, auth_headers) -> str:
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         response = await app.get(
             f"/api/v1/projects/proj-test/queue/{CHALLENGER}/status", headers=auth_headers
         )

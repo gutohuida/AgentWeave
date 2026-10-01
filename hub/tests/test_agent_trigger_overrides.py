@@ -91,7 +91,7 @@ async def test_a_valid_override_is_applied_to_the_spawned_command(app, auth_head
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             response = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={
@@ -126,7 +126,7 @@ async def test_an_override_persists_on_the_conversation_and_survives_reload(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             response = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={
@@ -168,7 +168,7 @@ async def test_a_new_conversation_does_not_inherit_a_previous_conversations_over
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s1"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", first_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             first = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={
@@ -186,7 +186,7 @@ async def test_a_new_conversation_does_not_inherit_a_previous_conversations_over
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s2"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", second_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             second = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "override-fresh", "message": "hi again", "session_mode": "new"},
@@ -314,7 +314,7 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
             ]
         )
         with patch("hub.api.v1.agent_trigger.PipeSession.spawn", first_spawn):  # noqa: SIM117
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
                 first = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
                     json={
@@ -344,7 +344,7 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
             ]
         )
         with patch("hub.api.v1.agent_trigger.PipeSession.spawn", second_spawn):  # noqa: SIM117
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
                 second = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
                     json={
@@ -386,7 +386,7 @@ async def test_a_config_style_override_reaches_the_app_server_transport(
 
     fake_run_turn = _fake_run_turn()
     with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             response = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={

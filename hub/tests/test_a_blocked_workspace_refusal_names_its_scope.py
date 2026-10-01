@@ -94,7 +94,7 @@ async def _refusal(monkeypatch, *, agent: str, **kwargs) -> TriggerAgentError:
 
     monkeypatch.setattr(worktrees, "resolve_turn_workspace", _raise)
     async with async_session_factory() as session:
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with pytest.raises(TriggerAgentError) as caught:
                 await trigger_agent_directly(
                     project_id="proj-test",

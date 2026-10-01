@@ -87,7 +87,6 @@ from ...launchability import (
     get_agent_config,
     harness_has_honoured_mcp,
     probe_agent,
-    resolve_access_path,
     resolve_agent_env,
     spec_turn_notice,
 )
@@ -1109,7 +1108,11 @@ async def _trigger_agent_directly(
     # requirement forbids a truer description from silently widening permission: the operator's
     # `hub_client` moves both, an inference moves only the second.
     hub_client = config.get("hub_client")
-    access_path = resolve_access_path(runner, hub_client)
+    # Every spawnable runner is MCP-injectable (`launchability`'s now-deleted
+    # `resolve_access_path`/`MCP_INJECTABLE_RUNNERS` reduced to exactly this for any live
+    # `Runner.cli`); task 3.3 (`each-runner-cli-is-one-adapter`) replaces this with
+    # `resolve_access_axes`, which also needs `runner_flags` (below) threaded up to here (F474).
+    access_path = "cli" if hub_client == "cli" else "mcp"
     described_path = described_access_path(
         access_path,
         override=hub_client,

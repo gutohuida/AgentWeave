@@ -132,7 +132,7 @@ async def _set_up(app, auth_headers, bind_runner, agent):
 
 async def _operator_turn(app, auth_headers, agent, spawn):
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": agent, "message": "please do it", "session_mode": "new"},
@@ -296,7 +296,7 @@ async def test_a_refused_firing_stays_in_progress_until_its_input_is_delivered(
         await db.commit()
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             async with async_session_factory() as db:
                 job = await db.get(AIJob, "job-held-plain")
                 await JobScheduler()._fire_job_internal(job, "scheduled", session=db)
@@ -431,7 +431,7 @@ async def _schedule(agent, spawn):
     from hub.turn_scheduler import schedule_agent
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             result = await schedule_agent("proj-test", agent)
             await _await_a_bounded_number_of_runs()
     return result
@@ -594,7 +594,7 @@ async def test_the_wake_starts_the_turn_at_the_reset_with_no_other_call(
         assert scheduler.scheduler.get_job(f"allowance-wake:proj-test:{agent}") is not None
 
         with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 for _ in range(100):
                     await asyncio.sleep(0.1)
                     if spawn.call_count == 2:

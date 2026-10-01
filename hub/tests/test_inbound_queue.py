@@ -363,7 +363,7 @@ async def test_operator_input_does_not_drain_another_conversation(app, auth_head
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             reset = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "hop-target", "message": "operator reset"},
@@ -437,7 +437,7 @@ async def test_delivery_cap_defers_entries_to_following_turns(app, auth_headers,
         side_effect=[completed_session(7001, "cap-1"), completed_session(7002, "cap-2")]
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             result = await schedule_agent("proj-test", "cap-target")
             assert result.response is not None
             await await_background_runs()
@@ -470,7 +470,7 @@ async def test_queue_status_probes_the_bound_runner_not_the_agent_name(
 ):
     """The reported reason must come from the runner the agent is bound to.
 
-    Probing without the Runner overlay falls through to `RUNNER_CLI["native"] is
+    Probing without the Runner overlay falls through to `LEGACY_RUNNER_CLI["native"] is
     None`, whose fallback is the agent's own name — so an agent called
     `codex-spec` bound to the `codex` runner was reported as
     "Runner CLI 'codex-spec' was not found in PATH". It was launchable. The

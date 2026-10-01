@@ -180,7 +180,7 @@ async def test_trigger_allocates_conversation_synchronously_before_provider_outp
         with patch(  # noqa: SIM117
             "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=session)
         ):
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 response = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
                     json={"agent": "claude", "message": "hi"},
@@ -218,7 +218,7 @@ async def test_conversation_scope_is_immutable_across_binding_and_followups(app,
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"provider-1"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             first = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "claude", "message": "first"},
@@ -237,7 +237,7 @@ async def test_conversation_scope_is_immutable_across_binding_and_followups(app,
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"provider-1"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn_2):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={
@@ -278,7 +278,7 @@ async def test_provider_binding_is_idempotent_for_repeated_session_id(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"provider-1"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             first = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "claude", "message": "first"},
@@ -294,7 +294,7 @@ async def test_provider_binding_is_idempotent_for_repeated_session_id(
         ]
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn_2):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             second = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={
@@ -346,7 +346,7 @@ async def test_provider_binding_conflict_leaves_conversation_untouched_and_fails
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"provider-1"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn_1):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             first = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "claude", "message": "first"},
@@ -359,7 +359,7 @@ async def test_provider_binding_conflict_leaves_conversation_untouched_and_fails
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"provider-2"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn_2):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             second = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={
@@ -419,7 +419,7 @@ async def test_stop_and_retry_retain_conversation_and_resume_bound_session(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"provider-1"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn_1):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             first = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "claude", "message": "first"},
@@ -432,7 +432,7 @@ async def test_stop_and_retry_retain_conversation_and_resume_bound_session(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=stoppable)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             second = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={
@@ -464,7 +464,7 @@ async def test_stop_and_retry_retain_conversation_and_resume_bound_session(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"provider-1"}\n']
     )
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn_3):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             retry = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={

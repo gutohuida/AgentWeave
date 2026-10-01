@@ -107,7 +107,7 @@ async def _deliver_review(db, task_id, *, entries):
         entry.conversation_id = conversation.id
         db.add(entry)
     await db.commit()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         await trigger_agent_directly(
             project_id=PROJECT,
             agent=REVIEWER,
@@ -145,7 +145,7 @@ async def test_an_operators_by_hand_review_is_the_operators(
         conversation = new_conversation(project_id=PROJECT, agent=REVIEWER, origin="operator")
         db.add(conversation)
         await db.commit()
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             await trigger_agent_directly(
                 project_id=PROJECT,
                 agent=REVIEWER,

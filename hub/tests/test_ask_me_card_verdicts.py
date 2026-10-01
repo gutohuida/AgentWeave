@@ -86,7 +86,7 @@ async def test_a_codex_card_stores_the_verdict(app, auth_headers, bind_runner):
         return codex_appserver.TurnOutcome(thread_id="t-1", status="completed", error=None)
 
     with patch("hub.api.v1.agent_trigger.codex_run_turn", AsyncMock(side_effect=_run)):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
             response = await app.post(
                 "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "askme-codex", "message": "hi", "session_mode": "new"},

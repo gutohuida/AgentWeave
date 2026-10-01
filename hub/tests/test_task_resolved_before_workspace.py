@@ -96,7 +96,7 @@ async def test_a_task_that_does_not_exist_is_refused_and_provisions_no_worktree(
     conversation_id = await _conversation("writer")
 
     async with async_session_factory() as session:
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with pytest.raises(TaskBindingError) as excinfo:
                 await trigger_agent_directly(
                     project_id="proj-test",
@@ -133,7 +133,7 @@ async def test_an_unavailable_workspace_still_wins_over_the_task_refusal(
     shutil.rmtree(directory)
 
     async with async_session_factory() as session:
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with pytest.raises(TriggerAgentError) as excinfo:
                 await trigger_agent_directly(
                     project_id="proj-test",
@@ -170,7 +170,7 @@ async def test_a_missing_task_outranks_work_dir_on_a_review_turn(
         await session.commit()
 
     async with async_session_factory() as session:
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with pytest.raises(TaskBindingError) as excinfo:
                 await trigger_agent_directly(
                     project_id="proj-test",
@@ -203,7 +203,7 @@ async def test_a_missing_task_outranks_work_dir_for_a_writing_agent(
     conversation_id = await _conversation("writer")
 
     async with async_session_factory() as session:
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with pytest.raises(TaskBindingError) as excinfo:
                 await trigger_agent_directly(
                     project_id="proj-test",
@@ -241,7 +241,7 @@ async def test_a_missing_task_outranks_an_unresolvable_review_target(
         await session.commit()
 
     async with async_session_factory() as session:
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with pytest.raises(TaskBindingError) as excinfo:
                 await trigger_agent_directly(
                     project_id="proj-test",
@@ -293,7 +293,7 @@ async def test_a_real_task_still_binds_and_the_turn_still_gets_its_workspace(
 
     async with async_session_factory() as session:
         with patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn):  # noqa: SIM117
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 await trigger_agent_directly(
                     project_id="proj-test",
                     agent="writer",

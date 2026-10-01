@@ -413,7 +413,7 @@ async def test_a_turn_queued_behind_a_live_run_waits_for_it_and_then_runs(
             return list(result.scalars().all())
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", side_effect=spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             started = await app.post(
                 f"/api/v1/projects/{PROJECT}/agent/trigger",
                 json={"agent": AGENT, "message": "please do it", "session_mode": "new"},

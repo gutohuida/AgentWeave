@@ -66,7 +66,7 @@ async def test_a_trigger_writes_nothing_to_the_project_row(
 
     fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             event.listen(engine.sync_engine, "before_cursor_execute", _record)
             try:
                 response = await app.post(

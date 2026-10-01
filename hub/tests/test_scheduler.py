@@ -104,7 +104,7 @@ async def test_fired_job_creates_a_run_via_direct_execution_not_a_message(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -420,7 +420,7 @@ async def test_loop_with_stop_when_queue_empties_and_a_pending_task_does_not_sto
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -498,7 +498,7 @@ async def test_loop_fire_claims_the_oldest_pending_task(app, auth_headers, bind_
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -586,7 +586,7 @@ async def test_loop_fire_claims_the_oldest_even_when_updated_differs(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -659,7 +659,7 @@ async def test_loop_fire_resumes_an_active_task_instead_of_claiming_another(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -750,7 +750,7 @@ async def test_loop_fire_resumes_an_assigned_task_rather_than_stranding_it(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -949,7 +949,7 @@ async def test_loop_whose_tasks_are_all_completed_but_unapproved_skips_instead_o
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             for _ in range(3):
                 async with async_session_factory() as db:
@@ -1038,7 +1038,7 @@ async def test_loop_whose_tasks_are_all_completed_but_unapproved_skips_instead_o
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
                 recovered = await scheduler._fire_job_internal(
@@ -1136,7 +1136,7 @@ async def test_loop_whose_only_task_is_blocked_on_an_unanswered_question_skips_i
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             for _ in range(3):
                 async with async_session_factory() as db:
@@ -1194,7 +1194,7 @@ async def test_loop_whose_only_task_is_blocked_on_an_unanswered_question_skips_i
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
                 recovered = await scheduler._fire_job_internal(
@@ -1236,7 +1236,7 @@ async def test_loop_fire_with_empty_queue_claims_nothing_and_does_not_error(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -1285,7 +1285,7 @@ async def test_loop_fire_whose_spawn_fails_leaves_the_job_run_failed_not_stuck_i
         "hub.api.v1.agent_trigger.PtySession.spawn",
         MagicMock(side_effect=FileNotFoundError("claude was not found in PATH")),
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -1411,7 +1411,7 @@ async def test_loop_briefing_omits_prior_checkpoint_section_on_a_first_firing(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -1493,7 +1493,7 @@ async def test_loop_briefing_includes_a_prior_checkpoint_in_full_under_the_cap(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -1560,7 +1560,7 @@ async def test_loop_briefing_truncates_an_oversized_prior_checkpoint_to_exactly_
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -1625,7 +1625,7 @@ async def test_loop_edit_staged_mid_firing_leaves_that_firings_briefing_untouche
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
 
             # Firing 1: briefed with the original purpose.
@@ -1735,7 +1735,7 @@ async def test_non_loop_job_fired_content_is_byte_identical_to_job_message(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -2369,7 +2369,7 @@ async def test_run_count_and_last_run_describe_firings_not_considerations(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             for _ in range(3):
                 async with async_session_factory() as db:
                     fresh_job = await db.get(AIJob, job.id)
@@ -2413,7 +2413,7 @@ async def test_run_count_and_last_run_describe_firings_not_considerations(
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
                 assert (
@@ -2617,7 +2617,7 @@ async def test_a_primary_firing_that_claims_work_stages_task_id_not_review_task_
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -2669,7 +2669,7 @@ async def test_a_firing_that_staffs_a_review_stages_review_task_id_not_task_id(
         )
 
     scheduler = JobScheduler()
-    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
         async with async_session_factory() as db:
             fresh_job = await db.get(AIJob, job.id)
             await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
@@ -2717,7 +2717,7 @@ async def test_a_flow_work_run_binds_and_starts_its_claimed_task(app, auth_heade
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)
@@ -2764,7 +2764,7 @@ async def test_a_firing_that_claims_no_task_starts_an_unbound_run_with_no_diverg
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, "job-sched-unbound-run")
@@ -2825,7 +2825,7 @@ async def test_a_flow_work_run_that_moves_nothing_is_divergent(app, auth_headers
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
     ):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             scheduler = JobScheduler()
             async with async_session_factory() as db:
                 fresh_job = await db.get(AIJob, job.id)

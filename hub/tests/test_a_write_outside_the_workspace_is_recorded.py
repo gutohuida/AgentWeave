@@ -191,7 +191,7 @@ async def drive(app, auth_headers, agent: str, destination: Path, *, session_id=
     """
     line = write_call_line(destination, session_id=session_id)
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([line])):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             trigger = await app.post(
                 f"/api/v1/projects/{PROJECT}/agent/trigger",
                 json={"agent": agent, "message": "hi", "session_mode": "new"},

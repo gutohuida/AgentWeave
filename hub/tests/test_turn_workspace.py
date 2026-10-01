@@ -134,7 +134,7 @@ async def _turn(app_session_factory, *, agent: str, **kwargs) -> Optional[str]:
 
     async with app_session_factory() as session:
         with patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn):  # noqa: SIM117
-            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
                 await trigger_agent_directly(session=session, agent=agent, **kwargs)
 
                 # Waited for and drained **inside the patch**, which is the whole of the fix.

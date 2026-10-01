@@ -215,7 +215,7 @@ async def get_queue_status(
             config = await get_agent_config(project_id, agent, session)
             # The bound Runner record is the sole source of which CLI to launch, exactly as
             # in `agent_trigger` and the agent roster. Probing without it fell through to
-            # `RUNNER_CLI["native"] is None`, whose fallback is the **agent's own name** —
+            # `LEGACY_RUNNER_CLI["native"] is None`, whose fallback is the **agent's own name** —
             # so an agent called `codex-spec` bound to the `codex` runner was reported as
             # "Runner CLI 'codex-spec' was not found in PATH". The agent was launchable; the
             # status said otherwise, and the message masked the real reason a turn had not

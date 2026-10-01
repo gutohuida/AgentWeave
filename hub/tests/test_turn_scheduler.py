@@ -137,7 +137,7 @@ async def test_a_turn_admits_only_the_controlling_entrys_kind_review_first(
 
     spawn = MagicMock(side_effect=lambda *a, **k: _completed_session(9001, "kind-1"))
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch(
                 "hub.api.v1.agent_trigger.review_turn.prepare_review_turn",
                 AsyncMock(
@@ -208,7 +208,7 @@ async def test_a_turn_admits_only_the_controlling_entrys_kind_work_first(
 
     spawn = MagicMock(return_value=_completed_session(9002, "kind-2"))
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             result = await schedule_agent("proj-test", agent)
             assert result.response is not None
             await _drain()
@@ -273,7 +273,7 @@ async def test_a_deferred_entry_is_delivered_on_the_next_turn(
 
     spawn = MagicMock(side_effect=lambda *a, **k: _completed_session(9003, "kind-3"))
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with patch(
                 "hub.api.v1.agent_trigger.review_turn.prepare_review_turn",
                 AsyncMock(
@@ -332,7 +332,7 @@ async def test_several_work_entries_and_no_review_are_unchanged(app, auth_header
 
     spawn = MagicMock(return_value=_completed_session(9005, "kind-4"))
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             result = await schedule_agent("proj-test", agent)
             assert result.response is not None
             await _drain()

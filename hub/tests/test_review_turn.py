@@ -157,7 +157,7 @@ async def test_a_reviewer_reads_a_file_that_is_not_on_main(
 
     fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             response = await _trigger_review(app, auth_headers)
             assert response.status_code == 200, response.text
             await _await_background_run()
@@ -183,7 +183,7 @@ async def test_the_boundary_moves_with_the_workspace(
 
     fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             await _trigger_review(app, auth_headers)
             await _await_background_run()
 
@@ -208,7 +208,7 @@ async def test_the_reviewers_own_worktree_is_outside_the_turns_boundary(
 
     fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             await _trigger_review(app, auth_headers)
             await _await_background_run()
 
@@ -232,7 +232,7 @@ async def test_the_turn_context_says_this_is_a_review_and_names_the_task_and_com
 
     fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             await _trigger_review(app, auth_headers)
             await _await_background_run()
 
@@ -290,7 +290,7 @@ async def test_the_context_says_when_earlier_evidence_named_a_different_commit(
 
     fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             await _trigger_review(app, auth_headers)
             await _await_background_run()
 
@@ -387,7 +387,7 @@ async def test_work_dir_cannot_be_combined_with_a_review_turn(
         # The launchability probe runs before this argument check, so without the patch the
         # refusal a machine without `claude` on PATH sees is "not found in PATH" — which is
         # not what this test is about. Same patch every other trigger in this file uses.
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             with pytest.raises(TriggerAgentError) as excinfo:
                 await trigger_agent_directly(
                     project_id="proj-test",
@@ -700,7 +700,7 @@ async def test_a_review_turn_does_not_commit_on_the_reviewers_detached_head(
         )
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", _dirty_the_checkout):  # noqa: SIM117
-        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
             await _trigger_review(app, auth_headers)
             await _await_background_run()
 

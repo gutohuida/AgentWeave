@@ -69,7 +69,7 @@ async def _capture_build_command(app, auth_headers, agent, *, session_suffix):
     with (
         patch("hub.turn_scheduler.schedule_agent", schedule_agent),
         patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([result_line])),
-        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"),
         patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command),
     ):
         resp = await app.post(
