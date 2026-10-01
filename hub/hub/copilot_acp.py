@@ -71,6 +71,7 @@ from .runner_commands import OPERATOR_POSTURE
 from .runner_events import (
     ContextUsageSample,
     RunEvent,
+    _truncate_utf8,
     diagnostic_event,
     error_event,
     status_event,
@@ -509,10 +510,29 @@ def _standing_rules(
     facts: Optional[CallFacts],
     posture: str,
     spec_turn: bool,
+    workspace: str = "",
 ) -> Optional[Dict[str, Any]]:
     """Step 3 of D8: slice 3's `_hub_own_call` predicate and slice 5's `github-mcp-server` rule go
-    here, each owned by its slice. Nothing yet. Step 1 has already answered an MCP request whose
-    server is not identified, so no rule here ever sees one (review, conflict 2)."""
+    here, each owned by its slice. Step 1 has already answered an MCP request whose server is not
+    identified, so no rule here ever sees one (review, conflict 2).
+
+    Slice 3 (`a-run-reaches-the-hub-without-mcp` D8, task 6.2): a shell request that is exactly one
+    `aw-tool` invocation, or an `edit` whose every path is a `.json` file in the calls root, is the
+    Hub's own -- allowed in every posture, before the spec-turn edit refusal (D16: the one write a
+    spec turn keeps). An `edit` is allowed only when it names at least one path and every path
+    passes; otherwise the whole request goes on to the judge, one answer to one request. Its own
+    `try`: `decide_permission` turns any raise into a REJECT, and this rule may only allow or fall
+    through (verification 2026-10-01, finding 5).
+    """
+    if kind in ("execute", "edit") and pairs and workspace:
+        try:
+            # Function-local, as `_judge`'s: importing `mcp_server` builds its FastMCP instance.
+            from . import mcp_server
+
+            if all(mcp_server._hub_own_call(t, i, workspace=workspace) for t, i in pairs):
+                return _decision(ALLOW, "the Hub's own tools")
+        except Exception:  # noqa: BLE001 -- fall through to the judge, never refuse here
+            logger.warning("the Hub's own call-command check failed", exc_info=True)
     return None
 
 
@@ -587,7 +607,9 @@ def _decide_permission(
     pairs = normalise_request(params, calls)
 
     # Step 3, the slot slices 3 and 5 fill.
-    standing = _standing_rules(pairs, kind=kind, facts=facts, posture=judged, spec_turn=spec_turn)
+    standing = _standing_rules(
+        pairs, kind=kind, facts=facts, posture=judged, spec_turn=spec_turn, workspace=workspace
+    )
     if standing is not None:
         return {**standing, **extra}
 
@@ -1099,7 +1121,7 @@ class CopilotEventMapper:
                     severity="warning",
                     summary=(
                         f"Copilot reported the AgentWeave MCP server ({name}) as {status}; this "
-                        "run reaches the Hub by its HTTP form instead."
+                        "run was told to reach the Hub with `aw-tool`."
                     ),
                     code="copilot.mcp_server_unavailable",
                     facts={"status": status},
@@ -1552,6 +1574,55 @@ def _mode_name(value: Any) -> Optional[str]:
     return value.rsplit("#", 1)[-1]
 
 
+#: How long the `/mcp list` diagnostic prompt may take; measured answering in ~5 ms (D9).
+MCP_LIST_TIMEOUT_SECONDS = 10.0
+#: The longest quote of Copilot's own sentence about the Hub's server (D12).
+MCP_LIST_QUOTE_BYTES = 300
+
+
+def hub_server_reports(event_type: str, data: Mapping[str, Any]) -> List[str]:
+    """The recognised statuses (`connected`, `failed`) Copilot reports for the Hub's server in one
+    raw event (D1, R3). Any other string -- `pending`, whatever a policy block says -- is not a
+    report; the mapper shows it as a diagnostic."""
+    if event_type == "session.mcp_servers_loaded":
+        reported = data.get("servers")
+        entries = [e for e in reported if isinstance(e, dict)] if isinstance(reported, list) else []
+    elif event_type == "session.mcp_server_status_changed":
+        entries = [dict(data)]
+    else:
+        return []
+    return [
+        str(entry.get("status"))
+        for entry in entries
+        if (entry.get("name") or entry.get("serverName")) == HUB_MCP_SERVER_NAME
+        and entry.get("status") in ("connected", "failed")
+    ]
+
+
+async def _mcp_list_quote(session: Any, session_id: str, state: Dict[str, Any]) -> Optional[str]:
+    """Send one `/mcp list` slash prompt -- no model call -- and return Copilot's own line about
+    the Hub's server, bounded, for the operator (D9, D12). Shown verbatim, never keyed on. The
+    prompt is exactly one text block: a slash command that is not the prompt's first text goes
+    to the model as ordinary text (R3). Never raises; None when nothing came back."""
+    state["collect"] = []
+    try:
+        await session.request(
+            "session/prompt",
+            {"sessionId": session_id, "prompt": [{"type": "text", "text": "/mcp list"}]},
+            timeout=MCP_LIST_TIMEOUT_SECONDS,
+        )
+    except Exception:  # noqa: BLE001 -- a diagnostic, never a reason to stop the turn
+        logger.warning("Copilot's /mcp list diagnostic failed", exc_info=True)
+    finally:
+        chunks = state.pop("collect", None) or []
+    text = "".join(chunks).strip()
+    if not text:
+        return None
+    lines = [line.strip() for line in text.splitlines() if HUB_MCP_SERVER_NAME in line]
+    quoted, _ = _truncate_utf8(lines[0] if lines else text, MCP_LIST_QUOTE_BYTES)
+    return quoted
+
+
 def _context_block(per_turn_context: Optional[str], tool_surface_context: Optional[str]) -> str:
     parts = [COPILOT_TURN_CONTEXT_HEAD]
     for part in (per_turn_context, tool_surface_context):
@@ -1602,6 +1673,11 @@ async def run_turn(
     on_refusal: "Optional[Callable[[str, Dict[str, Any]], Awaitable[None]]]" = None,
     on_decision: "Optional[Callable[[str, Dict[str, Any], bool], Awaitable[None]]]" = None,
     turn_timeout: float = DEFAULT_TURN_TIMEOUT_SECONDS,
+    await_mcp_announce: "Optional[Callable[[], Awaitable[bool]]]" = None,
+    render_surface: (
+        "Optional[Callable[[str, Optional[bool], Optional[str]], Awaitable[List[str]]]]"
+    ) = None,
+    on_mcp_status: "Optional[Callable[[str], Awaitable[Any]]]" = None,
 ) -> TurnOutcome:
     """Drive one Copilot turn over ACP and return how it ended.
 
@@ -1758,6 +1834,15 @@ async def run_turn(
             # nothing replayed can reach a decision.
             track_call(calls, event_type, data)
             track_servers(servers, event_type, data)
+            # Copilot's own report about the Hub's server is a harness report
+            # (`a-run-reaches-the-hub-without-mcp` D1), armed or not: `session.mcp_servers_loaded`
+            # arrives with the first model prompt. Only for a run given the server.
+            if on_mcp_status is not None and mcp_command:
+                for reported in hub_server_reports(event_type, data):
+                    try:
+                        await on_mcp_status(reported)
+                    except Exception:  # noqa: BLE001 -- a record never fails the turn
+                        logger.warning("recording Copilot's MCP status failed", exc_info=True)
             if not state["armed"]:
                 if event_type in (
                     "session.mcp_servers_loaded",
@@ -1768,6 +1853,17 @@ async def run_turn(
             await _on_armed_raw_event(event_type, data, params)
         elif method == "session/update":
             if not state["armed"]:
+                collected = state.get("collect")
+                update = params.get("update")
+                if (
+                    collected is not None
+                    and isinstance(update, dict)
+                    and update.get("sessionUpdate") == "agent_message_chunk"
+                ):
+                    # The `/mcp list` reply (D9): read for its own diagnostic, never mapped.
+                    content = update.get("content")
+                    if isinstance(content, dict) and isinstance(content.get("text"), str):
+                        collected.append(content["text"])
                 return  # replayed history, available commands: dropped (D7)
             update = params.get("update")
             if not isinstance(update, dict):
@@ -1993,6 +2089,32 @@ async def run_turn(
                 )
             )
 
+        # `a-run-reaches-the-hub-without-mcp` D9: the run tests itself before its first prompt.
+        # Copilot started the servers it was given inside `session/new`, so the announce is due
+        # now. The surface is decided from this run's own answer; the access notice and the tool
+        # section are rendered for it; Plan mode below follows it. A run given no server does not
+        # wait (nothing could announce) and is told the call command, untested.
+        surface_texts: Optional[List[str]] = None
+        if render_surface is not None:
+            tested: Optional[bool] = None
+            quote: Optional[str] = None
+            if mcp_command and await_mcp_announce is not None:
+                tested = bool(await await_mcp_announce())
+                if not tested and should_interrupt is not None:
+                    try:
+                        stop_now = bool(should_interrupt())
+                    except Exception:  # noqa: BLE001
+                        stop_now = False
+                    if stop_now:
+                        # Ended during the wait: nothing was told and nothing tested (R3).
+                        return TurnOutcome(session_id=session_id, status="interrupted")
+                if not tested:
+                    quote = await _mcp_list_quote(session, session_id, state)
+            told_access_path = "mcp" if tested else "shim"
+            # The mapper words its own MCP failure for what the run was actually told (D9, R3).
+            mapper.told_access_path = told_access_path
+            surface_texts = await render_surface(told_access_path, tested, quote)
+
         # D8's posture step, every turn. Step 1: always set the mode, whatever the load reported.
         plan = spec_turn and SPEC_TURN_USES_PLAN_MODE and told_access_path == "mcp"
         mode_uri = PLAN_MODE if plan else AGENT_MODE
@@ -2070,7 +2192,6 @@ async def run_turn(
         if spec_turn and posture == _FULL:
             state["judged_posture"] = WORKSPACE_PERMISSION_MODE
 
-        # (Slice 3's announce wait and `render_surface` go here, before the prompt.)
         blocks: List[Dict[str, Any]] = []
         if use_resource_block and stable_context:
             blocks.append(
@@ -2083,9 +2204,14 @@ async def run_turn(
                     },
                 }
             )
-        blocks.append(
-            {"type": "text", "text": _context_block(per_turn_context, tool_surface_context)}
+        # For a run that tested itself, the notice and tool section rendered for the decided
+        # surface replace the pre-spawn section, which may describe the other surface (D9).
+        tools_text = (
+            "\n\n".join(text for text in surface_texts if text)
+            if surface_texts is not None
+            else tool_surface_context
         )
+        blocks.append({"type": "text", "text": _context_block(per_turn_context, tools_text)})
         # Always a block of its own: a message reading `/allow-all on` is text, not a command.
         blocks.append({"type": "text", "text": prompt})
 

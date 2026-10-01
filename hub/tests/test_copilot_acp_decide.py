@@ -1122,3 +1122,83 @@ class TestTrackingCalls:
         calls = {}
         track_call(calls, "tool.execution_start", {"omitted": "too-large"})
         assert calls == {}
+
+
+class TestTheHubsOwnCallCommand:
+    """`a-run-reaches-the-hub-without-mcp` 6.2 (design D8, D16): step 3's standing rule. The call
+    command and its arguments-file write are the Hub's own operations by another route, so they
+    are allowed in every posture -- no card under "Ask me" -- and a specification turn keeps the one
+    write it needs. A near miss falls through to step 4, never to a refusal by this rule."""
+
+    @staticmethod
+    def _workspace(tmp_path):
+        (tmp_path / ".agentweave" / "calls").mkdir(parents=True)
+        return tmp_path
+
+    @staticmethod
+    def _shell(command):
+        calls = {"call_s": CallFacts(tool_name="powershell", mcp_server=None, mcp_tool=None)}
+        return _params(tool_call_id="call_s", kind="execute", raw_input={"command": command}), calls
+
+    @pytest.mark.parametrize(
+        "posture", [WORKSPACE_PERMISSION_MODE, "manual", FULL_ACCESS_PERMISSION_MODE]
+    )
+    def test_the_call_command_has_standing_in_every_posture(self, tmp_path, posture):
+        ws = self._workspace(tmp_path)
+        params, calls = self._shell("aw-tool create_task .agentweave/calls/1.json")
+        result = _decide(params, posture, ws, calls)
+        assert result["outcome"] == "ALLOW"
+        assert result["reason"] == "the Hub's own tools"
+
+    @pytest.mark.parametrize("posture", [WORKSPACE_PERMISSION_MODE, "manual"])
+    @pytest.mark.parametrize("spec_turn", [False, True])
+    def test_an_args_file_edit_has_standing_with_an_absolute_path(
+        self, tmp_path, posture, spec_turn
+    ):
+        """Copilot's `edit` locations arrive absolute (verification finding 7): case 3 does not
+        reuse case 2's relative-path rule."""
+        ws = self._workspace(tmp_path)
+        target = str(ws / ".agentweave" / "calls" / "1.json")
+        params = _params(kind="edit", raw_input={"path": target}, locations=[{"path": target}])
+        result = _decide(params, posture, ws, spec_turn=spec_turn)
+        assert result["outcome"] == "ALLOW", result
+
+    def test_a_spec_turn_still_refuses_any_other_write(self, tmp_path):
+        ws = self._workspace(tmp_path)
+        target = str(ws / "src" / "x.py")
+        params = _params(kind="edit", raw_input={"path": target}, locations=[{"path": target}])
+        for posture in (WORKSPACE_PERMISSION_MODE, "manual", FULL_ACCESS_PERMISSION_MODE):
+            assert _decide(params, posture, ws, spec_turn=True)["outcome"] == "REJECT", posture
+
+    def test_an_edit_naming_both_kinds_of_path_gets_one_answer_from_the_judge(self, tmp_path):
+        ws = self._workspace(tmp_path)
+        good = str(ws / ".agentweave" / "calls" / "1.json")
+        other = str(ws / "notes.txt")
+        params = _params(
+            kind="edit", raw_input={"path": good}, locations=[{"path": good}, {"path": other}]
+        )
+        assert _decide(params, "manual", ws)["outcome"] == "ASK_OPERATOR"
+
+    def test_a_near_miss_falls_through_to_the_card(self, tmp_path):
+        ws = self._workspace(tmp_path)
+        params, calls = self._shell("aw-tool create_task .agentweave/calls/1.json; rm x")
+        assert _decide(params, "manual", ws, calls)["outcome"] == "ASK_OPERATOR"
+
+    def test_an_unnamed_shell_never_gets_standing(self, tmp_path):
+        """Conflict 1, decided 2026-09-28: `("Shell", …)` goes to the judge or the card."""
+        ws = self._workspace(tmp_path)
+        params = _params(kind="execute", raw_input={"command": "aw-tool list_tasks"})
+        assert _decide(params, "manual", ws, {})["outcome"] == "ASK_OPERATOR"
+
+    def test_a_raising_predicate_falls_through_rather_than_refusing(self, tmp_path, monkeypatch):
+        """Verification finding 5: `decide_permission`'s outer handler turns any raise into REJECT,
+        so the standing rule carries its own `try`."""
+        from hub import mcp_server
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("predicate failed")
+
+        monkeypatch.setattr(mcp_server, "_hub_own_call", boom)
+        ws = self._workspace(tmp_path)
+        params, calls = self._shell("aw-tool create_task .agentweave/calls/1.json")
+        assert _decide(params, "manual", ws, calls)["outcome"] == "ASK_OPERATOR"

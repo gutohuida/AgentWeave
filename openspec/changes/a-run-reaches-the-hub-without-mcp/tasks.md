@@ -276,7 +276,7 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     regenerated from code (the capture script's own `build_golden_cases`) and checked mechanically: 104 cases, 32
     changed, every one a non-yolo Claude case whose new argv minus exactly the two rules equals its old argv, and
     no other case changed. `test_runner_parsing.py`'s two argv assertions updated to state D13.
-- [ ] 1.14 (after slice 2) Copilot transport, using slice 2's fake ACP agent (or a stub that answers `initialize`,
+- [x] 1.14 (after slice 2) Copilot transport, using slice 2's fake ACP agent (or a stub that answers `initialize`,
   `session/new` and `session/prompt`):
   - no announce within a patched 0.3 s wait → the fake receives the prompt `/mcp list` first, then a prompt whose
     text holds the shim notice and the `aw-tool` tool section; the run records `absent` + `shim`; exactly one
@@ -295,7 +295,20 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - (R3) an interrupt during the wait ends the run within one poll interval, with status NULL;
   - (review fix 7) a Copilot agent with `hub_client: "mcp"` whose wait times out is told `shim` (the shim notice and
     section, `plane_surface = shim`), and the next trigger still injects the server.
-- [ ] 1.15 (review finding 4, design D16) Specification turns told `shim`:
+  - **Done 2026-10-01**: `hub/tests/test_copilot_tests_its_own_run.py`, through slice 2's fake ACP session (its
+    ordered script makes the wire order the thing under test), red first. Transport rows: a timeout sends `/mcp
+    list` as exactly one block, then the model prompt whose context block holds the shim notice and section and not
+    the pre-spawn section, exactly one access notice, the message byte-identical, and `set_mode` after the wait; an
+    announce gives `mcp` and no `/mcp list`; a run given no server does not wait; an interrupt during the wait ends
+    `interrupted` with nothing told; a raw `failed` on a run told `mcp` is recorded and `copilot_mcp_server_failed`
+    emitted once; on a run told `shim` it is recorded and no error, the `mcp_server_unavailable` diagnostic naming
+    `aw-tool` (verification finding 3: it said "HTTP form"); a raw `connected` is a report. Trigger rows, on
+    `make_render_surface` with a real `Run`: a timeout records `shim` + `absent`, rewrites the context file for the
+    shim surface and stores one event quoting the `/mcp list` line; an announce records `mcp` and says nothing; a
+    failing database and a failing event stream still return the texts. The `hub_client: "mcp"`-with-timeout row is
+    covered by construction: the transport decides from its own test whatever the declaration (D1 review fix 7),
+    and the next trigger's `axes` still inject.
+- [x] 1.15 (review finding 4, design D16) Specification turns told `shim`:
   - Claude (slice 1's builder): `restrict_spec_writes=True` with `described_access_path="shim"` gives
     `--disallowedTools Edit,MultiEdit,NotebookEdit`; with `"mcp"` (and by default) today's
     `Edit,MultiEdit,Write,NotebookEdit`; both under yolo too. The trigger passes the described value (patch
@@ -306,6 +319,13 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     not set on for the spec turn); under full access a spec turn's non-`edit` request, a PowerShell command writing
     outside the workspace, is refused as under `workspace`, never ALLOWed on full access's account (design open
     question 11, DECIDED (c) 2026-09-28); `session/set_mode` plan is sent after the wait and only for a run told `mcp`.
+  - **Done 2026-10-01**. Claude half with 5.6 (`test_spec_authoring_restriction.py`). Copilot half: the
+    args-file `edit` allowed by standing on a spec turn under `workspace` and `manual` with an absolute path, and a
+    `src/x.py` edit refused in every posture (`test_copilot_acp_decide.py::TestTheHubsOwnCallCommand`); Plan mode
+    sent after the wait and only for `mcp` (`test_copilot_tests_its_own_run.py`, with
+    `SPEC_TURN_USES_PLAN_MODE` patched true since it ships false). Slice 2 already ships `create` out of the
+    exclusions, no `allow_all` on a spec turn and full access judged as workspace (verification finding 8); those
+    rows pass on slice 2's own tests.
 
 ## 2. The per-run record (design D1)
 
@@ -474,7 +494,7 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - **Done 2026-10-01** for the Claude/Codex path: `_render_hub_agent_context` takes `question_timeout` (the
     trigger passes `effective_question_wait(agent_row)`), and `Run(...)` records `plane_surface=described_path`.
     Copilot's after-spawn rendering is 5.4.
-- [ ] 5.4 Copilot, in slice 2's adapter and transport:
+- [x] 5.4 Copilot, in slice 2's adapter and transport:
   - `tests_mcp_before_first_prompt = True` on the ACP **transport** (slice 1 D16: a transport `ClassVar`);
   - the transport waits with `mcp_announce.wait` after `session/new` / `session/load`, **only when the run was
     given the server**, honouring `should_interrupt`. On timeout it sends `/mcp list` as a bare single text block,
@@ -500,6 +520,15 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     here only if slice 2 landed without it);
   - (review fix 7) a run's own wait timeout gives `shim` even under `hub_client: "mcp"` (design D1).
   Tests 1.14 and 1.15 (Copilot half) pass.
+  - **Done 2026-10-01**, rebuilt on the verification's findings 1-6. `tests_mcp_before_first_prompt` on both
+    transport ABCs (True on `CopilotAcpTransport`); `RpcCallbacks.await_mcp_announce` and an **async**
+    `render_surface(surface, tested, quote)` (finding 2: a sync callable could not write); the trigger decides
+    `tests_first` where the axes are (finding 4), omits the pre-spawn access notice for it, renders both surfaces
+    up front from one `render_kwargs`, and records `plane_surface` only when `render_surface` runs.
+    `copilot_acp.run_turn` waits before `set_mode` (finding 3), sets `mapper.told_access_path` rather than
+    mutating the frozen request, collects the `/mcp list` reply through its own `state["collect"]` (finding 5),
+    returns an `interrupted` outcome when stopped during the wait, and reports raw `connected`/`failed` for the
+    Hub's server before any transient skip (`hub_server_reports`, finding 6), only for a run given the server.
 - [x] 5.6 (review finding 4, design D16; slice 1's builder) `restrict_spec_writes` with the described surface: the
   `described_access_path` keyword, and `Write` kept only for Claude spec turns described `shim`. Test 1.15 (Claude
   half) passes.
@@ -507,12 +536,18 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     `ClaudeStreamTransport.build_launch` and `_build_claude_command` (default `"mcp"`, so every golden is unchanged by
     it); a spec turn described `shim` gets `--disallowedTools Edit,MultiEdit,NotebookEdit`. The trigger passes
     `described_path`. Test 1.15's Claude half (`test_spec_authoring_restriction.py`) passes.
-- [ ] 5.5 The `plane_surface` status event, once per run, when a run given MCP is recorded `absent` or `failed`
+- [x] 5.5 The `plane_surface` status event, once per run, when a run given MCP is recorded `absent` or `failed`
   (quoting the `/mcp list` line on Copilot, bounded by `_truncate_utf8`). Its wording follows the run's
   `plane_surface` (design D12, R3), and for `mcp` its second sentence depends on a `hub_client: "mcp"` declaration
   (review fix 7). It is not emitted where the runner's own failure event states it: Codex `failed` (reworded for
   `shim` by 2.6), and Copilot told `mcp`. Test 1.14 (event half) passes. Add a Claude case beside 1.2's consumer test: a
   run told `mcp` whose `init` omits the server gets the "although the run was told to use it" wording.
+  - **Done 2026-10-01**. Claude: in `_flush_line` (the 2.5 consumer), one event per run, worded by
+    `launchability.plane_surface_summary` for the recorded `plane_surface` and the `hub_client: "mcp"` declaration;
+    trigger tests for told `shim`, told `mcp` from a stale `connected` ("although the run was told to use it"),
+    declared, connected (no event) and a `cli` run (untested). Copilot: stored by `make_render_surface` at the
+    wait's timeout with the `/mcp list` quote. Codex `failed` (reworded by 2.6) and Copilot told `mcp` (slice 2's
+    error) add no second statement: neither path calls the summary.
 
 ## 6. The approver recognises the call command (design D8)
 
@@ -530,9 +565,14 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     in place of their `mcp__agentweave__` lines. Case 2 and 3 need a known workspace (an empty one gives no
     standing). Test 1.6 passes; the approver suites (`test_permission_approver.py`, `test_copilot_acp_decide.py`,
     `test_ask_me_card_verdicts.py`, `test_mcp_server.py`) still pass: 515 with the new files.
-- [ ] 6.2 Slice 2's ACP permission handler calls `_hub_own_call(..., workspace=<run work dir>)` before `_decide` or
+- [x] 6.2 Slice 2's ACP permission handler calls `_hub_own_call(..., workspace=<run work dir>)` before `_decide` or
   the card, in every posture, on its normalised `(tool_name, tool_input)`. It reports the allow like any other
   decision (`on_decision`, if `a-run-records-that-its-calls-were-allowed` has landed).
+  - **Done 2026-10-01** in `copilot_acp._standing_rules` (verification finding 7), which runs before the
+    spec-turn edit refusal: an `execute` or `edit` whose every normalised pair passes `_hub_own_call(...,
+    workspace=<run's>)` is ALLOW "the Hub's own tools", in every posture; its own `try` falls through on a raise
+    (finding 5). `on_decision` is not wired because `a-run-records-that-its-calls-were-allowed` is unbuilt; the allow
+    reaches the recorders through `answer_permission` like any decision. Tests: `TestTheHubsOwnCallCommand` (12).
 - ~~6.3~~ **Cut by R3** (design D8, open question 4). The original text is kept below for the record. The cut's
   consequences are already applied: 1.12 dropped, D8's Codex caller struck, the sandboxing requirement narrowed.
   Codex's `decide_approval`: the command-approval branch accepts on `_hub_own_call` before the

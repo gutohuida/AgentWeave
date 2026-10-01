@@ -136,6 +136,8 @@ def _request_label(subject: Mapping[str, Any]) -> str:
 class CopilotAcpTransport(RpcTransport):
     """Copilot's RPC transport: an ACP peer the Hub drives (`copilot_acp.run_turn`)."""
 
+    tests_mcp_before_first_prompt = True
+
     # Not an argv flag: the rendered stable context is the Hub-written custom agent file, chosen
     # over ACP with `session/set_config_option {configId: "agent"}` (slice 2 D4/D6).
     instruction_channel = "session/set_config_option agent"
@@ -192,6 +194,9 @@ class CopilotAcpTransport(RpcTransport):
             on_accounting=cb.on_accounting,
             on_session=cb.on_session,
             on_session_missing=cb.on_session_missing,
+            await_mcp_announce=cb.await_mcp_announce,
+            render_surface=cb.render_surface,
+            on_mcp_status=cb.on_mcp_status,
             should_interrupt=cb.should_interrupt,
             request_approval=cb.request_approval,
             on_refusal=cb.on_refusal,

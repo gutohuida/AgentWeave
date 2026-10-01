@@ -160,12 +160,21 @@ class RpcCallbacks:
     #: `a-run-reaches-the-hub-without-mcp` D1: the harness's own report about the Hub's tool
     #: server (`connected` or `failed`), for a run given it. Codex's app-server calls it.
     on_mcp_status: Optional[Callable[[str], Awaitable[Any]]] = None
+    #: D9, for a transport that `tests_mcp_before_first_prompt`: wait (bounded, honouring the
+    #: interrupt) for this run's tool server to announce itself; True when it did.
+    await_mcp_announce: Optional[Callable[[], Awaitable[bool]]] = None
+    #: D9: `(surface, tested, quote) -> [notice, tool section]` for the surface the transport
+    #: decided after its wait; it also records what the run was told. Total.
+    render_surface: Optional[
+        Callable[[str, Optional[bool], Optional[str]], Awaitable[List[str]]]
+    ] = None
 
 
 class StreamTransport(ABC):
     """A process whose stdout is parsed line by line (design D3)."""
 
     kind: ClassVar[Literal["stream"]] = "stream"
+    tests_mcp_before_first_prompt: ClassVar[bool] = False
     spawn_kind: ClassVar[Literal["pty", "pipe"]]
     instruction_channel: ClassVar[Optional[str]] = None
     context_window_source: ClassVar[Literal["reported", "catalog"]]
@@ -206,6 +215,11 @@ class RpcTransport(ABC):
     """
 
     kind: ClassVar[Literal["rpc"]] = "rpc"
+    # True for a transport whose harness starts its MCP servers before the Hub sends the first
+    # prompt (Copilot over ACP: inside `session/new`), so the run tests itself and the access
+    # notice and tool section are rendered after that test (`a-run-reaches-the-hub-without-mcp`
+    # D9).
+    tests_mcp_before_first_prompt: ClassVar[bool] = False
     instruction_channel: ClassVar[Optional[str]] = None
     context_window_source: ClassVar[Literal["reported", "catalog"]]
 

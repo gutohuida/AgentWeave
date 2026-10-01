@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import (
     bound_address,
     instance_identity,
+    mcp_announce,
     project_workspace,
     requirement_evidence,
     review_turn,
@@ -159,6 +160,60 @@ async def _latest_mcp_test_or_none(
     except Exception:  # noqa: BLE001 -- no grounds is the safe answer
         logger.warning("reading %s's latest MCP test failed", agent, exc_info=True)
         return None
+
+
+def make_render_surface(
+    *,
+    run_id: str,
+    agent: str,
+    work_dir: Optional[str],
+    surfaces: Dict[str, Dict[str, str]],
+    on_event: Callable[[Any], Awaitable[None]],
+) -> Callable[[str, Optional[bool], Optional[str]], Awaitable[List[str]]]:
+    """The `render_surface` a run that tests itself is handed (`a-run-reaches-the-hub-without-mcp`
+    D9): `(surface, tested, quote) -> [notice, tool section]`.
+
+    It records what the run was told (`Run.plane_surface`) and, when the test timed out, `absent`
+    by the wait's precedence; rewrites the canonical context file with the section for the decided
+    surface, so the record of what the agent was told agrees with what it was sent; and, on a
+    timeout, stores D12's one status event quoting Copilot's own line. Total: the writes are
+    best-effort and logged, because the prompt is what the run is told, and failing it after spawn
+    over a record would be worse than a stale record.
+    """
+
+    async def render(surface: str, tested: Optional[bool], quote: Optional[str]) -> List[str]:
+        chosen = surfaces.get(surface) or {}
+        try:
+            async with async_session_factory() as db:
+                run = await db.get(Run, run_id)
+                if run is not None:
+                    run.plane_surface = surface
+                if tested is False:
+                    await record_harness_mcp_status(db, run_id, "absent", source="wait")
+                await db.commit()
+        except Exception:  # noqa: BLE001
+            logger.warning("recording run %s's surface failed", run_id, exc_info=True)
+        if chosen.get("context") and work_dir:
+            try:
+                context_file = Path(work_dir) / ".agentweave" / "context" / f"{agent}.md"
+                context_file.write_text(chosen["context"], encoding="utf-8")
+            except OSError:
+                logger.warning(
+                    "rewriting %s's context for its surface failed", agent, exc_info=True
+                )
+        if tested is False:
+            try:
+                await on_event(
+                    status_event(
+                        "plane_surface",
+                        summary=plane_surface_summary("absent", surface, quoted=quote),
+                    )
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning("storing run %s's surface event failed", run_id, exc_info=True)
+        return [text for text in (chosen.get("notice"), chosen.get("tool_surface")) if text]
+
+    return render
 
 
 async def _record_harness_report(run_id: str, status: str) -> Optional[str]:
@@ -1181,6 +1236,10 @@ async def _trigger_agent_directly(
     # opt-out sentinel is present, which the strip would already have removed.
     runner_flags = list(runner_row.flags or [])
     axes = resolve_access_axes(adapter, hub_client=hub_client, flags=runner_flags)
+    # A transport whose harness starts its MCP servers before the first prompt (Copilot) tests
+    # this run itself and is told after that test (`a-run-reaches-the-hub-without-mcp` D9); the
+    # pre-spawn description below is then only the fallback it replaces.
+    tests_first = adapter.transport(runner_flags).tests_mcp_before_first_prompt
     described_path = described_access_path(
         axes.plane,
         override=hub_client,
@@ -1196,7 +1255,8 @@ async def _trigger_agent_directly(
     task_document = await spec_document_for_task(session, binding.task)
 
     session_data = await _get_session_data(project_id, session)
-    rendered_context = await _render_hub_agent_context(
+    # Keyword form, so each argument keeps its comment; rendered once per surface (D9).
+    render_kwargs: Dict[str, Any] = dict(  # noqa: C408
         agent=agent,
         project_id=project_id,
         db=session,
@@ -1239,6 +1299,27 @@ async def _trigger_agent_directly(
         # the work as verified.
         review=review_context,
     )
+    rendered_context = await _render_hub_agent_context(**render_kwargs)
+    # D9: a run that tests itself is told after its test, so both surfaces' renderings are made
+    # now, while the session is at hand; its transport picks one with `render_surface`.
+    surfaces: Optional[Dict[str, Dict[str, str]]] = None
+    if tests_first:
+        surfaces = {}
+        for surface in ("mcp", "shim"):
+            rendered = (
+                rendered_context
+                if surface == described_path
+                else await _render_hub_agent_context(**{**render_kwargs, "access_path": surface})
+            )
+            surfaces[surface] = {
+                "notice": access_path_notice(
+                    surface,
+                    tool_prefix=(adapter.mcp_tool_prefix or "") if surface == "mcp" else "",
+                    shell_may_lack_network=adapter.shell_may_lack_network,
+                ),
+                "tool_surface": rendered.get("tool_surface") or "",
+                "context": rendered["context"],
+            }
     context_file = Path(effective_work_dir) / ".agentweave" / "context" / f"{agent}.md"
     try:
         context_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1264,13 +1345,17 @@ async def _trigger_agent_directly(
     # the tool list's is: known only for a Claude-family run described as having the injected surface
     # (F139).
     notice_prefix = (adapter.mcp_tool_prefix or "") if described_path == "mcp" else ""
-    notices = [
-        access_path_notice(
-            described_path,
-            tool_prefix=notice_prefix,
-            shell_may_lack_network=adapter.shell_may_lack_network,
-        )
-    ]
+    notices = (
+        []
+        if tests_first
+        else [
+            access_path_notice(
+                described_path,
+                tool_prefix=notice_prefix,
+                shell_may_lack_network=adapter.shell_may_lack_network,
+            )
+        ]
+    )
     # F52: told once, up front, rather than discovered turn after turn by an agent that treats a
     # refused git command as work lost. `review_context is None` matches the condition `worktree`
     # is computed under below (a review checkout is read-only and never snapshotted); an agent with
@@ -1334,6 +1419,7 @@ async def _trigger_agent_directly(
             runner_flags=runner_flags,
             restrict_spec_writes=bool(spec_document),
         )
+        copilot_turn.surfaces = surfaces
         cmd: List[str] = []
     elif run_transport is not None and run_transport.kind == "stream":
         try:
@@ -1462,7 +1548,7 @@ async def _trigger_agent_directly(
         workspace_dir=effective_work_dir,
         # What this run was told it reaches the Hub with (`a-run-reaches-the-hub-without-mcp` D1),
         # the same value its notice and tool section were rendered from above.
-        plane_surface=described_path,
+        plane_surface=None if tests_first else described_path,
     )
 
     # The binding, and the automatic move it causes, are staged here — before delivery, which is
@@ -3242,6 +3328,8 @@ class _CopilotTurn:
     extra_flags: List[str]
     cli: Optional[str]
     pre_turn_events: List[Any]
+    #: Both surfaces' notice, tool section and canonical context (D9), for `render_surface`.
+    surfaces: Optional[Dict[str, Dict[str, str]]] = None
 
 
 async def _prepare_copilot_turn(
@@ -3387,6 +3475,28 @@ async def _execute_copilot_run(
                 on_session_missing=cb.on_session_missing,
                 should_interrupt=cb.should_interrupt,
                 on_refusal=cb.on_refusal,
+                # D1/D9: this run's own test, for a run given the server.
+                on_mcp_status=(
+                    (lambda status: _record_harness_report(run_id, status)) if mcp_command else None
+                ),
+                await_mcp_announce=(
+                    (
+                        lambda: mcp_announce.wait(
+                            run_id,
+                            mcp_announce.MCP_ANNOUNCE_WAIT_SECONDS,
+                            should_interrupt=cb.should_interrupt,
+                        )
+                    )
+                    if mcp_command
+                    else None
+                ),
+                render_surface=make_render_surface(
+                    run_id=run_id,
+                    agent=agent,
+                    work_dir=work_dir,
+                    surfaces=turn.surfaces or {},
+                    on_event=cb.on_event,
+                ),
                 request_approval=lambda method, subject: _await_operator_permission(
                     project_id=project_id,
                     agent=agent,
