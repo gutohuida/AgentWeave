@@ -50,7 +50,6 @@ from ...agent_roster import require_known_agent
 from ...auth import get_project
 from ...checkpoint_handover import consider_handover_from_run_end
 from ...codex_appserver import (
-    TRANSPORT_SENTINELS,
     AppServerError,
     TurnOutcome,
     readable_exit_code,
@@ -126,7 +125,7 @@ from ...run_task_binding import (
     spec_document_for_task,
     tasks_held_by_a_running_turn,
 )
-from ...runner_adapters import ADAPTERS, build_command, get_adapter
+from ...runner_adapters import ADAPTERS, AccessAxes, build_command, get_adapter, resolve_access_axes
 from ...runner_commands import OPERATOR_POSTURE, UnsupportedRunnerError, mcp_tool_prefix
 from ...runner_events import AccountingSample
 from ...runner_parsing import (
@@ -179,6 +178,13 @@ _stop_requested: set = set()
 # inventing a longer one.
 CODEX_OPERATOR_DECISION_TIMEOUT = 120
 CODEX_OPERATOR_POLL_SECONDS = 2
+
+# The union of every adapter's transport sentinels (design D5's "the sentinel strip is the union
+# over adapters") — flags that pick a runner's transport rather than being real CLI arguments, so
+# none of them may leak into `build_command`'s argv. Codex's app-server opt-in/opt-out pair is the
+# only member today; a later adapter with its own sentinel (e.g. an ACP opt-out) adds to this set
+# without this module naming it by name.
+_TRANSPORT_SENTINELS = frozenset().union(*(a.transport_sentinels for a in ADAPTERS.values()))
 
 
 class TriggerAgentRequest(RequestModel):
@@ -1100,21 +1106,33 @@ async def _trigger_agent_directly(
     # cannot disagree about the same turn.
     #
     # **Two values, and the difference between them is §4 of
-    # `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`.** `access_path` is what the run
-    # is *given*: it decides `mcp_command` below, and through that the run's permission posture
-    # (`runner_commands.build_command` emits `--permission-prompt-tool` only where a server is
-    # injected). `described_path` is what the run is *told*, and it never asserts a tool surface
-    # the Hub has no grounds to believe this harness will honour. They are separate because the
-    # requirement forbids a truer description from silently widening permission: the operator's
-    # `hub_client` moves both, an inference moves only the second.
+    # `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`.** `axes` (design D4) is what
+    # the run is *given*: `axes.tool_surface` decides `mcp_command` below, and through that the
+    # run's permission posture (`runner_commands.build_command` emits `--permission-prompt-tool`
+    # only where a server is injected); `axes.plane` is the value `described_path` and the context
+    # renderer's `access_path` keyword both take. `described_path` is what the run is *told*, and
+    # it never asserts a tool surface the Hub has no grounds to believe this harness will honour.
+    # They are separate because the requirement forbids a truer description from silently widening
+    # permission: the operator's `hub_client` moves both, an inference moves only the second.
     hub_client = config.get("hub_client")
-    # Every spawnable runner is MCP-injectable (`launchability`'s now-deleted
-    # `resolve_access_path`/`MCP_INJECTABLE_RUNNERS` reduced to exactly this for any live
-    # `Runner.cli`); task 3.3 (`each-runner-cli-is-one-adapter`) replaces this with
-    # `resolve_access_axes`, which also needs `runner_flags` (below) threaded up to here (F474).
-    access_path = "cli" if hub_client == "cli" else "mcp"
+    # Read before the sentinel strip further down — `resolve_access_axes` needs the runner's
+    # **raw** `Runner.flags` (design D4): axis 2 for a Codex app-server run depends on whether the
+    # opt-out sentinel is present, which the strip would already have removed.
+    runner_flags = list(runner_row.flags or [])
+    if adapter is not None:
+        axes = resolve_access_axes(adapter, hub_client=hub_client, flags=runner_flags)
+    else:
+        # Copilot has no `RunnerAdapter` in this slice (`a-copilot-agent-runs-over-acp` adds its
+        # own, as a later ORDER item) — reproduce `resolve_access_axes`'s rule directly rather
+        # than call a member it does not have. `approvals` is unread for Copilot below.
+        tool_surface = "none" if hub_client == "cli" else "mcp"
+        axes = AccessAxes(
+            tool_surface=tool_surface,
+            approvals="none",
+            plane="mcp" if tool_surface == "mcp" else "cli",
+        )
     described_path = described_access_path(
-        access_path,
+        axes.plane,
         override=hub_client,
         harness_honoured_mcp=await harness_has_honoured_mcp(session, project_id, agent),
     )
@@ -1180,9 +1198,9 @@ async def _trigger_agent_directly(
         ) from exc
 
     # Task 4.5: tell the agent, at turn start, which access path is in use — never offer
-    # one that isn't actually available in this environment. `access_path` was resolved above the
-    # context materialization, which needs the same value. The prefix is grounded the same way the
-    # tool list's is: known only for a Claude-family run described as having the injected surface
+    # one that isn't actually available in this environment. `described_path` was resolved above
+    # the context materialization, which needs the same value. The prefix is grounded the same way
+    # the tool list's is: known only for a Claude-family run described as having the injected surface
     # (F139).
     notice_prefix = mcp_tool_prefix(runner) if described_path == "mcp" else ""
     notices = [access_path_notice(described_path, tool_prefix=notice_prefix)]
@@ -1208,7 +1226,7 @@ async def _trigger_agent_directly(
         notices.append(spec_notice)
     prompt = "\n\n".join([*notices, message])
     mcp_command = None
-    if access_path == "mcp":
+    if axes.tool_surface == "mcp":
         try:
             mcp_command = [sys.executable, str(tool_server.pinned_server_path())]
         except OSError as exc:
@@ -1218,12 +1236,15 @@ async def _trigger_agent_directly(
             ) from exc
 
     # Codex uses the app-server transport unless the runner explicitly opts out; see
-    # `uses_app_server`. Both transport sentinels are stripped before `flags` reaches
-    # `build_command` — neither is a real `codex exec` argument, and either would otherwise
-    # leak into that argv unchanged.
-    runner_flags = list(runner_row.flags or [])
+    # `uses_app_server`. `run_transport` reads the same raw flags, before the strip below, to
+    # decide whether the trigger builds argv at all (design D6: a stream transport gets one
+    # through `build_command`; an RPC transport builds its own, inside `run_turn`). The strip
+    # itself is the union of every adapter's `transport_sentinels` (design D5) — neither sentinel
+    # is a real CLI argument, and either would otherwise leak into `build_command`'s argv
+    # unchanged.
     use_codex_app_server = uses_app_server(runner, runner_flags)
-    runner_flags = [f for f in runner_flags if f not in TRANSPORT_SENTINELS]
+    run_transport = adapter.transport(runner_flags) if adapter is not None else None
+    runner_flags = [f for f in runner_flags if f not in _TRANSPORT_SENTINELS]
 
     copilot_turn: Optional[_CopilotTurn] = None
     if runner == "copilot":
@@ -1244,7 +1265,7 @@ async def _trigger_agent_directly(
             restrict_spec_writes=bool(spec_document),
         )
         cmd: List[str] = []
-    else:
+    elif run_transport is not None and run_transport.kind == "stream":
         try:
             cmd = build_command(
                 runner=runner,
@@ -1267,6 +1288,10 @@ async def _trigger_agent_directly(
             raise TriggerAgentError(
                 status.HTTP_501_NOT_IMPLEMENTED, str(exc), request_level=True
             ) from exc
+    else:
+        # An RPC transport (Codex app-server today) builds its own spawn argv inside
+        # `run_turn`, from `RpcTurnRequest` — nobody downstream reads an unused `cmd` (design D6).
+        cmd = []
 
     run_id = f"run-{short_id()}"
     run_token = mint_run_token()
@@ -2349,11 +2374,12 @@ async def _execute_run(
     *use_codex_app_server* (task 2.8) selects a completely separate execution path —
     `_execute_codex_appserver_run` below — since the app-server transport has no PTY/pipe
     subprocess for this function's own read/wait loop to drive; `cli`/`prompt`/`yolo`/
-    `mcp_command` are only meaningful for that path (`cmd` was still built for it by the
-    caller, but is unused here — app-server has no argv, it speaks JSON-RPC). Anything the
-    caller renders *into* that argv therefore has to arrive here by its own parameter or it
-    reaches nothing: `permission_mode` was rescued by hand, and `config_overrides` — every
-    config-style control, Codex's Effort today — is the rest of that class (F99).
+    `mcp_command` are only meaningful for that path (`cmd` is empty for it — the caller builds
+    argv only for a stream transport, design D6; app-server has no argv, it speaks JSON-RPC).
+    Anything the caller renders *into* that argv therefore has to arrive here by its own
+    parameter or it reaches nothing: `permission_mode` was rescued by hand, and
+    `config_overrides` — every config-style control, Codex's Effort today — is the rest of that
+    class (F99).
 
     *repo_root* is the project's own root directory, `ProjectWorkspace`'s answer as the trigger
     body already computed it. It arrives by parameter for the same reason as everything above and
