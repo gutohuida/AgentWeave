@@ -53,7 +53,6 @@ from ...checkpoint_handover import consider_handover_from_run_end
 from ...codex_appserver import (
     AppServerError,
     readable_exit_code,
-    uses_app_server,
 )
 from ...conversation_titles import maybe_generate_title
 from ...conversations import (
@@ -1209,14 +1208,13 @@ async def _trigger_agent_directly(
                 f"Could not materialize the tool server for {agent}: {exc}",
             ) from exc
 
-    # Codex uses the app-server transport unless the runner explicitly opts out; see
-    # `uses_app_server`. `run_transport` reads the same raw flags, before the strip below, to
-    # decide whether the trigger builds argv at all (design D6: a stream transport gets one
+    # `run_transport` is the adapter's answer for these raw flags (Codex: app-server unless the
+    # runner opts out with `--no-app-server`). It reads them before the strip below, to decide
+    # whether the trigger builds argv at all (design D6: a stream transport gets one
     # through `build_command`; an RPC transport builds its own, inside `run_turn`). The strip
     # itself is the union of every adapter's `transport_sentinels` (design D5) — neither sentinel
     # is a real CLI argument, and either would otherwise leak into `build_command`'s argv
     # unchanged.
-    use_codex_app_server = uses_app_server(runner, runner_flags)
     run_transport = adapter.transport(runner_flags)
     runner_flags = [f for f in runner_flags if f not in _TRANSPORT_SENTINELS]
 
@@ -1437,7 +1435,6 @@ async def _trigger_agent_directly(
             # the checkout ended at `886124f`, an orphan commit of three `.pyc` files that running
             # the tests had touched.
             worktree=None if review_context is not None else isolated_workspace,
-            use_codex_app_server=use_codex_app_server,
             copilot_turn=copilot_turn,
             adapter=adapter,
             transport=run_transport,
@@ -2331,7 +2328,6 @@ async def _execute_run(
     repo_root: Optional[str] = None,
     env: Optional[Dict[str, str]] = None,
     worktree: Optional[Path] = None,
-    use_codex_app_server: bool = False,
     cli: Optional[str] = None,
     prompt: Optional[str] = None,
     yolo: bool = False,
@@ -2349,9 +2345,9 @@ async def _execute_run(
     an isolated worktree specifically (not just "some cwd") to know whether to snapshot
     it once the run ends (task 5.3's conflict detection needs real commits to compare).
 
-    *use_codex_app_server* (task 2.8) selects a completely separate execution path —
-    `_execute_rpc_run` below, given *adapter*/*transport* (design D9) — since the app-server
-    transport has no PTY/pipe subprocess for this function's own read/wait loop to drive;
+    An RPC *transport* (task 2.8; Codex's app-server, Copilot's ACP) selects a completely
+    separate execution path — `_execute_rpc_run` below, given *adapter*/*transport* (design D9) —
+    since an RPC transport has no PTY/pipe subprocess for this function's own read/wait loop to drive;
     `cli`/`prompt`/`yolo`/`mcp_command` are only meaningful for that path (`cmd` is empty for it —
     the caller builds argv only for a stream transport, design D6; app-server has no argv, it
     speaks JSON-RPC). Anything the caller renders *into* that argv therefore has to arrive here by
@@ -2394,8 +2390,8 @@ async def _execute_run(
         )
         return
 
-    if use_codex_app_server:
-        assert adapter is not None and transport is not None and transport.kind == "rpc"
+    if transport is not None and transport.kind == "rpc":
+        assert adapter is not None
         await _execute_rpc_run(
             adapter,
             transport,

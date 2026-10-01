@@ -54,8 +54,7 @@ from ...model_catalog import (
 )
 from ...output_recording import record_agent_output, record_context_usage
 from ...review_turn import ReviewContext, verdict_evidence_sentence
-from ...runner_adapters import get_adapter
-from ...runner_commands import posture_at_rest
+from ...runner_adapters import get_adapter, resolve_access_axes
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -548,23 +547,22 @@ async def list_agents(
                 **({"model": bound_runner.model} if bound_runner.model else {}),
             }
 
-        # What the next run gets when nobody chose a posture, read from the one function the spawn
-        # falls back to, over the config the spawn reads (`get_agent_config`'s merge, not
-        # `agent_meta`, whose precedence differs for `hub_client`). F283.
+        # What the next run gets when nobody chose a posture, read from the adapter member the
+        # spawn falls back to, over the axes and config the spawn reads (`get_agent_config`'s
+        # merge, not `agent_meta`, whose precedence differs for `hub_client`). F283, design D3.
         permission_mode_at_rest = permission_mode_built_in = None
         _bound_adapter = get_adapter(bound_runner.cli) if bound_runner else None
-        provider = _bound_adapter.catalog_provider if _bound_adapter else None
-        if provider is not None:
+        if _bound_adapter is not None:
             spawn_config = agent_config(
                 session_data, agent_name, agent_row.config if agent_row else None
             )
-            # Every spawnable runner is MCP-injectable; `launchability`'s now-deleted
-            # `resolve_access_path` reduced to exactly this for any live `Runner.cli` (F474).
-            access_path = "cli" if spawn_config.get("hub_client") == "cli" else "mcp"
-            permission_mode_at_rest = posture_at_rest(
-                provider, access_path, bool(spawn_config.get("yolo"))
+            axes = resolve_access_axes(
+                _bound_adapter, hub_client=spawn_config.get("hub_client"), flags=bound_runner.flags
             )
-            permission_mode_built_in = posture_at_rest(provider, access_path, False)
+            permission_mode_at_rest = _bound_adapter.posture_at_rest(
+                axes, yolo=bool(spawn_config.get("yolo"))
+            )
+            permission_mode_built_in = _bound_adapter.posture_at_rest(axes, yolo=False)
 
         _runner = agent_meta.get("runner", "native")
         _runner_adapter = get_adapter(_runner)

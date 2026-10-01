@@ -10,11 +10,9 @@ re-pointed `agent_trigger._execute_rpc_run` at `transport.run_turn` and deleted 
 the only copies (`worker.py`/`conversation_titles.py` keep their own originals until task 3.5
 re-points them at this adapter, same precedent as `claude.py`, task 2.2).
 
-`CodexAdapter.transport`'s body is `codex_appserver.uses_app_server`'s today (minus its
-`runner_cli != "codex"` guard, which the adapter lookup replaces) -- design D5 marks that function
-for deletion, but its two real callers (`agent_trigger.py:1221`, `agents.py:260`) are outside this
-package and belong to tasks 3.3/3.6; deleting it here would break their imports before those tasks
-land, so it stays until whichever of them removes the last caller (filed as F472).
+`CodexAdapter.transport` took `codex_appserver.uses_app_server`'s body (minus its
+`runner_cli != "codex"` guard, which the adapter lookup replaces); that function is deleted (design
+D5, task 4.4), its callers reading `adapter.transport(flags)` and `adapter.collaboration` (F472).
 """
 
 from __future__ import annotations
@@ -271,9 +269,9 @@ class CodexAdapter(RunnerAdapter):
         return _STREAM_TRANSPORT
 
     def posture_at_rest(self, axes: AccessAxes, *, yolo: bool) -> str:
-        return runner_commands.posture_at_rest(
-            "codex", "mcp" if axes.approvals != "none" else "cli", yolo
-        )
+        # "No posture" and `acceptEdits` map to the same thread policy, so "Edit files" is what an
+        # unset run gets; `yolo` is Full access on both transports (design D3, R3).
+        return FULL_ACCESS_PERMISSION_MODE if yolo else "acceptEdits"
 
     def one_shot(
         self,

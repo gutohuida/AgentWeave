@@ -25529,6 +25529,26 @@ AW_KEY=$(cat ~/.agentweave/hub/profiles/trial/bootstrap-key.txt) AW_PROJECT=<pid
 
 ---
 
+**Addendum 2026-10-01 (`each-runner-cli-is-one-adapter` task 6.2 (a), R2 open question 3; still parked).**
+Two facts, one read from code and one driven:
+
+- *From code:* `GET /agents/launchability` reports `collaboration_ready: True` for a `claude` agent with
+  `hub_client: "cli"`, because `ClaudeAdapter.collaboration(flags, yolo=…)` takes no `hub_client`. That
+  is the very configuration this finding measured unable to reach the Hub. Driven on the trial Hub
+  2026-10-01: `radrive-clihub` reads `runnable: True, collaboration_ready: True, collaboration_reason:
+  null`, unchanged from the pre-adapter baseline (`hub/tests/fixtures/runner_adapters/drive_before.json`),
+  so the adapter move neither caused nor fixed it.
+- *Driven, and it muddies any re-measurement on this machine:* a `hub_client: "cli"` Haiku run of
+  `adapterdrive` (`run-2314f869771d`) was given no tool server (axes `none/none/cli`, told the HTTP form)
+  and **still set `Run.mcp_adapter_online_at`**. The server came from the operator's own Claude
+  configuration: `~/.claude.json` registers `agentweave` → `agentweave-mcp` at local scope for
+  `C:/Users/huida/Documents/projects/AgentWeave`, and an agent worktree under
+  `.agentweave/worktrees/<name>/` is inside that directory, so Claude loads it. The installed
+  `agentweave-mcp` reads the run's `AW_RUN_TOKEN` from the environment it inherits and reports in as
+  the run. So on this machine, for `proj-d85a82bf4216`, a "cli" Claude run is not tool-less, and
+  `harness_has_honoured_mcp` can be set by a server the Hub never injected. A re-measurement of this
+  finding must use a project outside this repository, or remove that registration first.
+
 ## F302 (B) — an agent's *first* turn is told "no MCP tools this turn" while it is holding them, and one measured turn believed it
 
 **Status:** fixed `802a8c7`. Found 2026-09-09 by the day window's D-1 drive, on a Hub carrying all
@@ -31825,6 +31845,15 @@ started the same afternoon.
 
 ---
 
+**Foot 2026-10-01 (`each-runner-cli-is-one-adapter` task 6.2).** The Hub's runner registries are now the
+adapter table: `ADAPTERS` in `hub/hub/runner_adapters/__init__.py` holds `claude`, `codex` and (task 3.7)
+`copilot`, and `tests/test_runner_adapters_conformance.py` fails unless `tuple(ADAPTERS) == RUNNER_CLIS
+== tuple(CATALOG)` equals the database's `ck_runners_cli` set. `RUNNER_CLI` is renamed
+`LEGACY_RUNNER_CLI` and keeps only legacy strings plus `claude`/`codex` for `probe_agent`'s
+no-adapter path. The `copilot` row this note was to remove in slice 2 is already absent (read
+2026-10-01, `launchability.py:46-55`). `MCP_INJECTABLE_RUNNERS` and `resolve_access_path` are deleted
+(task 3.2, F474).
+
 ## F394 (A) -- `hub-test` does not error on `master`, it HANGS: three runs stopped dead at 13% and were killed by GitHub's 6-hour job timeout
 
 **Status:** fixed f9e6dee (root cause, 2026-09-22): the hang was the tests' own wait, not the product. `_await_background_run`'s `while set: for task in list(set): await task` never yields on a finished task, and a spawn-failure retry that finishes behind the waiter leaves exactly that — see the foot. Earlier: 3491580 (mitigation, 2026-09-21): `hub-test` now runs `pytest tests/ -v --timeout=300 --timeout-method=thread` and `pytest-timeout` is in `hub/pyproject.toml` dev extras. Verified locally that a sleeping test is killed with a stack. **Now verified on CI once (2026-09-22): run `35667708908` (`45d769f`) hung, was killed after 300 s instead of 6 h, and dumped a stack naming `test_agent_trigger.py::test_spawn_failure_marks_run_failed` blocked in `_await_background_run` — see the foot.** The root cause of the hang is still unknown. **Found 2026-09-20** in an interactive session, while doing nothing more than
@@ -33630,3 +33659,29 @@ Task 3.6's own text says the route "iterates `ADAPTERS`". Implemented literally 
 
 F471 itself says this exact tension ("`test_runners_api.py:204` ... depends on the 3-wide set") is **not** this task's to resolve — "group 2 (or, per D2's own 'For slice 2' note, whichever slice actually adds `CopilotAdapter`) has to either land a `CopilotAdapter` stub ... or revise D1/D2/tasks.md's 2-tuple text". Task 3.6 is neither of those: it adds no `CopilotAdapter`. So the route was left reading `RUNNER_CLIS` (unchanged from before this task), with a comment pointing at F471/this finding instead of the bare `ADAPTERS` the task text names. This keeps `test_runners_api.py` passing and leaves `test_runner_adapters_conformance.py`'s three F471 cases exactly as every iteration since 13 has found them — no new failure, no regressed endpoint. Whoever lands a real `CopilotAdapter` (the queue's own separate `a-copilot-agent-runs-over-acp`-successor item) should revisit this comment: once `get_adapter("copilot")` stops being `None`, `ADAPTERS` and `RUNNER_CLIS` converge and the distinction this finding carves out becomes moot.
 
+## F476 (C) — three Copilot-name branches remain outside the runner adapters, against the requirement the adapter change adds
+
+**Status:** open, filed 2026-10-01 while closing `each-runner-cli-is-one-adapter` (task 4.4). Derived from code, not driven.
+**Ready:** needs design (each branch needs an adapter member that has not been designed)
+
+The change adds *Each supported runner CLI is served by exactly one runner adapter* to `runner-registry`,
+which says code outside the adapters SHALL NOT branch on the name of a supported runner CLI, one that has an
+adapter. Task 3.7 gave Copilot an adapter (`CopilotAdapter`, `ADAPTERS["copilot"]`), so Copilot is now
+such a CLI. Task 4.4's scan (`hub/tests/test_no_runner_literals.py`) checks only `"claude"`/`"codex"`, as
+its text says, and passes. A scan for `"copilot"` finds three branches it does not cover:
+
+- `hub/hub/api/v1/agent_trigger.py:1222` — `if runner == "copilot":` dispatches to `_prepare_copilot_turn`
+  (home, diagnostics, every refusal before the `Run` row). Task 3.7 kept this deliberately.
+- `hub/hub/api/v1/agents.py:1681` — `runner.cli != "copilot"` guards the Copilot home ensured at agent
+  creation (`ensure_copilot_home`).
+- `hub/hub/conversation_titles.py:280` — `if runner.cli == "copilot":` parses the JSONL title envelope; the
+  Claude and Codex title commands print plain text, read raw.
+
+(`copilot_probe.py:129` matches the pattern but compares a directory name, not a runner.)
+
+Each needs a member the slice-1 design never named: a per-turn preparation hook on the RPC transport,
+a hook run when an agent is bound or created, and a title-text extractor beside `parse_one_shot`.
+Adding them while closing the change would be design without a round. **Fix:** design those three
+members (Copilot slice 3, `a-copilot-agent-uses-hooks-and-its-own-agents`, already touches the
+trigger's Copilot preparation), move the branches onto them, and widen `test_no_runner_literals.py`
+to every key of `ADAPTERS`, so the scan covers whatever runners exist rather than a hard-coded two.

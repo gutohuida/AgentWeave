@@ -76,17 +76,6 @@ APP_SERVER_OPT_OUT_FLAG = "--no-app-server"
 TRANSPORT_SENTINELS = (APP_SERVER_OPT_IN_FLAG, APP_SERVER_OPT_OUT_FLAG)
 
 
-def uses_app_server(runner_cli: str, flags: Optional[List[str]]) -> bool:
-    """Whether a codex run with these runner flags uses the app-server transport.
-
-    Single source of truth for the decision, so the transport actually selected and the
-    collaboration-readiness reported to the operator cannot disagree.
-    """
-    if runner_cli != "codex":
-        return False
-    return APP_SERVER_OPT_OUT_FLAG not in (flags or [])
-
-
 # Server->client methods this Hub must answer. Verified against
 # `codex app-server generate-json-schema` (CLI 0.146.0) and a live protocol trace.
 ELICITATION_METHOD = "mcpServer/elicitation/request"

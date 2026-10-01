@@ -293,7 +293,7 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                     ControlValue(id="bypassPermissions", label="Full access"),
                 ),
                 # The posture a Claude run the Hub can answer gets at rest
-                # (`runner_commands.posture_at_rest`, F283); a pill with nothing else to go on
+                # (`ClaudeAdapter.posture_at_rest`, F283); a pill with nothing else to go on
                 # shows this, so it must be true.
                 default=WORKSPACE_PERMISSION_MODE,
                 apply=ApplySpec(style="flag", template="--permission-mode {value}"),

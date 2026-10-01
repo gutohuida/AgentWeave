@@ -151,9 +151,7 @@ class ClaudeAdapter(RunnerAdapter):
         return _STREAM_TRANSPORT
 
     def posture_at_rest(self, axes: AccessAxes, *, yolo: bool) -> str:
-        return runner_commands.posture_at_rest(
-            "claude", "mcp" if axes.approvals != "none" else "cli", yolo
-        )
+        return runner_commands.claude_posture_at_rest(axes.approvals, yolo)
 
     def one_shot(
         self,

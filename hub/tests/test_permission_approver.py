@@ -1099,13 +1099,24 @@ def test_the_posture_is_labelled_by_what_it_permits():
 
 # --- One posture at rest, read by the spawn and by every display (F283) --------------------------
 # `the-permissions-pill-shows-the-posture-the-run-gets`, design D1/D5. The catalog default is what a
-# pill shows when it knows nothing else, so it must be the posture the run would really get.
+# pill shows when it knows nothing else, so it must be the posture the run would really get. Each
+# runner's rule is its adapter's `posture_at_rest` (`each-runner-cli-is-one-adapter`, design D3),
+# read over the axes the agents list resolves.
+
+
+def posture_at_rest(provider, access_path, yolo):
+    """The posture the agents list serves for a runner with no flags: `access_path` is `"cli"` for
+    an agent with `hub_client: "cli"`, `"mcp"` otherwise."""
+    from hub.runner_adapters import get_adapter, resolve_access_axes
+
+    adapter = get_adapter(provider)
+    hub_client = "cli" if access_path == "cli" else None
+    axes = resolve_access_axes(adapter, hub_client=hub_client, flags=None)
+    return adapter.posture_at_rest(axes, yolo=yolo)
 
 
 @pytest.mark.parametrize("provider", ["claude", "codex", "copilot"])
 def test_each_catalog_default_is_the_posture_a_run_gets(provider):
-    from hub.runner_commands import posture_at_rest
-
     control = get_provider(provider).control("permission_mode")
     assert control.default == posture_at_rest(provider, "mcp", False)
 
@@ -1123,8 +1134,6 @@ def _flag_pairs(argv):
 
 @pytest.mark.parametrize("mcp_command", [["py", "s.py"], None])
 def test_the_spawn_at_rest_is_the_posture_it_names(mcp_command):
-    from hub.runner_commands import posture_at_rest
-
     posture = posture_at_rest("claude", "mcp" if mcp_command else "cli", False)
     at_rest = build_command(runner="claude", cli="claude", prompt="hi", mcp_command=mcp_command)
     named = build_command(
@@ -1140,8 +1149,6 @@ def test_the_spawn_at_rest_is_the_posture_it_names(mcp_command):
 def test_a_yolo_run_at_rest_is_full_access():
     """The same posture, different argv: at rest a yolo run gets `--dangerously-skip-permissions`,
     while an explicit Full access renders `--permission-mode bypassPermissions` (design D1, R3)."""
-    from hub.runner_commands import posture_at_rest
-
     assert posture_at_rest("claude", "mcp", True) == "bypassPermissions"
     argv = _claude_argv(yolo=True)
     assert "--dangerously-skip-permissions" in argv
@@ -1153,15 +1160,12 @@ def test_a_copilot_run_at_rest_reads_the_same_function(yolo):
     """Copilot decides its unset posture in its own module; it must be this function's answer,
     whatever the access path (design D5)."""
     from hub.copilot_acp import posture_for
-    from hub.runner_commands import posture_at_rest
 
     for access_path in ("mcp", "cli"):
         assert posture_for(None, yolo=yolo) == posture_at_rest("copilot", access_path, yolo)
 
 
 def test_codex_at_rest_is_edit_files():
-    from hub.runner_commands import posture_at_rest
-
     assert posture_at_rest("codex", "mcp", False) == "acceptEdits"
     assert posture_at_rest("codex", "mcp", True) == "bypassPermissions"
 
@@ -1170,8 +1174,6 @@ def test_the_default_posture_never_widens_the_boundary(workspace, tmp_path):
     """The MODIFIED scenario *The default posture never widens the workspace boundary*: under the
     posture a Claude run gets at rest, the Hub refuses a write outside the workspace and allows one
     inside it, with no operator asked."""
-    from hub.runner_commands import posture_at_rest
-
     assert posture_at_rest("claude", "mcp", False) == WORKSPACE_PERMISSION_MODE
     assert _decide("Write", {"file_path": str(workspace / "a.txt")})["allow"] is True
     assert _decide("Write", {"file_path": str(tmp_path / "outside" / "a.txt")})["allow"] is False

@@ -254,11 +254,11 @@ class CopilotAdapter(RunnerAdapter):
         return None
 
     def posture_at_rest(self, axes: AccessAxes, *, yolo: bool) -> str:
-        # Copilot's answer is the same on either access path (slice 2 D5); the argument is passed
-        # the way the other adapters pass it.
-        return runner_commands.posture_at_rest(
-            "copilot", "mcp" if axes.approvals != "none" else "cli", yolo
-        )
+        # Copilot's answer is the same on either access path (slice 2 D5): its ACP posture table's
+        # answer for an unset mode.
+        from .. import copilot_acp
+
+        return copilot_acp.posture_for(None, yolo=yolo)
 
     def one_shot(
         self,

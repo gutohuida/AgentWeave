@@ -1812,3 +1812,12 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-09-30 — a check you run with `;` before `git commit` does not gate the commit.** A
   task-evidence failure scrolled by and the commit went through (`536b6d8`, CI red until
   `6ed8c28`). Chain the gate with `&&`.
+- **2026-10-01 — on `proj-d85a82bf4216` a `hub_client: "cli"` Claude run is not tool-less.** The
+  operator's `~/.claude.json` registers `agentweave` -> `agentweave-mcp` at local scope for the repo
+  root, and agent worktrees (`.agentweave/worktrees/<name>/`) sit inside it, so Claude loads that
+  server; it reads the run's `AW_RUN_TOKEN` and sets `Run.mcp_adapter_online_at` though the Hub injected
+  nothing. Measure MCP-less behaviour on a project outside this repo (F301 addendum).
+- **2026-10-01 — `POST /session/sync` takes `{"data": {...}}` and replaces both the stored session
+  data and the roster** (any agent row missing from `data.agents` is deleted). `GET /agents` omits archived
+  agents, which the sync still deletes if unnamed, so build the payload from `project_sessions.data` plus every `agents`
+  row name read `mode=ro` (`scripts/drive/d1001_adapter_claude_unchanged.py`, `roster_sync`).
