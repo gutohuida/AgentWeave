@@ -105,3 +105,84 @@ def test_an_unwritable_target_raises_instead_of_returning_the_source(tmp_path, m
     monkeypatch.setattr(os, "replace", boom)
     with pytest.raises(OSError):
         pin.path()
+
+
+# --- `a-run-reaches-the-hub-without-mcp` D5: the `aw-tool` launchers beside the pin ---------------
+
+
+def _exe_dir_name() -> str:
+    import hashlib
+    import sys
+
+    return hashlib.sha256(sys.executable.encode()).hexdigest()[:8]
+
+
+def test_launchers_sit_under_the_digest_and_this_interpreter(tmp_path):
+    import sys
+
+    pin = ToolServerPin(_source(tmp_path, b"A"), root=tmp_path / "root")
+    directory = pin.launcher_dir()
+    server = pin.path()
+
+    assert directory == tmp_path / "root" / pin.digest / "bin" / _exe_dir_name()
+    cmd = (directory / "aw-tool.cmd").read_bytes()
+    assert cmd == f'@"{sys.executable}" -I -S "{server}" --call %*\r\n'.encode()
+    sh = (directory / "aw-tool").read_bytes().decode()
+    assert sh.startswith("#!/bin/sh\n")
+    assert "\r" not in sh
+    exe = sys.executable.replace("\\", "/")
+    assert f'exec "{exe}" -I -S "{str(server).replace(chr(92), "/")}" --call "$@"' in sh
+    if os.name != "nt":
+        assert os.access(directory / "aw-tool", os.X_OK)
+
+
+def test_launchers_are_rewritten_when_altered_or_deleted(tmp_path):
+    pin = ToolServerPin(_source(tmp_path, b"A"), root=tmp_path / "root")
+    directory = pin.launcher_dir()
+    good_cmd = (directory / "aw-tool.cmd").read_bytes()
+    good_sh = (directory / "aw-tool").read_bytes()
+
+    (directory / "aw-tool.cmd").write_bytes(b"@echo hijacked\r\n")
+    (directory / "aw-tool").unlink()
+    pin.launcher_dir()
+
+    assert (directory / "aw-tool.cmd").read_bytes() == good_cmd
+    assert (directory / "aw-tool").read_bytes() == good_sh
+
+
+def test_prune_takes_a_stale_digests_launchers_with_it(tmp_path):
+    root = tmp_path / "root"
+    pin = ToolServerPin(_source(tmp_path, b"A"), root=root)
+    old = ToolServerPin(_source(tmp_path, b"OLD"), root=root)
+    old_launchers = old.launcher_dir()
+    stamp = time.time() - 8 * DAY
+    os.utime(old.path(), (stamp, stamp))
+    pin.path()
+
+    assert pin.prune_stale() == [root / old.digest]
+    assert not old_launchers.exists()
+
+
+def test_the_launcher_runs_the_pin_isolated(tmp_path):
+    """Test 1.3's third case, through the launcher itself: `-I -S` means a `json.py` on
+    `PYTHONPATH` cannot change what the auto-approved program runs (design D5, R3)."""
+    import json
+    import subprocess
+
+    import hub.mcp_server as mcp_server
+
+    pin = ToolServerPin(Path(mcp_server.__file__), root=tmp_path / "root")
+    directory = pin.launcher_dir()
+    poison = tmp_path / "poison"
+    poison.mkdir()
+    (poison / "json.py").write_text("raise RuntimeError('poisoned json')\n")
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("AW_", "PYTHON"))}
+    env["PYTHONPATH"] = str(poison)
+    launcher = directory / ("aw-tool.cmd" if os.name == "nt" else "aw-tool")
+
+    proc = subprocess.run(
+        [str(launcher), "--list"], capture_output=True, text=True, env=env, cwd=tmp_path, timeout=60
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert json.loads(proc.stdout.strip().splitlines()[-1])["ok"] is True

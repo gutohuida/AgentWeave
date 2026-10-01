@@ -14,6 +14,7 @@ import hashlib
 import logging
 import os
 import shutil
+import sys
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -38,23 +39,53 @@ class ToolServerPin:
 
     def path(self) -> Path:
         """The verified pinned copy; rewritten if missing or altered. Raises `OSError`."""
-        try:
-            if self._target.read_bytes() == self._bytes:
-                os.utime(self._target)
-                return self._target
-        except FileNotFoundError:
-            pass
-        directory = self._target.parent
-        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self._write_verified(self._target, self._bytes)
         if os.name != "nt":
             os.chmod(self._root, 0o700)
-        temp = directory / f"{_SERVER_NAME}.{os.getpid()}.tmp"
+        return self._target
+
+    def launcher_dir(self) -> Path:
+        """The `aw-tool` launchers for this pin and this interpreter; verified like `path()`.
+
+        `a-run-reaches-the-hub-without-mcp`, design D5. A run without the tool-protocol surface
+        reaches the Hub by running this pin in call mode, and this directory goes first on every
+        run's `PATH`. Two files: `aw-tool.cmd` (Windows, CRLF) and `aw-tool` (POSIX sh, which Git
+        Bash on Windows runs too). Both embed the interpreter's path, so the directory is keyed by
+        it as well as by the digest: two Hubs with the same server bytes and different Pythons
+        must not rewrite each other's launcher. Both pass `-I -S`, so no `PYTHON*` variable and no
+        site-packages `.pth` file can change what an auto-approved command runs; call mode needs
+        only the stdlib. Pruned with the digest directory. Raises `OSError`.
+        """
+        server = self.path()
+        exe = sys.executable
+        directory = self._target.parent / "bin" / hashlib.sha256(exe.encode()).hexdigest()[:8]
+        cmd = f'@"{exe}" -I -S "{server}" --call %*\r\n'
+        posix_exe, posix_server = exe.replace("\\", "/"), str(server).replace("\\", "/")
+        sh = f'#!/bin/sh\nexec "{posix_exe}" -I -S "{posix_server}" --call "$@"\n'
+        self._write_verified(directory / "aw-tool.cmd", cmd.encode("utf-8"))
+        self._write_verified(directory / "aw-tool", sh.encode("utf-8"), mode=0o700)
+        return directory
+
+    @staticmethod
+    def _write_verified(target: Path, data: bytes, mode: Optional[int] = None) -> None:
+        """Leave *target* alone if it holds *data* (touching it, so pruning sees it in use);
+        otherwise write it atomically. Raises `OSError`."""
         try:
-            temp.write_bytes(self._bytes)
-            os.replace(temp, self._target)
+            if target.read_bytes() == data:
+                os.utime(target)
+                return
+        except FileNotFoundError:
+            pass
+        directory = target.parent
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        temp = directory / f"{target.name}.{os.getpid()}.tmp"
+        try:
+            temp.write_bytes(data)
+            if mode is not None and os.name != "nt":
+                os.chmod(temp, mode)
+            os.replace(temp, target)
         finally:
             temp.unlink(missing_ok=True)
-        return self._target
 
     def prune_stale(self, max_age: timedelta = timedelta(days=7)) -> List[Path]:
         """Remove sibling digest directories untouched for `max_age`; never this pin's own."""

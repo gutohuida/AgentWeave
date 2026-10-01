@@ -71,6 +71,9 @@ EXCLUDE_PATTERNS = [
     # Rewritten from the canonical context on every single turn (`agent_trigger`), so it is pure
     # regenerated output. It was found committed onto a real project's main branch.
     ".agentweave/context/",
+    # The call command's arguments files (`a-run-reaches-the-hub-without-mcp`, D14): the agent's
+    # scratch, rewritten call after call, and never part of its work.
+    ".agentweave/calls/",
     # The one entry the rule above does not reach: no worktree holds a marker, so the Hub's own
     # commit never sweeps it in. It is here because the operator's `git add -A` in their primary
     # checkout would, and because `workspace_paths` offered it in the `@path` picker (F170). It binds

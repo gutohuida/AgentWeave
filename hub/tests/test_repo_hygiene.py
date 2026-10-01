@@ -52,6 +52,11 @@ def test_seeding_writes_the_block(tmp_path):
         assert checkout in repo_hygiene.EXCLUDE_PATTERNS
         assert checkout in written
 
+    # `a-run-reaches-the-hub-without-mcp` D14: the call command's argument files are the agent's
+    # scratch, and `git add -A` must never commit them onto its branch.
+    assert ".agentweave/calls/" in repo_hygiene.EXCLUDE_PATTERNS
+    assert ".agentweave/calls/" in written
+
 
 def test_git_agrees_about_the_hubs_own_files(tmp_path):
     """The claim is about `git status`, not about the contents of a file."""

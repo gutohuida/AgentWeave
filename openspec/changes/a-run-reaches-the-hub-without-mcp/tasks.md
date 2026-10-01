@@ -171,13 +171,17 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - R3 row, **allowed**: `aw-tool create_task .AgentWeave/Calls/1.json` on Windows (case-insensitive paths,
     compared with `normcase`).
   - Fails today: every "allowed" row under `operator` calls `_ask_operator`.
-- [ ] 1.7 `hub/tests/test_tool_server_pin.py`: `PIN.launcher_dir()` (design D5):
+- [x] 1.7 `hub/tests/test_tool_server_pin.py`: `PIN.launcher_dir()` (design D5):
   - it holds `aw-tool.cmd` (CRLF, naming `sys.executable`, `-I -S` and the pinned path, `--call %*`) and `aw-tool`
     (sh, `exec … -I -S … --call "$@"`);
   - both are rewritten when altered or deleted;
   - it sits under `<digest>/bin/<sha256(sys.executable)[:8]>`;
   - `prune_stale` removes it with its digest directory.
-- [ ] 1.8 The trigger's env test: the one in `hub/tests/test_agent_trigger.py` that reads
+  - **Done 2026-10-01**: four tests in `test_tool_server_pin.py`, red first. The exact bytes of both launchers
+    (`.cmd` CRLF; `sh` LF, forward slashes, executable on POSIX); rewritten after an alteration and a deletion;
+    pruned with a stale digest; and 1.3's third case through the launcher itself (`aw-tool.cmd --list` under
+    `cmd`, with a poisoned `json.py` on `PYTHONPATH`, exits 0).
+- [x] 1.8 The trigger's env test: the one in `hub/tests/test_agent_trigger.py` that reads
   `spawned_env["AW_RUN_TOKEN"]` (`:713` at R2).
   - the launcher dir is the first `PATH` entry;
   - with a base env whose key is `Path`, the same key is reused and no second `PATH` key appears;
@@ -189,6 +193,14 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - a patched `PIN.path` that raises `OSError` refuses the trigger with 409 *"Could not materialize the tool
     server…"*, also under `hub_client: "cli"`. Today the pin is made only for MCP runs (design D5).
   - `hub/tests/test_repo_hygiene.py`: `.agentweave/calls/` is in `EXCLUDE_PATTERNS`, and in the seeded block.
+  - **Done 2026-10-01**: in `test_agent_trigger.py` (new tests beside the `:708` env test, whose HTTP-form
+    assertions change with group 5). Launchers first on `PATH`, one `PATH` key, and `.agentweave/calls/` a
+    directory, for `hub_client` unset and `"cli"`. A patched `PIN.path` raising `OSError` refuses both: the route
+    answers queue-first (`status: queued`, `run_id: null`, the reason in `waiting_reason`), not a bare 409, which
+    is how it answers every `TriggerAgentError`; the `cli` row was red before the change (it started a run).
+    `prepend_run_path` (a `Path` key reused, order kept) and `prepare_calls_dir` (a junction replaced and its
+    target's file kept; a linked `.agentweave` left alone with a warning; a file replaced) are tested directly.
+    `test_repo_hygiene.py`: `.agentweave/calls/` in `EXCLUDE_PATTERNS` and in the seeded block.
 - [ ] 1.9 `hub/tests/test_tool_surface_matches_server.py` + `test_launchability.py`:
   - `access_path_notice("shim")` names `aw-tool` and `.agentweave/calls/`, and contains no `AW_RUN_TOKEN`, no
     `Bearer` and no `$HUB_URL`;
@@ -354,9 +366,12 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
 
 ## 4. The launcher, the run's PATH and the calls directory (design D5, D14)
 
-- [ ] 4.1 `ToolServerPin.launcher_dir()` in `tool_server.py` (launchers pass `-I -S`), and prune with the digest
+- [x] 4.1 `ToolServerPin.launcher_dir()` in `tool_server.py` (launchers pass `-I -S`), and prune with the digest
   directory. Test 1.7 passes.
-- [ ] 4.2 `agent_trigger.py`:
+  - **Done 2026-10-01**: `ToolServerPin.launcher_dir()`, with `path()` and it sharing one `_write_verified`
+    (compare, touch, or atomic replace). Pruning needed no change: the launchers live inside the digest
+    directory `prune_stale` removes. Test 1.7 passes.
+- [x] 4.2 `agent_trigger.py`:
   - the `PATH` prepend, with a case-insensitive key, beside `AW_RUN_TOKEN` (`:1246`);
   - `.agentweave/calls/` created beside the context file (`:1160-1169`), with an `OSError` refused as the context
     write is. A `calls` that is a link or junction is removed (the link, never its target's contents) and recreated
@@ -364,8 +379,13 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - `PIN.path()` and `PIN.launcher_dir()` for **every** run, before the `mcp_command` branch. An `OSError` is
     refused with the tool-server reason (`:1197-1203`), and the MCP branch then reuses the path (design D5).
   Test 1.8 passes.
-- [ ] 4.3 `repo_hygiene.EXCLUDE_PATTERNS` gains `.agentweave/calls/` with a one-line reason. Test 1.8 (hygiene half)
+  - **Done 2026-10-01**: `prepend_run_path` beside `AW_WORKSPACE_DIR`; `prepare_calls_dir` right after the context
+    write, with its refusal; `pinned_server_path()` and `PIN.launcher_dir()` for every run before
+    `mcp_command`, which reuses the path. Verification finding 13 applied: `ValueError` is caught beside `OSError`
+    at both new steps. Test 1.8 passes.
+- [x] 4.3 `repo_hygiene.EXCLUDE_PATTERNS` gains `.agentweave/calls/` with a one-line reason. Test 1.8 (hygiene half)
   passes.
+  - **Done 2026-10-01**: `.agentweave/calls/` in `repo_hygiene.EXCLUDE_PATTERNS`, with its reason.
 
 ## 5. What the run is told (design D9–D12)
 

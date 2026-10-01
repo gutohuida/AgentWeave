@@ -143,6 +143,50 @@ from ...utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
 
+
+def prepend_run_path(env: Dict[str, str], directory: Path) -> None:
+    """Put *directory* first on the run's `PATH` (`a-run-reaches-the-hub-without-mcp`, D5).
+
+    On Windows the key may be spelled `Path`; the existing key is found case-insensitively and
+    reused, so the child never sees two of them (which one a process would read is undefined).
+    """
+    key = next((k for k in env if k.upper() == "PATH"), "PATH")
+    existing = env.get(key, "")
+    env[key] = str(directory) + (os.pathsep + existing if existing else "")
+
+
+def prepare_calls_dir(work_dir: str) -> None:
+    """Make `<work_dir>/.agentweave/calls/` a real directory for this turn (design D14).
+
+    The call command reads its arguments files only from there, and the approver gives standing
+    only to files there, both refusing when any component is a link. So a `calls` that is a link,
+    a junction or a file is removed -- the link itself, never its target's contents -- and a real
+    directory made. A `.agentweave` that is itself a link is left alone (it may hold the project
+    binding), nothing is created through it, and the turn proceeds: the calls-root rule then
+    never matches for this workspace, which is the safe direction. Raises `OSError`.
+    """
+    root = os.path.realpath(work_dir)
+    agentweave = os.path.join(root, ".agentweave")
+    calls = os.path.join(agentweave, "calls")
+    if os.path.lexists(agentweave) and os.path.normcase(
+        os.path.realpath(agentweave)
+    ) != os.path.normcase(agentweave):
+        logger.warning(
+            "%s is a link; the Hub makes no .agentweave/calls/ through it, so the call command's "
+            "arguments files have no standing in this workspace",
+            agentweave,
+        )
+        return
+    if os.path.lexists(calls):
+        linked = os.path.normcase(os.path.realpath(calls)) != os.path.normcase(calls)
+        if linked or not os.path.isdir(calls):
+            if os.path.isdir(calls) and os.name == "nt":
+                os.rmdir(calls)  # a junction or directory symlink: removes the link only
+            else:
+                os.unlink(calls)
+    os.makedirs(calls, exist_ok=True)
+
+
 router = APIRouter(prefix="/agent", tags=["agent-trigger"])
 
 # A running background task with no other strong reference can be garbage-collected by
@@ -1169,6 +1213,15 @@ async def _trigger_agent_directly(
             status.HTTP_409_CONFLICT,
             f"Could not materialize canonical context for {agent}: {exc}",
         ) from exc
+    # Where the call command's arguments files go (`a-run-reaches-the-hub-without-mcp`, D14),
+    # made fresh beside the context, and refused the same way when it cannot be.
+    try:
+        prepare_calls_dir(effective_work_dir)
+    except (OSError, ValueError) as exc:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            f"Could not materialize canonical context for {agent}: {exc}",
+        ) from exc
 
     # Task 4.5: tell the agent, at turn start, which access path is in use — never offer
     # one that isn't actually available in this environment. `described_path` was resolved above
@@ -1198,15 +1251,19 @@ async def _trigger_agent_directly(
     if spec_notice:
         notices.append(spec_notice)
     prompt = "\n\n".join([*notices, message])
-    mcp_command = None
-    if axes.tool_surface == "mcp":
-        try:
-            mcp_command = [sys.executable, str(tool_server.pinned_server_path())]
-        except OSError as exc:
-            raise TriggerAgentError(
-                status.HTTP_409_CONFLICT,
-                f"Could not materialize the tool server for {agent}: {exc}",
-            ) from exc
+    # The pinned tool server and its `aw-tool` launchers, for **every** run
+    # (`a-run-reaches-the-hub-without-mcp`, D5): the call command is the same file in call mode,
+    # and a run given no tool server needs it most. One that cannot be made refuses the run rather
+    # than telling it a command that does not exist.
+    try:
+        server_path = tool_server.pinned_server_path()
+        launcher_dir = tool_server.PIN.launcher_dir()
+    except (OSError, ValueError) as exc:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            f"Could not materialize the tool server for {agent}: {exc}",
+        ) from exc
+    mcp_command = [sys.executable, str(server_path)] if axes.tool_surface == "mcp" else None
 
     # `run_transport` is the adapter's answer for these raw flags (Codex: app-server unless the
     # runner opts out with `--no-app-server`). It reads them before the strip below, to decide
@@ -1282,6 +1339,8 @@ async def _trigger_agent_directly(
     # the agent is *told* about and the one that is *enforced* must come from one value, or an
     # agent can be refused at a line it was never shown.
     env["AW_WORKSPACE_DIR"] = effective_work_dir
+    # The call command, first on the run's `PATH` whatever its surface (D5).
+    prepend_run_path(env, launcher_dir)
     # Which approver posture this run is under. The approval tool serves both, and only this
     # tells it whether to decide against the workspace itself or put the call to the operator.
     if (control_overrides or {}).get("permission_mode") == "manual":

@@ -3289,3 +3289,167 @@ async def test_a_provider_session_reports_the_directory_its_turns_ran_in(app, au
         # No recorded directory: blank, never an invented one.
         "sess-f189-legacy": None,
     }
+
+
+# --- `a-run-reaches-the-hub-without-mcp` group 4: the call command's launchers on every run's PATH,
+# and `.agentweave/calls/` made fresh each turn (design D5, D14) -----------------------------------
+
+
+async def _trigger_capturing_env(app, auth_headers, bind_runner, agent, config):
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {agent: config}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner(agent, cli="claude")
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-path-1"}\n']
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": agent, "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200, resp.text
+            await _await_background_run()
+    return fake_spawn.call_args.kwargs
+
+
+def _path_entries(env):
+    import os
+
+    keys = [k for k in env if k.upper() == "PATH"]
+    assert len(keys) == 1, keys  # one PATH key, whatever its spelling
+    return env[keys[0]].split(os.pathsep)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "config", [{"runner": "claude"}, {"runner": "claude", "hub_client": "cli"}]
+)
+async def test_every_run_has_the_launchers_first_on_its_path(
+    app, auth_headers, bind_runner, config
+):
+    """D5: whatever the run's surface -- harmless where MCP is present, and the only way to the
+    plane where it is not. Includes `hub_client: "cli"`, a run given no tool server."""
+    from hub import tool_server
+
+    agent = "path-cli" if config.get("hub_client") else "path-mcp"
+    kwargs = await _trigger_capturing_env(app, auth_headers, bind_runner, agent, config)
+
+    entries = _path_entries(kwargs["env"])
+    assert Path(entries[0]) == tool_server.PIN.launcher_dir()
+    assert (Path(entries[0]) / "aw-tool.cmd").is_file()
+    assert (Path(kwargs["cwd"]) / ".agentweave" / "calls").is_dir()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "config", [{"runner": "claude"}, {"runner": "claude", "hub_client": "cli"}]
+)
+async def test_a_pin_that_cannot_be_made_refuses_every_run(app, auth_headers, bind_runner, config):
+    """D5 (R2 correction): the pin used to be made only for MCP runs, so a `cli` run whose pin
+    could not be written would have been told a command that does not exist."""
+    from hub import tool_server
+
+    agent = "pinfail-cli" if config.get("hub_client") else "pinfail-mcp"
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {agent: config}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner(agent, cli="claude")
+
+    def boom():
+        raise OSError("disk full")
+
+    with patch.object(tool_server.PIN, "path", boom):  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": agent, "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+
+    # The trigger route answers a refusal by queueing the input with the reason (queue-first), so
+    # the run that did not start is the assertion: no run id, and the reason names the pin.
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "queued"
+    assert body["run_id"] is None
+    assert "Could not materialize the tool server" in body["waiting_reason"]
+
+
+def test_the_launchers_go_first_on_an_existing_path_key_whatever_its_spelling(tmp_path):
+    import os
+
+    env = {"Path": "C:\\Windows" + os.pathsep + "C:\\bin", "OTHER": "x"}
+    agent_trigger.prepend_run_path(env, tmp_path)
+
+    assert list(env) == ["Path", "OTHER"]
+    assert env["Path"].split(os.pathsep) == [str(tmp_path), "C:\\Windows", "C:\\bin"]
+
+    bare = {"OTHER": "x"}
+    agent_trigger.prepend_run_path(bare, tmp_path)
+    assert bare["PATH"] == str(tmp_path)
+
+
+def _link_dir(link: Path, target: Path) -> None:
+    import os
+
+    if os.name == "nt":
+        subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)], check=True, capture_output=True
+        )
+    else:
+        link.symlink_to(target, target_is_directory=True)
+
+
+def test_a_linked_calls_directory_is_replaced_and_its_target_kept(tmp_path):
+    """D14 / review fix 1: `calls` is the Hub's own; a link there is removed (the link, never its
+    target's contents) and a real directory made in its place."""
+    import os
+
+    work = tmp_path / "work"
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    (target / "keep.json").write_text("{}")
+    (work / ".agentweave").mkdir(parents=True)
+    _link_dir(work / ".agentweave" / "calls", target)
+
+    agent_trigger.prepare_calls_dir(str(work))
+
+    calls = work / ".agentweave" / "calls"
+    assert calls.is_dir()
+    assert Path(os.path.realpath(calls)) == Path(os.path.realpath(work)) / ".agentweave" / "calls"
+    assert (target / "keep.json").is_file()
+
+
+def test_a_linked_agentweave_directory_is_left_alone_with_a_warning(tmp_path, caplog):
+    """D14: `.agentweave` may hold the project binding; the Hub creates nothing through a link
+    there, says so, and the turn proceeds (the calls-root rule then never matches)."""
+    work = tmp_path / "work"
+    work.mkdir()
+    real = tmp_path / "real-agentweave"
+    real.mkdir()
+    _link_dir(work / ".agentweave", real)
+
+    with caplog.at_level("WARNING"):
+        agent_trigger.prepare_calls_dir(str(work))
+
+    assert not (real / "calls").exists()
+    assert any(".agentweave" in rec.getMessage() for rec in caplog.records)
+
+
+def test_a_plain_file_where_calls_belongs_is_replaced(tmp_path):
+    work = tmp_path / "work"
+    (work / ".agentweave").mkdir(parents=True)
+    (work / ".agentweave" / "calls").write_text("not a directory")
+
+    agent_trigger.prepare_calls_dir(str(work))
+
+    assert (work / ".agentweave" / "calls").is_dir()
