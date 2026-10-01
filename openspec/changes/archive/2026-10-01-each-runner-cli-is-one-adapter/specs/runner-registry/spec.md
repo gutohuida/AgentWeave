@@ -34,7 +34,7 @@ Moving existing runners onto adapters SHALL NOT change any of the following for 
 - **WHEN** the Hub starts
 - **THEN** the CLIs that have an adapter, the CLIs a runner may name, the CLIs the database accepts, and the model
   catalog's providers are the same set
-- **AND** today that set is `claude` and `codex`
+- **AND** today that set is `claude`, `codex` and `copilot`
 
 #### Scenario: A runner CLI with no adapter is refused
 

@@ -2,7 +2,7 @@
 
 Run from the repo root: `py -3.11 hub/tests/fixtures/runner_adapters/capture_goldens.py`.
 This script must be run, and its output committed, *before* group 2 of
-`openspec/changes/each-runner-cli-is-one-adapter/tasks.md` edits any of the code it imports —
+`openspec/changes/archive/2026-10-01-each-runner-cli-is-one-adapter/tasks.md` edits any of the code it imports —
 the golden is only meaningful as a snapshot of pre-change behaviour. Never `git stash` /
 `git checkout --` the working tree while capturing (DEAD-ENDS 2026-09-27); this script only
 reads the code, so it is safe to run against a dirty tree.
