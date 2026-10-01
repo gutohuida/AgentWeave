@@ -93,7 +93,7 @@ Capture the goldens in 1.1–1.4 from the code **before any edit in group 2**. D
 
 ## 4. Whole-suite proof
 
-- [ ] 4.1 Every group-1 test passes against the unchanged goldens. Verify: `cd hub && py -3.11 -m pytest tests/test_runner_adapters_argv.py tests/test_runner_adapters_events.py tests/test_runner_adapters_rpc.py tests/test_runner_adapters_conformance.py tests/test_access_axes.py tests/test_runner_adapters_imports.py -q` and `git diff --stat -- hub/tests/fixtures/runner_adapters/` shows no golden changed since 1.1–1.4
+- [x] 4.1 Every group-1 test passes against the unchanged goldens. Verify: `cd hub && py -3.11 -m pytest tests/test_runner_adapters_argv.py tests/test_runner_adapters_events.py tests/test_runner_adapters_rpc.py tests/test_runner_adapters_conformance.py tests/test_access_axes.py tests/test_runner_adapters_imports.py -q` and `git diff --stat -- hub/tests/fixtures/runner_adapters/` shows no golden changed since 1.1–1.4
 - [ ] 4.2 The Hub suite, under the CI condition that `claude` is not on PATH (memory: local suite green because `claude` is on PATH). Verify: `py -3.11 -m pytest hub/tests/ -q -p no:cacheprovider`, then the same with `claude`'s directory removed from `PATH` for the process
 - [ ] 4.3 CI's lint over CI's paths (CLAUDE.md, "Code quality"). Verify: `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`
 - [ ] 4.4 `hub/tests/test_no_runner_literals.py`: no `== "claude"`, `== "codex"`, `in ("claude"` or `!= "codex"` in `hub/hub/**/*.py` outside `runner_adapters/`, `migrations/`, `db/models.py`, and `model_catalog.py`'s `CATALOG` keys. Verify: `cd hub && py -3.11 -m pytest tests/test_no_runner_literals.py -q`
