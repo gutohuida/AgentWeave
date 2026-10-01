@@ -613,6 +613,8 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
 - [x] 8.4 `py -3.11 -m pytest hub/tests/ -q` and `py -3.11 -m pytest tests/ -q`, all green. Record the counts.
   - **Done 2026-10-01**: Hub suite at `ca7107e`, `claude` removed from `PATH`: **6042 passed, 88 skipped, 0 failed**
     (14:35); `pytest tests/`: **560 passed, 3 skipped**.
+    CI (Linux) on `735c334`, run 36906639515: hub-test **6034 passed, 23 skipped, 0 failed**; CLI 556 passed;
+    UI 1790 passed. CI was red on `daed48d`..`ca7107e` for two tests that assumed Windows paths, fixed in `735c334`.
 
 ## 9. Drive on the trial Hub `:8010`
 
