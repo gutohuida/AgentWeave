@@ -267,3 +267,122 @@ def test_the_final_warning_belongs_only_to_the_mode_that_asks():
     to run out of room on; `off` was never warning in the first place."""
     assert not needs_final_warning(_policy(mode="automatic"), percent=99.0)
     assert not needs_final_warning(_policy(mode="off"), percent=99.0)
+
+
+# --------------------------------------------------------------------------- D10: thresholds
+# derived from the compaction point (task 1.12 of a-copilot-run-shows-its-credits)
+
+
+def test_compaction_percent_95_pins_claudes_built_in_numbers():
+    """C=95 (no runner, or an unknown one) must reproduce today's numbers byte-identically."""
+    policy = resolve_policy(None, None, compaction_percent=95)
+    assert (policy.threshold_value, policy.notes_value, policy.final_warning_percent) == (
+        80,
+        70,
+        92,
+    )
+
+
+def test_compaction_percent_80_gives_copilots_derived_numbers():
+    policy = resolve_policy(None, None, compaction_percent=80)
+    assert (policy.threshold_value, policy.notes_value, policy.final_warning_percent) == (
+        65,
+        55,
+        77,
+    )
+
+
+def test_a_project_percent_threshold_above_the_ceiling_is_lowered():
+    policy = resolve_policy(
+        None,
+        _project(
+            checkpoint_threshold_mode="percent",
+            checkpoint_threshold_value=80,
+            checkpoint_notes_value=78,
+        ),
+        compaction_percent=80,
+    )
+    assert policy.threshold_value == 77
+    assert policy.threshold_source == "runner_ceiling"
+    assert policy.notes_value == 67
+
+
+def test_a_claude_percent_threshold_at_the_ceiling_is_lowered_too():
+    """Q7, decided (b), 2026-09-28: the percent ceiling applies to every runner, Claude included."""
+    policy = resolve_policy(
+        None,
+        _project(
+            checkpoint_threshold_mode="percent",
+            checkpoint_threshold_value=95,
+            checkpoint_notes_value=94,
+        ),
+        compaction_percent=95,
+    )
+    assert policy.threshold_value == 92
+    assert policy.threshold_source == "runner_ceiling"
+    assert policy.notes_value == 82
+
+
+def test_a_token_threshold_is_ceiling_capped_only_below_compaction_95():
+    """Q7 (b): the token-mode percent ceiling fires only for a runner that compacts below 95% —
+    today Copilot. Claude's token thresholds stay reachable only after Claude itself compacts."""
+    copilot_policy = _policy(
+        threshold_mode="tokens",
+        threshold_value=999_999,
+        final_warning_percent=77,
+        compaction_percent=80,
+    )
+    assert should_checkpoint(copilot_policy, context_tokens=100, percent=77.0)
+    assert not should_checkpoint(copilot_policy, context_tokens=100, percent=76.0)
+
+    claude_policy = _policy(
+        threshold_mode="tokens",
+        threshold_value=999_999,
+        final_warning_percent=92,
+        compaction_percent=95,
+    )
+    assert not should_checkpoint(claude_policy, context_tokens=100, percent=92.0)
+    assert not should_checkpoint(claude_policy, context_tokens=100, percent=99.0)
+
+
+def test_needs_final_warning_reads_the_policys_own_final_warning_percent():
+    policy_80 = _policy(mode="offered", final_warning_percent=77, compaction_percent=80)
+    assert needs_final_warning(policy_80, percent=77.0)
+
+    policy_95 = _policy(mode="offered", final_warning_percent=92, compaction_percent=95)
+    assert not needs_final_warning(policy_95, percent=77.0)
+
+
+def test_token_mode_notes_ceiling_only_below_compaction_95():
+    """R3: a notes value that would never otherwise be reached in token mode still counts as
+    reached once the reading's percent passes `final_warning_percent - 10` — but only for a
+    runner that compacts below 95%."""
+    policy = _policy(
+        threshold_mode="tokens",
+        threshold_value=150_000,
+        notes_value=140_000,
+        final_warning_percent=77,
+        compaction_percent=80,
+    )
+    assert not should_request_notes(policy, context_tokens=30_000, percent=66.0)
+    assert should_request_notes(policy, context_tokens=30_000, percent=67.0)
+    assert not should_request_notes(policy, context_tokens=30_000, percent=77.0)
+
+    no_notes_policy = _policy(
+        threshold_mode="tokens",
+        threshold_value=150_000,
+        notes_value=None,
+        final_warning_percent=77,
+        compaction_percent=80,
+    )
+    assert not should_request_notes(no_notes_policy, context_tokens=30_000, percent=67.0)
+
+    claude_policy = _policy(
+        threshold_mode="tokens",
+        threshold_value=150_000,
+        notes_value=140_000,
+        final_warning_percent=92,
+        compaction_percent=95,
+    )
+    assert not should_request_notes(claude_policy, context_tokens=30_000, percent=82.0)
+    assert not should_request_notes(claude_policy, context_tokens=30_000, percent=91.0)

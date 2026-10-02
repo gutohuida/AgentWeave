@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 30,
+    "iteration": 31,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "a-copilot-run-shows-its-credits-impl",
-    "next_action": "a-copilot-run-shows-its-credits-impl: task 1.12 next (hub/tests/test_checkpoint_policy.py -- resolve_policy(None, None) and compaction_percent=95 give threshold 80, notes 70, final 92 (pins Claude); compaction_percent=80 gives 65/55/77; a project percent threshold 80 with compaction_percent=80 gives 77 and threshold_source == \"runner_ceiling\", and a notes value of 78 becomes 67; a Claude percent...). Implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Builds on slice 3 built-but-unarchived. Haiku turns only when driving.",
+    "next_action": "a-copilot-run-shows-its-credits-impl: task 1.13 next (hub/tests/test_checkpoint_cutover.py -- an offered project, a copilot runner bound to agent cop and a claude runner bound to agent cla, both with no threshold of their own; a 66% reading for cop's conversation sets checkpoint_warning == \"due\" and broadcasts one checkpoint_due with threshold_value == 65; the same reading for cla changes nothing; then a dismissed cop conversation at 78% gets \"final\"). Implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Builds on slice 3 built-but-unarchived. Haiku turns only when driving.",
     "queue": [
         {
             "id": "F479-fix",

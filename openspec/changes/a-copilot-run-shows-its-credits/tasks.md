@@ -328,7 +328,7 @@ root.
   `premium_requests: null` everywhere. `preferred_display` for a Claude allowance row is unchanged
   except for the new `runner: "claude"` key. For a newer Copilot allowance row it carries
   `runner: "copilot"`. `GET /accounting/conversations/{id}` sums a conversation's credits
-- [ ] 1.12 Extend `hub/tests/test_checkpoint_policy.py`: `resolve_policy(None, None)` and
+- [x] 1.12 Extend `hub/tests/test_checkpoint_policy.py`: `resolve_policy(None, None)` and
   `compaction_percent=95` give threshold 80, notes 70, final 92 (pins Claude). `compaction_percent=80`
   gives 65 / 55 / 77. A project percent threshold 80 with `compaction_percent=80` gives 77 and
   `threshold_source == "runner_ceiling"`, and a notes value of 78 becomes 67. A Claude percent
