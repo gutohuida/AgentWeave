@@ -11,7 +11,7 @@ the third. These drive `_execute_run`'s end through the `_fake_pty` pattern
 import json
 import time
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -607,3 +607,260 @@ async def test_the_wake_starts_the_turn_at_the_reset_with_no_other_call(
     [entry] = await _entries(agent)
     assert entry.state == "delivered"
     assert entry.delivered_in_run_id != run_id
+
+
+# ---------------------------------------------------------------------------
+# 1.15(b) -- the RPC run end holds the queue too (`a-copilot-run-shows-its-credits`)
+# ---------------------------------------------------------------------------
+
+#: Only `_execute_run` (the PTY/exec transport) reads `hold_for_reading`/`allowance_refusal` and
+#: persists `queue_agent_held` -- `_execute_rpc_run`, shared by Codex and Copilot, calls
+#: `return_run_entries` with no `refusal` and `finalize_job_run_for_conversation` unconditionally.
+#: A Copilot quota refusal over ACP is therefore counted like any other failure today: these tests
+#: are red until that gap closes.
+
+
+@pytest.fixture
+def _copilot_installed(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    exe = tmp_path / "copilot.exe"
+    exe.write_bytes(b"MZ")
+    monkeypatch.setattr("hub.copilot_probe.resolve_copilot_executable", lambda override: exe)
+    return tmp_path
+
+
+async def _copilot_agent(app, auth_headers, bind_runner, name):
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {name: {"runner": "copilot"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200, sync.text
+    await bind_runner(name, cli="copilot")
+
+
+def _rejected_copilot_sample(resets_at_epoch, *, rate_limit_type="five_hour"):
+    from hub.runner_events import AccountingSample
+
+    return AccountingSample(
+        source="copilot_prompt_result",
+        allowance={
+            "status": "rejected",
+            "resetsAt": resets_at_epoch,
+            "rateLimitType": rate_limit_type,
+        },
+    )
+
+
+def _fake_rpc_turn(session_id, *, status="failed", error="refused", sample=None):
+    """A `copilot_acp.run_turn`/`codex_appserver.run_turn` replacement: binds a session, feeds
+    *sample* through `on_accounting` when given (the quota case), then ends the turn."""
+
+    async def _run(**kwargs):
+        on_session = kwargs.get("on_session")
+        if on_session is not None:
+            await on_session(session_id)
+        on_accounting = kwargs.get("on_accounting")
+        if sample is not None and on_accounting is not None:
+            await on_accounting(sample)
+        on_thread_started = kwargs.get("on_thread_started")
+        if on_thread_started is not None:
+            await on_thread_started(session_id)
+            from hub.codex_appserver import TurnOutcome as CodexTurnOutcome
+
+            return CodexTurnOutcome(thread_id=session_id, status=status, error=error)
+        from hub.copilot_acp import TurnOutcome as CopilotTurnOutcome
+
+        return CopilotTurnOutcome(session_id=session_id, status=status, error=error)
+
+    return AsyncMock(side_effect=_run)
+
+
+def _schedule_only_the_first_real(real):
+    """A `schedule_agent` spy letting only the triggering call through, so a returned, uncounted
+    entry is not immediately re-delivered into the same fake and does not cascade forever (same
+    device as `test_failed_run_returns_input.py`'s `_schedule_after_the_first`)."""
+    seen = []
+
+    async def _wrapped(project_id, agent):
+        seen.append(agent)
+        if len(seen) == 1:
+            return await real(project_id, agent)
+        from hub.turn_scheduler import ScheduleResult
+
+        return ScheduleResult(waiting_reason="suppressed for this test")
+
+    return AsyncMock(side_effect=_wrapped)
+
+
+async def test_a_refused_copilot_turn_holds_the_queue_uncounted(
+    app, auth_headers, bind_runner, _copilot_installed
+):
+    """Task 1.15(b), the quota case: one `queue_agent_held` event, the entry returned uncounted,
+    and `provider_hold` naming the reset -- exactly 2.4/2.6's exec-path shape, reached this time
+    over the Copilot RPC transport."""
+    from hub.turn_scheduler import schedule_agent as real_schedule_agent
+
+    agent = "held-copilot"
+    await _copilot_agent(app, auth_headers, bind_runner, agent)
+    resets_at = int(time.time()) + 3600
+    sample = _rejected_copilot_sample(resets_at)
+    fake = _fake_rpc_turn("sess-held-cop-1", sample=sample)
+
+    with patch("hub.copilot_acp.run_turn", fake):
+        with patch(
+            "hub.turn_scheduler.schedule_agent",
+            _schedule_only_the_first_real(real_schedule_agent),
+        ):
+            response = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": agent, "message": "please do it", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert response.status_code == 200, response.text
+            run_id = response.json()["run_id"]
+            await _await_background_run()
+
+    [entry] = await _entries(agent)
+    assert entry.state == "queued"
+    assert entry.delivery_attempts == 0
+    assert entry.allowance_refusals == 1
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        assert run.status == "failed"
+        hold = await provider_allowance.provider_hold(db, "proj-test", agent)
+    assert hold is not None
+    assert hold.resets_at == datetime.fromtimestamp(resets_at, tz=timezone.utc)
+    assert hold.limit_type == "five_hour"
+
+    [event] = await _held_events()
+    assert event.data["agent"] == agent
+    assert event.data["run_id"] == run_id
+    assert event.data["entry_ids"] == [entry.id]
+    assert event.data["limit_type"] == "five_hour"
+
+
+async def test_a_refused_copilot_firing_stays_in_progress_until_delivered(
+    app, auth_headers, bind_runner, _copilot_installed
+):
+    """The same firing-status fact 2.5 proves for the exec path (design D13, task A4.3): a
+    Copilot quota refusal's own job firing is not finalised while its input is still held."""
+    from hub.scheduler import JobScheduler
+
+    agent = "job-held-copilot"
+    await _copilot_agent(app, auth_headers, bind_runner, agent)
+    resets_at = int(time.time()) + 3600
+    sample = _rejected_copilot_sample(resets_at)
+    fake = _fake_rpc_turn("sess-job-cop-1", sample=sample)
+
+    async with async_session_factory() as db:
+        db.add(
+            AIJob(
+                id="job-held-copilot",
+                project_id="proj-test",
+                name="Held Copilot job",
+                agent=agent,
+                message="standing instruction",
+                cron="*/5 * * * *",
+                session_mode="new",
+                enabled=True,
+            )
+        )
+        await db.commit()
+
+    with patch("hub.copilot_acp.run_turn", fake):
+        async with async_session_factory() as db:
+            job = await db.get(AIJob, "job-held-copilot")
+            await JobScheduler()._fire_job_internal(job, "scheduled", session=db)
+        await _await_background_run()
+
+    fake.assert_called_once()
+    async with async_session_factory() as db:
+        [firing] = (
+            (await db.execute(select(JobRun).where(JobRun.job_id == "job-held-copilot")))
+            .scalars()
+            .all()
+        )
+    assert firing.status == "in_progress"
+
+
+async def test_a_copilot_rate_limit_refusal_persists_no_held_event(
+    app, auth_headers, bind_runner, _copilot_installed
+):
+    """Negative control (task 1.15(b)'s own text): `errorType: "rate_limit"` names no rejected
+    reading (1.15(a)'s own control), so this run's entry is counted as an ordinary failure, not
+    held -- this must stay true once the quota case above is fixed."""
+    from hub.turn_scheduler import schedule_agent as real_schedule_agent
+
+    agent = "rate-limited-copilot"
+    await _copilot_agent(app, auth_headers, bind_runner, agent)
+    fake = _fake_rpc_turn("sess-rate-cop-1", sample=None)
+
+    with patch("hub.copilot_acp.run_turn", fake):
+        with patch(
+            "hub.turn_scheduler.schedule_agent",
+            _schedule_only_the_first_real(real_schedule_agent),
+        ):
+            response = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": agent, "message": "please do it", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert response.status_code == 200, response.text
+            await _await_background_run()
+
+    [entry] = await _entries(agent)
+    assert entry.state == "queued"
+    assert entry.delivery_attempts == 1
+    assert entry.allowance_refusals == 0
+    assert await _held_events() == []
+
+
+async def test_a_refused_codex_rpc_run_is_unchanged(app, auth_headers, bind_runner):
+    """Task 1.15(b)'s own text: a Codex RPC run's end is unchanged by closing the Copilot gap --
+    Codex's `AccountingSample` never carries a `rejected` allowance, so it keeps today's ordinary
+    counted-failure handling, not the hold."""
+    from hub.turn_scheduler import schedule_agent as real_schedule_agent
+
+    agent = "returns-appserver-held"
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {agent: {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200, sync.text
+    created = await app.post(
+        "/api/v1/projects/proj-test/runners",
+        json={"name": f"{agent}-runner", "cli": "codex", "flags": ["--app-server"]},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    bound = await app.patch(
+        f"/api/v1/projects/proj-test/agents/{agent}",
+        json={"runner_id": created.json()["id"]},
+        headers=auth_headers,
+    )
+    assert bound.status_code == 200, bound.text
+    fake = _fake_rpc_turn("thread-held-1", sample=None)
+
+    with patch("hub.codex_appserver.run_turn", fake):
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/codex"):
+            with patch(
+                "hub.turn_scheduler.schedule_agent",
+                _schedule_only_the_first_real(real_schedule_agent),
+            ):
+                response = await app.post(
+                    "/api/v1/projects/proj-test/agent/trigger",
+                    json={"agent": agent, "message": "please do it", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert response.status_code == 200, response.text
+                await _await_background_run()
+
+    [entry] = await _entries(agent)
+    assert entry.state == "queued"
+    assert entry.delivery_attempts == 1
+    assert entry.allowance_refusals == 0
+    assert await _held_events() == []

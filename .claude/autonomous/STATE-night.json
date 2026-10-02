@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 34,
+    "iteration": 35,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "a-copilot-run-shows-its-credits-impl",
-    "next_action": "a-copilot-run-shows-its-credits-impl: task 1.15(b) next, hub/tests/test_a_refused_turn_holds_the_queue.py only (1.15(a) is done, iter 34, commit pending -- see tasks.md's dated note; slices 1 and 2 are confirmed built, the old 'Rebase at IMPL' note is stale). Add an RPC case patching the Copilot transport's module-level run_turn (slice 1 D9's seam) to deliver a failed TurnOutcome plus the rejected-reading sample; assert one queue_agent_held event persisted, the run's entries returned and not counted as a delivery attempt, the job run not finalised, provider_hold naming the reset, no queue_agent_held for an errorType:rate_limit run, and a Codex RPC run's end unchanged. Read the file's existing fixtures (app, auth_headers, bind_runner) and its existing RPC-shaped test(s) before writing. Once (b) passes its own red-check, tick 1.15 in tasks.md and move to 1.16. Implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Haiku turns only when driving.",
+    "next_action": "a-copilot-run-shows-its-credits-impl: task 1.16 next (1.15 done in full, iter 35 -- see tasks.md's dated note; both (a) and (b) ticked). Before touching Python again, read the tail of iter 35's backgrounded full hub/tests/ suite run (background task b3f028umm, or the harness's own record of it) for anything task 1.15(b)'s new fixtures (home/executable monkeypatches in test_a_refused_turn_holds_the_queue.py, a schedule_agent patch) disturbed elsewhere; log what it found before proceeding. Then task 1.16, UI: extend hub/ui/src/__tests__/accountingPresentation.test.tsx -- formatAiCredits(275856000) is '0.28 AI credits', formatAiCredits(4000000) is '<0.01 AI credits', formatAiCredits(null) is null; accountingDisplayLabel with a Copilot allowance {status: 'allowed', rateLimitType: 'monthly', resetsAt, remainingPercentage: 96.5} and runner: 'copilot' starts 'Copilot monthly allowance available'; existing Claude label strings unchanged. Implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Haiku turns only when driving.",
     "queue": [
         {
             "id": "F479-fix",

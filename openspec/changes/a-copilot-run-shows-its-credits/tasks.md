@@ -353,7 +353,7 @@ root.
 - [x] 1.14 Extend `hub/tests/test_migrations.py`: upgrade to head adds the four `turn_usage` and two
   `worker_invocations` columns, nullable; downgrade removes them; a pre-existing `turn_usage` row
   survives with NULLs. Fails today
-- [ ] 1.15 The run end, in two files.
+- [x] 1.15 The run end, in two files.
   - (a) `hub/tests/test_copilot_acp_run_turn.py` (slice 2's scripted fake session): a session whose raw
     events include the quota refusal and whose `session/prompt` returns `stopReason: "end_turn"` yields
     `TurnOutcome.status == "failed"` and one `on_accounting` call carrying the rejected reading. This
@@ -388,7 +388,30 @@ root.
   future wiring that fires on every JSON-RPC error rather than quota ones specifically). Full-file
   regression: `py -3.11 -m pytest hub/tests/test_copilot_acp_run_turn.py -q`: 50 passed, 3 failed
   (the new quota cases only, no other breakage). `ruff check` clean; `black --check
-  --target-version py311` needed one reformat, applied. **(b) not started** -- next.
+  --target-version py311` needed one reformat, applied.
+
+  **(b) done, iter 35, 2026-10-02.** Four tests added to `hub/tests/test_a_refused_turn_holds_the_
+  queue.py`: `test_a_refused_copilot_turn_holds_the_queue_uncounted` (patches `hub.copilot_acp.
+  run_turn` to feed a rejected `AccountingSample` through `on_accounting`; asserts one entry
+  returned `queued` with `delivery_attempts == 0`/`allowance_refusals == 1`, a `provider_hold`
+  naming the reset and its `limit_type`, and exactly one `queue_agent_held` event), `test_a_refused_
+  copilot_firing_stays_in_progress_until_delivered` (same quota turn fired through `JobScheduler.
+  _fire_job_internal`; asserts the `JobRun` stays `in_progress`), `test_a_copilot_rate_limit_
+  refusal_persists_no_held_event` (no sample delivered, mirroring 1.15(a)'s own `rate_limit`
+  control; asserts the entry is counted as an ordinary failure and no `queue_agent_held` row
+  exists), and `test_a_refused_codex_rpc_run_is_unchanged` (same shape over `hub.codex_appserver.
+  run_turn`, bound `--app-server`; asserts Codex keeps today's counted-failure handling). Verified
+  each of the first two fails for the stated reason, not a fixture error: `delivery_attempts == 1`
+  (counted, not 0) and `firing.status == "failed"` (finalised, not `in_progress`) -- both because
+  `_execute_rpc_run` (`hub/hub/api/v1/agent_trigger.py:3900-3984`) calls `return_run_entries(db,
+  run_id)` with no `refusal` and `finalize_job_run_for_conversation` unconditionally, unlike
+  `_execute_run`'s D2/D5 block (`:2963-3026`) that `_execute_rpc_run` never gained. The negative
+  controls (rate-limit, Codex) pass today, unchanged, confirming they describe behaviour the fix
+  must not disturb. `py -3.11 -m pytest hub/tests/test_a_refused_turn_holds_the_queue.py -v`: 14
+  passed (all pre-existing, no regression) + 2 passed (the two new controls) + 2 failed (the two
+  new quota cases, as predicted) = 16/18. `ruff check` clean; `black --check --target-version
+  py311` clean, no reformat needed. `openspec validate a-copilot-run-shows-its-credits --strict`:
+  valid.
 - [ ] 1.16 UI, extend `hub/ui/src/__tests__/accountingPresentation.test.tsx`: `formatAiCredits(275856000)`
   is `0.28 AI credits`, `formatAiCredits(4000000)` is `<0.01 AI credits`, and `formatAiCredits(null)` is
   `null`. `accountingDisplayLabel` with a Copilot allowance `{status: 'allowed', rateLimitType:
