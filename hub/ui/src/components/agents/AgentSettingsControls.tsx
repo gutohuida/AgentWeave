@@ -351,7 +351,9 @@ export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
   const updateMode = useUpdateAgentCheckpointMode()
   const updateThreshold = useUpdateAgentCheckpointOverride()
   const projectId = useConfigStore((state) => state.selectedProjectId)
-  const { data: projectSettings } = useProjectSettings(projectId ?? null)
+  const { data: projectSettings, isError: projectSettingsFailed } = useProjectSettings(
+    projectId ?? null,
+  )
   const storedMode = agent.checkpoint_threshold_mode ?? 'percent'
   const stored = agent.checkpoint_threshold_value ?? null
   const [unit, setUnit] = useState<'percent' | 'tokens'>(storedMode)
@@ -428,6 +430,12 @@ export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
       {ceilingNote && (
         <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>
           {ceilingNote}
+        </p>
+      )}
+      {!hasOverride && projectSettingsFailed && (
+        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+          The project's threshold could not be read, so where this agent's checkpoint fires is not
+          shown.
         </p>
       )}
       {(updateMode.isError || updateThreshold.isError) && (

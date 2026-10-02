@@ -55,7 +55,7 @@ export function ProjectSettingsPanel() {
   const { data: settings } = useProjectSettings(projectId ?? null)
   const { data: mainBranch } = useMainBranchSuggestion(projectId ?? null)
   const { data: runners = [] } = useRunners()
-  const { data: projectAgents = [] } = useAgents()
+  const { data: projectAgents = [], isError: projectAgentsFailed } = useAgents()
   const { data: catalog } = useModelCatalog()
   const update = useUpdateProjectSettings(projectId ?? '')
   const relocate = useRelocateProject(projectId ?? '')
@@ -265,6 +265,12 @@ export function ProjectSettingsPanel() {
             {note}
           </p>
         ))}
+        {projectAgentsFailed && (
+          <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+            The project's agents could not be read, so a threshold lowered for their runners is
+            not shown.
+          </p>
+        )}
       </SettingsRow>
       <SettingsRow
         label="Ask for notes at"

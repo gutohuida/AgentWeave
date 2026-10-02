@@ -62,10 +62,11 @@ let suggestion: { suggestion: string | null; chosen: string | null; is_repositor
  *  once it does. */
 type AgentWithCompaction = AgentSummary & { checkpoint_compaction_percent?: number | null }
 let projectAgents: AgentWithCompaction[] = []
+let projectAgentsFailed = false
 
 vi.mock('@/api/agents', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/agents')>()),
-  useAgents: () => ({ data: projectAgents, isLoading: false }),
+  useAgents: () => ({ data: projectAgents, isLoading: false, isError: projectAgentsFailed }),
 }))
 
 vi.mock('@/api/projects', () => ({
@@ -281,6 +282,14 @@ describe('project-level checkpoint-ceiling notice (task 1.18(b), design D10)', (
     settings = makeSettings()
     settings.checkpoint_threshold_mode = 'percent'
     settings.checkpoint_threshold_value = 80
+    projectAgentsFailed = false
+  })
+
+  it('says so when the project agents could not be read', () => {
+    projectAgents = []
+    projectAgentsFailed = true
+    render(<ProjectSettingsPanel />)
+    expect(screen.queryByText(/agents could not be read/)).toBeInTheDocument()
   })
 
   it('names an agent whose runner compacts below the configured threshold', () => {

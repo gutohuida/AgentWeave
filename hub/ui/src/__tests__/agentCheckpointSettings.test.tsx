@@ -32,14 +32,21 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
 })
 
 /** The project's saved threshold, which an agent with no override of its own inherits (D10). */
-let projectThreshold: { checkpoint_threshold_mode: 'percent' | 'tokens' | null; checkpoint_threshold_value: number | null } = {
+/** `null` stands for a project settings read that failed. */
+let projectThreshold: { checkpoint_threshold_mode: 'percent' | 'tokens' | null; checkpoint_threshold_value: number | null } | null = {
   checkpoint_threshold_mode: null,
   checkpoint_threshold_value: null,
 }
 
 vi.mock('@/api/projects', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/projects')>()
-  return { ...actual, useProjectSettings: () => ({ data: projectThreshold, isLoading: false }) }
+  return {
+    ...actual,
+    useProjectSettings: () =>
+      projectThreshold === null
+        ? { data: undefined, isLoading: false, isError: true }
+        : { data: projectThreshold, isLoading: false, isError: false },
+  }
 })
 
 vi.mock('@/api/agents', async (importOriginal) => {
@@ -225,6 +232,13 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
     modeMutate.mockReset()
     grantMutate.mockReset()
     projectThreshold = { checkpoint_threshold_mode: null, checkpoint_threshold_value: null }
+  })
+
+  it('says so when the inherited project threshold could not be read', () => {
+    projectThreshold = null
+    roster = [agent({ checkpoint_compaction_percent: 95 })]
+    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    expect(screen.queryByText(/project's threshold could not be read/)).toBeInTheDocument()
   })
 
   it('an agent with no override is judged against the project threshold it inherits (task 6.3)', () => {
