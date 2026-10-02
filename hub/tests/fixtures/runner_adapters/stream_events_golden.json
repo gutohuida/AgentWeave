@@ -122,7 +122,12 @@
       "reasoning_tokens": null,
       "model": null,
       "api_equivalent_usd_micros": 58752,
-      "allowance": null
+      "allowance": null,
+      "ai_nano_aiu": null,
+      "premium_requests": null,
+      "session_nano_aiu_total": null,
+      "session_premium_requests_total": null,
+      "credit_session_new": null
     },
     "session_id": "39ad524c-b7f7-4ae6-a480-2c57ee1180e2"
   },
@@ -182,7 +187,12 @@
       "reasoning_tokens": null,
       "model": "claude-sonnet-5",
       "api_equivalent_usd_micros": 12500,
-      "allowance": null
+      "allowance": null,
+      "ai_nano_aiu": null,
+      "premium_requests": null,
+      "session_nano_aiu_total": null,
+      "session_premium_requests_total": null,
+      "credit_session_new": null
     },
     "session_id": "sess-usage"
   },
@@ -300,7 +310,12 @@
       "reasoning_tokens": 0,
       "model": "gpt-5.5",
       "api_equivalent_usd_micros": null,
-      "allowance": null
+      "allowance": null,
+      "ai_nano_aiu": null,
+      "premium_requests": null,
+      "session_nano_aiu_total": null,
+      "session_premium_requests_total": null,
+      "credit_session_new": null
     },
     "session_id": null
   },
