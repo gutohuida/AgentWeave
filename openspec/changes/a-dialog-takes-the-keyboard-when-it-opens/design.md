@@ -196,3 +196,15 @@ None. The decision is recorded in the operator review above.
   suite re-run (both new assertions failed — focus stayed on the trigger, matching the pre-fix
   claim — 16/18 passed, the 2 new ones red), then the stash was popped and the suite re-run again
   (18/18, 11/11). `npm run lint` and `openspec validate --strict` both clean.
+- Impl 2026-10-02 (tasks 2.7, 1.12): `SetupModal` joined `useDialogFocus` — its own focus effect
+  (`:20-22`) and the `urlInput` ref removed, `panelRef`/`tabIndex={-1}` on the `role="dialog"` div,
+  `useDialogFocus(open, panelRef, onClose)` called above the `if (!open) return null` early return
+  (its `active` argument is the `open` prop itself, since `App.tsx:617` always mounts this component
+  and only toggles `open` — confirmed by task 1.12's rerender-based test, not an unmount/remount).
+  `data-dialog-initial-focus` moved from the removed ref onto the Hub URL input. Wrote 1.12's test
+  test-first (the deviation iteration 13 flagged for 1.9/1.10, continued from 1.11): extended
+  `setupModalAccessibility.test.tsx` with a trigger-button harness, `rerender`-ing the same component
+  instance between `open={false}` and `open` per the task text, rather than `fireEvent.keyDown`
+  Escape as the other restore tests use — ran alone first against the untouched component and
+  confirmed genuinely red (focus landed on `<body>`, matching the task's prediction exactly), then
+  green after the component change (2/2 in the file).

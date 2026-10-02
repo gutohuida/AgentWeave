@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
+import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { useConfigStore, type ModeId } from '@/store/configStore'
 
 interface SetupModalProps {
@@ -15,11 +16,9 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
   const [key,          setKey]          = useState(apiKey || '')
   const [proj,         setProj]         = useState(selectedProjectId || '')
   const [selectedMode, setSelectedMode] = useState<ModeId>(mode)
-  const urlInput = useRef<HTMLInputElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (open) urlInput.current?.focus()
-  }, [open])
+  useDialogFocus(open, panelRef, onClose)
 
   if (!open) return null
 
@@ -45,6 +44,8 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
       style={{ background: 'var(--scrim)' }}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
         className="setup-dialog elevation-overlay w-full max-w-md p-6"
         role="dialog"
         aria-modal="true"
@@ -73,7 +74,7 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
               Hub URL
             </label>
             <input
-              ref={urlInput}
+              data-dialog-initial-focus
               id="setup-hub-url"
               type="url"
               value={url}
