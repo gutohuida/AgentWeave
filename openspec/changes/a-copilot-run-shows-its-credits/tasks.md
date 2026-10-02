@@ -371,7 +371,24 @@ root.
     reset. A run with `errorType "rate_limit"` persists no `queue_agent_held`, and a Codex RPC run's
     end is unchanged.
 
-  Both fail today. (Rebase at IMPL: slices 1 and 2 unbuilt at R2)
+  Both fail today. **(a) done, iter 34, 2026-10-02**: slices 1 and 2 are no longer unbuilt --
+  `each-runner-cli-is-one-adapter` and `a-copilot-agent-runs-over-acp` are both archived
+  (`openspec/changes/archive/2026-10-01-each-runner-cli-is-one-adapter`,
+  `2026-09-30-a-copilot-agent-runs-over-acp`) and `RunnerAdapter`/`get_adapter`/`_execute_rpc_run`/
+  `CopilotAdapter`/`copilot_acp.run_turn` all exist -- the stale "(Rebase at IMPL: slices 1 and 2
+  unbuilt at R2)" note below was checked fresh and no longer holds. What is still unbuilt, and is
+  (a)'s own reason every new test fails, is slice 4's wiring: `run_turn`'s own docstring still says
+  `on_accounting` is not called by this slice, and `CopilotUsageLedger.observe_prompt_error` does
+  not exist, though `CopilotUsageLedger` itself and its quota recognition are already built and
+  tested in isolation (1.1-1.9). Four tests added to `TestRunEndQuotaRefusalCallsOnAccountingWith
+  RejectedReading` in `test_copilot_acp_run_turn.py`: the armed-session.error case, the JSON-RPC
+  quota-error case, the process-exit-after-quota-error case (all three fail today exactly on their
+  `on_accounting` assertion, confirmed by running each alone), and a `rate_limit` negative control
+  (passes today, since no case calls `on_accounting` yet -- kept as a regression guard against a
+  future wiring that fires on every JSON-RPC error rather than quota ones specifically). Full-file
+  regression: `py -3.11 -m pytest hub/tests/test_copilot_acp_run_turn.py -q`: 50 passed, 3 failed
+  (the new quota cases only, no other breakage). `ruff check` clean; `black --check
+  --target-version py311` needed one reformat, applied. **(b) not started** -- next.
 - [ ] 1.16 UI, extend `hub/ui/src/__tests__/accountingPresentation.test.tsx`: `formatAiCredits(275856000)`
   is `0.28 AI credits`, `formatAiCredits(4000000)` is `<0.01 AI credits`, and `formatAiCredits(null)` is
   `null`. `accountingDisplayLabel` with a Copilot allowance `{status: 'allowed', rateLimitType:

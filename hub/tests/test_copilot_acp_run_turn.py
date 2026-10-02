@@ -4184,3 +4184,245 @@ async def test_a_pinned_executables_verdict_is_filed_under_that_executable(monke
     copilot_acp._record_probe(present=True, authorized=True, reason=None)
     assert recorded[0]["cli_override"] == "C:/pinned/copilot.exe"
     assert "cli_override" not in recorded[1]
+
+
+class TestRunEndQuotaRefusalCallsOnAccountingWithRejectedReading:
+    """Task 1.15(a), design D8 ("A refused turn must end failed", "A refused turn must not raise
+    either"). `hub.copilot_usage.CopilotUsageLedger` already recognises a quota refusal in
+    isolation (`test_copilot_usage.py`'s 1.9: `observe_event("session.error", {"errorType":
+    "quota", "errorCode": "quota_exceeded"})` gives a reading whose `status == "rejected"`), but
+    `run_turn` itself does not yet instantiate that ledger or feed it anything -- this file's own
+    module docstring for `run_turn` still says "`on_accounting` is not called by this slice (D11:
+    each turn is recorded with no measured usage; slice 4 owns the ledger)", and
+    `CopilotUsageLedger.observe_prompt_error` (named by design.md for the JSON-RPC-error case,
+    *"Required of slices 1 and 2"*) does not exist. So every case here is expected to fail today on
+    its `on_accounting` assertion specifically; the first case's `outcome.status == "failed"` is
+    already true under the pre-existing D10 rule ("a session error fails the turn",
+    `TestArmedSessionErrorFailsUnlessStopWins`) and is checked here only for corroboration, the
+    same restraint `TestPostPromptFailuresReturnFailedOutcomeNotRaise` applies to its own
+    analogous checks.
+    """
+
+    @staticmethod
+    def _quota_session_error_notification():
+        return {
+            "notification": "github.com/copilot/sessionEvent",
+            "params": {
+                "sessionId": SESSION_ID,
+                "type": "session.error",
+                "timestamp": "2026-09-30T00:00:09.000Z",
+                "data": {
+                    "errorType": "quota",
+                    "errorCode": "quota_exceeded",
+                    "message": "You have exceeded your quota",
+                },
+            },
+        }
+
+    async def test_armed_quota_session_error_then_end_turn_calls_on_accounting_with_rejected_reading(
+        self, monkeypatch
+    ):
+        accounting_calls = []
+        script = _session_established_script(
+            tail_entries=[
+                self._quota_session_error_notification(),
+                {
+                    "response": {
+                        "stopReason": "end_turn",
+                        "usage": {"inputTokens": 1, "outputTokens": 1},
+                    }
+                },  # design D8: Copilot may still answer end_turn after a quota session.error
+            ]
+        )
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd=WORK,
+            env=None,
+            prompt="Summarise the failing build.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace=WORK,
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector([]),
+            on_session=_collector([]),
+            on_accounting=_collector(accounting_calls),
+        )
+
+        assert outcome.status == "failed", (
+            "design.md D10: an armed session.error fails the turn whatever stopReason "
+            f"session/prompt returns -- got status {outcome.status!r}"
+        )
+        assert len(accounting_calls) == 1, (
+            "design.md D8: a quota refusal must reach the caller through exactly one "
+            f"on_accounting call carrying the rejected reading, got {len(accounting_calls)}"
+        )
+        sample = accounting_calls[0]
+        assert (
+            sample.allowance is not None and sample.allowance["status"] == "rejected"
+        ), f"the rejected reading must reach on_accounting, got {sample.allowance!r}"
+
+    async def test_json_rpc_quota_error_on_prompt_returns_failed_and_calls_on_accounting(
+        self, monkeypatch
+    ):
+        """Design.md D8, R3: a `session/prompt` JSON-RPC error whose `data` carries the quota
+        fields must be recognised the same way the armed-notification case is, and `run_turn`
+        must return the failed outcome rather than let `CopilotACPError` propagate (R3
+        correction: "A refused turn must not raise either")."""
+        accounting_calls = []
+        script = _session_established_script(
+            tail_entry={
+                "error": {
+                    "code": -32000,
+                    "message": "Quota exceeded",
+                    "data": {"errorType": "quota", "errorCode": "quota_exceeded"},
+                }
+            }
+        )
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        # No pytest.raises: design.md's own text is "raise nothing" here, exactly as
+        # TestPostPromptFailuresReturnFailedOutcomeNotRaise's JSON-RPC-error case asserts -- a
+        # run_turn that let CopilotACPError propagate would fail this call itself.
+        outcome = await run_turn(
+            cwd=WORK,
+            env=None,
+            prompt="Summarise the failing build.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace=WORK,
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector([]),
+            on_session=_collector([]),
+            on_accounting=_collector(accounting_calls),
+        )
+
+        assert outcome.status == "failed"
+        assert outcome.session_id == SESSION_ID
+        assert len(accounting_calls) == 1, (
+            "design.md D8/R3: a JSON-RPC quota error's structured data must reach on_accounting "
+            f"the same way an armed session.error does, got {len(accounting_calls)}"
+        )
+        sample = accounting_calls[0]
+        assert (
+            sample.allowance is not None and sample.allowance["status"] == "rejected"
+        ), f"got {sample.allowance!r}"
+
+    async def test_process_exit_after_quota_session_error_returns_failed_and_calls_on_accounting(
+        self, monkeypatch
+    ):
+        """Design.md D8, R3's second addition: a process that exits after a quota
+        `session.error` and before `session/prompt` resolves must still reach `on_accounting`
+        with the rejected reading, and must not raise (the fake's `process_exited` entry raises
+        an `AppServerError` from inside `request()`, standing in for the real process's read
+        loop hitting EOF)."""
+        accounting_calls = []
+        script = _session_established_script(
+            tail_entries=[
+                self._quota_session_error_notification(),
+                {"process_exited": True},
+            ]
+        )
+        fake = _FakeACPSession(script, stderr_tail="copilot: killed\n")
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd=WORK,
+            env=None,
+            prompt="Summarise the failing build.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace=WORK,
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector([]),
+            on_session=_collector([]),
+            on_accounting=_collector(accounting_calls),
+        )
+
+        assert outcome.status == "failed"
+        assert len(accounting_calls) == 1, (
+            "a quota session.error armed just before the process died must still reach "
+            f"on_accounting with the rejected reading, got {len(accounting_calls)}"
+        )
+        sample = accounting_calls[0]
+        assert (
+            sample.allowance is not None and sample.allowance["status"] == "rejected"
+        ), f"got {sample.allowance!r}"
+
+    async def test_json_rpc_rate_limit_error_returns_failed_with_no_rejected_reading(
+        self, monkeypatch
+    ):
+        """Task 1.15(a)'s own text: "The same JSON-RPC error with errorType "rate_limit" also
+        returns slice 2's failed outcome (its D12 R3), with no rejected reading, so no hold"
+        (contract reconciliation, 2026-09-28). Kept beside the quota cases above as a negative
+        control: a passing implementation of this test alone, with the quota ones still failing,
+        would mean on_accounting was wired to fire on every JSON-RPC error rather than quota
+        ones specifically."""
+        accounting_calls = []
+        script = _session_established_script(
+            tail_entry={
+                "error": {
+                    "code": -32000,
+                    "message": "Secondary rate limit",
+                    "data": {"errorType": "rate_limit", "errorCode": "secondary_rate_limit"},
+                }
+            }
+        )
+        fake = _FakeACPSession(script)
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cwd=WORK,
+            env=None,
+            prompt="Summarise the failing build.",
+            model=None,
+            resume_session_id=None,
+            agent=AGENT_NAME,
+            per_turn_context="## Workspace\n- root: C:\\work",
+            tool_surface_context="## Tools\n- agentweave-send_message",
+            stable_context=None,
+            control_overrides=None,
+            told_access_path="mcp",
+            permission_mode=None,
+            workspace=WORK,
+            restrict_spec_writes=False,
+            extra_flags=None,
+            on_event=_collector([]),
+            on_session=_collector([]),
+            on_accounting=_collector(accounting_calls),
+        )
+
+        assert outcome.status == "failed"
+        rejected = [
+            c for c in accounting_calls if c.allowance and c.allowance.get("status") == "rejected"
+        ]
+        assert rejected == [], (
+            "design.md D8, task 1.15(a)'s own text: errorType rate_limit must give no rejected "
+            f"reading, so no hold -- got {rejected!r}"
+        )

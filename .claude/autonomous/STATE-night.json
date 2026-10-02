@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 33,
+    "iteration": 34,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "a-copilot-run-shows-its-credits-impl",
-    "next_action": "a-copilot-run-shows-its-credits-impl: task 1.15 next (hub/tests/test_copilot_acp_run_turn.py and hub/tests/test_a_refused_turn_holds_the_queue.py -- the run-end quota-refusal cases, D8/D12, two files/parts (a) and (b)). tasks.md flags 'Rebase at IMPL: slices 1 and 2 unbuilt at R2' -- check whether slices 1/2 are actually built before writing the test; if either is unbuilt, log it and move to the next queue item rather than guessing at an unbuilt seam. Implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Builds on slice 3 built-but-unarchived. Haiku turns only when driving.",
+    "next_action": "a-copilot-run-shows-its-credits-impl: task 1.15(b) next, hub/tests/test_a_refused_turn_holds_the_queue.py only (1.15(a) is done, iter 34, commit pending -- see tasks.md's dated note; slices 1 and 2 are confirmed built, the old 'Rebase at IMPL' note is stale). Add an RPC case patching the Copilot transport's module-level run_turn (slice 1 D9's seam) to deliver a failed TurnOutcome plus the rejected-reading sample; assert one queue_agent_held event persisted, the run's entries returned and not counted as a delivery attempt, the job run not finalised, provider_hold naming the reset, no queue_agent_held for an errorType:rate_limit run, and a Codex RPC run's end unchanged. Read the file's existing fixtures (app, auth_headers, bind_runner) and its existing RPC-shaped test(s) before writing. Once (b) passes its own red-check, tick 1.15 in tasks.md and move to 1.16. Implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Haiku turns only when driving.",
     "queue": [
         {
             "id": "F479-fix",
