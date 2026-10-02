@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChartersPage } from '@/components/charters/ChartersPage'
@@ -87,6 +87,22 @@ describe('charter management UI', () => {
       { name: 'Incident Commander', content: 'Coordinate incident response.' },
       expect.any(Object),
     )
+  })
+
+  it('puts focus on the Name input when the form opens, and returns it to the opener on Escape (task 1.9)', async () => {
+    const user = userEvent.setup()
+    render(<ChartersPage />)
+
+    const trigger = screen.getByRole('button', { name: 'New Charter' })
+    trigger.focus()
+    await user.click(trigger)
+
+    expect(screen.getByLabelText('Charter name')).toHaveFocus()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
   })
 
   it('reassigns a charter from the agent settings page', async () => {

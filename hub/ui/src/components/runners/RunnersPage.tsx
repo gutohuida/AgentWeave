@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
 import { Input, Select } from '@/components/ui/input'
 import { SettingsSection } from '@/components/environment/SettingsSection'
+import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { tint } from '@/lib/colorTint'
 import {
   useRunners,
@@ -225,6 +226,9 @@ function RunnerForm({
   // provider and implying Claude might one day drift the same way.
   const sourceLine = cli === 'codex' ? catalogSourceLine(providerEntry?.source) : null
 
+  const panelRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(true, panelRef, onCancel)
+
   return (
     <div
       className="fixed inset-0 flex items-center justify-center z-50"
@@ -232,6 +236,8 @@ function RunnerForm({
       onClick={onCancel}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="runner-form-title"
@@ -249,6 +255,7 @@ function RunnerForm({
             </label>
             <Input
               id="runner-name"
+              data-dialog-initial-focus
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="px-3 py-2 text-sm"

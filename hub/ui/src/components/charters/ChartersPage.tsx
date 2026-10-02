@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { Input, Textarea } from '@/components/ui/input'
 import { SettingsSection } from '@/components/environment/SettingsSection'
+import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { tint } from '@/lib/colorTint'
 import { readableApiError } from '@/api/client'
 import {
@@ -244,6 +245,8 @@ function CharterForm({
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [content, setContent] = useState(initial?.content ?? '')
+  const panelRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(true, panelRef, onCancel)
 
   return (
     <div
@@ -252,6 +255,8 @@ function CharterForm({
       onClick={onCancel}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-label={title}
         aria-modal="true"
@@ -267,6 +272,7 @@ function CharterForm({
         <Input
           id="charter-name"
           aria-label="Charter name"
+          data-dialog-initial-focus
           value={name}
           onChange={(event) => setName(event.target.value)}
           className="mb-3 px-3 py-2 text-sm"

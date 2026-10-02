@@ -187,3 +187,12 @@ None. The decision is recorded in the operator review above.
   as the post-fix behaviour (`expect(trigger).toHaveFocus()`), which is red today for that reason —
   this is 1.6's failing test, and 1.7 is the same assertion passing once the three `autoFocus`
   attributes become D1 marks.
+- Impl 2026-10-02 (tasks 2.5, 1.9, 1.10): applied D5's row for `CharterForm` and `RunnerForm` — a
+  `panelRef` on each `role="dialog"` element with `tabIndex={-1}`, `useDialogFocus(true, panelRef,
+  onCancel)`, and `data-dialog-initial-focus` on `#charter-name`/`#runner-name`
+  (`ChartersPage.tsx`, `RunnersPage.tsx`). Wrote 1.9/1.10's tests after the implementation this time
+  (not test-first, unlike 1.6/2.4); to still get genuine red-then-green evidence rather than a
+  passing-today record, the two component files were `git stash`-ed with the tests kept staged, the
+  suite re-run (both new assertions failed — focus stayed on the trigger, matching the pre-fix
+  claim — 16/18 passed, the 2 new ones red), then the stash was popped and the suite re-run again
+  (18/18, 11/11). `npm run lint` and `openspec validate --strict` both clean.

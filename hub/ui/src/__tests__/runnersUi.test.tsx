@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
@@ -202,6 +202,22 @@ describe('runner management UI', () => {
     await user.click(screen.getByRole('button', { name: 'New Runner' }))
     // Claude is the default CLI when the dialog opens.
     expect(screen.queryByText(/Built-in list|As listed by your installed Codex CLI/)).not.toBeInTheDocument()
+  })
+
+  it('puts focus on the Name input when the form opens, and returns it to the opener on Escape (task 1.10)', async () => {
+    const user = userEvent.setup()
+    render(<RunnersPage />)
+
+    const trigger = screen.getByRole('button', { name: 'New Runner' })
+    trigger.focus()
+    await user.click(trigger)
+
+    expect(screen.getByPlaceholderText('e.g. Claude Opus')).toHaveFocus()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
   })
 
   it('creates a custom runner variant without replacing the existing runner', async () => {
