@@ -106,12 +106,15 @@ sequence, one record per accepted transition, each naming its own responsible ru
 
 ### Requirement: HTTP and MCP access have equal capability
 
-Direct HTTP SHALL be the application contract. MCP SHALL be a thin adapter over that contract with the same operations, validation, governance, attribution, and typed failure meaning. An adapter MUST NOT duplicate queue, budget, identity, or lifecycle business rules, MUST NOT hold a governance or waiting rule that the contract does not itself impose on every caller, and MUST NOT silently convert failures into empty or successful results.
+Direct HTTP SHALL be the application contract. MCP SHALL be a thin adapter over that contract with the same operations, validation, governance, attribution, and typed failure meaning, and the Hub's call command SHALL be that same adapter program run in a call mode rather than a second adapter. An adapter MUST NOT duplicate queue, budget, identity, or lifecycle business rules, MUST NOT hold a governance or waiting rule that the contract does not itself impose on every caller, and MUST NOT silently convert failures into empty or successful results.
 
-Two adapters exist rather than one because MCP is convenient where it is permitted and some
-environments forbid MCP servers while still allowing ordinary local API calls. The command-line
-interface is **not** one of them: it manages the local application instance and carries no agent
-capabilities.
+Two ways into the one adapter exist because MCP is convenient where it is permitted, and some
+environments forbid MCP servers while still allowing a run to execute an ordinary local command.
+The call command is the adapter's own program, run once per call, and it reaches the contract with
+the run's own credential exactly as the MCP server does. Because it is the same program and not a
+restatement of it, an operation, a waiting rule or a failure meaning cannot differ between the two.
+The application's command-line interface is **not** one of them: it manages the local application
+instance and carries no agent capabilities.
 
 Equal capability is a property of behaviour, not of the route list, and two things broke it until
 2026-09-09 in ways a comparison of persisted effects could not see. Both are stated below because
@@ -136,13 +139,14 @@ rather than a division of labour.
 
 #### Scenario: One operation has one persisted result
 
-- **WHEN** equivalent valid actions are performed through HTTP and through MCP
+- **WHEN** equivalent valid actions are performed through HTTP, through MCP, and through the call
+  command
 - **THEN** their persisted effects have equivalent content and attribution
 
 #### Scenario: Failure meaning survives adaptation
 
 - **WHEN** the application API returns validation, denied, not-found, or conflict failure
-- **THEN** MCP callers receive the same failure meaning
+- **THEN** MCP callers and call-command callers receive the same failure meaning
 
 #### Scenario: A governance rule reaches every caller
 
@@ -173,8 +177,16 @@ rather than a division of labour.
 
 #### Scenario: The CLI offers no agent capability
 
-- **WHEN** an agent attempts to affect shared state through a command-line invocation
+- **WHEN** an agent attempts to affect shared state through the application's own command-line
+  interface
 - **THEN** no such command exists
+
+#### Scenario: The call command is the adapter's own program
+
+- **WHEN** the operations the call command can perform are listed from the program a run is given
+- **THEN** they are exactly the operations the MCP adapter serves, less the endpoint the harness
+  itself calls for approvals
+- **AND** each is performed by the same code the MCP adapter runs for it
 
 #### Scenario: No full project credential is present
 
@@ -184,7 +196,7 @@ rather than a division of labour.
 
 ### Requirement: A run whose harness cannot use MCP is told how to reach the plane
 
-A turn started on an access path without MCP SHALL be told, before the operator's message, that the capability plane is reachable over HTTP, and SHALL be told the plane's base address, the name of the environment variable holding its run credential, how that credential is presented, and where the available operations are described.
+A turn started without the tool-protocol surface SHALL be told, before the operator's message, that the capability plane is reachable through the Hub's call command, how an operation is called with it, and where the available operations are described, and SHALL NOT be instructed to present the run credential in any command it writes.
 
 The system holds everything such a run needs and, until 2026-09-09, said the opposite. The run
 credential and the Hub's own address are placed in the spawned process's environment; the notice
@@ -193,33 +205,37 @@ to report what it would have sent instead. An agent that is authenticated and to
 not try, and the operator saw a turn that declined to do reachable work for a stated reason that was
 false.
 
-**Told is not the same as able, and only the first is required here.** Driven 2026-09-09, no
-permission posture on a Claude harness let such a run make the request under its own power: the
-default `workspace` posture read a URL's path out of the shell command and refused it as outside
-the workspace (F300), and on the `cli` path `acceptEdits` has no approver at all, so a command that
-needs approval is denied for want of anything to answer it (F301). **The reason recorded for F301
-was wrong and is corrected here.** It read that the harness *statically refuses* an interpolated
-credential; measurement on 2026-09-10 refuted that — with the approval gate removed those same
-commands execute, and a bare literal request naming no variable at all is denied identically. The
-refusals are the harness's reasons a command *needs approval*, not reasons it is forbidden, and on
-a path with no answerer needing approval is denial. The conclusion is unchanged: unreachable by the
-agent's own tools on the `cli` path.
+**Told is not the same as able, and only the first was required until 2026-09-27.** Driven
+2026-09-09, no permission posture on a Claude harness let such a run make the HTTP request it was
+told to make under its own power: the default `workspace` posture read a URL's path out of the shell
+command and refused it as outside the workspace (F300, since fixed), and on the `cli` path
+`acceptEdits` has no approver at all, so a command that needs approval is denied for want of anything
+to answer it (F301). A measurement on 2026-09-10 corrected F301's first reading: the harness's
+refusals were its reasons a command *needs approval*, not reasons it is forbidden, and on a path with
+no answerer needing approval is denial.
 
-The first of those no longer holds where the `workspace` posture's approver runs. A run is told this
-HTTP form on its first turn, before the system has grounds to describe MCP, while that posture is
-deciding its shell commands, and a shell command naming the run's own Hub address is now allowed
-there (`agent-run-sandboxing`, *"A network address in a shell command is decided as a network
-address"*). The plane is genuinely reachable from that process environment — the MCP adapter reaches
-it from exactly there — so the notice is true.
+**Why the HTTP form is no longer what a run is told.** Following it requires the agent to write its
+credential, or a reference the shell expands to it, into a command. A harness records the commands a
+run executes, and one records them as events the system stores, so the credential ends up in stored
+text, which the credential requirement above forbids. And the shell a run is given decides which
+forms of a request can be typed at all: measured on Windows PowerShell 5.1, an argument beginning
+`@` does not parse, and a JSON argument passed to a program loses its inner quotes. The call command
+removes both problems. It reads the credential from its own environment, and it takes its arguments
+from a file, so the command a run writes names an operation and a file and nothing else. The HTTP
+contract is unchanged, and remains the contract; it is simply not an instruction a run is given.
 
 This is the deployment the equal-capability requirement was written for: MCP forbidden by policy,
-ordinary local API calls permitted. Capability that exists and is unreachable because it was never
+ordinary local commands permitted. Capability that exists and is unreachable because it was never
 described is not capability.
 
-What is named is a variable, never a value. The notice is prepended to the turn prompt, which is the
+What is named is a command, never a value. The notice is prepended to the turn prompt, which is the
 durable record of the turn, so a credential written into it is a credential written into stored
-text. The agent can already read its own environment, so naming the variable discloses nothing it
-does not hold; interpolating the value would breach the credential requirement above.
+text.
+
+Where a runner's own sandbox may keep its shell from reaching the Hub, and that has not been
+measured, the text says so and tells the run to report an unreachable result rather than retry.
+Stating reachability as a fact the system does not know would be the same kind of unfounded claim the
+next requirement forbids.
 
 The description of operations is the same description the MCP path is given, rendered for this
 access path. It is not a separate list. One source of truth for what the plane offers means an
@@ -229,16 +245,24 @@ operation added to the plane cannot be described to one kind of caller and hidde
 
 - **WHEN** a turn begins on an access path that offers no MCP tool surface
 - **THEN** the text delivered ahead of the operator's message states that the capability plane is
-  reachable, and identifies the plane's base address, the environment variable holding the run
-  credential, how that credential is presented on a request, and where the operations are described
+  reachable through the call command, how an operation's arguments are passed to it, and where the
+  operations are described
 - **AND** it does not state that the agent has no way to send messages, create or update tasks, or
   ask the operator
+
+#### Scenario: A run whose shell may not reach the Hub is told so
+
+- **WHEN** a turn is described the call command on a runner whose shell sandbox may not allow network
+  access to the Hub
+- **THEN** the text states that the call command may be unable to reach the Hub from that shell
+- **AND** it tells the run to report an unreachable result in its reply rather than retry
 
 #### Scenario: The credential is named and not disclosed
 
 - **WHEN** any text is delivered to a run describing how to reach the plane
-- **THEN** it contains the name of the environment variable holding the run credential
-- **AND** it does not contain the credential's value
+- **THEN** it does not contain the credential's value
+- **AND** it does not instruct the run to write the credential, or a reference that expands to it,
+  into a command
 
 #### Scenario: One description of the operations, two renderings
 
@@ -248,10 +272,10 @@ operation added to the plane cannot be described to one kind of caller and hidde
 
 ### Requirement: A run is told the access path it actually has
 
-The system SHALL NOT tell a run that a tool-protocol surface is available unless it has grounds to believe the run's harness will honour the surface it was given, SHALL NOT tell a run that a tool-protocol surface is absent unless it has grounds to believe that it is, and SHALL describe the plane's direct HTTP form whenever it lacks grounds to believe the surface will be honoured.
+The system SHALL NOT tell a run that a tool-protocol surface is available unless it has grounds to believe the run's harness will honour the surface it was given, SHALL NOT tell a run that a tool-protocol surface is absent unless it has grounds to believe that it is, and SHALL describe the plane's call command whenever it lacks grounds to believe the surface will be honoured.
 
 Providing a harness with a tool-protocol server is not the same as that harness offering it. A
-deployment may forbid tool-protocol servers by policy while permitting ordinary local API calls; a
+deployment may forbid tool-protocol servers by policy while permitting ordinary local commands; a
 run there receives the configuration, cannot use it, and is told in its first line to call tools
 that are not present. That is the same defect as telling a run it has no capability when it does,
 and it is the more likely of the two to be met, because it is what an unconfigured run gets.
@@ -263,10 +287,21 @@ fact: the grounds for describing the surface come from a *previous* run of the s
 its adapter online, and the injection that provides the surface is decided separately and
 unconditionally. Every agent's first turn therefore held the tools it was told it did not have.
 Absence and presence are the same kind of claim about the same unobserved fact, and neither is
-available without grounds. Describing the HTTP form is not an assertion about the tool surface and
+available without grounds. Describing the call command is not an assertion about the tool surface and
 remains the correct thing to do whenever there are no grounds to assert the surface — including
-when the system has grounds to believe the surface is absent, which is the case where the HTTP form
-is the run's only path.
+when the system has grounds to believe the surface is absent, which is the case where the call
+command is the run's only path.
+
+**Grounds are the latest test, not any success.** Until 2026-09-27 one run of an agent whose adapter
+had ever reported online was grounds for every later run of that agent, for ever, while each harness
+reports on every run whether it started the server. A policy that arrived after the first success was
+never noticed. Grounds are now the outcome of the most recent run of the agent that tested it:
+the adapter reporting online is a positive test, and a harness's own report that the server failed or
+was left out, or a wait for the adapter that ended without it, is a negative one. The harness's own
+report outweighs the adapter's, because the adapter reports when its process starts, before the harness
+has finished connecting to it. A report the system
+does not recognise is not grounds. A run whose harness starts the server before the system sends the
+run its first prompt tests itself, and is described from its own result.
 
 This binds every text the system places ahead of the operator's message, not only the first line of
 the turn. A run's canonical context is placed there too, and it describes the same operations from
@@ -274,8 +309,14 @@ the same decision about the same access path; a claim of absence removed from on
 other has not been removed. Where the system has no grounds either way, neither text asserts, and
 both describe.
 
-An explicit statement by the operator about a run's access path remains authoritative. This
-requirement governs what the system asserts on its own, not what it is told.
+An explicit statement by the operator about a run's access path remains authoritative, with one
+exception. This requirement governs what the system asserts on its own, not what it is told. The
+exception is a run that tested itself before its first prompt and found the surface absent: that run
+is told the call command, whatever the operator stated, because the statement is about what the agent
+is given and usually has, and the run's own test is a measurement of what its harness did this time.
+Telling a run tools it has just been measured not to hold is the defect this requirement exists to
+prevent. The statement still decides what the run is given, so the next run is given the surface and
+tests it again.
 
 Correcting what a run is told must not quietly change what that run may do. The access path decides
 more than the wording of a notice today: it decides whether the tool-protocol server is provided at
@@ -295,7 +336,8 @@ is told.
 
 - **WHEN** a turn begins and the system has no grounds to believe the run's harness will offer the
   tool-protocol surface it was configured with
-- **THEN** the text delivered ahead of the operator's message describes reaching the plane over HTTP
+- **THEN** the text delivered ahead of the operator's message describes reaching the plane through
+  the call command
 - **AND** it does not state that tool-protocol tools are available
 
 #### Scenario: No grounds means no denial either
@@ -304,7 +346,7 @@ is told.
   the tool-protocol surface it was configured with
 - **THEN** the text delivered ahead of the operator's message does not state that the run has no
   tool-protocol tools, for this turn or at all
-- **AND** it still describes reaching the plane over HTTP
+- **AND** it still describes reaching the plane through the call command
 
 #### Scenario: A run holding the tools is not told it is empty
 
@@ -315,10 +357,39 @@ is told.
 - **AND** the run's canonical context, which is delivered ahead of the operator's message in the
   same turn, makes no such claim either
 
+#### Scenario: A later negative test withdraws earlier grounds
+
+- **WHEN** an earlier run of an agent reported its adapter online
+- **AND** a later run of that agent was tested and its harness did not start the server
+- **THEN** the next turn of that agent that is described from history is described with the call
+  command
+
+#### Scenario: A report the system does not recognise is not grounds
+
+- **WHEN** a harness reports the server's state with a value the system does not recognise
+- **THEN** that run does not give grounds to describe the tool-protocol surface
+
+#### Scenario: A run that tests itself is described from its own result
+
+- **WHEN** a run's harness starts the tool-protocol server before the system sends that run its
+  first prompt
+- **THEN** the system waits, for a bounded time, for that run's adapter to report online
+- **AND** the run's first prompt describes the tool-protocol surface if it did, and the call command
+  if it did not, whatever earlier runs of the agent reported
+
 #### Scenario: The operator's own statement is honoured
 
 - **WHEN** the operator has stated which access path a run uses
+- **AND** the run did not test itself before its first prompt and find the surface absent
 - **THEN** that statement decides the access path
+
+#### Scenario: A run's own negative test outweighs the operator's statement for that run
+
+- **WHEN** the operator has stated that an agent uses the tool-protocol surface
+- **AND** a run of that agent tests itself before its first prompt and its adapter does not report
+  online within the wait
+- **THEN** that run's first prompt describes the call command
+- **AND** the next run of that agent is still given the tool-protocol server
 
 ### Requirement: Operator-facing severity values are the ones the operator's view understands
 
@@ -1214,4 +1285,88 @@ containment.
   its access
 - **THEN** it is given the tool server, an approval channel, and plane access over the tool protocol, exactly as before
   the values were separated
+
+### Requirement: Whether a run's harness started the Hub's tool server is recorded per run
+
+For every run given the Hub's tool-protocol server, the system SHALL record whether that run's harness started it, as one of started, failed, or left out, letting the harness's own recognised report decide over the adapter reporting online and the adapter reporting online decide over a wait that ended without it, in whatever order they arrive, and SHALL record for every run which surface the run was told to reach the plane through.
+
+The adapter reports online as soon as its process starts, before the harness has finished connecting
+to it. That proves the harness started the program, not that the harness offers its tools: a harness
+that started the server and then failed to connect to it has already produced that report. So the
+harness's own account of the server, where it gives one the system recognises, is what the run is
+recorded by, and the adapter's report decides only where the harness says nothing recognisable. A
+positive that could never be withdrawn by the harness's own later failure would be the permanent
+grounds this requirement exists to remove, rebuilt one level down.
+
+Only the harness starting the program may produce the adapter's report: the call command is the same
+program, started by the run rather than by its harness, and a call through it reports nothing about
+the server. A run that ended before any source could report was not tested, and is recorded as
+untested rather than as a negative. Recording never fails the run it records.
+
+A runner that has no way to report a negative keeps its last recorded test, which may be an old
+positive. That is stated rather than guessed around: for such a runner a guessed negative would point
+the run at a path its own sandbox may not let it use.
+
+#### Scenario: The adapter reporting online records a positive test
+
+- **WHEN** the adapter of a run that was given the server reports online
+- **THEN** that run is recorded as having started the server
+
+#### Scenario: The harness leaving the server out records a negative test
+
+- **WHEN** a run's harness reports the servers it started and the Hub's server is not among them
+- **THEN** that run is recorded as having left the server out
+
+#### Scenario: The harness's own failure outweighs the adapter's report
+
+- **WHEN** a run's adapter reports online and that run's harness reports that the server failed, in
+  either order
+- **THEN** that run is recorded as failed
+
+#### Scenario: A run that never reached its harness's report is untested
+
+- **WHEN** a run ends before its harness reported its servers and before its adapter reported online
+- **THEN** that run is recorded as untested
+- **AND** it does not count as the latest test of its agent
+
+#### Scenario: A call through the call command is not a positive test
+
+- **WHEN** a run whose harness did not start the tool-protocol server calls an operation through the
+  call command
+- **THEN** that run is not recorded as having started the server
+
+#### Scenario: The surface a run was told is recorded
+
+- **WHEN** a run's first prompt is composed
+- **THEN** the run records whether it was told the tool-protocol surface or the call command
+
+### Requirement: The call command carries the run's authority without showing it
+
+The call command SHALL read the run's credential and the Hub's address from its own process environment only, SHALL NOT accept either as an argument or from a file, and SHALL take an operation's arguments from a file the run names, never from the command line.
+
+A run that needs its credential in a command puts it into text the harness records. A command that
+reads it from its own environment leaves the command naming only an operation and a file of
+arguments, and the harness's record of that command holds no secret.
+
+#### Scenario: A call writes no secret into the command
+
+- **WHEN** a run calls an operation through the call command
+- **THEN** the command the run executed contains no credential and no reference that expands to one
+
+#### Scenario: A call without a run credential is refused before any request
+
+- **WHEN** the call command runs in a process whose environment holds no run credential
+- **THEN** it reports that the call is not bound to a run, and makes no request
+
+#### Scenario: A refusal keeps its meaning
+
+- **WHEN** the Hub refuses an operation called through the call command
+- **THEN** the command reports the refusal's status and reason in a form the run can read, and exits
+  unsuccessfully
+
+#### Scenario: A question waits through the call command
+
+- **WHEN** a run asks the operator a blocking question through the call command
+- **THEN** the command waits for the answers on the same terms as the tool-protocol adapter, and
+  reports the wait ended when its deadline passes unanswered
 

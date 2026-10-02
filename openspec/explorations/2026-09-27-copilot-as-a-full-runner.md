@@ -271,6 +271,10 @@ Each slice is its own openspec change. Each goes through R1/R2/R3, then an Opus 
    - `_decide` auto-approves the shim.
    - Notices say which surface this run has.
    - Closes F301 and F299 for Copilot; F340 for all.
+   - **Done 2026-10-02:** archived as `openspec/changes/archive/2026-10-02-a-run-reaches-the-hub-without-mcp/`.
+     The work PC turned out not to block MCP for the Hub-launched Copilot, so its human-only checks (10.1)
+     were waived; the persistent-shell question (step 8) moves to the detect-and-degrade follow-up. 9.10
+     passed after F478's arguments-file fix.
 4. **`copilot-spend-is-counted`:**
    - AI credits and premium requests as a unit in accounting, the allowance and the budget (D3).
    - Quota-exhaustion holds.

@@ -734,5 +734,8 @@ SQLite reads of the trial profile's database.
   - **Waived 2026-10-02 (operator).** The work PC does not block MCP for the Hub-launched Copilot (Round log,
     "Work PC, task 10.1"); the shim was driven at home under the flag. Step 8 is unanswered and is carried to the
     detect-and-degrade follow-up as its first question.
-- [ ] 10.2 `openspec validate a-run-reaches-the-hub-without-mcp --strict`, then the `openspec-archive-change` skill.
+- [x] 10.2 `openspec validate a-run-reaches-the-hub-without-mcp --strict`, then the `openspec-archive-change` skill.
   Sync the four deltas. Commit and push per CLAUDE.md, staging paths explicitly.
+  - **Done 2026-10-02:** strict validate clean (openspec 1.4.1 and 1.13.2); `openspec archive` synced five deltas
+    (agent-capability-plane, agent-run-sandboxing, agent-tool-surface, runtime-diagnostics,
+    spec-document-authority: 7 added, 4 modified); `openspec validate --specs --strict` 43 passed.
