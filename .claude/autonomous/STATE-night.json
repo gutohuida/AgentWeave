@@ -1,241 +1,40 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-01-daily",
-    "parent_branch": "master",
-    "parent_sha": "db1a331",
-    "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 49,
-    "log_file": ".claude/autonomous/2026-10-01-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-copilot-agent-uses-hooks-and-its-own-agents-impl",
-    "next_action": "a-copilot-agent-uses-hooks-and-its-own-agents-impl: slice 4 (a-copilot-run-shows-its-credits) is ARCHIVED (2026-10-02), so this item's precondition holds. Merge master into the cycle branch first if it moved. Task 7.6 stays skipped (real money).",
-    "queue": [
-        {
-            "id": "F479-fix",
-            "status": "done",
-            "title": "F479: drop str_replace from slice 2's Copilot spec-turn --excluded-tools, with a test",
-            "detail": "Done iter 3, commit f2f3bd9. Dropped from SPEC_TURN_EXCLUDED_TOOLS (hub/hub/copilot_acp.py:126); updated both assertions in test_copilot_acp_run_turn.py; 49/49 in that file; ruff/black clean. FINDINGS.md F479 footed fixed f2f3bd9. Full hub/tests/ suite backgrounded, not blocked on (see iter 3 log); next firing checks its tail before touching Python."
-        },
-        {
-            "id": "F478-r1",
-            "status": "done",
-            "title": "F478 R1: explore and propose (the URL reader of archived a-url-is-not-a-path)",
-            "detail": "Done iter 4: openspec/changes/an-arguments-file-written-from-powershell-is-the-hubs-own/ written, validate --strict valid. Measured: F478 is rule 6's backstop (F362's mechanism), not the URL rule. General half owned by the-shell-judge-reads-a-word-whole D2; this change gives the exact PowerShell Set-Content arguments-file write standing (case 4). Independent of the shell judge; archives after slice 3."
-        },
-        {
-            "id": "F478-r2",
-            "status": "done",
-            "title": "F478 R2: independent re-derivation against the code",
-            "detail": "Done iter 5: table, line refs and rule-6 mechanism confirmed with an own probe; 9.10's exact bytes (trial DB, run-b30d4295abaf seq 5) fit D2's grammar and decode via _decode_args_file. Corrected: word non-plain via quote too; Unicode is 5.1 and decodable; Copilot reaches case 4 only under key PowerShell (shown to hold by 9.4). OQ1: no bash args-file write in any drive DB. Task 1.8 fixed. 0.1 ticked."
-        },
-        {
-            "id": "F478-r3",
-            "status": "done",
-            "title": "F478 R3: independent re-derivation against the code",
-            "detail": "Done iter 6: BMP-wide tokenizer sweep (closers exactly U+0027, U+2018-U+201B; dashes U+2013-2015; 33 separators); every D2 trap run on 5.1. Smart-quote injection measured in grammar shape (pwned.txt created). New explicit rule: closing quote then space or end ('a'(cmd) ran cmd before binding failed). NUL reason corrected; 1.3 example replaced with one that parses. 0.2 ticked, validate --strict valid."
-        },
-        {
-            "id": "F478-rev",
-            "status": "done",
-            "title": "F478 adversarial Opus review of the proposal",
-            "detail": "Done iter 7: spec-queue/tracks/reviews/F478-2026-10-02.md, APPROVE WITH FIXES, all 9 applied. BLOCKING: 'nothing joined' generalised from the literal to every part (5.1 ran a joined New-Item after path, encoding, inside a bare path, after a parameter name and after the command name); path charset labelled a safety rule (re-measured: _plain_calls_path accepts '.agentweave/calls/$(New-Item x).json'). Also: C0/DEL excluded from the literal; shadowed Set-Content named in the requirement; Risks location text corrected; gate 4.1 checks synced text; new D5 + tasks 1.10/2.4: notice spells the form out; hard-link residual filed F480. validate --strict valid. OPEN DECISIONS rows: F478-approve, F478-oq1-bash, F478-oq2-location."
-        },
-        {
-            "id": "a-dialog-takes-the-keyboard-when-its-opens-impl",
-            "status": "done",
-            "title": "Implement a-dialog-takes-the-keyboard-when-it-opens (B11, F307), task by task, vertical slices",
-            "model": "sonnet",
-            "effort": "high",
-            "detail": "Done iter 18, commit a11a328. All 29 tasks across groups 0/1/2 complete (task 1.8, a regression-control check, was found still unticked and fixed with before/after evidence in the same firing that closed 2.11). Full vitest 176 files/1805 tests passed, lint clean, build succeeded, hub/hub/static/ui refreshed. openspec validate --strict valid. Group 3 (drive it) is the next queue item."
-        },
-        {
-            "id": "a-dialog-takes-the-keyboard-when-its-opens-drive",
-            "status": "done",
-            "title": "Drive the change in a browser against the served bundle",
-            "model": "sonnet",
-            "effort": "medium",
-            "detail": "Done iter 19. Fresh throwaway Hub on :8012 (profile drive1002, clean), bundle index-Cyk3sQbn.js (src_commit 096829c). t_d9_clearing_instructions_postchange.py leg E: 59/59 passed, F307's pre-fix escape-to-textarea gone, Cancel gets initial focus, 4-Tab cycle confirmed. New t_d10_dialog_focus_sweep.py (task-3.2-only, not a durable harness): CharterForm/RunnerForm/JobForm/SetupModal opened+closed by keyboard alone, 21/21 passed. One probe bug found+fixed (D5 dialogs put role=dialog on panelRef itself, not a wrapping scrim like ClearInstructionsDialog -- not a product defect). tasks.md 3.1/3.2 ticked with evidence; FINDINGS.md F307 entry appended confirming D13's half fixed. validate --strict valid."
-        },
-        {
-            "id": "a-dialog-takes-the-keyboard-when-its-opens-archive",
-            "status": "done",
-            "title": "openspec validate --strict, then archive the change",
-            "model": "sonnet",
-            "effort": "medium",
-            "detail": "Done iter 20, commit <pending>. validate --strict valid (29/29 tasks, all artifacts done). Delta spec (ADDED-only, one requirement, six scenarios) appended verbatim to openspec/specs/hub-interaction-feedback/spec.md; openspec validate --specs --strict: 43/43 passed. Change moved to openspec/changes/archive/2026-10-02-a-dialog-takes-the-keyboard-when-it-opens via git mv (rename detected, no content diff beyond the move). F307's FINDINGS.md Status line rewritten to name both commits -- f473510 (Tab/Escape half, UI-1) and 68f11b4 (initial-focus half, D1) -- superseding the old self-referential 'fixed (this commit)' text. F307 is severity B, not A, so the open severity-A list needed no edit (checked: F307 never appears in any 'open severity-A set' line). CLI suite (tests/, py -3.11): 560 passed, 3 skipped."
-        },
-        {
-            "id": "a-copilot-run-shows-its-credits-impl",
-            "status": "done",
-            "title": "Implement a-copilot-run-shows-its-credits",
-            "detail": "Done 2026-10-02 in the operator's interactive session after the window: tasks 4.4, 5.1-5.5, 6.1-6.6 (commits 38077d5, c84c8dd, c0b3c5b, 0785b35, 0008503); the golden-file regression from iter 21 fixed (8d25547). Groups 0-6 complete. Full hub/tests: 6119 passed after the n11 ratchet fix; tests/: 560 passed."
-        },
-        {
-            "id": "a-copilot-run-shows-its-credits-drive",
-            "status": "done",
-            "title": "Drive a-copilot-run-shows-its-credits",
-            "detail": "Haiku turns only. Done 2026-10-02 interactively on :8010 (operator's go-ahead): 7.1-7.7, three Copilot Free turns plus one Haiku turn (commit 5bad170). 7.3: the checkpoint continues across session/load, so D4 stands. 7.5's /compact is blocked by slice 2's slash guard (F481)."
-        },
-        {
-            "id": "a-copilot-run-shows-its-credits-archive",
-            "status": "done",
-            "title": "Archive a-copilot-run-shows-its-credits",
-            "detail": "Done 2026-10-02 interactively: three deltas synced, archived as openspec/changes/archive/2026-10-02-a-copilot-run-shows-its-credits/; F482 filed."
-        },
-        {
-            "id": "a-copilot-agent-uses-hooks-and-its-own-agents-impl",
-            "status": "open",
-            "title": "Implement a-copilot-agent-uses-hooks-and-its-own-agents",
-            "detail": "Only after slice 4 is ARCHIVED; if slice 4 is unfinished, skip to the next item. Task 7.6 skipped (real money)."
-        },
-        {
-            "id": "a-copilot-agent-uses-hooks-and-its-own-agents-drive",
-            "status": "open",
-            "title": "Drive a-copilot-agent-uses-hooks-and-its-own-agents",
-            "detail": "Haiku turns only."
-        },
-        {
-            "id": "a-copilot-agent-uses-hooks-and-its-own-agents-archive",
-            "status": "open",
-            "title": "Archive a-copilot-agent-uses-hooks-and-its-own-agents",
-            "detail": "If a delta collides with slice 3's unsynced delta, stop and log it; do not merge by hand."
-        },
-        {
-            "id": "the-corpus-is-indexed-arranged-and-adopted-from-the-app-impl",
-            "status": "open",
-            "title": "Implement the-corpus-is-indexed-arranged-and-adopted-from-the-app",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "a-specification-is-read-in-results-that-fit-impl",
-            "status": "open",
-            "title": "Implement a-specification-is-read-in-results-that-fit",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "input-the-hub-accepted-is-answered-as-accepted-impl",
-            "status": "open",
-            "title": "Implement input-the-hub-accepted-is-answered-as-accepted",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "charters-are-named-once-and-an-empty-one-says-so-impl",
-            "status": "open",
-            "title": "Implement charters-are-named-once-and-an-empty-one-says-so",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "the-app-window-keeps-the-operators-preferences-impl",
-            "status": "open",
-            "title": "Implement the-app-window-keeps-the-operators-preferences",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "a-run-records-that-its-calls-were-allowed-impl",
-            "status": "open",
-            "title": "Implement a-run-records-that-its-calls-were-allowed",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "drift-is-scanned-and-answered-on-the-document-impl",
-            "status": "open",
-            "title": "Implement drift-is-scanned-and-answered-on-the-document",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "a-retried-firing-records-how-its-work-ended-impl",
-            "status": "open",
-            "title": "Implement a-retried-firing-records-how-its-work-ended",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "a-task-checkout-catches-up-with-its-approved-prerequisites-impl",
-            "status": "open",
-            "title": "Implement a-task-checkout-catches-up-with-its-approved-prerequisites",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "stop-clears-a-run-an-earlier-hub-left-running-impl",
-            "status": "open",
-            "title": "Implement stop-clears-a-run-an-earlier-hub-left-running",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "worker-spend-counts-against-the-budget-impl",
-            "status": "open",
-            "title": "Implement worker-spend-counts-against-the-budget",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "every-event-the-hub-sends-reaches-the-app-impl",
-            "status": "open",
-            "title": "Implement every-event-the-hub-sends-reaches-the-app",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "a-flow-stages-its-review-in-the-dispatch-impl",
-            "status": "open",
-            "title": "Implement a-flow-stages-its-review-in-the-dispatch",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "the-shell-judge-reads-a-word-whole-impl",
-            "status": "open",
-            "title": "Implement the-shell-judge-reads-a-word-whole",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "a-drive-or-a-home-variable-names-a-directory-by-itself-impl",
-            "status": "open",
-            "title": "Implement a-drive-or-a-home-variable-names-a-directory-by-itself",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "drift-watches-the-files-its-evidence-is-about-impl",
-            "status": "open",
-            "title": "Implement drift-watches-the-files-its-evidence-is-about",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "a-name-a-caller-chooses-reaches-its-own-resource-impl",
-            "status": "open",
-            "title": "Implement a-name-a-caller-chooses-reaches-its-own-resource",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "a-file-path-is-not-redacted-as-a-credential-impl",
-            "status": "open",
-            "title": "Implement a-file-path-is-not-redacted-as-a-credential",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        },
-        {
-            "id": "a-refused-first-send-leaves-no-exploration-behind-impl",
-            "status": "open",
-            "title": "Implement a-refused-first-send-leaves-no-exploration-behind",
-            "detail": "From the operator's ORDER. Respect its own group-0 gates (REVISING or unfinished rounds -> skip and log). When impl is done, add -drive and -archive items after this one."
-        }
-    ],
-    "decisions_for_user": [
-        "a-run-reaches-hub-10.1",
-        "F478-approve",
-        "F478-oq1-bash",
-        "F478-oq2-location"
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-10-02-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "4c88a74",
+    "stop_at":  "2026-10-03T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-10-02-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
