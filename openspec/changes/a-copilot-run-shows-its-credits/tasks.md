@@ -1000,21 +1000,38 @@ root.
   The four exact-dict assertions were extended, still `==` (the conversation one, `agents[]`'s two
   entries, `project`, and the allowance display gaining `"runner": "claude"`). No other test reads
   this shape (grep). Tasks 1.10–1.11's four cases pass; the named command: 50 passed.
-- [ ] 6.2 `api/accounting.ts` types; `accountingDisplay.ts`: `NANO_AIU_PER_AI_CREDIT`,
+- [x] 6.2 `api/accounting.ts` types; `accountingDisplay.ts`: `NANO_AIU_PER_AI_CREDIT`,
   `formatAiCredits`, `monthly` period, provider name in the allowance label
-- [ ] 6.3 `AccountingPanel.tsx`, `OverviewBudgetSummary.tsx`, `AgentOutputPanel.tsx` (conversation
+  **Done 2026-10-02 (interactive).** Optional `ai_nano_aiu`/`premium_requests` on `UsageSummary`
+  and `TurnUsage`, `runner` on the allowance display (optional, so an older Hub's payload still
+  types). `formatAiCredits` (two decimals, `<0.01`, null for nothing), `NANO_AIU_PER_AI_CREDIT`,
+  `Monthly` period, and `Copilot monthly allowance available · 96% left · <reset>` for a non-Claude
+  runner; the Claude label is unchanged (its test passes). Task 1.16's four cases pass.
+- [x] 6.3 `AccountingPanel.tsx`, `OverviewBudgetSummary.tsx`, `AgentOutputPanel.tsx` (conversation
   header), `agentTimelineModel.ts` (`usageByRunId`), `AgentTimeline.tsx`, `AgentSettingsControls.tsx`
   and `ProjectSettingsPanel.tsx` (the lowering lines, one `runnerCeilingNote` helper beside
   `describeThreshold`) per design D6 and D10. Tasks 1.16–1.18 pass.
   `cd hub/ui && npm run lint && npx vitest run`
+  **Done 2026-10-02 (interactive).** Budgets: the second headline line and the per-agent chip.
+  Overview: an `AI credits` row. Conversation header: `N tokens · X.XX AI credits` (no 1.x test
+  covered it; one added in `conversationControls.test.tsx`). `tokensByRunId` became `usageByRunId`
+  (`{tokens, nanoAiu}`), as D6 says, and its four tests were moved onto it; the "Worked for" line
+  adds the credits. `runnerCeilingNote` and `projectCeilingNotes` sit beside `describeThreshold`;
+  the agent line judges the agent's own override or, without one, the project's saved threshold
+  (`useProjectSettings`, mocked in `agentCheckpointSettings.test.tsx`; one case added for the
+  inherited threshold); the project panel lists the agents per compaction point.
+  `AgentSummary.checkpoint_compaction_percent` typed. Tasks 1.16–1.18 pass. `npm run lint`: clean;
+  `npx vitest run`: 176 files, 1831 tests passed.
 - [x] 6.4 Only if `worker-spend-counts-against-the-budget` has already landed: each `workers` line
   gains `ai_nano_aiu` and `premium_requests` sums, with a test in its test file. Otherwise record here
   that it has not landed, so that change adds them when it lands (design D12)
   **Recorded 2026-10-02: not landed.** `openspec/changes/worker-spend-counts-against-the-budget/`
   is still open (not in `archive/`), and `usage_accounting.py` has no `workers` lines. Under D12,
   whichever lands second adds the sums, so that change owns them now.
-- [ ] 6.5 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`. Commit
+- [x] 6.5 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`. Commit
   `hub/ui/src` and `hub/hub/static/ui` together
+  **Done 2026-10-02 (interactive).** Built and refreshed (`index-B0SZ5JZW.js`, stamp recorded),
+  committed with the source.
 - [ ] 6.6 The CI set: `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`,
   `mypy src/`, `py -3.11 -m pytest hub/tests/ -q`, `py -3.11 -m pytest tests/ -q`
 

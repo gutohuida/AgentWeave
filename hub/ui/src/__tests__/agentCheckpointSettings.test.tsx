@@ -31,6 +31,17 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
   return { ...actual, useModelCatalog: () => ({ data: MODEL_CATALOG_FIXTURE, isLoading: false }) }
 })
 
+/** The project's saved threshold, which an agent with no override of its own inherits (D10). */
+let projectThreshold: { checkpoint_threshold_mode: 'percent' | 'tokens' | null; checkpoint_threshold_value: number | null } = {
+  checkpoint_threshold_mode: null,
+  checkpoint_threshold_value: null,
+}
+
+vi.mock('@/api/projects', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/projects')>()
+  return { ...actual, useProjectSettings: () => ({ data: projectThreshold, isLoading: false }) }
+})
+
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
   return {
@@ -213,6 +224,14 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
     thresholdMutate.mockReset()
     modeMutate.mockReset()
     grantMutate.mockReset()
+    projectThreshold = { checkpoint_threshold_mode: null, checkpoint_threshold_value: null }
+  })
+
+  it('an agent with no override is judged against the project threshold it inherits (task 6.3)', () => {
+    projectThreshold = { checkpoint_threshold_mode: 'percent', checkpoint_threshold_value: 96 }
+    roster = [agent({ checkpoint_compaction_percent: 95 })]
+    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    expect(screen.queryByText(/threshold of 96% is lowered to 92%/)).toBeInTheDocument()
   })
 
   it('names the runner\'s own compaction point for a Copilot-bound agent with no configured threshold', () => {

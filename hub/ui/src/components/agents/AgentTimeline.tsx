@@ -9,6 +9,7 @@ import type { AgentRunFacts, AgentSummary, RunLifecycleStatus } from '@/api/agen
 import type { TimelineEntry } from '@/api/agentChat'
 import type { QueueStatus } from '@/api/queue'
 import type { TurnUsage } from '@/api/accounting'
+import { formatAiCredits } from '@/components/accounting/accountingDisplay'
 import { agentColorVars } from '@/lib/agentColors'
 import { hubDate } from '@/lib/hubTime'
 import {
@@ -17,7 +18,8 @@ import {
   groupIntoTurns,
   isSuccessCompletionEntry,
   reduceTurnBlocks,
-  tokensByRunId,
+  usageByRunId,
+  type TurnUsageFigure,
   type TimelineTurn,
 } from '@/lib/agentTimelineModel'
 
@@ -118,7 +120,7 @@ export function AgentTimeline({
   }, [roster])
 
   const { turns, pending } = useMemo(() => groupIntoTurns(entries), [entries])
-  const tokensByRun = useMemo(() => tokensByRunId(recentTurns ?? []), [recentTurns])
+  const usageByRun = useMemo(() => usageByRunId(recentTurns ?? []), [recentTurns])
 
   // `isRunning` is `agent.status === 'running'` — a POLLED roster field, so it stays true for a
   // beat after the run has actually ended. The response text and the run's terminal lifecycle
@@ -318,7 +320,7 @@ export function AgentTimeline({
               agentName={agent.name}
               colorByName={colorByName}
               durationSeconds={turn.runId ? runDurationSeconds(runs[turn.runId]) : undefined}
-              tokenCount={turn.runId ? tokensByRun[turn.runId] : undefined}
+              usage={turn.runId ? usageByRun[turn.runId] : undefined}
             />
             {terminalLabel && (
               <div
@@ -439,7 +441,7 @@ function TurnBody({
   agentName,
   colorByName,
   durationSeconds,
-  tokenCount,
+  usage,
 }: {
   turn: TimelineTurn
   turnKey: string
@@ -447,8 +449,8 @@ function TurnBody({
   colorByName: ColorLookup
   /** Whole-run duration for a finished turn; undefined while running or if unknown. */
   durationSeconds?: number
-  /** Total tokens this turn measured, from the accounting API; undefined if unmeasured. */
-  tokenCount?: number
+  /** What this turn measured, from the accounting API; undefined if unmeasured. */
+  usage?: TurnUsageFigure
 }) {
   // Walked in execution order — a block is never hoisted ahead of the text that
   // preceded it (2026-08-04-hub-charcoal-visual-refresh).
@@ -475,7 +477,8 @@ function TurnBody({
         // versa) still reads as one fact, not a half-empty second line.
         const statLine = [
           durationSeconds !== undefined ? `Worked for ${formatElapsedSeconds(durationSeconds)}` : null,
-          tokenCount !== undefined ? `${tokenCount.toLocaleString()} tokens` : null,
+          usage !== undefined ? `${usage.tokens.toLocaleString()} tokens` : null,
+          usage !== undefined ? formatAiCredits(usage.nanoAiu) : null,
         ]
           .filter((part): part is string => part !== null)
           .join(' · ')

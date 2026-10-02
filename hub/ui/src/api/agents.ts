@@ -40,6 +40,9 @@ export interface AgentSummary {
   checkpoint_threshold_mode?: 'percent' | 'tokens' | null
   checkpoint_threshold_value?: number | null
   checkpoint_notes_value?: number | null
+  /** The bound runner's own compaction point (95 for Claude and Codex, 80 for Copilot); null with
+   *  no bound runner (`a-copilot-run-shows-its-credits` D10). */
+  checkpoint_compaction_percent?: number | null
   /** Two independent grants, both closed by default. Summary access is not transcript access. */
   can_read_checkpoints?: boolean
   can_recall?: boolean

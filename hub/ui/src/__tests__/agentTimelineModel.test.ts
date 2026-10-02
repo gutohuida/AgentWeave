@@ -7,7 +7,7 @@ import {
   groupIntoTurns,
   isSuccessCompletionEntry,
   reduceTurnBlocks,
-  tokensByRunId,
+  usageByRunId as usageByRunIdDirect,
 } from '@/lib/agentTimelineModel'
 import * as agentTimelineModel from '@/lib/agentTimelineModel'
 
@@ -245,30 +245,33 @@ describe('reduceTurnBlocks (2026-08-04-hub-charcoal-visual-refresh)', () => {
   })
 })
 
-describe('tokensByRunId', () => {
+describe('usageByRunId, token half (was tokensByRunId)', () => {
   it('maps a measured turn to its total token count', () => {
-    const result = tokensByRunId([turnUsage({ run_id: 'run-1', total_tokens: 4200 })])
-    expect(result['run-1']).toBe(4200)
+    const result = usageByRunIdDirect([turnUsage({ run_id: 'run-1', total_tokens: 4200 })])
+    expect(result['run-1']?.tokens).toBe(4200)
   })
 
   it('omits an unavailable turn rather than showing 0 tokens', () => {
-    const result = tokensByRunId([
+    const result = usageByRunIdDirect([
       turnUsage({ run_id: 'run-1', status: 'unavailable', total_tokens: null }),
     ])
     expect(result['run-1']).toBeUndefined()
   })
 
   it('omits a measured turn with no total (partial usage payload)', () => {
-    const result = tokensByRunId([turnUsage({ run_id: 'run-1', total_tokens: null })])
+    const result = usageByRunIdDirect([turnUsage({ run_id: 'run-1', total_tokens: null })])
     expect(result['run-1']).toBeUndefined()
   })
 
   it('keys by run_id, not turn id, so multiple entries for the same run resolve to one figure', () => {
-    const result = tokensByRunId([
+    const result = usageByRunIdDirect([
       turnUsage({ id: 'tu-1', run_id: 'run-1', total_tokens: 100 }),
       turnUsage({ id: 'tu-2', run_id: 'run-2', total_tokens: 250 }),
     ])
-    expect(result).toEqual({ 'run-1': 100, 'run-2': 250 })
+    expect(result).toEqual({
+      'run-1': { tokens: 100, nanoAiu: null },
+      'run-2': { tokens: 250, nanoAiu: null },
+    })
   })
 })
 

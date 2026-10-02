@@ -28,6 +28,7 @@ import {
 } from '@/api/checkpoints'
 import { ApiError, readableRefusal } from '@/api/client'
 import { useAccounting, useConversationAccounting } from '@/api/accounting'
+import { formatAiCredits } from '@/components/accounting/accountingDisplay'
 import { useConfigStore } from '@/store/configStore'
 import {
   checkpointOperationKey,
@@ -1112,6 +1113,9 @@ export function AgentOutputPanel({
             title="Total tokens used across this conversation"
           >
             {conversationUsage.total_tokens?.toLocaleString()} tokens
+            {formatAiCredits(conversationUsage.ai_nano_aiu)
+              ? ` · ${formatAiCredits(conversationUsage.ai_nano_aiu)}`
+              : ''}
           </span>
         )}
         <div className="min-w-0 flex-1" />

@@ -1,7 +1,7 @@
 import { useAccounting } from '@/api/accounting'
 import { Icon } from '@/components/common/Icon'
 import { BudgetExhaustionNotice } from '@/components/accounting/BudgetExhaustionNotice'
-import { accountingDisplayLabel } from '@/components/accounting/accountingDisplay'
+import { accountingDisplayLabel, formatAiCredits } from '@/components/accounting/accountingDisplay'
 
 function formatTokens(value: number | null): string {
   return value === null ? 'Usage unavailable' : `${value.toLocaleString()} tokens`
@@ -20,6 +20,8 @@ export function OverviewBudgetSummary() {
     )
   }
 
+  const credits = formatAiCredits(data.project.ai_nano_aiu)
+
   return (
     <div className="overview-budget-summary" aria-label="Budget summary">
       <div className="flex items-center justify-between gap-3">
@@ -33,6 +35,12 @@ export function OverviewBudgetSummary() {
         <span>Project total</span>
         <strong>{formatTokens(data.project.total_tokens)}</strong>
       </div>
+      {credits && (
+        <div className="overview-budget-row">
+          <span>AI credits</span>
+          <strong>{credits}</strong>
+        </div>
+      )}
       <div className="overview-budget-row">
         <span>Allowance</span>
         <strong>{accountingDisplayLabel(data.preferred_display)}</strong>

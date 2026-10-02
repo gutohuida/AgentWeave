@@ -12,7 +12,9 @@ let recordedEntries: TimelineEntry[] = []
 let sseConnectionState: 'closed' | 'connecting' | 'open' | 'reconnecting' = 'open'
 let roster: AgentSummary[] = []
 let launchability: Record<string, { present: boolean; authorized: boolean; runnable: boolean; reason?: string }> = {}
-let conversationUsage: { total_tokens: number | null; measured_turns: number } | undefined = undefined
+let conversationUsage:
+  | { total_tokens: number | null; measured_turns: number; ai_nano_aiu?: number | null }
+  | undefined = undefined
 
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
@@ -353,6 +355,16 @@ describe('conversation controls — whole-conversation token total', () => {
     render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
     expect(screen.getByTestId('conversation-token-total')).toHaveTextContent('42,300 tokens')
+    expect(screen.getByTestId('conversation-token-total')).not.toHaveTextContent('AI credits')
+  })
+
+  it('adds the AI credits of the conversation when a Copilot turn reported them (task 6.3, design D6)', async () => {
+    conversationUsage = { total_tokens: 42_300, measured_turns: 3, ai_nano_aiu: 275_856_000 }
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    expect(screen.getByTestId('conversation-token-total')).toHaveTextContent(
+      '42,300 tokens · 0.28 AI credits',
+    )
   })
 })
 

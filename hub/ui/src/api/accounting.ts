@@ -10,6 +10,9 @@ export interface UsageSummary {
   unavailable_turns: number
   api_equivalent_usd_micros: number | null
   unpriced_turns: number
+  /** Copilot's reported charge (nano-AIU), summed; null where no turn reported one. */
+  ai_nano_aiu?: number | null
+  premium_requests?: number | null
 }
 
 export interface AgentUsageSummary extends UsageSummary {
@@ -24,7 +27,13 @@ export interface TokenBudgetState {
 }
 
 export type AccountingDisplay =
-  | { kind: 'allowance'; label: 'Rate-limit allowance'; allowance: Record<string, unknown> }
+  | {
+      kind: 'allowance'
+      label: 'Rate-limit allowance'
+      allowance: Record<string, unknown>
+      /** The runner whose reading this is (`"claude"`, `"copilot"`). */
+      runner?: string | null
+    }
   | {
       kind: 'api_equivalent'
       label: 'API-equivalent estimate'
@@ -50,6 +59,8 @@ export interface TurnUsage {
   api_equivalent_usd_micros: number | null
   allowance: Record<string, unknown> | null
   observed_at: string
+  ai_nano_aiu?: number | null
+  premium_requests?: number | null
 }
 
 export interface AccountingSnapshot {

@@ -15,7 +15,8 @@ import { Select } from '@/components/ui/input'
 import { DeleteProjectDialog } from '@/components/environment/DeleteProjectDialog'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { useConfigStore } from '@/store/configStore'
-import { describeThreshold } from '@/components/environment/describeThreshold'
+import { describeThreshold, projectCeilingNotes } from '@/components/environment/describeThreshold'
+import { useAgents } from '@/api/agents'
 import { runnerOptionLabel } from '@/lib/runnerLabel'
 
 const inputClass = 'control-field block w-48 px-2 py-1.5 text-xs'
@@ -54,6 +55,7 @@ export function ProjectSettingsPanel() {
   const { data: settings } = useProjectSettings(projectId ?? null)
   const { data: mainBranch } = useMainBranchSuggestion(projectId ?? null)
   const { data: runners = [] } = useRunners()
+  const { data: projectAgents = [] } = useAgents()
   const { data: catalog } = useModelCatalog()
   const update = useUpdateProjectSettings(projectId ?? '')
   const relocate = useRelocateProject(projectId ?? '')
@@ -253,6 +255,16 @@ export function ProjectSettingsPanel() {
             className="control-field block w-24 px-2 py-1.5 text-xs"
           />
         </div>
+        {/* The saved threshold, as the Hub evaluates it per agent (D10). */}
+        {projectCeilingNotes(
+          settings?.checkpoint_threshold_mode,
+          settings?.checkpoint_threshold_value,
+          projectAgents,
+        ).map((note) => (
+          <p key={note} className="mt-1 text-[11px]" style={{ color: 'var(--text-2)' }}>
+            {note}
+          </p>
+        ))}
       </SettingsRow>
       <SettingsRow
         label="Ask for notes at"

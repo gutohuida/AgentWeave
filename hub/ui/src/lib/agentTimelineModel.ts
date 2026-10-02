@@ -114,18 +114,25 @@ export function reduceTurnBlocks(entries: TimelineEntry[]): TurnBlock[] {
   return blocks
 }
 
+/** What one turn cost: its tokens, and Copilot's nano-AIU charge when it reported one. */
+export interface TurnUsageFigure {
+  tokens: number
+  nanoAiu: number | null
+}
+
 /**
- * run_id -> total token count, from the accounting API's `recent_turns` (see
+ * run_id -> what that turn cost, from the accounting API's `recent_turns` (see
  * hub/hub/api/v1/accounting.py and Q7 Gap 5's exploration finding — per-turn figures already
  * exist in the right shape, this is a pure display read of them). An 'unavailable' turn or a
  * null total is omitted rather than shown as zero: the runner genuinely reported nothing, which
- * is a different fact than "used no tokens."
+ * is a different fact than "used no tokens." Such a turn's credits still count in the totals;
+ * only its own line is silent (`a-copilot-run-shows-its-credits` D6).
  */
-export function tokensByRunId(recentTurns: TurnUsage[]): Record<string, number> {
-  const tokens: Record<string, number> = {}
+export function usageByRunId(recentTurns: TurnUsage[]): Record<string, TurnUsageFigure> {
+  const usage: Record<string, TurnUsageFigure> = {}
   for (const turn of recentTurns) {
     if (turn.status !== 'measured' || turn.total_tokens === null) continue
-    tokens[turn.run_id] = turn.total_tokens
+    usage[turn.run_id] = { tokens: turn.total_tokens, nanoAiu: turn.ai_nano_aiu ?? null }
   }
-  return tokens
+  return usage
 }

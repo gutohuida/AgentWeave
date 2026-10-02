@@ -1,9 +1,25 @@
 import type { AccountingDisplay } from '@/api/accounting'
 import { hubDate } from '@/lib/hubTime'
 
+/** Copilot reports charges in nano-AIU; one AI credit is 10^9 of them. The SDK documents the
+ * figure as the session's own accounting, not a bill, so it is shown as credits and never as a
+ * currency amount. */
+export const NANO_AIU_PER_AI_CREDIT = 1_000_000_000
+
+/** `0.28 AI credits`, `<0.01 AI credits` below the display floor, null when nothing was reported. */
+export function formatAiCredits(nano: number | null | undefined): string | null {
+  if (typeof nano !== 'number' || !Number.isFinite(nano) || nano <= 0) return null
+  const credits = nano / NANO_AIU_PER_AI_CREDIT
+  if (credits < 0.01) return '<0.01 AI credits'
+  return `${credits.toFixed(2)} AI credits`
+}
+
+const RUNNER_NAMES: Record<string, string> = { copilot: 'Copilot', codex: 'Codex' }
+
 function allowancePeriod(value: unknown): string {
   if (value === 'seven_day') return 'Weekly'
   if (value === 'daily') return 'Daily'
+  if (value === 'monthly') return 'Monthly'
   return 'Rate-limit'
 }
 
@@ -37,6 +53,16 @@ export function accountingDisplayLabel(display: AccountingDisplay): string {
         : status === 'allowed' || status === 'accepted'
           ? 'allowance available'
           : 'allowance reported'
+    // A non-Claude reading names its provider: Copilot writes one on every run, so a mixed
+    // project's headline would otherwise switch providers silently (design D6).
+    const provider = display.runner ? RUNNER_NAMES[display.runner] : undefined
+    if (provider) {
+      const remaining = allowance.remainingPercentage
+      const left = typeof remaining === 'number' && Number.isFinite(remaining)
+        ? ` · ${Math.floor(remaining)}% left`
+        : ''
+      return `${provider} ${period.toLowerCase()} ${state}${left}${reset ? ` · ${reset}` : ''}`
+    }
     return `${period} ${state}${reset ? ` · ${reset}` : ''}`
   }
   if (display.kind === 'api_equivalent') {

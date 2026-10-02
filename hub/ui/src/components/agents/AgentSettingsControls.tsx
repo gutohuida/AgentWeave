@@ -19,6 +19,9 @@ import {
   useUpdateAgentWaiting,
 } from '@/api/runners'
 import { SettingsRow } from '@/components/environment/SettingsSection'
+import { runnerCeilingNote } from '@/components/environment/describeThreshold'
+import { useProjectSettings } from '@/api/projects'
+import { useConfigStore } from '@/store/configStore'
 import { Select, Textarea } from '@/components/ui/input'
 import { runnerOptionLabel } from '@/lib/runnerLabel'
 
@@ -347,6 +350,8 @@ const TOKENS_PER_UNIT = 1000
 export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
   const updateMode = useUpdateAgentCheckpointMode()
   const updateThreshold = useUpdateAgentCheckpointOverride()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  const { data: projectSettings } = useProjectSettings(projectId ?? null)
   const storedMode = agent.checkpoint_threshold_mode ?? 'percent'
   const stored = agent.checkpoint_threshold_value ?? null
   const [unit, setUnit] = useState<'percent' | 'tokens'>(storedMode)
@@ -364,6 +369,15 @@ export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
 
   const selectStyle = {
   }
+
+  // Where the checkpoint actually fires (D10): the agent's own override, else the project's.
+  const hasOverride = agent.checkpoint_threshold_value != null
+  const ceilingNote = runnerCeilingNote(
+    agent.checkpoint_compaction_percent,
+    hasOverride ? agent.checkpoint_threshold_mode : projectSettings?.checkpoint_threshold_mode,
+    hasOverride ? agent.checkpoint_threshold_value : projectSettings?.checkpoint_threshold_value,
+    agent.runner,
+  )
 
   return (
     <div className="space-y-3">
@@ -411,6 +425,11 @@ export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
       <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
         Replaces the project's threshold whole. Leave blank to inherit it.
       </p>
+      {ceilingNote && (
+        <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>
+          {ceilingNote}
+        </p>
+      )}
       {(updateMode.isError || updateThreshold.isError) && (
         <p className="text-xs" style={{ color: 'var(--red)' }}>
           Could not update the checkpoint policy.

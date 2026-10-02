@@ -5,10 +5,21 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/common/Icon'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { BudgetExhaustionNotice } from './BudgetExhaustionNotice'
-import { accountingDisplayLabel } from './accountingDisplay'
+import { accountingDisplayLabel, formatAiCredits } from './accountingDisplay'
 
 function formatTokens(value: number | null): string {
   return value === null ? 'Unavailable' : `${value.toLocaleString()} tokens`
+}
+
+/** Copilot's charge beside the token total (design D6): shown only when reported, and never
+ *  counted against the token budget, which the line says. */
+function creditsLine(nano: number | null | undefined, premium: number | null | undefined): string | null {
+  const credits = formatAiCredits(nano)
+  if (!credits) return null
+  const requests = typeof premium === 'number' && Number.isFinite(premium)
+    ? ` · ${premium.toLocaleString(undefined, { maximumFractionDigits: 2 })} premium requests`
+    : ''
+  return `${credits}${requests} (Copilot) — not counted against the budget`
 }
 
 function PreferredDisplay() {
@@ -69,6 +80,8 @@ export function AccountingPanel() {
       : 'Budget saved.'
     : null
 
+  const projectCredits = creditsLine(data.project.ai_nano_aiu, data.project.premium_requests)
+
   return (
     <SettingsSection title="Budgets" description="Token usage for this project and its agents, and the limit that pauses autonomous turns.">
       <div className="py-4">
@@ -77,6 +90,9 @@ export function AccountingPanel() {
         <div style={{ color: 'var(--text-3)', fontSize: 11, marginTop: 2 }}>
           {data.project.measured_turns} measured · {data.project.unavailable_turns} usage unavailable
         </div>
+        {projectCredits && (
+          <div style={{ color: 'var(--text-3)', fontSize: 11, marginTop: 2 }}>{projectCredits}</div>
+        )}
         <div style={{ color: 'var(--text-2)', fontSize: 12, marginTop: 6 }}>
           <PreferredDisplay />
         </div>
@@ -94,6 +110,7 @@ export function AccountingPanel() {
                 style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
               >
                 {agent.agent}: {formatTokens(agent.total_tokens)}
+                {formatAiCredits(agent.ai_nano_aiu) ? ` · ${formatAiCredits(agent.ai_nano_aiu)}` : ''}
                 {agent.unavailable_turns > 0 ? ` · ${agent.unavailable_turns} unavailable` : ''}
               </span>
             ))}
