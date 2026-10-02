@@ -255,3 +255,24 @@ def test_all_calls_with_no_prompt_result_uses_the_calls() -> None:
 
     assert sample.total_tokens == 33172
     assert sample.source == "copilot_calls"
+
+
+def test_second_usage_checkpoint_replaces_the_first() -> None:
+    first = {"totalNanoAiu": 100000000, "totalPremiumRequests": 0}
+    second = {"totalNanoAiu": 275856000, "totalPremiumRequests": 1}
+
+    in_order = CopilotUsageLedger()
+    in_order.observe_event("session.usage_checkpoint", first)
+    in_order.observe_event("session.usage_checkpoint", second)
+    sample_in_order = in_order.finish(session_was_new=True)
+
+    assert sample_in_order.session_nano_aiu_total == 275856000
+    assert sample_in_order.session_premium_requests_total == 1.0
+
+    reversed_order = CopilotUsageLedger()
+    reversed_order.observe_event("session.usage_checkpoint", second)
+    reversed_order.observe_event("session.usage_checkpoint", first)
+    sample_reversed_order = reversed_order.finish(session_was_new=True)
+
+    assert sample_reversed_order.session_nano_aiu_total == 100000000
+    assert sample_reversed_order.session_premium_requests_total == 0.0

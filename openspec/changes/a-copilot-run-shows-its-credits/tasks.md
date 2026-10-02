@@ -155,8 +155,24 @@ root.
   iterations 20-24, not a test failure). `ruff check` clean; `black --check --target-version py311`
   needed one reformat of both touched files (applied, re-checked clean). `openspec validate
   a-copilot-run-shows-its-credits --strict`: valid.
-- [ ] 1.7 Same file: two `session.usage_checkpoint` events (first 100000000/0, later 275856000/1) in
+- [x] 1.7 Same file: two `session.usage_checkpoint` events (first 100000000/0, later 275856000/1) in
   emitted order: the later wins. Reversing their order fails this test
+
+  Done 2026-10-02. Confirm-only, like 1.3/1.4: `observe_event`'s `session.usage_checkpoint` branch
+  (`hub/hub/copilot_usage.py:95-99`) already unconditionally replaces `self._checkpoint` on every
+  call, so "later wins" held before this task touched it. Added
+  `test_second_usage_checkpoint_replaces_the_first` to `hub/tests/test_copilot_usage.py`: feeds two
+  checkpoints (100000000/0, then 275856000/1) and asserts `session_nano_aiu_total == 275856000` and
+  `session_premium_requests_total == 1.0`; then feeds the same two reversed and asserts
+  `session_nano_aiu_total == 100000000` and `session_premium_requests_total == 0.0`. Sabotage check:
+  temporarily guarded the assignment with `if self._checkpoint is None:` (first-wins) — the
+  in-order assertion failed (100000000 != 275856000), confirming the test is not vacuous; reverted
+  by re-editing the three lines back (not `git checkout --`), `git status --short` afterward showed
+  only the test file touched. `py -3.11 -m pytest hub/tests/test_copilot_usage.py -v`: 9 passed.
+  Re-ran the same four `AccountingSample`-touching files plus this one together: 178 passed (same
+  unrelated aiosqlite-teardown `RuntimeError: Event loop is closed` resource warning noted by
+  iterations 20-25, not a test failure). `ruff check` and `black --check --target-version py311`
+  clean on the touched file. `openspec validate a-copilot-run-shows-its-credits --strict`: valid.
 - [ ] 1.8 Same file, credits (D4, R3's larger-of rule). Each case runs through
   `settle_copilot_credits` with a seeded `turn_usage`/`runs` baseline. "One call of N" means one
   `assistant.usage` whose `copilotUsage.totalNanoAiu` is N. Each case's per-call sum is chosen so that
