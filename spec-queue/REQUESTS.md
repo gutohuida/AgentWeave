@@ -273,7 +273,7 @@ server, identity, events). An exploration first (openspec-explore) when the oper
 ## R11 — Update the Copilot model list: it already offers Opus 5.5 and Sonnet 5.5
 **Asked:** 2026-10-02
 **Theme:** Agents & runners
-**Ready:** ready
+**Ready:** thinking
 
 The operator noted, on the work PC, that Copilot already offers Opus 5.5 and Sonnet 5.5, but the
 Hub's list doesn't. `_COPILOT_MODEL_IDS` (`hub/hub/model_catalog.py`) was copied from
@@ -284,3 +284,9 @@ the closest is `claude-sonnet-5`, which is already in the catalog. Before adding
 confirm the exact id from a newer `copilot help config` or from `/model`. A list that is
 copied by hand goes stale with every Copilot release, so it is worth asking whether the
 catalog should be read from `copilot help config` at probe time instead.
+
+**List shipped 2026-10-02 (home, interactive).** `_COPILOT_MODEL_IDS` now copies `copilot help config` from
+build 1.0.90 verbatim, which confirms `claude-sonnet-5.5` (printed last, after `kimi-k2.7-code`) and adds
+`claude-opus-5.5`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-6-luna` and `grok-4.6`;
+`scripts/check_model_catalog.py --provider copilot` agrees. What stays open, hence `thinking`: whether the
+catalog should be read from the CLI at probe time instead of copied by hand.

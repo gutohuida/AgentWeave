@@ -183,17 +183,21 @@ WORKSPACE_PERMISSION_MODE = "workspace"
 # per-run override the composer sends.
 FULL_ACCESS_PERMISSION_MODE = "bypassPermissions"
 
-# The model ids `copilot help config` printed under `model` (build 1.0.88), in its order.
+# The model ids `copilot help config` printed under `model` (build 1.0.90, 2026-10-02; R11), in its order.
 _COPILOT_MODEL_IDS: Tuple[str, ...] = (
     "claude-sonnet-5",
     "claude-fable-5.1",
     "claude-fable-5",
+    "claude-opus-5.5",
     "claude-opus-5",
     "claude-opus-4.8",
     "claude-opus-4.8-fast",
     "claude-opus-4.7",
     "claude-sonnet-4.6",
     "claude-haiku-4.5",
+    "gpt-6.1-sol",
+    "gpt-6-sol",
+    "gpt-6-luna",
     "gpt-6-astra",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
@@ -211,6 +215,8 @@ _COPILOT_MODEL_IDS: Tuple[str, ...] = (
     "grok-4.5",
     "kimi-k3",
     "kimi-k2.7-code",
+    "claude-sonnet-5.5",
+    "grok-4.6",
 )
 
 _UPPERCASE_WORDS = {"gpt", "mai"}
