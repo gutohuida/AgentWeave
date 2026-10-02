@@ -129,11 +129,16 @@
 
 ## 4. Archive
 
-- [ ] 4.1 **Gate:** `a-run-reaches-the-hub-without-mcp` is archived, so `openspec/specs/agent-run-sandboxing/spec.md`
+- [x] 4.1 **Gate:** `a-run-reaches-the-hub-without-mcp` is archived, so `openspec/specs/agent-run-sandboxing/spec.md`
   holds "The Hub's own call command is decided like the Hub's own tools". If not, stop here and log it. (Review)
   Also check that the synced requirement's text equals this delta's MODIFIED text with this change's additions
   removed: the SHALL clause's PowerShell item, the "The Hub tells a run…" paragraph, the `Set-Content` and
   literal sentences added to the residual paragraph, the rewritten "almost an invocation" paragraph, and the seven
   new scenarios. If they differ, re-base the delta on the synced text before archiving.
-- [ ] 4.2 `openspec validate an-arguments-file-written-from-powershell-is-the-hubs-own --strict`, then the
+  - **Done 2026-10-02:** slice 3 archived (`9a344e0`). A diff of the synced requirement against this delta shows
+    exactly the listed additions (the SHALL item, the "The Hub tells a run" paragraph, the two residual sentences,
+    the rewritten "almost" paragraph, seven scenarios) and nothing else, so no re-base was needed.
+- [x] 4.2 `openspec validate an-arguments-file-written-from-powershell-is-the-hubs-own --strict`, then the
   `openspec-archive-change` skill. Commit and push, staging paths explicitly.
+  - **Done 2026-10-02:** strict validate clean (1.4.1 and 1.13.2); `openspec archive` modified one requirement in
+    agent-run-sandboxing; `openspec validate --specs --strict` 43 passed.
