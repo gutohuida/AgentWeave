@@ -547,6 +547,27 @@ async def test_agent_summary_reports_the_bound_runner(app, auth_headers, add_age
 
 
 @pytest.mark.asyncio
+async def test_agent_summary_reports_the_bound_runners_compaction_point(
+    app, auth_headers, add_agent, bind_runner
+):
+    """A Copilot-bound agent reports its adapter's compaction point (80); an unbound one is null.
+
+    `checkpoint_compaction_percent` reads `_bound_adapter.compaction_percent` — the same adapter
+    the summary already resolves for `permission_mode_at_rest` — so this is the one summary field
+    `checkpoint_trigger.consider` also derives from, surfaced for the operator to see.
+    """
+    await add_agent("copilot-bound")
+    await bind_runner("copilot-bound", cli="copilot")
+    await add_agent("unbound-agent-2")
+
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
+    assert resp.status_code == 200
+    by_name = {a["name"]: a for a in resp.json()}
+    assert by_name["copilot-bound"]["checkpoint_compaction_percent"] == 80
+    assert by_name["unbound-agent-2"]["checkpoint_compaction_percent"] is None
+
+
+@pytest.mark.asyncio
 async def test_agent_summary_keeps_stored_config_when_unbound(app, auth_headers, add_agent):
     """An agent with no bound runner still derives runner and model from its own stored config.
 

@@ -111,6 +111,9 @@ class AgentSummary(BaseModel):
     checkpoint_threshold_mode: Optional[str] = Field(default=None, max_length=8)
     checkpoint_threshold_value: Optional[int] = None
     checkpoint_notes_value: Optional[int] = None
+    # The runner's own compaction point (e.g. 80 for Copilot), read from its bound adapter. Null
+    # with no runner bound — there is no adapter to ask.
+    checkpoint_compaction_percent: Optional[int] = None
     # Two independent grants, both closed by default: reading a peer's checkpoint is not the same
     # permission as recalling the raw output behind it.
     can_read_checkpoints: bool = False

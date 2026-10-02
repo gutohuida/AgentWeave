@@ -615,6 +615,9 @@ async def list_agents(
                     agent_row.checkpoint_threshold_value if agent_row else None
                 ),
                 checkpoint_notes_value=(agent_row.checkpoint_notes_value if agent_row else None),
+                checkpoint_compaction_percent=(
+                    _bound_adapter.compaction_percent if _bound_adapter is not None else None
+                ),
                 can_read_checkpoints=bool(agent_row.can_read_checkpoints) if agent_row else False,
                 can_recall=bool(agent_row.can_recall) if agent_row else False,
                 # Built by hand, so a grant added to the schema and not added here reads back as

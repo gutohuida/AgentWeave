@@ -744,10 +744,36 @@ root.
   The full-suite `hub/tests/` debt (open since iteration 35) is still unpaid — this firing's sweep
   is the ten-file checkpoint/jobs suite, the most directly relevant regression check for this
   task's diff, not the whole tree.
-- [ ] 3.4 `AgentSummary.checkpoint_compaction_percent` in `schemas/agents.py`, filled in
+- [x] 3.4 `AgentSummary.checkpoint_compaction_percent` in `schemas/agents.py`, filled in
   `list_agents`'s `AgentSummary(...)` (`api/v1/agents.py:581-630`) from `bound_runner` (`:548`, taken
   from `runners_by_id`, `:405-407`) through `get_adapter`, null when there is none, with no new
   query
+
+  Done iter 46. `checkpoint_compaction_percent: Optional[int] = None` added to `AgentSummary`
+  (`schemas/agents.py`, after `checkpoint_notes_value`). `list_agents`'s `AgentSummary(...)` call
+  fills it from `_bound_adapter.compaction_percent if _bound_adapter is not None else None` —
+  `_bound_adapter` is the same variable `permission_mode_at_rest`/`permission_mode_built_in`
+  already read a few lines above (`api/v1/agents.py:554`, `get_adapter(bound_runner.cli) if
+  bound_runner else None`), so no new query was added, per the task's own requirement.
+
+  New test `test_agent_summary_reports_the_bound_runners_compaction_point`
+  (`hub/tests/test_agents.py`, next to the existing bound-runner test): a Copilot-bound agent
+  reads `checkpoint_compaction_percent == 80` (via `bind_runner(..., cli="copilot")`, the real
+  `CopilotAdapter.compaction_percent` from task 3.1); an unbound agent reads `None`.
+
+  **Verified it is a real regression test, not a tautology**: stashed the two production-file
+  changes (`schemas/agents.py`, `api/v1/agents.py`) with the test left in place — failed with
+  `KeyError: 'checkpoint_compaction_percent'` (the field absent from the response entirely) —
+  then restored them and reran — passed. `py -3.11 -m pytest hub/tests/test_agents.py -q`: 31
+  passed, both before (30 passed + the 1 new failure) and after. Swept
+  `test_agent_default_permission_mode.py`, `test_patch_agent_refuses_unknown_fields.py`,
+  `test_request_agent_models_an_existing_agent.py` for a regression on the same `list_agents`
+  construction block: 28 passed. `ruff check` and `black --check --target-version py311` on all
+  three touched files: clean. `openspec validate a-copilot-run-shows-its-credits --strict`: valid.
+
+  Group 3 (the compaction point and the thresholds) is now complete. Group 4 (the ledger) is next.
+  The full-suite `hub/tests/` debt (open since iteration 35) is still unpaid — this firing's sweep
+  is the directly relevant agent-summary tests, not the whole tree.
 
 ## 4. The ledger
 
