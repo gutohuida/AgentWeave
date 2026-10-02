@@ -33,6 +33,19 @@ DECIDED. Absence is not consent.
   machine. Waive it, or do it and record the answer in the Round log, and 10.2 (strict validate,
   then archive) can run.
 
+### `a-copilot-run-shows-its-credits` task 5.4: a Copilot one-shot's credits -- 2026-10-02 interactive, OPEN
+
+- OPEN      copilot-oneshot-credits  **Should a Copilot worker call (`copilot -p`) record its credits
+  from the stream it does emit?** Task 5.4 said to read `session.shutdown {totalNanoAiu,
+  totalPremiumRequests}` only if the captured stream contains it. It does not
+  (`hub/tests/fixtures/copilot_acp/oneshot_ok.jsonl`), so `worker_invocations.ai_nano_aiu` and
+  `premium_requests` stay NULL for Copilot. The same capture does carry a `session.usage_checkpoint`
+  (`totalNanoAiu`, `totalPremiumRequests`) and the `result` line's `usage.premiumRequests`. A
+  one-shot is one process and one session, so the checkpoint is that call's whole charge. Reading
+  it is a small parser change plus a test against the capture. Recommendation: yes, read the
+  checkpoint (the same figure the ledger trusts for agent runs, D4). Leaving it NULL is also safe:
+  it under-reports worker credits, it never misreports them.
+
 ### `an-arguments-file-written-from-powershell-is-the-hubs-own` (F478) is ready for approval -- 2026-10-02 night, OPEN
 
 R1, R2 and R3 are done. The adversarial Opus review (`spec-queue/tracks/reviews/F478-2026-10-02.md`) approved it with
