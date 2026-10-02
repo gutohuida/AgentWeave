@@ -350,7 +350,7 @@ root.
   `checkpoint_warning == "due"` and broadcasts one `checkpoint_due` with `threshold_value == 65`. The
   same reading for `cla` changes nothing. Then a dismissed `cop` conversation at 78% gets
   `"final"`. Fails today
-- [ ] 1.14 Extend `hub/tests/test_migrations.py`: upgrade to head adds the four `turn_usage` and two
+- [x] 1.14 Extend `hub/tests/test_migrations.py`: upgrade to head adds the four `turn_usage` and two
   `worker_invocations` columns, nullable; downgrade removes them; a pre-existing `turn_usage` row
   survives with NULLs. Fails today
 - [ ] 1.15 The run end, in two files.

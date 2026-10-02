@@ -4531,3 +4531,116 @@ def test_migration_0115_is_guarded_when_runs_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0115"
+
+
+# ---------------------------------------------------------------------------------------------
+# 0116+ -- a Copilot run shows its credits (design D4/D5): turn_usage and worker_invocations
+# each gain their own credit columns. Task 1.14.
+# ---------------------------------------------------------------------------------------------
+
+_CREDIT_COLUMNS = ("ai_nano_aiu", "premium_requests")
+_TURN_USAGE_CREDIT_COLUMNS = _CREDIT_COLUMNS + (
+    "session_nano_aiu_total",
+    "session_premium_requests_total",
+)
+
+
+def _database_at_0115(tmp_path, name: str) -> tuple:
+    """Every table from the models, minus the Copilot credit columns 0116+ adds, stamped at 0115."""
+    db_file = tmp_path / name
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        for column in _TURN_USAGE_CREDIT_COLUMNS:
+            conn.execute(f"ALTER TABLE turn_usage DROP COLUMN {column}")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0115')")
+        conn.commit()
+    return db_file, db_url
+
+
+def _credit_columns_present(db_file: Path) -> dict:
+    with sqlite3.connect(db_file) as conn:
+        turn_usage = {row[1] for row in conn.execute("PRAGMA table_info(turn_usage)")}
+        worker_invocations = {
+            row[1] for row in conn.execute("PRAGMA table_info(worker_invocations)")
+        }
+    return {
+        "turn_usage": {c: c in turn_usage for c in _TURN_USAGE_CREDIT_COLUMNS},
+        "worker_invocations": {c: c in worker_invocations for c in _CREDIT_COLUMNS},
+    }
+
+
+def test_migration_adds_copilot_credit_columns_to_both_tables(tmp_path) -> None:
+    """Design D4/D5: `turn_usage` gets its own four nullable credit columns (this run's charge
+    plus the session checkpoint it ended at); `worker_invocations` gets the two charge-only
+    columns a one-shot call needs. All six are nullable -- nothing is backfilled, since a row
+    recorded before this change never saw a Copilot checkpoint."""
+    db_file, db_url = _database_at_0115(tmp_path, "up_copilot_credits.db")
+    before = _credit_columns_present(db_file)
+    assert not any(before["turn_usage"].values())
+    assert not any(before["worker_invocations"].values())
+
+    _upgrade_to(db_url, "head")
+
+    after = _credit_columns_present(db_file)
+    assert all(after["turn_usage"].values()), after["turn_usage"]
+    assert all(after["worker_invocations"].values()), after["worker_invocations"]
+
+    with sqlite3.connect(db_file) as conn:
+        turn_usage_info = {row[1]: row for row in conn.execute("PRAGMA table_info(turn_usage)")}
+        worker_invocations_info = {
+            row[1]: row for row in conn.execute("PRAGMA table_info(worker_invocations)")
+        }
+        for column in _TURN_USAGE_CREDIT_COLUMNS:
+            assert turn_usage_info[column][3] == 0, f"{column} must be nullable"
+        for column in _CREDIT_COLUMNS:
+            assert worker_invocations_info[column][3] == 0, f"{column} must be nullable"
+
+
+def test_migration_adds_copilot_credit_columns_without_disturbing_an_existing_row(tmp_path) -> None:
+    """A `turn_usage` row written before this change has never seen a Copilot credit -- it must
+    survive the upgrade with NULLs in the four new columns, not be dropped or rewritten."""
+    db_file, db_url = _database_at_0115(tmp_path, "preserve_copilot_credits.db")
+    stamp = "2026-01-01T00:00:00Z"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('proj-1', 'p', " f"'{stamp}')"
+        )
+        conn.execute(
+            "INSERT INTO runs (id, project_id, agent, status, started_at, initiator) "
+            f"VALUES ('run-old', 'proj-1', 'claude', 'completed', '{stamp}', 'operator')"
+        )
+        conn.execute(
+            "INSERT INTO turn_usage (id, run_id, project_id, agent, status, observed_at) "
+            f"VALUES ('usage-old', 'run-old', 'proj-1', 'claude', 'unavailable', '{stamp}')"
+        )
+        conn.commit()
+
+    _upgrade_to(db_url, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        row = conn.execute(
+            "SELECT ai_nano_aiu, premium_requests, session_nano_aiu_total, "
+            "session_premium_requests_total FROM turn_usage WHERE id = 'usage-old'"
+        ).fetchone()
+    assert row == (None, None, None, None)
+
+
+def test_migration_downgrade_drops_both_tables_copilot_credit_columns(tmp_path) -> None:
+    db_file, db_url = _database_at_0115(tmp_path, "down_copilot_credits.db")
+    _upgrade_to(db_url, "head")
+    assert all(_credit_columns_present(db_file)["turn_usage"].values())
+    assert all(_credit_columns_present(db_file)["worker_invocations"].values())
+
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0115")
+
+    after = _credit_columns_present(db_file)
+    assert not any(after["turn_usage"].values()), after["turn_usage"]
+    assert not any(after["worker_invocations"].values()), after["worker_invocations"]
