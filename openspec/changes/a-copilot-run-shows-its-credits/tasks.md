@@ -467,7 +467,7 @@ root.
   1.16's still-open `accountingPresentation.test.tsx`) / 173 passed; 1814 tests, 8 failed (4 from
   1.16, 4 new from 1.17) / 1806 passed — unchanged pass count, confirming no collateral breakage.
   `openspec validate a-copilot-run-shows-its-credits --strict`: valid.
-- [ ] 1.18 UI: an `AccountingPanel` test renders the credits line only when `project.ai_nano_aiu` is
+- [x] 1.18 UI: an `AccountingPanel` test renders the credits line only when `project.ai_nano_aiu` is
   not null. Extend `overviewBudgetSummary.test.tsx` to match. Extend `agentCheckpointSettings.test.tsx`:
   an agent with `checkpoint_compaction_percent: 80` shows the "compacts at about 80%" line, and one
   with 95 or null and no configured threshold does not. **Review finding 5:** an agent with
@@ -521,6 +521,50 @@ root.
   design D10 (`openspec/changes/a-copilot-run-shows-its-credits/design.md:567-685`) in full before
   starting — the percent/token ceiling rules and the exact wording for each surface are there, not
   restated in tasks.md.
+
+  **1.18(b) done 2026-10-02 (iter 39): the checkpoint-ceiling-notice half.** None of D10's UI lines
+  are built yet (only the policy fields and callers land across tasks 3.x–5.x), so every new
+  assertion here is expected to fail today through `queryByText` — a missing node, not a crash.
+  `checkpoint_compaction_percent` is not on `AgentSummary` yet (task 3.4): `agentCheckpointSettings
+  .test.tsx`'s `agent()` fixture helper widened to `Partial<AgentSummary & {
+  checkpoint_compaction_percent?: number | null }>`, cast `as unknown as AgentSummary` at the
+  return, the same cast-past-today's-type approach 1.16/1.17/1.18(a) used. Seven new tests under
+  "checkpoint ceiling notices": a Copilot-bound agent (`checkpoint_compaction_percent: 80`, no
+  override) shows `/compacts at about 80%/` and `/fires by 77% at the latest/`; agents at 95 or
+  null show neither (two control tests, pass today); review finding 5's 96%-override-at-C=95 case
+  shows `/lowered to 92%/` and `/Claude compacts at about 95%/`; a 92% override at the final
+  warning itself does not (control); Q7 (b)'s 95%-override case also shows `/lowered to 92%/`
+  (95 > 92, so it is past the ceiling too); a 150000-token override on a Copilot-bound agent shows
+  `/fires at 150000 tokens or at 77% of its window/`; the same override on a Claude-bound
+  (`compaction_percent: 95`) agent shows no such line (control — Claude's token threshold is not
+  lowered, Q7 (b)).
+
+  `projectSettingsPanel.test.tsx` gained a `useAgents` mock (`@/api/agents`) — the panel does not
+  call it yet; D10's "Project settings" bullet is what will make it — reset to `[]` in the file's
+  main `beforeEach` so the thirteen pre-existing tests are unaffected, and a new describe block with
+  the project's `checkpoint_threshold_mode`/`checkpoint_threshold_value` set to `'percent'`/`80` in
+  its own `beforeEach`: a bound agent at `checkpoint_compaction_percent: 80` makes the panel show
+  both `/Lowered to 77%/` and the agent's own name (`/cop-1/`); a bound agent at the C=95 default
+  shows no "Lowered to" text at all (control).
+
+  **Verified each new failure is for the stated reason, not a crash.** `npx vitest run
+  src/__tests__/agentCheckpointSettings.test.tsx`: 20 tests, 4 failed (the four non-control cases
+  above, each `received value must be an HTMLElement... Received has value: null` from
+  `queryByText(...).toBeInTheDocument()` — a clean "not found", not a thrown `getByText` error or a
+  render crash), 16 passed (all pre-existing plus the three new controls). `npx vitest run
+  src/__tests__/projectSettingsPanel.test.tsx`: 18 tests, 1 failed (the naming case, same `null`
+  shape), 17 passed (all pre-existing plus the new control). `npx tsc --noEmit`: clean. `npm run
+  lint`: clean. Full suite, `npm test`: 176 files, 6 failed (the two files touched here, plus
+  1.16/1.17/1.18(a)'s four still-open files, unchanged) / 170 passed; 1829 tests (10 more than
+  iteration 38's 1819, all ten accounted for: 5 new failures + 5 new passing controls), 16 failed
+  (11 pre-existing + 5 new) / 1813 passed — exactly the prior pass count plus the five new
+  controls, confirming no collateral breakage. `openspec validate a-copilot-run-shows-its-credits
+  --strict`: valid.
+
+  A fresh, complete `hub/tests/` background run is still owed (iteration 35's died with its
+  session, never finished) — 1.18(b) was UI-only (no Python touched), so this did not block it, but
+  the next Python-touching task should kick one off early and actually read its tail before relying
+  on it.
 - [ ] 1.19 Extend `hub/tests/test_provider_allowance.py` (Q6 decided 2026-09-28, design D8): a
   reading `{"status": "rejected", "resetsAt": 1790812800, "rateLimitType": "monthly", "provider":
   "copilot"}` gives `hold_for_reading(...).provider == "copilot"`, and `hold_sentence("cop", hold)`

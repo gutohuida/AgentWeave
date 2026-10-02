@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProjectSettingsPanel } from '@/components/environment/ProjectSettingsPanel'
 import { describeThreshold } from '@/components/environment/describeThreshold'
 import { useConfigStore } from '@/store/configStore'
+import type { AgentSummary } from '@/api/agents'
 
 const update = vi.fn()
 const relocate = vi.fn()
@@ -55,6 +56,18 @@ let suggestion: { suggestion: string | null; chosen: string | null; is_repositor
   is_repository: true,
 }
 
+/** `checkpoint_compaction_percent` lands at task 3.4 (design D10) -- not yet a field on
+ *  `AgentSummary`. The panel does not call `useAgents` yet either (that call is this task's own
+ *  work, D10 "Project settings"); the mock is in place ahead of it so 1.18(b)'s fixtures exist
+ *  once it does. */
+type AgentWithCompaction = AgentSummary & { checkpoint_compaction_percent?: number | null }
+let projectAgents: AgentWithCompaction[] = []
+
+vi.mock('@/api/agents', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/agents')>()),
+  useAgents: () => ({ data: projectAgents, isLoading: false }),
+}))
+
 vi.mock('@/api/projects', () => ({
   useProjects: () => ({ data: [project] }),
   useProjectSettings: () => ({ data: settings }),
@@ -96,6 +109,7 @@ describe('phase 5 project settings and locate repair', () => {
     relocate.mockReset()
     suggestion = { suggestion: 'master', chosen: null, is_repository: true }
     settings = makeSettings()
+    projectAgents = []
     useConfigStore.setState({ selectedProjectId: 'proj-a' })
   })
 
@@ -253,5 +267,36 @@ describe('threshold readings', () => {
     expect(describeThreshold('percent', 75, 200_000)).toBe('75% — 150k of 200k')
     expect(describeThreshold('tokens', 150_000, null)).toBe('150k')
     expect(describeThreshold('percent', 80, null)).toBe('80%')
+  })
+})
+
+/**
+ * Task 1.18(b), design D10 ("Project settings"): a project percent threshold shown lowered for
+ * any bound agent whose runner compacts below 95, naming that agent. The panel does not read
+ * `useAgents` or compute this line yet, so every assertion here is expected to fail today --
+ * confirming the gap -- through `queryByText`, not a crash.
+ */
+describe('project-level checkpoint-ceiling notice (task 1.18(b), design D10)', () => {
+  beforeEach(() => {
+    settings = makeSettings()
+    settings.checkpoint_threshold_mode = 'percent'
+    settings.checkpoint_threshold_value = 80
+  })
+
+  it('names an agent whose runner compacts below the configured threshold', () => {
+    projectAgents = [
+      { name: 'cop-1', status: 'idle', message_count: 0, active_task_count: 0, runner: 'copilot', checkpoint_compaction_percent: 80 },
+    ]
+    render(<ProjectSettingsPanel />)
+    expect(screen.queryByText(/Lowered to 77%/)).toBeInTheDocument()
+    expect(screen.queryByText(/cop-1/)).toBeInTheDocument()
+  })
+
+  it('shows nothing when every bound agent compacts at the C=95 default', () => {
+    projectAgents = [
+      { name: 'claude-1', status: 'idle', message_count: 0, active_task_count: 0, runner: 'claude', checkpoint_compaction_percent: 95 },
+    ]
+    render(<ProjectSettingsPanel />)
+    expect(screen.queryByText(/Lowered to/)).not.toBeInTheDocument()
   })
 })

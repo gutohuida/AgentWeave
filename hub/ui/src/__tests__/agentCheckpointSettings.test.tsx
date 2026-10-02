@@ -49,7 +49,12 @@ vi.mock('@/api/agents', async (importOriginal) => {
   }
 })
 
-function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
+/** `checkpoint_compaction_percent` lands at task 3.4 (design D10) -- not yet a field on
+ *  `AgentSummary`. Widened locally so fixtures can carry it ahead of that task without weakening
+ *  the real type signature everywhere else in this file. */
+type AgentWithCompaction = AgentSummary & { checkpoint_compaction_percent?: number | null }
+
+function agent(overrides: Partial<AgentWithCompaction> = {}): AgentSummary {
   return {
     name: 'claude-1',
     status: 'idle',
@@ -57,7 +62,7 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
     active_task_count: 0,
     runner: 'claude',
     ...overrides,
-  } as AgentSummary
+  } as unknown as AgentSummary
 }
 
 describe('per-agent checkpoint policy', () => {
@@ -190,5 +195,95 @@ describe('evidence acceptance grant', () => {
   it('says what it does not confer', () => {
     render(<AgentSettingsPage agent="claude-1" section="access" />)
     expect(screen.getByText(/cannot accept its own/)).toBeInTheDocument()
+  })
+})
+
+/**
+ * Task 1.18(b), design D10 ("Thresholds derived from the compaction point") and review finding 5.
+ *
+ * `checkpoint_compaction_percent` does not exist on `AgentSummary` yet (lands task 3.4), and none
+ * of these notices are built yet (`resolve_policy`'s new fields land earlier in the group; the UI
+ * lines themselves are this task's own work, not yet written in `CheckpointOverrideSetting`). Every
+ * assertion below is expected to fail today -- confirming the gap, not a crash -- through
+ * `queryByText`, so a missing node reads as "expected null to be in the document" rather than an
+ * uncaught `getByText` throw.
+ */
+describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
+  beforeEach(() => {
+    thresholdMutate.mockReset()
+    modeMutate.mockReset()
+    grantMutate.mockReset()
+  })
+
+  it('names the runner\'s own compaction point for a Copilot-bound agent with no configured threshold', () => {
+    roster = [agent({ checkpoint_compaction_percent: 80 })]
+    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    expect(screen.queryByText(/compacts at about 80%/)).toBeInTheDocument()
+    expect(screen.queryByText(/fires by 77% at the latest/)).toBeInTheDocument()
+  })
+
+  it('shows no compaction-point line for an agent at the C=95 default', () => {
+    roster = [agent({ checkpoint_compaction_percent: 95 })]
+    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    expect(screen.queryByText(/compacts at about/)).not.toBeInTheDocument()
+  })
+
+  it('shows no compaction-point line for an agent with no bound runner (null compaction percent)', () => {
+    roster = [agent({ checkpoint_compaction_percent: null })]
+    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    expect(screen.queryByText(/compacts at about/)).not.toBeInTheDocument()
+  })
+
+  it('review finding 5: a 96% override past the C=95 final warning says it is lowered to 92%', () => {
+    roster = [agent({
+      checkpoint_compaction_percent: 95,
+      checkpoint_threshold_mode: 'percent',
+      checkpoint_threshold_value: 96,
+    })]
+    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    expect(screen.queryByText(/lowered to 92%/)).toBeInTheDocument()
+    expect(screen.queryByText(/Claude compacts at about 95%/)).toBeInTheDocument()
+  })
+
+  it('a 92% override at the final warning itself is not reported as lowered', () => {
+    roster = [agent({
+      checkpoint_compaction_percent: 95,
+      checkpoint_threshold_mode: 'percent',
+      checkpoint_threshold_value: 92,
+    })]
+    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    expect(screen.queryByText(/lowered to 92%/)).not.toBeInTheDocument()
+  })
+
+  it('Q7 decided (b): a 95% override past the ceiling is also reported as lowered to 92%', () => {
+    roster = [agent({
+      checkpoint_compaction_percent: 95,
+      checkpoint_threshold_mode: 'percent',
+      checkpoint_threshold_value: 95,
+    })]
+    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    expect(screen.queryByText(/lowered to 92%/)).toBeInTheDocument()
+  })
+
+  it('a token override on a Copilot-bound agent reports the token-or-percent ceiling', () => {
+    roster = [agent({
+      checkpoint_compaction_percent: 80,
+      checkpoint_threshold_mode: 'tokens',
+      checkpoint_threshold_value: 150_000,
+    })]
+    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    expect(
+      screen.queryByText(/fires at 150000 tokens or at 77% of its window/),
+    ).toBeInTheDocument()
+  })
+
+  it('a Claude token override is not given a ceiling line -- its token threshold is not lowered', () => {
+    roster = [agent({
+      checkpoint_compaction_percent: 95,
+      checkpoint_threshold_mode: 'tokens',
+      checkpoint_threshold_value: 150_000,
+    })]
+    render(<AgentSettingsPage agent="claude-1" section="context" />)
+    expect(screen.queryByText(/fires at 150000 tokens/)).not.toBeInTheDocument()
   })
 })
