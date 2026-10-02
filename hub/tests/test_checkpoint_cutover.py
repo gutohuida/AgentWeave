@@ -995,6 +995,69 @@ async def test_offered_warns_at_the_threshold_and_spends_nothing(app, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_a_copilot_bound_agents_threshold_is_derived_from_its_own_compaction_point(
+    app, monkeypatch
+):
+    """D10: with no threshold configured anywhere — not on the agent, not on the project — a
+    Copilot-bound agent's built-in threshold is derived from its own runner's compaction point
+    (C=80 gives 65/55/77), not the Claude-shaped 80/70/92 every agent gets today. A Claude-bound
+    agent at the same reading is unaffected, because its own compaction point (C=95) still gives
+    the built-in numbers."""
+
+    broadcasts = []
+
+    async def record(project_id, event, payload):
+        broadcasts.append((event, payload))
+
+    monkeypatch.setattr("hub.checkpoint_trigger.sse_manager.broadcast", record)
+
+    async with async_session_factory() as db:
+        project = await db.get(Project, PROJECT)
+        if project is None:
+            project = Project(id=PROJECT, name="Testbed")
+            db.add(project)
+        project.checkpoint_mode = "offered"
+        project.checkpoint_threshold_mode = None
+        project.checkpoint_threshold_value = None
+        project.checkpoint_notes_value = None
+        db.add(Runner(id="runner-cop", project_id=PROJECT, name="Copilot", cli="copilot"))
+        db.add(Runner(id="runner-cla", project_id=PROJECT, name="Claude", cli="claude"))
+        db.add(Agent(id="agent-cop", project_id=PROJECT, name="cop", runner_id="runner-cop"))
+        db.add(Agent(id="agent-cla", project_id=PROJECT, name="cla", runner_id="runner-cla"))
+        await db.commit()
+        await _conversation(db, "conv-cop", agent="cop")
+        await _conversation(db, "conv-cla", agent="cla")
+
+    result_cop = await consider(PROJECT, "cop", "conv-cop", context_tokens=None, percent=66.0)
+    result_cla = await consider(PROJECT, "cla", "conv-cla", context_tokens=None, percent=66.0)
+
+    async with async_session_factory() as db:
+        cop = await get_conversation_by_id(db, "conv-cop")
+        cla = await get_conversation_by_id(db, "conv-cla")
+
+    assert result_cop is None
+    assert result_cla is None
+    assert cop.checkpoint_warning == "due"
+    assert cla.checkpoint_warning is None
+    assert [
+        (event, payload["conversation_id"], payload["threshold_value"])
+        for event, payload in broadcasts
+    ] == [("checkpoint_due", "conv-cop", 65)]
+
+    broadcasts.clear()
+    async with async_session_factory() as db:
+        conversation = await get_conversation_by_id(db, "conv-cop")
+        conversation.checkpoint_warning = "dismissed"
+        await db.commit()
+
+    await consider(PROJECT, "cop", "conv-cop", context_tokens=None, percent=78.0)
+
+    async with async_session_factory() as db:
+        conversation = await get_conversation_by_id(db, "conv-cop")
+    assert conversation.checkpoint_warning == "final"
+
+
+@pytest.mark.asyncio
 async def test_a_dismissed_warning_does_not_return_while_there_is_room(app, monkeypatch):
     """Re-asking an operator who said "not yet" is the same as not letting them say it.
 

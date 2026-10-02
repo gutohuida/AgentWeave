@@ -344,7 +344,7 @@ root.
   at percent 66 and True at percent 67, and False at percent 77 (the threshold ceiling). With no
   notes value it is False at 67. The same threshold and notes under C=95 give False at percent 82 and
   at 91 (no Claude token-notes ceiling). Fails today
-- [ ] 1.13 Extend `hub/tests/test_checkpoint_cutover.py` (beside the offered-mode tests): an `offered`
+- [x] 1.13 Extend `hub/tests/test_checkpoint_cutover.py` (beside the offered-mode tests): an `offered`
   project, a `copilot` runner bound to agent `cop` and a `claude` runner bound to agent `cla`, both
   with no threshold of their own. A reading of 66% for `cop`'s conversation sets
   `checkpoint_warning == "due"` and broadcasts one `checkpoint_due` with `threshold_value == 65`. The
