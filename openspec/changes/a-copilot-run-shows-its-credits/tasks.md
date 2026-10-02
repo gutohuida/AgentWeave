@@ -247,7 +247,7 @@ root.
   passed, 1 skipped (pre-existing skip, unrelated). `ruff check` clean on all touched files;
   `black --check --target-version py311` needed one reformat of the test file (applied, re-checked
   clean). `openspec validate a-copilot-run-shows-its-credits --strict`: valid.
-- [ ] 1.9 Same file, quota (D7, D8): acp4's snapshots give reading `{"status": "allowed", "quota":
+- [x] 1.9 Same file, quota (D7, D8): acp4's snapshots give reading `{"status": "allowed", "quota":
   "chat", "rateLimitType": "monthly", "resetsAt": 1790812800, "remainingPercentage": 96.5,
   "provider": "copilot"}`. (1790812800 is 2026-10-01T00:00:00Z; assert it with
   `datetime(2026,10,1,tzinfo=timezone.utc).timestamp()`.) Adding `session.error {errorType: "quota",
@@ -267,6 +267,54 @@ root.
   and none of `b`'s own, is filled with `a`'s `resetsAt`, and `allowance_refusal` of it is not None;
   a reading from another project is not used. A replayed `session.usage_checkpoint` observed before
   the ledger is armed is ignored
+  - **Done 2026-10-02.** Built the quota half of D7/D8 that task 1.1 left open: `copilot_usage.py`
+    gained `_qualifying_snapshot` (excludes `completions` by name, any `isUnlimitedEntitlement`,
+    and any entitlement `<= 0`), `_resets_at_from` (`resetDate` as epoch seconds) and the pure,
+    stdlib-only `quota_reading(snapshots, *, refused, prior_reading)`. The ledger now tracks the
+    newest call's `quotaSnapshots` and a `_refused` flag set only by `session.error
+    {errorType: "quota", errorCode: "quota_exceeded"}` (never message text), and `finish()` calls
+    `quota_reading(self._quota_snapshots, refused=self._refused, prior_reading=None)` into the
+    sample's `allowance` — `prior_reading=None` always, since the ledger has no database (D2).
+    `usage_accounting.py` gained `copilot_prior_quota_reading(db, project_id, *, now)`: the
+    project's newest `turn_usage.allowance` (any agent, `runner == "copilot"`, `ORDER BY
+    turn_usage.rowid DESC` as D4) whose `resetsAt` is still ahead of `now`. `settle_copilot_credits`
+    calls it, and fills `resetsAt` alone into the sample's allowance, only when that allowance is
+    already `{"status": "rejected", ...}` with no `resetsAt` of its own — never for an `allowed`
+    reading (review finding 2), never overwriting a `resetsAt` the run's own snapshot already
+    named (the late-reset case).
+  - 17 tests added to `hub/tests/test_copilot_usage.py`: the acp4 allowed reading (exact dict,
+    `resetsAt` asserted against `datetime(2026,10,1,tzinfo=timezone.utc).timestamp()`); the
+    quota-exceeded refusal read by `allowance_refusal`; three other `errorType`/`errorCode` pairs
+    (`rate_limit`/`session_quota_exceeded`, `rate_limit`/`billing_not_configured`,
+    `query`/message `"quota exceeded"`) each staying `allowed`; four direct `quota_reading()` unit
+    cases (no snapshot and not refused, review finding 2's prior-ignored case, the
+    only-`resetsAt`-copied case, and refused with neither snapshot nor prior); and four
+    `settle_copilot_credits` integration cases through a real database session — review finding
+    1(b) (agent `b` filled from agent `a`'s reading in the same project), project isolation (a
+    reading in another project is not borrowed), a past prior reset leaving `resetsAt` absent, and
+    review finding 2's second half (a settled non-refused sample with no snapshot carries
+    `allowance is None`).
+  - **Sabotage checks**, both reverted after (`git diff` clean before moving on): (1) `_observe_error`
+    changed to `if False: self._refused = True` — the quota-exceeded and 1(b) tests both failed
+    (`allowance` stayed `None`/unrefused), confirming they exercise the recognition. (2)
+    `copilot_prior_quota_reading`'s `if resets_at > current.timestamp()` changed to `if True` — the
+    past-reset test failed (`resetsAt` present when it should be absent), confirming the "ahead of
+    now" filter is live.
+  - "A replayed `session.usage_checkpoint` observed before the ledger is armed is ignored" is
+    `copilot_acp.run_turn`'s own dispatch-arming invariant (design.md:66-68, 1691, 1751), not a
+    `CopilotUsageLedger` behaviour — the ledger only ever sees events `run_turn` has already armed
+    and dispatched to it (design.md:114). Deferred to task 4.4, where the armed dispatch point and
+    its wiring to the ledger are built; not tested here because there is nothing in this file to
+    sabotage.
+  - `py -3.11 -m pytest hub/tests/test_copilot_usage.py -v`: 30 passed. Regression:
+    `test_copilot_usage.py` plus `test_accounting_model.py`, `test_agent_trigger.py`,
+    `test_provider_allowance.py`, `test_runner_parsing.py`, `test_accounting_api.py` together: 209
+    passed (same unrelated aiosqlite-teardown `RuntimeError: Event loop is closed` resource warning
+    noted by iterations 20-27, not a test failure). `py -3.11 -m pytest hub/tests/test_migrations.py
+    hub/tests/test_project_persistence.py -q`: 124 passed, 1 skipped (pre-existing, unrelated).
+    `ruff check` clean on all touched files; `black --check --target-version py311` needed one
+    reformat of the test file (applied, re-checked clean). `openspec validate
+    a-copilot-run-shows-its-credits --strict`: valid.
 - [ ] 1.10 Extend `hub/tests/test_accounting_api.py`: seed a Claude turn (1000 tokens, no credits)
   for agent `a-claude` and two Copilot turns (500 and 300 tokens; 200000000 and 75856000 nano-AIU;
   premium 1.0 and 0.5) for agent `b-copilot`. `GET /accounting` gives `project.total_tokens == 1800`,

@@ -11,12 +11,16 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .runner_events import AccountingSample
 from .runner_parsing import _accounting_from_dimensions
 
 logger = logging.getLogger(__name__)
+
+# D7: snapshot keys that never gate credits, excluded before the lowest-remaining pick.
+_EXCLUDED_QUOTA_KEYS = {"completions"}
 
 # github.com/copilot/sessionEvent assistant.usage -> the normaliser's own dimension names
 # (runner_parsing._accounting_from_dimensions), so the shared key lists stay untouched (D3).
@@ -77,6 +81,84 @@ class _Compaction:
     request_id: Optional[str]
 
 
+def _qualifying_snapshot(snapshots: Any) -> Optional[Tuple[str, Dict[str, Any]]]:
+    """D7: among *snapshots*, the lowest-`remainingPercentage` entry that is not `completions`,
+    not an unlimited entitlement, and not already exhausted of entitlement (0 or fewer
+    requests, as `premium_interactions` is on a Free account). None when nothing qualifies."""
+    if not isinstance(snapshots, dict):
+        return None
+    best: Optional[Tuple[str, Dict[str, Any]]] = None
+    best_remaining: Optional[float] = None
+    for key, value in snapshots.items():
+        if key in _EXCLUDED_QUOTA_KEYS or not isinstance(value, dict):
+            continue
+        if value.get("isUnlimitedEntitlement") is True:
+            continue
+        entitlement = value.get("entitlementRequests")
+        if isinstance(entitlement, bool) or not isinstance(entitlement, (int, float)):
+            continue
+        if entitlement <= 0:
+            continue
+        remaining = value.get("remainingPercentage")
+        if isinstance(remaining, bool) or not isinstance(remaining, (int, float)):
+            continue
+        if best_remaining is None or remaining < best_remaining:
+            best, best_remaining = (key, value), remaining
+    return best
+
+
+def _resets_at_from(value: Dict[str, Any]) -> Optional[int]:
+    """D7: `resetDate` as epoch seconds. No `resetDate`, no `resetsAt`."""
+    reset_date = value.get("resetDate")
+    if not isinstance(reset_date, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(reset_date.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return int(parsed.timestamp())
+
+
+def quota_reading(
+    snapshots: Any,
+    *,
+    refused: bool,
+    prior_reading: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """D7/D8: the allowance reading one Copilot run writes. Pure, stdlib-only (D2) -- this run's
+    own qualifying snapshot, if any, plus (only when `refused`, review finding 2) `resetsAt`
+    alone from `prior_reading`, when this run's own snapshot named none. A run that was not
+    refused and saw no qualifying snapshot writes no reading at all, whatever `prior_reading`
+    says (review finding 2): otherwise an ordinary non-quota failure after a hold would re-emit
+    the earlier `rejected` reading and renew it.
+    """
+    qualifying = _qualifying_snapshot(snapshots)
+    if qualifying is None and not refused:
+        return None
+
+    reading: Dict[str, Any] = {
+        "status": "rejected" if refused else "allowed",
+        "rateLimitType": "monthly",
+        "provider": "copilot",
+    }
+    if qualifying is not None:
+        key, value = qualifying
+        reading["quota"] = key
+        remaining = value.get("remainingPercentage")
+        if isinstance(remaining, (int, float)) and not isinstance(remaining, bool):
+            reading["remainingPercentage"] = remaining
+        resets_at = _resets_at_from(value)
+        if resets_at is not None:
+            reading["resetsAt"] = resets_at
+
+    if refused and "resetsAt" not in reading and isinstance(prior_reading, dict):
+        prior_resets_at = prior_reading.get("resetsAt")
+        if isinstance(prior_resets_at, (int, float)) and not isinstance(prior_resets_at, bool):
+            reading["resetsAt"] = prior_resets_at
+
+    return reading
+
+
 class CopilotUsageLedger:
     """One per `run_turn` call (D2). Stdlib-only."""
 
@@ -86,6 +168,10 @@ class CopilotUsageLedger:
         self._compactions: List[_Compaction] = []
         self._checkpoint: Optional[_Checkpoint] = None
         self._prompt_result: Optional[Dict[str, Any]] = None
+        #: The newest `quotaSnapshots` map a call carried (D7). Last call observed wins.
+        self._quota_snapshots: Optional[Dict[str, Any]] = None
+        #: D8: recognised only by a `session.error`'s structured fields, never message text.
+        self._refused = False
 
     def observe_event(self, event_type: str, data: Dict[str, Any]) -> None:
         if not isinstance(data, dict):
@@ -99,6 +185,12 @@ class CopilotUsageLedger:
             )
         elif event_type == "session.compaction_complete":
             self._observe_compaction(data)
+        elif event_type == "session.error":
+            self._observe_error(data)
+
+    def _observe_error(self, data: Dict[str, Any]) -> None:
+        if data.get("errorType") == "quota" and data.get("errorCode") == "quota_exceeded":
+            self._refused = True
 
     def _observe_call(self, data: Dict[str, Any]) -> None:
         call_id = data.get("providerCallId") or data.get("apiCallId")
@@ -106,6 +198,9 @@ class CopilotUsageLedger:
             if call_id in self._seen_call_ids:
                 return
             self._seen_call_ids.add(call_id)
+        snapshots = data.get("quotaSnapshots")
+        if isinstance(snapshots, dict):
+            self._quota_snapshots = snapshots
         dims = _mapped(data, _CALL_KEY_MAP)
         sample = _accounting_from_dimensions(dims, source="copilot_calls")
         total_tokens = sample.total_tokens if sample is not None else 0
@@ -238,6 +333,11 @@ class CopilotUsageLedger:
         provisional_nano_aiu = per_call_nano_aiu
         provisional_premium_requests = session_premium_requests_total
 
+        # D7/D8: this run's own reading. With no database (D2) it cannot fill `resetsAt` from
+        # an earlier run when this run saw no qualifying snapshot of its own; that is
+        # `settle_copilot_credits`'s job, at run end, against the project's last written reading.
+        allowance = quota_reading(self._quota_snapshots, refused=self._refused, prior_reading=None)
+
         return AccountingSample(
             source=winner.source,
             input_tokens=winner.input_tokens,
@@ -247,6 +347,7 @@ class CopilotUsageLedger:
             cache_write_tokens=winner.cache_write_tokens,
             reasoning_tokens=winner.reasoning_tokens,
             model=model,
+            allowance=allowance,
             ai_nano_aiu=provisional_nano_aiu,
             premium_requests=provisional_premium_requests,
             session_nano_aiu_total=session_nano_aiu_total,

@@ -12,9 +12,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 
-from hub.copilot_usage import CopilotUsageLedger
+from hub.copilot_usage import CopilotUsageLedger, quota_reading
 from hub.db.engine import async_session_factory
 from hub.db.models import Project, Run
+from hub.provider_allowance import allowance_refusal
 from hub.runner_events import AccountingSample
 from hub.usage_accounting import record_turn_usage, settle_copilot_credits
 
@@ -657,3 +658,343 @@ async def test_credits_baseline_uses_insertion_order_not_a_clock_stepping_backwa
 
     assert charges[3] == 50000000
     assert sum(c or 0 for c in charges) == 550000000
+
+
+# --- Task 1.9: quota (design D7, D8) ----------------------------------------------------------
+
+
+def _quota_snapshot(
+    remaining: float, *, reset_date: str = "2026-10-01T00:00:00Z"
+) -> Dict[str, Any]:
+    """The acp4 shape: `chat` qualifies, `completions` is excluded by name, `premium_interactions`
+    by its zero entitlement (Free account)."""
+    return {
+        "chat": {
+            "isUnlimitedEntitlement": False,
+            "entitlementRequests": 200,
+            "usedRequests": 7,
+            "remainingPercentage": remaining,
+            "resetDate": reset_date,
+        },
+        "completions": {
+            "isUnlimitedEntitlement": False,
+            "entitlementRequests": 2000,
+            "remainingPercentage": 100,
+            "resetDate": reset_date,
+        },
+        "premium_interactions": {
+            "isUnlimitedEntitlement": False,
+            "entitlementRequests": 0,
+            "remainingPercentage": 0,
+            "resetDate": reset_date,
+        },
+    }
+
+
+RESETS_AT_2026_10_01 = int(datetime(2026, 10, 1, tzinfo=timezone.utc).timestamp())
+
+
+def _future_epoch(days: int = 5) -> int:
+    return int((datetime.now(timezone.utc) + timedelta(days=days)).timestamp())
+
+
+def _past_epoch(days: int = 5) -> int:
+    return int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
+
+
+def test_acp4_quota_snapshot_gives_an_allowed_reading() -> None:
+    events, prompt_result_usage = acp4_events()
+    call_events = [(t, d) for t, d in events if t == "assistant.usage"]
+    # The newest call's own snapshot (call 3, remainingPercentage 96.5) is the reading -- D7.
+    call_events[-1][1]["quotaSnapshots"] = _quota_snapshot(96.5)
+
+    ledger = CopilotUsageLedger()
+    for event_type, data in call_events:
+        ledger.observe_event(event_type, data)
+    ledger.observe_prompt_result(prompt_result_usage)
+
+    sample = ledger.finish(session_was_new=True)
+
+    assert sample.allowance == {
+        "status": "allowed",
+        "quota": "chat",
+        "rateLimitType": "monthly",
+        "resetsAt": RESETS_AT_2026_10_01,
+        "remainingPercentage": 96.5,
+        "provider": "copilot",
+    }
+
+
+def test_quota_exceeded_error_gives_a_rejected_reading_allowance_refusal_sees() -> None:
+    events, _ = acp4_events()
+    call_events = [(t, d) for t, d in events if t == "assistant.usage"]
+    call_events[-1][1]["quotaSnapshots"] = _quota_snapshot(96.5)
+
+    ledger = CopilotUsageLedger()
+    for event_type, data in call_events:
+        ledger.observe_event(event_type, data)
+    ledger.observe_event("session.error", {"errorType": "quota", "errorCode": "quota_exceeded"})
+
+    sample = ledger.finish(session_was_new=True)
+
+    assert sample.allowance is not None
+    assert sample.allowance["status"] == "rejected"
+    assert allowance_refusal(sample.allowance) is not None
+
+
+@pytest.mark.parametrize(
+    "error_data",
+    [
+        {"errorType": "rate_limit", "errorCode": "session_quota_exceeded"},
+        {"errorType": "rate_limit", "errorCode": "billing_not_configured"},
+        {"errorType": "query", "errorCode": None, "message": "quota exceeded"},
+    ],
+)
+def test_other_error_codes_leave_the_reading_allowed(error_data: Dict[str, Any]) -> None:
+    # D8: recognised only by `errorType == "quota"` and `errorCode == "quota_exceeded"` --
+    # never message text, and no other structured errorType/errorCode pair.
+    events, _ = acp4_events()
+    call_events = [(t, d) for t, d in events if t == "assistant.usage"]
+    call_events[-1][1]["quotaSnapshots"] = _quota_snapshot(96.5)
+
+    ledger = CopilotUsageLedger()
+    for event_type, data in call_events:
+        ledger.observe_event(event_type, data)
+    ledger.observe_event("session.error", error_data)
+
+    sample = ledger.finish(session_was_new=True)
+
+    assert sample.allowance is not None
+    assert sample.allowance["status"] == "allowed"
+
+
+def test_quota_reading_with_no_qualifying_snapshot_and_not_refused_writes_nothing() -> None:
+    assert quota_reading(None, refused=False, prior_reading=None) is None
+    only_excluded = {
+        "completions": {"entitlementRequests": 2000, "remainingPercentage": 100},
+        "premium_interactions": {"entitlementRequests": 0, "remainingPercentage": 0},
+    }
+    assert quota_reading(only_excluded, refused=False, prior_reading=None) is None
+
+
+def test_quota_reading_review_finding_2_ignores_prior_when_not_refused() -> None:
+    # A non-refused run with no snapshot writes no reading, whatever `prior_reading` says --
+    # otherwise an ordinary non-quota failure after a hold would renew it (design D8).
+    prior = {
+        "status": "rejected",
+        "resetsAt": _future_epoch(),
+        "rateLimitType": "monthly",
+        "provider": "copilot",
+    }
+    assert quota_reading(None, refused=False, prior_reading=prior) is None
+
+
+def test_quota_reading_refused_with_no_snapshot_copies_only_resets_at_from_prior() -> None:
+    # Review finding 1(b)/2: a whole-reading copy would wrongly carry the prior's own quota,
+    # remainingPercentage and "allowed" status.
+    future = _future_epoch()
+    prior = {
+        "status": "allowed",
+        "quota": "chat",
+        "remainingPercentage": 12.0,
+        "resetsAt": future,
+        "rateLimitType": "monthly",
+        "provider": "copilot",
+    }
+    reading = quota_reading(None, refused=True, prior_reading=prior)
+    assert reading == {
+        "status": "rejected",
+        "resetsAt": future,
+        "rateLimitType": "monthly",
+        "provider": "copilot",
+    }
+
+
+def test_quota_reading_refused_with_no_snapshot_and_no_prior_has_no_resets_at() -> None:
+    reading = quota_reading(None, refused=True, prior_reading=None)
+    assert reading == {"status": "rejected", "rateLimitType": "monthly", "provider": "copilot"}
+    assert "resetsAt" not in reading
+
+
+@pytest.mark.asyncio
+async def test_settle_fills_resets_at_from_the_projects_newest_copilot_reading(app: Any) -> None:
+    # Review finding 1(b): agent b's first-call refusal, with agent a's Copilot reading in the
+    # same project ahead and none of b's own, is filled with a's resetsAt.
+    project_id = "proj-quota-1b"
+    future = _future_epoch()
+    async with async_session_factory() as session:
+        session.add(Project(id=project_id, name=project_id))
+        await session.flush()
+        session.add(Run(id="run-quota-1b-a", project_id=project_id, agent="a", session_id="sess-a"))
+        await session.flush()
+        await record_turn_usage(
+            session,
+            run_id="run-quota-1b-a",
+            project_id=project_id,
+            agent="a",
+            runner="copilot",
+            sample=AccountingSample(
+                source="copilot_calls",
+                allowance={
+                    "status": "allowed",
+                    "quota": "chat",
+                    "remainingPercentage": 12.0,
+                    "resetsAt": future,
+                    "rateLimitType": "monthly",
+                    "provider": "copilot",
+                },
+            ),
+        )
+        await session.commit()
+
+        session.add(Run(id="run-quota-1b-b", project_id=project_id, agent="b", session_id="sess-b"))
+        await session.flush()
+
+        ledger = CopilotUsageLedger()
+        ledger.observe_event("session.error", {"errorType": "quota", "errorCode": "quota_exceeded"})
+        sample = ledger.finish(session_was_new=True)
+        assert sample.allowance == {
+            "status": "rejected",
+            "rateLimitType": "monthly",
+            "provider": "copilot",
+        }
+
+        settled = await settle_copilot_credits(
+            session, sample, project_id=project_id, agent="b", session_id="sess-b"
+        )
+
+    assert settled is not None
+    assert settled.allowance == {
+        "status": "rejected",
+        "resetsAt": future,
+        "rateLimitType": "monthly",
+        "provider": "copilot",
+    }
+    assert allowance_refusal(settled.allowance) is not None
+
+
+@pytest.mark.asyncio
+async def test_settle_does_not_borrow_a_reading_from_another_project(app: Any) -> None:
+    future = _future_epoch()
+    async with async_session_factory() as session:
+        session.add(Project(id="proj-quota-other", name="proj-quota-other"))
+        await session.flush()
+        session.add(
+            Run(
+                id="run-quota-other-a",
+                project_id="proj-quota-other",
+                agent="a",
+                session_id="sess-a",
+            )
+        )
+        await session.flush()
+        await record_turn_usage(
+            session,
+            run_id="run-quota-other-a",
+            project_id="proj-quota-other",
+            agent="a",
+            runner="copilot",
+            sample=AccountingSample(
+                source="copilot_calls",
+                allowance={
+                    "status": "allowed",
+                    "resetsAt": future,
+                    "rateLimitType": "monthly",
+                    "provider": "copilot",
+                },
+            ),
+        )
+        await session.commit()
+
+        session.add(Project(id="proj-quota-mine", name="proj-quota-mine"))
+        await session.flush()
+        session.add(
+            Run(
+                id="run-quota-mine-b",
+                project_id="proj-quota-mine",
+                agent="b",
+                session_id="sess-b",
+            )
+        )
+        await session.flush()
+
+        ledger = CopilotUsageLedger()
+        ledger.observe_event("session.error", {"errorType": "quota", "errorCode": "quota_exceeded"})
+        sample = ledger.finish(session_was_new=True)
+
+        settled = await settle_copilot_credits(
+            session, sample, project_id="proj-quota-mine", agent="b", session_id="sess-b"
+        )
+
+    assert settled is not None
+    assert settled.allowance == {
+        "status": "rejected",
+        "rateLimitType": "monthly",
+        "provider": "copilot",
+    }
+
+
+@pytest.mark.asyncio
+async def test_settle_ignores_a_prior_reading_whose_reset_has_passed(app: Any) -> None:
+    past = _past_epoch()
+    async with async_session_factory() as session:
+        session.add(Project(id="proj-quota-past", name="proj-quota-past"))
+        await session.flush()
+        session.add(
+            Run(id="run-quota-past-a", project_id="proj-quota-past", agent="a", session_id="sess-a")
+        )
+        await session.flush()
+        await record_turn_usage(
+            session,
+            run_id="run-quota-past-a",
+            project_id="proj-quota-past",
+            agent="a",
+            runner="copilot",
+            sample=AccountingSample(
+                source="copilot_calls",
+                allowance={
+                    "status": "rejected",
+                    "resetsAt": past,
+                    "rateLimitType": "monthly",
+                    "provider": "copilot",
+                },
+            ),
+        )
+        await session.commit()
+
+        session.add(
+            Run(id="run-quota-past-b", project_id="proj-quota-past", agent="b", session_id="sess-b")
+        )
+        await session.flush()
+
+        ledger = CopilotUsageLedger()
+        ledger.observe_event("session.error", {"errorType": "quota", "errorCode": "quota_exceeded"})
+        sample = ledger.finish(session_was_new=True)
+
+        settled = await settle_copilot_credits(
+            session, sample, project_id="proj-quota-past", agent="b", session_id="sess-b"
+        )
+
+    assert settled is not None
+    assert settled.allowance == {
+        "status": "rejected",
+        "rateLimitType": "monthly",
+        "provider": "copilot",
+    }
+    assert "resetsAt" not in settled.allowance
+
+
+@pytest.mark.asyncio
+async def test_settle_non_refused_sample_with_no_snapshot_has_no_allowance(app: Any) -> None:
+    # Review finding 2: a settled non-refused sample with no snapshot carries `allowance is
+    # None`, so a later `rate_limit` failure cannot renew a hold from it.
+    async with async_session_factory() as session:
+        settled = await settle_copilot_credits(
+            session,
+            CopilotUsageLedger().finish(session_was_new=True),
+            project_id="proj-quota-none",
+            agent="copilot",
+            session_id="sess-quota-none",
+        )
+    assert settled is not None
+    assert settled.allowance is None

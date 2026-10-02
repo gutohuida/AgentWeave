@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import case, func, literal_column, select
@@ -14,6 +15,11 @@ from .runner_events import AccountingSample
 from .utils import short_id
 
 logger = logging.getLogger(__name__)
+
+#: Rows read looking for the project's newest qualifying Copilot reading (design D8). A page,
+#: not everything: a long-lived project's `turn_usage` history should not be scanned in full
+#: just to fill one `resetsAt`.
+_PRIOR_QUOTA_PAGE = 50
 
 
 async def record_turn_usage(
@@ -115,6 +121,45 @@ async def copilot_session_baseline(
     return int(nano_aiu), premium
 
 
+async def copilot_prior_quota_reading(
+    db: AsyncSession, project_id: str, *, now: Optional[datetime] = None
+) -> Optional[Dict[str, Any]]:
+    """The project's newest Copilot allowance reading whose `resetsAt` is still ahead, read
+    across **every agent** (design D8, review finding 1(b)): a quota refusal lands on a run's
+    first call, which has no `assistant.usage` and so no snapshot of its own, and the quota is
+    per GitHub account, so another of the project's Copilot agents states the same reset.
+    `ORDER BY turn_usage.rowid DESC`, as `copilot_session_baseline` reads insertion order
+    (review finding 3) — not `observed_at`. Returns None on no qualifying row, or on any
+    exception, logged.
+    """
+    current = now if now is not None else datetime.now(timezone.utc)
+    try:
+        rows = (
+            (
+                await db.execute(
+                    select(TurnUsage.allowance)
+                    .where(TurnUsage.project_id == project_id, TurnUsage.runner == "copilot")
+                    .order_by(literal_column("turn_usage.rowid").desc())
+                    .limit(_PRIOR_QUOTA_PAGE)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    except Exception:
+        logger.exception("copilot_prior_quota_reading failed for project=%s", project_id)
+        return None
+    for allowance in rows:
+        if not isinstance(allowance, dict):
+            continue
+        resets_at = allowance.get("resetsAt")
+        if isinstance(resets_at, bool) or not isinstance(resets_at, (int, float)):
+            continue
+        if resets_at > current.timestamp():
+            return allowance
+    return None
+
+
 async def settle_copilot_credits(
     db: AsyncSession,
     sample: Optional[AccountingSample],
@@ -180,8 +225,23 @@ async def settle_copilot_credits(
             stored_total = None
             stored_premium = None
 
+        # D8: the ledger could not read the project's prior reading (D2, no database), so a
+        # refused run with none of its own named no `resetsAt`. Fill it now, only when this run
+        # is already `rejected` and still carries none — never for an `allowed` reading, and
+        # never overwriting a `resetsAt` this run's own snapshot already named.
+        allowance = sample.allowance
+        if (
+            isinstance(allowance, dict)
+            and allowance.get("status") == "rejected"
+            and "resetsAt" not in allowance
+        ):
+            prior = await copilot_prior_quota_reading(db, project_id)
+            if prior is not None:
+                allowance = dict(allowance, resetsAt=prior.get("resetsAt"))
+
         return dataclasses.replace(
             sample,
+            allowance=allowance,
             ai_nano_aiu=ai_nano_aiu,
             premium_requests=premium_requests,
             session_nano_aiu_total=stored_total,
