@@ -332,6 +332,13 @@ class AccountingSample:
     model: Optional[str] = None
     api_equivalent_usd_micros: Optional[int] = None
     allowance: Optional[Dict[str, Any]] = None
+    ai_nano_aiu: Optional[int] = None
+    premium_requests: Optional[float] = None
+    session_nano_aiu_total: Optional[int] = None
+    session_premium_requests_total: Optional[float] = None
+    #: Not persisted. Set only by CopilotUsageLedger.finish (design D2); settle_copilot_credits
+    #: reads it to decide whether to act on a sample at all.
+    credit_session_new: Optional[bool] = None
 
     def merged(self, newer: "AccountingSample") -> "AccountingSample":
         """Overlay newer reported fields while retaining independent earlier telemetry."""
@@ -346,6 +353,11 @@ class AccountingSample:
             "model",
             "api_equivalent_usd_micros",
             "allowance",
+            "ai_nano_aiu",
+            "premium_requests",
+            "session_nano_aiu_total",
+            "session_premium_requests_total",
+            "credit_session_new",
         ):
             newer_value = getattr(newer, name)
             values[name] = newer_value if newer_value is not None else getattr(self, name)

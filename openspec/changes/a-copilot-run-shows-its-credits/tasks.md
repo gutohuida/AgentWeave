@@ -45,7 +45,7 @@ root.
 
 ## 1. Tests first — each fails on today's code
 
-- [ ] 1.1 New `hub/tests/test_copilot_usage.py`, fixture `acp4_events()` built from the acp4
+- [x] 1.1 New `hub/tests/test_copilot_usage.py`, fixture `acp4_events()` built from the acp4
   transcript in the order Copilot emitted it (three `assistant.usage`, then `session.usage_checkpoint`,
   then the prompt result `{inputTokens 33108, outputTokens 64, totalTokens 33172, thoughtTokens 0,
   cachedReadTokens 21888, cachedWriteTokens 0}`). With `session_was_new=True`, `finish()` gives input
@@ -54,8 +54,27 @@ root.
   `source == "copilot_calls"` (the calls and the result tie at 33172; a tie goes to the calls, D3).
   Fails today
   (no module). `py -3.11 -m pytest hub/tests/test_copilot_usage.py -q`
-- [ ] 1.2 Same file: the sum is not doubled. Total is 33172, not 66344, whichever of the calls or
+  - **Done 2026-10-02.** `hub/hub/copilot_usage.py` (new): `CopilotUsageLedger` with
+    `observe_event`/`observe_prompt_result`/`finish` covering D3's per-call sum, the key-name
+    mapping (D3 *Key names*) and the tie-goes-to-calls rule; `AccountingSample`
+    (`runner_events.py`) gained the five new fields and carries them in `merged` (task 2.3's
+    dataclass half only — `db/models.py`, the migration and `record_turn_usage`'s write stay open,
+    tasks 2.1/2.2). `observe_prompt_error` and D7/D8's quota reading are not built yet (tests 1.9+).
+    `py -3.11 -m pytest hub/tests/test_copilot_usage.py -q`: 1 passed. Re-ran
+    `hub/tests/test_accounting_model.py`, `test_agent_trigger.py`, `test_provider_allowance.py`,
+    `test_runner_parsing.py` (the four files that touch `AccountingSample`/`merged`): 169 passed,
+    nothing moved by the new fields (they default to `None` and sit after the existing ones).
+    `ruff check` clean; `black --check --target-version py311` clean after one reformat.
+- [x] 1.2 Same file: the sum is not doubled. Total is 33172, not 66344, whichever of the calls or
   the prompt result the ledger saw first
+  - **Done 2026-10-02.** `test_sum_is_not_doubled_whichever_side_arrives_first`: runs the acp4
+    fixture through two ledgers, one fed events-then-result, one fed result-then-events (`finish`
+    only reads accumulated state, so the two call orders are the only degrees of freedom `observe_event`/
+    `observe_prompt_result` expose). Both give `total_tokens == 33172`, neither 66344.
+    `py -3.11 -m pytest hub/tests/test_copilot_usage.py -q`: 2 passed. Also re-ran
+    `test_accounting_model.py`, `test_agent_trigger.py`, `test_provider_allowance.py`,
+    `test_runner_parsing.py`: 171 passed. `ruff check` and `black --check --target-version py311`
+    clean on all three touched files.
 - [ ] 1.3 Same file: dropped events (`session_was_new=True`). Only calls 1 and 3 observed (their sum
   is 22080 + 26 = 22106), plus the full prompt result, gives total 33172 and
   `source == "copilot_prompt_result"`, `cache_read_tokens == 21888` (the prompt result's
