@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 18,
+    "iteration": 19,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-dialog-takes-the-keyboard-when-its-opens-drive",
-    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-drive: openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md tasks 3.1/3.2 (group 3, the last two tasks in the file). Start a throwaway trial Hub on a fresh port/profile serving the rebuilt bundle (hub/hub/static/ui, refreshed in commit a11a328 -- 176/176 vitest files, 1805/1805 tests, lint clean, build succeeded). 3.1: drive leg E of scripts/drive/t_d9_clearing_instructions_postchange.py in a real browser (Playwright) and record each press's document.activeElement against the rewritten post-fix assertion (iter17, commit 664e85a) -- open puts focus on Cancel, four Tabs cycle [Clear instructions, Cancel, Clear instructions, Cancel] inside the panel. 3.2: in the same browser, open and close each of the four D5 dialogs (CharterForm, RunnerForm, JobForm, SetupModal) from its trigger with the keyboard alone (Escape to close) and record where focus is on open and after close. Record in scripts/drive/FINDINGS.md if either disproves or confirms F307; tick 3.1/3.2 in tasks.md with the evidence. Group 2 (the fix) is fully done -- 29/29 tasks, including task 1.8 which iteration 18 found still unticked from an earlier gap and fixed with before/after evidence. After 3.1/3.2, the next queue item is '-archive' (openspec validate --strict, then archive, per night-window.md step 4.1 -- set F307's FINDINGS.md Status to fixed <sha>).",
+    "current": "a-dialog-takes-the-keyboard-when-its-opens-archive",
+    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-archive: group 3 (drive it) is now done -- tasks 3.1 and 3.2 both ticked with browser evidence from iteration 19 (throwaway :8012 Hub, bundle index-Cyk3sQbn.js). openspec validate a-dialog-takes-the-keyboard-when-it-opens --strict, then archive the change per night-window.md step 4.1. Set F307's FINDINGS.md Status line to 'fixed <sha>' for this change's commit (the D13/initial-focus half; the Tab-wrap half was already closed by UI-1 2026-09-23) and correct the open-severity list.",
     "queue": [
         {
             "id": "F479-fix",
@@ -55,11 +55,11 @@
         },
         {
             "id": "a-dialog-takes-the-keyboard-when-its-opens-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive the change in a browser against the served bundle",
             "model": "sonnet",
             "effort": "medium",
-            "detail": "Group 3 of the same tasks.md. UI change: must be driven in a real browser against the rebuilt bundle on a fresh drive port/profile, not a transcription. Record in scripts/drive/FINDINGS.md if it disproves or confirms F307."
+            "detail": "Done iter 19. Fresh throwaway Hub on :8012 (profile drive1002, clean), bundle index-Cyk3sQbn.js (src_commit 096829c). t_d9_clearing_instructions_postchange.py leg E: 59/59 passed, F307's pre-fix escape-to-textarea gone, Cancel gets initial focus, 4-Tab cycle confirmed. New t_d10_dialog_focus_sweep.py (task-3.2-only, not a durable harness): CharterForm/RunnerForm/JobForm/SetupModal opened+closed by keyboard alone, 21/21 passed. One probe bug found+fixed (D5 dialogs put role=dialog on panelRef itself, not a wrapping scrim like ClearInstructionsDialog -- not a product defect). tasks.md 3.1/3.2 ticked with evidence; FINDINGS.md F307 entry appended confirming D13's half fixed. validate --strict valid."
         },
         {
             "id": "a-dialog-takes-the-keyboard-when-its-opens-archive",

@@ -73,5 +73,29 @@ In `hub/ui/src/__tests__/useDialogFocus.test.tsx` unless named otherwise.
 
 ## 3. Drive it
 
-- [ ] 3.1 On a trial Hub serving the rebuilt bundle, drive leg E of `t_d9_clearing_instructions_postchange.py` in a real browser and record each press's `document.activeElement`
-- [ ] 3.2 In the same browser, open and close each of the four D5 dialogs from its trigger with the keyboard alone (Escape to close), and record where focus is on open and after close
+- [x] 3.1 On a trial Hub serving the rebuilt bundle, drive leg E of `t_d9_clearing_instructions_postchange.py` in a real browser and record each press's `document.activeElement` —
+      done: a fresh throwaway Hub on `:8012` (`~/.agentweave/hub/profiles/drive1002/agentweave.db`,
+      a clean profile, not `:8010`/`:8000`), serving bundle `index-Cyk3sQbn.js` (`ui-build-stamp.json`
+      `src_commit: 096829c`, the bundle committed at task 2.11). Ran
+      `scripts/drive/t_d9_clearing_instructions_postchange.py` against it: **59/59 checks passed**.
+      Leg E, in order: Save holds keyboard focus before the dialog opens; Enter on Save opens it;
+      focus moves straight into the panel, onto Cancel (`{'tag': 'BUTTON', 'text': 'Cancel',
+      'inPanel': True}`) — F307's pre-fix behaviour (press 1 escaping to the textarea) is gone; four
+      Tab presses cycle `['Clear instructions', 'Cancel', 'Clear instructions', 'Cancel']`, every one
+      `inPanel: True`; Escape closes it and returns focus to Save. Full output recorded in
+      `scripts/drive/FINDINGS.md`'s F307 entry.
+- [x] 3.2 In the same browser, open and close each of the four D5 dialogs from its trigger with the keyboard alone (Escape to close), and record where focus is on open and after close —
+      done: new one-off script `scripts/drive/t_d10_dialog_focus_sweep.py` (not a durable regression
+      harness like `t_d9`'s; this task's own evidence), against the same `:8012` throwaway Hub.
+      For each of `CharterForm` ("New Charter"), `RunnerForm` ("New Runner"), `JobForm` ("New Job")
+      and `SetupModal` ("Hub setup"): focused the trigger button, pressed Enter, read
+      `document.activeElement`, pressed Escape, read it again. **21/21 checks passed** — in every
+      case focus landed inside the panel (on its `data-dialog-initial-focus` element: the name/path
+      input) the instant it opened, and Escape returned focus to the trigger that opened it. One
+      probe bug found and fixed along the way: the focus probe borrowed D9's `scrim.firstElementChild`
+      panel lookup, which assumes `role="dialog"` sits on a wrapper around the focus-trapped panel
+      (true for `ClearInstructionsDialog`); all four D5 dialogs put `role="dialog"` directly on
+      `panelRef` itself, so that lookup under-counted "inPanel" until corrected to treat the
+      `role="dialog"` element as the panel — a probe defect, not a product one (confirmed by reading
+      `ChartersPage.tsx:258-260`, `RunnersPage.tsx:239-241`, `JobForm.tsx:135-138`,
+      `SetupModal.tsx:47-50`, all four `ref={panelRef}` ... `role="dialog"` on the same element).

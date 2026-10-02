@@ -26200,6 +26200,11 @@ fail that file loudly, which is the right moment to revisit it.
 
 **Review follow-up 2026-09-23 (adversarial Opus review of UI-1).** Escape had the same two-dialog problem, predating the round: the older dialog's listener was registered first and so closed first. It is now gated on the same stack. Test: `useDialogFocus — Escape with two of its own dialogs open`.
 
+**D13's half — which control gets initial focus — CONFIRMED FIXED, 2026-10-02 (night window, iteration 19).** `a-dialog-takes-the-keyboard-when-it-opens` (D1) answers UI-1's deferred question: the panel's `data-dialog-initial-focus` mark moves focus to Cancel on mount, so a destructive confirmation never leaves focus on the trigger in the first place. Re-driven in a real browser on a fresh `:8012` throwaway Hub serving bundle `index-Cyk3sQbn.js` (built from `096829c`):
+- `t_d9_clearing_instructions_postchange.py` leg E, 59/59 checks passed. Open puts focus on Cancel (not Save, not the textarea); four Tab presses cycle `["Clear instructions", "Cancel", "Clear instructions", "Cancel"]`, all inside the panel; Escape returns focus to Save.
+- `t_d10_dialog_focus_sweep.py` (new, task 3.2): the other three D5 dialogs — `CharterForm`, `RunnerForm`, `JobForm` — plus `SetupModal`, opened from each one's own trigger with the keyboard alone (`Enter`) and closed with `Escape`. 21/21 checks passed: in every one, focus lands inside the panel (on its `data-dialog-initial-focus` element) the moment it opens, and Escape returns focus to the trigger that opened it.
+`ArchiveConfirmDialog` and `TaskDetailDrawer` (D6's effect-based variant) were not re-driven live this iteration — they were covered by task 2.8's vitest coverage, not by this browser sweep.
+
 ---
 
 ## F308 (B) — pinning CI to the resolution buys agreement by spending the drift alarm, and nothing replaced it
