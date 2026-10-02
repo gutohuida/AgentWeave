@@ -609,11 +609,29 @@ root.
 
 ## 2. Schema and sample
 
-- [ ] 2.1 `db/models.py`: add the four `TurnUsage` columns and two `WorkerInvocation` columns (design
+- [x] 2.1 `db/models.py`: add the four `TurnUsage` columns and two `WorkerInvocation` columns (design
   D5). Leave `ck_turn_usage_availability` unchanged
-- [ ] 2.2 The migration (next free number at build time): table guards as `0033`/`0034`,
+
+  **Done 2026-10-02.** The `TurnUsage` half (`ai_nano_aiu`, `premium_requests`,
+  `session_nano_aiu_total`, `session_premium_requests_total`) was already built at task 1.8 (iter
+  27, migration `0116`) as part of closing that test-ahead gap. This task's remaining scope was the
+  `WorkerInvocation` half: `ai_nano_aiu` (BigInteger, nullable) and `premium_requests` (Float,
+  nullable), added after `cost_usd_micros` in `db/models.py:1917-1919`. `ck_turn_usage_availability`
+  untouched (constrains only token columns per D5).
+- [x] 2.2 The migration (next free number at build time): table guards as `0033`/`0034`,
   `batch_alter_table`, no backfill. Bump `HEAD_REVISION` (`hub/tests/test_migrations.py`) and the head
   assertion in `hub/tests/test_project_persistence.py`. `py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py -q`
+
+  **Done 2026-10-02.** `0117_worker_invocations_copilot_credits.py`: guards for a missing
+  `worker_invocations` table (as `0033`/`0034` do), `batch_alter_table(recreate="never")`, no
+  backfill, symmetric `downgrade()`. `HEAD_REVISION` bumped to `"0117"` in `test_migrations.py`;
+  head assertion bumped to `"0117"` in `test_project_persistence.py`. `_database_at_0115` extended
+  to also drop the two `worker_invocations` credit columns so `test_migration_adds_copilot_credit_columns_to_both_tables`
+  and `..._without_disturbing_an_existing_row` (task 1.14's tests, written ahead of this task) now
+  exercise the real migration instead of a gap. `py -3.11 -m pytest hub/tests/test_migrations.py
+  hub/tests/test_project_persistence.py -q`: 127 passed, 1 skipped, no regression. `ruff check` and
+  `black --check --target-version py311` clean on all four touched/added files. `openspec validate
+  a-copilot-run-shows-its-credits --strict`: valid.
 - [ ] 2.3 `runner_events.AccountingSample`: add `ai_nano_aiu`, `premium_requests`,
   `session_nano_aiu_total`, `session_premium_requests_total` (Optional, default None) and the
   unpersisted `credit_session_new: Optional[bool]`, and carry all five in `merged` (R3: a merge that

@@ -1913,6 +1913,10 @@ class WorkerInvocation(Base):
     cache_write_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     reasoning_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     cost_usd_micros: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # A Copilot one-shot call's credit charge (a-copilot-run-shows-its-credits, design D5).
+    # Nullable: not every worker call is a Copilot call, and a non-Copilot one reports nothing.
+    ai_nano_aiu: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    premium_requests: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 

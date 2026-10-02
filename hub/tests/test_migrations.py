@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0116"
+HEAD_REVISION = "0117"
 
 
 # ---------------------------------------------------------------------------
@@ -4546,13 +4546,15 @@ _TURN_USAGE_CREDIT_COLUMNS = _CREDIT_COLUMNS + (
 
 
 def _database_at_0115(tmp_path, name: str) -> tuple:
-    """Every table from the models, minus the Copilot credit columns 0116+ adds, stamped at 0115."""
+    """Every table from the models, minus the Copilot credit columns 0116/0117 add, stamped at 0115."""
     db_file = tmp_path / name
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run(_create_all_at(db_url))
     with sqlite3.connect(db_file) as conn:
         for column in _TURN_USAGE_CREDIT_COLUMNS:
             conn.execute(f"ALTER TABLE turn_usage DROP COLUMN {column}")
+        for column in _CREDIT_COLUMNS:
+            conn.execute(f"ALTER TABLE worker_invocations DROP COLUMN {column}")
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0115')")
         conn.commit()
