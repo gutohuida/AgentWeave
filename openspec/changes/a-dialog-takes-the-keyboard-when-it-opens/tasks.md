@@ -62,7 +62,14 @@ In `hub/ui/src/__tests__/useDialogFocus.test.tsx` unless named otherwise.
       presses from Save -> four from Cancel). `py -3.11 -m py_compile` on the file: clean. Not run
       live here — it needs a real Hub/browser and is this change's own group-3/-drive queue item,
       not this static edit
-- [ ] 2.11 Full vitest suite and `npm run lint`; `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py` (writes `ui-build-stamp.json`), and commit `hub/ui/src` with `hub/hub/static/ui` in one commit. Record counts inline
+- [x] 2.11 Full vitest suite: **176 files / 1805 tests passed** (`npx vitest run`; the two printed
+      "Error: boom" stacks are `ErrorBoundary.test.tsx`'s own intentional throw, not failures).
+      `npm run lint`: clean (`eslint . --ext ts,tsx --report-unused-disable-directives
+      --max-warnings 0`, zero output). `npm run build` (`tsc && vite build`): succeeded, 2715
+      modules transformed. `py -3.11 scripts/refresh_ui_bundle.py`: refreshed
+      `hub/hub/static/ui` and wrote `ui-build-stamp.json`. Committed `hub/ui/src` (unchanged by
+      this task) with `hub/hub/static/ui` and `ui-build-stamp.json` in one commit, per
+      `.claude/rules/hub-ui.md`
 
 ## 3. Drive it
 
