@@ -632,10 +632,32 @@ root.
   hub/tests/test_project_persistence.py -q`: 127 passed, 1 skipped, no regression. `ruff check` and
   `black --check --target-version py311` clean on all four touched/added files. `openspec validate
   a-copilot-run-shows-its-credits --strict`: valid.
-- [ ] 2.3 `runner_events.AccountingSample`: add `ai_nano_aiu`, `premium_requests`,
+- [x] 2.3 `runner_events.AccountingSample`: add `ai_nano_aiu`, `premium_requests`,
   `session_nano_aiu_total`, `session_premium_requests_total` (Optional, default None) and the
   unpersisted `credit_session_new: Optional[bool]`, and carry all five in `merged` (R3: a merge that
   dropped the flag would turn the settle into a no-op). `usage_accounting.record_turn_usage` writes them whether or not the sample is measured
+
+  **Done 2026-10-02 (already built at task 1.8, iter 27, `5ce2078` — this task only verifies it).**
+  `AccountingSample` already carried all five fields (`runner_events.py:335-341`) and `merged`
+  already carried all five (`:356-360`); `record_turn_usage` already wrote the four credit fields
+  gated only on `sample is not None`, not on `measured` (`usage_accounting.py:68-73`), per task
+  1.8's own evidence note (`tasks.md:214-215`). No gap existed by inspection, but no test proved it
+  for the unmeasured case specifically, so this task added one:
+  `test_unmeasured_sample_still_persists_copilot_credits` in `test_accounting_model.py` — an
+  `AccountingSample` with `total_tokens=None` (so `measured=False`/`status="unavailable"`) but all
+  four credit fields set, written via `record_turn_usage`, refreshed from the DB, asserting
+  `status=="unavailable"`, `total_tokens is None`, and all four credit fields round-trip. Verified
+  as a real regression test, not just a passing one: temporarily reverted the fix (gated all four
+  fields on `measured`) and reran — the new test failed (`assert None == 124144000` on
+  `ai_nano_aiu`); restored, reran — passes again. `py -3.11 -m pytest hub/tests/test_accounting_model.py
+  -q`: 6 passed. `py -3.11 -m pytest hub/tests/test_accounting_model.py
+  hub/tests/test_copilot_usage.py hub/tests/test_provider_allowance.py
+  hub/tests/test_run_reconciliation.py -q`: 75 passed, 4 failed — the 4 failures are task 1.19's
+  own pre-existing "confirm the gap" tests in `test_provider_allowance.py` (unimplemented product
+  code for a later task, not a regression; `git stash` of this task's one-file diff was unnecessary
+  to confirm since the failures are in a file this task never touched). `ruff check` and `black
+  --check --target-version py311` clean on `test_accounting_model.py`. `openspec validate
+  a-copilot-run-shows-its-credits --strict`: valid.
 
 ## 3. The compaction point and the thresholds
 

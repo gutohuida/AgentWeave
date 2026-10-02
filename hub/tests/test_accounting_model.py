@@ -127,6 +127,45 @@ async def test_record_turn_usage_is_idempotent_and_preserves_runner_telemetry(ap
 
 
 @pytest.mark.asyncio
+async def test_unmeasured_sample_still_persists_copilot_credits(app) -> None:
+    """Design D5: a quota-refused turn has no tokens (unmeasured) but may still carry a
+    settled Copilot charge or a session baseline worth keeping. `record_turn_usage` must write
+    the four credit fields even when `sample.total_tokens is None` drives `status` to
+    `"unavailable"` -- unlike the token fields, which stay `None` on that path."""
+    async with async_session_factory() as session:
+        project = Project(id="proj-unmeasured-credits", name="UnmeasuredCredits")
+        run = Run(id="run-unmeasured-credits", project_id=project.id, agent="copilot")
+        session.add_all([project, run])
+        await session.flush()
+        sample = AccountingSample(
+            source="copilot_calls",
+            ai_nano_aiu=124_144_000,
+            premium_requests=1.0,
+            session_nano_aiu_total=400_000_000,
+            session_premium_requests_total=2.0,
+        )
+        assert sample.total_tokens is None
+
+        row = await record_turn_usage(
+            session,
+            run_id=run.id,
+            project_id=project.id,
+            agent="copilot",
+            runner="copilot",
+            sample=sample,
+        )
+        await session.commit()
+        await session.refresh(row)
+
+        assert row.status == "unavailable"
+        assert row.total_tokens is None
+        assert row.ai_nano_aiu == 124_144_000
+        assert row.premium_requests == 1.0
+        assert row.session_nano_aiu_total == 400_000_000
+        assert row.session_premium_requests_total == 2.0
+
+
+@pytest.mark.asyncio
 async def test_conversation_usage_sums_only_that_conversations_runs(app) -> None:
     async with async_session_factory() as session:
         project = Project(id="proj-conv-usage", name="ConvUsage")
