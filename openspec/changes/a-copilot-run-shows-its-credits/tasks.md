@@ -109,8 +109,23 @@ root.
   closed` resource warning noted by iterations 20-22, not a test failure). `ruff check` and
   `black --check --target-version py311` clean on both touched files. `openspec validate
   a-copilot-run-shows-its-credits --strict`: valid.
-- [ ] 1.5 Same file: a subagent call (`parentToolCallId` set, `initiator: "sub-agent"`) is counted
+- [x] 1.5 Same file: a subagent call (`parentToolCallId` set, `initiator: "sub-agent"`) is counted
   once; a repeated notification with the same `providerCallId` is counted once
+
+  **Done 2026-10-02.** `test_subagent_call_counted_once_and_duplicate_notification_deduped` added
+  to `hub/tests/test_copilot_usage.py`. Feeds one top-level call plus one subagent call
+  (`parentToolCallId` set, `initiator: "sub-agent"`), then the subagent call's event a second time
+  (same `providerCallId`); asserts `total_tokens == 11009 + 510` (both calls counted once each,
+  not the duplicate counted twice) and `ai_nano_aiu == 222280000 + 5000000` (the per-call nano-AIU
+  sum, since no checkpoint was observed in this test). Sabotage check: with the `providerCallId`
+  dedup in `_observe_call` (`hub/hub/copilot_usage.py:94-98`) disabled, the test fails on the
+  `total_tokens` assert, confirming it actually exercises the dedup rather than passing
+  vacuously — reverted after the check (`git status --short` showed only the test file touched).
+  `py -3.11 -m pytest hub/tests/test_copilot_usage.py -v`: 6 passed. Regression (same four
+  `AccountingSample`-touching files plus this one): 175 passed (same unrelated aiosqlite-teardown
+  `RuntimeError: Event loop is closed` resource warning noted by iterations 20-23, not a test
+  failure). `ruff check` clean; `black --check --target-version py311` clean after one reformat.
+  `openspec validate a-copilot-run-shows-its-credits --strict`: valid.
 - [ ] 1.6 Same file: a `session.compaction_complete` with `compactionTokensUsed` adds its tokens and
   nano-AIU when no call has `providerCallId == requestId`, and adds nothing when one does
 - [ ] 1.7 Same file: two `session.usage_checkpoint` events (first 100000000/0, later 275856000/1) in

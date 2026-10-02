@@ -137,6 +137,37 @@ def test_second_prompt_result_replaces_the_first_not_summed() -> None:
     assert sample.source == "copilot_prompt_result"
 
 
+def test_subagent_call_counted_once_and_duplicate_notification_deduped() -> None:
+    events, _ = acp4_events()
+    top_call = next(
+        d for t, d in events if t == "assistant.usage"
+    )  # call 1: 10988/21/0, nano 222280000
+
+    subagent_call = {
+        "model": MODEL,
+        "inputTokens": 500,
+        "outputTokens": 10,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "reasoningTokens": 0,
+        "providerCallId": "SUBAGENT:0001",
+        "parentToolCallId": "TOOL:0001",
+        "initiator": "sub-agent",
+        "copilotUsage": {"totalNanoAiu": 5000000},
+    }
+
+    ledger = CopilotUsageLedger()
+    ledger.observe_event("assistant.usage", top_call)
+    ledger.observe_event("assistant.usage", subagent_call)
+    # A repeated notification with the same providerCallId: counted once, not twice.
+    ledger.observe_event("assistant.usage", dict(subagent_call))
+
+    sample = ledger.finish(session_was_new=True)
+
+    assert sample.total_tokens == 11009 + 510
+    assert sample.ai_nano_aiu == 222280000 + 5000000
+
+
 def test_all_calls_with_no_prompt_result_uses_the_calls() -> None:
     events, _ = acp4_events()
     call_events = [(t, d) for t, d in events if t == "assistant.usage"]
