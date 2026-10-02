@@ -33799,3 +33799,24 @@ replayed the schema's shape through `acptee`, so it proves the Hub's handling, n
 every armed `session.error` whole at warning level (`Copilot session.error errorType=… payload=…` in the Hub's
 log). **Wanted:** the first real quota refusal's line from that log, copied here. It either confirms D8 or
 corrects the field names. If a refusal ever arrives without a hold, look for that line first.
+
+## F483 (A) — A Copilot runner is "not signed in" on a machine where `copilot login` is current
+
+**Status:** open, filed 2026-10-02 on the work PC during task 10.1 of `a-run-reaches-the-hub-without-mcp`.
+**Ready:** cause reproduced; fix shape not chosen. Creating a Copilot agent returned `409` with "Copilot CLI is not
+signed in. Run `copilot login`.", and still did after the operator ran `copilot login` again. Copilot 1.0.89-1 (the
+npm platform binary the Hub resolves) keeps the token in the Windows Credential Manager
+(`…github.com:<login>.copilot-cli`), but it finds *which* account to read through `lastLoggedInUser` /
+`loggedInUsers` in `$COPILOT_HOME/config.json`. The Hub's worker home (`~/.agentweave/hub/copilot-home/worker`) and
+every per-agent home start without those keys, so `session/new` answers `-32000 "Authentication required"`.
+Reproduced by hand with the probe's own `PROBE_ARGS` and `copilot_guard_env`: an empty home gives `-32000`, and
+the same home seeded with only those two keys copied from `~/.copilot/config.json` gives `session/new` OK. This
+contradicts design-time evidence that auth survives an empty `COPILOT_HOME` (exploration
+`2026-09-27-copilot-as-a-full-runner/a-copilot-cli-capabilities.md:249`, measured on the home PC). Either the
+CLI's lookup changed or that machine had another credential path, such as a `gh` token. Running `copilot login` in a
+terminal writes only `~/.copilot`, so the reason the Hub shows tells the operator to do something that cannot help.
+**Workaround used:** the two keys were copied into the worker home's `config.json`. The probe flipped to
+`runnable: true` within one refresh. Each agent's home needs the same copy before its first run. **Fix
+candidates:** `ensure_copilot_home` and the worker-home setup copy `lastLoggedInUser`/`loggedInUsers` from the
+operator's default Copilot home, since neither key is a secret or a permission; or the not-signed-in reason names
+the home that was probed.

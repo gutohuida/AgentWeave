@@ -269,3 +269,18 @@ Open questions for later, not answered: how a canvas terminal relates to today's
 runs (is it an agent, a run, or something new?); which tabs, and whether they follow the terminal's
 current task; layout and persistence of the canvas; and what "connected" means concretely (tool
 server, identity, events). An exploration first (openspec-explore) when the operator picks it up.
+
+## R11 — Update the Copilot model list: it already offers Opus 5.5 and Sonnet 5.5
+**Asked:** 2026-10-02
+**Theme:** Agents & runners
+**Ready:** ready
+
+The operator noted, on the work PC, that Copilot already offers Opus 5.5 and Sonnet 5.5, but the
+Hub's list doesn't. `_COPILOT_MODEL_IDS` (`hub/hub/model_catalog.py`) was copied from
+`copilot help config` on build 1.0.88. The same command on build 1.0.89-1 (the npm platform binary on
+the work PC, 2026-10-02) adds three ids, in this order: `claude-opus-5.5` (after `claude-fable-5`),
+and `gpt-6-sol` and `gpt-6-luna` (before `gpt-6-astra`). That build's list has no `claude-sonnet-5.5`;
+the closest is `claude-sonnet-5`, which is already in the catalog. Before adding a Sonnet 5.5 id,
+confirm the exact id from a newer `copilot help config` or from `/model`. A list that is
+copied by hand goes stale with every Copilot release, so it is worth asking whether the
+catalog should be read from `copilot help config` at probe time instead.

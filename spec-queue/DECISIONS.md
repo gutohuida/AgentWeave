@@ -32,6 +32,12 @@ DECIDED. Absence is not consent.
   2026-09-28). Nothing in this window can run that check; it is scoped to the operator's own
   machine. Waive it, or do it and record the answer in the Round log, and 10.2 (strict validate,
   then archive) can run.
+- **2026-10-02, work PC (interactive):** the checks were begun and stopped after item 2 at the operator's
+  call. **MCP is not blocked there for the Hub-launched Copilot**: the run connected (`connected`/`mcp`) and
+  created the task through the MCP tool, with no managed-settings file or HKLM policy present. The shim path, and
+  so step 8's persistent-shell answer, was not exercised. Remaining choice: waive 10.1 on that evidence, or force
+  the shim there with `--disable-mcp-server agentweave` and finish items 3 to 6 and 8. Round log, "Work PC, task
+  10.1".
 
 ### `a-copilot-run-shows-its-credits` task 5.4: a Copilot one-shot's credits -- 2026-10-02 interactive, DECIDED
 

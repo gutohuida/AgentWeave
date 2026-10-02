@@ -1321,6 +1321,28 @@ Copilot spec turn told `shim` submit a document. Test 1.15 covers both runners' 
     as the follow-up's trigger); `proposal.md` (the launcher bullet); `test-guide.md` human-only 6 (Full access) and
     new 8 (what "Ask me" does not cover; record whether persistent sessions are in use).
 
+- **Work PC, task 10.1 (2026-10-02, interactive, operator present).** The human-only checks were begun on the work
+  PC and stopped by the operator after item 2, because **the change's premise does not hold there: MCP is not
+  blocked for the Copilot the Hub launches.** Evidence, read from the test Hub's database (a throwaway project, a
+  Copilot agent at "Ask me", model Auto resolving to `claude-opus-5`, Hub-resolved `copilot.exe` 1.0.89-1; the
+  interactive `copilot` on PATH reports 1.0.90-0):
+  - Item 2's run (`run-b9160fb388ca`, exit 0) recorded `harness_mcp_status=connected`, `plane_surface=mcp`. Its
+    one Hub call was the MCP tool `agentweave-create_task` (`category: mcp` in its `agent_outputs` payload),
+    which created the task. No permission card was raised (`permission_requests` empty); no `aw-tool` call ran.
+  - No managed policy exists to block it: no `%ProgramFiles%\GitHubCopilot\managed-settings.json`, nothing under
+    `HKLM:\SOFTWARE\Policies` for Copilot or GitHub, no `AutoRun` value, and Copilot's user cache records plan
+    `business` with `is_mcp_enabled: true`. Item 1's `/env` and `/mcp list` from an interactive session were not
+    collected, so an organisation-side block that applies only to interactive sessions, or only to IDEs, is not
+    excluded.
+  - Not run: forcing the shim with `--disable-mcp-server agentweave` (how 9.3 exercised it at home), and so items
+    3 to 6 and 8. **Step 8's question, whether Copilot's shell sessions persist between a run's commands on the
+    work PC, is unanswered**, so this entry gives no trigger for the detect-and-degrade follow-up (Decision E).
+  - Found on the way: F483 (a Copilot runner reads "not signed in" when `copilot login` is current, because
+    `COPILOT_HOME` lacks the account pointer the Credential Manager lookup needs) and request R11 (the Copilot
+    model list trails `copilot help config`).
+  - **10.1 stays open**: the operator has neither completed the checks nor waived them. `DECISIONS.md` row
+    `a-run-reaches-hub-10.1` records the remaining choice.
+
 ## Required of slices 1, 2; not provided to 5 (R3)
 
 Each slice owns its own file. This section states, in the owning slice's names, what this change needs from each, and

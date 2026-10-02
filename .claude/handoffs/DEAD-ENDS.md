@@ -1851,3 +1851,18 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-10-02 — vitest `instructionsUnreadEditor.test.tsx` ("still loads, edits, saves and confirms on
   the success path") failed once under the full run and passed 8/8 three times alone.** Load-dependent
   intermittent; not caused by the credits change.
+- **2026-10-02 (work PC) ? no `py` launcher.** Make a venv with `uv venv -p 3.11` outside the repo and install
+  through it. The corporate TLS proxy breaks uv's downloads unless `UV_NATIVE_TLS=1` is set.
+- **2026-10-02 (work PC) ? `reg.exe` is blocked by policy.** Read the registry with `Get-ItemProperty HKLM:\...`.
+- **2026-10-02 (work PC) ? the agent's `view` tool is refused by an erroring repo hook.** Read files with
+  `Get-Content`; grep still works.
+- **2026-10-02 (work PC) ? `ConvertFrom-Json` fails on Copilot's cache and `config.json`**: they are JSONC.
+  Strip `//` lines first, or parse in Python.
+- **2026-10-02 (work PC) ? a Copilot runner reads "not signed in" right after `copilot login`** (F483). The
+  token is in the Credential Manager; the account pointer (`lastLoggedInUser`, `loggedInUsers`) is in
+  `~/.copilot/config.json`, which the Hub's `COPILOT_HOME`s lack. Workaround until fixed: copy those two keys
+  into `~/.agentweave/hub/copilot-home/worker/config.json` and into each Copilot agent's home under
+  `copilot-home/projects/<pid>/<agent>/config.json` before its first run.
+- **2026-10-02 (work PC) ? MCP is not blocked for the Hub-launched Copilot** despite the expectation that
+  policy blocks it; a run connected and called `agentweave-create_task` over MCP. To exercise `aw-tool` there,
+  force it with `--disable-mcp-server agentweave` on the runner.
