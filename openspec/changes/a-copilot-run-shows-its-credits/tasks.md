@@ -709,10 +709,41 @@ root.
   "Fails today" in its own tasks.md line (`:351`) and unrelated to this task's one-file diff. `ruff
   check` and `black --check --target-version py311` clean on `checkpoint_policy.py`. `openspec
   validate a-copilot-run-shows-its-credits --strict`: valid.
-- [ ] 3.3 `checkpoint_trigger.consider`: resolve the agent's runner (`Agent.runner_id` → `Runner` →
+- [x] 3.3 `checkpoint_trigger.consider`: resolve the agent's runner (`Agent.runner_id` → `Runner` →
   adapter) and pass `compaction_percent`; the decline message names `policy.final_warning_percent`;
   both `checkpoint_due` payloads carry `threshold_source`. Task 1.13 passes.
   `py -3.11 -m pytest hub/tests/test_checkpoint_policy.py hub/tests/test_checkpoint_cutover.py -q`
+
+  Done iter 45. New `_agent_compaction_percent(db, agent)` helper (mirrors `_resolve_runner`'s
+  shape): None on no agent, no `runner_id`, a missing runner row, or `get_adapter(runner.cli)`
+  returning None — every missing-link case falls through to `resolve_policy`'s own `C=95` default,
+  nothing guessed here. `consider` calls it once per reading and passes the result as
+  `compaction_percent=` to `resolve_policy` (was called with no `compaction_percent` before, always
+  C=95). The dismissed-conversation decline message now reads `policy.final_warning_percent`
+  instead of the imported `FINAL_WARNING_PERCENT`; the module no longer imports that constant at
+  all (no other use in this file — `ruff` would have flagged F401 otherwise). Both `checkpoint_due`
+  broadcast payloads (the final-warning one and the "due" one) gained `threshold_source:
+  policy.threshold_source`. Added `from .runner_adapters import get_adapter`; confirmed no import
+  cycle by importing `hub.checkpoint_trigger` directly (fails only on `DATABASE_URL` being unset in
+  a bare shell — a config guard unrelated to this change, not an import error — and the full test
+  suite below already proves the import graph resolves under pytest's fixtures).
+
+  **Verified by running the tests, not by re-reading the diff**: `py -3.11 -m pytest
+  hub/tests/test_checkpoint_policy.py hub/tests/test_checkpoint_cutover.py -q`: **84 passed**,
+  including `test_a_copilot_bound_agents_threshold_is_derived_from_its_own_compaction_point`
+  (task 1.13's test, the one this task exists to turn green) — confirmed failing before this change
+  (`assert None == 'due'`, the Copilot agent's threshold never lowered because `compaction_percent`
+  never reached `resolve_policy`) and passing after it. Swept the same ten-file checkpoint/jobs
+  suite as task 3.2: `test_checkpoint_access/configuration/cutover/generation/handover/notes/
+  record.py`, `test_flow_checkpoint_lineage.py`, `test_jobs.py`, `test_jobs_crud.py`,
+  `test_checkpoint_policy.py` — **275 passed, 3 skipped, 0 failed** (the one known failure from
+  iteration 44 is now gone, not just moved). `ruff check` and `black --check
+  --target-version py311` on `checkpoint_trigger.py`: both clean. `openspec validate
+  a-copilot-run-shows-its-credits --strict`: valid.
+
+  The full-suite `hub/tests/` debt (open since iteration 35) is still unpaid — this firing's sweep
+  is the ten-file checkpoint/jobs suite, the most directly relevant regression check for this
+  task's diff, not the whole tree.
 - [ ] 3.4 `AgentSummary.checkpoint_compaction_percent` in `schemas/agents.py`, filled in
   `list_agents`'s `AgentSummary(...)` (`api/v1/agents.py:581-630`) from `bound_runner` (`:548`, taken
   from `runners_by_id`, `:405-407`) through `get_adapter`, null when there is none, with no new

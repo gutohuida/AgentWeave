@@ -23,7 +23,6 @@ from sqlalchemy import select
 from .checkpoint_cutover import CutoverRefusedError, cut_over
 from .checkpoint_generation import generate_checkpoint
 from .checkpoint_policy import (
-    FINAL_WARNING_PERCENT,
     needs_final_warning,
     resolve_policy,
     should_checkpoint,
@@ -41,6 +40,7 @@ from .db.models import (
     Runner,
 )
 from .inbound_queue import new_entry
+from .runner_adapters import get_adapter
 from .sse import sse_manager
 
 logger = logging.getLogger(__name__)
@@ -153,6 +153,23 @@ async def _resolve_runner(
     return runner.cli, project.checkpoint_model or runner.model, runner.id
 
 
+async def _agent_compaction_percent(db, agent: Optional[Agent]) -> Optional[int]:
+    """The compaction point of *agent*'s own bound runner, or None (D10, `C`).
+
+    `resolve_policy` treats None as C=95, today's Claude-shaped numbers — the right default for
+    no agent, no bound runner, a runner row that no longer exists, or a CLI with no adapter.
+    """
+    if agent is None or not agent.runner_id:
+        return None
+    runner = await db.get(Runner, agent.runner_id)
+    if runner is None:
+        return None
+    adapter = get_adapter(runner.cli)
+    if adapter is None:
+        return None
+    return adapter.compaction_percent
+
+
 async def consider(
     project_id: str,
     agent_name: str,
@@ -179,7 +196,8 @@ async def consider(
         if project is None:
             return None
 
-        policy = resolve_policy(agent, project)
+        compaction_percent = await _agent_compaction_percent(db, agent)
+        policy = resolve_policy(agent, project, compaction_percent=compaction_percent)
         if not policy.enabled:
             _declined(conversation_id, "checkpointing is off for this agent and project")
             return None
@@ -214,7 +232,7 @@ async def consider(
                 _declined(
                     conversation_id,
                     "the operator dismissed this conversation's warning and it has not "
-                    f"reached {FINAL_WARNING_PERCENT}% (percent={percent})",
+                    f"reached {policy.final_warning_percent}% (percent={percent})",
                 )
                 return None
             conversation.checkpoint_warning = "final"
@@ -227,6 +245,7 @@ async def consider(
                     "agent": agent_name,
                     "threshold_mode": policy.threshold_mode,
                     "threshold_value": policy.threshold_value,
+                    "threshold_source": policy.threshold_source,
                     "final": True,
                 },
             )
@@ -303,6 +322,7 @@ async def consider(
                         "agent": agent_name,
                         "threshold_mode": policy.threshold_mode,
                         "threshold_value": policy.threshold_value,
+                        "threshold_source": policy.threshold_source,
                     },
                 )
                 logger.info("checkpoint due for %s", conversation_id)
