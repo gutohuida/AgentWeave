@@ -4432,3 +4432,164 @@ class TestRunEndQuotaRefusalCallsOnAccountingWithRejectedReading:
             "design.md D8, task 1.15(a)'s own text: errorType rate_limit must give no rejected "
             f"reading, so no hold -- got {rejected!r}"
         )
+
+
+def _usage_call(call_id, input_tokens, output_tokens, nano_aiu):
+    return _raw_event(
+        "assistant.usage",
+        {
+            "providerCallId": call_id,
+            "model": "gpt-5-mini",
+            "inputTokens": input_tokens,
+            "outputTokens": output_tokens,
+            "copilotUsage": {"totalNanoAiu": nano_aiu},
+        },
+    )
+
+
+def _checkpoint(nano_aiu, premium):
+    return _raw_event(
+        "session.usage_checkpoint",
+        {"totalNanoAiu": nano_aiu, "totalPremiumRequests": premium},
+    )
+
+
+class TestRunTurnFeedsOneLedgerAndDeliversItOnce:
+    """Task 4.4 (design D2): one `CopilotUsageLedger` per call, fed armed raw events and the
+    prompt result, and one `on_accounting(ledger.finish(session_was_new=...))` on every return
+    once a session exists. A raise delivers nothing (the executor records `sample=None`)."""
+
+    async def test_a_completed_turn_delivers_the_per_call_sum_once(self, monkeypatch):
+        accounting = []
+        script = _new_with() + [
+            _usage_call("call-1", 100, 10, 2_000_000),
+            _usage_call("call-2", 50, 5, 1_000_000),
+            _usage_call("call-2", 50, 5, 1_000_000),  # redelivered: counted once (D3)
+            _checkpoint(9_000_000, 1.0),
+            {"response": {"stopReason": "end_turn", "usage": {"inputTokens": 1}}},
+        ]
+        _fake, _events, outcome = await _drive(
+            monkeypatch, script, on_accounting=_collector(accounting)
+        )
+        assert outcome.status == "completed"
+        assert len(accounting) == 1
+        sample = accounting[0]
+        assert (sample.source, sample.input_tokens, sample.output_tokens) == (
+            "copilot_calls",
+            150,
+            15,
+        ), "the per-call sum beats a smaller prompt result (D3)"
+        assert sample.ai_nano_aiu == 3_000_000
+        assert sample.session_nano_aiu_total == 9_000_000
+        assert sample.credit_session_new is True, "run_turn called session/new"
+
+    async def test_a_loaded_session_counts_only_armed_events(self, monkeypatch):
+        """A checkpoint or call `session/load` replays reaches nothing: only what follows the
+        prompt is this run's (D2's arming)."""
+        accounting = []
+        script = [
+            {"response": INIT_RESPONSE},
+            _checkpoint(7_000_000, 4.0),  # replayed during the load: unarmed
+            _usage_call("old-call", 999, 999, 5_000_000),  # replayed: unarmed
+            {"response": _load_response()},
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME),
+                        _allow_all_option("off"),
+                    ]
+                }
+            },
+            {"response": {}},
+            _usage_call("new-call", 20, 2, 500_000),
+            {"response": {"stopReason": "end_turn"}},
+        ]
+        _fake, _events, outcome = await _drive(
+            monkeypatch,
+            script,
+            resume_session_id=RESUME_ID,
+            on_accounting=_collector(accounting),
+        )
+        assert outcome.status == "completed"
+        assert len(accounting) == 1
+        sample = accounting[0]
+        assert (sample.input_tokens, sample.output_tokens, sample.ai_nano_aiu) == (20, 2, 500_000)
+        assert sample.session_nano_aiu_total is None, "the replayed checkpoint was not armed"
+        assert sample.credit_session_new is False, "a loaded session is not new (D4)"
+
+    async def test_a_load_that_falls_back_to_new_is_a_new_session(self, monkeypatch):
+        accounting = []
+        script = [
+            {"response": INIT_RESPONSE},
+            {"error": {"code": -32002, "message": "Resource not found", "data": None}},
+            *_new_with()[1:],
+            _END_TURN,
+        ]
+        _fake, _events, outcome = await _drive(
+            monkeypatch,
+            script,
+            resume_session_id=RESUME_ID,
+            on_accounting=_collector(accounting),
+        )
+        assert outcome.session_id == SESSION_ID
+        assert [s.credit_session_new for s in accounting] == [True], "the -32002 fallback (D2)"
+
+    async def test_a_raise_after_the_session_exists_delivers_nothing(self, monkeypatch):
+        """A same-named agent AgentWeave did not write stays selected: `run_turn` raises before
+        the prompt, and the executor's `except` records `sample=None` (D2), so no sample."""
+        accounting = []
+        script = [
+            {"response": INIT_RESPONSE},
+            {
+                "response": {
+                    "sessionId": SESSION_ID,
+                    "modes": {"currentModeId": AGENT_MODE_URI},
+                    "configOptions": [_mode_option(), _agent_option(""), _allow_all_option()],
+                }
+            },
+            {
+                "response": {
+                    "configOptions": [
+                        _mode_option(),
+                        _agent_option(AGENT_NAME, description="someone else's agent"),
+                        _allow_all_option(),
+                    ]
+                }
+            },
+            {"error": {"code": -32000, "message": "cannot deselect"}},
+        ]
+        with pytest.raises(CopilotACPError):
+            await _drive(monkeypatch, script, on_accounting=_collector(accounting))
+        assert accounting == []
+
+    async def test_a_quota_error_with_no_message_still_fails_the_turn(self, monkeypatch):
+        """The mapper names a root error only from a `session.error` that has a message; the
+        ledger recognises the refusal from its structured fields alone (D8), so the turn still
+        ends `failed` and its input is requeued rather than delivered."""
+        accounting = []
+        script = _new_with() + [
+            _raw_event("session.error", {"errorType": "quota", "errorCode": "quota_exceeded"}),
+            {"response": {"stopReason": "end_turn"}},
+        ]
+        _fake, _events, outcome = await _drive(
+            monkeypatch, script, on_accounting=_collector(accounting)
+        )
+        assert outcome.status == "failed"
+        assert outcome.error
+        assert [s.allowance["status"] for s in accounting] == ["rejected"]
+
+    async def test_a_failing_on_accounting_does_not_turn_the_outcome_into_a_raise(
+        self, monkeypatch
+    ):
+        delivered = []
+
+        async def _broken(sample):
+            delivered.append(sample)
+            raise RuntimeError("database gone")
+
+        _fake, _events, outcome = await _drive(
+            monkeypatch, _new_with() + [_END_TURN], on_accounting=_broken
+        )
+        assert len(delivered) == 1, "the sample was offered, and its failure swallowed"
+        assert outcome.status == "completed"

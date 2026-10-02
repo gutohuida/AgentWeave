@@ -1048,3 +1048,19 @@ async def test_settle_non_refused_sample_with_no_snapshot_has_no_allowance(app: 
         )
     assert settled is not None
     assert settled.allowance is None
+
+
+def test_finish_never_raises_and_keeps_the_refusal(monkeypatch):
+    """D11: malformed telemetry gives a sample with no tokens and no credits, logged; it still
+    carries `credit_session_new` (so the settle runs) and a recognised refusal (so D8 holds)."""
+    ledger = CopilotUsageLedger()
+    ledger.observe_event("session.error", {"errorType": "quota", "errorCode": "quota_exceeded"})
+
+    def _boom():
+        raise ValueError("malformed telemetry")
+
+    monkeypatch.setattr(ledger, "_calls_sample", _boom)
+    sample = ledger.finish(session_was_new=False)
+    assert sample.total_tokens is None and sample.ai_nano_aiu is None
+    assert sample.credit_session_new is False
+    assert sample.allowance is not None and sample.allowance["status"] == "rejected"

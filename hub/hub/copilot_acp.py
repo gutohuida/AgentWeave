@@ -65,6 +65,7 @@ from .copilot_probe import (
     too_old_reason,
     version_supported,
 )
+from .copilot_usage import CopilotUsageLedger
 from .model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
 from .pty_runner import terminate_process_tree
 from .runner_commands import OPERATOR_POSTURE
@@ -1696,8 +1697,9 @@ async def run_turn(
 
     `env` is the run environment the trigger built (filtered, with `COPILOT_HOME`); it is passed
     as-is. `mcp_command`, when set, means the access path is MCP: the argv names the home's
-    `agentweave-mcp.json`. `cli` is a runner's pinned executable. `on_accounting` is not called by
-    this slice (D11: each turn is recorded with no measured usage; slice 4 owns the ledger).
+    `agentweave-mcp.json`. `cli` is a runner's pinned executable. `on_accounting` is called exactly
+    once on every return once a session exists, with this call's `CopilotUsageLedger` sample
+    (`a-copilot-run-shows-its-credits` D2); a raise delivers none.
 
     Raises (`CopilotACPError`, `FileNotFoundError`, `OSError`, `asyncio.TimeoutError`) only before
     the prompt is written; returns a `TurnOutcome` for everything after (D12, R3). A stop sends
@@ -1748,6 +1750,8 @@ async def run_turn(
 
     calls: Dict[str, CallFacts] = {}
     servers: Dict[str, List[Dict[str, Any]]] = {}
+    # One ledger per call, fed only armed events and the prompt's own answer (D2).
+    ledger = CopilotUsageLedger()
     mapper = CopilotEventMapper(
         told_access_path=told_access_path, requested_model=model, calls=calls
     )
@@ -1796,7 +1800,11 @@ async def run_turn(
     async def _on_armed_raw_event(
         event_type: str, data: Dict[str, Any], params: Dict[str, Any]
     ) -> None:
-        """Every armed raw event passes here (slice 4 adds its ledger's `observe_event`)."""
+        """Every armed raw event passes here, to the mapper and the usage ledger."""
+        try:
+            ledger.observe_event(event_type, data)
+        except Exception:  # noqa: BLE001 - telemetry never fails the turn (D11)
+            logger.warning("Copilot usage ledger rejected a %s event", event_type, exc_info=True)
         await emit(mapper.on_raw_event(event_type, data, params))
         if event_type == "session.mode_changed":
             new_mode = next(
@@ -1956,6 +1964,15 @@ async def run_turn(
         # `fs/*`, `terminal/*` and `elicitation/create` are not advertised (design, Non-goals).
         raise CopilotACPError(f"Method not found: {method}", code=METHOD_NOT_FOUND_CODE)
 
+    async def deliver_accounting(outcome: TurnOutcome, session_was_new: bool) -> TurnOutcome:
+        """The one `on_accounting` call of a turn that has a session (D2)."""
+        if on_accounting is not None:
+            try:
+                await on_accounting(ledger.finish(session_was_new=session_was_new))
+            except Exception:  # noqa: BLE001 - a returned outcome is never turned into a raise
+                logger.warning("recording a Copilot turn's usage failed", exc_info=True)
+        return outcome
+
     session = await ACPProcess.spawn(
         argv,
         cwd=session_cwd,
@@ -1991,6 +2008,8 @@ async def run_turn(
         new_params = {"cwd": session_cwd, "mcpServers": []}
         session_response: Dict[str, Any]
         session_id: Optional[str] = None
+        # `session/new` was called, the `-32002` fallback included (D2, D4).
+        session_was_new = False
         if resume_session_id:
             try:
                 session_response = await session.request(
@@ -2034,6 +2053,7 @@ async def run_turn(
             session_id = _str_or_none(session_response.get("sessionId"))
             if session_id is None:
                 raise CopilotACPError("Copilot's session/new answered no sessionId.")
+            session_was_new = True
         _record_probe(present=True, authorized=True, reason=None, cli=cli)
         state["session_id"] = session_id
         if on_session is not None:
@@ -2113,7 +2133,10 @@ async def run_turn(
                         stop_now = False
                     if stop_now:
                         # Ended during the wait: nothing was told and nothing tested (R3).
-                        return TurnOutcome(session_id=session_id, status="interrupted")
+                        return await deliver_accounting(
+                            TurnOutcome(session_id=session_id, status="interrupted"),
+                            session_was_new,
+                        )
                 if not tested:
                     quote = await _mcp_list_quote(session, session_id, state)
             told_access_path = "mcp" if tested else "shim"
@@ -2226,17 +2249,19 @@ async def run_turn(
         for event_type, data, params in early_server_events:
             await emit(mapper.on_raw_event(event_type, data, params))
         prompt_written = True
-        return await _await_prompt(
+        outcome = await _await_prompt(
             session,
             session_id,
             blocks,
             state=state,
             mapper=mapper,
+            ledger=ledger,
             emit=emit,
             check_interrupt=check_interrupt,
             send_cancel=send_cancel,
             turn_timeout=turn_timeout,
         )
+        return await deliver_accounting(outcome, session_was_new)
     finally:
         if prompt_written:
             close_forced = bool(state.get("close_forced"))
@@ -2250,6 +2275,7 @@ async def _await_prompt(
     *,
     state: Dict[str, Any],
     mapper: CopilotEventMapper,
+    ledger: CopilotUsageLedger,
     emit: Callable[[List[RunEvent]], Awaitable[None]],
     check_interrupt: Callable[[], Awaitable[None]],
     send_cancel: Callable[[], Awaitable[None]],
@@ -2283,7 +2309,7 @@ async def _await_prompt(
             with contextlib.suppress(BaseException):
                 await prompt_task
 
-    #: The prompt result, read in one place (slice 4 reads its `usage` here).
+    #: The prompt result, read in one place; its `usage` goes to the ledger (D2, D3).
     prompt_result: Optional[Dict[str, Any]] = None
     failure: Optional[str] = None
     if prompt_task.cancelled():
@@ -2298,6 +2324,13 @@ async def _await_prompt(
             failure = f"{type(exc).__name__}: {exc}"
         else:
             prompt_result = prompt_task.result()
+        # D8: a JSON-RPC error's structured quota fields count as a refusal; never its message.
+        if isinstance(exc, CopilotACPError):
+            with contextlib.suppress(Exception):
+                ledger.observe_prompt_error(exc.data)
+    if isinstance(prompt_result, dict):
+        with contextlib.suppress(Exception):
+            ledger.observe_prompt_result(prompt_result.get("usage"))
 
     await emit(mapper.finish())
 
@@ -2315,6 +2348,9 @@ async def _await_prompt(
         status, error = "failed", failure
     elif mapper.root_error is not None:
         status, error = "failed", mapper.root_error
+    elif ledger.refused:
+        # D8: a quota refusal fails the turn whatever the stop reason, so its input is requeued.
+        status, error = "failed", "Copilot refused the turn: the plan's quota is spent."
     else:
         status, error = "completed", None
     return TurnOutcome(

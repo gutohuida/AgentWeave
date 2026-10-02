@@ -192,6 +192,11 @@ class CopilotUsageLedger:
         if data.get("errorType") == "quota" and data.get("errorCode") == "quota_exceeded":
             self._refused = True
 
+    @property
+    def refused(self) -> bool:
+        """Whether this run met D8's quota refusal (`run_turn` then returns `failed`)."""
+        return self._refused
+
     def observe_prompt_error(self, data: Dict[str, Any]) -> None:
         """D8: the `data` of a JSON-RPC error answering `session/prompt`. The same structured
         quota fields count here as on a `session.error` notification (D8: "the same fields on a
@@ -289,6 +294,19 @@ class CopilotUsageLedger:
         )
 
     def finish(self, *, session_was_new: bool) -> AccountingSample:
+        """The run's one sample. Never raises (D11): malformed telemetry gives a sample with no
+        tokens and no credits, logged, still carrying `credit_session_new` and a refusal."""
+        try:
+            return self._finish(session_was_new=session_was_new)
+        except Exception:  # noqa: BLE001 - a run end never fails on its telemetry
+            logger.warning("Copilot usage ledger could not finish this run", exc_info=True)
+            return AccountingSample(
+                source="copilot_calls",
+                allowance=quota_reading(None, refused=self._refused, prior_reading=None),
+                credit_session_new=session_was_new,
+            )
+
+    def _finish(self, *, session_was_new: bool) -> AccountingSample:
         calls_sample = self._calls_sample()
         result_sample = self._result_sample()
 

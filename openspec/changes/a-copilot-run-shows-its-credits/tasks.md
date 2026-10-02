@@ -889,7 +889,7 @@ root.
   unwired task 4.4, not touched by this verification. No source change made (4.3 asked only to
   verify what tasks 1.8/the settle half of 1.9 already built and tested). `openspec validate
   a-copilot-run-shows-its-credits --strict`: valid, both before and after ticking 4.3.
-- [ ] 4.4 `copilot_acp.run_turn` (design D2; R2's answer to Q1 is that there is no adapter
+- [x] 4.4 `copilot_acp.run_turn` (design D2; R2's answer to Q1 is that there is no adapter
   `usage_from`):
   - one ledger per call, armed when the `session/prompt` request is written;
   - every subscribed raw event and the prompt result go to the ledger;
@@ -903,6 +903,25 @@ root.
     and 2*, item 9).
 
   Task 1.15(a) passes. (Rebase at IMPL: `a-copilot-agent-runs-over-acp` unbuilt at R2)
+  **Done 2026-10-02 (interactive session, after the night window).** Rebase check:
+  `a-copilot-agent-runs-over-acp` is archived (`openspec/changes/archive/2026-09-30-...`); built
+  against the code as it stands. `run_turn` creates one `CopilotUsageLedger`; `_on_armed_raw_event`
+  feeds it (so a `session/load` replay is never counted); `_await_prompt` passes a
+  `CopilotACPError`'s `.data` to `observe_prompt_error` and the result's `usage` to
+  `observe_prompt_result`, and returns `failed` when `ledger.refused` and nothing else failed the
+  turn (reachable for a quota `session.error` with no message or from a subagent, which name no root
+  error). `deliver_accounting` makes the one `on_accounting(ledger.finish(session_was_new=...))` call
+  on both returns that have a session (the announce-wait stop and the prompt's end); a raise
+  delivers none, and a failing callback is logged, never raised. `session_was_new` is set where
+  `session/new` answers, so the `-32002` fallback counts. **Gap found in 4.2 and closed here:**
+  4.2's note said `finish` "never raises (D11)" but it had no guard; `finish` now wraps `_finish`
+  and returns a no-tokens sample that keeps `credit_session_new` and a refusal. Evidence: the three
+  1.15(a) cases now pass; six new `TestRunTurnFeedsOneLedgerAndDeliversItOnce` cases plus
+  `test_finish_never_raises_and_keeps_the_refusal`. With `copilot_acp.py` stashed, 7 of the 10
+  quota/ledger cases fail (the raise guard and the rate-limit control pass by construction); with
+  `copilot_usage.py` stashed the `finish` test fails. All `test_copilot_*.py`, `test_agent_trigger.py`,
+  `test_a_refused_turn_holds_the_queue.py`, `test_runner_adapters_events.py`: 406 passed, 2 failed
+  (1.15(b), task 5.3's), 1 skipped. ruff and black clean.
 
 ## 5. The run end
 
