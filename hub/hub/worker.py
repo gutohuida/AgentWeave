@@ -272,6 +272,8 @@ async def _record(
                     cache_write_tokens=result.usage.cache_write_tokens,
                     reasoning_tokens=result.usage.reasoning_tokens,
                     cost_usd_micros=result.usage.cost_usd_micros,
+                    ai_nano_aiu=result.usage.ai_nano_aiu,
+                    premium_requests=result.usage.premium_requests,
                     error=result.error,
                 )
             )

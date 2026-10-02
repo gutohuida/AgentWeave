@@ -55,6 +55,9 @@ class AllowanceRefusal:
 
     resets_at: datetime
     limit_type: Optional[str] = None
+    #: The reading's own `provider` (`a-copilot-run-shows-its-credits` D8): `"copilot"` for a
+    #: Copilot plan reading, None for Claude's, which names none.
+    provider: Optional[str] = None
 
 
 def allowance_refusal(allowance: Any) -> Optional[AllowanceRefusal]:
@@ -74,9 +77,11 @@ def allowance_refusal(allowance: Any) -> Optional[AllowanceRefusal]:
     if isinstance(resets_at, bool) or not isinstance(resets_at, (int, float)):
         return None
     limit_type = allowance.get("rateLimitType")
+    provider = allowance.get("provider")
     return AllowanceRefusal(
         resets_at=datetime.fromtimestamp(resets_at, tz=timezone.utc),
         limit_type=limit_type if isinstance(limit_type, str) and limit_type else None,
+        provider=provider if isinstance(provider, str) and provider else None,
     )
 
 
@@ -89,6 +94,7 @@ class ProviderHold:
     limit_type: Optional[str]
     observed_at: datetime
     run_id: str
+    provider: Optional[str] = None
 
 
 def hold_for_reading(allowance: Any, observed_at: datetime, run_id: str) -> Optional[ProviderHold]:
@@ -102,6 +108,7 @@ def hold_for_reading(allowance: Any, observed_at: datetime, run_id: str) -> Opti
         limit_type=refusal.limit_type,
         observed_at=observed_at,
         run_id=run_id,
+        provider=refusal.provider,
     )
 
 
@@ -205,10 +212,26 @@ def _clock(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).strftime("%H:%M")
 
 
+def _clock_and_date(moment: datetime) -> str:
+    """A month-long hold names its day, not only its time (`a-copilot-run-shows-its-credits` D8)."""
+    return f"{_clock(moment)} UTC on {moment.astimezone(timezone.utc).strftime('%Y-%m-%d')}"
+
+
 def hold_sentence(agent: str, hold: ProviderHold) -> str:
     """What the operator is told about a held queue (design D9). Derived, never stored."""
-    limit = f"{hold.limit_type.replace('_', '-')} " if hold.limit_type else ""
     until = hold.hold_until.astimezone(timezone.utc)
+    if hold.provider == "copilot":
+        # Q6 (decided 2026-09-28): the hold stays, so its notice names when it ends and the way
+        # out -- rebinding alone writes no reading, so it does not end the hold.
+        return (
+            f"{agent}'s Copilot plan quota is spent until {_clock_and_date(until)} "
+            f"({until.isoformat()}). The Hub holds its queue, its loops and its jobs until then, "
+            "and does not count the refusal against any input. To continue sooner, bind the "
+            "agent to another runner and then send it a message: rebinding alone does not end "
+            "the hold. A new message from the operator is also tried once on Copilot, which "
+            "helps only after buying more credits."
+        )
+    limit = f"{hold.limit_type.replace('_', '-')} " if hold.limit_type else ""
     return (
         f"{agent}'s provider refused its last turn: its {limit}usage limit is spent until "
         f"{_clock(until)} UTC ({until.isoformat()}). The Hub holds its queue until then and does "
@@ -219,11 +242,18 @@ def hold_sentence(agent: str, hold: ProviderHold) -> str:
 
 def hold_busy_reason(agent: str, hold: ProviderHold) -> str:
     """The loop busy guard's short form (design D6)."""
+    if hold.provider == "copilot":
+        return f"{agent} is held until {_clock_and_date(hold.hold_until)} by its Copilot plan quota"
     return f"{agent} is held until {_clock(hold.hold_until)} UTC by its provider's usage limit"
 
 
 def hold_coalesce_reason(agent: str, hold: ProviderHold) -> str:
     """A plain job's coalesced firing (design D7). Must fit `JobRun.error_summary`'s 500."""
+    if hold.provider == "copilot":
+        return (
+            f"{agent}'s Copilot plan quota is spent until {_clock_and_date(hold.hold_until)}, "
+            "and this job's earlier firing is still queued for it. This firing adds nothing."
+        )
     return (
         f"{agent}'s provider usage limit is spent until {_clock(hold.hold_until)} UTC, and this "
         "job's earlier firing is still queued for it. This firing adds nothing."

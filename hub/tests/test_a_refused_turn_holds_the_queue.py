@@ -871,3 +871,73 @@ async def test_a_refused_codex_rpc_run_is_unchanged(app, auth_headers, bind_runn
     assert entry.delivery_attempts == 1
     assert entry.allowance_refusals == 0
     assert await _held_events() == []
+
+
+# ---------------------------------------------------------------------------
+# Task 5.1 -- the RPC run end settles Copilot credits before recording them
+# ---------------------------------------------------------------------------
+
+
+async def test_a_copilot_rpc_run_records_its_settled_credits(
+    app, auth_headers, bind_runner, _copilot_installed
+):
+    """`_execute_rpc_run` passes the ledger's sample through `settle_copilot_credits` in the
+    finalising session (design D4, task 5.1): a loaded session's run is charged the checkpoint
+    difference from the session's earlier run, not its smaller per-call sum, and the executor
+    records it under the adapter's runner name."""
+    from hub.db.models import TurnUsage
+    from hub.runner_events import AccountingSample
+    from hub.usage_accounting import record_turn_usage
+
+    agent = "settled-copilot"
+    session_id = "sess-settle-1"
+    await _copilot_agent(app, auth_headers, bind_runner, agent)
+    async with async_session_factory() as db:
+        db.add(
+            Run(
+                id="run-settle-0",
+                project_id="proj-test",
+                agent=agent,
+                session_id=session_id,
+                status="completed",
+            )
+        )
+        await db.flush()
+        await record_turn_usage(
+            db,
+            run_id="run-settle-0",
+            project_id="proj-test",
+            agent=agent,
+            runner="copilot",
+            sample=AccountingSample(
+                source="copilot_calls",
+                session_nano_aiu_total=1_000_000,
+                session_premium_requests_total=1.0,
+            ),
+        )
+        await db.commit()
+
+    sample = AccountingSample(
+        source="copilot_calls",
+        total_tokens=10,
+        ai_nano_aiu=200_000,
+        session_nano_aiu_total=1_500_000,
+        session_premium_requests_total=2.0,
+        credit_session_new=False,
+    )
+    fake = _fake_rpc_turn(session_id, status="completed", error=None, sample=sample)
+    with patch("hub.copilot_acp.run_turn", fake):
+        response = await app.post(
+            "/api/v1/projects/proj-test/agent/trigger",
+            json={"agent": agent, "message": "carry on", "session_mode": "new"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        run_id = response.json()["run_id"]
+        await _await_background_run()
+
+    async with async_session_factory() as db:
+        row = (await db.execute(select(TurnUsage).where(TurnUsage.run_id == run_id))).scalar_one()
+    assert row.runner == "copilot"
+    assert (row.ai_nano_aiu, row.premium_requests) == (500_000, 1.0)
+    assert row.session_nano_aiu_total == 1_500_000

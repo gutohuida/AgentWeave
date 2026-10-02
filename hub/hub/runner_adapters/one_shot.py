@@ -29,6 +29,9 @@ class WorkerUsage:
     cache_write_tokens: Optional[int] = None
     reasoning_tokens: Optional[int] = None
     cost_usd_micros: Optional[int] = None
+    #: Copilot's own charge (`a-copilot-run-shows-its-credits` D5). No other runner reports them.
+    ai_nano_aiu: Optional[int] = None
+    premium_requests: Optional[float] = None
 
 
 def extract_json_object(text: str) -> Optional[Dict[str, Any]]:

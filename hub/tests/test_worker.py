@@ -11,6 +11,7 @@ all of that goes to *stderr* and stdout carries one clean line. A parser written
 imagined shape passes its own tests and fails on contact.
 """
 
+import dataclasses
 import subprocess
 
 import pytest
@@ -567,3 +568,33 @@ async def test_claude_and_codex_spawns_still_inherit_the_hubs_environment(app, m
     monkeypatch.setattr(subprocess, "run", fake_run)
     await _run()
     assert seen["env"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_workers_copilot_credits_reach_its_invocation_row(app, monkeypatch):
+    """Task 5.4: `run_worker` writes `WorkerUsage.ai_nano_aiu` / `premium_requests` into the
+    `worker_invocations` row (migration 0117), so a parser that reads them is recorded."""
+    _patch_spawn(monkeypatch, stdout=CLAUDE_STDOUT)
+    real_parse = worker_module.parse_envelope
+
+    def _with_credits(cli, stdout):
+        answer, usage, error = real_parse(cli, stdout)
+        return (
+            answer,
+            dataclasses.replace(usage, ai_nano_aiu=7_500_000, premium_requests=1.0),
+            error,
+        )
+
+    monkeypatch.setattr(worker_module, "parse_envelope", _with_credits)
+    await _run()
+    [row] = await _invocations()
+    assert (row.ai_nano_aiu, row.premium_requests) == (7_500_000, 1.0)
+
+
+def test_the_captured_copilot_one_shot_has_no_session_shutdown():
+    """Task 5.4's condition, recorded: the `-p --output-format json` capture holds no
+    `session.shutdown`, so `parse_copilot_envelope` leaves both credit fields None."""
+    text = ONESHOT_FIXTURE.read_text(encoding="utf-8")
+    assert '"session.shutdown"' not in text
+    _answer, usage, _error = parse_copilot_envelope(text)
+    assert (usage.ai_nano_aiu, usage.premium_requests) == (None, None)

@@ -141,7 +141,7 @@ from ...task_transition_service import (
     ORIGIN_JOB,
     TransitionRefusedError,
 )
-from ...usage_accounting import record_turn_usage
+from ...usage_accounting import record_turn_usage, settle_copilot_credits
 from ...utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
@@ -3903,6 +3903,11 @@ async def _execute_rpc_run(
         # them for the exec path (AgentOutputPanel's handoff-detection, see below).
         exit_code = 0 if final_status == "completed" else 1
 
+        # `_execute_run`'s refusal branch, which slice 1 left out of this executor
+        # (`a-copilot-run-shows-its-credits` D8, task 5.3). Inert for Codex: no Codex sample
+        # carries an allowance reading.
+        refusal: Optional[AllowanceRefusal] = None
+        held: Optional[ProviderHold] = None
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
             if run:
@@ -3927,27 +3932,65 @@ async def _execute_rpc_run(
                 # themselves at their `asyncio.TimeoutError` — the guard is `status == "pending"`,
                 # so arriving second changes nothing rather than double-writing.
                 await expire_pending_for_run(db, run_id)
-                await record_turn_usage(
+                # Copilot's credits are settled against the session's earlier runs here, in the
+                # finalising session (D4). It acts only on a sample the Copilot ledger produced,
+                # so this executor names no runner, and it never raises (D11).
+                settled = await settle_copilot_credits(
+                    db,
+                    accounting_sample,
+                    project_id=project_id,
+                    agent=agent,
+                    session_id=session_id,
+                )
+                usage = await record_turn_usage(
                     db,
                     run_id=run_id,
                     project_id=project_id,
                     agent=agent,
                     runner=runner,
-                    sample=accounting_sample,
+                    sample=settled,
                 )
+                # As `_execute_run`: only a recorded reading holds, and only a failed run whose
+                # reset is still ahead goes back uncounted.
+                held = hold_for_reading(usage.allowance, usage.observed_at, run_id)
+                recognised = allowance_refusal(usage.allowance)
+                if (
+                    recognised is not None
+                    and final_status == "failed"
+                    and binding_conflict is None
+                    and recognised.resets_at > run.ended_at
+                ):
+                    refusal = recognised
             # See `_execute_run`. This is the path a killed app-server actually takes: `run_turn`
             # returns a failed `TurnOutcome` rather than raising, so the pre-spawn `except` above
             # never sees it. A stop arrives as `outcome.status == "interrupted"` → `stopped`, and
             # keeps its input. A binding conflict is excluded for the reason given there.
             #
-            # See `_execute_run`'s identical call — design D13, task A4.3.
-            await finalize_job_run_for_conversation(db, conversation_id, final_status)
+            # See `_execute_run`'s identical call — design D13, task A4.3. Skipped under a
+            # refusal for the reason given there: the firing is delivered at the reset.
+            if refusal is None:
+                await finalize_job_run_for_conversation(db, conversation_id, final_status)
             returned = (
-                await return_run_entries(db, run_id)
+                await return_run_entries(db, run_id, refusal=refusal)
                 if final_status == "failed" and binding_conflict is None
                 else []
             )
             await db.commit()
+            # The wake, immediately after the commit, for the reason `_execute_run` gives.
+            if held is not None:
+                arm_allowance_wake(project_id, agent, held.hold_until)
+                held_payload = {
+                    "agent": agent,
+                    "run_id": run_id,
+                    "hold_until": held.hold_until.isoformat(),
+                    "resets_at": held.resets_at.isoformat(),
+                    "limit_type": held.limit_type,
+                    "entry_ids": list(returned),
+                }
+                await persist_event(
+                    db, project_id, "queue_agent_held", held_payload, agent=agent, severity="warn"
+                )
+                await sse_manager.broadcast(project_id, "queue_agent_held", held_payload)
             # The run boundary, as in `_execute_run`. Both runners reach it, because the check sits
             # at a boundary AgentWeave owns rather than inside either agent. Skipped when the input
             # went back to the queue, for the reason given there.

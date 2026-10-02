@@ -1801,6 +1801,17 @@ async def run_turn(
         event_type: str, data: Dict[str, Any], params: Dict[str, Any]
     ) -> None:
         """Every armed raw event passes here, to the mapper and the usage ledger."""
+        if event_type == "session.error":
+            # Until a real quota refusal is captured, every payload is logged whole: D8's
+            # recognition is confirmed or corrected from it (`a-copilot-run-shows-its-credits`
+            # task 5.2; task 8.2 asks for the first one).
+            logger.warning(
+                "Copilot session.error errorType=%r errorCode=%r statusCode=%r payload=%s",
+                data.get("errorType"),
+                data.get("errorCode"),
+                data.get("statusCode"),
+                json.dumps(data, default=str)[:2000],
+            )
         try:
             ledger.observe_event(event_type, data)
         except Exception:  # noqa: BLE001 - telemetry never fails the turn (D11)

@@ -925,13 +925,23 @@ root.
 
 ## 5. The run end
 
-- [ ] 5.1 `_execute_rpc_run` (slice 1's generic RPC executor): at run end, in the finalising session
+- [x] 5.1 `_execute_rpc_run` (slice 1's generic RPC executor): at run end, in the finalising session
   and before `record_turn_usage`, pass the merged sample through `settle_copilot_credits`, which acts
   on any sample whose `credit_session_new` is set (R3: not only one with a session credit total). Then record it with `runner=adapter.name`. The
   executor has no `"copilot"` literal. (Rebase at IMPL: slice 1 unbuilt at R2)
-- [ ] 5.2 Log every `session.error` payload at warning level with its `errorType`, `errorCode` and
+  **Done 2026-10-02 (interactive).** `settle_copilot_credits(db, accounting_sample,
+  project_id=, agent=, session_id=)` runs in the finalising session before `record_turn_usage`,
+  whose `runner=runner` is already the adapter's name; no runner literal added. Test
+  `test_a_copilot_rpc_run_records_its_settled_credits` (seeded earlier run 1 000 000 / 1.0, ledger
+  sample 1 500 000 / 2.0 with a 200 000 per-call sum): row reads 500 000 / 1.0; fails with the
+  executor change stashed.
+- [x] 5.2 Log every `session.error` payload at warning level with its `errorType`, `errorCode` and
   `statusCode` (design D8, capture)
-- [ ] 5.3 Apply `_execute_run`'s refusal branch (`api/v1/agent_trigger.py:2667-2743`) to
+  **Done 2026-10-02 (interactive).** In `copilot_acp._on_armed_raw_event` (the transport, so the
+  generic executor stays runner-free): one warning per armed `session.error` with the three fields
+  and the payload (2 000 characters at most). Test
+  `test_every_armed_session_error_is_logged_with_its_structured_fields`.
+- [x] 5.3 Apply `_execute_run`'s refusal branch (`api/v1/agent_trigger.py:2667-2743`) to
   `_execute_rpc_run`. Its Codex ancestor has none of it (`:3345-3362`), and slice 1's design does not
   unify the run end (R2). The branch is:
   - `hold_for_reading`, and `allowance_refusal` gated on `final_status == "failed"`, no binding
@@ -941,19 +951,38 @@ root.
   - after the commit, `arm_allowance_wake` and the `queue_agent_held` event.
 
   Task 1.15(b) passes. (Rebase at IMPL: slice 1 unbuilt at R2)
-- [ ] 5.4 `WorkerUsage` gains `ai_nano_aiu` and `premium_requests`, and `run_worker` writes them into
+  **Done 2026-10-02 (interactive).** `hold_for_reading`/`allowance_refusal` on the recorded row,
+  `refusal` only for a failed run with no binding conflict and a reset ahead of `ended_at`;
+  `finalize_job_run_for_conversation` skipped under it; `return_run_entries(..., refusal=)`;
+  `arm_allowance_wake` and `queue_agent_held` after the commit. 1.15(b): the two Copilot cases now
+  pass, and with the executor stashed they fail again; the rate-limit and Codex controls pass
+  either way. `test_a_refused_turn_holds_the_queue.py`: 17 passed.
+- [x] 5.4 `WorkerUsage` gains `ai_nano_aiu` and `premium_requests`, and `run_worker` writes them into
   `WorkerInvocation(...)` (`worker.py:393-412`). Slice 2's `parse_copilot_envelope` reads
   `session.shutdown {totalNanoAiu, totalPremiumRequests}` into them **if** slice 2's task 1.2 capture
   of the `-p --output-format json` stream contains that event. The parser test uses that capture, not
   a hand-written line. If the capture has no `session.shutdown`, record that here and leave the
   columns NULL. (Rebase at IMPL: slices 1 and 2 unbuilt at R2)
-- [ ] 5.5 `provider_allowance.py` (Q6 decided 2026-09-28, design D8): `AllowanceRefusal` and
+  **Done 2026-10-02 (interactive). Recorded: the capture
+  (`hub/tests/fixtures/copilot_acp/oneshot_ok.jsonl`) has no `session.shutdown`**, so
+  `parse_copilot_envelope` is unchanged and both columns stay NULL for a Copilot one-shot. The
+  capture does carry a `session.usage_checkpoint` (`totalNanoAiu`, `totalPremiumRequests`) and the
+  `result` line's `usage.premiumRequests`. For a one-process session either one is that call's
+  whole charge, but reading them is outside this task's text: left to the operator (OPEN). Built:
+  `WorkerUsage.ai_nano_aiu`/`premium_requests`, written by `worker._record`. Tests
+  `test_a_workers_copilot_credits_reach_its_invocation_row` (fails with `worker.py` stashed) and
+  `test_the_captured_copilot_one_shot_has_no_session_shutdown`.
+- [x] 5.5 `provider_allowance.py` (Q6 decided 2026-09-28, design D8): `AllowanceRefusal` and
   `ProviderHold` gain `provider: Optional[str] = None`, read from the reading's `provider` key and
   carried by `hold_for_reading`. For `provider == "copilot"`, `hold_sentence` names the reset date and
   the way out (bind the agent to another runner, then message it; rebinding alone does not end the
   hold; its loops and jobs stay blocked until then), and `hold_busy_reason` and
   `hold_coalesce_reason` add the date. A hold with no provider renders exactly as today. Task 1.19
   passes. `py -3.11 -m pytest hub/tests/test_provider_allowance.py hub/tests/test_a_refused_turn_holds_the_queue.py hub/tests/test_inbound_queue.py -q`
+  **Done 2026-10-02 (interactive).** `provider` on both dataclasses, read only from a non-empty
+  string; the Copilot sentence is design D8's wording, with the date from `hold_until`; the busy
+  and coalesce reasons add `HH:MM UTC on YYYY-MM-DD`. Claude's three sentences are byte-identical
+  (the 285/86/161 length asserts pass). The named command: 75 passed.
 
 ## 6. API and UI
 

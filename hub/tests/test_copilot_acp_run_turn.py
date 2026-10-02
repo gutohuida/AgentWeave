@@ -4593,3 +4593,24 @@ class TestRunTurnFeedsOneLedgerAndDeliversItOnce:
         )
         assert len(delivered) == 1, "the sample was offered, and its failure swallowed"
         assert outcome.status == "completed"
+
+
+async def test_every_armed_session_error_is_logged_with_its_structured_fields(monkeypatch, caplog):
+    """Task 5.2 (design D8, capture): until a real quota refusal is observed, every
+    `session.error` payload is logged at warning level with `errorType`, `errorCode` and
+    `statusCode`, so the first one can be pasted into FINDINGS (task 8.2)."""
+    payload = {
+        "errorType": "quota",
+        "errorCode": "quota_exceeded",
+        "statusCode": 402,
+        "message": "You have exceeded your quota",
+    }
+    with caplog.at_level("WARNING", logger="hub.copilot_acp"):
+        await _drive(monkeypatch, _new_with() + [_raw_event("session.error", payload), _END_TURN])
+    [record] = [r for r in caplog.records if "Copilot session.error" in r.getMessage()]
+    assert record.levelname == "WARNING"
+    message = record.getMessage()
+    assert "errorType='quota'" in message
+    assert "errorCode='quota_exceeded'" in message
+    assert "statusCode=402" in message
+    assert "You have exceeded your quota" in message
