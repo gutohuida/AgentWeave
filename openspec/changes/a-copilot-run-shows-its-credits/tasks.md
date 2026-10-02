@@ -1053,15 +1053,24 @@ Read its startup line to confirm the database. **Never touch `:8000`.** The acco
 Free**: Auto model only, a small monthly allowance. Keep prompts to one short sentence and the whole
 drive to at most **four** model-calling turns. Record each figure verbatim in design.md's round log.
 
-- [ ] 7.1 Bind a Copilot agent (slice 2's runner, model Auto) in the trial project. Send "Reply with
+- [x] 7.1 Bind a Copilot agent (slice 2's runner, model Auto) in the trial project. Send "Reply with
   the word OK." Read its `turn_usage` row (`mode=ro` SQLite read of the trial database). `total_tokens`
   equals the sum of the run's `assistant.usage` events in the run's log, and `ai_nano_aiu` and
   `session_nano_aiu_total` are set. `GET /accounting`: `budget.used_tokens` rose by exactly the
   tokens, and `project.ai_nano_aiu` equals the row's
-- [ ] 7.2 In the app: the Budgets section shows the credits line and the agent chip, the Overview
+  **Done 2026-10-02 (interactive, trial Hub `:8010`).** `run-04336ef38dd6`: `total_tokens` 15436 =
+  the one `assistant.usage` call's 15415 + 21 (read from the `acptee` ACP log, since Copilot does
+  not persist that event); `ai_nano_aiu` 193730000, `session_nano_aiu_total` 193730000.
+  `budget.used_tokens` 0 to 15436; `project.ai_nano_aiu` 193730000 = the row's. design.md Round log,
+  "Drive, group 7".
+- [x] 7.2 In the app: the Budgets section shows the credits line and the agent chip, the Overview
   shows credits, the conversation header shows `… tokens · X AI credits`, and the turn's "Worked for"
   line shows the credits. A Claude agent's turn in the same project shows no credits
-- [ ] 7.3 A second turn in the **same conversation** (a resumed session): its `ai_nano_aiu` equals its
+  **Done 2026-10-02.** Served bundle, Chromium: Budgets shows `0.81 AI credits · 3 premium requests
+  (Copilot)` and the chip `cop-c: 64,015 tokens · 0.81 AI credits`; Overview `0.81 AI credits`;
+  header `64,015 tokens · 0.81 AI credits`; each "Worked for" line carries its credits (0.19, 0.45,
+  0.17). The Haiku agent's turn has NULL credit columns and its conversation shows none.
+- [x] 7.3 A second turn in the **same conversation** (a resumed session): its `ai_nano_aiu` equals its
   `session_nano_aiu_total` minus 7.1's. That answers whether the checkpoint total continues across
   `session/load` (design table, INFERRED until now). **This gates D4 (review finding 4; R3 had said
   it did not).** If it continued, D4 stands. If it restarted from zero, D4's larger-of rule charges
@@ -1072,12 +1081,26 @@ drive to at most **four** model-calling turns. Record each figure verbatim in de
   run's `ai_nano_aiu` is checked against its own checkpoint. Record which it was. Also record this
   resumed turn's prompt-result `usage` beside its per-call sum (Q10). If the result includes 7.1's tokens,
   stop and make the per-call sum authoritative on a loaded session (design D3)
-- [ ] 7.4 Record the run's `quotaSnapshots` keys and which one's `usedRequests` rose. Record whether
+  **Done 2026-10-02.** `run-9cba3b1bee45`, a new process that called `session/load`: checkpoint
+  193730000 to 639966000, difference 446236000 = the run's `ai_nano_aiu` = its per-call sum. **The
+  checkpoint continued across `session/load`: D4 stands.** Q10: the resumed prompt result (25703)
+  equals its own per-call sum and excludes 7.1's 15436, so there is no D3 stop.
+- [x] 7.4 Record the run's `quotaSnapshots` keys and which one's `usedRequests` rose. Record whether
   the ACP prompt result and the per-call sum agreed (the ledger's warning log line, if any)
-- [ ] 7.5 Optional, only if 7.1–7.3 used little allowance: `/compact` in the same conversation (one
+  **Done 2026-10-02.** Keys `chat`, `completions`, `premium_interactions`. No key's `usedRequests`
+  rose over three turns (`chat` stayed 2 of 200); only `chat.remainingPercentage` moved (99.2, 99.1,
+  98.9). Prompt result and per-call sum agreed exactly on every turn; no ledger warning line.
+- [x] 7.5 Optional, only if 7.1–7.3 used little allowance: `/compact` in the same conversation (one
   compaction model call). Record whether an `assistant.usage` accompanied `session.compaction_complete`
   (same `providerCallId` as its `requestId`) and that the run's credits were counted once
-- [ ] 7.6 Thresholds with no model call: with the project's checkpoint mode `offered`, post a synthetic
+  **Done 2026-10-02; the compaction half could not be reached (F481).** `/compact` sent as the
+  operator message did not compact. Slice 2 deliberately begins every `session/prompt` with
+  `COPILOT_TURN_CONTEXT_HEAD` (`hub/hub/copilot_acp.py`), so that no prompt starts with `/` and runs
+  as a slash command. Copilot, which does advertise `compact`, answered it as chat: one call, no
+  `session.compaction_complete`. Credits were counted once (checkpoint difference 165232500 =
+  per-call sum). Whether a compaction call emits `assistant.usage` stays unmeasured. Only a natural
+  auto-compaction at about 80% of the window can show it now.
+- [x] 7.6 Thresholds with no model call: with the project's checkpoint mode `offered`, post a synthetic
   66% reading for the Copilot agent's conversation through `POST /agents/{name}/context-usage`
   (`api/v1/agents.py:2980`), carrying that conversation's provider `session_id`, `status: "measured"`,
   `source`, `observed_at`, `context_tokens`, `limit_tokens` **and `percent: 66`**. The route does not
@@ -1086,10 +1109,20 @@ drive to at most **four** model-calling turns. Record each figure verbatim in de
   `output_recording.py:173-189`, and hands the reading to `consider_from_reading`, `:233-238`). The conversation shows the checkpoint-due banner. The same
   reading for the Claude agent shows nothing. The Copilot agent's settings show the "compacts at
   about 80%" line
-- [ ] 7.7 The hold, by fixture: quota exhaustion cannot be reached on Free. Replay 1.15's event
+  **Done 2026-10-02.** Mode `offered`; a 66% reading for each conversation's session: the Copilot
+  conversation's `checkpoint_warning` became `due` and its page shows the banner with "Checkpoint
+  now"; the Claude conversation stayed NULL with no banner. Copilot's Context settings read "Copilot
+  compacts at about 80% of its window. This agent's checkpoint fires by 77% at the latest."
+- [x] 7.7 The hold, by fixture: quota exhaustion cannot be reached on Free. Replay 1.15's event
   sequence through the executor on `:8010` if slice 2 offers a replay seam, and read `GET /queue`
   status: it names the hold and the reset. If there is no seam, record that the hold is verified by
   task 1.15 only, and leave test-guide Human-only item 3 open
+  **Done 2026-10-02.** The seam is the agent's `config.cli` pin: `acptee` answered `session/prompt`
+  with 1.15(a)'s quota `session.error` then `end_turn`, without a model call. `run-e3a6e1631adb`
+  failed; its allowance is `rejected` with `resetsAt` 1793491200; `GET /queue/cop-c/status` names
+  the hold until 00:00 UTC on 2026-11-01 and the rebind-then-message way out, with
+  `delivery_attempts` 0. Test-guide Human-only item 3 is checked by this, by replay rather than a
+  real refusal.
 
 ## 8. Archive
 

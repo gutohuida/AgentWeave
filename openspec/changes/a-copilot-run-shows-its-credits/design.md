@@ -19,12 +19,12 @@ the shipped 1.0.88 package's `schemas/session-events.schema.json` or `app.js`, b
 | `assistant.usage.quotaSnapshots.<id>` carries `entitlementRequests, usedRequests, remainingPercentage, usageAllowedWithExhaustedQuota, overageAllowedWithExhaustedQuota, resetDate` | VERIFIED-LOCAL | acp4, key `chat` on the Free plan, `resetDate "2026-10-01T00:00:00Z"` |
 | `assistant.usage` includes subagent calls (`parentToolCallId`, `initiator: "sub-agent"`) | VERIFIED-SCHEMA + DOCUMENTED | schema; SDK doc *"emitted once for every model API call in a turn (including calls made by sub-agents)"*. No subagent ran in acp4 |
 | `assistant.usage` is ephemeral: not replayed on resume | DOCUMENTED | SDK `usage-and-billing` |
-| The ACP prompt result's `usage` is cumulative for the session **within the process** | VERIFIED-LOCAL | acp4: two later slash prompts returned the same totals; after a restart and `session/load`, `/usage` returned **no `usage` field** (R1 probe, 2026-09-27) |
-| `session.usage_checkpoint {totalNanoAiu, totalPremiumRequests}` is session-cumulative and survives resume | VERIFIED-LOCAL (emitted at turn end) + VERIFIED-SCHEMA (*"Durable session usage checkpoint for reconstructing aggregate accounting on resume"*) | acp4; R1 probe: `/usage` after load read "Requests: 1" from the restored session. Whether the **next** checkpoint after a load continues the total is INFERRED; task 7.3 measures it |
+| The ACP prompt result's `usage` is cumulative for the session **within the process** | VERIFIED-LOCAL | acp4: two later slash prompts returned the same totals; after a restart and `session/load`, `/usage` returned **no `usage` field** (R1 probe, 2026-09-27). **Drive 7.3 (2026-10-02):** the first model prompt after a `session/load` in a new process returned 25703 tokens, that turn's own per-call sum, not 7.1's 15436 added to it. The counter starts afresh per process. |
+| `session.usage_checkpoint {totalNanoAiu, totalPremiumRequests}` is session-cumulative and survives resume | VERIFIED-LOCAL (emitted at turn end) + VERIFIED-SCHEMA (*"Durable session usage checkpoint for reconstructing aggregate accounting on resume"*) | acp4; R1 probe: `/usage` after load read "Requests: 1" from the restored session. Whether the **next** checkpoint after a load continues the total was INFERRED until task 7.3. **VERIFIED-LOCAL, drive 7.3 (2026-10-02):** it continues. 193730000 after 7.1, then 639966000 after a `session/load` in a new process: a difference of 446236000, which equals that run's own per-call sum. D4 stands |
 | `session.error {errorType, errorCode, message, statusCode, remediation}`; quota codes `quota_exceeded`, `session_quota_exceeded`, `billing_not_configured`; rate-limit codes `user_weekly_rate_limited`, `user_global_rate_limited`, `rate_limited`, … | VERIFIED-SCHEMA | `ErrorData`; never observed |
 | `session.error` also reaches the ACP text stream as an `Error: <message>` chunk | VERIFIED-SCHEMA (`app.js` maps `session.error` → `agent_message_chunk "Error: …"`) | code read |
 | Individual plans' allowance resets at 00:00:00 UTC on the 1st of each month; Business/Enterprise ask an administrator for more budget | DOCUMENTED | docs `billing` |
-| `session.compaction_complete.compactionTokensUsed {inputTokens, outputTokens, cacheReadTokens, copilotUsage.totalNanoAiu}` and `requestId` | VERIFIED-SCHEMA | `CompactionCompleteData`. Whether the compaction call also emits an `assistant.usage` is **unknown**; task 7.4 measures it |
+| `session.compaction_complete.compactionTokensUsed {inputTokens, outputTokens, cacheReadTokens, copilotUsage.totalNanoAiu}` and `requestId` | VERIFIED-SCHEMA | `CompactionCompleteData`. Whether the compaction call also emits an `assistant.usage` is **unknown**; task 7.4 measures it. **Still unknown after the drive (2026-10-02):** 7.5's `/compact` never reached Copilot as a command, by slice 2's slash-command guard (Round log, "Drive, group 7"; F481) |
 | Auto-compaction at ~80% of the window, a pause at ~95% | DOCUMENTED | docs `context-management` |
 | 1 AI credit = $0.01 | DOCUMENTED | docs `billing` |
 | AI credits = `nanoAiu / 1e9` | DOCUMENTED as a convention only | SDK doc: *"The examples divide by 1e9 as a convenience, following the SI nano prefix; confirm this matches current billing"*. acp4's `costPerBatch` gives mai-code-1.1-flash 20 AIU per million input tokens, i.e. $0.20/M at 1 AIU = 1 credit, which is plausible (INFERRED) |
@@ -1148,6 +1148,73 @@ order fails it. API tests assert by position in the order the route returns (`ag
     the loop and job notices to state the date; three scenarios added. test-guide.md:
     Agent-verifiable items 1, 4 and a new 6 (validate is now 7); Human-only items 3, 6 and 7 turned
     from decisions into checks. proposal.md: the Copilot hold bullet and the thresholds bullet.
+- **Drive, group 7 (2026-10-02).** This ran on the trial Hub `:8010`, started from `hub/` and
+  confirmed by its startup line to be using `profiles/trial/agentweave.db`, pid 13652. The Hub
+  migrated that database 0115 → 0117 on start. The Copilot CLI was 1.0.90 on the Free plan, with
+  model Auto, which resolved to `gpt-6-luna` for turns 1 and 3 and to `mai-code-1.1-flash` for
+  turn 2. The drive used three model-calling Copilot turns and one Claude Haiku turn. The project
+  was a throwaway, `proj-38f948df1446`, under `testbed/scratch/credits-drive/`. The drive script is
+  `scripts/drive/d1002_copilot_credits.py`, with a browser half in `…_browser.py`. Copilot does
+  not persist `assistant.usage` in `session-state/<id>/events.jsonl` (only
+  `session.usage_checkpoint`). So the agent's `config.cli` was pinned to `acptee.exe`
+  (`scripts/drive/acptee.cs`), a pass-through that logs the ACP stream byte for byte. Its log is
+  the per-call record used below.
+  - **7.1** (`run-04336ef38dd6`). One `assistant.usage` call: input 15415, output 21,
+    cacheWrite 15412, `copilotUsage.totalNanoAiu` 193730000. The `turn_usage` row records
+    `total_tokens` 15436, which equals the per-call sum. It also records `ai_nano_aiu` 193730000,
+    `premium_requests` 1.0, `session_nano_aiu_total` 193730000 and
+    `session_premium_requests_total` 1.0. `GET /accounting`: `budget.used_tokens` went from 0 to
+    15436, and `project.ai_nano_aiu` is 193730000, the same as the row's.
+  - **7.2** (served bundle, Chromium). Copilot conversation header: `64,015 tokens · 0.81 AI
+    credits` (after three turns). Turn lines: `Worked for 9s · 15,436 tokens · 0.19 AI credits`,
+    `… 25,703 tokens · 0.45 AI credits`, `… 22,876 tokens · 0.17 AI credits`. Overview: `0.81 AI
+    credits`. Budgets: `0.81 AI credits · 3 premium requests (Copilot) — not counted against the
+    budget`; the agent chip reads `cop-c: 64,015 tokens · 0.81 AI credits`, and the allowance line
+    reads `Copilot monthly allowance available · 98% left · resets Nov 1`. The Claude agent
+    (`run-e2ff5bd78620`, 35949 tokens) has a row with NULL credit columns, and its conversation
+    shows no credits.
+  - **7.3** (`run-9cba3b1bee45`, the same conversation and session `8bf5bb67…`). It ran in a new
+    process that called `session/load` (the tee's request log shows `initialize`, `session/load`,
+    `session/prompt`). The checkpoint went from 193730000 to 639966000. The difference, 446236000,
+    equals the run's `ai_nano_aiu` and its own per-call sum. **The checkpoint total continues
+    across `session/load`, so D4 stands.** Q10: the resumed turn's prompt result was input 25667,
+    output 36, total 25703, which equals its per-call sum and does not include 7.1's 15436. So
+    there is no D3 stop.
+  - **7.4.** The `quotaSnapshots` keys were `chat`, `completions` and `premium_interactions`, the
+    same on every call. No key's `usedRequests` rose across the three turns: `chat` stayed at 2 of
+    200, and `completions` and `premium_interactions` stayed at 0. Only `chat.remainingPercentage`
+    moved: 99.2, then 99.1, then 98.9. `resetDate` is `2026-11-01T00:00:00Z`. The reading the Hub
+    chose was `chat` (D7). On every turn the prompt result and the per-call sum agreed exactly, and
+    the ledger logged no disagreement warning.
+  - **7.5** (`run-7ae7fb81a043`). The operator message `/compact` did **not** compact.
+    Copilot's `available_commands_update` lists `compact`. But slice 2 deliberately begins every
+    `session/prompt` with `COPILOT_TURN_CONTEXT_HEAD`, so that no relayed text can run as a slash
+    command (`/allow-all`). The text `/compact` therefore never reaches Copilot as a command.
+    Copilot answered it as chat: one call, 22876 tokens, 343 output, and no
+    `session.compaction_complete`. Credits were still counted once: the checkpoint difference
+    (805198500 − 639966000 = 165232500) equals the run's `ai_nano_aiu` and its per-call sum.
+    Whether a compaction's own call emits `assistant.usage` remains unmeasured. The guard is
+    correct; that the operator has no way to compact a Copilot conversation on demand is F481.
+  - **7.6.** The project was set to `offered`. `POST /agents/{name}/context-usage` was called with
+    `status measured`, `percent 66`, `context_tokens 66000`, `limit_tokens 100000` and each
+    conversation's provider `session_id`. Both calls returned 201. The Copilot conversation's
+    `checkpoint_warning` became `due` (built-in threshold 80 − 15 = 65), and its page shows *"This
+    conversation has reached its checkpoint threshold…"* with "Checkpoint now". The Claude
+    conversation's stayed NULL (its threshold is 80), and its page shows no banner. The Copilot
+    agent's Context settings read *"Copilot compacts at about 80% of its window. This agent's
+    checkpoint fires by 77% at the latest."* The Claude agent's do not.
+  - **7.7** (`run-e3a6e1631adb`). The seam is the agent's `config.cli` pin, not a Hub route.
+    While `refuse.flag` existed, `acptee` did not forward `session/prompt`. It answered with
+    1.15(a)'s sequence instead: the quota `session.error`, then `stopReason: "end_turn"`. No model
+    call was made. The real executor then ran: the run is `failed`, and its row's allowance is
+    `{"status": "rejected", "rateLimitType": "monthly", "provider": "copilot", "resetsAt":
+    1793491200}`, with `resetsAt` filled from 7.5's reading by `settle_copilot_credits`. The 5.2
+    warning line logged the payload. `GET /queue/cop-c/status` returned `waiting_count` 1,
+    `delivery_attempts` 0, and a `waiting_reason` of *"cop-c's Copilot plan quota is spent until
+    00:00 UTC on 2026-11-01 (2026-11-01T00:00:00+00:00). The Hub holds its queue, its loops and its
+    jobs until then, and does not count the refusal against any input. To continue sooner, bind the
+    agent to another runner and then send it a message…"*. A real refusal's payload is still
+    wanted (task 8.2).
 
 ## Open questions for R2/R3
 

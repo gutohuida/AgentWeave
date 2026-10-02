@@ -33771,3 +33771,20 @@ under "Workspace only" (measured), where a plain relative write is already allow
 `st_nlink > 1` is not inside. It needs a design round (the requirement text says "taken as named and not by
 following links", which a hard link sidesteps) and a decision on whether the Hub's turn-start reset of the calls
 directory should also remove multiply-linked files.
+
+## F481 (C) — a Copilot conversation cannot be compacted on demand: `/compact` is sent as chat and charged
+
+**Status:** open, found 2026-10-02 by drive task 7.5 of `a-copilot-run-shows-its-credits` (design.md Round
+log, "Drive, group 7"; `run-7ae7fb81a043` on the trial Hub). **Ready:** no change owns it.
+
+An operator who types `/compact` to a Copilot agent gets a normal model turn. In the drive that was one call,
+22876 tokens and 0.17 AI credits, with no `session.compaction_complete` and no compaction. The cause is
+deliberate and correct: slice 2 begins every `session/prompt` with `COPILOT_TURN_CONTEXT_HEAD`
+(`hub/hub/copilot_acp.py`), so that no relayed text runs as a slash command (`/allow-all`, `/permissions`).
+Copilot does advertise `compact` in its `available_commands_update`. Two things are left. First, the
+operator has no in-app way to compact a Copilot conversation, and nothing tells them that `/compact` will be
+spent as chat. The old `POST /agents/{name}/compact` route only sends a message telling the agent to "Run
+`/compact` in your session", which no agent can do. Second, design D3's compaction de-duplication
+(`compactionTokensUsed` against an `assistant.usage` with the same `requestId`) stays unmeasured until a
+natural auto-compaction at about 80% of the window is captured. A fix would be a Hub-issued compaction
+that bypasses the guard for that one command, or refusing a leading `/compact` with a sentence.
