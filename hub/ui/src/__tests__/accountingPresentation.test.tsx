@@ -319,4 +319,40 @@ describe('accounting presentation', () => {
       expect(label).not.toMatch(/^Copilot/)
     })
   })
+
+  describe('AI credits on the Budgets panel (task 1.18)', () => {
+    /** `project.ai_nano_aiu`/`premium_requests` land at task 6.1 (design D6's byte-identity test);
+     *  the headline caption and per-agent chips land at an unticked UI task. Cast past today's
+     *  `UsageSummary`/`AgentUsageSummary` types rather than widening them here. */
+    it('adds a second headline line with AI credits and premium requests when the project reports them', () => {
+      snapshot = {
+        ...baseSnapshot(),
+        project: {
+          ...baseSnapshot().project,
+          ai_nano_aiu: 275_856_000,
+          premium_requests: 1.5,
+        } as unknown as AccountingSnapshot['project'],
+      }
+      const { container } = render(<AccountingPanel />)
+      expect(container.textContent).toContain(
+        '0.28 AI credits · 1.5 premium requests (Copilot) — not counted against the budget',
+      )
+    })
+
+    it('shows no credits line when the project has nothing to report (control)', () => {
+      const { container } = render(<AccountingPanel />)
+      expect(container.textContent).not.toContain('AI credits')
+    })
+
+    it('adds AI credits to a per-agent chip only for the agent that reports them', () => {
+      snapshot = baseSnapshot()
+      snapshot.agents = [
+        { ...snapshot.agents[0], ai_nano_aiu: 275_856_000 } as unknown as AccountingSnapshot['agents'][number],
+        snapshot.agents[1],
+      ]
+      render(<AccountingPanel />)
+      expect(screen.getByText('claude: 1,234 tokens · 0.28 AI credits')).toBeInTheDocument()
+      expect(screen.getByText('codex: Unavailable · 1 unavailable')).toBeInTheDocument()
+    })
+  })
 })

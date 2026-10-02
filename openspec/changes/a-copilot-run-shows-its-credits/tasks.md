@@ -479,6 +479,48 @@ root.
   with a token override of 150000 shows the "fires at 150000 tokens or at 77% of its window" line
   at `checkpoint_compaction_percent: 80` and **no** token line at 95 (Claude's token threshold is
   not lowered)
+
+  **1.18(a) done 2026-10-02 (iter 38): the AccountingPanel/overviewBudgetSummary half.** Split like
+  1.15(a)/(b) — this is the credits-display half (D6); the checkpoint-threshold-lowering half (D10,
+  review finding 5, Q7) is 1.18(b), not yet started. `project.ai_nano_aiu`/`premium_requests` don't
+  exist on `UsageSummary`/`AgentUsageSummary` yet (land at task 6.1), so both files build fixtures
+  through an inline `as unknown as AccountingSnapshot[...]` cast rather than widening those types
+  here, matching 1.16/1.17's namespace-cast pattern. `accountingPresentation.test.tsx` gained three
+  tests under a new "AI credits on the Budgets panel" describe: a project with `ai_nano_aiu`/
+  `premium_requests` set shows `'0.28 AI credits · 1.5 premium requests (Copilot) — not counted
+  against the budget'` (D6's headline-caption row, byte-matched against its table text); a project
+  with neither set shows no "AI credits" text anywhere (control); an agent chip with `ai_nano_aiu`
+  set reads `'claude: 1,234 tokens · 0.28 AI credits'` while a sibling chip with no credits figure
+  is unchanged (`'codex: Unavailable · 1 unavailable'`). `overviewBudgetSummary.test.tsx`'s mock was
+  made mutable (a module-level `let project`, reset in `beforeEach`, mirroring
+  `accountingPresentation.test.tsx`'s `let snapshot` — it was a fixed inline object before, with no
+  way for a second scenario to vary it) and gained two tests: a project with `ai_nano_aiu` set shows
+  `'0.28 AI credits'` somewhere on the summary; one without shows no "AI credits" text (control).
+  All four assertions read `container.textContent` rather than a specific DOM split, since neither
+  component's eventual markup for the new line is designed yet.
+
+  **Verified each new failure is for the stated reason, not a crash.** `npx vitest run
+  src/__tests__/accountingPresentation.test.tsx src/__tests__/overviewBudgetSummary.test.tsx`: the
+  headline test fails with `expected '...' to contain '0.28 AI credits · 1.5 premium requests...'`
+  (the gap); the chip test fails on `getByText('claude: 1,234 tokens · 0.28 AI credits')` finding no
+  such node (the chip shows only `'claude: 1,234 tokens'` today, confirmed in the printed DOM); the
+  overview-row test fails with `expected '...' to contain '0.28 AI credits'`. Both control tests
+  (nothing to report) pass today, unchanged. `npx tsc --noEmit`: clean (the cast approach holds
+  before task 6.1 adds the real fields). `npm run lint`: clean. Full suite, `npm test`: 176 files, 4
+  failed (the two files above, plus 1.16's still-open `accountingPresentation.test.tsx` cases and
+  1.17's still-open `agentTimelineModel.test.ts`/`agentTimeline.test.tsx` — same files, no new ones)
+  / 172 passed; 1819 tests, 11 failed (8 pre-existing from 1.16/1.17, 3 new from 1.18(a)) / 1808
+  passed — exactly 5 more total tests than iteration 37's 1814, all five accounted for (3 new
+  failures + 2 new passing controls), confirming no collateral breakage. `openspec validate
+  a-copilot-run-shows-its-credits --strict`: valid.
+
+  Next (1.18(b)): `agentCheckpointSettings.test.tsx` (the "compacts at about 80%" line,
+  `checkpoint_compaction_percent` on `AgentSummary` — not yet a field, lands at task 3.4 — review
+  finding 5's "lowered to 92%" wording, and Q7 (b)'s token-override line) and
+  `projectSettingsPanel.test.tsx` (the project-level "Lowered to 77%" line naming the agent). Read
+  design D10 (`openspec/changes/a-copilot-run-shows-its-credits/design.md:567-685`) in full before
+  starting — the percent/token ceiling rules and the exact wording for each surface are there, not
+  restated in tasks.md.
 - [ ] 1.19 Extend `hub/tests/test_provider_allowance.py` (Q6 decided 2026-09-28, design D8): a
   reading `{"status": "rejected", "resetsAt": 1790812800, "rateLimitType": "monthly", "provider":
   "copilot"}` gives `hold_for_reading(...).provider == "copilot"`, and `hold_sentence("cop", hold)`
