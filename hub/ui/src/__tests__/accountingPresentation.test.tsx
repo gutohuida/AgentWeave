@@ -4,6 +4,17 @@ import type { AccountingSnapshot } from '@/api/accounting'
 import { AccountingPanel } from '@/components/accounting/AccountingPanel'
 import { BudgetExhaustionNotice } from '@/components/accounting/BudgetExhaustionNotice'
 import { accountingDisplayLabel } from '@/components/accounting/accountingDisplay'
+import * as accountingDisplayModule from '@/components/accounting/accountingDisplay'
+
+/** `formatAiCredits` lands in task 2.x (`a-copilot-run-shows-its-credits`, design "One formatter").
+ *  Read through the namespace rather than a named import so this file still type-checks and the
+ *  rest of its tests still run before that task exists -- a missing named export would fail
+ *  module load for the whole file, not just this assertion. */
+function readFormatAiCredits(): ((nano: number | null) => string | null) | undefined {
+  return (accountingDisplayModule as unknown as Record<string, unknown>).formatAiCredits as
+    | ((nano: number | null) => string | null)
+    | undefined
+}
 
 let snapshot: AccountingSnapshot
 const mutate = vi.fn()
@@ -268,5 +279,44 @@ describe('accounting presentation', () => {
       'title',
       'Autonomous turns are paused; operator messages can still run.',
     )
+  })
+
+  describe('AI credits (a-copilot-run-shows-its-credits, task 1.16)', () => {
+    it('formatAiCredits renders nano-AIU as AI credits to two decimals', () => {
+      expect(readFormatAiCredits()?.(275_856_000)).toBe('0.28 AI credits')
+    })
+
+    it('formatAiCredits shows <0.01 AI credits below the display floor', () => {
+      expect(readFormatAiCredits()?.(4_000_000)).toBe('<0.01 AI credits')
+    })
+
+    it('formatAiCredits is null when there is nothing to show', () => {
+      expect(readFormatAiCredits()?.(null)).toBeNull()
+    })
+
+    it('accountingDisplayLabel names the provider on a non-Claude allowance reading', () => {
+      const label = accountingDisplayLabel({
+        kind: 'allowance',
+        label: 'Rate-limit allowance',
+        allowance: {
+          status: 'allowed',
+          rateLimitType: 'monthly',
+          resetsAt: 1_790_812_800,
+          remainingPercentage: 96.5,
+        },
+        runner: 'copilot',
+      } as unknown as Parameters<typeof accountingDisplayLabel>[0])
+      expect(label).toMatch(/^Copilot monthly allowance available/)
+    })
+
+    it('keeps the existing Claude allowance label unprefixed when the reading names no runner', () => {
+      const label = accountingDisplayLabel({
+        kind: 'allowance',
+        label: 'Rate-limit allowance',
+        allowance: { status: 'allowed', rateLimitType: 'seven_day', resetsAt: 1_788_000_000 },
+      })
+      expect(label).toMatch(/^Weekly allowance available/)
+      expect(label).not.toMatch(/^Copilot/)
+    })
   })
 })

@@ -412,11 +412,30 @@ root.
   new quota cases, as predicted) = 16/18. `ruff check` clean; `black --check --target-version
   py311` clean, no reformat needed. `openspec validate a-copilot-run-shows-its-credits --strict`:
   valid.
-- [ ] 1.16 UI, extend `hub/ui/src/__tests__/accountingPresentation.test.tsx`: `formatAiCredits(275856000)`
+- [x] 1.16 UI, extend `hub/ui/src/__tests__/accountingPresentation.test.tsx`: `formatAiCredits(275856000)`
   is `0.28 AI credits`, `formatAiCredits(4000000)` is `<0.01 AI credits`, and `formatAiCredits(null)` is
   `null`. `accountingDisplayLabel` with a Copilot allowance `{status: 'allowed', rateLimitType:
   'monthly', resetsAt, remainingPercentage: 96.5}` and `runner: 'copilot'` starts `Copilot monthly
   allowance available`. The existing Claude label strings are unchanged
+
+  **Done 2026-10-02 (iter 36).** `formatAiCredits` does not exist yet (lands at 6.2), and
+  `accountingDisplayLabel`/`AccountingDisplay` take no `runner` field yet (lands at 6.2/6.3), so the
+  three `formatAiCredits` cases and the Copilot-naming case are read through a namespace cast
+  (`readFormatAiCredits()` in the test file) rather than a direct named import — a missing named
+  export fails module load for the *whole* test file under Vite's ESM resolution, not just one
+  assertion, which would have taken the file's 15 pre-existing passing tests down with it. The
+  fourth test added, pinning today's unprefixed Claude label (`'Rate-limit allowance available'`
+  ...) as a control, passes today and is the byte-identical case design.md's "Surfaces" section
+  promises to preserve.
+
+  `npx vitest run src/__tests__/accountingPresentation.test.tsx` (from `hub/ui/`): 19 tests, 4
+  failed (the three `formatAiCredits` cases at `expected undefined to be ...`/`toBeNull()`, and the
+  Copilot-naming case at `'Rate-limit allowance available · resets Oct 1, 1:00 AM'` not matching
+  `/^Copilot monthly allowance available/` — each failing for the stated reason, not a crash), 15
+  passed (all pre-existing, no regression, plus the new Claude-control case). `npx tsc --noEmit`:
+  clean. `npm run lint`: clean. Full suite, `npm test`: 176 files, 1 failed (this one) / 175 passed,
+  1810 tests, 4 failed / 1806 passed — no collateral breakage elsewhere. `openspec validate
+  a-copilot-run-shows-its-credits --strict`: valid.
 - [ ] 1.17 UI, extend `agentTimelineModel.test.ts`: `usageByRunId` returns `{tokens, nanoAiu}` per run
   and omits unavailable turns as `tokensByRunId` did. Extend `agentTimeline.test.tsx`: a turn with
   credits reads `… tokens · 0.28 AI credits`, and a turn without them reads exactly as today
