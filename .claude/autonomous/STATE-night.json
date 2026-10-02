@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "a-dialog-takes-the-keyboard-when-its-opens-impl",
-    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-impl: openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md task 2.5 -- CharterForm and RunnerForm: add a panelRef on the role=\"dialog\" element with tabIndex={-1}, useDialogFocus(true, panelRef, onCancel), and data-dialog-initial-focus on the Name input (design D5). Then 2.6 -- JobForm, same shape, mark on the Job Name input. Write the harness/behaviour test first per this change's pattern (task 1.x already covers D1 itself; check whether these two forms already have coverage or need new test files alongside). 2.3 done iter 12: data-dialog-initial-focus added to Cancel in DeleteCharterDialog/ClearInstructionsDialog/ArchiveConfirmDialog; confirmDialogInitialFocus.test.tsx (1.5) now passes on the explicit mark, not the DOM-order fallback (14/14 with useDialogFocus.test.tsx). No bundle refresh until 2.11.",
+    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-impl: openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md task 2.6 -- JobForm (hub/ui/src/components/jobs/JobForm.tsx): a panelRef on the role=\"dialog\" element with tabIndex={-1}, useDialogFocus(true, panelRef, onCancel), and data-dialog-initial-focus on the Job Name input (design D5 -- the header's Close button is first in DOM order, so without the mark D1 would land there instead). Write 1.11's failing test in a new jobFormFocus.test.tsx or alongside jobFormLoopDeclaration.test.tsx: opening puts focus on the Job Name input not Close; Escape calls onCancel; closing returns focus to the opener -- prefer writing it test-first this time (iter 13 did 2.5 before 1.9/1.10 and had to git-stash the component change to get genuine red evidence; cleaner to write the test first so it is red for real). 2.5 done iter 13: CharterForm (ChartersPage.tsx) and RunnerForm (RunnersPage.tsx) both joined useDialogFocus the same way; 1.9/1.10 added to chartersUi.test.tsx/runnersUi.test.tsx (18/18, 11/11), verified red (stash) then green. No bundle refresh until 2.11.",
     "queue": [
         {
             "id": "F479-fix",
