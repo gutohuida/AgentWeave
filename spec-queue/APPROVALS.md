@@ -47,6 +47,10 @@ today taken out and three changes to it:
 
 `an-agent-can-be-paused-and-keeps-its-input` is still `REVISING` and not in the queue.
 
+- APPROVED  an-arguments-file-written-from-powershell-is-the-hubs-own   added 2026-10-02 in an interactive session
+  (operator: *"Option A. Approve."*), with Open questions 1 and 2 as recommended (no bash form; the location
+  residual accepted). **Built interactively on `master`, not by the night window**; it is not in tonight's ORDER.
+
 ORDER: F479, F478-r1, F478-r2, F478-r3, F478-rev, a-copilot-run-shows-its-credits, a-copilot-agent-uses-hooks-and-its-own-agents, the-corpus-is-indexed-arranged-and-adopted-from-the-app, a-specification-is-read-in-results-that-fit, input-the-hub-accepted-is-answered-as-accepted, charters-are-named-once-and-an-empty-one-says-so, a-dialog-takes-the-keyboard-when-it-opens, the-app-window-keeps-the-operators-preferences, a-run-records-that-its-calls-were-allowed, drift-is-scanned-and-answered-on-the-document, a-retried-firing-records-how-its-work-ended, a-task-checkout-catches-up-with-its-approved-prerequisites, stop-clears-a-run-an-earlier-hub-left-running, worker-spend-counts-against-the-budget, every-event-the-hub-sends-reaches-the-app, a-flow-stages-its-review-in-the-dispatch, the-shell-judge-reads-a-word-whole, a-drive-or-a-home-variable-names-a-directory-by-itself, drift-watches-the-files-its-evidence-is-about, a-name-a-caller-chooses-reaches-its-own-resource, a-file-path-is-not-redacted-as-a-credential, a-refused-first-send-leaves-no-exploration-behind
 
 

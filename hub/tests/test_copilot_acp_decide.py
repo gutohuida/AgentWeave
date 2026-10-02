@@ -1202,3 +1202,34 @@ class TestTheHubsOwnCallCommand:
         ws = self._workspace(tmp_path)
         params, calls = self._shell("aw-tool create_task .agentweave/calls/1.json")
         assert _decide(params, "manual", ws, calls)["outcome"] == "ASK_OPERATOR"
+
+    # `an-arguments-file-written-from-powershell-is-the-hubs-own` task 1.8: 9.10's form, on the
+    # spec turn it was refused on, keyed `PowerShell` through the start event's `powershell`.
+    PS_WRITE = (
+        "Set-Content -Path '.agentweave/calls/r.json' -Value '{\"path\":\"spec/x.html\"}' "
+        "-Encoding utf8"
+    )
+
+    @pytest.mark.parametrize(
+        "posture", [WORKSPACE_PERMISSION_MODE, "manual", FULL_ACCESS_PERMISSION_MODE]
+    )
+    def test_a_powershell_args_file_write_has_standing_on_a_spec_turn(self, tmp_path, posture):
+        ws = self._workspace(tmp_path)
+        params, calls = self._shell(self.PS_WRITE)
+        result = _decide(params, posture, ws, calls, spec_turn=True)
+        assert result["outcome"] == "ALLOW", result
+        assert result["reason"] == "the Hub's own tools"
+
+    @pytest.mark.parametrize("tool_name", [None, "write_powershell"])
+    def test_the_write_from_a_shell_keyed_shell_goes_to_the_judge(self, tmp_path, tool_name):
+        ws = self._workspace(tmp_path)
+        params = _params(
+            tool_call_id="call_s", kind="execute", raw_input={"command": self.PS_WRITE}
+        )
+        calls = (
+            {}
+            if tool_name is None
+            else {"call_s": CallFacts(tool_name=tool_name, mcp_server=None, mcp_tool=None)}
+        )
+        result = _decide(params, "manual", ws, calls, spec_turn=True)
+        assert result.get("reason") != "the Hub's own tools", result

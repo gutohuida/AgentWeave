@@ -1638,6 +1638,9 @@ def _read_command(
 
 
 # --- The Hub's own call command (`a-run-reaches-the-hub-without-mcp`, design D8) -----------------
+# Four cases have standing: the MCP tools, one `aw-tool` invocation, a file-tool write of an
+# arguments file, and (`an-arguments-file-written-from-powershell-is-the-hubs-own`) one PowerShell
+# `Set-Content` of an arguments file, the notice's fallback route for the same write.
 
 _HUB_OWN_REASON = "the Hub's own tools"
 
@@ -1728,6 +1731,107 @@ def _hub_own_command(tool_name: str, command: str, workspace: str) -> bool:
     return len(words) == 2 or _plain_calls_path(words[2], workspace)
 
 
+# Case 4 (`an-arguments-file-written-from-powershell-is-the-hubs-own`, design D2): the notice's
+# PowerShell route for the arguments file. Parameter names by their full name only; `-Path` and
+# `-LiteralPath` are one parameter (wildcards cannot differ: the path's characters exclude them).
+_PS_WRITE_PARAMETERS = {
+    "-path": "path",
+    "-literalpath": "path",
+    "-value": "value",
+    "-encoding": "encoding",
+}
+# What ends or poisons a single-quoted literal on PowerShell 5.1: the typographic single quotes,
+# which close it like `'` (R3's tokenizer sweep: exactly U+2018-U+201B), and every C0 control but
+# TAB, LF and CR, plus DEL (review). RFC 8259 allows none of them raw in a JSON text.
+_PS_LITERAL_EXCLUDED = frozenset(
+    [chr(c) for c in range(0x20) if c not in (0x09, 0x0A, 0x0D)]
+    + [chr(c) for c in (0x7F, 0x2018, 0x2019, 0x201A, 0x201B)]
+)
+_PS_PATH_CHARS = _PLAIN_COMMAND_CHARS_POWERSHELL - {" "}
+
+
+def _ps_bare_word(command: str, start: int) -> Tuple[str, int]:
+    """The text from `start` to the next ASCII space or the end, and where it stops."""
+    end = command.find(" ", start)
+    end = len(command) if end < 0 else end
+    return command[start:end], end
+
+
+def _ps_single_quoted(command: str, start: int) -> Optional[Tuple[str, int]]:
+    """The content of the `'...'` literal at `start` (a doubled `''` is one quote) and the index
+    after its closing quote, or None when there is no literal or it holds an excluded character."""
+    if command[start : start + 1] != "'":
+        return None
+    content: List[str] = []
+    i = start + 1
+    while i < len(command):
+        char = command[i]
+        if char in _PS_LITERAL_EXCLUDED:
+            return None
+        if char == "'":
+            if command[i + 1 : i + 2] == "'":
+                content.append("'")
+                i += 2
+                continue
+            return "".join(content), i + 1
+        content.append(char)
+        i += 1
+    return None
+
+
+def _hub_own_powershell_write(command: str, workspace: str) -> bool:
+    """Case 4: exactly `Set-Content -Path <p> -Value '<literal>' -Encoding utf8`, the parameters
+    once each in any order, parts separated by ASCII spaces only (design D2).
+
+    Every part must end at an ASCII space or the end of the text: text joined to any part is a
+    further argument that PowerShell evaluates before the binding fails (review, measured). The
+    path is held to an allow-list of characters, because `_plain_calls_path` alone resolves a name
+    and would accept `.agentweave/calls/$(...).json`. The literal is never read."""
+    if not command:
+        return False
+    i = len(command) - len(command.lstrip(" "))
+    name, i = _ps_bare_word(command, i)
+    if name.lower() != "set-content":
+        return False
+    seen: Dict[str, str] = {}
+    while True:
+        while i < len(command) and command[i] == " ":
+            i += 1
+        if i == len(command):
+            break
+        token, i = _ps_bare_word(command, i)
+        parameter = _PS_WRITE_PARAMETERS.get(token.lower())
+        if parameter is None or parameter in seen or i == len(command):
+            return False
+        while i < len(command) and command[i] == " ":
+            i += 1
+        if i == len(command):
+            return False
+        if parameter == "value":
+            literal = _ps_single_quoted(command, i)
+            if literal is None:
+                return False
+            value, i = literal
+        elif command[i] == "'":
+            quoted = _ps_single_quoted(command, i)
+            if quoted is None:
+                return False
+            value, i = quoted
+        else:
+            value, i = _ps_bare_word(command, i)
+        if i < len(command) and command[i] != " ":
+            return False
+        if parameter == "path" and (
+            any(char not in _PS_PATH_CHARS for char in value)
+            or not _plain_calls_path(value, workspace)
+        ):
+            return False
+        if parameter == "encoding" and value.lower() != "utf8":
+            return False
+        seen[parameter] = value
+    return set(seen) == {"path", "value", "encoding"}
+
+
 def _hub_own_write(tool_name: str, tool_input: Dict[str, Any], workspace: str) -> bool:
     """Case 3: a write tool whose declared paths are all `.json` files inside the calls root, and
     that declares at least one (every path of none is vacuously true, R3)."""
@@ -1744,11 +1848,14 @@ def _hub_own_call(
 ) -> Optional[str]:
     """`"the Hub's own tools"` when this request is the Hub's own, else None (design D8).
 
-    True in exactly three cases: the Hub's MCP tools; a `Bash`/`PowerShell` command that is
+    True in exactly four cases: the Hub's MCP tools; a `Bash`/`PowerShell` command that is
     exactly one `aw-tool` invocation (a callable tool, at most one plain relative `.json` path in
-    the calls root); a write tool writing only `.json` files in the calls root. Those operations
-    were never subject to the posture -- they are bounded by the run's own credential -- and the
-    call command reaches exactly them. Anything else is None, and the caller decides as it always
+    the calls root); a write tool writing only `.json` files in the calls root; and a `PowerShell`
+    command that is exactly one `Set-Content` of such a file from one single-quoted literal (case
+    4, `an-arguments-file-written-from-powershell-is-the-hubs-own`). Those operations were never
+    subject to the posture -- they are bounded by the run's own credential -- and the call command
+    reaches exactly them. Case 4 alone allows what the workspace judge would refuse: the judge
+    reads the literal's text as paths, and PowerShell writes it verbatim. Anything else is None, and the caller decides as it always
     has: a near miss is never denied by this rule. Total: any failure is None, because a raise
     would turn a fall-through into a refusal in both callers. `workspace` defaults to
     `AW_WORKSPACE_DIR`; a caller in the Hub process passes the run's.
@@ -1765,7 +1872,13 @@ def _hub_own_call(
             return None
         if tool_name in _TOOL_DIALECTS:
             command = tool_input.get("command")
-            if isinstance(command, str) and _hub_own_command(tool_name, command, workspace):
+            if not isinstance(command, str):
+                return None
+            if _hub_own_command(tool_name, command, workspace):
+                return _HUB_OWN_REASON
+            if _TOOL_DIALECTS[tool_name][0] == "powershell" and _hub_own_powershell_write(
+                command, workspace
+            ):
                 return _HUB_OWN_REASON
             return None
         if _hub_own_write(tool_name, tool_input, workspace):
@@ -2451,7 +2564,8 @@ def _decode_args_file(data: bytes) -> str:
             return data.decode(locale.getencoding())
     raise _CallUsageError(
         "The arguments file could not be decoded as text. Write it with your file tool, or from "
-        "PowerShell with `Set-Content -Encoding utf8`."
+        "PowerShell with exactly "
+        "`Set-Content -Path '.agentweave/calls/<file>.json' -Value '<json>' -Encoding utf8`."
     )
 
 

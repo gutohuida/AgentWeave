@@ -333,3 +333,14 @@ route changes its return shape.
   function is `_standing_rules`, task 1.8's `:1201` is now `:1193`, and `_PLAIN_RELATIVE_RE` is at `:1118-1122`.
   The reviewer and the night window both recommend accepting Open questions 1 and 2 as R1 proposed. Both are left
   to the operator (`spec-queue/DECISIONS.md`).
+- **Implementation, 2026-10-02** (interactive, on `master`, after the operator's approval). Case 4 is
+  `_hub_own_powershell_write` in `mcp_server.py`. It amends one sentence of slice 3's design D8: the call
+  command's rule *"can only spare a request from being asked about, never refuse one or allow one the workspace
+  decision would refuse for any other reason"* now has the stated exception for this write (the MODIFIED
+  requirement's last paragraph). Two implementation facts for later readers. (1) "Nothing joined" is enforced
+  twice: a bare part reads to the next space, so joined text lands inside the value and fails its check, and
+  every part must also end at a space or the end. Only the second catches a quoted part joined straight to the
+  next parameter (`-Value '…'-Encoding utf8`), so task 1.4 gained three such rows after a mutation showed the
+  rule otherwise untested. (2) The excluded literal characters are written as code points, not escapes.
+  Measured on PowerShell 5.1.26100.9444 (task 3.1): all 30 allowed forms wrote exactly one file holding the
+  literal verbatim, and the shim's `_decode_args_file` read each one back.
