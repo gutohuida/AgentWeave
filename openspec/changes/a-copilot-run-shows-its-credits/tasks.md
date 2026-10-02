@@ -685,11 +685,30 @@ root.
   hub/tests/test_launchability.py -q`: 83 passed. `ruff check` and `black --check
   --target-version py311` clean on all five touched files. `openspec validate
   a-copilot-run-shows-its-credits --strict`: valid.
-- [ ] 3.2 `checkpoint_policy.py`: D10's formulas, the two new `CheckpointPolicy` fields, the percent
+- [x] 3.2 `checkpoint_policy.py`: D10's formulas, the two new `CheckpointPolicy` fields, the percent
   clamp (every runner), the notes clamp, the token-mode ceiling in `should_checkpoint` and in the
   threshold half of `should_request_notes` (not in `crosses`) and the token-mode notes ceiling, both
   guarded by `policy.compaction_percent < 95` (Q7 decided (b), 2026-09-28), and `needs_final_warning`
-  reading the policy. Keep the three module constants at their C=95 values. Task 1.12 passes
+  reading the policy. Keep the three module constants at their C=95 values. Task 1.12 passes.
+  `CheckpointPolicy` gains `final_warning_percent`/`compaction_percent` after `threshold_source`,
+  both defaulting to the C=95 values. `resolve_policy(agent, project, *, compaction_percent=None)`
+  derives `C - 15` / `threshold - 10` / `C - 3`, clamps a configured **percent** threshold above the
+  derived final warning to it (`threshold_source -> "runner_ceiling"`, every runner including
+  Claude) and its notes value with it; token mode is untouched there (the window is unknown to the
+  policy). The token-mode ceiling instead lives in a new `_threshold_reached` helper shared by
+  `should_checkpoint` and the threshold half of `should_request_notes`, and a matching inline check
+  in the notes half, both guarded by `policy.compaction_percent < 95`. `needs_final_warning` now
+  reads `policy.final_warning_percent`. `py -3.11 -m pytest hub/tests/test_checkpoint_policy.py -q`:
+  36 passed (all 12 D10 cases from task 1.12, byte-identical Claude numbers pinned). Swept every
+  other checkpoint/jobs suite for a regression: `test_checkpoint_access/configuration/cutover/
+  generation/handover/notes/record.py`, `test_flow_checkpoint_lineage.py`, `test_jobs.py`,
+  `test_jobs_crud.py` — 238 passed, 3 skipped, one failure
+  (`test_a_copilot_bound_agents_threshold_is_derived_from_its_own_compaction_point`,
+  `test_checkpoint_cutover.py:998`), which is task 1.13's own test for task 3.3
+  (`checkpoint_trigger.consider` resolving the runner and passing `compaction_percent`), marked
+  "Fails today" in its own tasks.md line (`:351`) and unrelated to this task's one-file diff. `ruff
+  check` and `black --check --target-version py311` clean on `checkpoint_policy.py`. `openspec
+  validate a-copilot-run-shows-its-credits --strict`: valid.
 - [ ] 3.3 `checkpoint_trigger.consider`: resolve the agent's runner (`Agent.runner_id` → `Runner` →
   adapter) and pass `compaction_percent`; the decline message names `policy.final_warning_percent`;
   both `checkpoint_due` payloads carry `threshold_source`. Task 1.13 passes.

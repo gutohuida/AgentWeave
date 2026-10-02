@@ -50,6 +50,11 @@ class CheckpointPolicy:
     model: Optional[str]
     # Where the threshold came from, for a surface that wants to say "inherited from the project".
     threshold_source: str = "default"
+    # D10: thresholds derived from the bound runner's compaction point (C). These two default to
+    # the C=95 values so a caller constructing a CheckpointPolicy directly, without a runner, gets
+    # today's numbers unchanged.
+    final_warning_percent: int = FINAL_WARNING_PERCENT
+    compaction_percent: int = 95
 
     @property
     def automatic(self) -> bool:
@@ -76,16 +81,33 @@ def _threshold_of(holder: Any) -> Optional[Tuple[str, int, Optional[int]]]:
     return mode, value, getattr(holder, "checkpoint_notes_value", None)
 
 
-def resolve_policy(agent: Any, project: Any) -> CheckpointPolicy:
+def resolve_policy(
+    agent: Any, project: Any, *, compaction_percent: Optional[int] = None
+) -> CheckpointPolicy:
     """Agent overrides project overrides built-in default.
 
     `mode` and the threshold resolve independently: an agent may sensibly turn checkpointing off
     for itself while accepting the project's threshold, or tighten its threshold while leaving
     the project to decide whether checkpoints are automatic.
+
+    `compaction_percent` (D10, `C`) is the bound runner's compaction point, 95 when there is no
+    agent, no bound runner, or an unknown one — the value that reproduces today's Claude numbers
+    byte-identically. The built-in threshold/notes/final-warning are all derived from it
+    (`C - 15`, `threshold - 10`, `C - 3`). A configured **percent** threshold above the derived
+    final warning is lowered to it, for every runner including Claude (Q7, decided (b)):
+    `threshold_source` becomes `"runner_ceiling"`, and a notes value that is not left below the
+    lowered threshold is lowered with it, to `threshold - 10`. Token mode cannot be clamped here —
+    the window is not known to the policy — so its ceiling is applied dynamically, against the
+    reading's percent, in `should_checkpoint` and `should_request_notes`.
     """
     mode = getattr(agent, "checkpoint_mode", None) or getattr(project, "checkpoint_mode", None)
     if mode not in CHECKPOINT_MODES:
         mode = "off"
+
+    compaction = compaction_percent if compaction_percent is not None else 95
+    final_warning = compaction - 3
+    built_in_threshold = compaction - 15
+    built_in_notes = built_in_threshold - 10
 
     threshold = _threshold_of(agent)
     source = "agent"
@@ -93,10 +115,17 @@ def resolve_policy(agent: Any, project: Any) -> CheckpointPolicy:
         threshold = _threshold_of(project)
         source = "project"
     if threshold is None:
-        threshold = (DEFAULT_THRESHOLD_MODE, DEFAULT_THRESHOLD_VALUE, DEFAULT_NOTES_VALUE)
+        threshold = (DEFAULT_THRESHOLD_MODE, built_in_threshold, built_in_notes)
         source = "default"
 
     threshold_mode, threshold_value, notes_value = threshold
+
+    if threshold_mode == "percent" and threshold_value > final_warning:
+        threshold_value = final_warning
+        source = "runner_ceiling"
+        if notes_value is not None and notes_value >= threshold_value:
+            notes_value = threshold_value - 10
+
     return CheckpointPolicy(
         mode=mode,
         threshold_mode=threshold_mode,
@@ -105,6 +134,8 @@ def resolve_policy(agent: Any, project: Any) -> CheckpointPolicy:
         runner_id=getattr(project, "checkpoint_runner_id", None),
         model=getattr(project, "checkpoint_model", None),
         threshold_source=source,
+        final_warning_percent=final_warning,
+        compaction_percent=compaction,
     )
 
 
@@ -172,6 +203,32 @@ def crosses(
     return percent is not None and percent >= value
 
 
+def _threshold_reached(
+    policy: CheckpointPolicy, *, context_tokens: Optional[int], percent: Optional[float]
+) -> bool:
+    """Whether the policy's threshold is reached, including the token-mode ceiling (D10).
+
+    In percent mode the ceiling already lives in `policy.threshold_value` itself (`resolve_policy`
+    lowered it there). In token mode the window is not known to the policy, so a token threshold
+    also counts as reached once the reading's own `percent` passes the final warning — but only
+    for a runner that compacts below 95% (Q7, decided (b)): a Claude or Codex token threshold is
+    never fired early by this ceiling.
+    """
+    if crosses(
+        policy.threshold_mode,
+        policy.threshold_value,
+        context_tokens=context_tokens,
+        percent=percent,
+    ):
+        return True
+    return (
+        policy.threshold_mode == "tokens"
+        and policy.compaction_percent < 95
+        and percent is not None
+        and percent >= policy.final_warning_percent
+    )
+
+
 def should_checkpoint(
     policy: CheckpointPolicy, *, context_tokens: Optional[int], percent: Optional[float]
 ) -> bool:
@@ -184,12 +241,7 @@ def should_checkpoint(
     """
     if not policy.enabled:
         return False
-    return crosses(
-        policy.threshold_mode,
-        policy.threshold_value,
-        context_tokens=context_tokens,
-        percent=percent,
-    )
+    return _threshold_reached(policy, context_tokens=context_tokens, percent=percent)
 
 
 def should_request_notes(
@@ -206,16 +258,23 @@ def should_request_notes(
         return False
     if policy.notes_value >= policy.threshold_value:
         return False
-    return crosses(
+    notes_reached = crosses(
         policy.threshold_mode,
         policy.notes_value,
         context_tokens=context_tokens,
         percent=percent,
-    ) and not crosses(
-        policy.threshold_mode,
-        policy.threshold_value,
-        context_tokens=context_tokens,
-        percent=percent,
+    ) or (
+        # Token-mode notes ceiling (D10, R3): a notes value the token count would never reach
+        # still counts as reached once the reading's percent passes the point ten below the
+        # final warning — the percent-mode result for a notes value past the ceiling — but only
+        # for a runner that compacts below 95%, same guard as the threshold ceiling above.
+        policy.threshold_mode == "tokens"
+        and policy.compaction_percent < 95
+        and percent is not None
+        and percent >= policy.final_warning_percent - 10
+    )
+    return notes_reached and not _threshold_reached(
+        policy, context_tokens=context_tokens, percent=percent
     )
 
 
@@ -234,7 +293,7 @@ def needs_final_warning(policy: CheckpointPolicy, *, percent: Optional[float]) -
     """
     if not policy.enabled or policy.automatic:
         return False
-    return percent is not None and percent >= FINAL_WARNING_PERCENT
+    return percent is not None and percent >= policy.final_warning_percent
 
 
 def window_for(model: Optional[str]) -> Optional[int]:
