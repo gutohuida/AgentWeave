@@ -9,6 +9,40 @@ import {
   reduceTurnBlocks,
   tokensByRunId,
 } from '@/lib/agentTimelineModel'
+import * as agentTimelineModel from '@/lib/agentTimelineModel'
+
+/** `usageByRunId` lands at task 6.3 (design.md "Each turn's 'Worked for' line" row); `TurnUsage`
+ *  gains `ai_nano_aiu` at task 6.2. Read through a namespace cast, as accountingPresentation.test.tsx
+ *  does for `formatAiCredits`, so a function that does not exist yet fails one assertion rather than
+ *  module load for the whole file. */
+function readUsageByRunId():
+  | ((recentTurns: TurnUsage[]) => Record<string, { tokens: number; nanoAiu: number | null }>)
+  | undefined {
+  return (agentTimelineModel as unknown as Record<string, unknown>).usageByRunId as
+    | ((recentTurns: TurnUsage[]) => Record<string, { tokens: number; nanoAiu: number | null }>)
+    | undefined
+}
+
+function turnUsageWithCredits(overrides: Partial<TurnUsage> & { ai_nano_aiu?: number | null }): TurnUsage {
+  return {
+    id: 'tu-1',
+    run_id: 'run-1',
+    agent: 'claude',
+    status: 'measured',
+    runner: 'copilot',
+    model: 'copilot',
+    input_tokens: 100,
+    output_tokens: 200,
+    total_tokens: 300,
+    cache_read_tokens: null,
+    cache_write_tokens: null,
+    reasoning_tokens: null,
+    api_equivalent_usd_micros: null,
+    allowance: null,
+    observed_at: '2026-08-02T00:00:00Z',
+    ...overrides,
+  } as unknown as TurnUsage
+}
 
 function entry(overrides: Partial<TimelineEntry>): TimelineEntry {
   return {
@@ -235,5 +269,40 @@ describe('tokensByRunId', () => {
       turnUsage({ id: 'tu-2', run_id: 'run-2', total_tokens: 250 }),
     ])
     expect(result).toEqual({ 'run-1': 100, 'run-2': 250 })
+  })
+})
+
+describe('usageByRunId (lands at task 6.3; TurnUsage.ai_nano_aiu lands at 6.2)', () => {
+  it('maps a measured turn to its token count and nano-AIU figure', () => {
+    const usageByRunId = readUsageByRunId()
+    const result = usageByRunId?.([
+      turnUsageWithCredits({ run_id: 'run-1', total_tokens: 4200, ai_nano_aiu: 275_856_000 }),
+    ])
+    expect(result).toEqual({ 'run-1': { tokens: 4200, nanoAiu: 275_856_000 } })
+  })
+
+  it('carries a null nano-AIU for a turn with no credit figure (a Claude run)', () => {
+    const usageByRunId = readUsageByRunId()
+    const result = usageByRunId?.([
+      turnUsageWithCredits({ run_id: 'run-1', total_tokens: 4200, ai_nano_aiu: null }),
+    ])
+    expect(result).toEqual({ 'run-1': { tokens: 4200, nanoAiu: null } })
+  })
+
+  it('omits an unavailable turn rather than showing 0 tokens, as tokensByRunId does', () => {
+    // Asserted on the whole object (not a single missing key) so that `usageByRunId` not
+    // existing yet — `undefined?.(...)` is `undefined` — fails this test too, rather than
+    // vacuously satisfying "the unavailable run's key is absent".
+    const usageByRunId = readUsageByRunId()
+    const result = usageByRunId?.([
+      turnUsageWithCredits({ run_id: 'run-1', total_tokens: 4200, ai_nano_aiu: 275_856_000 }),
+      turnUsageWithCredits({
+        run_id: 'run-2',
+        status: 'unavailable',
+        total_tokens: null,
+        ai_nano_aiu: null,
+      }),
+    ])
+    expect(result).toEqual({ 'run-1': { tokens: 4200, nanoAiu: 275_856_000 } })
   })
 })

@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSummary } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
+import type { TurnUsage } from '@/api/accounting'
 import { AgentTimeline } from '@/components/agents/AgentTimeline'
 
 // Stub the Icon component so WorkRow's per-tool icon (Q7 D2) can be asserted by name
@@ -478,6 +479,38 @@ describe('AgentTimeline', () => {
       />,
     )
     expect(screen.getByTestId('turn-worked-for')).toHaveTextContent('1,234 tokens')
+  })
+
+  it('reads "N tokens · X.XX AI credits" for a turn with a credit figure (lands at task 6.3)', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[entry({ id: 'a-tok-credits', kind: 'agent_output', output_kind: 'text', run_id: 'run-credits' })]}
+        roster={[agent]}
+        runs={{ 'run-credits': { status: 'completed', started_at: '2026-08-02T00:00:00Z', ended_at: '2026-08-02T00:00:10Z' } }}
+        isRunning={false}
+        recentTurns={[{
+          id: 'tu-credits',
+          run_id: 'run-credits',
+          agent: 'claude',
+          status: 'measured',
+          runner: 'copilot',
+          model: 'copilot',
+          input_tokens: 1000,
+          output_tokens: 234,
+          total_tokens: 1234,
+          cache_read_tokens: null,
+          cache_write_tokens: null,
+          reasoning_tokens: null,
+          api_equivalent_usd_micros: null,
+          allowance: null,
+          observed_at: '2026-08-02T00:00:10Z',
+          // `TurnUsage.ai_nano_aiu` lands at task 6.2; cast past today's type.
+          ai_nano_aiu: 275_856_000,
+        } as unknown as TurnUsage]}
+      />,
+    )
+    expect(screen.getByTestId('turn-worked-for')).toHaveTextContent('1,234 tokens · 0.28 AI credits')
   })
 
   it('omits the token stat entirely when the turn has no measured usage yet', () => {

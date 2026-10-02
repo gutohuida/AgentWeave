@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 36,
+    "iteration": 37,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "a-copilot-run-shows-its-credits-impl",
-    "next_action": "a-copilot-run-shows-its-credits-impl: task 1.17 next (1.16 done iter 36 -- see tasks.md's dated note). UI: extend agentTimelineModel.test.ts -- usageByRunId returns {tokens, nanoAiu} per run and omits unavailable turns as tokensByRunId did. Extend agentTimeline.test.tsx -- a turn with credits reads '... tokens . 0.28 AI credits', a turn without them reads exactly as today. Neither usageByRunId nor the credits-aware render exist yet (land at 6.2/6.3) -- read through a namespace cast for anything not yet exported, as 1.16 did, so a missing export doesn't fail module load for the whole file. Separately: a fresh, complete hub/tests/ background run is still owed (iter 35's died with its session at 8%, never finished) -- the next Python-touching task should kick one off early and actually read its tail before relying on it. Implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Haiku turns only when driving.",
+    "next_action": "a-copilot-run-shows-its-credits-impl: task 1.18 next (1.17 done iter 37 -- see tasks.md's dated note). UI: an AccountingPanel test renders the credits line only when project.ai_nano_aiu is not null. Extend overviewBudgetSummary.test.tsx to match. Extend agentCheckpointSettings.test.tsx: an agent with checkpoint_compaction_percent 80 shows the 'compacts at about 80%' line, one with 95 or null and no configured threshold does not; review finding 5: checkpoint_compaction_percent 95 with a percent override of 96 shows 'lowered to 92%' (read tasks.md:470-onward in full before starting -- it continues past this summary). None of AccountingPanel's credits line, project.ai_nano_aiu, or the checkpoint-override behaviour exist yet -- use the same namespace-cast pattern 1.16/1.17 used so a missing export fails one assertion, not module load for the whole file. Separately: a fresh, complete hub/tests/ background run is still owed (iter 35's died with its session at 8%, never finished) -- the next Python-touching task should kick one off early and actually read its tail before relying on it. Implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Haiku turns only when driving.",
     "queue": [
         {
             "id": "F479-fix",

@@ -436,9 +436,37 @@ root.
   clean. `npm run lint`: clean. Full suite, `npm test`: 176 files, 1 failed (this one) / 175 passed,
   1810 tests, 4 failed / 1806 passed — no collateral breakage elsewhere. `openspec validate
   a-copilot-run-shows-its-credits --strict`: valid.
-- [ ] 1.17 UI, extend `agentTimelineModel.test.ts`: `usageByRunId` returns `{tokens, nanoAiu}` per run
+- [x] 1.17 UI, extend `agentTimelineModel.test.ts`: `usageByRunId` returns `{tokens, nanoAiu}` per run
   and omits unavailable turns as `tokensByRunId` did. Extend `agentTimeline.test.tsx`: a turn with
   credits reads `… tokens · 0.28 AI credits`, and a turn without them reads exactly as today
+
+  **Done 2026-10-02 (iter 37).** `usageByRunId` does not exist yet (lands at 6.3), and
+  `TurnUsage.ai_nano_aiu` does not exist yet (lands at 6.2), so `agentTimelineModel.test.ts` reads
+  `usageByRunId` through the same namespace-cast pattern 1.16 used for `formatAiCredits`
+  (`readUsageByRunId()`), and builds its fixtures through a local `turnUsageWithCredits()` helper
+  that casts past today's `TurnUsage` type for the extra field. Three new tests: a measured turn
+  maps to `{tokens, nanoAiu}`; a turn with no credit figure carries `nanoAiu: null`; an unavailable
+  turn alongside a measured one is omitted from the result — asserted on the *whole* returned object
+  (not a single missing key), so `usageByRunId` not existing — `undefined?.(...)` is `undefined` —
+  fails this test too, rather than vacuously satisfying "the unavailable run's key is absent" (the
+  trap the file's comment on `readUsageByRunId` names).
+
+  `agentTimeline.test.tsx` gained one test, next to the existing token-count test: a `recentTurns`
+  row with `ai_nano_aiu: 275_856_000` (cast past today's `TurnUsage` type) expects
+  `'1,234 tokens · 0.28 AI credits'` on `turn-worked-for`. The existing "omits the token stat
+  entirely" test already pins a turn with no credits reading exactly as today, so task 1.17's
+  "turn without them reads exactly as today" half needed no new test — it is still green and
+  unmodified.
+
+  `npx vitest run src/__tests__/agentTimelineModel.test.ts`: 22 tests, 3 failed (the three new
+  `usageByRunId` cases, each `expected undefined to deeply equal {...}` — the gap, not a crash), 19
+  passed (all pre-existing, no regression). `npx vitest run src/__tests__/agentTimeline.test.tsx`:
+  47 tests, 1 failed (the new credits case, `Worked for 10s · 1,234 tokens` not matching the
+  expected credits suffix), 46 passed (all pre-existing, no regression). `npx tsc --noEmit`: clean.
+  `npm run lint`: clean. Full suite, `npm test`: 176 files, 3 failed (the two files above plus
+  1.16's still-open `accountingPresentation.test.tsx`) / 173 passed; 1814 tests, 8 failed (4 from
+  1.16, 4 new from 1.17) / 1806 passed — unchanged pass count, confirming no collateral breakage.
+  `openspec validate a-copilot-run-shows-its-credits --strict`: valid.
 - [ ] 1.18 UI: an `AccountingPanel` test renders the credits line only when `project.ai_nano_aiu` is
   not null. Extend `overviewBudgetSummary.test.tsx` to match. Extend `agentCheckpointSettings.test.tsx`:
   an agent with `checkpoint_compaction_percent: 80` shows the "compacts at about 80%" line, and one
