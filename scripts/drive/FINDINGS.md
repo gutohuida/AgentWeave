@@ -26097,7 +26097,7 @@ iterations 7 and 8.
 ---
 ## F307 (B) — a confirmation dialog's first Tab leaves the panel, into the editor behind the scrim
 
-**Status:** fixed (this commit) [UI-1, 2026-09-23] — a Tab arriving from outside the panel enters it; the cycle is closed from the first press; see FIXED at the end of this entry. Was: open — filed 2026-09-10 (night window, iteration 8), **measured in a real browser**
+**Status:** fixed `f473510` (Tab/Escape half, UI-1, 2026-09-23) and `68f11b4` (initial-focus half, D13 of `a-dialog-takes-the-keyboard-when-it-opens`, 2026-10-02) — a Tab arriving from outside the panel enters it, the cycle is closed from the first press, and the panel now takes initial focus on open so there is no outside-the-panel press 1 left to make. Both halves measured in a real browser against the served bundle. Was: open — filed 2026-09-10 (night window, iteration 8), **measured in a real browser**
 against the served bundle, not fixed. **Pre-existing and shared**, not introduced by the change that
 found it: `useDialogFocus` is the common hook, and the blind spot is in the hook.
 

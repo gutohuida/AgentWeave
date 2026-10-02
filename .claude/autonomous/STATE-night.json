@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 19,
+    "iteration": 20,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-dialog-takes-the-keyboard-when-its-opens-archive",
-    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-archive: group 3 (drive it) is now done -- tasks 3.1 and 3.2 both ticked with browser evidence from iteration 19 (throwaway :8012 Hub, bundle index-Cyk3sQbn.js). openspec validate a-dialog-takes-the-keyboard-when-it-opens --strict, then archive the change per night-window.md step 4.1. Set F307's FINDINGS.md Status line to 'fixed <sha>' for this change's commit (the D13/initial-focus half; the Tab-wrap half was already closed by UI-1 2026-09-23) and correct the open-severity list.",
+    "current": "a-copilot-run-shows-its-credits-impl",
+    "next_action": "a-copilot-run-shows-its-credits-impl: implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Builds on slice 3 built-but-unarchived. Haiku turns only when driving.",
     "queue": [
         {
             "id": "F479-fix",
@@ -63,11 +63,11 @@
         },
         {
             "id": "a-dialog-takes-the-keyboard-when-its-opens-archive",
-            "status": "open",
+            "status": "done",
             "title": "openspec validate --strict, then archive the change",
             "model": "sonnet",
             "effort": "medium",
-            "detail": "Only after -impl and -drive are both done. Set F307's FINDINGS.md Status line to fixed <sha> and correct the open-severity list, per night-window.md step 4.1."
+            "detail": "Done iter 20, commit <pending>. validate --strict valid (29/29 tasks, all artifacts done). Delta spec (ADDED-only, one requirement, six scenarios) appended verbatim to openspec/specs/hub-interaction-feedback/spec.md; openspec validate --specs --strict: 43/43 passed. Change moved to openspec/changes/archive/2026-10-02-a-dialog-takes-the-keyboard-when-it-opens via git mv (rename detected, no content diff beyond the move). F307's FINDINGS.md Status line rewritten to name both commits -- f473510 (Tab/Escape half, UI-1) and 68f11b4 (initial-focus half, D1) -- superseding the old self-referential 'fixed (this commit)' text. F307 is severity B, not A, so the open severity-A list needed no edit (checked: F307 never appears in any 'open severity-A set' line). CLI suite (tests/, py -3.11): 560 passed, 3 skipped."
         },
         {
             "id": "a-copilot-run-shows-its-credits-impl",
