@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { useAgents } from '@/api/agents'
 import { Button } from '@/components/ui/button'
 import { JobCreate } from '@/api/jobs'
 import { cronDayAmbiguity, describeCron, formatNextRun, nextRuns } from '@/lib/cron'
+import { useDialogFocus } from '@/hooks/useDialogFocus'
 
 interface JobFormProps {
   onSubmit: (job: JobCreate) => void
@@ -52,6 +53,8 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
   // fields above are — a controlled field that always renders must not opt a job into a loop by
   // existing.
   const [workNeedsEvidence, setWorkNeedsEvidence] = useState(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(true, panelRef, onCancel)
 
   // What the operator is about to commit, said twice over: once as a sentence, once as the actual
   // instants. Both are `null`/empty for an expression that cannot be read exactly, so a schedule
@@ -122,6 +125,8 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
       onClick={onCancel}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
         className="elevation-overlay w-full max-w-lg max-h-[90vh] overflow-y-auto p-6"
         role="dialog"
         aria-modal="true"
@@ -154,6 +159,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
               className="control-field"
               style={inputStyle}
               disabled={isPending}
+              data-dialog-initial-focus
             />
           </div>
 
