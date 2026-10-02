@@ -6,6 +6,7 @@ acp4-turn-mcp-shell-1.0.88.log`) in the order Copilot emitted it: three `assista
 notifications, one `session.usage_checkpoint`, then the `session/prompt` result's own `usage`.
 """
 
+import logging
 from typing import Any, Dict, List, Tuple
 
 from hub.copilot_usage import CopilotUsageLedger
@@ -91,3 +92,36 @@ def test_sum_is_not_doubled_whichever_side_arrives_first() -> None:
     for sample in (sample_events_first, sample_result_first):
         assert sample.total_tokens == 33172
         assert sample.total_tokens != 66344
+
+
+def test_dropped_calls_fall_back_to_the_prompt_result(caplog: Any) -> None:
+    events, prompt_result_usage = acp4_events()
+    call_events = [(t, d) for t, d in events if t == "assistant.usage"]
+
+    ledger = CopilotUsageLedger()
+    ledger.observe_event(*call_events[0])  # call 1
+    ledger.observe_event(*call_events[2])  # call 3; call 2 dropped
+    ledger.observe_prompt_result(prompt_result_usage)
+
+    with caplog.at_level(logging.WARNING):
+        sample = ledger.finish(session_was_new=True)
+
+    assert sample.total_tokens == 33172
+    assert sample.source == "copilot_prompt_result"
+    assert sample.cache_read_tokens == 21888
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("22106" in w and "33172" in w for w in warnings)
+
+
+def test_all_calls_with_no_prompt_result_uses_the_calls() -> None:
+    events, _ = acp4_events()
+    call_events = [(t, d) for t, d in events if t == "assistant.usage"]
+
+    ledger = CopilotUsageLedger()
+    for event_type, data in call_events:
+        ledger.observe_event(event_type, data)
+
+    sample = ledger.finish(session_was_new=True)
+
+    assert sample.total_tokens == 33172
+    assert sample.source == "copilot_calls"

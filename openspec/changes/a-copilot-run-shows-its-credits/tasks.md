@@ -75,11 +75,23 @@ root.
     `test_accounting_model.py`, `test_agent_trigger.py`, `test_provider_allowance.py`,
     `test_runner_parsing.py`: 171 passed. `ruff check` and `black --check --target-version py311`
     clean on all three touched files.
-- [ ] 1.3 Same file: dropped events (`session_was_new=True`). Only calls 1 and 3 observed (their sum
+- [x] 1.3 Same file: dropped events (`session_was_new=True`). Only calls 1 and 3 observed (their sum
   is 22080 + 26 = 22106), plus the full prompt result, gives total 33172 and
   `source == "copilot_prompt_result"`, `cache_read_tokens == 21888` (the prompt result's
   `cachedReadTokens`, mapped by the ledger, design D3 *Key names*), and logs one warning naming both
   figures. All three calls and no prompt result gives 33172 and `source == "copilot_calls"`
+  - **Done 2026-10-02.** `test_dropped_calls_fall_back_to_the_prompt_result`: feeds calls 1 and 3
+    only (skips call 2), then the full prompt result; asserts total 33172, `source ==
+    "copilot_prompt_result"`, `cache_read_tokens == 21888`, and a captured WARNING-level log record
+    containing both `"22106"` and `"33172"`. `test_all_calls_with_no_prompt_result_uses_the_calls`:
+    all three calls, no prompt result, gives 33172 and `source == "copilot_calls"`. Both passed
+    against today's code unchanged — `CopilotUsageLedger.finish` (`hub/hub/copilot_usage.py:141-166`)
+    already implements this fallback and warning from task 1.1's build, so this task found no gap,
+    only confirmed one. `py -3.11 -m pytest hub/tests/test_copilot_usage.py -v`: 4 passed. Re-ran the
+    same four `AccountingSample`-touching files plus this one together: 173 passed (same unrelated
+    `RuntimeError: Event loop is closed` aiosqlite-teardown resource warning noted by 1.1/1.2, not a
+    test failure). `ruff check` and `black --check --target-version py311` clean on the touched file.
+    `openspec validate a-copilot-run-shows-its-credits --strict`: valid.
 - [ ] 1.4 Same file: one ledger (one process) that observes two prompt results, 33172 and then a
   cumulative 40000, uses 40000, not their sum 73172 (design D3: the process-cumulative figure is the
   run's). Assert with the results in the order they were emitted, so a ledger that kept the earlier
