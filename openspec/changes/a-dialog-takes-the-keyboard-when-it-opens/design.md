@@ -222,3 +222,14 @@ None. The decision is recorded in the operator review above.
   still a genuine red for the fix this task adds). Added D6's effect verbatim
   (`useEffect(() => { if (isPending) panelRef.current?.focus() }, [isPending])`) to both components;
   both tests green (7/7 in the two files together).
+- Impl 2026-10-02 (task 2.9): re-ran the context table's grep (`role="dialog"`, `role="alertdialog"`,
+  `aria-modal` under `hub/ui/src`, excluding `__tests__`) at today's HEAD. 13 components carry the
+  role; 12 carry `aria-modal="true"` and all 12 call `useDialogFocus` (the seven original hook users,
+  the four D5 moves, and `StartFlowDialog.tsx:31`); the 13th, `DirectoryPicker.tsx:108`, carries
+  `role="dialog"` with no `aria-modal` and keeps its own focus/restore (`:46-50`), as R2/R3 already
+  found — still out of scope. No new hand-built dialog since R3's `09127ba` derivation beyond
+  `StartFlowDialog`, which the 2026-10-01 impl entry above already surfaced. `StartFlowDialog` is
+  folded into the D5-shape list here, explicitly: unlike the four in D5's table, it already had its
+  own `panelRef`/`role="dialog"` before this change and never needed a new `useDialogFocus` call or
+  `data-dialog-initial-focus` mark — only `tabIndex={-1}` (task 2.2) to match the shape. Full
+  per-component line list recorded in `tasks.md` 2.9.

@@ -36,8 +36,32 @@ In `hub/ui/src/__tests__/useDialogFocus.test.tsx` unless named otherwise.
 - [x] 2.6 `JobForm`: the same, with the mark on the Job Name input — done: `panelRef`/`tabIndex={-1}` on the `role="dialog"` element, `useDialogFocus(true, panelRef, onCancel)`, `data-dialog-initial-focus` on the Job Name input. Unlike `CharterForm`/`RunnerForm` (2.5), this one changes observed behaviour: the header's Close button is first in DOM order, so without the mark D1's fallback would have focused Close instead
 - [x] 2.7 `SetupModal`: remove its focus effect (`:20-22`) and the `urlInput` ref if nothing else reads it; a `panelRef` on its `role="dialog"` element with `tabIndex={-1}`, `useDialogFocus(open, panelRef, onClose)`, and the mark on the Hub URL input. The hook call stays above `if (!open) return null` — done: effect and ref removed, `panelRef`/`tabIndex={-1}` on the dialog `div`, `useDialogFocus(open, panelRef, onClose)` called above the early return, `data-dialog-initial-focus` on the Hub URL input
 - [x] 2.8 `ArchiveConfirmDialog` and `JobForm`: design D6's effect, focusing the panel when `isPending` becomes true — done: `useEffect(() => { if (isPending) panelRef.current?.focus() }, [isPending])` added to both, verbatim from design D6
-- [ ] 2.9 Re-run the grep from design's context table (`role="dialog"`, `role="alertdialog"`, `aria-modal` under `hub/ui/src`): every hand-built modal dialog calls `useDialogFocus` or is `DirectoryPicker`. Record the list inline
-- [ ] 2.10 Update `scripts/drive/t_d9_clearing_instructions_postchange.py` leg E: on open, focus is on Cancel; press 1 now reaches "Clear instructions"
+- [x] 2.9 Re-run the grep from design's context table (`role="dialog"`, `role="alertdialog"`,
+      `aria-modal` under `hub/ui/src`, excluding `__tests__`) — 13 components carry the role, 12 of
+      them `aria-modal="true"`, confirming every one of the 12 calls `useDialogFocus` and the 13th
+      (`DirectoryPicker.tsx:108`, `role="dialog"` with no `aria-modal`) keeps its own focus/restore
+      (`:46-50`) and stays out of scope, matching R2/R3's note. The list:
+      `AgentCreateDialog.tsx` (`:164`/`:198`), `ChartersPage.tsx`/`CharterForm` (`:249`/`:260`, D5),
+      `DeleteCharterDialog.tsx` (`:30`/`:42`), `DeleteProjectDialog.tsx` (`:34`/`:51`),
+      `ClearInstructionsDialog.tsx` (`:37`/`:48`), `JobForm.tsx` (`:57`/`:138`, D5),
+      `SetupModal.tsx` (`:21`/`:50`, D5), `ProjectManagerModal.tsx` (`:73`/`:125`),
+      `RunnersPage.tsx`/`RunnerForm` (`:230`/`:241`, D5), `ArchiveConfirmDialog.tsx` (`:29`/`:42`),
+      `StartFlowDialog.tsx` (`:31`/`:90`) and `TaskDetailDrawer.tsx` (`:271`/`:318`).
+      `StartFlowDialog.tsx:31` folded into the D5-shape list explicitly here: it already carried its
+      own `panelRef`/`role="dialog"` before this change (found live during task 2.2, not one of
+      design D5's original four), so it only needed `tabIndex={-1}` (done in 2.2) — it did not need
+      a new `panelRef`, `useDialogFocus` call or `data-dialog-initial-focus` mark the way the four
+      D5 dialogs did. No new hand-built dialog found since R3's 09127ba derivation other than this
+      one, already accounted for
+- [x] 2.10 Updated `scripts/drive/t_d9_clearing_instructions_postchange.py` leg E: the pre-fix
+      walk (Save held focus on open, press 1 escaped to the textarea behind the scrim — F307,
+      kept as a reproduction) is replaced with a post-fix assertion that focus lands on Cancel the
+      moment the dialog opens (`data-dialog-initial-focus` + D1), then four Tab presses cycle
+      `["Clear instructions", "Cancel", "Clear instructions", "Cancel"]`, all `inPanel`. Also
+      updated the module docstring's leg-E one-liner and the walk's `print` label to match (five
+      presses from Save -> four from Cancel). `py -3.11 -m py_compile` on the file: clean. Not run
+      live here — it needs a real Hub/browser and is this change's own group-3/-drive queue item,
+      not this static edit
 - [ ] 2.11 Full vitest suite and `npm run lint`; `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py` (writes `ui-build-stamp.json`), and commit `hub/ui/src` with `hub/hub/static/ui` in one commit. Record counts inline
 
 ## 3. Drive it

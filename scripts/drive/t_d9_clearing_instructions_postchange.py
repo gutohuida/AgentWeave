@@ -27,8 +27,10 @@ Eight legs:
   B. 5.1(a) — select all, delete, Save. A dialog, ZERO PUTs while it is open, row untouched.
   C. 5.1(b) — Cancel. Still zero PUTs, still byte-identical, and the editor keeps what was typed.
   D. 5.1(c) — Confirm. Now, and only now, one PUT and an empty row.
-  E. 5.4 — the keyboard: Tab inside the panel, Escape cancels, focus returns to Save. That is
-     `useDialogFocus`'s contract, it is unprovable in jsdom, and section 4 leaves it owed here.
+  E. 5.4 — the keyboard: opening puts focus on Cancel (F307, fixed by
+     `a-dialog-takes-the-keyboard-when-it-opens`), Tab stays inside the panel from there, Escape
+     cancels, focus returns to Save. That is `useDialogFocus`'s contract, it is unprovable in
+     jsdom, and section 4 leaves it owed here.
   F. the singular branch — one stored line reads "1 line", not "1 lines".
   G. the three saves that must NOT be interrupted, plus the near-miss that must be.
 
@@ -380,7 +382,7 @@ def drive(pid):
         page.close()
 
         # ---------------------------------------------------------- E, 5.4
-        print("\nE — 5.4: the keyboard. Tab, Escape, and where focus lands afterwards.")
+        print("\nE — 5.4: the keyboard. Open puts focus on Cancel; Tab cycles the panel; Escape returns it.")
         check(put_stored(pid, RULES) == 200, "the fixture's instructions are restored")
         wire = {"put": 0, "bodies": []}
         page = open_page(browser, pid, wire)
@@ -398,39 +400,34 @@ def drive(pid):
         check(s["dialogs"] == 1, "Enter on Save asks the same question a click does")
         check(wire["put"] == 0, f"and writes nothing ({wire['put']})")
 
+        # Post-change (a-dialog-takes-the-keyboard-when-it-opens, D1 + task 2.3): the panel's own
+        # `data-dialog-initial-focus` mark on Cancel means `useDialogFocus` moves focus there on
+        # mount, so it never sits on Save behind the scrim. This is F307's fix, measured here rather
+        # than read from the component — a browser, not jsdom, is what the task owes (1.8's note).
+        opened = focus_now(page)
+        check(
+            opened["inPanel"] is True and opened["text"] == "Cancel",
+            f"F307 FIXED: focus moves straight into the panel, onto Cancel, when it opens {opened}",
+        )
+
         walk = []
-        for _ in range(5):
+        for _ in range(4):
             page.keyboard.press("Tab")
             page.wait_for_timeout(150)
             walk.append(focus_now(page))
-        print("    Tab walk from Save, five presses:")
+        print("    Tab walk from Cancel, four presses:")
         for i, w in enumerate(walk, 1):
             print(f"      {i}. {w['tag']}/{w['text']!r} aria={w['aria']!r} inPanel={w['inPanel']}")
 
-        # 5.4 says "Tab cycles within the panel". The measured answer is: it does, once focus is
-        # inside — and the FIRST press escapes, because `useDialogFocus` never moves focus into the
-        # panel on open and its trap only fires when `document.activeElement` is the panel's first
-        # or last focusable. Focus is still on Save, outside, so press 1 follows native DOM order
-        # into the textarea behind the scrim. Filed as F307 and NOT fixed here: the hook is shared
-        # by six dialogs, so which control takes focus on open is a design decision this window
-        # does not get to make.
-        #
-        # Both halves are asserted, the escape as a KEPT REPRODUCTION rather than as a red check —
-        # so this drive's exit code means "the change's own contract holds and F307 is unchanged",
-        # and fixing F307 will fail this file loudly, which is the correct time to revisit it.
-        cycle = walk[1:]
         check(
-            all(w["inPanel"] for w in cycle),
-            f"once focus is inside the panel, Tab stays there — presses 2-5 {[w['inPanel'] for w in cycle]}",
+            all(w["inPanel"] for w in walk),
+            f"focus starts inside the panel now, so every press stays there — {[w['inPanel'] for w in walk]}",
         )
         check(
-            [w["text"] for w in cycle] == ["Cancel", "Clear instructions"] * 2,
-            f"cycling the dialog's own two controls and nothing else {[w['text'] for w in cycle]}",
-        )
-        check(
-            walk[0]["inPanel"] is False and walk[0]["aria"] == "Project instructions",
-            f"F307 REPRODUCED (filed, pre-existing, shared with ArchiveConfirmDialog): the first Tab "
-            f"escapes to the editor behind the scrim — {walk[0]['tag']}/{walk[0]['aria']!r}",
+            [w["text"] for w in walk]
+            == ["Clear instructions", "Cancel", "Clear instructions", "Cancel"],
+            f"press 1 now reaches 'Clear instructions' directly — no escape to the editor behind "
+            f"the scrim, the pre-fix F307 behaviour — {[w['text'] for w in walk]}",
         )
 
         page.keyboard.press("Escape")
