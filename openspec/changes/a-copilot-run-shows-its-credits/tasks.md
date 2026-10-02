@@ -324,7 +324,7 @@ root.
   own `ai_nano_aiu`, asserted by position. With `token_budget = 1801` and the same rows,
   `usage_accounting.project_budget_state(db, project_id)["exhausted"] is False` and its `used_tokens
   == 1800` (review finding 11: the scheduling hot path, `turn_scheduler.py:363`). Fails today
-- [ ] 1.11 Same file: a project with only Claude rows returns `ai_nano_aiu: null` and
+- [x] 1.11 Same file: a project with only Claude rows returns `ai_nano_aiu: null` and
   `premium_requests: null` everywhere. `preferred_display` for a Claude allowance row is unchanged
   except for the new `runner: "claude"` key. For a newer Copilot allowance row it carries
   `runner: "copilot"`. `GET /accounting/conversations/{id}` sums a conversation's credits

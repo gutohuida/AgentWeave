@@ -357,6 +357,151 @@ async def test_copilot_credits_aggregate_alongside_claude_tokens(app, auth_heade
 
 
 @pytest.mark.asyncio
+async def test_claude_only_project_has_null_credits_everywhere(app, auth_headers) -> None:
+    """Task 1.11, first half: a project with no Copilot row reports the two new credit keys
+    as null — in `project`, every `agents[]` entry and every `recent_turns[]` row — and its
+    allowance `preferred_display` is unchanged except for the new `runner` key, carrying the
+    allowance row's own runner ("claude"), not a hardcoded provider name."""
+    await _seed_usage()
+
+    data = (await app.get("/api/v1/projects/proj-test/accounting", headers=auth_headers)).json()
+
+    assert data["project"]["ai_nano_aiu"] is None
+    assert data["project"]["premium_requests"] is None
+    for agent in data["agents"]:
+        assert agent["ai_nano_aiu"] is None
+        assert agent["premium_requests"] is None
+    assert data["recent_turns"]
+    for turn in data["recent_turns"]:
+        assert turn["ai_nano_aiu"] is None
+        assert turn["premium_requests"] is None
+
+    assert data["preferred_display"] == {
+        "kind": "allowance",
+        "label": "Rate-limit allowance",
+        "allowance": {"five_hour": {"remaining_percent": 64}},
+        "runner": "claude",
+    }
+
+
+@pytest.mark.asyncio
+async def test_newer_copilot_allowance_displaces_claude_with_its_own_runner_name(
+    app, auth_headers
+) -> None:
+    """Task 1.11, second half: `preferred_display` picks the newest allowance row (R2) and
+    names *that* row's runner — a newer Copilot reading displaces an older Claude one and
+    carries `runner: "copilot"`, not the stale Claude name."""
+    now = datetime.now(timezone.utc)
+    async with async_session_factory() as session:
+        session.add(Run(id="run-allowance-claude", project_id="proj-test", agent="claude"))
+        session.add(
+            TurnUsage(
+                id="usage-allowance-claude",
+                run_id="run-allowance-claude",
+                project_id="proj-test",
+                agent="claude",
+                status="measured",
+                runner="claude",
+                total_tokens=10,
+                allowance={"five_hour": {"remaining_percent": 90}},
+                observed_at=now,
+            )
+        )
+        session.add(Run(id="run-allowance-copilot", project_id="proj-test", agent="copilot"))
+        session.add(
+            TurnUsage(
+                id="usage-allowance-copilot",
+                run_id="run-allowance-copilot",
+                project_id="proj-test",
+                agent="copilot",
+                status="measured",
+                runner="copilot",
+                total_tokens=20,
+                ai_nano_aiu=1_000_000,
+                premium_requests=0.1,
+                allowance={"monthly": {"remaining_percent": 96}},
+                observed_at=now + timedelta(seconds=5),
+            )
+        )
+        await session.commit()
+
+    data = (await app.get("/api/v1/projects/proj-test/accounting", headers=auth_headers)).json()
+    assert data["preferred_display"] == {
+        "kind": "allowance",
+        "label": "Rate-limit allowance",
+        "allowance": {"monthly": {"remaining_percent": 96}},
+        "runner": "copilot",
+    }
+
+
+@pytest.mark.asyncio
+async def test_conversation_accounting_sums_a_conversations_copilot_credits(
+    app, auth_headers
+) -> None:
+    """Task 1.11, third half: `GET /accounting/conversations/{id}` is a real aggregate, not a
+    slice of the project-wide recent window (see the 60-row test above) — and that aggregate
+    now sums credits too, across every Copilot turn in the conversation."""
+    async with async_session_factory() as session:
+        project = await session.get(Project, "proj-test")
+        assert project is not None
+        conversation = new_conversation(project_id=project.id, agent="copilot", origin="operator")
+        conversation.id = conversation.lineage_id = "conv-credits"
+        session.add(conversation)
+        session.add(
+            Run(
+                id="run-conv-credits-1",
+                project_id=project.id,
+                agent="copilot",
+                conversation_id="conv-credits",
+            )
+        )
+        session.add(
+            TurnUsage(
+                id="usage-conv-credits-1",
+                run_id="run-conv-credits-1",
+                project_id=project.id,
+                agent="copilot",
+                status="measured",
+                runner="copilot",
+                total_tokens=50,
+                ai_nano_aiu=200_000_000,
+                premium_requests=1.0,
+            )
+        )
+        session.add(
+            Run(
+                id="run-conv-credits-2",
+                project_id=project.id,
+                agent="copilot",
+                conversation_id="conv-credits",
+            )
+        )
+        session.add(
+            TurnUsage(
+                id="usage-conv-credits-2",
+                run_id="run-conv-credits-2",
+                project_id=project.id,
+                agent="copilot",
+                status="measured",
+                runner="copilot",
+                total_tokens=30,
+                ai_nano_aiu=75_856_000,
+                premium_requests=0.5,
+            )
+        )
+        await session.commit()
+
+    response = await app.get(
+        "/api/v1/projects/proj-test/accounting/conversations/conv-credits", headers=auth_headers
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_tokens"] == 80
+    assert body["ai_nano_aiu"] == 275856000
+    assert body["premium_requests"] == 1.5
+
+
+@pytest.mark.asyncio
 async def test_budget_patch_accepts_positive_or_null_and_rejects_nonpositive(
     app, auth_headers
 ) -> None:
