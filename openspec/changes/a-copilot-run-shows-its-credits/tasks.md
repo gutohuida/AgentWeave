@@ -126,8 +126,35 @@ root.
   `RuntimeError: Event loop is closed` resource warning noted by iterations 20-23, not a test
   failure). `ruff check` clean; `black --check --target-version py311` clean after one reformat.
   `openspec validate a-copilot-run-shows-its-credits --strict`: valid.
-- [ ] 1.6 Same file: a `session.compaction_complete` with `compactionTokensUsed` adds its tokens and
+- [x] 1.6 Same file: a `session.compaction_complete` with `compactionTokensUsed` adds its tokens and
   nano-AIU when no call has `providerCallId == requestId`, and adds nothing when one does
+
+  Done 2026-10-02. `hub/hub/copilot_usage.py` gained a `_Compaction` record, `_observe_compaction`
+  (dispatched from `observe_event` on `session.compaction_complete`) and `_effective_calls`
+  (`_calls` plus each stored compaction whose `requestId`/`serviceRequestId` matches no observed
+  call's `providerCallId`/`apiCallId`). The match is resolved lazily in `_effective_calls`, read by
+  both `_calls_sample` and `finish`, rather than at observe-time, because whether a matching call
+  exists can only be known once every event has arrived — an earlier observe-time version (using
+  the shared `_seen_call_ids` set directly inside `_observe_compaction`) gave the wrong answer when
+  the compaction event arrived *before* its matching call: it registered the compaction's own
+  tokens first, then discarded the real call as a "duplicate" of its own `requestId`, counting the
+  compaction's approximate figure instead of the call's actual one. Caught by adding a
+  reversed-order assertion to the same test and is why the fix exists.
+
+  Two tests added to `hub/tests/test_copilot_usage.py`:
+  `test_compaction_adds_its_tokens_and_nano_aiu_when_no_call_shares_its_request_id` (one call plus
+  an unrelated compaction: total and nano-AIU are both sums) and
+  `test_compaction_adds_nothing_when_a_call_shares_its_request_id` (one call and a compaction whose
+  `requestId` equals that call's `providerCallId`: total and nano-AIU are the call's alone, checked
+  in both arrival orders — call-then-compaction and compaction-then-call). `py -3.11 -m pytest
+  hub/tests/test_copilot_usage.py -v`: 8 passed. Sabotage check: temporarily forced the dedup
+  branch in `_effective_calls` to never match (`if False:`) — the "adds nothing" test failed
+  (13059 tokens instead of 11009), confirming it is not vacuous; reverted and re-ran clean. Re-ran
+  the same four `AccountingSample`-touching files plus this one together: 177 passed (same
+  unrelated aiosqlite-teardown `RuntimeError: Event loop is closed` resource warning noted by
+  iterations 20-24, not a test failure). `ruff check` clean; `black --check --target-version py311`
+  needed one reformat of both touched files (applied, re-checked clean). `openspec validate
+  a-copilot-run-shows-its-credits --strict`: valid.
 - [ ] 1.7 Same file: two `session.usage_checkpoint` events (first 100000000/0, later 275856000/1) in
   emitted order: the later wins. Reversing their order fails this test
 - [ ] 1.8 Same file, credits (D4, R3's larger-of rule). Each case runs through

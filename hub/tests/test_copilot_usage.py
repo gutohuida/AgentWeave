@@ -168,6 +168,81 @@ def test_subagent_call_counted_once_and_duplicate_notification_deduped() -> None
     assert sample.ai_nano_aiu == 222280000 + 5000000
 
 
+def _compaction_event(
+    request_id: str, input_tokens: int, output_tokens: int, cache_read: int, nano_aiu: int
+) -> Dict[str, Any]:
+    return {
+        "requestId": request_id,
+        "compactionTokensUsed": {
+            "inputTokens": input_tokens,
+            "outputTokens": output_tokens,
+            "cacheReadTokens": cache_read,
+            "copilotUsage": {"totalNanoAiu": nano_aiu},
+        },
+    }
+
+
+def test_compaction_adds_its_tokens_and_nano_aiu_when_no_call_shares_its_request_id() -> None:
+    top_call = {
+        "model": MODEL,
+        "inputTokens": 10988,
+        "outputTokens": 21,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "reasoningTokens": 0,
+        "providerCallId": "C3D0:1ACB84:95A88E:CFC8BD:6AB95457",
+        "copilotUsage": {"totalNanoAiu": 222280000},
+    }
+
+    ledger = CopilotUsageLedger()
+    ledger.observe_event("assistant.usage", top_call)
+    ledger.observe_event(
+        "session.compaction_complete", _compaction_event("COMPACT:0001", 2000, 50, 100, 40000000)
+    )
+
+    sample = ledger.finish(session_was_new=True)
+
+    assert sample.total_tokens == (10988 + 21) + (2000 + 50)
+    assert sample.ai_nano_aiu == 222280000 + 40000000
+
+
+def test_compaction_adds_nothing_when_a_call_shares_its_request_id() -> None:
+    shared_id = "C3D0:1ACB84:95A88E:CFC8BD:6AB95457"
+    top_call = {
+        "model": MODEL,
+        "inputTokens": 10988,
+        "outputTokens": 21,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "reasoningTokens": 0,
+        "providerCallId": shared_id,
+        "copilotUsage": {"totalNanoAiu": 222280000},
+    }
+
+    ledger = CopilotUsageLedger()
+    ledger.observe_event("assistant.usage", top_call)
+    ledger.observe_event(
+        "session.compaction_complete", _compaction_event(shared_id, 2000, 50, 100, 40000000)
+    )
+
+    sample = ledger.finish(session_was_new=True)
+
+    assert sample.total_tokens == 10988 + 21
+    assert sample.ai_nano_aiu == 222280000
+
+    # And in the other order: the compaction arrives first, the matching call second.
+    ledger_reversed = CopilotUsageLedger()
+    ledger_reversed.observe_event(
+        "session.compaction_complete", _compaction_event(shared_id, 2000, 50, 100, 40000000)
+    )
+    ledger_reversed.observe_event("assistant.usage", top_call)
+
+    sample_reversed = ledger_reversed.finish(session_was_new=True)
+
+    assert sample_reversed.total_tokens == 10988 + 21
+    assert sample_reversed.ai_nano_aiu == 222280000
+
+
 def test_all_calls_with_no_prompt_result_uses_the_calls() -> None:
     events, _ = acp4_events()
     call_events = [(t, d) for t, d in events if t == "assistant.usage"]

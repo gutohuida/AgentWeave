@@ -70,12 +70,20 @@ class _Checkpoint:
     premium_requests: Optional[float]
 
 
+@dataclass
+class _Compaction:
+    dimensions: Dict[str, Any]
+    nano_aiu: Optional[float]
+    request_id: Optional[str]
+
+
 class CopilotUsageLedger:
     """One per `run_turn` call (D2). Stdlib-only."""
 
     def __init__(self) -> None:
         self._seen_call_ids: Set[str] = set()
         self._calls: List[_Call] = []
+        self._compactions: List[_Compaction] = []
         self._checkpoint: Optional[_Checkpoint] = None
         self._prompt_result: Optional[Dict[str, Any]] = None
 
@@ -89,6 +97,8 @@ class CopilotUsageLedger:
                 nano_aiu=_nonneg_number(data.get("totalNanoAiu")),
                 premium_requests=_nonneg_number(data.get("totalPremiumRequests")),
             )
+        elif event_type == "session.compaction_complete":
+            self._observe_compaction(data)
 
     def _observe_call(self, data: Dict[str, Any]) -> None:
         call_id = data.get("providerCallId") or data.get("apiCallId")
@@ -112,22 +122,60 @@ class CopilotUsageLedger:
             )
         )
 
+    def _observe_compaction(self, data: Dict[str, Any]) -> None:
+        """A successful compaction's own `compactionTokensUsed` (D3). Kept separate from
+        `_calls` and resolved against them in `_effective_calls` -- not here -- because whether
+        a matching `assistant.usage` exists can only be known once every event has arrived
+        (the compaction's own call, if Copilot emits one, may reach the ledger before or after
+        this event; the dedup must be order-independent)."""
+        compaction_tokens = data.get("compactionTokensUsed")
+        if not isinstance(compaction_tokens, dict):
+            return
+        request_id = data.get("requestId") or data.get("serviceRequestId")
+        dims = _mapped(compaction_tokens, _CALL_KEY_MAP)
+        nano_aiu = None
+        usage = compaction_tokens.get("copilotUsage")
+        if isinstance(usage, dict):
+            nano_aiu = _nonneg_number(usage.get("totalNanoAiu"))
+        self._compactions.append(
+            _Compaction(dimensions=dims, nano_aiu=nano_aiu, request_id=request_id)
+        )
+
+    def _effective_calls(self) -> List[_Call]:
+        """`_calls` plus each compaction whose `requestId` matches no observed call's
+        `providerCallId`/`apiCallId` (D3) -- a compaction that does match is already counted
+        through that call, so it contributes nothing here."""
+        calls = list(self._calls)
+        for comp in self._compactions:
+            if comp.request_id is not None and comp.request_id in self._seen_call_ids:
+                continue
+            sample = _accounting_from_dimensions(comp.dimensions, source="copilot_calls")
+            total_tokens = sample.total_tokens if sample is not None else 0
+            calls.append(
+                _Call(
+                    dimensions=comp.dimensions,
+                    model=None,
+                    total_tokens=total_tokens or 0,
+                    nano_aiu=comp.nano_aiu,
+                )
+            )
+        return calls
+
     def observe_prompt_result(self, usage: Optional[Dict[str, Any]]) -> None:
         if isinstance(usage, dict):
             self._prompt_result = usage  # last result in the process wins (D3)
 
     def _calls_sample(self) -> Optional[AccountingSample]:
-        if not self._calls:
+        calls = self._effective_calls()
+        if not calls:
             return None
         summed: Dict[str, int] = {}
-        for call in self._calls:
+        for call in calls:
             for key, value in call.dimensions.items():
                 if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
                     continue
                 summed[key] = summed.get(key, 0) + int(value)
-        model = None
-        if self._calls:
-            model = max(self._calls, key=lambda c: c.total_tokens).model
+        model = max(calls, key=lambda c: c.total_tokens).model
         sample = _accounting_from_dimensions(summed, source="copilot_calls", model=model)
         return sample
 
@@ -165,13 +213,14 @@ class CopilotUsageLedger:
                         disagreement * 100,
                     )
 
+        calls = self._effective_calls()
         model = None
-        if self._calls:
-            model = max(self._calls, key=lambda c: c.total_tokens).model
+        if calls:
+            model = max(calls, key=lambda c: c.total_tokens).model
 
         per_call_nano_aiu: Optional[int] = None
-        if self._calls:
-            reported = [c.nano_aiu for c in self._calls if c.nano_aiu is not None]
+        if calls:
+            reported = [c.nano_aiu for c in calls if c.nano_aiu is not None]
             if reported:
                 per_call_nano_aiu = int(sum(reported))
 
