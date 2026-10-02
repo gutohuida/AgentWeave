@@ -843,7 +843,7 @@ root.
   are green in the 35-pass run above. Left unticked this turn — this iteration's named unit of work
   was 4.2 only — but the next firing on this change should give it one fresh, independent read
   against design D4/D8 (not a re-read of this note) before ticking it, per the round discipline.
-- [ ] 4.3 `usage_accounting.copilot_session_baseline(db, project_id, agent, session_id)`: the last
+- [x] 4.3 `usage_accounting.copilot_session_baseline(db, project_id, agent, session_id)`: the last
   written `turn_usage` row (`ORDER BY turn_usage.rowid DESC`, not `observed_at`; design D4, review
   finding 3) joined to `runs` on `Run.session_id == session_id`, for that project and agent, with
   `session_nano_aiu_total` not null. It returns None on any exception, logged. Also
@@ -854,6 +854,41 @@ root.
   every sample whose `credit_session_new` is not None, checkpoint or not, returns any other sample
   unchanged, and never raises.
   Tasks 1.8 and the settle half of 1.9 pass
+
+  **Iter 49, 2026-10-02 — verified with a fresh, independent read of `hub/hub/usage_accounting.py`
+  against design D4/D8 directly (not a re-read of iter 48's note).** `copilot_session_baseline`
+  (`:80-121`): returns `None` on `session_id is None` (`:92-93`); selects
+  `session_nano_aiu_total`/`session_premium_requests_total` joined `Run.id == TurnUsage.run_id`
+  filtered on `project_id`, `agent`, `Run.session_id == session_id`,
+  `session_nano_aiu_total IS NOT NULL` (`:95-105`); ordered
+  `literal_column("turn_usage.rowid").desc()` (`:106`, matches D4's rowid-not-`observed_at`
+  requirement verbatim); wrapped in `try/except Exception` that logs and returns `None` (`:94,
+  110-117`). `settle_copilot_credits` (`:163-257`): no-ops when `sample is None or
+  sample.credit_session_new is None` (`:180-181`, matches "acts on every sample whose
+  `credit_session_new` is not None ... returns any other sample unchanged"); `diff >= (per_call or
+  0)` picks the checkpoint difference, else falls back to `per_call` (`:198-213`, the larger-of
+  rule); `premium_requests` is computed only inside the `diff` branch, `None` in the fallback branch
+  (`:206-213`, matches "premium requests only when the difference was used"); the fallback branch
+  stores `baseline_total + per_call` when both are known, else nothing (`:218-226`, D4's "fallback
+  stores the total it reached"); the `resetsAt` borrow only fires when `allowance.get("status") ==
+  "rejected" and "resetsAt" not in allowance`, reading `copilot_prior_quota_reading` which scans
+  `runner == "copilot"` rows for *any* agent in the project ordered by rowid and returns the first
+  whose `resetsAt` is still ahead of now (`:124-160, 228-240`, matches D8's "any agent ... whose
+  reset is ahead"); the whole body is one `try/except Exception` that logs and returns the
+  *original* `sample` unchanged (`:183, 250-257`, "never raises"). No implementation gap found —
+  iter 48's note held up under independent re-derivation. Evidence: `py -3.11 -m pytest
+  hub/tests/test_copilot_usage.py -q` — 35 passed (unchanged from iter 48's count), including the
+  nine settle-side tests (`test_credits_loaded_run_charged_the_checkpoint_difference` through
+  `test_settle_non_refused_sample_with_no_snapshot_has_no_allowance`) that exercise the
+  larger-of rule, the premium-only-on-difference branch, the fallback storage, cross-run baseline
+  ordering under a stepped-back clock, and all four `resetsAt`-borrow cases (filled, cross-project
+  isolation, expired reset ignored, no-op when not rejected) end to end against a real seeded
+  `turn_usage`/`runs` row — not merely a read of the source. `py -3.11 -m pytest
+  hub/tests/test_copilot_acp_run_turn.py -q` — 50 passed, 3 failed, the same three
+  (`TestRunEndQuotaRefusalCallsOnAccountingWithRejectedReading`) iters 47-48 already attributed to
+  unwired task 4.4, not touched by this verification. No source change made (4.3 asked only to
+  verify what tasks 1.8/the settle half of 1.9 already built and tested). `openspec validate
+  a-copilot-run-shows-its-credits --strict`: valid, both before and after ticking 4.3.
 - [ ] 4.4 `copilot_acp.run_turn` (design D2; R2's answer to Q1 is that there is no adapter
   `usage_from`):
   - one ledger per call, armed when the `session/prompt` request is written;
