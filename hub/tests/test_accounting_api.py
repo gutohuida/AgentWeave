@@ -7,6 +7,7 @@ import pytest
 from hub.conversations import new_conversation
 from hub.db.engine import async_session_factory
 from hub.db.models import Project, Run, TurnUsage
+from hub.usage_accounting import project_budget_state
 
 
 async def _seed_usage() -> None:
@@ -277,6 +278,82 @@ async def test_unpriced_turns_is_zero_when_every_turn_is_priced(app, auth_header
     data = (await app.get("/api/v1/projects/proj-test/accounting", headers=auth_headers)).json()
     assert data["project"]["unpriced_turns"] == 0
     assert data["preferred_display"]["unpriced_turns"] == 0
+
+
+@pytest.mark.asyncio
+async def test_copilot_credits_aggregate_alongside_claude_tokens(app, auth_headers) -> None:
+    now = datetime.now(timezone.utc)
+    async with async_session_factory() as session:
+        session.add(Run(id="run-credits-claude", project_id="proj-test", agent="a-claude"))
+        session.add(
+            TurnUsage(
+                id="usage-credits-claude",
+                run_id="run-credits-claude",
+                project_id="proj-test",
+                agent="a-claude",
+                status="measured",
+                runner="claude",
+                total_tokens=1000,
+                observed_at=now,
+            )
+        )
+        session.add(Run(id="run-credits-copilot-1", project_id="proj-test", agent="b-copilot"))
+        session.add(
+            TurnUsage(
+                id="usage-credits-copilot-1",
+                run_id="run-credits-copilot-1",
+                project_id="proj-test",
+                agent="b-copilot",
+                status="measured",
+                runner="copilot",
+                total_tokens=500,
+                ai_nano_aiu=200_000_000,
+                premium_requests=1.0,
+                observed_at=now + timedelta(seconds=2),
+            )
+        )
+        session.add(Run(id="run-credits-copilot-2", project_id="proj-test", agent="b-copilot"))
+        session.add(
+            TurnUsage(
+                id="usage-credits-copilot-2",
+                run_id="run-credits-copilot-2",
+                project_id="proj-test",
+                agent="b-copilot",
+                status="measured",
+                runner="copilot",
+                total_tokens=300,
+                ai_nano_aiu=75_856_000,
+                premium_requests=0.5,
+                observed_at=now + timedelta(seconds=4),
+            )
+        )
+        await session.commit()
+
+    data = (await app.get("/api/v1/projects/proj-test/accounting", headers=auth_headers)).json()
+    assert data["project"]["total_tokens"] == 1800
+    assert data["project"]["ai_nano_aiu"] == 275856000
+    assert data["project"]["premium_requests"] == 1.5
+    assert data["budget"]["used_tokens"] == 1800
+
+    assert [agent["agent"] for agent in data["agents"]] == ["a-claude", "b-copilot"]
+    assert data["agents"][0]["ai_nano_aiu"] is None
+    assert data["agents"][1]["ai_nano_aiu"] == 275856000
+
+    # observed_at descending: copilot-2 (newest), copilot-1, claude (oldest).
+    recent = data["recent_turns"][:3]
+    assert [turn["total_tokens"] for turn in recent] == [300, 500, 1000]
+    assert [turn["ai_nano_aiu"] for turn in recent] == [75856000, 200000000, None]
+
+    async with async_session_factory() as session:
+        project = await session.get(Project, "proj-test")
+        assert project is not None
+        project.token_budget = 1801
+        await session.commit()
+
+    async with async_session_factory() as session:
+        state = await project_budget_state(session, "proj-test")
+    assert state["exhausted"] is False
+    assert state["used_tokens"] == 1800
 
 
 @pytest.mark.asyncio

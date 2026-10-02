@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 28,
+    "iteration": 29,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "a-copilot-run-shows-its-credits-impl",
-    "next_action": "a-copilot-run-shows-its-credits-impl: task 1.10 next (extend hub/tests/test_accounting_api.py -- seed a Claude turn (1000 tokens, no credits) for agent a-claude and two Copilot turns (500/300 tokens, 200000000/75856000 nano-AIU, premium 1.0/0.5) for agent b-copilot; GET /accounting gives project.total_tokens 1800, project.ai_nano_aiu 275856000, project.premium_requests 1.5, budget.used_tokens 1800, and each agent's own row). Implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Builds on slice 3 built-but-unarchived. Haiku turns only when driving.",
+    "next_action": "a-copilot-run-shows-its-credits-impl: task 1.11 next (same file -- a project with only Claude rows returns ai_nano_aiu: null and premium_requests: null everywhere; preferred_display for a Claude allowance row is unchanged except for the new runner: \"claude\" key; for a newer Copilot allowance row it carries runner: \"copilot\"; GET /accounting/conversations/{id} sums a conversation's credits). Implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Builds on slice 3 built-but-unarchived. Haiku turns only when driving.",
     "queue": [
         {
             "id": "F479-fix",

@@ -315,7 +315,7 @@ root.
     `ruff check` clean on all touched files; `black --check --target-version py311` needed one
     reformat of the test file (applied, re-checked clean). `openspec validate
     a-copilot-run-shows-its-credits --strict`: valid.
-- [ ] 1.10 Extend `hub/tests/test_accounting_api.py`: seed a Claude turn (1000 tokens, no credits)
+- [x] 1.10 Extend `hub/tests/test_accounting_api.py`: seed a Claude turn (1000 tokens, no credits)
   for agent `a-claude` and two Copilot turns (500 and 300 tokens; 200000000 and 75856000 nano-AIU;
   premium 1.0 and 0.5) for agent `b-copilot`. `GET /accounting` gives `project.total_tokens == 1800`,
   `project.ai_nano_aiu == 275856000`, `project.premium_requests == 1.5`, `budget.used_tokens == 1800`.
