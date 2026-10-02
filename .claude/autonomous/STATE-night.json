@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 17,
+    "iteration": 18,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-dialog-takes-the-keyboard-when-its-opens-impl",
-    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-impl: openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md task 2.11 -- full vitest suite and npm run lint under hub/ui; cd hub/ui && npm run build; then py -3.11 scripts/refresh_ui_bundle.py (writes ui-build-stamp.json); commit hub/ui/src together with hub/hub/static/ui in ONE commit (per .claude/rules/hub-ui.md); record counts inline in tasks.md. This is the last task in group 2 (the fix) -- group 3 (drive it, tasks 3.1/3.2) is the separate 'a-dialog-takes-the-keyboard-when-its-opens-drive' queue item below and needs a live throwaway Hub + Playwright browser, not this process alone; do not start it in the same firing as 2.11 unless 2.11 leaves substantial time. 2.9/2.10 done iter 17: 2.9 re-ran the role=\"dialog\"/alertdialog/aria-modal grep -- 13 components carry the role, 12 call useDialogFocus (including StartFlowDialog, now folded into the D5-shape list explicitly in both tasks.md and design.md's round log), the 13th (DirectoryPicker) confirmed still out of scope. 2.10 rewrote scripts/drive/t_d9_clearing_instructions_postchange.py leg E: was asserting the pre-fix F307 reproduction (Save held focus, Tab 1 escaped to the textarea), now asserts the post-fix contract (open puts focus on Cancel, four-Tab walk cycles Clear instructions/Cancel inside the panel) -- py_compile and ruff clean, NOT run live (needs the -drive queue item's real Hub). openspec validate --strict valid.",
+    "current": "a-dialog-takes-the-keyboard-when-its-opens-drive",
+    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-drive: openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md tasks 3.1/3.2 (group 3, the last two tasks in the file). Start a throwaway trial Hub on a fresh port/profile serving the rebuilt bundle (hub/hub/static/ui, refreshed in commit a11a328 -- 176/176 vitest files, 1805/1805 tests, lint clean, build succeeded). 3.1: drive leg E of scripts/drive/t_d9_clearing_instructions_postchange.py in a real browser (Playwright) and record each press's document.activeElement against the rewritten post-fix assertion (iter17, commit 664e85a) -- open puts focus on Cancel, four Tabs cycle [Clear instructions, Cancel, Clear instructions, Cancel] inside the panel. 3.2: in the same browser, open and close each of the four D5 dialogs (CharterForm, RunnerForm, JobForm, SetupModal) from its trigger with the keyboard alone (Escape to close) and record where focus is on open and after close. Record in scripts/drive/FINDINGS.md if either disproves or confirms F307; tick 3.1/3.2 in tasks.md with the evidence. Group 2 (the fix) is fully done -- 29/29 tasks, including task 1.8 which iteration 18 found still unticked from an earlier gap and fixed with before/after evidence. After 3.1/3.2, the next queue item is '-archive' (openspec validate --strict, then archive, per night-window.md step 4.1 -- set F307's FINDINGS.md Status to fixed <sha>).",
     "queue": [
         {
             "id": "F479-fix",
@@ -47,11 +47,11 @@
         },
         {
             "id": "a-dialog-takes-the-keyboard-when-its-opens-impl",
-            "status": "open",
+            "status": "done",
             "title": "Implement a-dialog-takes-the-keyboard-when-it-opens (B11, F307), task by task, vertical slices",
             "model": "sonnet",
             "effort": "high",
-            "detail": "Approved (APPROVALS.md lines ~130/243), rounds 0.1-0.3 done, no dependency gate. 26 of 29 tasks remain across group 1 (tests) and group 2 (the fix: useDialogFocus.ts, tabIndex, data-dialog-initial-focus marks, SetupModal, ArchiveConfirmDialog/JobForm D6), ending in 2.11 (vitest+lint+build+refresh_ui_bundle, one commit with hub/hub/static/ui). Never below one task per firing; split further in the log if a task is too big."
+            "detail": "Done iter 18, commit a11a328. All 29 tasks across groups 0/1/2 complete (task 1.8, a regression-control check, was found still unticked and fixed with before/after evidence in the same firing that closed 2.11). Full vitest 176 files/1805 tests passed, lint clean, build succeeded, hub/hub/static/ui refreshed. openspec validate --strict valid. Group 3 (drive it) is the next queue item."
         },
         {
             "id": "a-dialog-takes-the-keyboard-when-its-opens-drive",
