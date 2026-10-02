@@ -68,7 +68,7 @@ export function ClearInstructionsDialog({
         </p>
 
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel}>
+          <Button variant="ghost" size="sm" onClick={onCancel} data-dialog-initial-focus>
             Cancel
           </Button>
           <Button variant="destructive" size="sm" onClick={onConfirm}>

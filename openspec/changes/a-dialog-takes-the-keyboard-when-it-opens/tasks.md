@@ -30,7 +30,7 @@ In `hub/ui/src/__tests__/useDialogFocus.test.tsx` unless named otherwise.
       rounds and not in design's context table or D5. It already follows the same `panelRef`/`role="dialog"`
       shape as the other seven, so it got `tabIndex={-1}` here too; flagged for 2.9's re-grep, not a
       blocker for this slice
-- [ ] 2.3 Mark Cancel with `data-dialog-initial-focus` in the three confirm-only dialogs
+- [x] 2.3 Mark Cancel with `data-dialog-initial-focus` in the three confirm-only dialogs — done: `DeleteCharterDialog.tsx`, `ClearInstructionsDialog.tsx`, `ArchiveConfirmDialog.tsx`. `confirmDialogInitialFocus.test.tsx` (1.5) stayed green throughout, now passing on the explicit mark rather than the DOM-order fallback (14/14 with `useDialogFocus.test.tsx`)
 - [x] 2.4 Replace `autoFocus` with `data-dialog-initial-focus` in `AgentCreateDialog`, `DeleteProjectDialog`, `ProjectManagerModal` — done; all three already call `useDialogFocus` (`AgentCreateDialog.tsx:164`, `DeleteProjectDialog.tsx:34`, `ProjectManagerModal.tsx:73`), so the mark is live immediately
 - [ ] 2.5 `CharterForm` and `RunnerForm`: a `panelRef` on the `role="dialog"` element with `tabIndex={-1}`, `useDialogFocus(true, panelRef, onCancel)`, and `data-dialog-initial-focus` on the Name input (design D5)
 - [ ] 2.6 `JobForm`: the same, with the mark on the Job Name input

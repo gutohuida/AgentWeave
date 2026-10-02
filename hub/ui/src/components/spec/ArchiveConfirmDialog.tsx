@@ -56,7 +56,7 @@ export function ArchiveConfirmDialog({
         )}
 
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel} disabled={isPending}>
+          <Button variant="ghost" size="sm" onClick={onCancel} disabled={isPending} data-dialog-initial-focus>
             Cancel
           </Button>
           <Button variant="destructive" size="sm" onClick={onConfirm} disabled={isPending}>
