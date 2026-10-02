@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 import { vi } from 'vitest'
 import { JobsPage } from '@/components/jobs/JobsPage'
+import { JobForm } from '@/components/jobs/JobForm'
 
 // Task 1.11: `JobForm`'s header carries a Close button that is first in DOM order, ahead of the
 // Job Name input — so unlike the confirm-only dialogs (task 1.5/2.3), D1's `marked ?? first ??
@@ -62,5 +63,23 @@ describe('JobForm focus (task 1.11)', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(trigger).toHaveFocus()
+  })
+})
+
+describe('1.13 JobForm — focus moves to the panel when isPending becomes true', () => {
+  it('Create holds focus, then isPending turns true: focus moves off the now-disabled button, to the panel', () => {
+    const { container, rerender } = render(
+      <JobForm onSubmit={() => {}} onCancel={() => {}} isPending={false} />,
+    )
+
+    const createButton = screen.getByRole('button', { name: /Create Job/i })
+    createButton.focus()
+    expect(document.activeElement).toBe(createButton)
+
+    rerender(<JobForm onSubmit={() => {}} onCancel={() => {}} isPending={true} />)
+
+    const panel = container.querySelector('[tabindex="-1"]')
+    expect(document.activeElement).not.toBe(createButton)
+    expect(document.activeElement).toBe(panel)
   })
 })

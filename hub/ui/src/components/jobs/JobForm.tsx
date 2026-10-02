@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { useAgents } from '@/api/agents'
 import { Button } from '@/components/ui/button'
@@ -55,6 +55,13 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
   const [workNeedsEvidence, setWorkNeedsEvidence] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   useDialogFocus(true, panelRef, onCancel)
+
+  // D6: every field and button disables while pending, including the Create button the operator
+  // just pressed (by click or by Enter) — the same drop to `<body>` ArchiveConfirmDialog has.
+  // Move focus to the panel itself (`tabIndex={-1}` from task 2.2) instead.
+  useEffect(() => {
+    if (isPending) panelRef.current?.focus()
+  }, [isPending])
 
   // What the operator is about to commit, said twice over: once as a sentence, once as the actual
   // instants. Both are `null`/empty for an expression that cannot be read exactly, so a schedule

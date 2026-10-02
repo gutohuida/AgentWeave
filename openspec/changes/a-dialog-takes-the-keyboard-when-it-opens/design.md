@@ -208,3 +208,17 @@ None. The decision is recorded in the operator review above.
   Escape as the other restore tests use — ran alone first against the untouched component and
   confirmed genuinely red (focus landed on `<body>`, matching the task's prediction exactly), then
   green after the component change (2/2 in the file).
+- Impl 2026-10-02 (tasks 1.13, 2.8): wrote both halves of D6's test test-first — a new test in
+  `confirmDialogInitialFocus.test.tsx` (a direct-render `ArchiveHarness` wrapping
+  `ArchiveConfirmDialog`, `rerender`-ing the same instance from `isPending={false}` to `true`) and a
+  new test in `jobFormFocus.test.tsx` (direct-render `JobForm`, same `rerender` shape). Both focus
+  the Archive/Create button, assert it holds focus, rerender with `isPending={true}`, then assert
+  `document.activeElement` is the panel (found by `container.querySelector('[tabindex="-1"]')`, since
+  the panel carries no `role` of its own — the outer scrim `div` is `role="dialog"`) and is not the
+  now-disabled button. Ran both against the untouched components first: **confirmed red for real** —
+  `document.activeElement` stayed the disabled button in jsdom (it does not auto-blur a focused
+  element when `disabled` is set, unlike D6's stated browser behaviour, but the assertion the test
+  needs — that focus ends up on the panel — is false either way without the effect, so the test is
+  still a genuine red for the fix this task adds). Added D6's effect verbatim
+  (`useEffect(() => { if (isPending) panelRef.current?.focus() }, [isPending])`) to both components;
+  both tests green (7/7 in the two files together).

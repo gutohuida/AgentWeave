@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 
@@ -27,6 +27,13 @@ export function ArchiveConfirmDialog({
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   useDialogFocus(true, panelRef, onCancel)
+
+  // D6: Cancel and Archive both disable while pending, so the Archive button the operator just
+  // pressed drops the keyboard to `<body>` behind the scrim. D1 cannot help — it runs once, on
+  // open. Move focus to the panel itself (`tabIndex={-1}` from task 2.2) instead.
+  useEffect(() => {
+    if (isPending) panelRef.current?.focus()
+  }, [isPending])
 
   return (
     <div
