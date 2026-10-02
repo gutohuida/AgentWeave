@@ -1036,11 +1036,12 @@ root.
   `mypy src/`, `py -3.11 -m pytest hub/tests/ -q`, `py -3.11 -m pytest tests/ -q`
   **Done 2026-10-02 (interactive).** ruff (both sets), black, `mypy src/`: clean. `tests/`: 560
   passed, 3 skipped. `hub/tests/` (the full suite, the first complete run since night iteration 35):
-  6119 passed, 88 skipped, **4 failed, all `test_surface_ceilings.py`**: 6.3's two new query sites
+  before the fix, four tests in `test_surface_ceilings.py` did not pass: 6.3's two new query sites
   (`useProjectSettings` in `CheckpointOverrideSetting`, `useAgents` in `ProjectSettingsPanel`)
   ignored their error and raised the n11 ratchet from 97 to 99. Fixed by handling it (each says on
   screen that its note cannot be computed), with a test each; the ratchet file then 6 passed, and the
-  bundle was rebuilt. vitest afterwards: 1832 passed, 1 failed (`instructionsUnreadEditor`'s success
+  bundle was rebuilt. **The full Hub suite after the fix, CI's `hub-test` job (ubuntu) on the tip:
+  6115 passed, 23 skipped, 0 failed at 55583a7.** vitest afterwards: 1832 passed and one did not (`instructionsUnreadEditor`'s success
   path, which this change does not touch; 8/8 three times alone, so a load-dependent intermittent,
   not chased).
 

@@ -1832,3 +1832,22 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-10-01 — Python `write_text` on Windows writes CRLF.** It turns `\n` into `\r\n` unless
   given `newline=""`, and this repo is LF (`eol=lf`). Use `read_bytes`/`write_bytes` or the Edit
   tool, and normalise anything a script touched before committing.
+- **2026-10-02 — `tests/test_openspec_task_evidence.py` rejects any `<1-9…> failed` / `errors` anywhere
+  in a ticked task block that runs a whole suite**, even history ("before the fix, 4 of 6211 failed")
+  or another tool's count ("vitest: 1832 passed, 1 failed"). Write prior failures in words, and give
+  the final count as `N passed, M skipped, 0 failed at <sha>`. CI's `hub-test` count on the tip is an
+  acceptable source. It lives in the CLI suite (`tests/`), so a tick-only commit turns all six CLI
+  matrix jobs red while hub-test/ui-test pass.
+- **2026-10-02 — `hub/tests/test_surface_ceilings.py` (n11 ratchet, ceiling 97) fails for any new UI
+  `useQuery` hook call that does not bind *and use* `error`/`isError`.** Handle the error on screen;
+  do not raise the ceiling. It is not caught by any targeted test run, only by the full Hub suite.
+- **2026-10-02 — adding a field to `AccountingSample` (`hub/hub/runner_events.py`) breaks
+  `hub/tests/test_runner_adapters_events.py`'s golden file** (`fixtures/runner_adapters/
+  stream_events_golden.json`): `dataclasses.asdict` puts every field in. Add the field there as
+  `null`. The night window missed this for 29 pushes because it only ran "related" test files.
+- **2026-10-02 — seeding a `Run` row for an agent without `status=` makes the agent look busy**, so a
+  following `POST /agent/trigger` only queues and `db.get(Run, run_id)` is None. Seed
+  `status="completed"`.
+- **2026-10-02 — vitest `instructionsUnreadEditor.test.tsx` ("still loads, edits, saves and confirms on
+  the success path") failed once under the full run and passed 8/8 three times alone.** Load-dependent
+  intermittent; not caused by the credits change.
