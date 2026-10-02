@@ -173,7 +173,7 @@ root.
   unrelated aiosqlite-teardown `RuntimeError: Event loop is closed` resource warning noted by
   iterations 20-25, not a test failure). `ruff check` and `black --check --target-version py311`
   clean on the touched file. `openspec validate a-copilot-run-shows-its-credits --strict`: valid.
-- [ ] 1.8 Same file, credits (D4, R3's larger-of rule). Each case runs through
+- [x] 1.8 Same file, credits (D4, R3's larger-of rule). Each case runs through
   `settle_copilot_credits` with a seeded `turn_usage`/`runs` baseline. "One call of N" means one
   `assistant.usage` whose `copilotUsage.totalNanoAiu` is N. Each case's per-call sum is chosen so that
   a rule taking only the difference, or only the calls, fails it:
@@ -200,6 +200,53 @@ root.
     (each with its own calls), recorded in that order with `observed_at` 10, 20, 10 and 15 seconds
     past a fixed instant. Run 4 is charged 50000000 and the four sum to 550000000. Ordered by
     `observed_at`, run 4 would be charged 150000000 against run 2's total, so this fails on the R3 rule
+
+  **Done 2026-10-02.** `settle_copilot_credits` and `copilot_session_baseline` did not exist (task
+  4.3 was unbuilt), and `turn_usage` had none of design D5's four credit columns (task 2.1/2.2
+  unbuilt), so this task's own gap included the production code, not only the test. Built the
+  minimal slice 1.8 needs, leaving the rest of 2.1/2.2/4.3's scope (the `worker_invocations`
+  columns, D7/D8's quota half) open for 1.9/5.x:
+  - `db/models.py`: `TurnUsage` gained `ai_nano_aiu` (BigInteger), `premium_requests` (Float),
+    `session_nano_aiu_total` (BigInteger), `session_premium_requests_total` (Float), all nullable.
+    Migration `0116_turn_usage_copilot_credits.py` (guarded for a missing table, as `0033`/`0034`
+    do); `HEAD_REVISION` in `test_migrations.py` and the head assertion in
+    `test_project_persistence.py` bumped to `0116`.
+  - `usage_accounting.record_turn_usage` now writes the four fields from the sample whether or
+    not the turn is `measured` (task 2.3's remaining half).
+  - `usage_accounting.copilot_session_baseline(db, project_id, agent, session_id)`: the last
+    `turn_usage` row with a non-null `session_nano_aiu_total`, for that project/agent, joined to
+    `runs` on `session_id`, `ORDER BY turn_usage.rowid DESC` (not `observed_at` — review finding 3).
+    Returns None on no row or on any exception, logged.
+  - `usage_accounting.settle_copilot_credits(db, sample, *, project_id, agent, session_id)`: D4's
+    larger-of rule. Returns `sample` unchanged when `credit_session_new is None`; otherwise never
+    raises, logging and returning `sample` on any other exception.
+  - `copilot_usage.CopilotUsageLedger.finish`'s provisional `ai_nano_aiu` was wrong for this task:
+    it used the checkpoint total whenever one existed, discarding the per-call sum `settle` needs to
+    compare against. In the acp4 fixture the two happen to be equal (both 275856000), so every
+    task-1.1-1.7 test passed either way and the bug went unnoticed until 1.8 needed the per-call
+    figure independently of the checkpoint. Fixed: `finish`'s provisional `ai_nano_aiu` is now always
+    the per-call sum (D11's "provisional per-call credits"); `session_nano_aiu_total` still carries
+    the checkpoint separately. Re-ran 1.1-1.7 after the fix: unaffected (9/9 still passed).
+
+  Eight tests added to `hub/tests/test_copilot_usage.py`, one per case (a)-(h), each seeding real
+  `Project`/`Run`/`turn_usage` rows through a test database session (`app` fixture) rather than
+  only exercising the ledger. (h) seeds four runs of one session with `observed_at` 10s/20s/10s/15s
+  past a fixed instant and asserts run 4 is charged 50000000 (the sum of all four is 550000000).
+
+  **Sabotage checks** (both reverted after, `git diff` clean before the next step): (1) baseline
+  query changed from `ORDER BY turn_usage.rowid DESC` to `ORDER BY turn_usage.observed_at DESC` —
+  case (h) failed (`150000000 != 50000000`), confirming it actually exercises the rowid-vs-clock
+  distinction the task describes. (2) the larger-of condition changed from
+  `diff >= (per_call or 0)` to always prefer `diff` — cases (c) and (d) both failed (`24144000 !=
+  124144000`), confirming the "larger of" comparison is live, not vacuous.
+
+  `py -3.11 -m pytest hub/tests/test_copilot_usage.py -v`: 17 passed. Regression: `test_copilot_usage.py`
+  plus `test_accounting_model.py`, `test_agent_trigger.py`, `test_provider_allowance.py`,
+  `test_runner_parsing.py`, `test_accounting_api.py` together: 196 passed.
+  `py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py -q`: 124
+  passed, 1 skipped (pre-existing skip, unrelated). `ruff check` clean on all touched files;
+  `black --check --target-version py311` needed one reformat of the test file (applied, re-checked
+  clean). `openspec validate a-copilot-run-shows-its-credits --strict`: valid.
 - [ ] 1.9 Same file, quota (D7, D8): acp4's snapshots give reading `{"status": "allowed", "quota":
   "chat", "rateLimitType": "monthly", "resetsAt": 1790812800, "remainingPercentage": 96.5,
   "provider": "copilot"}`. (1790812800 is 2026-10-01T00:00:00Z; assert it with

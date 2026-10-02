@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import dataclasses
+import logging
+from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import Project, Run, TurnUsage
 from .runner_events import AccountingSample
 from .utils import short_id
+
+logger = logging.getLogger(__name__)
 
 
 async def record_turn_usage(
@@ -52,10 +56,145 @@ async def record_turn_usage(
             sample.api_equivalent_usd_micros if sample is not None else None
         ),
         allowance=sample.allowance if sample is not None else None,
+        # Copilot credits (design D5): written whether or not the turn is `measured`, unlike
+        # the token fields above — a quota-refused turn has no tokens but may still carry a
+        # settled charge or a session total worth keeping as the next run's baseline.
+        ai_nano_aiu=sample.ai_nano_aiu if sample is not None else None,
+        premium_requests=sample.premium_requests if sample is not None else None,
+        session_nano_aiu_total=sample.session_nano_aiu_total if sample is not None else None,
+        session_premium_requests_total=(
+            sample.session_premium_requests_total if sample is not None else None
+        ),
     )
     db.add(row)
     await db.flush()
     return row
+
+
+async def copilot_session_baseline(
+    db: AsyncSession, project_id: str, agent: str, session_id: Optional[str]
+) -> Optional[Tuple[int, Optional[float]]]:
+    """The last-written `turn_usage` row's session totals for this Copilot session (design D4).
+
+    "Last written" means `ORDER BY turn_usage.rowid DESC` — insertion order — not `observed_at`,
+    which a clock stepping backwards between two runs of the same session can reorder (review
+    2026-09-28, finding 3). `turn_usage` has a `String` primary key, so it is a rowid table, as
+    `_approval_outcome` relies on for `spec_document_events` (`api/v1/spec.py:262-281`).
+
+    Returns None when there is no such row, or on any exception, logged.
+    """
+    if session_id is None:
+        return None
+    try:
+        row = (
+            await db.execute(
+                select(TurnUsage.session_nano_aiu_total, TurnUsage.session_premium_requests_total)
+                .select_from(TurnUsage)
+                .join(Run, Run.id == TurnUsage.run_id)
+                .where(
+                    TurnUsage.project_id == project_id,
+                    TurnUsage.agent == agent,
+                    Run.session_id == session_id,
+                    TurnUsage.session_nano_aiu_total.isnot(None),
+                )
+                .order_by(literal_column("turn_usage.rowid").desc())
+                .limit(1)
+            )
+        ).first()
+    except Exception:
+        logger.exception(
+            "copilot_session_baseline failed for project=%s agent=%s session=%s",
+            project_id,
+            agent,
+            session_id,
+        )
+        return None
+    if row is None:
+        return None
+    nano_aiu, premium = row
+    return int(nano_aiu), premium
+
+
+async def settle_copilot_credits(
+    db: AsyncSession,
+    sample: Optional[AccountingSample],
+    *,
+    project_id: str,
+    agent: str,
+    session_id: Optional[str],
+) -> Optional[AccountingSample]:
+    """Design D4: credits are the larger of the session-checkpoint difference across runs and
+    this run's own per-call sum — never charged twice, never negative, correct whether or not
+    the session's checkpoint continues counting after a `session/load`.
+
+    Acts on every sample whose `credit_session_new` is not None (only `CopilotUsageLedger.finish`
+    sets it); any other sample is returned unchanged. Never raises: a failed baseline read is "no
+    baseline" (`copilot_session_baseline` already returns None for that), and any other exception
+    here is logged, returning `sample` with its ledger-provisional per-call credits untouched.
+    """
+    if sample is None or sample.credit_session_new is None:
+        return sample
+
+    try:
+        if sample.credit_session_new:
+            baseline_total: Optional[int] = 0
+            baseline_premium: Optional[float] = 0.0
+        else:
+            baseline = await copilot_session_baseline(db, project_id, agent, session_id)
+            if baseline is None:
+                baseline_total, baseline_premium = None, None
+            else:
+                baseline_total, baseline_premium = baseline
+
+        per_call = sample.ai_nano_aiu  # the ledger's provisional per-call sum, or None
+        checkpoint_total = sample.session_nano_aiu_total
+        checkpoint_premium = sample.session_premium_requests_total
+
+        diff: Optional[int] = (
+            checkpoint_total - baseline_total
+            if checkpoint_total is not None and baseline_total is not None
+            else None
+        )
+
+        if diff is not None and diff >= (per_call or 0):
+            ai_nano_aiu: Optional[int] = diff
+            premium_requests: Optional[float] = None
+            if checkpoint_premium is not None and baseline_premium is not None:
+                premium_diff = checkpoint_premium - baseline_premium
+                if premium_diff >= 0:
+                    premium_requests = premium_diff
+        else:
+            ai_nano_aiu = per_call
+            premium_requests = None
+
+        # The fallback stores the total it reached, so the next run's difference doesn't charge
+        # the same spend again (D4). A run that saw a checkpoint always stores that checkpoint's
+        # own totals, whichever figure it was charged.
+        if checkpoint_total is not None:
+            stored_total: Optional[int] = checkpoint_total
+            stored_premium: Optional[float] = checkpoint_premium
+        elif per_call is not None and baseline_total is not None:
+            stored_total = baseline_total + per_call
+            stored_premium = None
+        else:
+            stored_total = None
+            stored_premium = None
+
+        return dataclasses.replace(
+            sample,
+            ai_nano_aiu=ai_nano_aiu,
+            premium_requests=premium_requests,
+            session_nano_aiu_total=stored_total,
+            session_premium_requests_total=stored_premium,
+        )
+    except Exception:
+        logger.exception(
+            "settle_copilot_credits failed for project=%s agent=%s session=%s",
+            project_id,
+            agent,
+            session_id,
+        )
+        return sample
 
 
 def _summary_from_row(row: Any, *, agent: Optional[str] = None) -> Dict[str, Any]:

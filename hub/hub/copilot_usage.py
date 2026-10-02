@@ -232,9 +232,10 @@ class CopilotUsageLedger:
         session_premium_requests_total = (
             self._checkpoint.premium_requests if self._checkpoint else None
         )
-        provisional_nano_aiu = (
-            session_nano_aiu_total if session_nano_aiu_total is not None else per_call_nano_aiu
-        )
+        # Provisional only: this run's own per-call sum (D11's fallback figure).
+        # `settle_copilot_credits` is what applies D4's larger-of rule against the session
+        # checkpoint; without it this is the best a database-free `finish()` can report.
+        provisional_nano_aiu = per_call_nano_aiu
         provisional_premium_requests = session_premium_requests_total
 
         return AccountingSample(

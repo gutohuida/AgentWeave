@@ -5,9 +5,11 @@ from typing import Any, List, Optional
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -1285,6 +1287,14 @@ class TurnUsage(Base):
     reasoning_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     api_equivalent_usd_micros: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     allowance: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Copilot credits (a-copilot-run-shows-its-credits, design D4/D5). `ai_nano_aiu` and
+    # `premium_requests` are this run's own charge; `session_nano_aiu_total` and
+    # `session_premium_requests_total` are the session checkpoint this run ended at, read back
+    # as the next run's baseline by `usage_accounting.copilot_session_baseline`.
+    ai_nano_aiu: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    premium_requests: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    session_nano_aiu_total: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    session_premium_requests_total: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     project: Mapped["Project"] = relationship(back_populates="turn_usages")
