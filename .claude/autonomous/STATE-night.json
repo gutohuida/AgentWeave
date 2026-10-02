@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 11,
+    "iteration": 12,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "a-dialog-takes-the-keyboard-when-its-opens-impl",
-    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-impl: openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md task 2.3 -- mark Cancel with data-dialog-initial-focus in the three confirm-only dialogs (DeleteCharterDialog, ClearInstructionsDialog, ArchiveConfirmDialog). hub/ui/src/__tests__/confirmDialogInitialFocus.test.tsx (task 1.5) already asserts Cancel gets initial focus and passes today on the DOM-order fallback alone (no dialog marks Cancel yet) -- it must stay green through this change, now passing because of the explicit mark rather than DOM order. Run it alone and with useDialogFocus.test.tsx after. Then move to 2.5 (CharterForm/RunnerForm) next. 2.4 and 1.7 done iter 11: autoFocus replaced with data-dialog-initial-focus in AgentCreateDialog/DeleteProjectDialog/ProjectManagerModal (confirmed all three already call useDialogFocus); agentCreateDialogFocusRestore.test.tsx now 1/1 green (both halves of 1.7). No bundle refresh until 2.11.",
+    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-impl: openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md task 2.5 -- CharterForm and RunnerForm: add a panelRef on the role=\"dialog\" element with tabIndex={-1}, useDialogFocus(true, panelRef, onCancel), and data-dialog-initial-focus on the Name input (design D5). Then 2.6 -- JobForm, same shape, mark on the Job Name input. Write the harness/behaviour test first per this change's pattern (task 1.x already covers D1 itself; check whether these two forms already have coverage or need new test files alongside). 2.3 done iter 12: data-dialog-initial-focus added to Cancel in DeleteCharterDialog/ClearInstructionsDialog/ArchiveConfirmDialog; confirmDialogInitialFocus.test.tsx (1.5) now passes on the explicit mark, not the DOM-order fallback (14/14 with useDialogFocus.test.tsx). No bundle refresh until 2.11.",
     "queue": [
         {
             "id": "F479-fix",
