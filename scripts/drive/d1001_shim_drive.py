@@ -306,7 +306,7 @@ def spec():
     wait_idle(s["pid"], COP)
     report(s["pid"], COP)
     events = ro(
-        "select event_type from spec_document_events where document_id in "
+        "select kind, origin, run_id from spec_document_events where document_id in "
         "(select id from spec_documents where path=?)",
         (doc["path"],),
     )

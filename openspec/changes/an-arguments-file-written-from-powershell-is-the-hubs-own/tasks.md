@@ -105,23 +105,27 @@
   route. Update any existing notice-text assertions (`test_launchability.py:601` asserts `-Encoding utf8`, which
   still holds).
   - **Done 2026-10-02:** the three sites spell out `Set-Content -Path '.agentweave/calls/<file>.json' -Value '<json>' -Encoding utf8`; the file tool stays preferred.
-- [ ] 2.5 `py -3.11 -m pytest hub/tests/test_hub_own_call.py hub/tests/test_permission_approver.py
+- [x] 2.5 `py -3.11 -m pytest hub/tests/test_hub_own_call.py hub/tests/test_permission_approver.py
   hub/tests/test_copilot_acp_run_turn.py -q`; `ruff check`; `black --check --target-version py311`. Then the full
   `hub/tests/` suite, backgrounded per the night window's rule, with its tail read before the change is closed.
+  - **Done 2026-10-02:** the four named files, `ruff check`, `black --check --target-version py311` and `mypy src/` clean; full `hub/tests/` 6250 passed, 88 skipped at 4f8b8cc.
 
 ## 3. Drive
 
-- [ ] 3.1 Measure the predicate against real PowerShell 5.1: for every row of 1.1 and 1.2, run the command in a
+- [x] 3.1 Measure the predicate against real PowerShell 5.1: for every row of 1.1 and 1.2, run the command in a
   scratch workspace and confirm that the file holds exactly the literal's content and that the shim
   (`aw-tool --list` is not enough: `aw-tool read_spec_document <file>` against a drive Hub) decodes it.
-- [ ] 3.2 Re-drive slice 3's task 9.10 on a fresh drive profile and port (never `:8000`; Haiku is not a Copilot
+  - **Done 2026-10-02:** PowerShell 5.1.26100.9444, every 1.1 and 1.2 row (30 commands) run through `-EncodedCommand` in a scratch workspace: each exited 0, created exactly `.agentweave/calls/r.json` and nothing else, and the file decoded by `_decode_args_file` equals the literal (doubled `''` as one quote); the JSON rows parse. The shim end to end over such a file is 3.2's `aw-tool read_spec_document` and `submit_spec_document`.
+- [x] 3.2 Re-drive slice 3's task 9.10 on a fresh drive profile and port (never `:8000`; Haiku is not a Copilot
   model, so use the drive's Copilot model as 9.10 did). Record Copilot's exact `rawInput.command` for the
   arguments-file write. If it matches the grammar, the write is allowed with "the Hub's own tools" and the
   submission is recorded. If it does not, record the form and stop: that is a new finding, not a grammar
   widening made in the drive.
-- [ ] 3.3 Append the outcome to `scripts/drive/FINDINGS.md`. F478's status line names this change's commit for
+  - **Done 2026-10-02:** on the trial Hub `:8010` and 9.10's own agent (`cop-s3`, `--disable-mcp-server agentweave`, project `proj-47d7dcf6f191`) rather than a fresh profile, so the comparison with 9.10 holds. `run-71191896f5c6`: `absent` + `shim`; Copilot's `rawInput.command` was `Set-Content -Path '.agentweave/calls/read-spec.json' -Value '{"path":"spec/changes/olive-yeti/spec.html"}' -Encoding utf8`, then twice the same form for `submit-spec.json`, each matching the grammar and completing; `aw-tool read_spec_document` and `submit_spec_document` ran (the first submit was refused 422 by the tool's own schema check, `evidence` a dict, and the model corrected it); one `spec_document_events` row, `content`/`submission`, this run; no permission card; 0 stored events holding `aw_run_`. Replaying the three captured commands through `decide_permission` on a spec turn: ALLOW "the Hub's own tools" with case 4, REJECT ("Edit files allows file changes inside the workspace only") with it patched off, the answer 9.10 got.
+- [x] 3.3 Append the outcome to `scripts/drive/FINDINGS.md`. F478's status line names this change's commit for
   the arguments-file half, and `the-shell-judge-reads-a-word-whole` for the general half (`echo 'a:b/c'`), which
   stays open until that change archives.
+  - **Done 2026-10-02:** F478's status line names `4f8b8cc` and this drive for the arguments-file half, and `the-shell-judge-reads-a-word-whole` for the general half.
 
 ## 4. Archive
 

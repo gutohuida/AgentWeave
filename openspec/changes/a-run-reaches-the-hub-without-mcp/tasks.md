@@ -702,7 +702,7 @@ SQLite reads of the trial profile's database.
     choice; `run-5ffb0bac65e3` with the fields given: `Write` to `.agentweave/calls/create_task.json`, then `aw-tool
     create_task .agentweave/calls/create_task.json`, no denial (`Bash(aw-tool:*)`), task S3-F301 created by the run;
     status NULL (untested), told `shim`.
-- [ ] 9.10 (review finding 4, design D16) **Copilot spec turn told `shim`** (1 prompt), on 9.3's blocked agent, with
+- [x] 9.10 (review finding 4, design D16) **Copilot spec turn told `shim`** (1 prompt), on 9.3's blocked agent, with
   a specification document open: *"Submit this document unchanged, then stop."* Expect `absent` + `shim`; the model
   wrote `.agentweave/calls/*.json` with `create` (allowed by standing, no card) and ran `aw-tool
   submit_spec_document …`; the document's submission recorded; any other write in the turn refused. If Copilot never
@@ -713,6 +713,10 @@ SQLite reads of the trial profile's database.
     the Hub refused it: the workspace judge reads `"path":"spec/..."` as a URL whose path is outside the workspace
     (**F478**, reproduced by `_decide` alone; predates this change). The turn then stopped; no submission. Left open:
     the spec flow over the shim on Copilot needs F478's judge fix (its own round) or a spec turn that uses `create`.
+  - **Met 2026-10-02** after F478's arguments-file half (`an-arguments-file-written-from-powershell-is-the-hubs-own`,
+    `4f8b8cc`): `run-71191896f5c6` on the same agent, `absent` + `shim`; Copilot wrote its arguments files from
+    PowerShell (not with `create`), each allowed by the Hub's own rule with no card, ran `aw-tool
+    submit_spec_document`, and the document's submission was recorded. Details in that change's task 3.2.
 - [x] 9.9 Append the outcome to `scripts/drive/FINDINGS.md`: the F340 status line (fixed), F301 (fixed for Copilot;
   Claude per 9.8), and F299 (answered for Copilot; open for Claude). File any new defect as a new finding.
   - **Done 2026-10-01**: `scripts/drive/FINDINGS.md`: F340 footed (fixed for runs that report; open for Codex

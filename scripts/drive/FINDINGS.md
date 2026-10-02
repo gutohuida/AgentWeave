@@ -33728,7 +33728,10 @@ call; no card, task created by the run (`run-000e23023de9`). The approver was no
 
 ## F478 (B) — the workspace judge reads `key:value/path` inside a shell string as a URL whose path is outside the workspace
 
-**Status:** open, found 2026-10-01 by drive 9.10 of `a-run-reaches-the-hub-without-mcp`. **Ready:** R1 proposed
+**Status:** arguments-file half fixed 2026-10-02 by `an-arguments-file-written-from-powershell-is-the-hubs-own`
+(`4f8b8cc`; re-driven: 9.10 met on the trial Hub, `run-71191896f5c6`, Copilot's three `Set-Content` writes allowed
+by standing and the submission recorded). The general half (`echo 'a:b/c'`) stays open until
+`the-shell-judge-reads-a-word-whole` archives. Found 2026-10-01 by drive 9.10 of `a-run-reaches-the-hub-without-mcp`. **Ready:** R1 proposed
 2026-10-02 as `an-arguments-file-written-from-powershell-is-the-hubs-own` (the arguments-file half; R2 done
 2026-10-02 -- 9.10's exact command fits its grammar; R3 done 2026-10-02 -- BMP-wide tokenizer sweep, every grammar trap run on 5.1, one safety rule made explicit; adversarial review done 2026-10-02 -- APPROVE WITH FIXES, all nine applied, "nothing joined" generalised to every part, notice now spells the form out; operator approval owed, DECISIONS.md `F478-approve`). R1 measured that the refusal is rule 6's backstop, not the URL rule (rule 1 already needs `://`), so
 the general half (`echo 'a:b/c'`) is F362's mechanism, owned by `the-shell-judge-reads-a-word-whole` D2.
