@@ -277,6 +277,11 @@ def _summary_from_row(row: Any, *, agent: Optional[str] = None) -> Dict[str, Any
             else None
         ),
         "unpriced_turns": int(row.unpriced_turns or 0),
+        # Copilot's credits (D5, D6): null where no turn reported one, never a zero.
+        "ai_nano_aiu": int(row.ai_nano_aiu) if row.ai_nano_aiu is not None else None,
+        "premium_requests": (
+            float(row.premium_requests) if row.premium_requests is not None else None
+        ),
     }
     if agent is not None:
         summary = {"agent": agent, **summary}
@@ -296,6 +301,8 @@ def _aggregate_columns() -> tuple[Any, ...]:
         func.sum(case((TurnUsage.api_equivalent_usd_micros.is_(None), 1), else_=0)).label(
             "unpriced_turns"
         ),
+        func.sum(TurnUsage.ai_nano_aiu).label("ai_nano_aiu"),
+        func.sum(TurnUsage.premium_requests).label("premium_requests"),
     )
 
 
@@ -356,12 +363,15 @@ async def accounting_snapshot(
             "api_equivalent_usd_micros": row.api_equivalent_usd_micros,
             "allowance": row.allowance if isinstance(row.allowance, dict) else None,
             "observed_at": row.observed_at.isoformat(),
+            "ai_nano_aiu": row.ai_nano_aiu,
+            "premium_requests": row.premium_requests,
         }
         for row in recent_rows
     ]
-    latest_allowance = next(
-        (row.allowance for row in recent_rows if isinstance(row.allowance, dict)), None
+    latest_allowance_row = next(
+        (row for row in recent_rows if isinstance(row.allowance, dict)), None
     )
+    latest_allowance = latest_allowance_row.allowance if latest_allowance_row else None
     cost = project_summary["api_equivalent_usd_micros"]
     total = project_summary["total_tokens"]
     if latest_allowance is not None:
@@ -369,6 +379,8 @@ async def accounting_snapshot(
             "kind": "allowance",
             "label": "Rate-limit allowance",
             "allowance": latest_allowance,
+            # Whose allowance it is: the row's own runner, so a label never names the wrong one.
+            "runner": latest_allowance_row.runner,
         }
     elif cost is not None:
         preferred_display = {

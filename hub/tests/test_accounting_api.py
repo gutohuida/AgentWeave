@@ -95,6 +95,8 @@ async def test_accounting_aggregates_by_agent_and_project_without_cross_project_
         "unavailable_turns": 1,
         "api_equivalent_usd_micros": 30_000,
         "unpriced_turns": 1,
+        "ai_nano_aiu": None,
+        "premium_requests": None,
     }
     assert data["agents"] == [
         {
@@ -106,6 +108,8 @@ async def test_accounting_aggregates_by_agent_and_project_without_cross_project_
             "unavailable_turns": 0,
             "api_equivalent_usd_micros": 30_000,
             "unpriced_turns": 0,
+            "ai_nano_aiu": None,
+            "premium_requests": None,
         },
         {
             "agent": "codex",
@@ -116,6 +120,8 @@ async def test_accounting_aggregates_by_agent_and_project_without_cross_project_
             "unavailable_turns": 1,
             "api_equivalent_usd_micros": None,
             "unpriced_turns": 1,
+            "ai_nano_aiu": None,
+            "premium_requests": None,
         },
     ]
     assert data["budget"] == {
@@ -138,6 +144,7 @@ async def test_allowance_precedes_api_equivalent_and_unavailable_is_not_zero(
         "kind": "allowance",
         "label": "Rate-limit allowance",
         "allowance": {"five_hour": {"remaining_percent": 64}},
+        "runner": "claude",
     }
     unavailable = next(turn for turn in data["recent_turns"] if turn["status"] == "unavailable")
     assert unavailable["total_tokens"] is None
@@ -595,6 +602,8 @@ async def test_conversation_accounting_sums_that_conversation_and_ignores_the_pr
         "unavailable_turns": 0,
         "api_equivalent_usd_micros": None,
         "unpriced_turns": 60,
+        "ai_nano_aiu": None,
+        "premium_requests": None,
     }
 
 

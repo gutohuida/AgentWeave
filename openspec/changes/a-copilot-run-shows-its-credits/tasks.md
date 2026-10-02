@@ -986,7 +986,7 @@ root.
 
 ## 6. API and UI
 
-- [ ] 6.1 `usage_accounting`: `ai_nano_aiu` and `premium_requests` in `_aggregate_columns`,
+- [x] 6.1 `usage_accounting`: `ai_nano_aiu` and `premium_requests` in `_aggregate_columns`,
   `_summary_from_row`, `recent_turns` and `conversation_usage`; `runner` on the allowance display.
   Every new key is appended after the existing ones. **Extend, do not loosen,** the four exact-dict
   assertions in `hub/tests/test_accounting_api.py` that the new keys move (review finding 9; design
@@ -994,6 +994,12 @@ root.
   "premium_requests": None`; `:136` (`preferred_display ==`, an allowance) gains `"runner": "claude"`;
   `:368` (the conversation `response.json() ==`) gains the two null keys. They stay exact `==`, and
   are the byte-identity test of test-guide item 3. Tasks 1.10–1.11 pass. `py -3.11 -m pytest hub/tests/test_accounting_api.py hub/tests/test_accounting_budget.py hub/tests/test_provider_allowance.py -q`
+  **Done 2026-10-02 (interactive).** Two `SUM` columns in `_aggregate_columns`, two keys appended
+  in `_summary_from_row` (so `project`, `agents[]` and `conversation_usage` carry them) and in
+  each `recent_turns[]` row; the allowance display gains the newest allowance row's own `runner`.
+  The four exact-dict assertions were extended, still `==` (the conversation one, `agents[]`'s two
+  entries, `project`, and the allowance display gaining `"runner": "claude"`). No other test reads
+  this shape (grep). Tasks 1.10–1.11's four cases pass; the named command: 50 passed.
 - [ ] 6.2 `api/accounting.ts` types; `accountingDisplay.ts`: `NANO_AIU_PER_AI_CREDIT`,
   `formatAiCredits`, `monthly` period, provider name in the allowance label
 - [ ] 6.3 `AccountingPanel.tsx`, `OverviewBudgetSummary.tsx`, `AgentOutputPanel.tsx` (conversation
@@ -1001,9 +1007,12 @@ root.
   and `ProjectSettingsPanel.tsx` (the lowering lines, one `runnerCeilingNote` helper beside
   `describeThreshold`) per design D6 and D10. Tasks 1.16–1.18 pass.
   `cd hub/ui && npm run lint && npx vitest run`
-- [ ] 6.4 Only if `worker-spend-counts-against-the-budget` has already landed: each `workers` line
+- [x] 6.4 Only if `worker-spend-counts-against-the-budget` has already landed: each `workers` line
   gains `ai_nano_aiu` and `premium_requests` sums, with a test in its test file. Otherwise record here
   that it has not landed, so that change adds them when it lands (design D12)
+  **Recorded 2026-10-02: not landed.** `openspec/changes/worker-spend-counts-against-the-budget/`
+  is still open (not in `archive/`), and `usage_accounting.py` has no `workers` lines. Under D12,
+  whichever lands second adds the sums, so that change owns them now.
 - [ ] 6.5 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`. Commit
   `hub/ui/src` and `hub/hub/static/ui` together
 - [ ] 6.6 The CI set: `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`,
