@@ -642,6 +642,7 @@ async def _copilot_agent(app, auth_headers, bind_runner, name):
 
 
 def _rejected_copilot_sample(resets_at_epoch, *, rate_limit_type="five_hour"):
+    """D7's reading shape: every Copilot reading carries `"provider": "copilot"`."""
     from hub.runner_events import AccountingSample
 
     return AccountingSample(
@@ -650,6 +651,7 @@ def _rejected_copilot_sample(resets_at_epoch, *, rate_limit_type="five_hour"):
             "status": "rejected",
             "resetsAt": resets_at_epoch,
             "rateLimitType": rate_limit_type,
+            "provider": "copilot",
         },
     )
 
@@ -740,6 +742,11 @@ async def test_a_refused_copilot_turn_holds_the_queue_uncounted(
     assert event.data["run_id"] == run_id
     assert event.data["entry_ids"] == [entry.id]
     assert event.data["limit_type"] == "five_hour"
+
+    # Task 1.19: the held queue's own `schedule_agent` call reads D7's `"provider": "copilot"`
+    # reading through this hold and gives the Copilot sentence, not the generic one.
+    result = await real_schedule_agent("proj-test", agent)
+    assert result.waiting_reason == provider_allowance.hold_sentence(agent, hold)
 
 
 async def test_a_refused_copilot_firing_stays_in_progress_until_delivered(

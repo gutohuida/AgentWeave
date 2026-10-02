@@ -20,6 +20,7 @@ from hub.provider_allowance import (
     allowance_refusal,
     hold_busy_reason,
     hold_coalesce_reason,
+    hold_for_reading,
     hold_sentence,
     provider_hold,
 )
@@ -42,6 +43,18 @@ def _reading(resets_at, *, status="rejected", limit="five_hour"):
         "overageDisabledReason": "out_of_credits",
         "isUsingOverage": False,
         "unifiedWindows": {"five_hour": {"utilization": 1.02, "resetsAt": epoch}},
+    }
+
+
+def _copilot_reading(resets_at):
+    """D7's reading shape: `{"status": "rejected", ..., "rateLimitType": "monthly",
+    "provider": "copilot"}`."""
+    epoch = resets_at.timestamp() if isinstance(resets_at, datetime) else resets_at
+    return {
+        "status": "rejected",
+        "resetsAt": epoch,
+        "rateLimitType": "monthly",
+        "provider": "copilot",
     }
 
 
@@ -292,3 +305,56 @@ def test_the_hold_sentence_reads_the_limit_and_omits_an_absent_one():
     bare = hold_sentence("dev", _hold(limit=None))
     assert "its usage limit is spent" in bare
     assert "None" not in bare
+
+
+# ---------------------------------------------------------------------------
+# 1.19 — a Copilot reading's own provider, and its month-long hold's own sentence
+# (design D8, Q6 decided 2026-09-28)
+# ---------------------------------------------------------------------------
+
+
+def _copilot_hold():
+    """A month-long Copilot hold ending exactly at 2026-10-01 00:00 UTC (design D8's example)."""
+    until = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    return ProviderHold(
+        hold_until=until,
+        resets_at=until,
+        limit_type="monthly",
+        observed_at=until - timedelta(days=5),
+        run_id="run-cop",
+        provider="copilot",
+    )
+
+
+def test_a_copilot_reading_carries_its_provider_through_the_hold():
+    hold = hold_for_reading(_copilot_reading(1790812800), NOW, "run-cop")
+    assert hold is not None
+    assert hold.provider == "copilot"
+
+
+def test_a_claude_reading_carries_no_provider():
+    """No `provider` key (today's Claude shape): `provider is None`, and no Claude sentence moves
+    — the three existing length asserts above (285, 86, 161) stay unchanged."""
+    hold = hold_for_reading(_reading(1789351800), NOW, "run-x")
+    assert hold is not None
+    assert hold.provider is None
+
+
+def test_the_copilot_sentence_names_the_reset_date_and_the_way_out():
+    hold = _copilot_hold()
+    text = hold_sentence("cop", hold)
+    assert "2026-10-01" in text
+    assert "00:00 UTC" in text
+    assert "another runner" in text
+    assert "then send it a message" in text
+    assert "rebinding alone does not end the hold" in text
+    assert "loops" in text
+    assert "jobs" in text
+
+
+def test_the_copilot_busy_and_coalesce_reasons_name_the_date():
+    hold = _copilot_hold()
+    assert "2026-10-01" in hold_busy_reason("cop", hold)
+    assert "2026-10-01" in hold_coalesce_reason("cop", hold)
+    # `JobRun.error_summary` is `String(500)`, at the longest agent name.
+    assert len(hold_coalesce_reason("a" * 32, hold)) <= 500

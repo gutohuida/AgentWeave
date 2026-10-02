@@ -565,7 +565,7 @@ root.
   session, never finished) — 1.18(b) was UI-only (no Python touched), so this did not block it, but
   the next Python-touching task should kick one off early and actually read its tail before relying
   on it.
-- [ ] 1.19 Extend `hub/tests/test_provider_allowance.py` (Q6 decided 2026-09-28, design D8): a
+- [x] 1.19 Extend `hub/tests/test_provider_allowance.py` (Q6 decided 2026-09-28, design D8): a
   reading `{"status": "rejected", "resetsAt": 1790812800, "rateLimitType": "monthly", "provider":
   "copilot"}` gives `hold_for_reading(...).provider == "copilot"`, and `hold_sentence("cop", hold)`
   contains `"2026-10-01"`, `"00:00 UTC"`, `"another runner"`, `"then send it a message"` and
@@ -575,6 +575,37 @@ root.
   `provider is None`, and the three existing length asserts (285, 86, 161) are unchanged, so no
   Claude sentence moves. Extend `test_a_refused_turn_holds_the_queue.py`'s RPC case (1.15(b)): the
   held Copilot agent's `waiting_reason` from `schedule_agent` is that Copilot sentence. Fails today
+
+  **Done 2026-10-02 (iter 40).** `1790812800` decodes to exactly `2026-10-01T00:00:00+00:00`
+  (checked: `datetime.fromtimestamp`), matching D8's own example, so `_copilot_hold()`'s
+  `hold_until` is built from it directly. `provider_allowance.py` has neither field yet
+  (task 5.5, not this one), so all four new assertions fail cleanly: `hold_for_reading(...).provider`
+  raises `AttributeError: 'ProviderHold' object has no attribute 'provider'`, and
+  `ProviderHold(..., provider="copilot")` raises `TypeError: unexpected keyword argument 'provider'`
+  at construction — not masked passes, and not a different crash than the one task 5.5 closes.
+  `hold_for_reading` had to be added to the file's `from hub.provider_allowance import (...)` block
+  (it wasn't previously imported there). **Care taken not to regress the three pinned lengths:**
+  the new `_copilot_hold()` is its own helper with a hard-coded `provider="copilot"`, not a
+  `provider=` parameter threaded onto the existing `_hold()` — a first pass did exactly that and
+  broke all 3 of the existing sentence tests (`_hold()` calling `ProviderHold(..., provider=None)`,
+  which the dataclass does not accept, `TypeError` on every call) before being caught and reverted;
+  `_hold()` is back to its original signature, confirmed unchanged by the full file re-run below.
+  `_rejected_copilot_sample` (`test_a_refused_turn_holds_the_queue.py`) gained `"provider": "copilot"`
+  in its allowance dict (D7's real wire shape always carries it) — inert today since nothing reads
+  the key yet, confirmed by diffing this file's failure set before/after (`git stash`): the same two
+  tests fail at the same two assertions, for the same reason, with or without the key. The RPC case's
+  new assertion (`real_schedule_agent` called again after the hold is established, asserting
+  `result.waiting_reason == provider_allowance.hold_sentence(agent, hold)`) sits after the function's
+  existing assertions, so it does not change *where* that already-red test fails today; it will bite
+  once task 5.3 (the RPC run-end branch) and 5.5 (the Copilot sentence) both land.
+  `py -3.11 -m pytest hub/tests/test_provider_allowance.py hub/tests/test_a_refused_turn_holds_the_queue.py hub/tests/test_inbound_queue.py -q`
+  run per-file: `test_provider_allowance.py` 25 passed / 4 new failed (exactly the four new
+  assertions above); `test_a_refused_turn_holds_the_queue.py` 14 passed / 2 failed, the same two as
+  the `git stash` baseline, at the same assertion lines; `test_inbound_queue.py` 29 passed,
+  untouched — 68 passed / 6 failed overall, all six accounted for, no regression.
+  `ruff check` clean on both edited files. `black --check --target-version py311` needed one
+  reformat of `test_provider_allowance.py` (applied, re-checked clean).
+  `openspec validate a-copilot-run-shows-its-credits --strict`: valid.
 
 ## 2. Schema and sample
 
