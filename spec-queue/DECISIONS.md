@@ -33,9 +33,9 @@ DECIDED. Absence is not consent.
   machine. Waive it, or do it and record the answer in the Round log, and 10.2 (strict validate,
   then archive) can run.
 
-### `a-copilot-run-shows-its-credits` task 5.4: a Copilot one-shot's credits -- 2026-10-02 interactive, OPEN
+### `a-copilot-run-shows-its-credits` task 5.4: a Copilot one-shot's credits -- 2026-10-02 interactive, DECIDED
 
-- OPEN      copilot-oneshot-credits  **Should a Copilot worker call (`copilot -p`) record its credits
+- DECIDED   copilot-oneshot-credits  **Yes: read the one-shot's `session.usage_checkpoint`** (operator, 2026-10-02, as recommended). A follow-up change, not this one. The question was: **Should a Copilot worker call (`copilot -p`) record its credits
   from the stream it does emit?** Task 5.4 said to read `session.shutdown {totalNanoAiu,
   totalPremiumRequests}` only if the captured stream contains it. It does not
   (`hub/tests/fixtures/copilot_acp/oneshot_ok.jsonl`), so `worker_invocations.ai_nano_aiu` and

@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-copilot-run-shows-its-credits-drive",
-    "next_action": "a-copilot-run-shows-its-credits-drive: group 7 (tasks 7.1-7.7) on the trial Hub :8010, per tasks.md group 7's own limits (Copilot Free, model Auto, at most four model-calling turns). Note the queue item's 'Haiku turns only' cannot apply to a Copilot runner; group 7 names its own budget. Implementation (groups 0-6) was finished interactively on 2026-10-02 and is green locally; confirm CI's verdict for the tip before building on it. 7.3 gates design D4: if the resumed session's checkpoint restarted from zero, stop and revise D4 before archiving.",
+    "current": "a-copilot-agent-uses-hooks-and-its-own-agents-impl",
+    "next_action": "a-copilot-agent-uses-hooks-and-its-own-agents-impl: slice 4 (a-copilot-run-shows-its-credits) is ARCHIVED (2026-10-02), so this item's precondition holds. Merge master into the cycle branch first if it moved. Task 7.6 stays skipped (real money).",
     "queue": [
         {
             "id": "F479-fix",
@@ -77,15 +77,15 @@
         },
         {
             "id": "a-copilot-run-shows-its-credits-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive a-copilot-run-shows-its-credits",
-            "detail": "Haiku turns only."
+            "detail": "Haiku turns only. Done 2026-10-02 interactively on :8010 (operator's go-ahead): 7.1-7.7, three Copilot Free turns plus one Haiku turn (commit 5bad170). 7.3: the checkpoint continues across session/load, so D4 stands. 7.5's /compact is blocked by slice 2's slash guard (F481)."
         },
         {
             "id": "a-copilot-run-shows-its-credits-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive a-copilot-run-shows-its-credits",
-            "detail": "If a delta collides with slice 3's unsynced delta, stop and log it; do not merge by hand."
+            "detail": "Done 2026-10-02 interactively: three deltas synced, archived as openspec/changes/archive/2026-10-02-a-copilot-run-shows-its-credits/; F482 filed."
         },
         {
             "id": "a-copilot-agent-uses-hooks-and-its-own-agents-impl",
@@ -224,8 +224,7 @@
         "a-run-reaches-hub-10.1",
         "F478-approve",
         "F478-oq1-bash",
-        "F478-oq2-location",
-        "copilot-oneshot-credits"
+        "F478-oq2-location"
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",

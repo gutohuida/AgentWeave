@@ -1126,10 +1126,19 @@ drive to at most **four** model-calling turns. Record each figure verbatim in de
 
 ## 8. Archive
 
-- [ ] 8.1 Sync the three delta specs into `openspec/specs/` (`openspec-sync-specs`), archive the
+- [x] 8.1 Sync the three delta specs into `openspec/specs/` (`openspec-sync-specs`), archive the
   change, and record slice 4 as done in the exploration's slice list
-- [ ] 8.2 File a finding (or append to an open one) asking for the first real Copilot quota refusal's
+  **Done 2026-10-02.** Synced: three ADDED requirements (one each in `agent-conversation-workspace`,
+  `conversation-checkpoint` and `usage-accounting`) and one MODIFIED (`usage-accounting`, "Supported
+  runner telemetry normalizes to one accounting shape"). No other open change touches those
+  requirements, and slice 3's delta names other capabilities. `openspec validate --specs --strict`
+  reports 43 valid. Slice 4 is marked done in
+  `openspec/explorations/2026-09-27-copilot-as-a-full-runner.md`.
+- [x] 8.2 File a finding (or append to an open one) asking for the first real Copilot quota refusal's
   `session.error` payload, captured by task 5.2's log, so that D8's recognition is confirmed or
   corrected. Copy the Q6 decision (2026-09-28: keep the month-long hold; its notice states the reset
   date and the rebind-then-message way out) and the Q7 decision (2026-09-28: option (b)) into
   DECISIONS
+  **Done 2026-10-02.** F482 asks for the first real refusal's logged payload. The two decisions were
+  already in DECISIONS as `ghcp-c-quota-hold` (Q6) and `ghcp-b-ceiling` (Q7), so there was nothing to
+  copy.

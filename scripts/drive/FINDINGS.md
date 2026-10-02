@@ -33788,3 +33788,14 @@ spent as chat. The old `POST /agents/{name}/compact` route only sends a message 
 (`compactionTokensUsed` against an `assistant.usage` with the same `requestId`) stays unmeasured until a
 natural auto-compaction at about 80% of the window is captured. A fix would be a Hub-issued compaction
 that bypasses the guard for that one command, or refusing a leading `/compact` with a sentence.
+
+## F482 (C) — D8's quota recognition rests on the schema, not on a captured refusal
+
+**Status:** open, filed 2026-10-02 by task 8.2 of `a-copilot-run-shows-its-credits`. **Ready:** waits on evidence,
+not on a change. A Copilot quota refusal is recognised only by a `session.error` (or a `session/prompt` JSON-RPC
+error's `data`) carrying `errorType "quota"` and `errorCode "quota_exceeded"` (design D8, `copilot_usage.py`). Those
+names come from Copilot's published `ErrorData` schema; no real refusal has ever been observed. Drive task 7.7
+replayed the schema's shape through `acptee`, so it proves the Hub's handling, not the recognition. Task 5.2 logs
+every armed `session.error` whole at warning level (`Copilot session.error errorType=… payload=…` in the Hub's
+log). **Wanted:** the first real quota refusal's line from that log, copied here. It either confirms D8 or
+corrects the field names. If a refusal ever arrives without a hold, look for that line first.

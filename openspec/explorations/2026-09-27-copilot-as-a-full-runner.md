@@ -276,6 +276,10 @@ Each slice is its own openspec change. Each goes through R1/R2/R3, then an Opus 
    - Quota-exhaustion holds.
    - Per-call usage from raw events.
    - Checkpoint thresholds per runner (80% compaction).
+   - **Done 2026-10-02:** built as `a-copilot-run-shows-its-credits` and archived as
+     `openspec/changes/archive/2026-10-02-a-copilot-run-shows-its-credits/`. Its drive confirmed
+     that the session checkpoint continues across `session/load`. Two items are left open: F481
+     (no on-demand compaction for Copilot) and F482 (no real quota refusal captured yet).
 5. **`copilot-agents-are-native`:**
    - Agent + charter rendered as a Copilot custom agent (D1).
    - Hub-owned hooks for telemetry and `agentStop`.
