@@ -179,3 +179,11 @@ None. The decision is recorded in the operator review above.
   existing Tab-wrap controls (task 1.8) assumed (focus still on the trigger when `tab()` is called) —
   both now call `trigger.focus()` again after the hook mounts, to put focus back outside the panel and
   still exercise the "Tab recovers focus from outside" path the tests are named for.
+- Impl 2026-10-02 (task 1.6): measured, not inferred. `agentCreateDialogFocusRestore.test.tsx`
+  mounts a real trigger and `AgentCreateDialog`, focuses the trigger, clicks it open (confirming
+  `autoFocus` has already moved focus onto the name input), fires Escape, and checks
+  `document.activeElement`. **It is `<body>`, confirming D3's inference exactly as predicted**: the
+  cleanup's `returnFocusTo?.focus()` targets the now-detached input. The test's assertion is written
+  as the post-fix behaviour (`expect(trigger).toHaveFocus()`), which is red today for that reason —
+  this is 1.6's failing test, and 1.7 is the same assertion passing once the three `autoFocus`
+  attributes become D1 marks.
