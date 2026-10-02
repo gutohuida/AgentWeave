@@ -64,7 +64,7 @@ export function DeleteProjectDialog({
         <label className="mt-4 block text-xs">
           Type <strong>{project.name}</strong> to confirm
           <input
-            autoFocus
+            data-dialog-initial-focus
             aria-label="Project name to confirm"
             value={typed}
             onChange={(event) => setTyped(event.target.value)}

@@ -137,7 +137,7 @@ export function ProjectManagerModal({
         <label className="mt-4 block text-xs">
           {isCreate ? 'Create it in' : 'Directory path'}
           <div className="relative mt-1 flex gap-1.5">
-            <Input autoFocus value={path} onChange={(event) => setPath(event.target.value)} className="min-w-0 px-3 py-2" />
+            <Input data-dialog-initial-focus value={path} onChange={(event) => setPath(event.target.value)} className="min-w-0 px-3 py-2" />
             {nativeAvailability?.available ? (
               <Button
                 type="button"
