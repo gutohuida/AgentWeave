@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "a-dialog-takes-the-keyboard-when-its-opens-impl",
-    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-impl: openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md task 2.4 -- replace the autoFocus attribute with data-dialog-initial-focus in AgentCreateDialog.tsx:205, DeleteProjectDialog and ProjectManagerModal (their autoFocus sites). Then confirm task 1.7: hub/ui/src/__tests__/agentCreateDialogFocusRestore.test.tsx's 'returns focus to the trigger after Escape' assertion goes green, and the input still holds focus while the dialog is open (D1's marked-control path, not autoFocus, now does that). Tick 1.7 only once both are shown, not assumed. Vitest under hub/ui. 1.6 done iter 10: wrote the failing test, measured document.activeElement lands on <body> after Escape today, confirming D3 exactly as design.md predicted -- not refuted. Do NOT touch the three confirm-only dialogs here (that is task 2.3, separate). No bundle refresh until 2.11.",
+    "next_action": "a-dialog-takes-the-keyboard-when-its-opens-impl: openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/tasks.md task 2.3 -- mark Cancel with data-dialog-initial-focus in the three confirm-only dialogs (DeleteCharterDialog, ClearInstructionsDialog, ArchiveConfirmDialog). hub/ui/src/__tests__/confirmDialogInitialFocus.test.tsx (task 1.5) already asserts Cancel gets initial focus and passes today on the DOM-order fallback alone (no dialog marks Cancel yet) -- it must stay green through this change, now passing because of the explicit mark rather than DOM order. Run it alone and with useDialogFocus.test.tsx after. Then move to 2.5 (CharterForm/RunnerForm) next. 2.4 and 1.7 done iter 11: autoFocus replaced with data-dialog-initial-focus in AgentCreateDialog/DeleteProjectDialog/ProjectManagerModal (confirmed all three already call useDialogFocus); agentCreateDialogFocusRestore.test.tsx now 1/1 green (both halves of 1.7). No bundle refresh until 2.11.",
     "queue": [
         {
             "id": "F479-fix",
