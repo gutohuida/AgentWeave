@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "db1a331",
     "stop_at": "2026-10-02T07:00:00+01:00",
-    "iteration": 22,
+    "iteration": 23,
     "log_file": ".claude/autonomous/2026-10-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "a-copilot-run-shows-its-credits-impl",
-    "next_action": "a-copilot-run-shows-its-credits-impl: implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Builds on slice 3 built-but-unarchived. Haiku turns only when driving.",
+    "next_action": "a-copilot-run-shows-its-credits-impl: task 1.5 next (subagent call with parentToolCallId set is counted once; a repeated providerCallId notification is counted once). Implement the change task by task, vertical slices, per ghcp-d5-order relaxation recorded in spec-queue/APPROVALS.md (2026-10-01, operator redirect). Builds on slice 3 built-but-unarchived. Haiku turns only when driving.",
     "queue": [
         {
             "id": "F479-fix",

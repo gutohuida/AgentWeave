@@ -113,6 +113,30 @@ def test_dropped_calls_fall_back_to_the_prompt_result(caplog: Any) -> None:
     assert any("22106" in w and "33172" in w for w in warnings)
 
 
+def test_second_prompt_result_replaces_the_first_not_summed() -> None:
+    events, first_result = acp4_events()
+    second_result = {
+        "inputTokens": 39900,
+        "outputTokens": 76,
+        "totalTokens": 40000,
+        "thoughtTokens": 0,
+        "cachedReadTokens": 26000,
+        "cachedWriteTokens": 0,
+    }
+
+    ledger = CopilotUsageLedger()
+    for event_type, data in events:
+        ledger.observe_event(event_type, data)
+    ledger.observe_prompt_result(first_result)
+    ledger.observe_prompt_result(second_result)
+
+    sample = ledger.finish(session_was_new=True)
+
+    assert sample.total_tokens == 40000
+    assert sample.total_tokens != 73172
+    assert sample.source == "copilot_prompt_result"
+
+
 def test_all_calls_with_no_prompt_result_uses_the_calls() -> None:
     events, _ = acp4_events()
     call_events = [(t, d) for t, d in events if t == "assistant.usage"]

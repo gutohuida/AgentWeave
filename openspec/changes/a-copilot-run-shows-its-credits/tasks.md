@@ -92,10 +92,23 @@ root.
     `RuntimeError: Event loop is closed` aiosqlite-teardown resource warning noted by 1.1/1.2, not a
     test failure). `ruff check` and `black --check --target-version py311` clean on the touched file.
     `openspec validate a-copilot-run-shows-its-credits --strict`: valid.
-- [ ] 1.4 Same file: one ledger (one process) that observes two prompt results, 33172 and then a
+- [x] 1.4 Same file: one ledger (one process) that observes two prompt results, 33172 and then a
   cumulative 40000, uses 40000, not their sum 73172 (design D3: the process-cumulative figure is the
   run's). Assert with the results in the order they were emitted, so a ledger that kept the earlier
   one fails
+
+  Done 2026-10-02: `test_second_prompt_result_replaces_the_first_not_summed` added to
+  `hub/tests/test_copilot_usage.py`. Feeds the acp4 calls, then `observe_prompt_result` with the
+  acp4 result (33172) followed by a second result of 40000; asserts `total_tokens == 40000`,
+  `!= 73172`, `source == "copilot_prompt_result"`. Passed against today's code unchanged —
+  `observe_prompt_result` (`hub/hub/copilot_usage.py:115-117`) already overwrites `_prompt_result`
+  on every call rather than keeping the first, so "last result wins" (D3) was already correct; this
+  task found no gap, only added the test the spec calls for. `py -3.11 -m pytest
+  hub/tests/test_copilot_usage.py -v`: 5 passed. Regression (same four `AccountingSample`-touching
+  files plus this one): 174 passed (same unrelated aiosqlite-teardown `RuntimeError: Event loop is
+  closed` resource warning noted by iterations 20-22, not a test failure). `ruff check` and
+  `black --check --target-version py311` clean on both touched files. `openspec validate
+  a-copilot-run-shows-its-credits --strict`: valid.
 - [ ] 1.5 Same file: a subagent call (`parentToolCallId` set, `initiator: "sub-agent"`) is counted
   once; a repeated notification with the same `providerCallId` is counted once
 - [ ] 1.6 Same file: a `session.compaction_complete` with `compactionTokensUsed` adds its tokens and
