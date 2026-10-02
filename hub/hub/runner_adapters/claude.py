@@ -116,6 +116,8 @@ class ClaudeAdapter(RunnerAdapter):
         "started — which cannot reach AgentWeave agents or the operator."
     )
     write_tool_kinds = CLAUDE_WRITE_TOOLS
+    # `checkpoint_policy.py:24`'s comment: the value today's thresholds were chosen against.
+    compaction_percent = 95
 
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:
         cli, present, reason = probe_binary(self.binary, config.get("cli"), agent)

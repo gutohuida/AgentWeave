@@ -661,11 +661,30 @@ root.
 
 ## 3. The compaction point and the thresholds
 
-- [ ] 3.1 `RunnerAdapter.compaction_percent` (`ClassVar[Optional[int]]`, no base default) with
+- [x] 3.1 `RunnerAdapter.compaction_percent` (`ClassVar[Optional[int]]`, no base default) with
   Claude 95 and Codex 95, and 80 on slice 2's `CopilotAdapter` (design D9). Slice 1 reserves the
   member for this slice (its D16). Extend slice 1's conformance test so every `ADAPTERS` entry
   declares it. `grep -rn "compaction_percent" hub/hub/runner_adapters` shows all three. (Rebase at
   IMPL: `each-runner-cli-is-one-adapter` unbuilt at R2)
+
+  **Done iteration 43.** Rebase check first: `each-runner-cli-is-one-adapter` is archived
+  (`openspec/changes/archive/2026-10-01-each-runner-cli-is-one-adapter`), so `hub/hub/runner_adapters/`
+  already splits each runner into its own file (`base.py`, `claude.py`, `codex.py`, `copilot.py`);
+  `compaction_percent` was added where D9 and D16 say it belongs regardless — on `RunnerAdapter`
+  (`base.py:279-282`, a bare `ClassVar[Optional[int]]` annotation, no assignment, so an adapter
+  that omits it raises `AttributeError` rather than reading a default) and on each of the three
+  concrete classes (`claude.py:120` = 95, `codex.py:234` = 95, `copilot.py:230` = 80).
+  `grep -rn "compaction_percent" hub/hub/runner_adapters` shows all four lines. Extended
+  `test_runner_adapters_conformance.py` with `test_every_adapter_declares_compaction_percent`,
+  parametrized over `ADAPTERS`, asserting each adapter's value against the D9 table. **Verified it
+  is a real regression test, not a tautology**: temporarily removed `copilot.py`'s
+  `compaction_percent = 80` (from an untracked backup), reran — failed with `AttributeError` at the
+  new test's assertion line — then restored the file and reran — passed again, with `git diff
+  --stat` showing only the intended 2-line addition. `py -3.11 -m pytest
+  hub/tests/test_runner_adapters_conformance.py hub/tests/test_runner_adapters_imports.py
+  hub/tests/test_launchability.py -q`: 83 passed. `ruff check` and `black --check
+  --target-version py311` clean on all five touched files. `openspec validate
+  a-copilot-run-shows-its-credits --strict`: valid.
 - [ ] 3.2 `checkpoint_policy.py`: D10's formulas, the two new `CheckpointPolicy` fields, the percent
   clamp (every runner), the notes clamp, the token-mode ceiling in `should_checkpoint` and in the
   threshold half of `should_request_notes` (not in `crosses`) and the token-mode notes ceiling, both

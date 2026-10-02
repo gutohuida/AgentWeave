@@ -59,6 +59,19 @@ def test_catalog_provider_equals_name(cli):
     assert adapter.catalog_provider == adapter.name == cli
 
 
+# `compaction_percent` has no base default (design D9); every `ADAPTERS` entry must declare it,
+# or `getattr` below raises `AttributeError` instead of returning the sentinel.
+_EXPECTED_COMPACTION_PERCENT = {"claude": 95, "codex": 95, "copilot": 80}
+
+
+@pytest.mark.parametrize("cli", list(ADAPTERS))
+def test_every_adapter_declares_compaction_percent(cli):
+    adapter = get_adapter(cli)
+    # No base default: an adapter that omits the member raises `AttributeError` here rather
+    # than silently reading one.
+    assert adapter.compaction_percent == _EXPECTED_COMPACTION_PERCENT[cli]
+
+
 # --- (b) GET /runners/launchability-by-provider's key order follows ADAPTERS ------------------
 
 

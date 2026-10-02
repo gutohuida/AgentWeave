@@ -229,6 +229,9 @@ class CodexAdapter(RunnerAdapter):
     write_tool_kinds = {CODEX_WRITE_TOOL: "changes[].path"}
     one_shot_takes_schema = True
     shell_may_lack_network = True
+    # Unknown for Codex (INFERRED: it has its own auto-compaction limit). 95 keeps today's
+    # behaviour exactly (design D9).
+    compaction_percent = 95
 
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:
         cli, present, reason = probe_binary(self.binary, config.get("cli"), agent)

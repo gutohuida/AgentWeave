@@ -226,6 +226,8 @@ class CopilotAdapter(RunnerAdapter):
     # Each names its files under `locations[].path`, a diff's `changes[].path` as the fallback.
     write_tool_kinds = dict.fromkeys(sorted(COPILOT_WRITE_TOOLS), "locations[].path")
     one_shot_takes_schema = False
+    # DOCUMENTED, `context-management` (design D9).
+    compaction_percent = 80
 
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:
         # Read from Copilot itself (slice 2 D15): a cached verdict from a model-free ACP
