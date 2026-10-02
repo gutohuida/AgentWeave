@@ -20,9 +20,12 @@ DECIDED. Absence is not consent.
 
 ## Open
 
-### `a-run-reaches-the-hub-without-mcp` task 10.1 needs the operator on the work PC -- 2026-10-01 night, OPEN
+### `a-run-reaches-the-hub-without-mcp` task 10.1 needs the operator on the work PC -- 2026-10-01 night, DECIDED 2026-10-02
 
-- OPEN      a-run-reaches-hub-10.1  **Do the human-only checks in this change's `test-guide.md`,
+- DECIDED   a-run-reaches-hub-10.1  **Waived on the work-PC evidence** (operator, 2026-10-02, as recommended):
+  no available machine blocks MCP for the Hub-launched Copilot, and the shim passed at home with MCP disabled by
+  flag (group 9). Step 8 stays unanswered; it moves to the detect-and-degrade follow-up as its first question
+  rather than its trigger. 10.2 is still held by 9.10 (F478). The question was: **Do the human-only checks in this change's `test-guide.md`,
   or explicitly waive them, so task 10.2 (archive) can proceed.** The change is at 55/58 tasks:
   group 9 is done (9.9 footed F340/F301/F299's outcomes into `FINDINGS.md`; 9.10 is separately
   blocked, below). Task 10.1 names step 8's answer -- whether Copilot's shell sessions persist

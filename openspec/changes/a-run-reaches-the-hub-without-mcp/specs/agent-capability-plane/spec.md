@@ -71,7 +71,7 @@ rather than a division of labour.
 - **AND** the system later judges that run's report of the wait ending against that expiry
 - **THEN** the expiry is disclosed to the run that started the wait
 
-#### Scenario: The application's CLI offers no agent capability
+#### Scenario: The CLI offers no agent capability
 
 - **WHEN** an agent attempts to affect shared state through the application's own command-line
   interface

@@ -33820,3 +33820,10 @@ terminal writes only `~/.copilot`, so the reason the Hub shows tells the operato
 candidates:** `ensure_copilot_home` and the worker-home setup copy `lastLoggedInUser`/`loggedInUsers` from the
 operator's default Copilot home, since neither key is a secret or a permission; or the not-signed-in reason names
 the home that was probed.
+**Reproduced at home 2026-10-02, and why the home PC never saw it:** the probe's own handshake (Hub-resolved
+`copilot` 1.0.88, `PROBE_ARGS`, `probe_env`) against a fresh temporary home: empty home with `gh` visible -> OK;
+empty home with `gh` hidden (`GH_CONFIG_DIR` empty, GitHub CLI off `PATH`) -> `-32000 "Authentication required"`;
+the same, seeded with only `lastLoggedInUser`/`loggedInUsers` -> OK. With no account named in its home, Copilot
+falls back to the GitHub CLI's keyring token, and the home PC has `gh` signed in as `gutohuida`. The work PC's
+`gh` has no usable personal login. So the exploration's "auth survives an empty `COPILOT_HOME`" was true only
+through `gh`; it is not a CLI regression.

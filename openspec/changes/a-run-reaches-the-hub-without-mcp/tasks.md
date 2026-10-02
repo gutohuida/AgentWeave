@@ -722,10 +722,13 @@ SQLite reads of the trial profile's database.
 
 ## 10. Archive
 
-- [ ] 10.1 The human-only checks in `test-guide.md` are done by the operator on the work PC, or explicitly waived by
+- [x] 10.1 The human-only checks in `test-guide.md` are done by the operator on the work PC, or explicitly waived by
   them. Step 8's answer (whether Copilot's shell sessions persist between a run's commands there, and whether any
   run activated a venv, imported a module or set `ComSpec` before an `aw-tool` call) is recorded in the Round log:
   it is the trigger for the detect-and-degrade follow-up change (design open question 7, DECIDED (a) now, (c) as a
   follow-up, 2026-09-28). If it shows persistent sessions in use, raise that change; it is not built here.
+  - **Waived 2026-10-02 (operator).** The work PC does not block MCP for the Hub-launched Copilot (Round log,
+    "Work PC, task 10.1"); the shim was driven at home under the flag. Step 8 is unanswered and is carried to the
+    detect-and-degrade follow-up as its first question.
 - [ ] 10.2 `openspec validate a-run-reaches-the-hub-without-mcp --strict`, then the `openspec-archive-change` skill.
   Sync the four deltas. Commit and push per CLAUDE.md, staging paths explicitly.

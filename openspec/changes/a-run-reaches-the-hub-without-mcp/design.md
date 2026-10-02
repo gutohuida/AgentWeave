@@ -1342,6 +1342,9 @@ Copilot spec turn told `shim` submit a document. Test 1.15 covers both runners' 
     model list trails `copilot help config`).
   - **10.1 stays open**: the operator has neither completed the checks nor waived them. `DECISIONS.md` row
     `a-run-reaches-hub-10.1` records the remaining choice.
+  - **Waived later the same day, at home (operator).** No machine available blocks MCP, and group 9 drove the
+    shim with MCP disabled by flag. Step 8's persistent-shell question is unanswered, so Decision E's follow-up has
+    no trigger evidence either way; that change, if raised, starts by answering it.
 
 ## Required of slices 1, 2; not provided to 5 (R3)
 
