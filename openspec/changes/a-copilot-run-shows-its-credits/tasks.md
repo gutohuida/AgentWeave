@@ -777,10 +777,31 @@ root.
 
 ## 4. The ledger
 
-- [ ] 4.1 Add `assistant.usage`, `session.usage_checkpoint` and `session.compaction_complete` to
+- [x] 4.1 Add `assistant.usage`, `session.usage_checkpoint` and `session.compaction_complete` to
   slice 2's subscription constant. Its design already lists `session.error`, leaves the first two to
   this slice, and includes none of the three. A test asserts that the `initialize` request carries all
   four. (Rebase at IMPL: `a-copilot-agent-runs-over-acp` unbuilt at R2)
+
+  Done iter 47. Rebase check: `a-copilot-agent-runs-over-acp` has since archived
+  (`openspec/changes/archive/2026-09-30-a-copilot-agent-runs-over-acp/`); its subscription constant
+  is `copilot_acp.COPILOT_RAW_EVENTS` (`hub/hub/copilot_acp.py:93-108`) — read fresh rather than
+  trusted from the task text, matching the design's current list exactly (13 members, `session.error`
+  first). Appended `"assistant.usage"`, `"session.usage_checkpoint"`, `"session.compaction_complete"`
+  at the end, per design.md:102-106 ("Task 4.1 appends all three"). Extended the existing
+  `test_initialize_new_agent_then_prompt_in_order_with_context_first`
+  (`hub/tests/test_copilot_acp_run_turn.py:416-421`) with explicit assertions that `session.error`
+  and all three new events are in the wire `initialize` request's `clientCapabilities._meta.
+  ["github.com/copilot"].events` list — the actual request Copilot receives, not just the constant.
+  Verified as a real regression test: `git stash push -- hub/hub/copilot_acp.py` (test left in
+  place) reran red with `AssertionError: assert 'assistant.usage' in [...]`; `git stash pop`
+  restored green. `py -3.11 -m pytest hub/tests/test_copilot_acp_run_turn.py -q`: 50 passed, 3
+  failed — the same 3 (`TestRunEndQuotaRefusalCallsOnAccountingWithRejectedReading`) fail identically
+  with both files stashed, confirmed pre-existing and unrelated to this change. Read one: `assert
+  len(accounting_calls) == 1 ... got 0` — these assert D8's quota-refusal `on_accounting` call,
+  which `run_turn` does not make yet; they are task 4.4's own tests, written ahead of its
+  implementation, not a regression from 4.1 and not a new finding. `ruff check` and `black --check
+  --target-version py311` on both touched files: clean. `openspec validate
+  a-copilot-run-shows-its-credits --strict`: valid, both before and after ticking 4.1.
 - [ ] 4.2 `hub/hub/copilot_usage.py`: `CopilotUsageLedger` (`observe_event`, `observe_prompt_result`,
   `observe_prompt_error`, `finish`) per design D2–D4, with the Copilot key mapping of D3 and
   negative credit figures ignored (D4), and `quota_reading(snapshots, *, refused, prior_reading)` per

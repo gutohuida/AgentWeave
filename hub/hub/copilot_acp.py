@@ -104,6 +104,9 @@ COPILOT_RAW_EVENTS: Tuple[str, ...] = (
     "tool.execution_complete",
     "session.mode_changed",
     "exit_plan_mode.requested",
+    "assistant.usage",
+    "session.usage_checkpoint",
+    "session.compaction_complete",
 )
 
 #: Opens the first prompt block of every turn (D5, review note 15). A resumed session holds

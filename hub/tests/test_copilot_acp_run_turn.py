@@ -414,6 +414,12 @@ class TestNewSessionSequence:
         assert len(subscribed) == len(set(subscribed)), "subscription list must be de-duplicated"
         # Sanity against design.md's own list (D10 `:1130-1142`), not a re-derivation of it.
         assert "session.error" in subscribed and "tool.execution_start" in subscribed
+        # Task 4.1: slice 4's three ledger events are appended to slice 2's list, alongside the
+        # `session.error` slice 2 already subscribed.
+        assert "session.error" in subscribed
+        assert "assistant.usage" in subscribed
+        assert "session.usage_checkpoint" in subscribed
+        assert "session.compaction_complete" in subscribed
 
         new_params = fake.sent_requests[i_new][1]
         assert new_params["cwd"] == WORK
