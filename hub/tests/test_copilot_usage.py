@@ -768,6 +768,56 @@ def test_other_error_codes_leave_the_reading_allowed(error_data: Dict[str, Any])
     assert sample.allowance["status"] == "allowed"
 
 
+def test_prompt_error_quota_exceeded_gives_a_rejected_reading() -> None:
+    # D8: "the same fields on a `session/prompt` JSON-RPC error's `data` count too" -- task 4.2's
+    # own new entry point, exercised directly rather than through `observe_event`.
+    events, _ = acp4_events()
+    call_events = [(t, d) for t, d in events if t == "assistant.usage"]
+    call_events[-1][1]["quotaSnapshots"] = _quota_snapshot(96.5)
+
+    ledger = CopilotUsageLedger()
+    for event_type, data in call_events:
+        ledger.observe_event(event_type, data)
+    ledger.observe_prompt_error({"errorType": "quota", "errorCode": "quota_exceeded"})
+
+    sample = ledger.finish(session_was_new=True)
+
+    assert sample.allowance is not None
+    assert sample.allowance["status"] == "rejected"
+    assert allowance_refusal(sample.allowance) is not None
+
+
+@pytest.mark.parametrize(
+    "error_data",
+    [
+        {"errorType": "rate_limit", "errorCode": "session_quota_exceeded"},
+        {"errorType": "rate_limit", "errorCode": "billing_not_configured"},
+        {"errorType": "query", "errorCode": None, "message": "quota exceeded"},
+    ],
+)
+def test_prompt_error_other_codes_leave_the_reading_allowed(error_data: Dict[str, Any]) -> None:
+    events, _ = acp4_events()
+    call_events = [(t, d) for t, d in events if t == "assistant.usage"]
+    call_events[-1][1]["quotaSnapshots"] = _quota_snapshot(96.5)
+
+    ledger = CopilotUsageLedger()
+    for event_type, data in call_events:
+        ledger.observe_event(event_type, data)
+    ledger.observe_prompt_error(error_data)
+
+    sample = ledger.finish(session_was_new=True)
+
+    assert sample.allowance is not None
+    assert sample.allowance["status"] == "allowed"
+
+
+def test_prompt_error_ignores_non_dict_data() -> None:
+    ledger = CopilotUsageLedger()
+    ledger.observe_prompt_error(None)  # type: ignore[arg-type]
+    sample = ledger.finish(session_was_new=True)
+    assert sample.allowance is None
+
+
 def test_quota_reading_with_no_qualifying_snapshot_and_not_refused_writes_nothing() -> None:
     assert quota_reading(None, refused=False, prior_reading=None) is None
     only_excluded = {

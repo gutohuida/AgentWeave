@@ -192,6 +192,13 @@ class CopilotUsageLedger:
         if data.get("errorType") == "quota" and data.get("errorCode") == "quota_exceeded":
             self._refused = True
 
+    def observe_prompt_error(self, data: Dict[str, Any]) -> None:
+        """D8: the `data` of a JSON-RPC error answering `session/prompt`. The same structured
+        quota fields count here as on a `session.error` notification (D8: "the same fields on a
+        `session/prompt` JSON-RPC error's `data` count too") -- never message text."""
+        if isinstance(data, dict):
+            self._observe_error(data)
+
     def _observe_call(self, data: Dict[str, Any]) -> None:
         call_id = data.get("providerCallId") or data.get("apiCallId")
         if call_id is not None:

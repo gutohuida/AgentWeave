@@ -802,12 +802,47 @@ root.
   implementation, not a regression from 4.1 and not a new finding. `ruff check` and `black --check
   --target-version py311` on both touched files: clean. `openspec validate
   a-copilot-run-shows-its-credits --strict`: valid, both before and after ticking 4.1.
-- [ ] 4.2 `hub/hub/copilot_usage.py`: `CopilotUsageLedger` (`observe_event`, `observe_prompt_result`,
+- [x] 4.2 `hub/hub/copilot_usage.py`: `CopilotUsageLedger` (`observe_event`, `observe_prompt_result`,
   `observe_prompt_error`, `finish`) per design D2–D4, with the Copilot key mapping of D3 and
   negative credit figures ignored (D4), and `quota_reading(snapshots, *, refused, prior_reading)` per
   D7–D8: `prior_reading` is read only when `refused`, and only for `resetsAt`.
   `finish(*, session_was_new)` is pure and never raises (D11). Tasks 1.1–1.7 and the ledger half of
   1.9 pass. `py -3.11 -m pytest hub/tests/test_copilot_usage.py -q`
+
+  **Iter 48, 2026-10-02.** `observe_event`, `observe_prompt_result`, `finish`, `quota_reading` and
+  the Copilot key maps already existed (built iterations 21/25/27/28, per iter 47's note on 4.2).
+  Only `observe_prompt_error(data)` was missing — confirmed absent by `grep -n "def
+  observe_prompt_error" hub/hub/copilot_usage.py` before this edit. Added it
+  (`hub/hub/copilot_usage.py:196-201`), delegating to the existing `_observe_error` structured-field
+  check (D8: "the same fields on a `session/prompt` JSON-RPC error's `data` count too"), guarded by
+  its own `isinstance(data, dict)` check since it is called directly, not through `observe_event`'s
+  dispatch. Added three direct tests exercising the new entry point by itself (not only through
+  `session.error`), beside the existing `session.error`-shaped ones:
+  `test_prompt_error_quota_exceeded_gives_a_rejected_reading`,
+  `test_prompt_error_other_codes_leave_the_reading_allowed` (same three non-matching
+  errorType/errorCode pairs as the `session.error` parametrisation), and
+  `test_prompt_error_ignores_non_dict_data`. Verified red/green: `git stash push -- hub/hub/
+  copilot_usage.py`, reran the five new tests — `AttributeError: 'CopilotUsageLedger' object has no
+  attribute 'observe_prompt_error'` on all five; `git stash pop` restored the change — all five
+  green. Full file: `py -3.11 -m pytest hub/tests/test_copilot_usage.py -q` — 35 passed (was 30).
+  `py -3.11 -m pytest hub/tests/test_copilot_acp_run_turn.py -q` — 50 passed, 3 failed, same three
+  (`TestRunEndQuotaRefusalCallsOnAccountingWithRejectedReading`) and same count as iter 47 found
+  before this change — task 4.4's own tests (`run_turn` wiring `observe_prompt_error` and the
+  refused-return path), not touched by 4.2, not a regression. `ruff check` and `black --check
+  --target-version py311` on both touched files: clean. `openspec validate
+  a-copilot-run-shows-its-credits --strict`: valid, both before and after ticking 4.2.
+
+  **4.3 discovered already built, not yet verified-and-ticked.** While locating 4.2's one missing
+  method, `hub/hub/usage_accounting.py` was read in full and already contains
+  `copilot_session_baseline` (`:80-121`) and `settle_copilot_credits` (`:163-`), matching 4.3's
+  contract point for point (rowid-ordered baseline read, larger-of-difference-and-per-call rule,
+  fallback total storage, `resetsAt` borrowed only into an already-`rejected` reading, never
+  raises). `test_copilot_usage.py`'s settle-side tests (`test_settle_fills_resets_at_from_the_
+  projects_newest_copilot_reading`, `test_settle_does_not_borrow_a_reading_from_another_project`,
+  `test_settle_ignores_a_prior_reading_whose_reset_has_passed`, and others) already exercise it and
+  are green in the 35-pass run above. Left unticked this turn — this iteration's named unit of work
+  was 4.2 only — but the next firing on this change should give it one fresh, independent read
+  against design D4/D8 (not a re-read of this note) before ticking it, per the round discipline.
 - [ ] 4.3 `usage_accounting.copilot_session_baseline(db, project_id, agent, session_id)`: the last
   written `turn_usage` row (`ORDER BY turn_usage.rowid DESC`, not `observed_at`; design D4, review
   finding 3) joined to `runs` on `Run.session_id == session_id`, for that project and agent, with
