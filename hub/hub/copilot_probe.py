@@ -58,7 +58,19 @@ NOT_FOUND_REASON = (
     "GitHub Copilot CLI was not found: install it with npm (`@github/copilot`) or the "
     "standalone installer."
 )
-NOT_SIGNED_IN_REASON = "Copilot CLI is not signed in. Run `copilot login`."
+
+
+def not_signed_in_reason() -> str:
+    """Names the file the Hub copies the account from (F483): `copilot login` under another
+    `COPILOT_HOME` signs in an account the Hub never sees."""
+    from .copilot_home import operator_copilot_home
+
+    config = operator_copilot_home() / "config.json"
+    return (
+        "Copilot CLI is not signed in. Run `copilot login`; the Hub signs Copilot in as the "
+        f"account it records in {config}."
+    )
+
 
 _SCRIPT_SUFFIXES = {".cmd", ".bat", ".ps1", ".js", ".mjs", ".cjs", ".sh"}
 _SHIM_NAMES = {"copilot", "copilot.cmd", "copilot.ps1"}
@@ -379,11 +391,10 @@ async def _exchange(proc, request_id: int, method: str, params: Dict[str, Any]) 
 
 async def probe_copilot(path: Path) -> _Verdict:
     """One model-free handshake. Classifies only what it can conclude; raises otherwise."""
-    from .copilot_home import copilot_worker_home
+    from .copilot_home import ensure_copilot_worker_home
     from .pty_runner import terminate_process_tree
 
-    home = copilot_worker_home()
-    home.mkdir(parents=True, exist_ok=True, mode=0o700)
+    home = ensure_copilot_worker_home()
     proc = await _spawn_probe_process(probe_argv(path), cwd=home, env=probe_env(home))
     try:
 
@@ -403,7 +414,7 @@ async def probe_copilot(path: Path) -> _Verdict:
             new = await _exchange(proc, 2, "session/new", {"cwd": str(home), "mcpServers": []})
             error = new.get("error")
             if isinstance(error, dict) and error.get("code") == AUTH_REQUIRED_CODE:
-                return _Verdict(True, False, NOT_SIGNED_IN_REASON, version, time.monotonic())
+                return _Verdict(True, False, not_signed_in_reason(), version, time.monotonic())
             if error is not None:
                 raise RuntimeError(f"session/new failed: {error}")
             session_id = (new.get("result") or {}).get("sessionId")

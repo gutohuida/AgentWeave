@@ -1151,13 +1151,18 @@ def _copilot_homes_stay_out_of_the_real_home(tmp_path_factory, monkeypatch):
     """Binding or creating a Copilot agent writes its Hub-owned home
     (`a-copilot-agent-runs-over-acp` D4), which lives under `Path.home()`. A test that does not
     patch the home itself gets a temporary root instead, so the suite never writes into the
-    operator's real `~/.agentweave`. A test that patches `Path.home` keeps its own layout."""
+    operator's real `~/.agentweave`. A test that patches `Path.home` keeps its own layout.
+
+    The same holds for the operator's own Copilot home, which F483's account pointer is read
+    from: the suite never reads the real `~/.copilot` or the real `COPILOT_HOME`."""
     from pathlib import Path
 
     from hub import copilot_home
 
     real_home = Path.home()
     temporary = tmp_path_factory.mktemp("copilot-home-root")
+    operator = tmp_path_factory.mktemp("operator-copilot-home")
+    monkeypatch.delenv("COPILOT_HOME", raising=False)
 
     def _root() -> Path:
         home = Path.home()
@@ -1165,4 +1170,12 @@ def _copilot_homes_stay_out_of_the_real_home(tmp_path_factory, monkeypatch):
             return temporary
         return home / ".agentweave" / "hub" / "copilot-home"
 
+    real_operator_home = copilot_home.operator_copilot_home
+
+    def _operator_home() -> Path:
+        if Path.home() == real_home and "COPILOT_HOME" not in os.environ:
+            return operator
+        return real_operator_home()
+
     monkeypatch.setattr(copilot_home, "copilot_home_root", _root)
+    monkeypatch.setattr(copilot_home, "operator_copilot_home", _operator_home)

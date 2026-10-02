@@ -248,3 +248,101 @@ class TestSweep:
     def test_a_clean_home_reports_nothing(self):
         _ensure()
         assert _ensure().removed == ()
+
+
+class TestAccountPointer:
+    """F483: `copilot login` names the account only in the operator's own home; a Hub-owned home
+    without that pointer answers `session/new` with "Authentication required" unless the GitHub
+    CLI holds a token. Measured on the work PC and at home with the probe's own handshake."""
+
+    POINTER = {
+        "lastLoggedInUser": {"host": "https://github.com", "login": "octo"},
+        "loggedInUsers": [{"host": "https://github.com", "login": "octo"}],
+    }
+
+    @pytest.fixture(autouse=True)
+    def _operator_home(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("COPILOT_HOME", raising=False)
+        operator = tmp_path / ".copilot"
+        operator.mkdir()
+        # Copilot's own JSONC shape: a `//` header, then the object.
+        (operator / "config.json").write_text(
+            "// User settings belong in settings.json.\n// This file is managed automatically.\n"
+            + json.dumps(
+                {"firstLaunchAt": "2026-10-02T10:00:00Z", "theme": "dark", **self.POINTER}
+            ),
+            encoding="utf-8",
+        )
+        return operator
+
+    def _config(self, home: Path) -> dict:
+        return json.loads((home / "config.json").read_text(encoding="utf-8"))
+
+    def test_a_new_agent_home_gets_the_pointer_and_nothing_else(self):
+        home = _ensure().path
+        assert self._config(home) == self.POINTER
+
+    def test_the_agent_home_keeps_copilots_own_keys(self):
+        home = copilot_home_path("proj-abc123", "cop-1")
+        home.mkdir(parents=True)
+        (home / "config.json").write_text(
+            "// managed\n" + json.dumps({"firstLaunchAt": "x", "trustedFolders": ["C:/"]}),
+            encoding="utf-8",
+        )
+        _ensure()
+        # The sweep still drops the permission key; the pointer joins what Copilot wrote.
+        assert self._config(home) == {"firstLaunchAt": "x", **self.POINTER}
+
+    def test_a_changed_sign_in_is_copied_on_the_next_ensure(self, _operator_home):
+        home = _ensure().path
+        changed = {
+            "lastLoggedInUser": {"host": "https://github.com", "login": "other"},
+            "loggedInUsers": [{"host": "https://github.com", "login": "other"}],
+        }
+        (_operator_home / "config.json").write_text(json.dumps(changed), encoding="utf-8")
+        _ensure()
+        assert self._config(home) == changed
+
+    def test_an_unchanged_pointer_is_not_rewritten(self):
+        home = _ensure().path
+        assert copilot_home.sync_account_pointer(home) is False
+
+    def test_no_sign_in_leaves_the_home_alone(self, _operator_home):
+        (_operator_home / "config.json").write_text('{"theme": "dark"}', encoding="utf-8")
+        home = _ensure().path
+        assert not (home / "config.json").exists()
+
+    def test_a_missing_operator_home_leaves_the_home_alone(self, _operator_home):
+        (_operator_home / "config.json").unlink()
+        home = _ensure().path
+        assert not (home / "config.json").exists()
+
+    def test_copilot_home_names_the_operators_home(self, tmp_path, monkeypatch):
+        elsewhere = tmp_path / "custom-copilot"
+        elsewhere.mkdir()
+        (elsewhere / "config.json").write_text(
+            json.dumps({"lastLoggedInUser": {"login": "custom"}}), encoding="utf-8"
+        )
+        monkeypatch.setenv("COPILOT_HOME", str(elsewhere))
+        home = _ensure().path
+        assert self._config(home) == {"lastLoggedInUser": {"login": "custom"}}
+
+    def test_the_worker_home_gets_the_pointer(self, tmp_path):
+        home = copilot_home.ensure_copilot_worker_home()
+        assert home == _root(tmp_path) / "worker"
+        assert self._config(home) == self.POINTER
+
+    def test_the_operators_own_home_is_never_written(self, _operator_home):
+        before = (_operator_home / "config.json").read_bytes()
+        assert copilot_home.sync_account_pointer(_operator_home) is False
+        assert (_operator_home / "config.json").read_bytes() == before
+
+
+class TestNotSignedInReason:
+    def test_the_reason_names_the_file_the_account_is_read_from(self, tmp_path, monkeypatch):
+        from hub.copilot_probe import not_signed_in_reason
+
+        monkeypatch.delenv("COPILOT_HOME", raising=False)
+        reason = not_signed_in_reason()
+        assert reason.startswith("Copilot CLI is not signed in. Run `copilot login`")
+        assert str(tmp_path / ".copilot" / "config.json") in reason

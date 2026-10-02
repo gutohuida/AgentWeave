@@ -65,6 +65,7 @@ import time
 import pytest
 
 import hub.copilot_acp as copilot_acp
+import hub.copilot_probe as copilot_probe
 from hub.codex_appserver import AppServerError
 from hub.copilot_acp import ACPProcess, CopilotACPError, TurnOutcome, run_turn
 
@@ -2007,7 +2008,8 @@ class TestSessionNewAuthErrorMarksProbeNotAuthorized:
     design.md `:1215-1217` names: *"When ... `session/new` fails `-32000`, `run_turn` writes that
     verdict into `CopilotProbe` (D15) before raising."* `-32000` and its message "Authentication
     required" are CODE (design.md `:1398-1399`, `app.js` `newSession` -> `ps.authRequired()`); the
-    `reason` sentence asserted below ("Copilot CLI is not signed in. Run `copilot login`.") is
+    `reason` sentence asserted below ("Copilot CLI is not signed in. Run `copilot login`", F483 adding
+    the file the account is read from) is
     D15's own table row for this state (design.md `:1409`), reused here as the least-invented
     reading of "that verdict" -- `run_turn` presumably writes the same verdict shape
     `CopilotProbe`'s own refresh would have concluded, not a distinct message of its own.
@@ -2071,9 +2073,11 @@ class TestSessionNewAuthErrorMarksProbeNotAuthorized:
             "the executable ran and answered -- absent would be a different D15 row (not "
             f"resolvable at all); got {verdict!r}"
         )
-        assert verdict["reason"] == "Copilot CLI is not signed in. Run `copilot login`.", verdict[
-            "reason"
-        ]
+        # F483: the sentence now also names the file the Hub copies the account from.
+        assert verdict["reason"] == copilot_probe.not_signed_in_reason(), verdict["reason"]
+        assert verdict["reason"].startswith(
+            "Copilot CLI is not signed in. Run `copilot login`"
+        ), verdict["reason"]
 
         methods = [m for m, _ in fake.sent_requests]
         assert methods == [

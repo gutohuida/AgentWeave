@@ -454,6 +454,12 @@ computed SHALL NOT make a Copilot agent uncreatable. In that case the run's own 
 binding check. A verdict that the CLI is not signed in or is too old SHALL be checked again on the
 next read of it, so that signing in or updating is seen without waiting for the verdict to age.
 
+`copilot login` records which account is signed in only in the operator's own Copilot home
+(`$COPILOT_HOME`, else `~/.copilot`), and the CLI reads the credential store through that record.
+The Hub SHALL therefore copy that record, and never a token, into every Copilot home it owns before
+its probe and before every Copilot run, and the not-signed-in reason SHALL name the file it is read
+from (F483, 2026-10-02).
+
 #### Scenario: A signed-in Copilot with no token variables
 
 - **WHEN** the Hub's environment has no `GH_TOKEN`, `GITHUB_TOKEN` or `COPILOT_GITHUB_TOKEN` and the Copilot CLI is signed in
@@ -470,6 +476,12 @@ next read of it, so that signing in or updating is seen without waiting for the 
 - **WHEN** the Hub holds a verdict that the Copilot CLI is not signed in, and the operator then runs `copilot login`
 - **THEN** the next read of the verdict starts a new check
 - **AND** a read after that check completes reports the runner launchable
+
+#### Scenario: Signed in with `copilot login` alone
+
+- **WHEN** the operator has signed in with `copilot login`, the GitHub CLI holds no sign-in, and the Hub's Copilot homes were created before that sign-in
+- **THEN** the next probe reports a Copilot runner launchable
+- **AND** the next Copilot turn starts a session
 
 #### Scenario: The verdict is still being computed
 

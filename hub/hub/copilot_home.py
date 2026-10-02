@@ -20,6 +20,9 @@ Copilot's own state (`session-state/`, `session-store.db`, `logs/`) is never tou
 
 The worker home (`copilot-home/worker/`) serves one-shot calls and the launchability probe. It is
 a sibling of `projects/`, so no project id can name it.
+
+Every home also gets the operator's account pointer in `config.json` (F483,
+`sync_account_pointer`), so a home the Hub created finds the sign-in `copilot login` made.
 """
 
 from __future__ import annotations
@@ -66,6 +69,13 @@ _CONFIG_PERMISSION_KEYS = (
     "defaultMode",
 )
 
+#: `config.json` keys naming the signed-in account (F483). Copilot keeps the token in the OS
+#: credential store and finds which entry to read through these; a home without them answers
+#: `session/new` with "Authentication required" unless the GitHub CLI holds a token to fall back
+#: on. `copilot login` writes them only into the operator's own home. Neither is a secret or a
+#: permission, so the Hub copies them into every home it owns.
+_ACCOUNT_KEYS = ("lastLoggedInUser", "loggedInUsers")
+
 _COMPONENT_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
@@ -77,6 +87,21 @@ def copilot_home_root() -> Path:
 def copilot_worker_home() -> Path:
     """The home one-shot calls and the launchability probe run under."""
     return copilot_home_root() / "worker"
+
+
+def operator_copilot_home() -> Path:
+    """The Copilot home `copilot login` writes for the operator: `$COPILOT_HOME`, else
+    `~/.copilot`. Read from the Hub's own environment, before the guard drops the variable."""
+    configured = os.environ.get("COPILOT_HOME")
+    return Path(configured) if configured else Path.home() / ".copilot"
+
+
+def ensure_copilot_worker_home() -> Path:
+    """Create the worker home and give it the operator's account pointer; return its path."""
+    home = copilot_worker_home()
+    home.mkdir(parents=True, exist_ok=True, mode=0o700)
+    sync_account_pointer(home)
+    return home
 
 
 def _checked_component(value: str, what: str) -> str:
@@ -224,6 +249,32 @@ def _parse_config(text: str) -> Dict[str, Any]:
     return data
 
 
+def sync_account_pointer(home: Path) -> bool:
+    """Copy the operator's account pointer into a Hub-owned home's `config.json` (F483), keeping
+    every other key. Does nothing when the operator's home names no account, or when `home` is the
+    operator's own. Returns whether the file changed. Raises `OSError` on a failed write."""
+    source = operator_copilot_home()
+    if source.resolve() == home.resolve():
+        return False
+    try:
+        operator = _parse_config((source / "config.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    pointer = {key: operator[key] for key in _ACCOUNT_KEYS if key in operator}
+    if not pointer:
+        return False
+    config = home / "config.json"
+    try:
+        data = _parse_config(config.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        # Absent or damaged: Copilot recreates what it needs around the pointer.
+        data = {}
+    if all(data.get(key) == value for key, value in pointer.items()):
+        return False
+    data.update(pointer)
+    return _write_if_changed(config, json.dumps(data, indent=2) + "\n")
+
+
 def _holds_a_file(path: Path) -> bool:
     return path.is_file() or (path.is_dir() and any(p.is_file() for p in path.rglob("*")))
 
@@ -305,6 +356,7 @@ def ensure_copilot_home(
     if os.name != "nt":
         os.chmod(home, 0o700)
     removed = _sweep(home, agent)
+    sync_account_pointer(home)
     record_owned_file(
         home,
         f"agents/{agent}.agent.md",

@@ -33802,7 +33802,11 @@ corrects the field names. If a refusal ever arrives without a hold, look for tha
 
 ## F483 (A) — A Copilot runner is "not signed in" on a machine where `copilot login` is current
 
-**Status:** open, filed 2026-10-02 on the work PC during task 10.1 of `a-run-reaches-the-hub-without-mcp`.
+**Status:** fixed 2026-10-02 at home (direct fix, operator's call): every Hub-owned Copilot home, the worker's
+included, gets the operator's `lastLoggedInUser`/`loggedInUsers` before each probe, one-shot and turn
+(`sync_account_pointer`), and the not-signed-in reason names the `config.json` it reads them from. Specs updated
+by hand: runner-registry ("Copilot launchability is read from Copilot itself") and operator-agent-creation.
+Filed 2026-10-02 on the work PC during task 10.1 of `a-run-reaches-the-hub-without-mcp`.
 **Ready:** cause reproduced; fix shape not chosen. Creating a Copilot agent returned `409` with "Copilot CLI is not
 signed in. Run `copilot login`.", and still did after the operator ran `copilot login` again. Copilot 1.0.89-1 (the
 npm platform binary the Hub resolves) keeps the token in the Windows Credential Manager

@@ -347,7 +347,9 @@ the team, other agents' history and the turn notices, which reach each turn with
 The Hub SHALL bring these files up to date before every Copilot turn, so that a charter,
 instructions or model edit made anywhere reaches the next turn. The home's location SHALL be derived
 only from identifiers the Hub has checked to be single, safe path components, because a project's
-identifier can come from a marker file inside the project's own folder. The files SHALL carry no credential. A failure to write
+identifier can come from a marker file inside the project's own folder. The files SHALL carry no credential;
+the home's own configuration SHALL name the account the operator signed Copilot in with, copied from the
+operator's Copilot home before every turn (runner-registry, "Copilot launchability is read from Copilot itself"). A failure to write
 them SHALL NOT undo the agent's creation. The same failure before a turn SHALL refuse that turn with
 a reason.
 

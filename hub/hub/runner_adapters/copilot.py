@@ -81,10 +81,9 @@ def copilot_one_shot_env(config: Optional[Mapping[str, Any]] = None) -> Dict[str
     """The Hub's environment through the one Copilot filter, under the worker home (D14): no
     GitHub token, no allow-all or trust variable, no provider override. `config` is the runner's,
     for slice 5's providers; nothing reads it yet."""
-    from ..copilot_home import copilot_worker_home
+    from ..copilot_home import ensure_copilot_worker_home
 
-    home = copilot_worker_home()
-    home.mkdir(parents=True, exist_ok=True, mode=0o700)
+    home = ensure_copilot_worker_home()
     env, _removed = copilot_guard_env(dict(os.environ), {})
     env["COPILOT_HOME"] = str(home)
     return env

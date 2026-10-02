@@ -806,7 +806,7 @@ class TestCopilotProbeVerdict:
         assert "GitHub auth token" not in str(result)
 
     def test_not_signed_in_names_copilot_login(self, _probe):
-        self._cache(_probe, present=True, authorized=False, reason=_probe.NOT_SIGNED_IN_REASON)
+        self._cache(_probe, present=True, authorized=False, reason=_probe.not_signed_in_reason())
         result = probe_agent("cop-1", {"runner": "copilot"})
         assert result["authorized"] is False and result["runnable"] is False
         assert "copilot login" in result["reason"]
@@ -832,7 +832,7 @@ class TestCopilotProbeVerdict:
     def test_a_negative_verdict_is_always_stale(self, _probe, monkeypatch):
         """Finding 11: `copilot login` changes neither the path nor the mtime, so a negative
         verdict younger than the TTL is returned and a refresh is scheduled."""
-        self._cache(_probe, present=True, authorized=False, reason=_probe.NOT_SIGNED_IN_REASON)
+        self._cache(_probe, present=True, authorized=False, reason=_probe.not_signed_in_reason())
         result = probe_agent("cop-1", {"runner": "copilot"})
         assert result["runnable"] is False
         assert len(self.scheduled) == 1
@@ -875,7 +875,7 @@ class TestCopilotProbeRefresh:
 
         async def _fake_probe(path):
             calls.append(path)
-            return _probe._Verdict(True, False, _probe.NOT_SIGNED_IN_REASON)
+            return _probe._Verdict(True, False, _probe.not_signed_in_reason())
 
         monkeypatch.setattr(_probe, "probe_copilot", _fake_probe)
         probe_agent("cop-1", {"runner": "copilot"})
@@ -917,7 +917,7 @@ class TestCopilotProbeRefresh:
 
     def test_record_writes_the_turns_verdict(self, _probe):
         _probe.CopilotProbe.record(
-            present=True, authorized=False, reason=_probe.NOT_SIGNED_IN_REASON
+            present=True, authorized=False, reason=_probe.not_signed_in_reason()
         )
         result = probe_agent("cop-1", {"runner": "copilot"})
         assert result["runnable"] is False and "copilot login" in result["reason"]

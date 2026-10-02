@@ -59,8 +59,8 @@ from .copilot_home import HUB_MCP_SERVER_NAME, MCP_CONFIG_NAME, agent_marker
 from .copilot_probe import (
     AUTH_REQUIRED_CODE,
     COPILOT_MIN_VERSION_TEXT,
-    NOT_SIGNED_IN_REASON,
     CopilotProbe,
+    not_signed_in_reason,
     resolve_copilot_executable,
     too_old_reason,
     version_supported,
@@ -2058,7 +2058,7 @@ async def run_turn(
                     # Written before the raise: the executor re-drains at once, and without the
                     # verdict each retry would spend a delivery attempt (D12, R3).
                     _record_probe(
-                        present=True, authorized=False, reason=NOT_SIGNED_IN_REASON, cli=cli
+                        present=True, authorized=False, reason=not_signed_in_reason(), cli=cli
                     )
                 raise
             session_id = _str_or_none(session_response.get("sessionId"))
