@@ -80,6 +80,19 @@ _TABLE = [
     _row("1.1n", "ls 2>/dev/null", True),
     _row("1.1o", "echo x > /dev/stderr", True),
     _row("1.1p", r"Get-ChildItem src\*.py", True, tool="PowerShell"),
+    # 1.2 (F403): a brace the outer shell itself expands is read as expanded (design D1). The
+    # first two are refused only once D1 runs the brace through, because `..` is one of its real
+    # alternatives (measured in Git Bash: `.{,.}` -> `. ..`, `{.,.}.` -> `.. ..`). The next three
+    # were already refused by the old tail backstop and must stay refused once rule 6 is rewritten
+    # without D1 -- each FAILS against rule 6's piece reading alone, because the unexpanded brace
+    # characters are just more word text, read as an inside relative path (R1's prototype measured
+    # all three allowed): `.{,.}/x` has no separator-adjacent `..`, `{.,.}./x` reads as the inside
+    # piece `{.,.}./x`, `src/{a,..}/../y` reads as the inside piece `src/{a,..}/../y`.
+    _row("1.2a", "cp notes.md .{,.}", False),
+    _row("1.2b", "cp notes.md {.,.}.", False),
+    _row("1.2c", "cp notes.md .{,.}/x", False),
+    _row("1.2d", "cp notes.md {.,.}./x", False),
+    _row("1.2e", "cp x src/{a,..}/../y", False),
 ]
 
 

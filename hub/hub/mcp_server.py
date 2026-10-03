@@ -1176,6 +1176,37 @@ _SUBSTITUTION = "$(…)"
 _LITERAL_DOLLAR = "\ue024"
 _MAX_NESTING = 8
 
+# D1: an unquoted, unescaped `{`, `,` and `}` in bash, marked so `_expand_braces` can tell one
+# from a literal character the lexer already rendered plain (a quoted or escaped one, or one
+# inside a `${...}` parameter expansion). Never produced for the PowerShell dialect: `{...}` is a
+# script block there and `,` an array operator (design D1).
+_BRACE_OPEN = "\ue025"
+_BRACE_COMMA = "\ue026"
+_BRACE_CLOSE = "\ue027"
+_BRACE_SENTINELS = {"{": _BRACE_OPEN, ",": _BRACE_COMMA, "}": _BRACE_CLOSE}
+_BRACE_RESTORE = {_BRACE_OPEN: "{", _BRACE_COMMA: ",", _BRACE_CLOSE: "}"}
+# Past this many nested groups, or this many alternatives from one argument, `_expand_braces`
+# returns None rather than build further (design D1, "The bounds") -- the per-`_decide` budget
+# (`_Budget`, task 2.0) is not yet threaded through; this is a provisional per-argument-only cap.
+_BRACE_MAX_NESTING = 32
+_BRACE_ARGUMENT_BUDGET = 256
+_BRACE_INT_SEQUENCE_RE = re.compile(r"^([+-]?[0-9]+)\.\.([+-]?[0-9]+)$")
+_BRACE_LETTER_SEQUENCE_RE = re.compile(r"^([A-Za-z])\.\.([A-Za-z])$")
+_BRACE_MAX_LETTER_SPAN = 58
+_TOO_MANY = (
+    "expands to more words or files than can be checked against your workspace; name the files "
+    "you mean, or write the payload to a file"
+)
+
+
+def _restore_brace_sentinels(text: str) -> str:
+    """A brace sentinel rendered back to the literal character it came from, for a refusal that
+    quotes an argument `_expand_braces` never finished (design D1)."""
+    for sentinel, literal in _BRACE_RESTORE.items():
+        text = text.replace(sentinel, literal)
+    return text
+
+
 # A refusal quotes at most this many characters, as rendered. `repr` expands what it cannot print
 # (a NUL becomes four characters, some code points ten), so bounding the word before rendering
 # would not bound the reason. The longest fixed wording is under 200 characters, so every reason
@@ -1540,13 +1571,17 @@ def _ansi_c_string(command: str, start: int, reading: str) -> Tuple[str, int]:
     return "".join(decoded), index
 
 
+_SUBSTITUTION_OPENERS = {")": "(", "}": "{"}  # the opener a `closer` nests on (design D1 for `}`)
+
+
 def _substitution(text: str, start: int, closer: str) -> Tuple[str, int]:
     """The command text of a substitution opened just before `start`, and where lexing resumes.
     Unbalanced, it runs to the end of the text."""
+    opener = _SUBSTITUTION_OPENERS.get(closer)
     depth, index = 1, start
     while index < len(text):
         char = text[index]
-        if closer == ")" and char == "(":
+        if opener is not None and char == opener:
             depth += 1
         elif char == closer:
             depth -= 1
@@ -1554,6 +1589,100 @@ def _substitution(text: str, start: int, closer: str) -> Tuple[str, int]:
                 return text[start:index], index + 1
         index += 1
     return text[start:], len(text)
+
+
+def _brace_sequence(content: str) -> Optional[List[str]]:
+    """A bare `{x..y}` sequence's alternatives, or None when `content` is not one (design D1).
+
+    An integer sequence is replaced by one representative, its first endpoint: none of its
+    elements can hold a separator or `~`, and each would be judged alike. A letter sequence is
+    expanded in full, over bash's ASCII-code range between its endpoints (so `{Z..a}` runs
+    through the punctuation between them too), bounded at `_BRACE_MAX_LETTER_SPAN` elements.
+    """
+    integers = _BRACE_INT_SEQUENCE_RE.match(content)
+    if integers:
+        return [integers.group(1)]
+    letters = _BRACE_LETTER_SEQUENCE_RE.match(content)
+    if letters:
+        start, end = ord(letters.group(1)), ord(letters.group(2))
+        step = 1 if end >= start else -1
+        if abs(end - start) + 1 > _BRACE_MAX_LETTER_SPAN:
+            return None
+        return [chr(code) for code in range(start, end + step, step)]
+    return None
+
+
+def _brace_frame() -> Dict[str, Any]:
+    return {"results": [""], "chains": [], "literal": []}
+
+
+def _brace_flush(frame: Dict[str, Any]) -> None:
+    if frame["literal"]:
+        text = "".join(frame["literal"])
+        frame["results"] = [prefix + text for prefix in frame["results"]]
+        frame["literal"] = []
+
+
+def _brace_absorb(parent: Dict[str, Any], alternatives: List[str], budget: int) -> bool:
+    """Cross `alternatives` into `parent`'s results, budget-checked before building (design D1,
+    "The bounds" -- counted before any alternative is built). False past `budget`."""
+    if len(alternatives) > budget or len(parent["results"]) * len(alternatives) > budget:
+        return False
+    parent["results"] = [prefix + alt for prefix in parent["results"] for alt in alternatives]
+    return True
+
+
+def _expand_braces(argument: str, budget: int) -> Optional[List[str]]:
+    """Every alternative `argument` expands to under bash's brace rule (design D1), with each
+    `{...}` group marked by `_lex` -- a top-level sentinel comma makes it a real group, a bare
+    `x..y` (no sentinel inside) a sequence, anything else restored as literal characters, with any
+    group nested inside it still expanded. None past `_BRACE_MAX_NESTING` groups deep or past
+    `budget` alternatives from this argument -- `_decide` then refuses with `_TOO_MANY`.
+
+    Built iteratively, an explicit stack of open groups, so there is no recursion (design D1,
+    Totality): a run of thousands of `{` with no matching `}` pushes only up to the nesting cap
+    before this returns None, and never recurses on depth.
+    """
+    stack: List[Dict[str, Any]] = [_brace_frame()]
+    index = 0
+    while index < len(argument):
+        char = argument[index]
+        if char == _BRACE_OPEN:
+            _brace_flush(stack[-1])
+            if len(stack) > _BRACE_MAX_NESTING:
+                return None
+            stack.append(_brace_frame())
+            index += 1
+            continue
+        if char == _BRACE_COMMA and len(stack) > 1:
+            _brace_flush(stack[-1])
+            stack[-1]["chains"].append(stack[-1]["results"])
+            stack[-1]["results"] = [""]
+            index += 1
+            continue
+        if char == _BRACE_CLOSE and len(stack) > 1:
+            _brace_flush(stack[-1])
+            frame = stack.pop()
+            frame["chains"].append(frame["results"])
+            if len(frame["chains"]) == 1:
+                sole = frame["chains"][0]
+                sequence = _brace_sequence(sole[0]) if len(sole) == 1 else None
+                alternatives = sequence if sequence is not None else ["{" + s + "}" for s in sole]
+            else:
+                alternatives = [alt for chain in frame["chains"] for alt in chain]
+            if not _brace_absorb(stack[-1], alternatives, budget):
+                return None
+            index += 1
+            continue
+        stack[-1]["literal"].append(_BRACE_RESTORE.get(char, char))
+        index += 1
+    while len(stack) > 1:  # unbalanced: the rest of the text (already scanned) stays literal
+        _brace_flush(stack[-1])
+        frame = stack.pop()
+        if not _brace_absorb(stack[-1], ["{" + s for s in frame["results"]], budget):
+            return None
+    _brace_flush(stack[0])
+    return stack[0]["results"]
 
 
 def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
@@ -1625,6 +1754,18 @@ def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
             current.append(text)
             started = True
             continue
+        if bash and char == "$" and following == "{":  # quote is None here (design D1)
+            # A `{` directly after a real `$` opens a parameter expansion, not a brace pattern:
+            # its contents up to the matching `}` are literal, never marked as brace sentinels.
+            text, index = _substitution(command, index + 2, "}")
+            current.append("${" + text + "}")
+            started = True
+            continue
+        if bash and char in _BRACE_SENTINELS:  # quote is None here (design D1)
+            current.append(_BRACE_SENTINELS[char])
+            started = True
+            index += 1
+            continue
         if char in "'\"":
             quote, started = char, True
             index += 1
@@ -1685,6 +1826,20 @@ def _read_command(
                 return refusal
         return None
     arguments, nested = _lex(command, dialect == "bash", reading)
+    if dialect == "bash":
+        # D1: each alternative a brace argument expands to is handed on to `_words` as its own
+        # argument, the way bash hands each alternative on as its own word. Most arguments carry
+        # no sentinel at all, so they are passed through untouched.
+        expanded_arguments: List[str] = []
+        for argument in arguments:
+            if any(sentinel in argument for sentinel in _BRACE_RESTORE):
+                alternatives = _expand_braces(argument, _BRACE_ARGUMENT_BUDGET)
+                if alternatives is None:
+                    return _refuse(_restore_brace_sentinels(argument), _TOO_MANY)
+                expanded_arguments.extend(alternatives)
+            else:
+                expanded_arguments.append(argument)
+        arguments = expanded_arguments
     words = _words(arguments)
     references = sum(1 for word, _, _ in words if _HUB_REFERENCE_RE[dialect].match(word))
     # A reference is trusted only when the command names `HUB_URL` nowhere else. That refuses
