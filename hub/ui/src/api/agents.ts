@@ -53,6 +53,8 @@ export interface AgentSummary {
   config?: {
     /** Copilot's own built-in review agents this agent consults before its verdict (design D8). */
     copilot_review_agents?: string[]
+    /** Whether this agent's Copilot spawn loads the built-in GitHub MCP server (design D9). */
+    copilot_github_mcp?: boolean
   }
 }
 
@@ -385,6 +387,26 @@ export function useUpdateAgentReviewAgents() {
     mutationFn: ({ agent, agents }: { agent: string; agents: string[] }) =>
       patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, {
         config: { copilot_review_agents: agents },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'project' &&
+          query.queryKey[1] === projectId &&
+          query.queryKey[2] === 'agents',
+      })
+    },
+  })
+}
+
+/** Whether this agent's Copilot spawn loads the built-in GitHub MCP server (design D9). */
+export function useUpdateAgentGithubMcp() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, enabled }: { agent: string; enabled: boolean }) =>
+      patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, {
+        config: { copilot_github_mcp: enabled },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({

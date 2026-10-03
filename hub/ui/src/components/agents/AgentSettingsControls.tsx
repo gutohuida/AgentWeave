@@ -5,6 +5,7 @@ import {
   useUpdateAgentCheckpointMode,
   useUpdateAgentCheckpointOverride,
   useUpdateAgentDescription,
+  useUpdateAgentGithubMcp,
   useUpdateAgentGrant,
   useUpdateAgentPermissionDefault,
   useUpdateAgentReviewAgents,
@@ -348,6 +349,47 @@ export function CopilotReviewAgentsSetting({ agent }: { agent: AgentSummary }) {
         repository's instructions, and its findings are not the verdict — the verdict is still
         recorded only by <code>update_task</code>. On a provider runner, Copilot's review agents
         may not run.
+      </p>
+      {update.isError && (
+        <p className="text-xs" style={{ color: 'var(--red)' }}>Could not save.</p>
+      )}
+    </div>
+  )
+}
+
+/** Whether this `copilot`-bound agent's Copilot spawn loads the built-in GitHub MCP server
+ *  (design D9). Off by default: `--disable-builtin-mcps` is passed unless this is on. Shown only
+ *  for a `copilot` agent, same rule as the review-agents setting above — a setting with no
+ *  backing state is not presented.
+ *
+ *  The help text states both things review 2026-09-28 finding 11 asked for: turning this on does
+ *  not grant GitHub access outright, it only lets a Workspace-only posture ask for it; and a
+ *  runner's own pre-approval flags (`--allow-tool`, `--allow-all-tools`) bypass the card
+ *  regardless of this setting, since those are the operator's own authority, set on the runner.
+ */
+export function CopilotGithubMcpSetting({ agent }: { agent: AgentSummary }) {
+  const update = useUpdateAgentGithubMcp()
+  const checked = agent.config?.copilot_github_mcp === true
+
+  return (
+    <div className="max-w-[320px] space-y-3">
+      <label className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => update.mutate({ agent: agent.name, enabled: event.target.checked })}
+          disabled={update.isPending}
+          aria-label={`Enable the GitHub MCP server for ${agent.name}`}
+          className="control-choice mt-0.5"
+        />
+        <span className="text-sm" style={{ color: 'var(--text)' }}>
+          Enable the built-in GitHub server
+        </span>
+      </label>
+      <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+        While this is on, every call to it under Workspace only is asked — never allowed
+        outright. A runner's own pre-approval flags (<code>--allow-tool</code>,{' '}
+        <code>--allow-all-tools</code>) bypass this card regardless of this setting.
       </p>
       {update.isError && (
         <p className="text-xs" style={{ color: 'var(--red)' }}>Could not save.</p>

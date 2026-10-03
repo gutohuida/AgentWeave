@@ -444,7 +444,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
     captured none, this case and the mapping are removed (design D9; operator-accepted
     2026-09-28), with the two spec scenarios on reporting a failed or starting server;
   - `GET /agents` returns `copilot_github_mcp` in the agent's `config`.
-- [ ] 1.14 (C, B, D) UI tests.
+- [x] 1.14 (C, B, D) UI tests.
   - `hub/ui/src/__tests__/runnerProviderConfig.test.tsx`: the Runners page shows provider fields only
     when the CLI is `copilot`. It shows the D7 sentence about API keys and Claude Max, and renders a
     refusal's own sentence beside the key field (served in the order `POST /runners` returns it).
@@ -466,8 +466,13 @@ scratch copy (DEAD-ENDS 2026-09-27).
   uncheck that never filtered the stored list).
   **Runner half done 2026-10-03 (night iter 8):** `runnerProviderConfig.test.tsx`, 10 passed (the
   first and third bullets; the composer case renders `NewConversationSurface`). Each of 12
-  mutations of the code it covers fails a named case. `copilotAgentSettings.test.tsx` (B, D) is
-  not written.
+  mutations of the code it covers fails a named case.
+  **D half done 2026-10-03 (night iter 12):** the GitHub-server control added to the same file, 10
+  more tests (20 total), covering: shown only for `copilot`, absent for `claude`/`codex`/unbound;
+  checked state matches `config.copilot_github_mcp`; a check/uncheck each PATCH `{enabled}`; the
+  help text's two sentences (asked under Workspace only while on; a runner's pre-approval flags
+  bypass the card); lives under Execution only. Two mutations caught (dropping the
+  `runner === 'copilot'` gate failed 3 cases; forcing `checked` to a constant failed 2).
 
 ## 2. Group A — Copilot's lifecycle reaches the Hub
 
@@ -755,14 +760,23 @@ scratch copy (DEAD-ENDS 2026-09-27).
     `test_runner_provider_config.py` -- 320 passed. `ruff check`, `black --check --target-version
     py311` (after one reformat of the new file), `mypy src/` clean. Full `hub/tests/` and CLI suite
     not yet run this iteration -- queued as part of 6.1, the full-suite task next in the group.
-- [ ] 5.2 Agent Settings UI: add a GitHub-server toggle shown only for `copilot` agents; its help
+- [x] 5.2 Agent Settings UI: add a GitHub-server toggle shown only for `copilot` agents; its help
   text says that while it is on every non-Hub MCP call under Workspace only is asked, and that a
   runner's pre-approval flags (`--allow-tool`, `--allow-all-tools`) bypass the card (review
   2026-09-28, finding 11). Pass its part of test 1.14. Run lint, vitest, build and bundle refresh as in 3.4.
+  **Done 2026-10-03 (night iter 12).** `CopilotGithubMcpSetting` (`AgentSettingsControls.tsx`): a
+  single checkbox reading `agent.config?.copilot_github_mcp === true`, PATCHing
+  `{config: {copilot_github_mcp: enabled}}` through a new `useUpdateAgentGithubMcp` hook
+  (`api/agents.ts`), same merge-patch shape as the review-agents setting. Rendered in
+  `AgentSettingsPage.tsx` under Execution, gated on `agent.runner === 'copilot'`, below the
+  review-agents row. Help text states both finding-11 sentences verbatim. `copilotAgentSettings.test.tsx`
+  gained a second `describe` block, 10 tests (20 total in the file, up from iter 9's 10); two
+  mutations caught (see 1.14). `npm run lint` clean. `npx vitest run`: 1863 passed (178 files; +10
+  over iter 10's 1853/177). `npm run build`, `py -3.11 scripts/refresh_ui_bundle.py`.
 
 ## 6. Full suite
 
-- [ ] 6.1 Run exactly what CI runs:
+- [x] 6.1 Run exactly what CI runs:
   - `ruff check src/ hub/ tests/`
   - `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`
   - `mypy src/`
@@ -771,6 +785,15 @@ scratch copy (DEAD-ENDS 2026-09-27).
   - `cd hub/ui && npm run lint && npx vitest run`
 
   All green.
+  **Done 2026-10-03 (night iter 12).** `ruff check` clean; `black --check --target-version py311`
+  clean (689 files unchanged); `mypy src/` clean (22 files). `pytest tests/ -q`: 565 passed, 3
+  skipped. `pytest hub/tests/ -q`: **6522 passed, 88 skipped** (0:46:02) — the first full run of
+  this window, not a targeted regression; its only non-pass signal is a pre-existing
+  `test_surface_ceilings.py` `UserWarning` ("routes with no client anywhere dropped to 27 from a
+  ceiling of 31") on a route-count ratchet this change's UI-only diff cannot move, and benign
+  `aiosqlite`/asyncio teardown thread warnings also unrelated to any file this change touched —
+  neither is a failure, exit code 0. `npm run lint` clean; `npx vitest run`: 1863 passed (178
+  files). This closes group D.
 
 ## 7. Drive
 
