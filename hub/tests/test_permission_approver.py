@@ -435,6 +435,26 @@ _TABLE = [
     _row("1.4s", "cp x $HOME.bak", False, _UNCHECKED),
     _row("1.4t", "cp x $PWD..", False, _UNCHECKED),
     _row("1.4u", "cp x ${HOME-y}", False, _UNCHECKED),
+    # a-drive-or-a-home-variable-names-a-directory-by-itself, task 1.5: controls that must stay
+    # allowed -- none of these names a directory variable from D2's list. IDs skip 1.5a-1.5c: each
+    # names a separate, later task (the accepted costs, D4's drive/tilde/glob rows, and
+    # `_drive_exists`). Each row PASSES today.
+    _row("1.5d", "echo $x", True),
+    _row("1.5e", "for f in $files; do echo $f; done", True),
+    _row("1.5f", 'test -n "$VAR"', True),
+    _row("1.5g", "echo $HOMEDIR", True),  # a prefix match, not HOME itself
+    _row("1.5h", "echo '$HOMEDIR'", True),
+    _row("1.5i", "tmp=$(mktemp); cp x $tmp", True),  # a lowercase user variable
+    _row("1.5j", "cp x $(git rev-parse --show-toplevel)", True),  # names no directory variable
+    _row(
+        "1.5k",
+        "git commit -m \"$(cat <<'EOF'\nfix the judge\nEOF\n)\"",
+        True,
+    ),
+    # (R6) a PowerShell script variable, not the environment's -- `$TEMP`/`$tmp` have no `env:`
+    # prefix, unlike `$env:USERPROFILE`/`$ENV:temp` in 1.4n/1.4o.
+    _row("1.5l", "$tmp = New-TemporaryFile; Remove-Item $tmp", True, tool="PowerShell"),
+    _row("1.5m", "Copy-Item x $TEMP", True, tool="PowerShell"),
 ]
 
 # Windows reads `\` as a separator, so these rows moved there. On POSIX, where `\` is an ordinary

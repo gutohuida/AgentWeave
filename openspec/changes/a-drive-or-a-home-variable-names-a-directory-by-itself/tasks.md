@@ -75,12 +75,25 @@
   Controls allowed: `cp n sub`, `ls in` (an inside link), `cp -r n newdir`, `grep -r foo --exclude-dir=node_modules .` with no `node_modules` link. With `node_modules` a link to outside, that grep is **refused**: assert it, so the accepted cost stays visible.
 
   (R8, the third review's LOW; the sibling's D8 step 2) With `node_modules`, `venv` and `.venv` each a link to outside at the workspace root, a bare bracket expression is matched as the shell matches it, not as `*`. Allowed: Bash `grep '[0-9]' f`, `tr '[:upper:]' '[:lower:]'` and `grep '[[:digit:]]' f` (the bracket-kept words `[0-9]`, `[:upper:]`, `[:lower:]` and `[[:digit:]]` reach step 3), and PowerShell `Select-String '[0-9]' f` (no dot rule there, so `.venv` would match a `*`). Each PASSES today (allowed, measured) and FAILS against the sibling's D8 as R7 wrote it (every bracket expression relaxed to `*`, which matches the links). In the same fixture `cp n [u]p` and `cp n u[p]` stay refused, naming where `up` resolves: the second review's HIGH 1 is not reopened (`fnmatch` matches both to `up`, measured).
-- [ ] 1.5 F401 controls that must stay allowed. Each PASSES today and names the rule it catches:
+- [x] 1.5 F401 controls that must stay allowed. Each PASSES today and names the rule it catches:
   - `echo $x`, `for f in $files; do echo $f; done`, `test -n "$VAR"`;
   - `echo $HOMEDIR` (a prefix match), `echo '$HOMEDIR'`;
   - `tmp=$(mktemp); cp x $tmp` (a lowercase user variable), `cp x $(git rev-parse --show-toplevel)` (a substitution naming no directory variable);
   - the commit heredoc `git commit -m "$(cat <<'EOF'` / `fix the judge` / `EOF` / `)"`;
   - (R6) PowerShell: `$tmp = New-TemporaryFile; Remove-Item $tmp` and `Copy-Item x $TEMP` (a script variable, not the environment's). Each PASSES today and FAILS against R5, whose PowerShell pattern made the `env:` prefix optional for every name.
+
+  **Measured, then built.** Ran all 10 rows directly against `_decide` before touching the test
+  file: each is `allow=True` today, matching the claim. Added rows `1.5d`-`1.5m` to `_TABLE` in
+  `hub/tests/test_permission_approver.py` (letters `a`-`c` skipped: `tasks.md` reserves them for
+  tasks 1.5a-1.5c, each its own later task, matching the convention task 1.4's table already uses
+  for `1.4b`-`1.4f`). No production code changed -- these are forward-looking regression guards for
+  D2's fix, same category as task 1.2's precedent. `py -3.11 -m pytest
+  hub/tests/test_permission_approver.py -q`: 331 passed, 1 skipped (up from 321; +10 rows). The
+  broader regression set (adds `test_the_shell_judge_reads_a_word_whole.py`,
+  `test_hub_own_call.py`, `test_copilot_acp_decide.py`,
+  `test_a_write_outside_the_workspace_is_recorded.py`): 685 passed, 2 skipped, nothing broken.
+  `ruff check` and `black --check --target-version py311`: both clean, no reformat needed.
+  `git diff --stat` confirms only the test file changed.
 - [ ] 1.5a (R4, the accepted costs, asserted refused so that a change of mind is visible) `echo '$HOME'`, `grep '$HOME' f`, `cp x $(dirname $PWD)`, and the commit heredoc whose body line is `use $HOME for config`. Each PASSES today (allowed), so each FAILS today, and the first three also FAIL against R3. (R6) Also PowerShell `Copy-Item x $PWD.Path` and `Write-Output $HOME.Length`, refused (member access; design Costs). Each FAILS today (allowed)
 - [ ] 1.5b (R3, design D4). Each FAILS today (allowed):
   - Windows, Bash tool: `python w.py <other>:` and `powershell -c 'Copy-Item x <other>:'`, with `<other>` an existing drive as in 1.1, refused as outside;
