@@ -233,7 +233,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
 
   This is a guard: it fails today only because the writer does not exist yet. Say so in the
   docstring.
-- [ ] 1.7 (C) `hub/tests/test_runner_provider_config.py`, through `POST /runners` and
+- [x] 1.7 (C) `hub/tests/test_runner_provider_config.py`, through `POST /runners` and
   `PATCH /runners/{id}`:
   - a `copilot` runner with `{type:"anthropic", api_key_var:"MY_ANTHROPIC_KEY"}` and model
     `claude-haiku-4-5-20251001` is created and returned with `api_key_var`, **no** key, and
@@ -272,6 +272,15 @@ scratch copy (DEAD-ENDS 2026-09-27).
     `checkpoint_model: "claude-haiku-4-5-20251001"` succeeds.
 
   Run `py -3.11 -m pytest hub/tests/test_runner_provider_config.py -v`.
+  **Done 2026-10-03 (night iter 3): 42 passed.** Against HEAD `427bd1a` in a scratch worktree: 42
+  failed (the create answers FastAPI's 422 `extra_forbidden` with the pasted key in
+  `detail[].input` -- finding 15 as predicted). Ten mutations of the real implementation (variable
+  pattern, alias-resolving model rule, Hub-credential names, a prefix-matched base URL, unknown
+  field, the PATCH pair judgement, the removal check, PATCH flags, the checkpoint check, the
+  response flag) each fail a named test. The "PATCH /projects" case is the route
+  `PUT /projects/{id}/settings`, the one settings write there is. It is judged only when the
+  `(checkpoint_runner_id, checkpoint_model)` pair changes, so a model stored before the runner
+  gained a provider does not block unrelated saves (generation ignores it instead, task 3.3).
 - [ ] 1.8 (C) `hub/tests/test_copilot_byok_env.py`: with `monkeypatch.setenv("MY_ANTHROPIC_KEY",
   "sk-ant-test-value")`, the run environment built for the provider runner (`resolve_agent_env`
   with the runner's `provider_config`, as the trigger calls it; design D7) has
@@ -336,9 +345,13 @@ scratch copy (DEAD-ENDS 2026-09-27).
   Repeat with `MY_ANTHROPIC_KEY=plainproxykey123` (a key no `sk-`/`aw_live_` pattern matches, as on a
   localhost proxy). A tool result must not be the only carrier: this test fails on today's
   `text_event` (the F190 pattern). After the run is finalised the registry holds nothing for it.
-- [ ] 1.10 (C) Migration. `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py`
+- [x] 1.10 (C) Migration. `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py`
   head assertions name the new revision, and `runners.provider_config` exists after upgrade from the
   previous head. These fail until the migration exists.
+  **Done 2026-10-03 (night iter 3):** `HEAD_REVISION = "0118"` in both files; two tests
+  (`test_migration_adds_runner_provider_config_and_keeps_an_existing_runner`, `..._downgrade_drops_...`)
+  red before `0118` existed (3 failed + the persistence head), green after: 129 passed, 1 skipped
+  over both files.
 - [ ] 1.11 (B) `hub/tests/test_review_turn_copilot_agents.py`, rendering through
   `_render_hub_agent_context` with a real `ReviewContext` (pattern:
   `test_review_turn.py::test_the_turn_context_says_this_is_a_review_and_names_the_task_and_commit`).
@@ -468,9 +481,9 @@ scratch copy (DEAD-ENDS 2026-09-27).
 
 ## 3. Group C — BYOK on a Copilot runner
 
-- [ ] 3.1 Add the migration for `runners.provider_config` (nullable JSON), following
+- [x] 3.1 Add the migration for `runners.provider_config` (nullable JSON), following
   `.claude/rules/db-migrations.md`: guard a missing table, and bump both head assertions. Add the
-  column to `hub/hub/db/models.py::Runner`. Pass test 1.10.
+  column to `hub/hub/db/models.py::Runner`. Pass test 1.10. **Done 2026-10-03: `0118_runner_provider_config.py`.**
 - [ ] 3.2 `hub/hub/schemas/runners.py`: add a `ProviderConfig` model with the validation in design D7,
   and add it to the create, update and response schemas. `hub/hub/api/v1/runners.py`: add the
   checks as 400s with a string `detail` (CLI is `copilot`; `type` is `anthropic`; `api_key_var` is a
@@ -486,6 +499,13 @@ scratch copy (DEAD-ENDS 2026-09-27).
   provider rule for a provider checkpoint runner is refused (finding 1).
   (R3) `agent_trigger.py:802`: a provider runner's model is `runner_row.model` whatever
   `conversation.runtime_overrides` holds. Pass test 1.7 and the per-run half of 1.8.
+  **Partly done 2026-10-03 (night iter 3): everything except the two `agent_trigger.py` sites.**
+  `hub/hub/runner_provider.py` holds the rules (sentences never repeat a submitted value);
+  `RunnerCreate`/`RunnerUpdate.provider_config` are `Optional[Any]` (not `Dict`: a string there
+  would 422 with the value echoed); `ProviderConfig` is the response's stored shape, read
+  defensively; the runner routes and the settings route apply the checks. Test 1.7 passes. **Still
+  open:** the `:1618` override refusal and the `:802` stored-override bypass, taken with 1.8's
+  per-run half.
 - [ ] 3.3 Environment and launchability (design D7):
   - `provider_config` reaches `resolve_agent_env` through `config` (R3: no new parameter), and the
     Copilot `guard_env` (given `config`; *Required of slices 1–4*, 1.3) sets the provider

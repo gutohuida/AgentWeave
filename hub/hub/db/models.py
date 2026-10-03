@@ -316,6 +316,10 @@ class Runner(Base):
     cli: Mapped[str] = mapped_column(String(16), nullable=False)
     model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     flags: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # A Copilot runner's model provider, `{type, base_url, api_key_var}` (migration 0118;
+    # a-copilot-agent-uses-hooks-and-its-own-agents design D7). `api_key_var` names a variable in
+    # the Hub's environment; the key itself is stored nowhere. NULL: the CLI's own subscription.
+    provider_config: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False

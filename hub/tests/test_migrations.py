@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0117"
+HEAD_REVISION = "0118"
 
 
 # ---------------------------------------------------------------------------
@@ -4646,3 +4646,72 @@ def test_migration_downgrade_drops_both_tables_copilot_credit_columns(tmp_path) 
     after = _credit_columns_present(db_file)
     assert not any(after["turn_usage"].values()), after["turn_usage"]
     assert not any(after["worker_invocations"].values()), after["worker_invocations"]
+
+
+# ---------------------------------------------------------------------------------------------
+# 0118 -- BYOK on a Copilot runner (a-copilot-agent-uses-hooks-and-its-own-agents, design D7):
+# runners gain a nullable `provider_config` JSON column. Task 1.10.
+# ---------------------------------------------------------------------------------------------
+
+
+def _database_at_0117(tmp_path, name: str) -> tuple:
+    """Every table from the models, minus `runners.provider_config`, stamped at 0117."""
+    db_file = tmp_path / name
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("ALTER TABLE runners DROP COLUMN provider_config")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0117')")
+        conn.commit()
+    return db_file, db_url
+
+
+def _runner_columns(db_file: Path) -> dict:
+    with sqlite3.connect(db_file) as conn:
+        return {row[1]: row for row in conn.execute("PRAGMA table_info(runners)")}
+
+
+def test_migration_adds_runner_provider_config_and_keeps_an_existing_runner(tmp_path) -> None:
+    """Design D7: `runners.provider_config` is nullable, and a runner stored before this change
+    survives the upgrade with NULL there -- it is a subscription runner, as it always was."""
+    db_file, db_url = _database_at_0117(tmp_path, "up_provider_config.db")
+    assert "provider_config" not in _runner_columns(db_file)
+    stamp = "2026-01-01T00:00:00Z"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('proj-1', 'p', " f"'{stamp}')"
+        )
+        conn.execute(
+            "INSERT INTO runners (id, project_id, name, cli, model, created_at, updated_at) "
+            f"VALUES ('runner-old', 'proj-1', 'old', 'copilot', 'auto', '{stamp}', '{stamp}')"
+        )
+        conn.commit()
+
+    _upgrade_to(db_url, "head")
+
+    columns = _runner_columns(db_file)
+    assert "provider_config" in columns
+    assert columns["provider_config"][3] == 0, "provider_config must be nullable"
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0118"
+        row = conn.execute(
+            "SELECT cli, model, provider_config FROM runners WHERE id = 'runner-old'"
+        ).fetchone()
+    assert row == ("copilot", "auto", None)
+
+
+def test_migration_downgrade_drops_runner_provider_config(tmp_path) -> None:
+    db_file, db_url = _database_at_0117(tmp_path, "down_provider_config.db")
+    _upgrade_to(db_url, "head")
+    assert "provider_config" in _runner_columns(db_file)
+
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0117")
+
+    assert "provider_config" not in _runner_columns(db_file)

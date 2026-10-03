@@ -28,6 +28,7 @@ from ...project_workspace import (
     raise_workspace_http_error,
     resolve_project_workspace,
 )
+from ...runner_provider import has_provider, provider_model_problem
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...utils import persist_event
@@ -492,6 +493,24 @@ async def update_project_settings(
                     f"Unknown runner '{runner_id}': no runner by that id belongs to this project"
                 ),
             )
+        # A checkpoint runner on a model provider sends `checkpoint_model` to that provider's API
+        # as is, so it must be a Claude API model id (a-copilot-agent-uses-hooks-and-its-own-agents
+        # design D7, review finding 1). Judged only when the pair is newly set: one stored before
+        # the runner gained a provider is ignored at generation instead, and must not block every
+        # unrelated settings save.
+        pair_changed = (merged.checkpoint_runner_id, merged.checkpoint_model) != (
+            project.checkpoint_runner_id,
+            project.checkpoint_model,
+        )
+        if (
+            field_name == "checkpoint_runner_id"
+            and pair_changed
+            and merged.checkpoint_model is not None
+            and has_provider(runner.provider_config)
+        ):
+            problem = provider_model_problem(merged.checkpoint_model)
+            if problem is not None:
+                raise HTTPException(status_code=400, detail=f"checkpoint_model: {problem}")
     # A merge target that does not exist would fail silently at approval time, recorded as a skip
     # nobody expected. Refused here instead, where the operator is looking at the field.
     main_branch_newly_named = bool(merged.main_branch) and merged.main_branch != project.main_branch

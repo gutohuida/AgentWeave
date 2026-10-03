@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "ghcp-s5-c-impl",
-    "next_action": "Task 1.1 is DONE (2026-10-03, real capture): session.compaction_start/compaction_complete/error held real over ACP; subagent.started/completed/failed did NOT arrive (run (b)'s explore-agent prompt never dispatched a subagent -- see design.md Round log 'Task 1.1, real capture, 2026-10-03'). Per 1.1's own instruction, group A (ghcp-s5-a-impl: tasks 1.2-1.6, 2.1-2.8) is STOPPED and blocked on the operator -- spec-queue/DECISIONS.md 'ghcp-s5-subagent-capture' (OPEN), carried in decisions_for_user. Do not start group A tasks. Move to ghcp-s5-c-impl (group C, BYOK on a Copilot runner): task 1.7 first (hub/tests/test_runner_provider_config.py, through POST/PATCH /runners -- the full case list is in tasks.md). This group is tagged 'opus' in the queue; run it on that model. Size each firing to finish; group C spans several firings (1.7-1.10, 3.1-3.5, its part of 1.14).",
+    "next_action": "Group C (ghcp-s5-c-impl), second slice: finish task 3.2's two agent_trigger.py sites with task 1.8's per-run half -- a per-run `model` override on a provider runner is refused 400 with no run created and runtime_overrides unchanged (the validate_overrides call near :1618), and a stored runtime_overrides model is ignored for a provider runner in favour of runner_row.model (near :802). Then, if the firing has room, 1.8's environment half with 3.3's copilot_provider_env (whole COPILOT_PROVIDER_ prefix strip, then exactly TYPE/BASE_URL/API_KEY via os.environ.get + COPILOT_MODEL) and runner_probe_config. Rules live in hub/hub/runner_provider.py (stored_provider_config reads a row defensively). Group A stays blocked on DECISIONS ghcp-s5-subagent-capture.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -26,7 +26,7 @@
             "status": "open",
             "model": "opus",
             "title": "Slice 5 group C: BYOK on a Copilot runner (security-sensitive, on Opus)",
-            "detail": "1.7-1.10, 3.1-3.5 (migration runners.provider_config; exact-value scrub; whole-prefix strip; urlsplit check), its part of 1.14. Follow the migration rules in .claude/rules/."
+            "detail": "Done iter 3: 1.7, 1.10, 3.1, and 3.2 except its agent_trigger sites. Left: 3.2 trigger sites, 1.8, 1.9, 3.3, 3.4 (UI), 3.5 (run_secrets scrub), its part of 1.14."
         },
         {
             "id": "ghcp-s5-b-impl",
@@ -79,7 +79,9 @@
             "title": "B4 sibling (12/31), drive-gated tasks only once the sibling's pieces land"
         }
     ],
-    "decisions_for_user": ["ghcp-s5-subagent-capture"],
+    "decisions_for_user": [
+        "ghcp-s5-subagent-capture"
+    ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
