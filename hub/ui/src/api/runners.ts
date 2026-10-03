@@ -4,6 +4,22 @@ import { useConfigStore } from '@/store/configStore'
 
 export type RunnerCli = 'claude' | 'codex' | 'copilot'
 
+/** A Copilot runner's model provider (BYOK, `a-copilot-agent-uses-hooks-and-its-own-agents` D7):
+ * the provider's address and the *name* of a variable in the Hub's environment that holds its key.
+ * The key itself is never sent, stored or returned. */
+export interface ProviderConfig {
+  type: 'anthropic'
+  base_url: string
+  api_key_var: string
+}
+
+/** What the dialog submits. `base_url` is omitted for the provider's own address. */
+export interface ProviderConfigInput {
+  type: 'anthropic'
+  base_url?: string
+  api_key_var: string
+}
+
 export interface Runner {
   id: string
   project_id: string
@@ -11,6 +27,9 @@ export interface Runner {
   cli: RunnerCli
   model?: string | null
   flags?: string[] | null
+  /** Set on a Copilot runner whose runs go to a model provider; its model is then a Claude API id
+   * and every run uses it (design D7). A damaged stored value reads as null here. */
+  provider_config?: ProviderConfig | null
   created_at: string
   updated_at: string
   /** True when `model` is set but the catalog does not declare it for `cli` — a runner created
@@ -24,6 +43,7 @@ export interface RunnerCreate {
   name: string
   cli: RunnerCli
   model?: string | null
+  provider_config?: ProviderConfigInput
 }
 
 /** `model` is omitted to leave it alone and sent as `null` to clear it back to the provider's
@@ -31,6 +51,8 @@ export interface RunnerCreate {
 export interface RunnerUpdate {
   name?: string
   model?: string | null
+  /** As `model`: omitted leaves it alone, `null` removes the provider. */
+  provider_config?: ProviderConfigInput | null
 }
 
 export interface RunnerLaunchability {

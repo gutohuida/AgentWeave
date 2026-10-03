@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ghcp-s5-c-impl",
-    "next_action": "Group C (ghcp-s5-c-impl), sixth and last slice: task 3.4, the Runners page (hub/ui/src/components/runners/RunnersPage.tsx): provider fields for `copilot` only (type select, base URL, key variable name), the D7 API-key/Claude Max sentence, a refusal's own sentence beside the key field (in the order POST /runners returns it), the composer's model control hidden for an agent on a provider runner in favour of the runner's model, and (finding 9) with a provider set the model picker lists `claude` catalog ids only, toggling the provider resets the model. With the runner half of test 1.14 (hub/ui/src/__tests__/runnerProviderConfig.test.tsx, plus the composer case). Then npm run lint, npx vitest run, npm run build, py -3.11 scripts/refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together; drive in a browser against the served bundle on a source Hub (scripts/drive/d1_aturn_browser.py is the pattern). Then close group C.",
+    "current": "ghcp-s5-b-impl",
+    "next_action": "Group B (ghcp-s5-b-impl), first slice, backend: write hub/tests/test_review_turn_copilot_agents.py (tests 1.11 and 1.12) with tasks 4.1 (review_turn.prepare_review_turn computes ReviewContext.base_sha = git merge-base <commit> <Project.main_branch> BEFORE ensure_review_checkout, None on any failure or when equal to the commit, never raising) and 4.2 (the D8 bullet in _render_hub_agent_context's review section; copilot_review_agents validated in the agent PATCH route, list first then vocabulary; renderer filters/ignores a non-list; add to ROSTER_CONFIG_KEYS and fix tests pinning that tuple). Red then green, mutation-check, the F392 regression union, CLI suite. Drive a review turn's rendered context on a source Hub. Second slice after it: 4.3 (Agent Settings review-agents control, copilot only, help text per finding 13) with its part of copilotAgentSettings.test.tsx, browser-driven, bundle refreshed.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -23,16 +23,16 @@
         },
         {
             "id": "ghcp-s5-c-impl",
-            "status": "open",
+            "status": "done",
             "model": "opus",
             "title": "Slice 5 group C: BYOK on a Copilot runner (security-sensitive, on Opus)",
-            "detail": "Done iters 3-7: 1.7, 1.8, 1.9, 1.10, 3.1, 3.2, 3.3, 3.5. Left: 3.4 (UI) with the runner half of 1.14."
+            "detail": "Done iters 3-8 (1.7-1.10, 3.1-3.5, runner half of 1.14). Its drive tasks 7.5/7.6 belong to ghcp-s5-drive."
         },
         {
             "id": "ghcp-s5-b-impl",
             "status": "open",
             "title": "Slice 5 group B: Copilot review agents on review turns",
-            "detail": "1.11, 1.12, 4.1-4.3, its part of 1.14."
+            "detail": "1.11, 1.12, 4.1, 4.2 (slice 1, backend); 4.3 with its part of 1.14 (slice 2, UI)."
         },
         {
             "id": "ghcp-s5-d-impl",

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { postureAtRest, useAgents } from '@/api/agents'
 import { useRunners } from '@/api/runners'
+import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
 import { useWorkspacePaths } from '@/api/workspace'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
@@ -68,6 +69,7 @@ export function NewConversationSurface({
   const handleSubmit = async (message: string): Promise<void> => {
     if (!agent) return
     setError(null)
+    const sentOverrides = overridesForRunner(pendingOverrides, runnerRow)
 
     /* The document is created BEFORE the turn, not after it. Creating it afterwards left the
      * first message — the one that decides how the agent frames the whole exploration — with no
@@ -102,7 +104,7 @@ export function NewConversationSurface({
         agent,
         message,
         spec_document: specDocument ?? undefined,
-        overrides: Object.keys(pendingOverrides).length > 0 ? pendingOverrides : undefined,
+        overrides: Object.keys(sentOverrides).length > 0 ? sentOverrides : undefined,
       }),
     })
     if (!response.ok) {
@@ -209,6 +211,7 @@ export function NewConversationSurface({
               workspacePaths={workspacePaths}
               runner={runnerRow?.cli ?? null}
               effectiveModel={runnerRow?.model ?? null}
+              modelIsRunners={runnerSetsModel(runnerRow)}
               effectiveControls={postureAtRest(agentRow)}
               pendingOverrides={pendingOverrides}
               onPendingOverridesChange={setPendingOverrides}

@@ -19,6 +19,7 @@ import {
 import { NEW_CONVERSATION_ID } from '@/lib/navigation'
 import { useQueueStatus, useQueuedEntries, releaseQueueEntry, withdrawQueueEntry } from '@/api/queue'
 import { useRunners } from '@/api/runners'
+import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
 import { useWorkspacePaths } from '@/api/workspace'
 import {
   continueConversation,
@@ -1006,7 +1007,7 @@ export function AgentOutputPanel({
         outgoingMessage,
         currentConversationId,
         agent.name,
-        emptyToUndefined(pendingOverrides),
+        emptyToUndefined(overridesForRunner(pendingOverrides, targetRunnerRow)),
       )
       if (result.conversation_id !== currentConversationId) moveTo(result.conversation_id)
       if (startsFresh) {
@@ -1319,6 +1320,7 @@ export function AgentOutputPanel({
               workspacePaths={workspacePaths}
               runner={targetRunnerRow?.cli ?? null}
               effectiveModel={targetRunnerRow?.model ?? null}
+              modelIsRunners={runnerSetsModel(targetRunnerRow)}
               // At rest the Permissions pill has to show what the run will actually do. The Hub
               // applies the agent's default when the conversation states none, so without this
               // the pill would sit at the catalog default while the run went elsewhere — the

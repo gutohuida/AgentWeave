@@ -449,6 +449,10 @@ scratch copy (DEAD-ENDS 2026-09-27).
     runner's model (design D7).
 
   Run `cd hub/ui && npx vitest run runnerProviderConfig copilotAgentSettings`.
+  **Runner half done 2026-10-03 (night iter 8):** `runnerProviderConfig.test.tsx`, 10 passed (the
+  first and third bullets; the composer case renders `NewConversationSurface`). Each of 12
+  mutations of the code it covers fails a named case. `copilotAgentSettings.test.tsx` (B, D) is
+  not written.
 
 ## 2. Group A — Copilot's lifecycle reaches the Hub
 
@@ -582,7 +586,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
   GitHub subscription, since no launchability check precedes a one-shot. Driven on a source Hub
   (port 8020, a local fake provider): the checkpoint one-shot's requests reached the provider with
   the key in `x-api-key` and the runner's model.
-- [ ] 3.4 The Runners page (`hub/ui/src/components/runners/RunnersPage.tsx`):
+- [x] 3.4 The Runners page (`hub/ui/src/components/runners/RunnersPage.tsx`):
   - provider fields for `copilot` (type select, base URL, key variable name);
   - the API-key/Claude Max sentence;
   - the refusal shown beside the field;
@@ -594,6 +598,17 @@ scratch copy (DEAD-ENDS 2026-09-27).
   Pass the runner half of test 1.14. Then run `cd hub/ui && npm run lint && npx vitest run`, then
   `npm run build` and `py -3.11 scripts/refresh_ui_bundle.py`. Commit `hub/ui/src` and
   `hub/hub/static/ui` together.
+  **Done 2026-10-03 (night iter 8).** `RunnersPage.tsx`: for a `copilot` runner, a "Send runs to a
+  model provider" checkbox revealing Provider (Anthropic only), Base URL and Key variable name, the
+  D7 sentence under the key field, and the Hub's refusal rendered there (else at the foot as
+  before). With a provider the model list is the served `claude` catalog's ids behind a disabled
+  placeholder; each toggle clears the model; edit sends `provider_config` (or `null`) for a Copilot
+  runner. The composer (`ComposerModelControls`, via `runnerSetsModel` in `lib/runnerProvider.ts`)
+  shows the runner's model as a static pill. **Beyond the task's words:** both composer callers
+  drop a stored `model` override for a provider runner (`overridesForRunner`), since the trigger
+  refuses it 400 and a conversation seeded before the rebind carries one (driven: 400 by API with
+  it, 200 from the composer without it). `npm run lint` clean, `npx vitest run` 1843 passed.
+  Driven in Chromium against the served bundle on a source Hub (port 8022).
 - [x] 3.5 (C; review 2026-09-28, finding 2) The per-run exact-value scrub: a `run_secrets` registry
   (in-process, never persisted), registered by the trigger with the resolved
   `COPILOT_PROVIDER_API_KEY` before the spawn and forgotten when the run is finalised; applied in
@@ -707,6 +722,12 @@ every run id, and paste each surface's text verbatim into the Round log.
 
   Then grep the trial database file (read-only, `mode=ro`) for `sk-ant-not-a-name`. There must be no
   match.
+  *Pre-driven 2026-10-03 night iter 8 on a source drive Hub (:8022), not :8010, so still open:* the
+  pasted value was refused 400 beside the key field with `api_key_var must be the name of an
+  environment variable (capital letters, digits and underscores, such as MY_ANTHROPIC_KEY), not the
+  key itself. Put the key in the Hub's environment and name that variable here.`; the runner on
+  unset `MY_ANTHROPIC_KEY` was created, and creating an agent on it was refused 409 naming
+  `$MY_ANTHROPIC_KEY`; 0 matches in the database file, any column, and the Hub log.
 - [ ] 7.6 (C, **operator key only**) **Preconditions (operator decision 2026-09-28, design D7 and
   Open question 8), all required before the key is set:**
   - the fixes for review findings 2 (the exact-value scrub, task 3.5), 3 (the whole-prefix strip,

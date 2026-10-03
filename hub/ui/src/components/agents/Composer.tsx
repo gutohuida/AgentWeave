@@ -47,6 +47,8 @@ export interface ComposerProps {
   /** The value each control will use if the operator sends without touching it — the
    * runner's own model / the catalog's declared default, resolved by the caller. */
   effectiveModel?: string | null
+  /** The runner sends its own model to a model provider: `effectiveModel` is shown, not offered. */
+  modelIsRunners?: boolean
   effectiveControls?: Record<string, string>
   /** The overrides the operator has actively chosen this composer session; empty means
    * "no override, inherit the resolved effective values above." Sent with the next
@@ -94,6 +96,7 @@ export function Composer({
   workspacePaths = [],
   runner = null,
   effectiveModel = null,
+  modelIsRunners = false,
   effectiveControls = {},
   pendingOverrides = {},
   onPendingOverridesChange = () => undefined,
@@ -330,7 +333,8 @@ export function Composer({
         <div className="flex min-w-0 flex-wrap items-center gap-2" data-slot="composer-control-row-leading">
           <ComposerModelControls
             runner={runner}
-            effectiveModel={pendingOverrides.model ?? effectiveModel}
+            effectiveModel={modelIsRunners ? effectiveModel : (pendingOverrides.model ?? effectiveModel)}
+            modelIsRunners={modelIsRunners}
             effectiveControls={{ ...effectiveControls, ...pendingOverrides }}
             onChangeModel={(modelId) =>
               onPendingOverridesChange({ ...pendingOverrides, model: modelId })

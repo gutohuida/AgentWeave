@@ -3,6 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { ModelPicker } from './ModelPicker'
 import { useModelCatalog, providerForRunner, type ControlDescriptor } from '@/api/modelCatalog'
+import { providerRunnerModelLabel } from '@/lib/runnerProvider'
 
 /** The AgentWeave counterpart of t3code's `composerControlClassName` (design.md Decision
  * 1) — every composer trigger (model, effort, conversation routing, target agent) renders
@@ -26,6 +27,10 @@ interface ComposerModelControlsProps {
   effectiveControls: Record<string, string>
   onChangeModel: (modelId: string) => void
   onChangeControl: (controlId: string, value: string) => void
+  /** The agent's runner sends its model to a model provider (`a-copilot-agent-uses-hooks-and-its-own-agents`
+   * design D7): every run uses the runner's model, `effectiveModel`, and a run cannot choose
+   * another, so it is shown and not offered. Its other controls are the CLI's and stay offered. */
+  modelIsRunners?: boolean
 }
 
 /** A compact "Label: Value ▾" trigger + popover listbox — the one interaction shape every
@@ -123,6 +128,21 @@ export function ControlOption({
   )
 }
 
+/** The model a provider runner sends, shown in the pill's place with nothing to open. */
+function RunnerModel({ model, label }: { model: string | null; label: string | undefined }) {
+  const shown = label ?? model ?? '—'
+  return (
+    <span
+      data-slot="composer-runner-model"
+      className={`${composerControlClassName} inline-flex h-8 min-w-0 max-w-full items-center gap-1 px-2.5 text-xs`}
+      title={`Model: ${shown}. This agent's runner sends its own model to its provider; change it on the runner.`}
+    >
+      <span className="shrink-0" style={{ color: 'var(--text-3)' }}>Model: </span>
+      <span className="min-w-0 truncate">{shown}</span>
+    </span>
+  )
+}
+
 // The model list gets its own picker (search, grouping, favourites — §4b) rather than the
 // generic ControlPill/ControlOption listbox every other pill (Effort, "To") still uses:
 // it is the one control the catalog is expected to grow past a flat handful of options.
@@ -172,6 +192,7 @@ export function ComposerModelControls({
   effectiveControls,
   onChangeModel,
   onChangeControl,
+  modelIsRunners = false,
 }: ComposerModelControlsProps) {
   const { data: catalog } = useModelCatalog()
   const providerId = providerForRunner(runner)
@@ -180,7 +201,11 @@ export function ComposerModelControls({
 
   return (
     <>
-      <ModelPicker provider={provider} effectiveModel={effectiveModel} onChangeModel={onChangeModel} />
+      {modelIsRunners ? (
+        <RunnerModel model={effectiveModel} label={providerRunnerModelLabel(catalog, effectiveModel)} />
+      ) : (
+        <ModelPicker provider={provider} effectiveModel={effectiveModel} onChangeModel={onChangeModel} />
+      )}
       {provider.controls
         .filter((control) => control.kind === 'enum')
         .map((control) => (
