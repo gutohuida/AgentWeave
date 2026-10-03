@@ -331,9 +331,13 @@ def test_a_powershell_args_file_write_has_standing_in_every_posture(workspace, a
 
 
 def test_the_9_10_form_is_refused_by_the_judge_alone(workspace, monkeypatch):
-    """What case 4 overrides is a reading of the literal, and only that (design D1)."""
+    """What case 4 overrode, until `the-shell-judge-reads-a-word-whole` (design D2) stopped rule 6
+    reading an embedded `/` as an absolute tail. Before that change `_decide` refused the 9.10 form
+    ('/x.html' is outside your workspace'); now the literal's `/x.html` fragment is read as the
+    relative piece it actually is (`spec/x.html`, inside), so this exact literal is no longer
+    refused on its own. Case 4 still gives the command standing for every other row in STANDING."""
     answer = _without_case_4(monkeypatch, *_ps(WRITE_9_10))
-    assert answer["allow"] is False and "/x.html" in answer["reason"], answer
+    assert answer["allow"] is True, answer
 
 
 @pytest.mark.parametrize(

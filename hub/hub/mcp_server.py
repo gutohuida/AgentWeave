@@ -1134,6 +1134,27 @@ _WORD_SPLIT_RE = re.compile(r"[\s=,]+")
 _WORD_TRIM = "\"'`{}[]()<>|;&:"
 _ARGUMENT_ENDS = "|;&<>()"
 
+# D4: the null device and standard streams a bash-spawned msys maps, as a whole word only (the-
+# shell-judge-reads-a-word-whole). `/dev/tcp/...`, `/dev/fd/N` and `/dev/sda` are not in this set,
+# so they still fall through to being judged as paths.
+_BASH_DEVICES = {"/dev/null", "/dev/stdin", "/dev/stdout", "/dev/stderr"}
+
+# D5: a network address with no scheme, read on the whole word after rule 2 and before rule 3 (in
+# both dialects), so a separator-less form (`git@github.com:repo`) is seen at all. The host in
+# `_SCP_ADDRESS_RE` must be unmistakably a host (a domain, an IPv4/IPv6 literal, or `localhost`),
+# so a dotless package-manager or digest form (`alpine@sha256:...`, `x@npm:y`) is left as a word.
+_SCP_ADDRESS_RE = re.compile(
+    r"^[A-Za-z0-9._-]+@(?:localhost|\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+):"
+)
+_HOST_PORT_RE = re.compile(r"^[A-Za-z0-9.-]{2,}:[0-9]+[/\\]")
+
+# D2: rule 6's piece breaks. Each is also a name character the shell reads literally in some
+# context (`@` and `'` everywhere, `(` `<>|;&` inside quotes, `:` glues a host/revision/curl
+# `name@file`), so a link or traversal before one of these was never resolved by the old backstop.
+# `)` is deliberately not a break (it would refuse every regex back-reference, `s/(foo)/\1/`).
+_PIECE_BREAKS_RE = re.compile(r"[<>|;&(@:\s'\"`]+")
+_PIECE_QUOTES = "'\"`"
+
 # A reference to the run's own Hub, in the spelling the tool's shell expands to the environment's
 # value. Bash's variables are case-sensitive and PowerShell's are not, and a bare `$HUB_URL` in
 # PowerShell is a shell variable that expands to nothing. `%HUB_URL%` is a reference in neither.
@@ -1335,6 +1356,8 @@ def _judge_word(
             # Also the path it spells, once the shell has put the approver's value in its place.
             return _judge_path(base + rest, root, word, argument, continues)
         return _refuse(word, _UNCHECKED)
+    if _SCP_ADDRESS_RE.match(word) or _HOST_PORT_RE.match(word):  # D5: a schemeless network address
+        return _refuse(word, _NETWORK)
     has_separator = any(separator in word for separator in _SEPARATORS)
     if has_separator and _expands(word):  # 3: where it points is decided when the shell runs
         return _refuse(word, _UNCHECKED)
@@ -1354,11 +1377,52 @@ def _judge_word(
         if value.partition("\x00")[0] == "..":
             return _judge_path("..", root, word, argument, continues)
         return None
+    if dialect == "bash" and word in _BASH_DEVICES:  # D4: the null device, stdin/out/err
+        return None
     if os.path.isabs(word) or _PLAIN_RELATIVE_RE.match(word):  # 5: a path, resolved
         return _judge_path(word, root, word, argument, continues)
-    for match in _ABSOLUTE_PATH_RE.finditer(word):  # 6: the backstop
-        candidate, at_end = match.group(), match.end() == len(word)
-        refusal = _judge_path(candidate, root, candidate, argument, continues and at_end)
+    return _judge_pieces(word, root, argument, continues)  # 6: the piece reading (D2)
+
+
+def _judge_piece(piece: str, root: str, argument: str, continues: bool) -> Optional[Dict[str, Any]]:
+    """One piece of rule 6's reading: a NUL or a leading `~` refuses outright (D2 step 5); else it
+    is judged as the relative or absolute path it spells."""
+    if "\x00" in piece:
+        return _refuse(piece, _UNRESOLVED)
+    if _TILDE_PREFIX_RE.match(piece):
+        return _refuse(piece, _UNCHECKED)
+    return _judge_path(piece, root, piece, argument, continues)
+
+
+def _judge_pieces_reading(
+    value: str, root: str, argument: str, continues: bool
+) -> Optional[Dict[str, Any]]:
+    """D2 steps 3-5: split `value` at `_PIECE_BREAKS_RE` and judge each non-empty piece, the last
+    one carrying `continues` on to `_judge_path`."""
+    pieces = [piece for piece in _PIECE_BREAKS_RE.split(value) if piece]
+    for index, piece in enumerate(pieces):
+        refusal = _judge_piece(piece, root, argument, continues and index == len(pieces) - 1)
+        if refusal:
+            return refusal
+    return None
+
+
+def _judge_pieces(word: str, root: str, argument: str, continues: bool) -> Optional[Dict[str, Any]]:
+    """Rule 6, replaced (D2, F362): a word that reached here holds a separator, no expansion, is
+    not plain and is not absolute. It is split at path-component breaks rather than scanned for an
+    absolute tail, and judged once more with its quote characters removed -- the reading an inner
+    shell joins (`sh -c "echo hi > '.'./stray.txt"` hands its inner shell `../stray.txt`)."""
+    value = word
+    if value.startswith("-"):  # D2 step 1: drop a short option's own letters, judge its value
+        glued = _GLUED_OPTION_RE.match(value)
+        if glued:
+            value = value[glued.end() :]
+    refusal = _judge_pieces_reading(value, root, argument, continues)
+    if refusal:
+        return refusal
+    if any(quote in value for quote in _PIECE_QUOTES):
+        unquoted = value.translate(str.maketrans("", "", _PIECE_QUOTES))
+        refusal = _judge_pieces_reading(unquoted, root, argument, continues)
         if refusal:
             return refusal
     return None

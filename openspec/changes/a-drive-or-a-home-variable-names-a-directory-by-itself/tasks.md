@@ -7,7 +7,7 @@
 - [x] 0.2e R7: one independent comparison round of R6's fixes against the code, before approval; recorded in `B4.md` under "R7" (no defect of this change's own; `B4-temp-dialect` cited)
 - [x] 0.2f R8 (the third Opus pre-approval review's fixes, `spec-queue/tracks/reviews/B4-2026-09-24-third.md`; the operator approves after this round): the review's LOW taken the cleaner way, in the sibling's D8 step 2: a bracket expression is matched exactly unless `fnmatch` cannot read it, and then as `?`; D10's R6 paragraph, Costs and task 1.4f's rows. Measured with real junctions in `testbed/scratch/b4-r8/`; recorded in `B4.md` under "R8"
 - [x] 0.3a The operator answers design Open Questions 2 and 3: answered 2026-09-24 afternoon in `spec-queue/DECISIONS.md` (`B4-dep-links`: build D10 as written, residual filed as F444; `B4-drive-exists`: a drive word is judged only when the drive exists). D5 and `PWD` were answered earlier the same day
-- [ ] 0.3 The operator approves in `APPROVALS.md` (after the Opus pre-approval review); told first that `:8000`'s next run uses the edited file
+- [x] 0.3 The operator approves in `APPROVALS.md` (after the Opus pre-approval review); told first that `:8000`'s next run uses the edited file -- `DECISIONS.md` `B4-approve` (DECIDED): both B4 changes approved as R8 left them
 - [ ] 0.4 (R4; order decided in `B4-residuals`: both in one night window) `the-shell-judge-reads-a-word-whole` is built first. This change uses its `_glob_links`, budget, level-by-level escape reading, `_DRIVE_LETTERS` and `hub-judge-windows` job
 
 ## 1. Tests first (in `hub/tests/test_permission_approver.py`) — each must fail on today's code or on the R3 design as written (each row says which)
