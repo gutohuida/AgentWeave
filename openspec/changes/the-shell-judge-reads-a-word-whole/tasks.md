@@ -147,7 +147,71 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
 
 ## 2. The fix
 
-- [ ] 2.0 (R4) `_Budget` and the per-`_decide` memo (design, "The bounds"), created in `_decide` and passed through `_read_command` (both dialects, both readings, nested); (R6) the memo key includes the trimmed-colon flag. `_TOO_MANY`. ~~`_DRIVE_LETTERS` (D9)~~ -- **built by task 2.0b below**, not here: re-derived this iteration that D9 (one line, `os.sep == "\\"`) and "The bounds" (the budget/memo threaded through `_read_command`, `_expand_braces`, `_glob_links` -- none of which exist yet) are independent in the design text, and 2.0b's own line already said it "may be built first". Still open: `_Budget`, the memo, `_TOO_MANY`
+- [x] 2.0 (R4) `_Budget` and the per-`_decide` memo (design, "The bounds"), created in `_decide` and passed through `_read_command` (both dialects, both readings, nested); (R6) the memo key includes the trimmed-colon flag. `_TOO_MANY`. ~~`_DRIVE_LETTERS` (D9)~~ -- **built by task 2.0b above**, not here (iteration 15 re-derived that D9 and "The bounds" are independent design concerns).
+
+  **Iteration 16.** Found, before writing anything, that an earlier iteration's tasks 1.2/1.3 had
+  already built `_expand_braces`, `_mark_inner_brace_sentinels` and the sentinels in `_lex`
+  (section 2's task 2.1/2.1b content), wired into `_read_command`, but gated by a provisional
+  module constant (`_BRACE_ARGUMENT_BUDGET = 256`, its own comment naming task 2.0 as not yet
+  threaded through) rather than a real per-`_decide` budget -- so 2.1/2.1b were left unticked
+  (correctly) despite the code existing. This made the gap exact rather than the open-ended one
+  the previous `next_action` framed it as: a `_Budget` class, not a brace-specific lexer/expander.
+  Built `_Budget` (`hub/hub/mcp_server.py`, beside `_expand_braces`): one object, created once per
+  `_decide` call (before the dialect/reading loops) and threaded as a required parameter through
+  every `_read_command` call, including the recursive nested-substitution one, so it is shared
+  across both dialects, both readings and nesting as the design asks. Two memos, both keyed
+  without `reading` (where the `c`/`utf8` readings render identical text the shared key is exactly
+  what avoids a double charge; where they differ, the word or argument text itself differs,
+  separating them without needing the field): `expand_braces(marked, dialect)` memoizes
+  `_expand_braces` by `(marked text, dialect)` and charges `alternatives_spent` only on a miss,
+  capped at `min(_BRACE_ARGUMENT_BUDGET, _BRACE_TOTAL_BUDGET - spent)` so "past either bound" (D1)
+  falls out of one scalar; `_memo_judge_word` memoizes `_judge_word` by the 6-tuple the design
+  names (`word, argument, continues, trailing_colon, dialect, trusted`), `trailing_colon` being
+  (R6) the colon flag. Added `_BRACE_TOTAL_BUDGET = 1024` beside the existing per-argument
+  constant. `_TOO_MANY` already existed (built with the provisional brace work) and needed no
+  change. Did not build `_glob_links`'s entry bound or its directory-listing memo (design "The
+  bounds" table's other two rows): `_glob_links` itself is task 2.1c, not built, so there is
+  nothing yet to count entries for or memoize listings of -- `_Budget` is left extensible for that
+  task to add to, not pre-built unused.
+
+  **Measured, not assumed**, with a throwaway script calling `_Budget.expand_braces` directly
+  before writing any test: two calls with the same `(marked, dialect)` charge `alternatives_spent`
+  once (10, not 20); clearing the memo's cache between the same two calls (simulating no memo)
+  charges it twice, and the second call then returns `None` against a monkeypatched total of 15
+  (`cap = min(256, 15-10=5)`, 10 > 5). Added one test,
+  `test_the_brace_budget_is_one_per_decide_not_per_reading_or_argument`, to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`: a single 10-alternative brace argument
+  with `_BRACE_TOTAL_BUDGET` monkeypatched to 15 is allowed (proving the memo stops the `c`/`utf8`
+  reading pair from double-charging one argument, which a shared-but-unmemoized budget would
+  refuse); a second, separate 10-alternative argument in the same command is then refused as
+  `_TOO_MANY` (proving the total is spent across arguments, not reset between them). Both
+  assertions are new behaviour: `_BRACE_TOTAL_BUDGET` did not exist before this iteration, so the
+  test fails (`AttributeError` on the monkeypatch) on today's code without the fix. Mutation check
+  (`git stash` just `mcp_server.py`): exactly this one test failed; the other 80 rows in the file
+  passed unchanged. `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`:
+  81 passed (was 80). Broader regression set (+`test_permission_approver.py`,
+  `test_hub_own_call.py`, `test_copilot_acp_decide.py`,
+  `test_a_write_outside_the_workspace_is_recorded.py`): 707 passed, 2 skipped, no regressions.
+  `ruff check` and `black --check --target-version py311` on both changed files: clean (black
+  reformatted the new `_Budget`/`_memo_judge_word` code once, then was clean). `mypy
+  hub/hub/mcp_server.py`: the same pre-existing `approve_tool_call` no-return-annotation gap.
+  `git diff --stat`: exactly `hub/hub/mcp_server.py` and the one test file, plus this file. Did not
+  run the full `hub/tests/` suite this iteration (46 minutes at the last full run,
+  `hub-suite-gate`); relied on the broader regression set as prior iterations have.
+
+  **Queued next:** task 2.1/2.1b's own checkbox text (sentinels in `_lex`, `_expand_braces`,
+  `_read_command` judging each alternative, the inner-shell reading) is now implemented in full
+  and threaded through the real budget built here -- re-derive against the current code before
+  ticking either, rather than assuming this iteration's note is complete: confirm task 1.2's and
+  1.3's own ticked rows actually exercise 2.1/2.1b's code paths (they do run through
+  `_expand_braces`/`_mark_inner_brace_sentinels`, measured by this iteration's `grep`, but were not
+  independently re-verified row-by-row this iteration), and check whether anything in 2.1/2.1b's
+  own text (totality against 5000 `{`, the nesting cap, letter-range expansion) lacks a test now
+  that `_Budget` exists to measure it against -- task 1.6's totality rows (5000 `{`, `{a,` x 2000,
+  `a{1..99999999}`, the 40-level `{a,b}` 2^40 case, the letter-range rows) are still entirely
+  unbuilt and are the next concrete gap once 2.1/2.1b's own status is confirmed. If 2.1/2.1b turn
+  out already complete, task 2.1c (D8 `_glob_links`) is section 2's next unbuilt item in build
+  order.
 - [x] 2.0b (R6, D12) `_physical` and the second reading in `_where`, on a drive-letter host, with the 64-step bound, inside `_where`'s existing `try`. Run 1.4f's literal rows on Windows. This fixes a pre-existing escape and may be built first. (R8, third review) Also correct the `hub/hub/workspace_writes.py` docstring, whose module text (lines 8-10) and `classify` text (lines 172-174) say its `realpath` is "the reason the two agree about a symlink" with `_decide`: after D12, `_decide` also reads a `..` after a link physically on a drive-letter host (a second reading, D12), and `classify` does not, so the two agree about a link named directly and may differ about a `..` after one (`node_modules/../src/x`: `_decide` refuses, on Windows `classify` records `ws/src/x`, inside, which is where Node writes). Comment only; no behaviour of `classify` changes
 
   **Iteration 15.** Built `_DRIVE_LETTERS = os.sep == "\\"` (D9, a module constant beside

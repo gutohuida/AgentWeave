@@ -290,3 +290,35 @@ def test_the_physical_readings_64_step_bound(workspace, monkeypatch):
     past_bound = _decide("Bash", {"command": "ls " + "sub/../" * 65 + "x"})
     assert past_bound["allow"] is False
     assert past_bound["reason"].endswith("could not be resolved")
+
+
+def _brace_list(prefix, count):
+    return "{" + ",".join(f"{prefix}{n}" for n in range(1, count + 1)) + "}"
+
+
+# 1.6 (partial), task 2.0 / design "The bounds": `_Budget` is one object for the whole `_decide`
+# call. Monkeypatching its total down to 15 (room for one 10-alternative argument, not two) proves
+# two things neither existed before task 2.0, so both fail with an `AttributeError` on today's code
+# (there was no `_BRACE_TOTAL_BUDGET` to patch) and, once the attribute exists, would fail on a
+# `_Budget` that charged without memoizing:
+#
+# - "a Bash command read in both readings charges the budget once" (the memo): `_decide` reads
+#   `command` under both the `c` and `utf8` readings even for a tool fixed to one dialect, and the
+#   brace argument renders identical text in both. Without the expansion memo (keyed by the marked
+#   argument text and dialect, not by `reading`), the second reading would spend the same 10
+#   alternatives again, totalling 20 against a budget of 15, and this single-argument command would
+#   be wrongly refused.
+# - the total is spent across separate arguments, not reset between them: a second 10-alternative
+#   argument in the same command has only the 5 the first left, and is refused.
+def test_the_brace_budget_is_one_per_decide_not_per_reading_or_argument(workspace, monkeypatch):
+    from hub import mcp_server
+
+    monkeypatch.setenv("HUB_URL", _HUB)
+    monkeypatch.setattr(mcp_server, "_BRACE_TOTAL_BUDGET", 15)
+    one_argument = _decide("Bash", {"command": f"touch {_brace_list('f', 10)}"})
+    assert one_argument["allow"] is True, one_argument["reason"]
+    two_arguments = _decide(
+        "Bash", {"command": f"touch {_brace_list('f', 10)} {_brace_list('g', 10)}"}
+    )
+    assert two_arguments["allow"] is False
+    assert two_arguments["reason"].endswith(mcp_server._TOO_MANY)

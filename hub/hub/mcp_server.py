@@ -1224,10 +1224,12 @@ _BRACE_CLOSE = "\ue027"
 _BRACE_SENTINELS = {"{": _BRACE_OPEN, ",": _BRACE_COMMA, "}": _BRACE_CLOSE}
 _BRACE_RESTORE = {_BRACE_OPEN: "{", _BRACE_COMMA: ",", _BRACE_CLOSE: "}"}
 # Past this many nested groups, or this many alternatives from one argument, `_expand_braces`
-# returns None rather than build further (design D1, "The bounds") -- the per-`_decide` budget
-# (`_Budget`, task 2.0) is not yet threaded through; this is a provisional per-argument-only cap.
+# returns None rather than build further (design D1, "The bounds"). `_BRACE_ARGUMENT_BUDGET` is
+# per argument; `_BRACE_TOTAL_BUDGET` is spent across the whole `_decide` call by `_Budget` below,
+# which also caps a single call at the argument bound.
 _BRACE_MAX_NESTING = 32
 _BRACE_ARGUMENT_BUDGET = 256
+_BRACE_TOTAL_BUDGET = 1024
 _BRACE_INT_SEQUENCE_RE = re.compile(r"^([+-]?[0-9]+)\.\.([+-]?[0-9]+)$")
 _BRACE_LETTER_SEQUENCE_RE = re.compile(r"^([A-Za-z])\.\.([A-Za-z])$")
 _BRACE_MAX_LETTER_SPAN = 58
@@ -1846,6 +1848,64 @@ def _expand_braces(argument: str, budget: int) -> Optional[List[str]]:
     return stack[0]["results"]
 
 
+class _Budget:
+    """One per `_decide` call, shared across both dialects, both readings and every nested
+    substitution `_read_command` recurses into (design "The bounds", R4) -- so the same text read
+    more than once for that reason is charged, and judged, only once.
+
+    Two memos, neither keyed by `reading`: where the `c` and `utf8` readings render a word or an
+    argument the same text, sharing the key is exactly what lets the second reading reuse the
+    first's answer instead of paying for it again; where they differ (an ANSI-C escape above
+    0x100), the text itself differs, so the key still separates them without naming `reading`.
+    """
+
+    def __init__(self) -> None:
+        self.alternatives_spent = 0
+        self._expansions: Dict[Tuple[str, str], Optional[List[str]]] = {}
+        self.judgements: Dict[Tuple[str, str, bool, bool, str, bool], Optional[Dict[str, Any]]] = {}
+
+    def expand_braces(self, marked: str, dialect: str) -> Optional[List[str]]:
+        """`_expand_braces(marked, ...)`, memoized by the marked argument text and dialect (design
+        "The bounds": "brace alternatives keyed by the marked argument text and dialect"). Charges
+        `alternatives_spent` only on a miss, and caps the call at whichever of the per-argument and
+        per-`_decide` bounds is tighter -- "past either bound" (D1) from one scalar cap.
+        """
+        key = (marked, dialect)
+        if key in self._expansions:
+            return self._expansions[key]
+        cap = min(_BRACE_ARGUMENT_BUDGET, _BRACE_TOTAL_BUDGET - self.alternatives_spent)
+        result = _expand_braces(marked, cap) if cap > 0 else None
+        if result is not None:
+            self.alternatives_spent += len(result)
+        self._expansions[key] = result
+        return result
+
+
+def _memo_judge_word(
+    budget: "_Budget",
+    word: str,
+    argument: str,
+    continues: bool,
+    trailing_colon: bool,
+    root: str,
+    dialect: str,
+    trusted: bool,
+    hub_url: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    """`_judge_word`, memoized per `_decide` call by every per-word input the judgement reads
+    (design "The bounds": "the key must carry every per-word input the judgement reads") -- so the
+    same word reached twice (another reading, or another brace alternative) is judged once.
+    """
+    key = (word, argument, continues, trailing_colon, dialect, trusted)
+    if key in budget.judgements:
+        return budget.judgements[key]
+    refusal = _judge_word(
+        word, argument, continues, trailing_colon, root, dialect, trusted, hub_url
+    )
+    budget.judgements[key] = refusal
+    return refusal
+
+
 def _mark_inner_brace_sentinels(text: str) -> str:
     """`text` (already lexed) with every `{`, `,` and `}` marked as `_lex` marks an unquoted bash
     one (design D1, R2) -- the blanket worst case run over any argument, quoted or not, proven to
@@ -1995,6 +2055,7 @@ def _read_command(
     root: str,
     dialect: str,
     reading: str,
+    budget: "_Budget",
     depth: int = 0,
     hub_url: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
@@ -2004,6 +2065,10 @@ def _read_command(
     0x7FFFFFFF decodes to (design D1) -- every other decode rule renders the same in both. It must
     reach a nested substitution's own recursive call, or a reading that stops at the top level
     would judge that substitution's ANSI-C content in one reading only.
+
+    `budget` is the one `_Budget` for the whole `_decide` call (design "The bounds", R4): shared
+    across both dialects, both readings and every nested substitution, so the same brace argument
+    or word judged more than once for that reason is charged, and judged, only once.
     """
     if depth > _MAX_NESTING:
         # Nested past what is lexed: the backstop over the whole text, which is how every command
@@ -2021,7 +2086,7 @@ def _read_command(
         expanded_arguments: List[str] = []
         for argument in arguments:
             if any(sentinel in argument for sentinel in _BRACE_RESTORE):
-                alternatives = _expand_braces(argument, _BRACE_ARGUMENT_BUDGET)
+                alternatives = budget.expand_braces(argument, dialect)
                 if alternatives is None:
                     return _refuse(_restore_brace_sentinels(argument), _TOO_MANY)
                 expanded_arguments.extend(alternatives)
@@ -2034,8 +2099,8 @@ def _read_command(
     # every way of reassigning it first (`HUB_URL=`, `export`, `$env:HUB_URL =`) without a list.
     trusted = 0 < references == len(re.findall(r"(?i)HUB_URL", command))
     for word, argument, continues, trailing_colon in words:
-        refusal = _judge_word(
-            word, argument, continues, trailing_colon, root, dialect, trusted, hub_url
+        refusal = _memo_judge_word(
+            budget, word, argument, continues, trailing_colon, root, dialect, trusted, hub_url
         )
         if refusal:
             return refusal
@@ -2048,17 +2113,25 @@ def _read_command(
         marked = _mark_inner_brace_sentinels(argument)
         if not any(sentinel in marked for sentinel in _BRACE_RESTORE):
             continue
-        inner_alternatives = _expand_braces(marked, _BRACE_ARGUMENT_BUDGET)
+        inner_alternatives = budget.expand_braces(marked, dialect)
         if inner_alternatives is None:
             return _refuse(argument, _TOO_MANY)
         for word, inner_argument, continues, trailing_colon in _words(inner_alternatives):
-            refusal = _judge_word(
-                word, inner_argument, continues, trailing_colon, root, dialect, trusted, hub_url
+            refusal = _memo_judge_word(
+                budget,
+                word,
+                inner_argument,
+                continues,
+                trailing_colon,
+                root,
+                dialect,
+                trusted,
+                hub_url,
             )
             if refusal:
                 return refusal
     for inner in nested:
-        refusal = _read_command(inner, root, dialect, reading, depth + 1, hub_url)
+        refusal = _read_command(inner, root, dialect, reading, budget, depth + 1, hub_url)
         if refusal:
             return refusal
     return None
@@ -2371,11 +2444,15 @@ def _decide(
         # A shell command declares no path, so its text is read in the tool's dialect and judged
         # word by word (the reader above). Relative words resolve against the workspace root,
         # which is where the run started; the shell's current directory is not seen.
+        # One `_Budget` for the whole decision (design "The bounds", R4): shared across both
+        # dialects and both readings below, so the same brace argument or word read more than
+        # once for that reason is charged, and judged, only once.
+        budget = _Budget()
         for dialect in _TOOL_DIALECTS.get(tool_name, ("bash", "powershell")):
             # Two passes, unconditionally: a `$'...'` escape from 0x100 to 0x7FFFFFFF renders
             # differently by locale, and both renderings must be judged (design D1, Round 4).
             for reading in ("c", "utf8"):
-                refusal = _read_command(command, root, dialect, reading, hub_url=hub_url)
+                refusal = _read_command(command, root, dialect, reading, budget, hub_url=hub_url)
                 if refusal:
                     return refusal
                 expands = expands or _names_a_runtime_value(command, dialect, reading)
