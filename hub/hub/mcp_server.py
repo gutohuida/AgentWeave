@@ -1231,6 +1231,10 @@ _BRACE_RESTORE = {_BRACE_OPEN: "{", _BRACE_COMMA: ",", _BRACE_CLOSE: "}"}
 _BRACE_MAX_NESTING = 32
 _BRACE_ARGUMENT_BUDGET = 256
 _BRACE_TOTAL_BUDGET = 1024
+# Design "The bounds": directory entries examined by `_glob_links`, across the whole `_decide`
+# call, charged on `budget` as each is read from `os.scandir` -- not after the listing is built,
+# so an unbounded directory cannot be materialized into memory before the bound is checked.
+_GLOB_ENTRY_BUDGET = 8192
 _BRACE_INT_SEQUENCE_RE = re.compile(r"^([+-]?[0-9]+)\.\.([+-]?[0-9]+)$")
 _BRACE_LETTER_SEQUENCE_RE = re.compile(r"^([A-Za-z])\.\.([A-Za-z])$")
 _BRACE_MAX_LETTER_SPAN = 58
@@ -1493,7 +1497,7 @@ def _relax_bracket_pattern(pattern: str) -> str:
     return "".join(pieces)
 
 
-def _glob_links(piece: str, shown: str, root: str) -> Optional[Dict[str, Any]]:
+def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optional[Dict[str, Any]]:
     """D8, a first slice: a `piece` (already rewritten by `_rewrite_dotdot_globs`) whose only
     glob-holding component is its last one, with no `..` anywhere. The base -- the piece's
     leading components -- is listed once with `os.scandir`, resolved first by `_physical` (D12)
@@ -1504,13 +1508,21 @@ def _glob_links(piece: str, shown: str, root: str) -> Optional[Dict[str, Any]]:
     cannot list it either, and the literal reading -- already judged by the caller -- stands
     alone).
 
+    **("The bounds") Each entry read from the listing is charged against `budget` as it is read**,
+    not after the listing is built, and past `_GLOB_ENTRY_BUDGET` the call is refused with
+    `_TOO_MANY`, quoting `shown` -- the same shared budget `_expand_braces` spends, so a directory
+    larger than the bound cannot be materialized into memory first and counted after.
+
     A piece holding more than one glob-holding component, a glob followed by further components,
     an extglob group, or a `..`, is left to a further slice of this same task (step 4's
     multi-component walk and `..`-after-a-link judging) -- this returns None for those rather than
     guess. The bash dot rule (D8 step 2, "a name beginning with `.` matches only when the
     component does too") is also left to that slice: skipping it only widens what matches, which
     the design allows ("over-approximation... can only add a refusal"), and nothing in this
-    slice's own test needs it.
+    slice's own test needs it. The per-pattern listing memo ("The bounds": "directory listings
+    keyed by the resolved directory") is also left to a further slice -- its absence only means a
+    directory already listed for one word's glob may be listed again for a different word's, which
+    spends budget sooner, never later, so it cannot turn a refusal into an allow.
     """
     drive, rest = os.path.splitdrive(piece)
     anchor = drive + os.sep
@@ -1530,20 +1542,22 @@ def _glob_links(piece: str, shown: str, root: str) -> Optional[Dict[str, Any]]:
         base = _physical(os.path.join(anchor, *components[:-1]) if components[:-1] else anchor)
     except (OSError, ValueError):
         return None
+    normalized_pattern = os.path.normcase(_relax_bracket_pattern(pattern))
     try:
         with os.scandir(base) as listing:
-            entries = list(listing)
+            for entry in listing:
+                budget.glob_entries_examined += 1
+                if budget.glob_entries_examined > _GLOB_ENTRY_BUDGET:
+                    return _refuse(shown, _TOO_MANY)
+                if not fnmatch.fnmatchcase(os.path.normcase(entry.name), normalized_pattern):
+                    continue
+                if not _is_link_entry(entry):
+                    continue
+                refusal = _judge_path(entry.path, root, shown, shown, False)
+                if refusal:
+                    return refusal
     except (OSError, ValueError):
         return None
-    normalized_pattern = os.path.normcase(_relax_bracket_pattern(pattern))
-    for entry in entries:
-        if not fnmatch.fnmatchcase(os.path.normcase(entry.name), normalized_pattern):
-            continue
-        if not _is_link_entry(entry):
-            continue
-        refusal = _judge_path(entry.path, root, shown, shown, False)
-        if refusal:
-            return refusal
     return None
 
 
@@ -1648,6 +1662,7 @@ def _judge_url(
 
 
 def _judge_word(
+    budget: "_Budget",
     word: str,
     argument: str,
     continues: bool,
@@ -1718,7 +1733,7 @@ def _judge_word(
         # finds, not only judged by its literal text -- `_PLAIN_RELATIVE_RE` already keeps every
         # relative glob out of this branch (D8, "Where it runs").
         if os.path.isabs(word) and any(char in word for char in _GLOB_CHARS):
-            return _glob_links(rewritten, word, root)
+            return _glob_links(rewritten, word, root, budget)
         return None
     return _judge_pieces(word, root, argument, continues)  # 6: the piece reading (D2)
 
@@ -2006,6 +2021,7 @@ class _Budget:
 
     def __init__(self) -> None:
         self.alternatives_spent = 0
+        self.glob_entries_examined = 0
         self._expansions: Dict[Tuple[str, str], Optional[List[str]]] = {}
         self.judgements: Dict[Tuple[str, str, bool, bool, str, bool], Optional[Dict[str, Any]]] = {}
 
@@ -2045,7 +2061,7 @@ def _memo_judge_word(
     if key in budget.judgements:
         return budget.judgements[key]
     refusal = _judge_word(
-        word, argument, continues, trailing_colon, root, dialect, trusted, hub_url
+        budget, word, argument, continues, trailing_colon, root, dialect, trusted, hub_url
     )
     budget.judgements[key] = refusal
     return refusal

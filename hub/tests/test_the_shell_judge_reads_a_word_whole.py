@@ -470,3 +470,30 @@ def test_an_absolute_glob_word_s_bracket_expression_is_relaxed_like_the_shell_re
     posix_class = _decide("Bash", {"command": f"cp n {forward}/[[:alpha:]]p/"})
     assert posix_class["allow"] is False
     assert "it resolves to" in posix_class["reason"]
+
+
+# ("The bounds") `_glob_links` charges `budget.glob_entries_examined` as each directory entry is
+# read from `os.scandir`, not after the whole listing is built, and refuses with `_TOO_MANY` once
+# the running total passes `_GLOB_ENTRY_BUDGET` -- the bound task 2.0's `_Budget` names for this,
+# which had no hook into `_glob_links` before this slice (an unbounded directory could be listed in
+# full, and held in memory as a Python list, before anything was ever charged or checked). Uses a
+# pattern that matches no entry in the fixture's workspace root (`nomatch*`, the same one the
+# neighbouring "not the last component" control uses) so the refusal can only come from the budget,
+# never from a link match racing it -- `os.scandir`'s listing order is unspecified. Measured
+# directly against `_decide` first (testbed/scratch/measure_glob_budget.py, gitignored, not
+# committed, run three times to rule out order-dependence): with the bound monkeypatched to 2
+# against the fixture's 5 direct entries (`sub`, `up`, `in`, `a'b`, `a@b`), the call was wrongly
+# **unbounded** before this slice and is now refused as too many, every time.
+def test_the_glob_link_walk_s_entries_are_charged_against_the_decide_budget(workspace, monkeypatch):
+    from hub import mcp_server
+
+    monkeypatch.setenv("HUB_URL", _HUB)
+    forward = str(workspace).replace("\\", "/")
+
+    within_bound = _decide("Bash", {"command": f"cp n {forward}/nomatch*/"})
+    assert within_bound["allow"] is True, within_bound["reason"]
+
+    monkeypatch.setattr(mcp_server, "_GLOB_ENTRY_BUDGET", 2)
+    over_bound = _decide("Bash", {"command": f"cp n {forward}/nomatch*/"})
+    assert over_bound["allow"] is False
+    assert over_bound["reason"].endswith(mcp_server._TOO_MANY)

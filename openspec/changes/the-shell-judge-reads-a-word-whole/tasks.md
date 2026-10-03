@@ -409,6 +409,74 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   and the budget charge per listing). Task 2.2's rule-6 rewiring of `_glob_links` onto relative
   globs is independent of step 4 and could be sized as its own slice first if step 4 proves too
   large again.
+
+  **Iteration 21 (the entry budget hook, independent of step 4's walk).** D8 step 4's own text
+  names "the budget charge per listing" as part of the multi-component walk, but re-reading "The
+  bounds" section directly shows the charge belongs to step 2's listing in general, not to the walk
+  specifically: "`_glob_links` charges the budget as each directory entry is read from `os.scandir`
+  and stops reading at the bound. It does not list a directory first and count it after." That is
+  true of the single-level `_glob_links` already built (iterations 19-20) regardless of whether the
+  multi-component walk exists yet, so it was sized out as its own slice. Before this iteration,
+  `_glob_links` had no `budget` parameter at all: `os.scandir`'s listing was read in full into a
+  Python list (`entries = list(listing)`) before anything was matched, so a directory with more
+  entries than `_GLOB_ENTRY_BUDGET` (8192, the design's own bound, which did not exist as a constant
+  either) could be enumerated and held in memory with no check and no bound -- the budget table's
+  "Directory entries examined by `_glob_links`" row named a bound that nothing enforced.
+
+  Added `_GLOB_ENTRY_BUDGET = 8192` beside `_BRACE_ARGUMENT_BUDGET`/`_BRACE_TOTAL_BUDGET`, and
+  `_Budget.glob_entries_examined` (an `int`, starting at 0, alongside `alternatives_spent`).
+  `_glob_links` now takes a `budget: "_Budget"` parameter, iterates `os.scandir`'s listing directly
+  inside the existing `try`/`except (OSError, ValueError)` (rather than materializing it first),
+  charging `budget.glob_entries_examined` for every entry read before matching it, and returns
+  `_refuse(shown, _TOO_MANY)` -- the same shared reason `_expand_braces` uses for its own bound --
+  the moment the running total passes the bound, stopping the listing mid-iteration rather than
+  finishing it. `budget` reaches `_glob_links` by threading it one hop further than it reached
+  before: `_judge_word` gained a `budget: "_Budget"` first parameter (matching `_memo_judge_word`'s
+  own ordering), and its one call site (`_memo_judge_word`, which already held `budget`) and its own
+  one call to `_glob_links` were both updated. `_judge_word` and `_glob_links` have exactly the one
+  call site each in `hub/hub/mcp_server.py` (confirmed by grep, not assumed), so no other caller
+  needed updating; the CLI (`src/agentweave/`) has no reference to either name.
+
+  The per-pattern listing memo the same "bounds" text also names ("directory listings keyed by the
+  resolved directory") was sized back out: its absence only means a directory already listed for
+  one glob word may be listed again for a different one (or a different dialect reading of the same
+  word), which spends the shared budget sooner, never later -- it cannot turn a refusal into a wrong
+  allow, only make a heavy, repeated-glob command hit `_TOO_MANY` sooner than the design's own
+  worked example (123 distinct glob words, 44 root entries, 5,412 of 8,192) implies. Documented as
+  left to a further slice in `_glob_links`'s own docstring.
+
+  Measured directly against `_decide` first, before writing a test (a throwaway script,
+  `testbed/scratch/measure_glob_budget.py`, gitignored, not committed, run three times to check for
+  `os.scandir` order-dependence): a workspace root holding 5 direct entries (`sub`, `up`, `in`,
+  `a'b`, `a@b`, the shared fixture's own set) globbed with a pattern matching none of them
+  (`nomatch*`, so no entry can short-circuit the walk via a link judgement before the bound is
+  reached, regardless of listing order) was unbounded before this slice and, with
+  `_GLOB_ENTRY_BUDGET` monkeypatched to 2, is now refused with `_TOO_MANY` every time. Added one
+  test, `test_the_glob_link_walk_s_entries_are_charged_against_the_decide_budget`, to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py` (not a `_TABLE` row: needs the fixture's
+  own workspace and a monkeypatched module constant, same reasoning as the neighbouring budget test
+  in `test_the_totality_rows_for_brace_expansion_never_raise_or_hang`). Mutation-checked: `git
+  stash`ing just `mcp_server.py` and rerunning the test file fails exactly the one new test, with an
+  `AttributeError` on `_GLOB_ENTRY_BUDGET` (the same shape as the existing brace-budget test's own
+  documented mutation check), leaving the other 93 rows passing unchanged. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 94 passed (was 93, +1). Broader
+  regression set (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): 720 passed, 2 skipped, no regressions. `ruff
+  check` clean; `black --check --target-version py311` reformatted one line (the new `_glob_links`
+  signature collapsed to one line) -- applied, then both files passed `black --check` and the full
+  regression set was rerun unchanged (720 passed). `git diff --stat`: exactly `hub/hub/mcp_server.py`
+  and the one test file, plus this task file.
+
+  **Task 2.1c still stays unticked**: this slice only hardens the entry budget around the
+  single-level `_glob_links` iterations 19-20 already built (rule 5, absolute words, no `..`, one
+  glob-holding component). It adds no new matching behaviour -- nothing that was allowed or refused
+  before this slice changed, for any row in `_TABLE` or any existing test. D8 step 4's
+  multi-component walk (real/listed path tracking, the `..`-after-a-link refusal naming where it
+  lands, `os.lstat` for a literal component) is still the largest remaining piece of 2.1c and is
+  unaffected by this slice; re-derive it from the design text again before attempting it, sizing
+  down further if it still does not fit one iteration, with task 2.2's rule-6 rewiring as the
+  fallback slice (now smaller by exactly the budget-threading work this iteration already did, since
+  rule 6's own future call to `_glob_links` will need `budget` passed the same way rule 5's does).
 - [ ] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
 
   **Iteration 18 (partial).** Measured today's `_decide` directly first (not from this file's old
