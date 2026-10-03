@@ -752,3 +752,34 @@ def test_the_undivided_whole_value_is_judged_too_1_4g(workspace, monkeypatch):
     # refusal through a real link or a physical `..`, never a bare glued name.
     no_link_behind_it = _decide("Bash", {"command": "cp n sub/@s/q"})
     assert no_link_behind_it["allow"] is True, no_link_behind_it["reason"]
+
+
+# Task 2.2, D4's narrower half (R4: on a host with drive letters, only a whole word or a redirect
+# target) -- task 1.7d. `sh -c 'ls 2>/dev/null'` is one OUTER word (the quotes keep the inner
+# shell's own text from being split by the outer lexer), so `/dev/null` never reaches the
+# whole-word check at rule 4; it reaches here as a rule-6 piece, split off by the `>` break.
+# Measured against `_decide` directly first (`testbed/scratch/measure_bash_devices_piece.py`,
+# gitignored, not committed): this row was wrongly refused as `'/dev/null' is outside your
+# workspace` before this slice (the piece reading had no device exemption at all, only the
+# whole-word check at rule 4 did). Confirmed by `git stash`ing just `mcp_server.py` and rerunning.
+def test_a_redirect_target_piece_names_a_bash_device_1_7d(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    inner_shell_redirect = _decide("Bash", {"command": "sh -c 'ls 2>/dev/null'"})
+    assert inner_shell_redirect["allow"] is True, inner_shell_redirect["reason"]
+
+    whole_word_argument = _decide("Bash", {"command": "python w.py /dev/null"})
+    assert whole_word_argument["allow"] is True, whole_word_argument["reason"]
+
+    # Control: the same name, not a redirect target and not a whole word, stays refused -- a
+    # native program given the text inside its own quoted script opens a real `C:\dev\null`,
+    # which msys does not map (design D4, R4).
+    not_a_redirect_target = _decide("Bash", {"command": "python -c \"open('/dev/null','w')\""})
+    assert not_a_redirect_target["allow"] is False
+    assert not_a_redirect_target["reason"] == "'/dev/null' is outside your workspace"
+
+    # Control: a piece glued by a break that is not `<`/`>` (here `@`) is not a redirect target
+    # either, and stays refused on this drive-letter host.
+    glued_not_redirect = _decide("Bash", {"command": 'sh -c "touch @/dev/null"'})
+    assert glued_not_redirect["allow"] is False
+    assert glued_not_redirect["reason"] == "'/dev/null' is outside your workspace"

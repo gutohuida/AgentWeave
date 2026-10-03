@@ -1162,6 +1162,10 @@ _HOST_PORT_RE = re.compile(r"^[A-Za-z0-9.-]{2,}:[0-9]+[/\\]")
 # `name@file`), so a link or traversal before one of these was never resolved by the old backstop.
 # `)` is deliberately not a break (it would refuse every regex back-reference, `s/(foo)/\1/`).
 _PIECE_BREAKS_RE = re.compile(r"[<>|;&(@:\s'\"`]+")
+# The same breaks, captured, so a split keeps each run of break characters in the result -- D4's
+# "a piece that directly follows a `<` or `>` break" (the device exemption) reads the delimiter
+# just before a piece, which plain `.split()` throws away.
+_PIECE_BREAKS_SPLIT_RE = re.compile(f"({_PIECE_BREAKS_RE.pattern})")
 _PIECE_QUOTES = "'\"`"
 
 # A reference to the run's own Hub, in the spelling the tool's shell expands to the environment's
@@ -1934,7 +1938,7 @@ def _judge_word(
         if os.path.isabs(word) and any(char in word for char in _GLOB_CHARS):
             return _glob_links(rewritten, word, root, budget)
         return None
-    return _judge_pieces(word, root, argument, continues)  # 6: the piece reading (D2)
+    return _judge_pieces(word, root, argument, continues, dialect)  # 6: the piece reading (D2)
 
 
 def _judge_piece(piece: str, root: str, argument: str, continues: bool) -> Optional[Dict[str, Any]]:
@@ -1948,14 +1952,33 @@ def _judge_piece(piece: str, root: str, argument: str, continues: bool) -> Optio
 
 
 def _judge_pieces_reading(
-    value: str, root: str, argument: str, continues: bool
+    value: str, root: str, argument: str, continues: bool, dialect: str
 ) -> Optional[Dict[str, Any]]:
     """D2 steps 2-5: mask each extglob group (D3) so splitting at `_PIECE_BREAKS_RE` does not break
-    inside one, split, restore the group's own text in each surviving piece, and judge each
-    non-empty piece, the last one carrying `continues` on to `_judge_path`."""
-    pieces = [piece for piece in _PIECE_BREAKS_RE.split(_mask_extglob_groups(value)) if piece]
-    for index, piece in enumerate(pieces):
+    inside one, split (keeping each delimiter, so a piece can be told apart from a redirect
+    target), restore the group's own text in each surviving piece, and judge each non-empty
+    piece, the last one carrying `continues` on to `_judge_path`.
+
+    D4: in the bash dialect, a piece naming a mapped device (`_BASH_DEVICES`) stands rather than
+    being judged as a path -- on a host with drive letters, only when it is a redirect target (the
+    piece directly after a `<`/`>` break; a native program given the name as a plain argument word
+    opens a real `C:\\dev\\...` path, which msys does not map), and on every other host for any
+    piece, since there `/dev/null` is a real device for every program.
+    """
+    split = _PIECE_BREAKS_SPLIT_RE.split(_mask_extglob_groups(value))
+    pieces = [
+        (split[index], split[index - 1] if index > 0 else "") for index in range(0, len(split), 2)
+    ]
+    pieces = [(piece, delimiter) for piece, delimiter in pieces if piece]
+    for index, (piece, delimiter) in enumerate(pieces):
         restored = _restore_extglob_sentinels(piece)
+        redirect_target = delimiter[-1:] in ("<", ">")
+        if (
+            dialect == "bash"
+            and restored in _BASH_DEVICES
+            and (not _DRIVE_LETTERS or redirect_target)
+        ):
+            continue
         refusal = _judge_piece(restored, root, argument, continues and index == len(pieces) - 1)
         if refusal:
             return refusal
@@ -2006,7 +2029,9 @@ def _judge_whole_value(
     return None
 
 
-def _judge_pieces(word: str, root: str, argument: str, continues: bool) -> Optional[Dict[str, Any]]:
+def _judge_pieces(
+    word: str, root: str, argument: str, continues: bool, dialect: str
+) -> Optional[Dict[str, Any]]:
     """Rule 6, replaced (D2, F362): a word that reached here holds a separator, no expansion, is
     not plain and is not absolute. It is split at path-component breaks rather than scanned for an
     absolute tail, and judged once more with its quote characters removed -- the reading an inner
@@ -2017,7 +2042,7 @@ def _judge_pieces(word: str, root: str, argument: str, continues: bool) -> Optio
         glued = _GLUED_OPTION_RE.match(value)
         if glued:
             value = value[glued.end() :]
-    refusal = _judge_pieces_reading(value, root, argument, continues)
+    refusal = _judge_pieces_reading(value, root, argument, continues, dialect)
     if refusal:
         return refusal
     whole_value = _whole_value(word)
@@ -2026,7 +2051,7 @@ def _judge_pieces(word: str, root: str, argument: str, continues: bool) -> Optio
         return refusal
     if any(quote in value for quote in _PIECE_QUOTES):
         unquoted = value.translate(str.maketrans("", "", _PIECE_QUOTES))
-        refusal = _judge_pieces_reading(unquoted, root, argument, continues)
+        refusal = _judge_pieces_reading(unquoted, root, argument, continues, dialect)
         if refusal:
             return refusal
         refusal = _judge_whole_value(

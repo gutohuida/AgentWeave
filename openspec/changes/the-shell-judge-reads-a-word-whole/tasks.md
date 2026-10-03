@@ -179,7 +179,11 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   - (R4, POSIX CI) `bash -c 'bash -c "cp n \$HOME"'` refused **once the sibling change is in**. Until then, assert that its level-1 word `$HOME` reaches `_judge_word`: spy on `_judge_word`, which FAILS against R3, where the escape-removed text was judged only as a path.
   - PowerShell `Copy-Item x Microsoft.PowerShell.Core\FileSystem::C:\Windows\x` refused (Windows), and `…\FileSystem::..\x` refused naming `..\x`. FAIL today.
   - Controls that stand: `grep foo 'src\a.py'` (Windows), `ls lib/Foo::Bar.pm`.
-- [ ] 1.7d (R4, D4 on Windows, Windows job) `python -c "open('/dev/null','w')"` refused as a path. PASSES today (tail), and FAILS against R3's D4. `sh -c "ls 2>/dev/null"` and `python w.py /dev/null` are allowed.
+- [x] 1.7d (R4, D4 on Windows, Windows job) `python -c "open('/dev/null','w')"` refused as a path. PASSES today (tail), and FAILS against R3's D4. `sh -c "ls 2>/dev/null"` and `python w.py /dev/null` are allowed.
+
+  **Iteration 26.** Built as task 2.2's third slice; see that task's own note for the measurement,
+  the fix (`_PIECE_BREAKS_SPLIT_RE`, `dialect` threaded through the piece reading) and the test
+  (`test_a_redirect_target_piece_names_a_bash_device_1_7d`).
 - [x] 1.8 In `hub/tests/test_permission_approver.py`, move rows X4, X5 and X6 out of "Residuals" to allowed, and change the expected reasons: N5 and N6 to `_NETWORK`, G3 to `_outside("../include")`, E11 to `_outside("../stray.txt")`, Z1 and Z2 to the whole traversal. Rewrite their comments to name this change, and record that each FAILS today
 
 ## 2. The fix
@@ -744,6 +748,51 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   pieces, the piece-level `_BASH_DEVICES` check threading `dialect` through, "Run 1.4g" now done)
   are a mix of built-elsewhere-unchecked and genuinely unbuilt; task 1.4g itself now ticks (see its
   own note).
+
+  **Iteration 26 note (third slice, the piece-level `_BASH_DEVICES` check, task 1.7d).** Re-derived
+  against the current code before building: rule 5's `_glob_links` call was already built
+  (iteration 20), but neither of rule 6's two readings called it, and the piece reading had no
+  device check at all -- only the whole-word check before rule 5 (line ~1924) did. Measured first
+  (`testbed/scratch/measure_bash_devices_piece.py`, gitignored, not committed), against `_decide`
+  directly: `sh -c 'ls 2>/dev/null'` -- the quotes keep the outer lexer from splitting at the inner
+  `>`, so the whole thing is one outer word, `/dev/null` reaches rule 6 as a piece split off by the
+  `>` break, not the whole-word check -- was wrongly **refused** (`'/dev/null' is outside your
+  workspace`), exactly task 1.7d's framing. `python -c "open('/dev/null','w')"` (python source
+  text, not a redirect) and `python w.py /dev/null` (a clean whole word) already matched the
+  task's "PASSES today" / "allowed" claims and needed no change.
+
+  Built `_PIECE_BREAKS_SPLIT_RE`, the same break class as `_PIECE_BREAKS_RE` but capturing, so
+  `_judge_pieces_reading`'s split keeps each delimiter next to the piece that followed it --
+  needed to tell a redirect-target piece (one directly after a `<`/`>` break) apart from any other
+  piece break (D4, R4's own distinction, not previously readable from a plain `.split()`). Threaded
+  `dialect` from `_judge_word`'s rule-6 call site through `_judge_pieces` and both of
+  `_judge_pieces_reading`'s calls (the quoted and quote-stripped readings). In the bash dialect, a
+  piece that is exactly a mapped device name now stands without being judged as a path, when it is
+  a redirect target OR the host has no drive letters (POSIX, where `/dev/null` is a real device for
+  every program, not only a redirect target) -- D4's own two-way rule, read off `design.md:430-442`
+  fresh, not assumed. `_judge_whole_value`/`_judge_piece` were not touched: the undivided-value
+  reading of a redirect-glued word (`"2>/dev/null"` read as one literal relative path) already
+  resolves *inside* the workspace with no `..` in it, exactly like the existing
+  `redirect_glued_to_a_glob` control (`sh -c 'ls 2>&1/x'`, task 1.4g) already proved for a
+  non-device redirect target -- confirmed by letting the piece-reading fix run alone and checking
+  the whole-value reading never raised a second refusal.
+
+  Added one test, `test_a_redirect_target_piece_names_a_bash_device_1_7d`, covering task 1.7d's
+  three named rows plus a control (a piece glued by a non-`<>` break, here `@`, stays refused --
+  the exemption is for a redirect target specifically, not any piece that happens to spell a
+  device name). Mutation-checked: stashing just `mcp_server.py` fails exactly that one test, the
+  other 98 unchanged. `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`:
+  99 passed (was 98, +1). Broader regression set
+  (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): 725 passed, 2 skipped, no regressions.
+  `ruff check` clean; `black --check --target-version py311` needed one reformat (the new
+  `_judge_pieces_reading` body), applied and reverified clean; `mypy src/` (the only path CI runs
+  mypy over) clean. `git diff --stat`: exactly `hub/hub/mcp_server.py`, the one test file, and this
+  task file. **Task 1.7d now ticks.** **Task 2.2 stays unticked**: `_glob_links` is still not
+  called from either of rule 6's readings (pieces or the whole value) -- the largest remaining
+  piece of this task, and the one that needs `budget` threaded all the way down through
+  `_judge_pieces`/`_judge_pieces_reading`/`_judge_piece`/`_judge_whole_value`, none of which carry
+  it today. That is the natural next slice.
 - [ ] 2.2a (R3, R4) The platform-keyed drive exception and the tilde-piece refusal in the piece reading; the level-by-level escape-removed readings, each judged by `_judge_word`, and the `::` not-plain rule before rule 5 (design D2 steps 3 and 5, D7). Run 1.7b, 1.7c and 1.7d
 - [ ] 2.2b D6: `approve_tool_call` catches an exception from `_decide`, denies with a reason and reports it; no return annotation
 - [ ] 2.2c (R4, D9) Add the `hub-judge-windows` job to `.github/workflows/ci.yml` (`windows-latest`, `working-directory: hub`, the `hub-test` install steps with `-c ../constraints-dev.txt`, `pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread`). Run `py -3.11 -m pytest tests/test_dev_constraints.py -q`. After pushing, confirm the job ran and passed, or do not tick
