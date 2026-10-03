@@ -82,6 +82,47 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   - `cp n '[[:alpha:]]p'/x`, `cp n [u]p/x` and `cp n ./u[p]` stay refused (rows above and 1.4e): the second review's HIGH 1 is not reopened.
 
   (R6) The rows `cp n [u]p/x` and `cp n '[[:alpha:]]p'/x` above pass only with D11: under R5 as written the words are `u]p/x` and `alpha:]]p/x`, no glob D8 can use, so both are **allowed** (FAIL against R5). The second is caught only by D8's whole-value pass, because `:` breaks the piece reading.
+
+  **Iteration 38 (first slice, the plain Bash/inner-shell/PowerShell rows).** Re-derived this
+  task's first bullet group fresh against `_decide` (`testbed/scratch/measure_1_4c_bash_rows.py`,
+  gitignored, not committed), not trusting the task's own claim that the reason assertion fails
+  today: with task 2.1c and 2.2 already built (both closed earlier this window), `cp n u*/`
+  (the bare trailing-slash form, distinct from the already-tested `cp n u*/x`), `cp n u?/x`,
+  `cp n [u]p/x` (matched exactly by the bracket relaxation task 2.1c's iteration 20 already
+  built -- `[u]p` holds none of `! ^ [ \` or a backtick, so it is not relaxed to `?`), the
+  inner-`bash -c 'cp n u*/'` form, and both PowerShell forms (`Copy-Item n u*\x` on Windows,
+  `Copy-Item n u*/x` on POSIX) are each **already refused today**, naming the resolved target --
+  confirmed by stashing nothing (no production file changed) and mutation-checking the test
+  instead (see below). The task's own text is stale here, like most of this change's rows. Two
+  rows in this same bullet group stay open, confirmed still wrong: `cp n '[[:alpha:]]p'/x`
+  (the POSIX character class) and `bash -O extglob -c 'cp n @(u)p/x'` (extglob) are each still
+  wrongly **allowed** -- `_glob_links` does not yet relax a POSIX class, and extglob is not in
+  `_GLOB_CHARS` so `_glob_links` never sees it as a glob at all, both as documented elsewhere in
+  this file. Neither this bullet's second paragraph ("the dot rule", `ls sub/.*/y`) nor the (R5),
+  (R8), or (R6/D11) sub-groups below were touched this iteration.
+
+  Added `test_a_bare_or_bracketed_relative_glob_is_matched_through_the_link_it_finds_1_4c` and
+  `test_a_relative_glob_is_matched_through_the_link_it_finds_windows_powershell_1_4c` to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`. Mutation-checked: backed up
+  `mcp_server.py`, inserted `return None` as `_glob_links`'s first statement (forcing every glob-link
+  call to find nothing), reran just the two new tests -- both fail (`assert True is False`),
+  confirming they are load-bearing; restored from the backup and confirmed `git diff --stat
+  hub/hub/mcp_server.py` is empty. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **112 passed** (was 110, +2). Broader
+  regression set (`test_permission_approver.py`, `test_hub_own_call.py`, `test_copilot_acp_decide.py`,
+  `test_a_write_outside_the_workspace_is_recorded.py`): **738 passed, 2 skipped**, no regressions.
+  `py -3.11 -m ruff check` and `py -3.11 -m black --check --target-version py311` on the changed
+  test file: both clean. No production file changed, so `mypy` is unaffected. `git diff --stat`:
+  exactly `hub/tests/test_the_shell_judge_reads_a_word_whole.py` and this task file.
+
+  **Task 1.4c still stays unticked.** What remains: the dot-rule row in this bullet's second
+  paragraph (unmeasured this iteration -- it may already be fixed by 2.1c's iteration 22 dot-leading
+  fix, needs re-derivation, not assumed); the POSIX character class and extglob rows just above
+  (each needs a further `_glob_links`/`_rewrite_dotdot_globs` slice, not attempted here); the (R5)
+  absolute-word and `sub/@s/u*/` rows; the (R8) bracket-relaxation rows (`[0-9]`, `[^a]`, `[!a]`);
+  and the (R6/D11) rows, which this task's own text says need 2.1d (unticked, not started). Each
+  needs its own fresh measurement against `_decide` before building, same discipline as this
+  iteration's slice -- do not assume any of them already pass just because this slice's rows did.
 - [ ] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
   - `cp n [u]p/` and `cp n ./u[p]` (a trailing `]` the trim removes). Each PASSES today only by the tail (`'/'`, `'/u[p'`), so assert the resolved target, which FAILS today; each FAILS against R5 (allowed).
   - `cp n [.]./x` refused as outside, quoting `'[.]./x'`. PASSES today by the tail `'/x'`, FAILS on the reason assertion and against R5 (the word `.]./x` is inside).

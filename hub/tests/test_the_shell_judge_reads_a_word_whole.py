@@ -706,6 +706,53 @@ def test_rule_6_also_matches_a_relative_glob_word_against_the_links_it_finds_2_2
     assert "it resolves to" in whole_value_only["reason"]
 
 
+# Task 1.4c's own plain-Bash/inner-shell/PowerShell rows (R4, D8 `_glob_links`, task 2.1c/2.2,
+# both already built): re-derived fresh against `_decide` (`testbed/scratch/measure_1_4c_bash_rows.py`,
+# gitignored, not committed), not trusting the task's own text, which claims the reason assertion
+# fails today -- it does not: each row below is already refused, naming the resolved target,
+# with no further production change needed. `cp n u*/` (a bare trailing slash, no tail component,
+# distinct from `through_link`'s `cp n u*/x` above) and `cp n u?/x` reach `_glob_links` through the
+# piece reading the same way `u*/x` does; `cp n [u]p/x` reaches it through the bracket relaxation
+# built for design D8 step 2 (task 2.1c, iteration 20) -- `[u]p` is matched exactly, not relaxed to
+# `?`, since it holds none of `! ^ [ \` or a backtick. The inner-`bash -c` and PowerShell forms
+# confirm the same `_glob_links` call is reached after each dialect's own lexing.
+def test_a_bare_or_bracketed_relative_glob_is_matched_through_the_link_it_finds_1_4c(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    bare_trailing_slash = _decide("Bash", {"command": "cp n u*/"})
+    assert bare_trailing_slash["allow"] is False
+    assert "it resolves to" in bare_trailing_slash["reason"]
+
+    question_mark = _decide("Bash", {"command": "cp n u?/x"})
+    assert question_mark["allow"] is False
+    assert "it resolves to" in question_mark["reason"]
+
+    bracket_exact = _decide("Bash", {"command": "cp n [u]p/x"})
+    assert bracket_exact["allow"] is False
+    assert "it resolves to" in bracket_exact["reason"]
+
+    inner_shell = _decide("Bash", {"command": "bash -c 'cp n u*/'"})
+    assert inner_shell["allow"] is False
+    assert "it resolves to" in inner_shell["reason"]
+
+    posix_powershell = _decide("PowerShell", {"command": "Copy-Item n u*/x"})
+    assert posix_powershell["allow"] is False
+    assert "it resolves to" in posix_powershell["reason"]
+
+
+@pytest.mark.skipif(not _WINDOWS, reason="a drive-letter host reads a backslash as a separator")
+def test_a_relative_glob_is_matched_through_the_link_it_finds_windows_powershell_1_4c(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    windows_powershell = _decide("PowerShell", {"command": "Copy-Item n u*\\x"})
+    assert windows_powershell["allow"] is False
+    assert "it resolves to" in windows_powershell["reason"]
+
+
 # 2.2, a first slice (design D2 step 2, D3's extglob units): an unquoted extglob group -- a
 # trigger (`@ ? * + !`) directly followed by `(`, up to its matching `)` -- is kept as one unit
 # through both the lexer and rule 6's piece reading, rather than fragmented at the `(`, `|` and `@`
