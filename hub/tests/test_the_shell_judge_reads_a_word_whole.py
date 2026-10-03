@@ -116,6 +116,26 @@ _TABLE = [
     # The accepted cost: a file literally named `.{,.}` is refused, because R2 cannot tell this
     # word apart from one handed to an inner shell.
     _row("1.3j", "cp notes.md '.{,.}'/x", False),
+    # 1.4 (D3): a glob component that begins with `.`, holds `*`/`?`/`[`, and that
+    # `fnmatch.fnmatchcase("..", component)` proves some real bash can still expand to `..`
+    # (`globskipdots` is off in bash before 5.2; Git Bash 5.2.37 has it on) is rewritten to `..`
+    # before `_judge_path` resolves it. Measured in real Git Bash 5.2.37 with `shopt -u
+    # globskipdots` (off, matching the older bash the rule guards against): `.*` -> `. ..`,
+    # `..*` -> `..`, `.[.]` -> `..`. `..?` needs a third character and never matches `..` in any
+    # bash (measured: stays literal), so `sub/..?/y` is left alone.
+    _row("1.4a", "ls .*/x", False),
+    _row("1.4h", "ls ..*/x", False),
+    _row("1.4i", "cp x .[.]/y", False),
+    # These two already resolve outside without any rewrite -- the leading component is already
+    # the literal `..`, which has no glob character to trigger D3 -- so they are controls: D3 must
+    # not change whether they refuse, only (below) whether the reason still quotes the whole piece.
+    _row("1.4j", "ls ../*", False),
+    _row("1.4k", "rm -rf ../*.py", False),
+    _row("1.4l", r"Get-ChildItem ..\*", False, tool="PowerShell"),
+    # Allowed: a dot-glob not at a component that could reach `..`, and a glob needing a third
+    # character after the dot.
+    _row("1.4m", "ls sub/.*/x", True),
+    _row("1.4n", "cp x sub/..?/y", True),
 ]
 
 
@@ -124,3 +144,31 @@ def test_the_decided_table(workspace, monkeypatch, tool, command, allow):
     monkeypatch.setenv("HUB_URL", _HUB)
     decision = _decide(tool, {"command": command})
     assert decision["allow"] is allow, decision["reason"]
+
+
+# 1.4: the refused rows above already pass an allow-only check today for three of the six (the
+# leading component is already a literal `..`), but the first three pass only once D3 rewrites the
+# glob component -- and even the three that already refused must still quote the *whole* piece as
+# written, not a fragment, so this checks the reason text itself rather than trusting `allow` alone.
+_DOTDOT_GLOB_REASON_TABLE = [
+    ("1.4a", "Bash", "ls .*/x", ".*/x"),
+    ("1.4h", "Bash", "ls ..*/x", "..*/x"),
+    ("1.4i", "Bash", "cp x .[.]/y", ".[.]/y"),
+    ("1.4j", "Bash", "ls ../*", "../*"),
+    ("1.4k", "Bash", "rm -rf ../*.py", "../*.py"),
+    ("1.4l", "PowerShell", r"Get-ChildItem ..\*", r"..\*"),
+]
+
+
+@pytest.mark.parametrize(
+    "tool, command, shown",
+    [
+        pytest.param(tool, command, shown, id=label)
+        for label, tool, command, shown in _DOTDOT_GLOB_REASON_TABLE
+    ],
+)
+def test_the_glob_dotdot_rows_quote_the_whole_piece(workspace, monkeypatch, tool, command, shown):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    decision = _decide(tool, {"command": command})
+    assert decision["allow"] is False
+    assert decision["reason"] == f"{shown!r} is outside your workspace"

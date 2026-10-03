@@ -7,6 +7,7 @@ and operator-gated scheduled-work mutations.
 
 import codecs
 import contextlib
+import fnmatch
 import inspect
 import json
 import locale
@@ -1271,6 +1272,30 @@ def _resolves_elsewhere(absolute: str, resolved: str) -> str:
     return f"{_OUTSIDE}: it resolves to {_quote(resolved)}"
 
 
+# D3: `a-url-is-not-a-path` kept `*`/`?`/`[` out of rule 5 because bash's `.*` can match `..`
+# (`globskipdots` is on in Git Bash 5.2.37 but off in bash before 5.2). A component is rewritten to
+# `..` only when `fnmatch.fnmatchcase("..", component)` proves it can expand that way -- `*` and
+# `?*` alone never match a dot-leading name, so `sub/..?/y` (a third character after the dot) is
+# left alone.
+_GLOB_CHARS = "*?["
+_SEPARATOR_RE = re.compile(f"([{re.escape(_SEPARATORS)}])")
+
+
+def _rewrite_dotdot_globs(path: str) -> str:
+    """Each component of `path` that some real bash could still expand to `..` (D3), rewritten to
+    `..` before `_judge_path` resolves it. The refusal this feeds still quotes the word as written,
+    not this rewritten value."""
+    components = _SEPARATOR_RE.split(path)
+    for index, component in enumerate(components):
+        if (
+            component.startswith(".")
+            and any(char in component for char in _GLOB_CHARS)
+            and fnmatch.fnmatchcase("..", component)
+        ):
+            components[index] = ".."
+    return "".join(components)
+
+
 def _judge_path(
     path: str, root: str, shown: str, argument: str, continues: bool
 ) -> Optional[Dict[str, Any]]:
@@ -1411,7 +1436,7 @@ def _judge_word(
     if dialect == "bash" and word in _BASH_DEVICES:  # D4: the null device, stdin/out/err
         return None
     if os.path.isabs(word) or _PLAIN_RELATIVE_RE.match(word):  # 5: a path, resolved
-        return _judge_path(word, root, word, argument, continues)
+        return _judge_path(_rewrite_dotdot_globs(word), root, word, argument, continues)
     return _judge_pieces(word, root, argument, continues)  # 6: the piece reading (D2)
 
 
@@ -1422,7 +1447,7 @@ def _judge_piece(piece: str, root: str, argument: str, continues: bool) -> Optio
         return _refuse(piece, _UNRESOLVED)
     if _TILDE_PREFIX_RE.match(piece):
         return _refuse(piece, _UNCHECKED)
-    return _judge_path(piece, root, piece, argument, continues)
+    return _judge_path(_rewrite_dotdot_globs(piece), root, piece, argument, continues)
 
 
 def _judge_pieces_reading(
