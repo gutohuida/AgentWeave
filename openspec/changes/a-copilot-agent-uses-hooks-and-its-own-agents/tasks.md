@@ -1060,6 +1060,35 @@ every run id, and paste each surface's text verbatim into the Round log.
   `… — acts on GitHub as you`, with no "Workspace only would …" line (R3). Deny it and record the
   card text.
 
+  **Driven 2026-10-03 night, real drive on `:8010`, left BLOCKED — its second bullet does not
+  hold.** First bullet: holds. With `copilot_github_mcp` unset (false), `Get-CimInstance
+  Win32_Process -Filter "Name='copilot.exe'"` during a real turn (`run-cda0da200b0f`) showed the
+  live command line carrying `--disable-builtin-mcps`. `PATCH .../agents/cp5` set
+  `copilot_github_mcp: true` (confirmed in the response); a new real turn (`run-a9ea1b559ca5`)
+  showed the live command line with that flag correctly absent.
+
+  Second bullet: does not hold, across four real turns. "List one open issue... using the GitHub
+  tools" (`run-a9ea1b559ca5`) made `cp5` use `gh issue list` over `shell` instead (its `read` of
+  `CLAUDE.md` was denied by a preToolUse hook first). A turn forcing the MCP path explicitly
+  (`run-1c8b1fe0df9a`) got the answer that the exposed GitHub MCP toolset has no issue-listing
+  tool at all. A turn naming `search_code` directly (`run-09913f71b09a`) did call
+  `github-mcp-server-search_code` — and it completed immediately, tool_use straight to
+  tool_result, with no ask-me card in the real `GET .../agent/cp5/chat` timeline and zero
+  `permission.requested`/`permission_denied`-family rows in `GET .../logs` for any of `cp5`'s runs
+  this session. A fourth turn asking `cp5` to create an issue through the MCP tool (testing
+  whether only read tools skip the ask) got the same "no such tool in this toolset" answer as the
+  second — no card, and confirmed after the fact that no issue was created
+  (`gh issue list --repo gutohuida/AgentWeave --state all` → `[]`).
+
+  Reading `hub/hub/copilot_acp.py` confirms this is not the Hub declining to ask: `answer_permission`
+  and the `github_rule`/D9 `ASK_OPERATOR` branch (`copilot_acp.py:671-672`) only run when Copilot's
+  ACP session sends `session/request_permission` in the first place. For the one github-mcp-server
+  call this drive got Copilot to actually make, it never sent that request — D9's gate was never
+  reached, not overridden. Filed as **finding F485** (`scripts/drive/FINDINGS.md`): task 7.8 as
+  specified cannot be completed as written in this environment — there is no issue tool to list
+  from, and no card was ever observed to deny. Left unchecked (blocked). **Allowance:** four real
+  turns on `cp5` (Free-model Auto), no review dispatch.
+
 ## 8. Archive
 
 - [ ] 8.1 Every kept group's tasks are checked, and every cut group's spec delta is deleted.

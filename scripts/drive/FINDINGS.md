@@ -33882,3 +33882,46 @@ no-record/no-broadcast guarantee for a provider key and is real and reproduced, 
 "independent" corroboration attached to it was not. Full report: `cp5`'s own
 `.reviews/review-0001-2026-10-03-1836.md` in the review checkout (not committed; written by its
 `edit` tool call during the turn).
+
+## F485 (D) — the GitHub MCP toggle's ask-me card never fires: Copilot's own session never sends `session/request_permission` for a built-in `github-mcp-server` call
+
+**Status:** open, found 2026-10-03 by drive task 7.8 of `a-copilot-agent-uses-hooks-and-its-own-agents`
+(tasks.md:1056; real drive on the trial Hub `:8010`, agent `cp5`). **Ready:** no change owns it.
+
+Task 7.8's first bullet held exactly as written: with `cp5.config.copilot_github_mcp` false (default,
+unset), `Get-CimInstance Win32_Process -Filter "Name='copilot.exe'"` on the live process during a real
+turn (`run-cda0da200b0f`) showed `--disable-builtin-mcps` on the command line; setting
+`copilot_github_mcp: true` via `PATCH .../agents/cp5` and firing a new turn (`run-a9ea1b559ca5`) showed
+the live process's command line with that flag correctly absent.
+
+**The second bullet does not hold.** With the toggle on, three separate real turns asked `cp5` to use
+GitHub tools: (1) "List one open issue... using the GitHub tools" (`run-a9ea1b559ca5`) — `cp5` ran `gh
+issue list` over `shell` instead, after its `read` of `CLAUDE.md` was denied by a preToolUse hook; (2) a
+turn forcing the MCP path explicitly (`run-1c8b1fe0df9a`) — `cp5` replied that the exposed GitHub MCP
+toolset has no issue-listing tool at all, and used nothing; (3) a turn naming `search_code` directly
+(`run-09913f71b09a`) — `cp5` called `github-mcp-server-search_code` and it **completed immediately**,
+tool_use straight to tool_result, with **no ask-me card anywhere** in the real `GET
+.../agent/cp5/chat` timeline and **zero** `permission.requested`/`permission_denied`-family events in
+`GET .../logs` for any of `cp5`'s runs this session. A fourth real turn, asking `cp5` to create an issue
+through the MCP tool (a write action, to see whether only read tools skip the ask), got the same answer
+as (2) — the exposed toolset has no issue-creation tool — so no card and no issue was created either
+(confirmed after the fact: `gh issue list --repo gutohuida/AgentWeave --state all` returned `[]`).
+
+Reading `hub/hub/copilot_acp.py`'s own permission path confirms this is not the Hub refusing to ask:
+`answer_permission` (`copilot_acp.py:2036`), and the `decide_permission`/`github_rule` logic that would
+answer `ASK_OPERATOR` for exactly this case (`copilot_acp.py:671-672`, D9), only run **when Copilot's ACP
+session sends `session/request_permission`** (`PERMISSION_METHOD`) in the first place. For the one
+github-mcp-server tool call this drive got Copilot to actually make (`search_code`), it never sent that
+request — the Hub's D9 toggle logic was never reached, not overridden. Copilot's own CLI, in this
+installed version, is deciding client-side that this built-in MCP tool call needs no confirmation,
+upstream of anything AgentWeave's Hub can gate.
+
+**Fix candidates:** confirm against a GitHub MCP tool Copilot's own CLI *does* ask permission for (if
+any exist in this toolset) to bound how much of D9's gate is reachable at all in practice; if none do,
+record that D9's ask-me card is currently unreachable for the installed Copilot CLI version and file
+the gap with upstream or drop the design's claim that the toggle produces an operator-visible card.
+Either way, task 7.8 as specified (`tasks.md:1056`) cannot be completed as written — there is no issue
+tool to list from and no card to deny.
+
+**Allowance.** Four real turns on `cp5` (Free-model Auto, per this change's call budget), no review
+dispatch. No finding-13 note (B's optional) applicable here.

@@ -1801,6 +1801,25 @@ has not), **correction** (sibling text that is wrong about this change), or **no
   boundary — is real and reproduced, independent of the fabricated corroboration. `tasks.md` 7.7
   left unchecked, marked blocked, with the full captured entry inline.
 
+- **Task 7.8, real drive, 2026-10-03**: first bullet holds. With `copilot_github_mcp` unset
+  (false), the live `copilot.exe`'s command line during a real turn (`run-cda0da200b0f`) carried
+  `--disable-builtin-mcps`; after `PATCH .../agents/cp5` set `copilot_github_mcp: true`, a new real
+  turn (`run-a9ea1b559ca5`) showed the flag correctly absent.
+
+  **The second bullet does not hold — no ask-me card was ever observed, across four real turns.**
+  "List one open issue... using the GitHub tools" made `cp5` fall back to `gh issue list` over
+  `shell`. A turn forcing the MCP path got the answer that the exposed GitHub MCP toolset has no
+  issue-listing tool. A turn naming `search_code` directly did reach a real github-mcp-server call
+  (`run-09913f71b09a`) — it completed immediately, tool_use straight to tool_result, with zero
+  `permission.requested`-family rows anywhere in `cp5`'s logs. A turn asking for issue creation (to
+  check whether only read tools skip the ask) got the same "no such tool" answer, and confirmed no
+  issue exists on the real repo afterward. Reading `copilot_acp.py` shows the Hub's own D9
+  `github_rule`/`ASK_OPERATOR` branch only runs once Copilot's ACP session sends
+  `session/request_permission` — which it never did for the one call this drive reached. D9's gate
+  was never reached, not overridden by anything this Hub does. Filed as **finding F485**
+  (`scripts/drive/FINDINGS.md`). `tasks.md` 7.8 left unchecked, marked blocked: as specified, the
+  task cannot be completed in this environment.
+
 ## Open questions for R2/R3
 
 1. **Slice 2 alignment.** *(Answered in R2; R3 moved the answers into *Required of slices 1–4*, D5 and D9.)* What does slice 2's raw-event subscription list contain? Where does its
