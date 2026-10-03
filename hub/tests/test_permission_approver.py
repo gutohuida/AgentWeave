@@ -209,9 +209,9 @@ def _outside(word: str) -> tuple:
     return ("outside", repr(word))
 
 
-def _row(label, command, allow, reason=None, *, tool="Bash"):
+def _row(label, command, allow, reason=None, *, tool="Bash", marks=()):
     """One row: the tool whose `command` is read, and D2's answer and reason *after*."""
-    return pytest.param(tool, command, allow, reason, id=label)
+    return pytest.param(tool, command, allow, reason, id=label, marks=marks)
 
 
 _TABLE = [
@@ -380,6 +380,38 @@ _TABLE = [
         True,
         tool="PowerShell",
     ),
+    # a-drive-or-a-home-variable-names-a-directory-by-itself, task 1.2: F402 controls that must stay
+    # allowed once D1 lands -- the workspace's own drive, and two unrelated uses of a second colon
+    # (git's revision syntax, sed's delimiter). Each PASSES today; a rule that ignores the dialect or
+    # a rule that refuses on any second colon would wrongly flip one of these.
+    _row(
+        "1.2a",
+        "Copy-Item x <owndrive>:",
+        True,
+        tool="PowerShell",
+        marks=pytest.mark.skipif(
+            sys.platform != "win32", reason="drive letters are a Windows concept"
+        ),
+    ),
+    _row(
+        "1.2b",
+        "Copy-Item x <owndrive>:foo",
+        True,
+        tool="PowerShell",
+        marks=pytest.mark.skipif(
+            sys.platform != "win32", reason="drive letters are a Windows concept"
+        ),
+    ),
+    _row("1.2c", "git show HEAD:README.md", True, tool="PowerShell"),
+    _row("1.2d", "sed s:a:b: f", True, tool="PowerShell"),
+    _row(
+        "1.2e",
+        "cp notes.md <owndrive>:",
+        True,
+        marks=pytest.mark.skipif(
+            sys.platform != "win32", reason="drive letters are a Windows concept"
+        ),
+    ),
 ]
 
 # Windows reads `\` as a separator, so these rows moved there. On POSIX, where `\` is an ordinary
@@ -432,6 +464,7 @@ def test_the_decided_table(workspace, monkeypatch, tool, command, allow, reason)
     root = os.path.realpath(workspace)
     command = command.replace("<root>", root.replace("\\", "/"))
     command = command.replace("<msys>", "/" + root[:1].lower() + root[2:].replace("\\", "/"))
+    command = command.replace("<owndrive>", root[:2])
     decision = _decide(tool, {"command": command})
     assert decision["allow"] is allow, decision["reason"]
     if reason == _NETWORK:
