@@ -354,15 +354,61 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   rows of 1.4c that need a bracket expression or a relative word (`cp n [u]p/x`, `ls sub/[a]`, `cp n
   u*/` relative) still do not pass; only the one absolute, bracket-free, `..`-free row above does.
 
-  **Queued next:** the design's D8 step 2 (relaxed bracket-expression matching, which `_glob_links`
-  needs before task 2.1d's remaining half -- the bracket-kept word reaching a real link match --
-  can close) is the next natural slice, sized the same way: re-derive from D8 step 2's text again
-  (the bracket-scanning rule from `[` to its closing `]`, past an optional leading `!`/`^`, with
-  POSIX classes `[: =. ]` read as bash reads them) before building, and wire it into the same
-  `_glob_links` so the bracket rows of 1.4c and 1.4e become reachable. After that, D8 step 4's
-  multi-component walk (carrying each branch's real and listed directory, moving on `..`) is what
-  the rest of 1.4c, 1.4d and 1.4f still need, and the entry budget is what task 2.0's `_Budget`
-  still has no hook for.
+  **Iteration 20 (a second slice: D8 step 2's bracket relaxation).** Re-derived step 2's bracket
+  rule from the design text again, not iteration 19's own reading, before building: `fnmatch` reads
+  a bracket expression differently from the shell only when it opens with `!` or `^`, or holds a
+  `[`, a `\` or a backtick; such an expression is relaxed to `?` (the widest reading that is still
+  one character), every other bracket expression is matched exactly, and a `[` with no closing `]`
+  is a literal character to both. Built `_bracket_expression_end` (finds the closing `]` as bash
+  does, past an optional leading `!`/`^` and a `]` directly after that, with `[:`, `[=`, `[.`
+  classes read as their own sub-brackets) and `_relax_bracket_pattern` (walks the pattern, relaxing
+  each bracket expression it finds per the rule above, passing everything else through unchanged)
+  in `hub/hub/mcp_server.py`, and wired the result into `_glob_links`'s existing match loop in
+  place of the raw pattern. The one line the old exclusion needed changing: `pattern`'s
+  glob-character check now reads `_GLOB_CHARS` (`*?[`) instead of `*?` only, so a pattern holding
+  only a bracket expression (`[u]p`, with no `*`/`?`) is no longer skipped before reaching the
+  match loop.
+
+  Measured directly against `_decide` first, on this Windows machine, with the same real junction
+  (`testbed/scratch/measure_glob_links.py`, gitignored, not committed, extended with five more
+  rows): against an absolute word whose piece's last component is a bracket pattern (trailing `/`,
+  so the bracket is the last component, not followed by further ones -- this slice's own scope),
+  `[u]p/` (exact match) and the three relaxed forms `[^a]p/` (bash negation), `[!a]p/`
+  (PowerShell's literal `!`) and `[[:alpha:]]p/` (a POSIX class `fnmatch` has no notion of) were all
+  wrongly **allowed** today against the real junction `up`, confirmed live, and are now refused,
+  each reason naming where `up` resolves. Confirmed no regression: `[0-9]/` (an exact bracket that
+  matches no one-character name in the fixture) stays allowed, R8's own worked example. Added one
+  standalone test,
+  `test_an_absolute_glob_word_s_bracket_expression_is_relaxed_like_the_shell_reads_it`, to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py` (needs the fixture's own absolute path and
+  a real junction, so not a `_TABLE` row, same reasoning as iteration 19's test next to it).
+  Mutation-checked: `git stash`ing just `mcp_server.py` and rerunning the test file fails exactly
+  this one new test (on its first assertion, the exact-match row), leaving the other 92 rows
+  passing unchanged. `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`:
+  93 passed (was 92, +1). Broader regression set
+  (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): 719 passed, 2 skipped, no regressions.
+  `ruff check` and `black --check --target-version py311` on both changed files: clean. `git diff
+  --stat`: exactly `hub/hub/mcp_server.py` and the one test file, plus this task file.
+
+  **Task 2.1c still stays unticked**, and so does 2.1d (below): this slice only reaches an
+  *absolute* word (rule 5's own wiring from iteration 19), so the 1.4c/1.4e bracket rows that are
+  relative words (`cp n [u]p/x`, `ls sub/[a]`, `cp n ./u[p]`) still do not pass -- they need rule
+  6's piece reading rewritten to call `_glob_links` too (task 2.2), which this change has not
+  reached. `..` and multi-component pieces are still excluded exactly as iteration 19 left them;
+  an extglob group is still not detected as a glob character at all (it has no `*`, `?` or `[`), so
+  `bash -O extglob -c 'cp n @(u)p/x'` (1.4c's own extglob row) is untouched by this slice too.
+
+  **Queued next:** D8 step 4's multi-component walk (carrying each branch's real and listed
+  directory, a literal component's link test via `os.lstat`, moving on `..` and judging where it
+  lands, the entry budget hook `_Budget` still has no `_glob_links` hook for) is what the rest of
+  1.4c, 1.4d and 1.4f need, and is the natural next slice once it can be sized down the same way
+  this one and iteration 19's were -- re-derive D8 step 4 from the design text again rather than
+  trusting this note, since it is the largest remaining piece of D8 (real/listed path tracking
+  across descent, the `..`-after-a-link refusal naming where it lands via `_resolves_elsewhere`,
+  and the budget charge per listing). Task 2.2's rule-6 rewiring of `_glob_links` onto relative
+  globs is independent of step 4 and could be sized as its own slice first if step 4 proves too
+  large again.
 - [ ] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
 
   **Iteration 18 (partial).** Measured today's `_decide` directly first (not from this file's old
@@ -397,6 +443,13 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   the one test file, plus this task file. **Task 2.1d stays unticked**: its own text also names "D8's
   reading of a component that opens with a bracket expression," which is `_glob_links`'s job once
   2.1c exists, and the link-detection rows of 1.4c/1.4e are not run yet.
+
+  **Iteration 20 note.** `_glob_links` now relaxes a bracket expression (2.1c's iteration-20 slice,
+  above), so "D8's reading of a component that opens with a bracket expression" exists -- but only
+  for an absolute word (rule 5). The bracket-kept word built here reaches a real link match through
+  that path (an absolute `cp n <ws>/[u]p/` now resolves and refuses), but 1.4c/1.4e's own rows are
+  relative words, which still reach rule 6's unrewritten piece reading, not `_glob_links`. 2.1d
+  stays unticked until task 2.2 wires `_glob_links` into rule 6 too.
 - [ ] 2.2 D2-D5 (R5: D3 and `_glob_links` also run in rule 5 on an absolute glob word, and in rule 6 on the whole value as well as each piece; `_words` reports a trimmed trailing `:` for D5; (R8) D2 step 6, the whole value's literal judgement, after the pieces, with a colon-joined option dropped, divided at its colons where `_DRIVE_LETTERS` is true (read at call time), and on POSIX judged whole as well, each through step 5. Run 1.4g):
   - replace rule 6 of `_judge_word` with the piece reading, including D3's extglob units;
   - add `_PIECE_BREAKS`, `_BASH_DEVICES`, `_SCP_ADDRESS_RE` and `_HOST_PORT_RE` beside `_ABSOLUTE_PATH_RE`, with a comment naming this change;

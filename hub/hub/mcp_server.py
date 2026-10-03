@@ -1433,23 +1433,84 @@ def _is_link_entry(entry: "os.DirEntry[str]") -> bool:
     return False
 
 
+_BRACKET_CLASS_OPENERS = {":": ":]", "=": "=]", ".": ".]"}
+
+
+def _bracket_expression_end(pattern: str, start: int) -> Optional[int]:
+    """The index of the `]` that closes the bracket expression opening at `pattern[start]` (D8
+    step 2, "found as bash finds it"): past an optional leading `!` or `^` and a `]` directly
+    after that, to the `]` that closes it, where a `[:`, `[=` or `[.` inside opens a POSIX class
+    that runs to its own `:]`, `=]` or `.]` rather than closing the expression. None when
+    `pattern[start]` is a `[` with no closing `]` -- bash and `fnmatch` both then read it as a
+    literal character.
+    """
+    length = len(pattern)
+    index = start + 1
+    if index < length and pattern[index] in "!^":
+        index += 1
+    if index < length and pattern[index] == "]":
+        index += 1
+    while index < length:
+        char = pattern[index]
+        if char == "[" and index + 1 < length and pattern[index + 1] in _BRACKET_CLASS_OPENERS:
+            closer = _BRACKET_CLASS_OPENERS[pattern[index + 1]]
+            end = pattern.find(closer, index + 2)
+            if end == -1:
+                index += 1
+                continue
+            index = end + 2
+            continue
+        if char == "]":
+            return index
+        index += 1
+    return None
+
+
+def _relax_bracket_pattern(pattern: str) -> str:
+    """`pattern` with each bracket expression (D8 step 2) relaxed to `?` where `fnmatch` cannot
+    read it as the shell does -- it opens with `!` or `^`, or holds a `[`, a `\\` or a backtick --
+    and kept as written otherwise, for `fnmatch` to match exactly. A `[` with no closing `]`, and
+    every character outside a bracket expression (including `*` and `?`), passes through
+    unchanged.
+    """
+    pieces = []
+    index = 0
+    length = len(pattern)
+    while index < length:
+        char = pattern[index]
+        if char == "[":
+            end = _bracket_expression_end(pattern, index)
+            if end is not None:
+                content = pattern[index + 1 : end]
+                if content[:1] in "!^" or any(mark in content for mark in "[\\`"):
+                    pieces.append("?")
+                else:
+                    pieces.append(pattern[index : end + 1])
+                index = end + 1
+                continue
+        pieces.append(char)
+        index += 1
+    return "".join(pieces)
+
+
 def _glob_links(piece: str, shown: str, root: str) -> Optional[Dict[str, Any]]:
     """D8, a first slice: a `piece` (already rewritten by `_rewrite_dotdot_globs`) whose only
-    glob-holding component is its last one, holding `*` and/or `?` only, with no `..` anywhere.
-    The base -- the piece's leading components -- is listed once with `os.scandir`, resolved first
-    by `_physical` (D12) so a link in the base is followed; each entry matching the final
-    component under `fnmatch.fnmatchcase` (`os.path.normcase` of both sides) that is itself a link
-    is judged by `_judge_path`, quoting `shown` (the word as written). None when nothing refuses,
-    including when the directory cannot be listed (the shell cannot list it either, and the
-    literal reading -- already judged by the caller -- stands alone).
+    glob-holding component is its last one, with no `..` anywhere. The base -- the piece's
+    leading components -- is listed once with `os.scandir`, resolved first by `_physical` (D12)
+    so a link in the base is followed; each entry matching the final component's *relaxed*
+    pattern (D8 step 2, `_relax_bracket_pattern`) under `fnmatch.fnmatchcase` (`os.path.normcase`
+    of both sides) that is itself a link is judged by `_judge_path`, quoting `shown` (the word as
+    written). None when nothing refuses, including when the directory cannot be listed (the shell
+    cannot list it either, and the literal reading -- already judged by the caller -- stands
+    alone).
 
     A piece holding more than one glob-holding component, a glob followed by further components,
-    a bracket expression, or a `..`, is left to a further slice of this same task (D8 step 2's
-    bracket relaxation, and step 4's multi-component walk and `..`-after-a-link judging) -- this
-    returns None for those rather than guess. The bash dot rule (D8 step 2, "a name beginning with
-    `.` matches only when the component does too") is also left to that slice: skipping it only
-    widens what matches, which the design allows ("over-approximation... can only add a refusal"),
-    and nothing in this slice's own test needs it.
+    an extglob group, or a `..`, is left to a further slice of this same task (step 4's
+    multi-component walk and `..`-after-a-link judging) -- this returns None for those rather than
+    guess. The bash dot rule (D8 step 2, "a name beginning with `.` matches only when the
+    component does too") is also left to that slice: skipping it only widens what matches, which
+    the design allows ("over-approximation... can only add a refusal"), and nothing in this
+    slice's own test needs it.
     """
     drive, rest = os.path.splitdrive(piece)
     anchor = drive + os.sep
@@ -1461,7 +1522,7 @@ def _glob_links(piece: str, shown: str, root: str) -> Optional[Dict[str, Any]]:
     if not components or ".." in components:
         return None
     pattern = components[-1]
-    if "[" in pattern or not any(char in pattern for char in "*?"):
+    if not any(char in pattern for char in _GLOB_CHARS):
         return None
     if any(char in component for component in components[:-1] for char in _GLOB_CHARS):
         return None
@@ -1474,7 +1535,7 @@ def _glob_links(piece: str, shown: str, root: str) -> Optional[Dict[str, Any]]:
             entries = list(listing)
     except (OSError, ValueError):
         return None
-    normalized_pattern = os.path.normcase(pattern)
+    normalized_pattern = os.path.normcase(_relax_bracket_pattern(pattern))
     for entry in entries:
         if not fnmatch.fnmatchcase(os.path.normcase(entry.name), normalized_pattern):
             continue

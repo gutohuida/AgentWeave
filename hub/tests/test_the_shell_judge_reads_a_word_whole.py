@@ -407,12 +407,12 @@ def test_a_letter_range_through_a_separator_is_refused_on_windows(workspace, mon
 
 # 2.1c (design D8), a first slice: rule 5 also matches an absolute glob word against the links it
 # finds, not only its literal text (R5's "cp n <workspace, absolute, forward slashes>/u*/" row).
-# Reachable only on this slice's own terms -- the glob is the piece's last component, holds only
-# `*`/`?`, and nothing in the piece is `..` -- the fuller walk (more than one glob component, a
-# glob followed by further components, a bracket expression, `..`) is left to a further slice; see
-# this task's own note in tasks.md. PASSES today only by the tail (`'/'`), so this asserts the
-# reason names where the match resolves, which FAILS today (measured with a throwaway script
-# first; confirmed by stashing just `mcp_server.py` and rerunning, below).
+# Reachable only on this slice's own terms -- the glob is the piece's last component, and nothing
+# in the piece is `..` -- the fuller walk (more than one glob component, a glob followed by
+# further components, an extglob group, `..`) is left to a further slice; see this task's own note
+# in tasks.md. PASSES today only by the tail (`'/'`), so this asserts the reason names where the
+# match resolves, which FAILS today (measured with a throwaway script first; confirmed by stashing
+# just `mcp_server.py` and rerunning, below).
 def test_an_absolute_glob_word_is_also_matched_against_the_links_it_finds(workspace, monkeypatch):
     monkeypatch.setenv("HUB_URL", _HUB)
     forward = str(workspace).replace("\\", "/")
@@ -431,3 +431,42 @@ def test_an_absolute_glob_word_is_also_matched_against_the_links_it_finds(worksp
     # a relative glob reaches rule 6, which this slice does not touch.
     relative = _decide("Bash", {"command": "cp n u*/x"})
     assert relative["allow"] is True, relative["reason"]
+
+
+# D8 step 2's bracket relaxation, re-derived from the design text again (not iteration 19's own
+# reading) and sized the same way: a bracket expression the piece's last component holds is kept
+# exact for `fnmatch` when it is one `fnmatch` already reads as the shell does, and relaxed to `?`
+# only where it cannot (it opens with `!`/`^`, or holds a `[`, `\` or backtick). Each row PASSES
+# today only by the tail; measured first with a throwaway script against a real junction before
+# trusting this test.
+def test_an_absolute_glob_word_s_bracket_expression_is_relaxed_like_the_shell_reads_it(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    forward = str(workspace).replace("\\", "/")
+
+    # Exact bracket match: `[u]p` matches only `up`, the link.
+    exact = _decide("Bash", {"command": f"cp n {forward}/[u]p/"})
+    assert exact["allow"] is False
+    assert "it resolves to" in exact["reason"]
+
+    # Control: `[0-9]` is also matched exactly -- no one-character digit name exists, so nothing
+    # matches and the word stands allowed (R8's own worked example).
+    no_match = _decide("Bash", {"command": f"cp n {forward}/[0-9]/"})
+    assert no_match["allow"] is True, no_match["reason"]
+
+    # Bash negation: `fnmatch` reads `^` literally, so `[^a]` relaxes to `?` and matches `up`.
+    negated = _decide("Bash", {"command": f"ls {forward}/[^a]p/"})
+    assert negated["allow"] is False
+    assert "it resolves to" in negated["reason"]
+
+    # PowerShell reads `!` literally where bash negates with it; either way `fnmatch` cannot read
+    # it, so `[!a]` also relaxes to `?` and matches `up`.
+    bang = _decide("Bash", {"command": f"cp n {forward}/[!a]p/"})
+    assert bang["allow"] is False
+    assert "it resolves to" in bang["reason"]
+
+    # A POSIX class `fnmatch` has no notion of: `[[:alpha:]]` relaxes to `?` and matches `up`.
+    posix_class = _decide("Bash", {"command": f"cp n {forward}/[[:alpha:]]p/"})
+    assert posix_class["allow"] is False
+    assert "it resolves to" in posix_class["reason"]
