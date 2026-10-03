@@ -8,6 +8,13 @@ design.md's *Required of slices 1–4* against the slices as built, and fix ever
 site first. "Fails on today's code" below means **it fails on master after those land and
 before this change**.
 
+**Done 2026-10-03** (IMPL pre-check; slices 1–4 are archived, along with
+`a-claude-run-is-told-its-agentweave-tools-by-their-full-names` and
+`an-ask-me-card-says-what-workspace-only-would-decide`). Every "(rebase at IMPL)" site naming one
+of those is now VERIFIED-CODE in design.md's Round log and in place; nothing needed correcting.
+The sites naming `worker-spend-counts-against-the-budget`, `a-run-records-that-its-calls-were-allowed`
+and `a-file-path-is-not-redacted-as-a-credential` are unchanged — those three remain open/unbuilt.
+
 The four groups are A, C, B and D, in order of value. Each one can be cut. If the operator REJECTED
 a group, skip every task tagged with it, and delete its spec delta before archiving:
 

@@ -71,8 +71,9 @@ the fallback for the counts when the `complete` event's `data` was omitted (D4, 
 `session.error` for its usage ledger. So this change *ensures* the six are present, as a set union
 onto slice 2's module constant, and genuinely adds only the three `subagent.*` types and
 `session.compaction_start`. It never re-declares the list, so cutting slice 4 or this change leaves
-the other's entries standing. **(rebase at IMPL: `a-copilot-agent-runs-over-acp`,
-`a-copilot-run-shows-its-credits` unbuilt at R2.)**
+the other's entries standing. **(IMPL pre-check, 2026-10-03: VERIFIED-CODE.
+`COPILOT_RAW_EVENTS` (`copilot_acp.py:94-111`) already holds `session.error` and
+`session.compaction_complete` from the now-archived slices 2 and 4.)**
 
 **Why.** For each fact the raw event is a superset of the hook payload (proposal table, VERIFIED from
 the schema):
@@ -152,8 +153,11 @@ constraints on that path: the new tool is registered with slice 3's `@_tool()` d
 tool is once slice 3 lands (its D3, review note 12), so it joins the callable-set parity test; and
 the hook file is written **through slice 2's `.agentweave-owned.json` recorder** (slice 2's
 § *Provided to slices 3–5* item 20), because slice 2's before-spawn sweep removes every hook,
-setting, MCP config and agent file in the home that the Hub did not record there. **(rebase at IMPL:
-`a-run-reaches-the-hub-without-mcp` unbuilt at R2.)** **Not `type:"http"`**, for four reasons:
+setting, MCP config and agent file in the home that the Hub did not record there. **(IMPL
+pre-check, 2026-10-03: moot, not wrong — `a-run-reaches-the-hub-without-mcp` is archived and its
+`.agentweave-owned.json`/`@_tool()` machinery exists, but D2 was DECIDED "none" 2026-09-28 and no
+task builds this overrule path, so nothing depends on it.)** **Not `type:"http"`**, for four
+reasons:
 
 1. `http://localhost` needs `COPILOT_HOOK_ALLOW_LOCALHOST=1` in the CLI's environment.
 2. The run token cannot reach the request. `allowedEnvVars` header expansion forces `https`, and a
@@ -383,7 +387,9 @@ declines the compaction's attempt until another run happens. (R2: they did colli
 - Slice 4 (`a-copilot-run-shows-its-credits`, its D10) changes `resolve_policy` to take
   `compaction_percent` and moves the final-warning percent per runner. R3: that happens inside
   `consider`, which the compaction path shares, so no separate plumbing is needed (above).
-  **(rebase at IMPL: `a-copilot-run-shows-its-credits` unbuilt at R3.)**
+  **(IMPL pre-check, 2026-10-03: VERIFIED-CODE. `consider` (`checkpoint_trigger.py:173-200`)
+  resolves `compaction_percent` internally; `consider_from_reading` passes only raw
+  `percent`/`context_tokens`.)**
 
 ## D5 — A Copilot error is one error event; a failed compaction is a diagnostic
 
@@ -416,7 +422,8 @@ compaction* (a degraded state, not a failure of the turn) is a `diagnostic`.
   the builder with `stream="copilot"` and, if slice 2 lands without the keyword, adds it
   (`stream: str = "runner"`, written into the payload). The UI renders a diagnostic's `content`
   (`AgentTimeline.tsx:806-822`), so the payload key names do not change what the operator reads.
-  **(rebase at IMPL: `a-copilot-agent-runs-over-acp` unbuilt at R3.)**
+  **(IMPL pre-check, 2026-10-03: VERIFIED-CODE. `diagnostic_event(*, stream, severity, summary,
+  code=None, facts=None)` (`runner_events.py:231-238`) ships exactly those keywords.)**
 - Neither builder passes `facts` through `redact_secrets` whole, for the `token`-key reason in D4.
   String values go through the value rule; numbers are kept.
 
@@ -667,8 +674,9 @@ have to dig out). The schema types the fields; the route decides.
       runner gained a provider) is ignored in favour of `runner.model`, as `:802` ignores a stored
       run override. One helper, `one_shot_model(runner, checkpoint_model)`, serves the three sites.
 
-  **(rebase at IMPL: `each-runner-cli-is-one-adapter` unbuilt at R2; if `catalog_provider` becomes
-  per-runner there, these sites collapse onto it.)**
+  **(IMPL pre-check, 2026-10-03: VERIFIED-CODE. `catalog_provider` is still a `ClassVar`
+  (`runner_adapters/base.py:268`), so the collapse condition did not happen; these sites still
+  apply.)**
 
 **Azure is deferred (DECIDED 2026-09-28, together with OpenAI).** An Azure model is a deployment
 name the catalog cannot declare (`COPILOT_PROVIDER_WIRE_MODEL`), which conflicts with the catalog
@@ -732,8 +740,12 @@ from `runner_row` (`agent_trigger.py:764-765`), then calls `resolve_agent_env(ru
 (`:849`). Putting `config["provider_config"] = runner_row.provider_config` in the same place (and
 in `get_agent_config`, below) delivers it. What was missing is the last hop: slice 1's
 `guard_env(proc_env, env_vars)` saw only `env_vars`, not `config`. That was listed under *Required
-of slices 1–4*, and slice 1's R3 provides it: `guard_env(proc_env, config)`, must not raise (contract reconciliation, 2026-09-28). **(rebase at IMPL: `each-runner-cli-is-one-adapter`, `a-copilot-agent-runs-over-acp`
-unbuilt at R3.)**
+of slices 1–4*, and slice 1's R3 provides it: `guard_env(proc_env, config)`, must not raise (contract reconciliation, 2026-09-28). **(IMPL pre-check, 2026-10-03: VERIFIED-CODE. The base adapter
+declares `guard_env(self, proc_env, config: Mapping[str, Any])` (`runner_adapters/base.py:297-299`)
+and the Copilot adapter implements it (`copilot.py:248-254`), calling
+`copilot_guard_env(base, config.get("env_vars") or {})`. It does not yet read
+`config["provider_config"]` — that plumbing is this change's own unbuilt task 3.3, not a gap in
+slice 1 or 2.)**
 
 **R2: the key reaches everything `copilot.exe` starts. R1's "explicit allow-list" was false.**
 Slice 2's D3, as written, puts **no** `env` block in `agentweave-mcp.json`: *"The stdio MCP child
@@ -799,7 +811,10 @@ display code (the roster's model label and the context's *Team* list), not probe
 
 `get_agent_config`'s result is also what `resolve_agent_env` receives in the trigger, so one
 addition there (`meta["provider_config"] = runner_row.provider_config` beside `:524-526`) serves
-both. **(rebase at IMPL: slice 1 D14 moves `probe_agent` onto the adapter; the call sites stay.)**
+both. **(IMPL pre-check, 2026-10-03: VERIFIED-CODE. The Copilot adapter implements
+`launchability(self, agent, config)` (`copilot.py:231-240`); `get_agent_config` and the other call
+sites in the table above are unchanged. `provider_config` is not yet threaded through them —
+unbuilt task 3.3, not a gap here.)**
 
 **Where the key could leak, and why it does not:**
 
@@ -894,8 +909,9 @@ add one bullet:
 > it is recorded only by `update_task`.
 
 The review section sits in the workspace block, which slice 2's D5 classes as **per-turn**, so on a
-Copilot run the bullet travels in the prompt's per-turn block, not the agent file. **(rebase at
-IMPL: `a-copilot-agent-runs-over-acp` unbuilt at R2.)**
+Copilot run the bullet travels in the prompt's per-turn block, not the agent file. **(IMPL
+pre-check, 2026-10-03: VERIFIED-CODE. `RpcTurnRequest.per_turn_context` and `_context_block`
+(`copilot_acp.py:1633-1661,2254`) build the per-turn prompt block exactly as described.)**
 
 **`<base>` (R2 answered question 4).** `ReviewContext` (`review_turn.py:47-67`) does **not** know the
 merge target: it carries `commit_sha`, `branch` (the evidence's branch) and `earlier_commits`.
@@ -925,13 +941,17 @@ it as `main_branch`. There is **no** merge-base helper in the codebase. So:
   `(subprocess.SubprocessError, OSError)` into `None`. Test 1.11 patches `_git` to raise
   `TimeoutExpired` and asserts the turn proceeds with the commit alone.
 
-**Open changes touching this section (R2 re-verified their designs; both unbuilt):**
+**Open changes touching this section (R2 re-verified their designs; both unbuilt at R2/R3 — IMPL
+pre-check, 2026-10-03: `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` is now
+archived; `a-flow-stages-its-review-in-the-dispatch` is still open):**
 
 - `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` gives `_render_hub_agent_context`
   an optional `runner` parameter (its design `:61-65`) and deliberately leaves the review verdict's
   `update_task` bare (its design `:69-75`). This change uses that `runner` parameter to know the
   runner is `copilot` if it has landed, and otherwise reads it from `agent_row.runner_id`. The
-  bullet names `update_task` bare, matching the verdict line. **(rebase at IMPL.)**
+  bullet names `update_task` bare, matching the verdict line. **(IMPL pre-check, 2026-10-03:
+  VERIFIED-CODE. `_render_hub_agent_context` has `runner: Optional[str] = None`
+  (`api/v1/agents.py:1770-1788`).)**
 - `a-flow-stages-its-review-in-the-dispatch` edits the loop briefing's `_briefing_verdict_lines`
   (its design `:168-170`), not this renderer. No conflict.
 
@@ -1074,8 +1094,12 @@ not guarantee a stored value is well-formed. So:
       is not GitHub. Its `workspace_verdict` is `None` too.
 
     This depends on no field of the ask-me change. R2's longer sentence ("The Hub does not decide
-    GitHub actions on your behalf") had nowhere to live and is dropped. **(rebase at IMPL: that
-    change and slices 1–2 unbuilt at R3.)**
+    GitHub actions on your behalf") had nowhere to live and is dropped. **(IMPL pre-check,
+    2026-10-03: VERIFIED-CODE. `an-ask-me-card-says-what-workspace-only-would-decide` is archived;
+    `PermissionRequest.workspace_verdict` (`db/models.py:1648`) and the adapter's
+    `permission_card_label`/`workspace_verdict` members (`runner_adapters/base.py:237,244`) exist.
+    The GitHub-specific case in both is still this change's own unbuilt task 5.1/1.6, not a gap in
+    the sibling changes.)**
 - **When the server fails to start (R2 correction).** R1 said slice 3's MCP status handling
   surfaces a failed GitHub server. It does not: slice 2's D10 reports only a failure of the server
   named `agentweave`, and slice 3 reads the same status for `agentweave` only. With the toggle on
@@ -1549,6 +1573,45 @@ has not), **correction** (sibling text that is wrong about this change), or **no
     what the CLI starts; `agent-configuration`'s unavailable-server paragraph stays until task 1.1
     decides it (tasks 1.13, 5.1 say what to delete if it is removed).
   - The change's name still says "hooks" although it installs none; not renamed (proposal note).
+
+- **IMPL pre-check, 2026-10-03** (tasks.md "Before you start": slices 1–4 and
+  `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` and
+  `an-ask-me-card-says-what-workspace-only-would-decide` are now archived; re-read against the
+  code as built, not their R2/R3 designs). `worker-spend-counts-against-the-budget` and
+  `a-run-records-that-its-calls-were-allowed` and `a-file-path-is-not-redacted-as-a-credential`
+  remain open/unbuilt, so the rebase markers naming only them are left as they stand.
+  - **Held, VERIFIED-CODE against the built slices** (every rebase site below is resolved in place):
+    D1's `COPILOT_RAW_EVENTS` (`copilot_acp.py:94-111`) already carries `session.error` and
+    `session.compaction_complete`, added by slices 2 and 4 as D1 said, and still lacks the three
+    `subagent.*` types and `session.compaction_start` (this change's own task 2.2, correctly
+    unbuilt); D4's claim that slice 4's `consider` (`checkpoint_trigger.py:173-200`) resolves
+    `compaction_percent` internally, with no separate plumbing (confirmed: `consider_from_reading`
+    passes only raw `percent`); D5's `diagnostic_event(*, stream, severity, summary, code=None,
+    facts=None)` (`runner_events.py:231-238`) ships exactly those keywords; D7's `catalog_provider`
+    (`runner_adapters/base.py:268`) is still a `ClassVar`; D7's `guard_env(proc_env, config)` and
+    `one_shot_env(purpose, config=None)` exist on the base adapter (`base.py:297-299,333-335`) and
+    the Copilot adapter (`copilot.py:248-254,283-286`), wired through `agent_trigger.py` as
+    described — the adapter reads only `config["env_vars"]` today (`copilot_env.py`'s unconditional
+    strip), because `provider_config`-aware behaviour is this change's own unbuilt task 3.3, not a
+    sibling's gap; D7's probe move onto the adapter holds (`copilot.py:231`'s `launchability`
+    method; `get_agent_config` and the other call sites are unchanged, as the note predicted); D8's
+    `_render_hub_agent_context` (`api/v1/agents.py:1770-1788`) has the `runner: Optional[str] = None`
+    parameter `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` added, and the review
+    bullet still travels through `per_turn_context`/`_context_block` (`copilot_acp.py:1633-1661`,
+    `:2254`), not the agent file; D9's `PermissionRequest.workspace_verdict`
+    (`db/models.py:1648`) and the adapter's `permission_card_label`/`workspace_verdict` members
+    (`base.py:237,244`; Copilot's generic bodies at `copilot.py:153-165`) exist, with no
+    GitHub-specific case yet (this change's own unbuilt task 5.1/1.6, not a gap in the ask-me-card
+    change or slices 1–2).
+  - **D2's dead path (line ~155) is moot, not wrong:** `a-run-reaches-the-hub-without-mcp` is
+    archived, so its `@_tool()`/`.agentweave-owned.json` machinery exists, but D2 was DECIDED
+    "none" on 2026-09-28 and no task builds the overrule path, so nothing here depends on the
+    dependency actually resolving.
+  - **Nothing found wrong.** No correction to any decision, test or task was needed; every
+    "(rebase at IMPL)" marker naming an archived change is replaced above by a VERIFIED-CODE
+    citation in place, and the markers naming `worker-spend-counts-against-the-budget`,
+    `a-run-records-that-its-calls-were-allowed` and `a-file-path-is-not-redacted-as-a-credential`
+    are left as genuinely unbuilt dependencies.
 
 ## Open questions for R2/R3
 
