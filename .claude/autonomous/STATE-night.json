@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 24,
+    "iteration": 26,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "the-shell-judge-reads-a-word-whole-impl",
-    "next_action": "the-shell-judge-reads-a-word-whole-impl (B4, 20/41): re-derive task 2.2's remaining bullets in openspec/changes/the-shell-judge-reads-a-word-whole/tasks.md fresh against hub/hub/mcp_server.py (where _decide and _glob_links live; read .claude/rules/ for mcp_server.py first). Do not trust iteration 25's notes (2026-10-02 night log, iterations 24-25). In particular check _glob_links (D8) in rule 5 (an absolute glob word) and in rule 6 (the whole value as well as each piece), which needs the _Budget/memo threaded through, and the piece-level _BASH_DEVICES check, which needs dialect threaded through. Build the one slice that fits this turn, test-first from the matching 1.4x rows, and run hub/tests/test_permission_approver.py plus hub/tests/test_the_shell_judge_reads_a_word_whole.py under py -3.11. Tick 2.2 only when every bullet is built and verified. Mind stop_at 22:00.",
+    "next_action": "the-shell-judge-reads-a-word-whole-impl (B4, 21/41): re-derive task 2.2's one remaining bullet fresh against hub/hub/mcp_server.py (read .claude/rules/ for mcp_server.py first). Iteration 26 (this run's log entry) built and ticked task 1.7d: the piece-level _BASH_DEVICES check, with dialect threaded through _judge_pieces/_judge_pieces_reading. What is left of task 2.2 itself: _glob_links (D8) is still not called from either of rule 6's readings -- the piece reading (_judge_pieces_reading -> _judge_piece) or the undivided-value reading (_judge_whole_value -> _judge_piece). This needs budget threaded all the way down through _judge_pieces -> _judge_pieces_reading/_judge_whole_value -> _judge_piece (none of which take it today), mirroring how rule 5 already passes budget into _glob_links. Do not trust this note uncritically -- re-derive against the current code first, including whether _judge_piece's absolute-word branch is the right place to call _glob_links or whether it needs its own glob-aware branch alongside _judge_path. Build the one slice that fits this turn, test-first (measure today's real behaviour with a gitignored testbed/scratch script before writing the fix, per this task's own discipline), and run hub/tests/test_permission_approver.py plus hub/tests/test_the_shell_judge_reads_a_word_whole.py under py -3.11. Tick 2.2 only when every bullet is built and verified. Mind stop_at 22:00.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -73,8 +73,8 @@
         {
             "id": "the-shell-judge-reads-a-word-whole-impl",
             "status": "open",
-            "title": "B4 continues (20/41): task 2.2's _glob_links/budget plumbing",
-            "detail": "See the 2026-10-02 night log, iterations 25-28, for the sizing notes."
+            "title": "B4 continues (21/41): task 2.2's remaining _glob_links/budget plumbing in rule 6",
+            "detail": "Iter 26 built and ticked task 1.7d (the piece-level _BASH_DEVICES check, dialect threaded through _judge_pieces/_judge_pieces_reading). Task 2.2 itself stays open: _glob_links is still not called from either of rule 6's readings (pieces or the whole value), which needs budget threaded through _judge_pieces -> _judge_pieces_reading/_judge_whole_value -> _judge_piece. See the 2026-10-02 night log, iterations 25-28, and this window's iter 26 entry, for the sizing notes."
         },
         {
             "id": "a-drive-or-a-home-variable-names-a-directory-by-itself-impl",
