@@ -455,6 +455,26 @@ _TABLE = [
     # prefix, unlike `$env:USERPROFILE`/`$ENV:temp` in 1.4n/1.4o.
     _row("1.5l", "$tmp = New-TemporaryFile; Remove-Item $tmp", True, tool="PowerShell"),
     _row("1.5m", "Copy-Item x $TEMP", True, tool="PowerShell"),
+    # a-drive-or-a-home-variable-names-a-directory-by-itself, task 1.5a: the accepted costs (design
+    # "Costs the operator accepts"), asserted refused so that a change of mind is visible. A quoted
+    # reference is text to the shell, not a reference, but D2 reads the lexed word's text regardless
+    # of quoting; the judge cannot tell the two apart. Each PASSES today (allowed), so each FAILS
+    # today.
+    _row("1.5a1", "echo '$HOME'", False, _UNCHECKED),
+    _row("1.5a2", "grep '$HOME' f", False, _UNCHECKED),
+    _row("1.5a3", "cp x $(dirname $PWD)", False, _UNCHECKED),  # the nested text has the word $PWD
+    _row(
+        "1.5a4",
+        "git commit -m \"$(cat <<'EOF'\nuse $HOME for config\nEOF\n)\"",
+        False,
+        _UNCHECKED,
+    ),
+    # (R6) a PowerShell member access on a directory variable. `.` is not a name character, so the
+    # lookahead matches; `$PWD.Path` names the same directory `$PWD` does (the idiomatic way to get
+    # it), while `$HOME.Length` names no directory and is a false refusal -- both accepted (design
+    # Costs). FAILS today (allowed): `powershell_auto` never carried bare `PWD`.
+    _row("1.5a5", "Copy-Item x $PWD.Path", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.5a6", "Write-Output $HOME.Length", False, _UNCHECKED, tool="PowerShell"),
 ]
 
 # Windows reads `\` as a separator, so these rows moved there. On POSIX, where `\` is an ordinary

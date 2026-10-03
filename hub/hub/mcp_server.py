@@ -1186,7 +1186,7 @@ _MAX_NESTING = 8
 _DIRECTORY_VARIABLE_NAMES = {
     "bash": ("HOME", "OLDPWD", "TMP", "PWD"),
     "powershell_env": ("USERPROFILE", "TEMP"),
-    "powershell_auto": ("HOME",),
+    "powershell_auto": ("HOME", "PWD"),
 }
 _DIRECTORY_VARIABLE_RE = {
     "bash": re.compile(

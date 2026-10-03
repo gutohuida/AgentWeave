@@ -94,7 +94,38 @@
   `test_a_write_outside_the_workspace_is_recorded.py`): 685 passed, 2 skipped, nothing broken.
   `ruff check` and `black --check --target-version py311`: both clean, no reformat needed.
   `git diff --stat` confirms only the test file changed.
-- [ ] 1.5a (R4, the accepted costs, asserted refused so that a change of mind is visible) `echo '$HOME'`, `grep '$HOME' f`, `cp x $(dirname $PWD)`, and the commit heredoc whose body line is `use $HOME for config`. Each PASSES today (allowed), so each FAILS today, and the first three also FAIL against R3. (R6) Also PowerShell `Copy-Item x $PWD.Path` and `Write-Output $HOME.Length`, refused (member access; design Costs). Each FAILS today (allowed)
+- [x] 1.5a (R4, the accepted costs, asserted refused so that a change of mind is visible) `echo '$HOME'`, `grep '$HOME' f`, `cp x $(dirname $PWD)`, and the commit heredoc whose body line is `use $HOME for config`. Each PASSES today (allowed), so each FAILS today, and the first three also FAIL against R3. (R6) Also PowerShell `Copy-Item x $PWD.Path` and `Write-Output $HOME.Length`, refused (member access; design Costs). Each FAILS today (allowed)
+
+  **Measured, then built.** Ran all six rows directly against `_decide` before touching production
+  code: five already refuse today for free (`echo '$HOME'`, `grep '$HOME' f`,
+  `cp x $(dirname $PWD)`, the heredoc, and `Write-Output $HOME.Length` -- task 1.4's D2 fix already
+  reads the lexed word's text regardless of quoting or the `.Length` member-access tail, the same
+  way it reads `$HOME.bak` in row 1.4s). One did not: PowerShell `Copy-Item x $PWD.Path` was
+  `allow=True` -- `_DIRECTORY_VARIABLE_NAMES["powershell_auto"]` only carried `HOME`, never bare
+  `PWD`, even though design.md line 80-81 names `PWD` as one of PowerShell's own four directory
+  variables (`HOME`/`PWD`/`PSHOME`/`PROFILE`). Confirmed `PSHOME`/`PROFILE` are 1.4b's own rows
+  (its own list has `$PROFILE`/`$PSHOME` bare), not this task's -- 1.4b never claims bare `PWD`
+  (only the scoped `$script:PWD`), so adding it here does not collide with that later task.
+
+  **Fix, `hub/hub/mcp_server.py`:** added `"PWD"` to `_DIRECTORY_VARIABLE_NAMES["powershell_auto"]`
+  (now `("HOME", "PWD")`) -- a one-tuple-element change; the existing `(?![A-Za-z0-9_])` lookahead
+  already does the member-access reading, so `$PWD.Path` and `$PWD` both match while `$PWDX` would
+  not.
+
+  Added rows `1.5a1`-`1.5a6` to `_TABLE` in `hub/tests/test_permission_approver.py`. **Mutation
+  check:** `git stash -- hub/hub/mcp_server.py`, reran the six rows: exactly `1.5a5`
+  (`Copy-Item x $PWD.Path`) failed (wrongly allowed); the other five passed unchanged against the
+  unmodified code, confirming the "five already pass" claim rather than assuming it. Popped the
+  stash; all six pass. **Suites run green.** `py -3.11 -m pytest
+  hub/tests/test_permission_approver.py -q`: 337 passed, 1 skipped (up from 331; +6 rows). The
+  broader regression set (adds `test_the_shell_judge_reads_a_word_whole.py`,
+  `test_hub_own_call.py`, `test_copilot_acp_decide.py`,
+  `test_a_write_outside_the_workspace_is_recorded.py`): 691 passed, 2 skipped, nothing broken.
+  `ruff check` and `black --check --target-version py311`: both clean, no reformat needed. `mypy
+  hub/hub/mcp_server.py`: one error, the same pre-existing `approve_tool_call`
+  no-return-annotation gap `.claude/rules/mcp-server.md` names as deliberate (shifted line only).
+  `git diff --stat`: only the two expected files changed, production diff is the single tuple
+  element.
 - [ ] 1.5b (R3, design D4). Each FAILS today (allowed):
   - Windows, Bash tool: `python w.py <other>:` and `powershell -c 'Copy-Item x <other>:'`, with `<other>` an existing drive as in 1.1, refused as outside;
   - both platforms: `dd if=x of=c:~` and `echo PATH=a:~`, refused as uncheckable;
