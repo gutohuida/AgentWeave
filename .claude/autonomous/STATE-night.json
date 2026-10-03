@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "ghcp-s5-c-impl",
-    "next_action": "Group C (ghcp-s5-c-impl), third slice: task 3.3 with task 1.8's remaining halves, in hub/tests/test_copilot_byok_env.py. copilot_provider_env(env, provider_config) in hub/hub/runner_provider.py (strip the whole COPILOT_PROVIDER_ prefix, COPILOT_MODEL, COPILOT_OFFLINE; then exactly TYPE/BASE_URL/API_KEY via os.environ.get(...,'') + COPILOT_MODEL), called by the Copilot guard_env and one_shot_env; runner_probe_config(runner_row) at the probe sites tasks.md 3.3 lists; launchability authorizes on the key variable; one_shot_model at the three checkpoint/handover/title sites. If 3.3 is too big for one firing, split it in two (env+guard first, then launchability+one-shots) and say so in tasks.md. Group A stays blocked on DECISIONS ghcp-s5-subagent-capture.",
+    "next_action": "Group C (ghcp-s5-c-impl), fourth slice: task 3.3's second half (one-shots) with test 1.8's one-shot half, in hub/tests/test_copilot_byok_env.py. worker.one_shot_env(cli) and the titler pass the runner's config ({provider_config, model}) to adapter.one_shot_env: run_worker already gets runner_id (read the row there, or have the three callers pass provider_config), conversation_titles holds the runner row. copilot_one_shot_env(config) ends in runner_provider.copilot_provider_env(env, config provider_config, model). one_shot_model(runner, checkpoint_model) in runner_provider (a provider runner ignores a checkpoint_model failing is_provider_model and uses runner.model) at checkpoint_trigger.py (~:153), checkpoint_handover.py (~:188), api/v1/checkpoints.py (~:183). Tests patch the worker's and titler's process spawn to capture env/argv (1.8's bullets). Then tick 3.3 and 1.8 if both halves pass. Group A stays blocked on DECISIONS ghcp-s5-subagent-capture.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -26,7 +26,7 @@
             "status": "open",
             "model": "opus",
             "title": "Slice 5 group C: BYOK on a Copilot runner (security-sensitive, on Opus)",
-            "detail": "Done iters 3-4: 1.7, 1.10, 3.1, 3.2 (incl. both trigger sites), 1.8's per-run half. Left: 3.3 + 1.8's env/one-shot/launchability halves, 1.9, 3.4 (UI), 3.5 (run_secrets scrub), its part of 1.14."
+            "detail": "Done iters 3-5: 1.7, 1.10, 3.1, 3.2, 1.8's per-run/env/launchability halves, 3.3's run half (env + launchability + runner_probe_config at four sites). Left: 3.3's one-shot half + 1.8's one-shot half, 1.9, 3.4 (UI), 3.5 (run_secrets scrub), its part of 1.14."
         },
         {
             "id": "ghcp-s5-b-impl",

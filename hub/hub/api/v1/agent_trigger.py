@@ -126,7 +126,7 @@ from ...runner_adapters.base import RpcCallbacks as TransportRpcCallbacks
 from ...runner_adapters.base import RpcTransport, RpcTurnRequest, RunnerAdapter, StreamTransport
 from ...runner_commands import OPERATOR_POSTURE, UnsupportedRunnerError
 from ...runner_events import AccountingSample, status_event
-from ...runner_provider import has_provider, provider_override_problem
+from ...runner_provider import has_provider, provider_override_problem, runner_probe_config
 from ...scheduler import (
     REVIEWABLE_LOOP_TASK_STATUSES,
     WITH_REVIEWER_LOOP_TASK_STATUSES,
@@ -887,8 +887,9 @@ async def _trigger_agent_directly(
     # legacy config-dict runner/model keys (from session-synced or self-registered
     # config) are superseded, not merged. See
     # openspec/changes/runner-agent-charter-separation/specs/runner-registry/spec.md.
-    config["runner"] = runner_row.cli
-    config["model"] = runner_row.model
+    # With its `provider_config`, which the probe judges and `resolve_agent_env` (below) carries
+    # to the Copilot `guard_env` (slice 5 D7).
+    config.update(runner_probe_config(runner_row))
     probe = probe_agent(agent, config)
     runner = probe["runner"]
 

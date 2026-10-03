@@ -55,6 +55,7 @@ from ...model_catalog import (
 from ...output_recording import record_agent_output, record_context_usage
 from ...review_turn import ReviewContext, verdict_evidence_sentence
 from ...runner_adapters import get_adapter, resolve_access_axes
+from ...runner_provider import runner_probe_config
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -731,7 +732,7 @@ async def create_operator_agent(
         if charter is None or charter.project_id != project_id:
             raise HTTPException(status_code=404, detail=f"Charter '{body.charter_id}' not found")
 
-    probe = probe_agent(body.name, {"runner": runner.cli, "model": runner.model})
+    probe = probe_agent(body.name, runner_probe_config(runner))
     if not probe["runnable"]:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

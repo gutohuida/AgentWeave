@@ -332,6 +332,14 @@ scratch copy (DEAD-ENDS 2026-09-27).
   **Per-run half done 2026-10-03 (night iter 4)** in `hub/tests/test_copilot_byok_env.py` (the
   stored model reaches the conversation through a real override on a plain runner, then a rebind,
   rather than a direct write). Environment, one-shot and launchability halves are task 3.3's.
+  **Environment and launchability halves done 2026-10-03 (night iter 5)**, same file, 16 passed
+  (6 fail at `1b2ef1a`): the four provider variables exactly, with the outranking names ambient
+  and in `env_vars`; none on a plain runner from either source; a `provider_config` in
+  session.json is not a provider (bound or unbound); the missing key builds `API_KEY == ""`; the
+  routes' verdicts with the variable unset/set and Copilot "not signed in" patched, `POST /agents`
+  201. One deviation: with the variable unset, `POST /agent/trigger` answers 200 `queued` with the
+  sentence as `waiting_reason` (and no run), the route's launchability refusal for any agent, not a
+  409. **Left: the one-shot half** (3.3's second slice).
 - [ ] 1.9 (C) Same file (review fixes 2026-09-28, finding 2): a fake run on the provider runner, with
   the key registered for it as the trigger registers it, records the key value through a **text**
   event, a **thinking** event, an error event, a diagnostic, a `POST /agents/{name}/output` with its
@@ -536,6 +544,17 @@ scratch copy (DEAD-ENDS 2026-09-27).
     at `checkpoint_trigger.py:153`, `checkpoint_handover.py:188` and `api/v1/checkpoints.py:183`.
 
   Pass test 1.8.
+  **Split in two (2026-10-03 night): runs first, then one-shots.** **First slice done (night iter
+  5):** `runner_provider.copilot_provider_env(env, provider_config, model)` (whole-prefix strip,
+  then exactly `TYPE`/`BASE_URL`/`API_KEY` via `os.environ.get(..., "")` and `COPILOT_MODEL`;
+  `model` is a parameter because the function sees no runner row), called by the Copilot
+  `guard_env`; the adapter's `launchability` authorizes a provider runner on its key variable
+  (`runner_provider.provider_launch_verdict`: the probe supplies `present` and `version` only; a
+  damaged stored value is reported, not raised on); `runner_probe_config(runner_row)` at all four
+  sites (`get_agent_config`, which also drops a `provider_config` from the agent's own config or
+  session.json; the trigger; `POST /agents`; `GET /runners/launchability`). **Left (second
+  slice):** `one_shot_env` given the runner's `config` at the worker and titler spawns,
+  `one_shot_model` at the three checkpoint/handover/title sites, and 1.8's one-shot half.
 - [ ] 3.4 The Runners page (`hub/ui/src/components/runners/RunnersPage.tsx`):
   - provider fields for `copilot` (type select, base URL, key variable name);
   - the API-key/Claude Max sentence;

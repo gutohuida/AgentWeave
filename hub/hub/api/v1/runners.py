@@ -22,6 +22,7 @@ from ...runner_provider import (
     provider_config_problem,
     provider_flags_problem,
     provider_model_problem,
+    runner_probe_config,
 )
 from ...schemas.runners import RunnerCreate, RunnerResponse, RunnerUpdate
 from ...utils import short_id
@@ -125,10 +126,7 @@ async def list_runner_launchability(
     result = await session.execute(select(Runner).where(Runner.project_id == project_id))
     return {
         "runners": {
-            runner.id: probe_agent(
-                runner.name,
-                {"runner": runner.cli, "model": runner.model},
-            )
+            runner.id: probe_agent(runner.name, runner_probe_config(runner))
             for runner in result.scalars().all()
         }
     }

@@ -27,6 +27,7 @@ from .copilot_env import (  # noqa: F401
 from .file_mentions import MENTION_NOTICE, neutralise_file_mentions
 from .runner_adapters import get_adapter
 from .runner_adapters.base import probe_binary
+from .runner_provider import runner_probe_config
 
 # DEAD (2026-09-20): 6 of these 8 keys name runner kinds no agent can be bound to any more.
 # Why: a Runner's `cli` is validated against RUNNER_CLIS = ("claude", "codex", "copilot")
@@ -652,6 +653,9 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
     )
     agent_row = agent_result.scalars().first()
     meta = agent_config(session_data, agent, agent_row.config if agent_row else None)
+    # A model provider is a runner's alone (slice 5 D7): one named in an agent's own config or in
+    # session.json would turn its runs into provider runs no runner route ever checked.
+    meta.pop("provider_config", None)
 
     if agent_row is not None:
         if agent_row.runner_id:
@@ -662,8 +666,7 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
                 # Overwrites rather than defers to session.json: the bound Runner is what
                 # `agent_trigger` actually launches, so anything else here would describe an
                 # agent nobody is going to start.
-                meta["runner"] = runner_row.cli
-                meta["model"] = runner_row.model
+                meta.update(runner_probe_config(runner_row))
         elif "runner" not in meta:
             # Unbound means *nothing anywhere says how to launch this* — not merely "no Runner
             # row". A CLI-configured agent carries its runner in session.json and no `Runner` is

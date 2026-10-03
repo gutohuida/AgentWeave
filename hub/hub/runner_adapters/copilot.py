@@ -26,6 +26,7 @@ from .. import runner_commands
 from ..codex_appserver import TurnOutcome
 from ..copilot_env import copilot_guard_env
 from ..file_mentions import neutralise_file_mentions
+from ..runner_provider import copilot_provider_env, has_provider, provider_launch_verdict
 from ..workspace_writes import COPILOT_WRITE_TOOLS
 from .base import (
     AccessAxes,
@@ -237,6 +238,11 @@ class CopilotAdapter(RunnerAdapter):
         verdict: LaunchVerdict = CopilotProbe.verdict(  # type: ignore[assignment]
             str(cli_override) if cli_override else None
         )
+        provider_config = config.get("provider_config")
+        if has_provider(provider_config):
+            # A provider runner needs its key, not a GitHub login (slice 5 D7): the probe supplies
+            # only whether the CLI is present, and its version.
+            return provider_launch_verdict(verdict, provider_config)  # type: ignore[return-value]
         return verdict
 
     def collaboration(
@@ -251,7 +257,9 @@ class CopilotAdapter(RunnerAdapter):
         # Always a full environment: the strips apply to the inherited one too (slice 2 D3).
         base = proc_env if proc_env is not None else dict(os.environ)
         filtered, _removed = copilot_guard_env(base, config.get("env_vars") or {})
-        return filtered
+        # Then the runner's own model provider, or none (slice 5 D7): stripped from both sources
+        # above, set here only from the runner's validated `provider_config`.
+        return copilot_provider_env(filtered, config.get("provider_config"), config.get("model"))
 
     def transport(self, flags: Optional[Sequence[str]]) -> StreamTransport | RpcTransport:
         return _RPC_TRANSPORT

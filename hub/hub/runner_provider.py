@@ -12,10 +12,12 @@ and the browser's network history.
 
 from __future__ import annotations
 
+import os
 import re
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Dict, Iterable, Mapping, Optional
 from urllib.parse import urlsplit
 
+from .copilot_env import COPILOT_MODEL_ENV_NAMES, COPILOT_PROVIDER_ENV_PREFIX
 from .model_catalog import CATALOG
 
 PROVIDER_CLI = "copilot"
@@ -193,3 +195,92 @@ def has_provider(value: Any) -> bool:
     send to a provider, and is reported unlaunchable rather than quietly run on the subscription.
     """
     return value is not None
+
+
+def runner_probe_config(runner_row: Any) -> dict:
+    """`{runner, model, provider_config}` from a bound `Runner` row: what `probe_agent`, the
+    adapter's `launchability` and `resolve_agent_env` read (design D7). Every probe site builds its
+    runner half here, so a provider runner is never judged on the subscription's verdict.
+
+    The stored `provider_config` is carried as is; its readers judge it with `has_provider` and
+    `stored_provider_config`, so a damaged one is reported, never raised on.
+    """
+    return {
+        "runner": runner_row.cli,
+        "model": runner_row.model,
+        "provider_config": getattr(runner_row, "provider_config", None),
+    }
+
+
+def _provider_or_model_name(name: str) -> bool:
+    upper = name.upper()
+    return upper.startswith(COPILOT_PROVIDER_ENV_PREFIX) or upper in COPILOT_MODEL_ENV_NAMES
+
+
+def copilot_provider_env(
+    env: Mapping[str, str], provider_config: Any, model: Optional[str]
+) -> Dict[str, str]:
+    """A Copilot spawn's model-provider variables (design D7, review findings 3 and 10).
+
+    Strips every `COPILOT_PROVIDER_*` name, `COPILOT_MODEL` and `COPILOT_OFFLINE` from `env` (the
+    ambient environment already merged with the agent's `env_vars`), then, only for a valid
+    provider, sets exactly `TYPE`, `BASE_URL`, `API_KEY` and `COPILOT_MODEL`. The prefix, not a
+    list: a `BEARER_TOKEN`, `WIRE_MODEL`, `API_KEY_COMMAND` or `HEADERS` left in the Hub's shell
+    would outrank or bypass the runner's checked settings.
+
+    The key is read with `os.environ.get(..., "")`: this runs inside `guard_env`, which must not
+    raise, and an empty key fails with the provider's 401 rather than falling back to the GitHub
+    subscription. Launchability reports the missing variable before any spawn.
+    """
+    result = {key: value for key, value in env.items() if not _provider_or_model_name(key)}
+    stored = stored_provider_config(provider_config)
+    if stored is None:
+        return result
+    result["COPILOT_PROVIDER_TYPE"] = stored["type"]
+    result["COPILOT_PROVIDER_BASE_URL"] = stored["base_url"]
+    result["COPILOT_PROVIDER_API_KEY"] = os.environ.get(stored["api_key_var"], "")
+    if model:
+        result["COPILOT_MODEL"] = model
+    return result
+
+
+def provider_launch_verdict(probe: Mapping[str, Any], provider_config: Any) -> dict:
+    """A provider runner's launchability (design D7): authorized iff the variable it names for the
+    key is set in the Hub's environment. A GitHub login is not needed, so Copilot's own cached
+    verdict supplies only whether the CLI is present, and its version.
+
+    The reason names the variable, never its value, and does not mention GitHub.
+    """
+    present = bool(probe.get("present"))
+    stored = stored_provider_config(provider_config)
+    reason: Optional[str]
+    if not present:
+        authorized, reason = False, probe.get("reason")
+    elif stored is None:
+        authorized = False
+        reason = (
+            "This runner's model provider settings are incomplete or damaged, so it cannot run. "
+            "Edit the runner and set its provider again, or remove it."
+        )
+    elif not os.environ.get(stored["api_key_var"]):
+        authorized = False
+        reason = (
+            "This runner sends its runs to a model provider, and the variable it names for the "
+            f"key, ${stored['api_key_var']}, is not set in the Hub's environment. Set it and "
+            "restart the Hub."
+        )
+    else:
+        authorized, reason = True, None
+    result: Dict[str, Any] = {
+        "runner": probe.get("runner", PROVIDER_CLI),
+        "cli": probe.get("cli"),
+        "present": present,
+        "authorized": authorized,
+        "runnable": present and authorized,
+        "reason": reason,
+    }
+    if probe.get("version"):
+        result["version"] = probe["version"]
+    if not present and probe.get("probe_error"):
+        result["probe_error"] = probe["probe_error"]
+    return result
