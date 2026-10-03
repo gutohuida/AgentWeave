@@ -880,6 +880,51 @@ every run id, and paste each surface's text verbatim into the Round log.
   `POST`ing each resulting event, and record that the live echo drop was not driven.) The timeline shows exactly **one** error event
   `copilot.authentication` (or whatever `errorType` 1.1 recorded), still visible with diagnostics
   hidden, and no duplicate `Error:` text. This spends no Copilot allowance.
+
+  **Blocked — driven for real, two of three expectations wrong, both for a group-A reason.**
+  C was not cut (group C is done); restarted the trial Hub `:8010` (from `hub/`, same trial
+  `DATABASE_URL`) with `MY_ANTHROPIC_KEY=invalid` in its own process environment — `os.environ` is
+  read live at spawn time (`hub/hub/runner_provider.py:268`), so an already-running Hub cannot pick
+  up a new var without a restart; this is the documented, sanctioned way to restart the trial Hub,
+  not the operator's `:8000`. Created a group C runner (`provider_config: {type: anthropic,
+  base_url: https://api.anthropic.com, api_key_var: MY_ANTHROPIC_KEY}`, model
+  `claude-haiku-4-5-20251001`), pointed `cp5` at it, ran one real turn ("Say hello.") on the real
+  Copilot CLI, and read `GET /agent/cp5/chat` (the actual rendered timeline — `/agents/cp5/timeline`,
+  used in 7.1/7.2, is EventLog-only and never carries an `AgentOutput`-kind error at all; found this
+  by reading `hub/hub/output_recording.py` and `hub/hub/api/v1/agent_chat.py:_output_to_timeline`
+  after the admin timeline came back empty).
+
+  The real timeline shows **three** `error`-kind entries, not one — the Hub retried the queue entry
+  three times before abandoning it (`"delivery failed 3 times; the Hub stopped retrying"`), and
+  `CopilotEventMapper.finish()` (`hub/hub/copilot_acp.py:1087-1093`) correctly flushes the pending
+  `session.error` notice into one `error` event *per attempt*, so three attempts give three. Each
+  carries `payload.code == "copilot_session_error"` — the literal hardcoded string
+  `_notice_event` returns for a root `session.error` (`hub/hub/copilot_acp.py:1125-1134`) — never
+  `copilot.<errorType>`, and `payload` has no `facts`, `status_code` or `remediation` at all, only
+  `{version, code, message, retryable}`. The Hub's own log (confirmed from `hub8010-stderr.log`)
+  shows it parsed `errorType='authentication'`, `statusCode=401` correctly off the wire — the
+  `copilot.<errorType>` + `facts` shape task 1.3 specifies is simply not built yet. Exact captured
+  entry:
+  ```json
+  {
+    "output_kind": "error",
+    "content": "Authentication failed with provider at https://api.anthropic.com (HTTP 401).\n  Check your COPILOT_PROVIDER_API_KEY, COPILOT_PROVIDER_API_KEY_COMMAND, or COPILOT_PROVIDER_BEARER_TOKEN.",
+    "payload": {"version": 1, "code": "copilot_session_error", "message": "Authentication failed with provider at https://api.anthropic.com (HTTP 401).\n  Check your COPILOT_PROVIDER_API_KEY, COPILOT_PROVIDER_API_KEY_COMMAND, or COPILOT_PROVIDER_BEARER_TOKEN.", "retryable": false}
+  }
+  ```
+  (×3, one per retried run_id.) No duplicate `Error:` *text* was found — the message never echoes
+  as plain text alongside the error card, so that one clause of 7.3 holds; diagnostics-hidden was
+  not separately exercised (no diagnostic fired this turn to hide).
+
+  This is the same already-OPEN `spec-queue/DECISIONS.md` row `ghcp-s5-subagent-capture` a third
+  way: task 1.3 (`copilot.<errorType>` code, `facts` with `status_code`/`remediation`) is squarely
+  inside the named-unstarted range (1.2-1.6), and the per-attempt triplication is a dedup task that
+  range would also need to add — neither is fixable by driving differently. Filed as a third
+  addendum there and in `design.md`'s Round log (*Task 7.3, real drive, 2026-10-03*). `cp5` was
+  restored to its original non-BYOK runner (`runner-72c07eca7e75`) afterward; the extra runner
+  (`runner-4a2a9d634569`) was left (harmless, inert) rather than deleted mid-turn-risk. `:8010`'s
+  process still carries `MY_ANTHROPIC_KEY=invalid` in its environment until next restart — relevant
+  to 7.5, which tests the var *unset*; note for whichever iteration drives 7.5.
 - [ ] 7.4 (A) `dir <cp5's COPILOT_HOME>\hooks` holds no deciding hook, and the home's config names
   no trusted folder. (R2: `Run` records no environment, so the `COPILOT_ALLOW_ALL` half is test
   1.6's.)

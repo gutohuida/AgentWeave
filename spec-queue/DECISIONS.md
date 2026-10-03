@@ -80,6 +80,22 @@ DECIDED. Absence is not consent.
   already names (*"group A (tasks 1.2-1.6, 2.1-2.8) has not been started"*), now confirmed against
   a second drive task rather than just task 1.1's. `tasks.md` 7.2 left unchecked, marked blocked.
 
+  **Addendum, 2026-10-03 night, task 7.3 (error once)** (design.md Round log, *Task 7.3, real
+  drive, 2026-10-03*): restarted the trial Hub `:8010` with `MY_ANTHROPIC_KEY=invalid` in its
+  process environment (the only way a provider runner's `api_key_var` reaches an already-running
+  Hub, since `os.environ` is read live at spawn — `hub/hub/runner_provider.py:268`), built a group
+  C BYOK runner naming that variable, and ran `cp5` for real. The real timeline (`GET
+  /agent/cp5/chat`, not the admin `/agents/{name}/timeline` 7.1/7.2 used — that one is EventLog-only
+  and never carries an `AgentOutput`-kind error) shows **three** `error` entries, one per retried
+  attempt, each `payload.code == "copilot_session_error"` — the literal string `_notice_event`
+  hardcodes for a root `session.error` (`hub/hub/copilot_acp.py:1125-1134`) — never
+  `copilot.<errorType>`, and no `facts`/`status_code`/`remediation`. Task 1.3 (the
+  `copilot.<errorType>` + `facts` shape) sits inside this row's already-named unstarted range
+  (1.2-1.6); the triplication is a dedup gap the same unstarted range would need to add. A third
+  confirmation of the same blocker, by a third independent drive task. `tasks.md` 7.3 left
+  unchecked, marked blocked with the full captured entry inline. `cp5` restored to its original
+  non-BYOK runner afterward.
+
 ### `a-run-reaches-the-hub-without-mcp` task 10.1 needs the operator on the work PC -- 2026-10-01 night, DECIDED 2026-10-02
 
 - DECIDED   a-run-reaches-hub-10.1  **Waived on the work-PC evidence** (operator, 2026-10-02, as recommended):

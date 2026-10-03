@@ -1736,6 +1736,42 @@ has not), **correction** (sibling text that is wrong about this change), or **no
   blocked range surfacing a second time, now against a different drive task. No code was written to
   work around this; `tasks.md` 7.2 is left unchecked, marked blocked with this evidence inline.
 
+- **Task 7.3, real drive, 2026-10-03**: group C was not cut, so drove this one for real rather than
+  reasoning about it. Restarted the trial Hub `:8010` from `hub/` with the same trial
+  `DATABASE_URL` plus `MY_ANTHROPIC_KEY=invalid` in the process's own environment — the only way a
+  provider runner's `api_key_var` can reach an already-running Hub, since `runner_provider.py`
+  reads `os.environ.get(stored["api_key_var"])` live at spawn time (line 268), not at Hub startup;
+  this is the documented, sanctioned restart for the trial Hub, never the operator's `:8000`. Built
+  a group C BYOK runner (`provider_config: {type: anthropic, base_url: https://api.anthropic.com,
+  api_key_var: MY_ANTHROPIC_KEY}`, model `claude-haiku-4-5-20251001`), pointed `cp5` at it, and ran
+  one real turn on the real Copilot CLI.
+
+  The admin `/agents/{name}/timeline` endpoint used for 7.1/7.2 came back empty — reading
+  `hub/hub/api/v1/agents.py`'s `agent_timeline` shows it queries only `Message`, `EventLog` and
+  `AgentHeartbeat`, and an `error` `RunEvent` is persisted as an `AgentOutput` row
+  (`hub/hub/output_recording.py`), a different table entirely. The real rendered timeline is `GET
+  /agent/{name}/chat` (`hub/hub/api/v1/agent_chat.py:_output_to_timeline`), which does include it.
+
+  **Result: three `error` entries, not one**, each `payload.code == "copilot_session_error"`, never
+  `copilot.<errorType>`. The Hub retried the queue delivery three times before abandoning it
+  (`"delivery failed 3 times"`), and `CopilotEventMapper.finish()` (`copilot_acp.py:1087-1093`)
+  correctly flushes the pending `session.error` notice into one `error` event *per attempt* — so
+  three attempts give three entries, each identical. `_notice_event`
+  (`copilot_acp.py:1125-1134`) hardcodes `error_event(code="copilot_session_error", message=...)`
+  for a root `session.error` regardless of `errorType`; the Hub's own log shows it parsed
+  `errorType='authentication'`, `statusCode=401` correctly off the wire, but nothing in the shipped
+  mapper turns that into `copilot.<errorType>` with `facts={status_code, remediation}` — exactly
+  what task 1.3 specifies, and task 1.3 sits inside this row's already-named unstarted range
+  (1.2-1.6). The per-attempt triplication is a related dedup gap the same unstarted range would
+  need to close. No duplicate `Error:` *text* was found alongside the card (that one clause holds).
+
+  A third drive task, a third independent confirmation of the same blocked range — not a new
+  finding, evidence sharpening the existing one. Filed as a third addendum on
+  `spec-queue/DECISIONS.md`'s `ghcp-s5-subagent-capture` row. `tasks.md` 7.3 left unchecked, marked
+  blocked with the full captured entry inline. `cp5` was restored to its original non-BYOK runner
+  afterward; `:8010`'s process keeps `MY_ANTHROPIC_KEY=invalid` in its environment until its next
+  restart, which matters to task 7.5 (tests the var *unset*).
+
 ## Open questions for R2/R3
 
 1. **Slice 2 alignment.** *(Answered in R2; R3 moved the answers into *Required of slices 1–4*, D5 and D9.)* What does slice 2's raw-event subscription list contain? Where does its
