@@ -1871,3 +1871,15 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-10-02 (work PC) — MCP is not blocked for the Hub-launched Copilot** despite the expectation that
   policy blocks it; a run connected and called `agentweave-create_task` over MCP. To exercise `aw-tool` there,
   force it with `--disable-mcp-server agentweave` on the runner.
+- **2026-10-03 (home) — a heredoc passed through the Bash tool loses a backslash pair.** A Python
+  literal written as two backslashes inside `<<'EOF'` arrived as one, twice running (`unicodeescape`
+  SyntaxError on `".claude\loops\..."`, and an `assert` anchor that never matched). Write any script
+  containing Windows paths or backslash escapes with the Write tool into the scratchpad, use `r'...'`
+  literals, and run it with `py -3.11 <file>`.
+- **2026-10-03 (home) — `ruff`/`black` are not on Git Bash's PATH; `ruff: command not found`.** Use
+  `py -3.11 -m ruff` and `py -3.11 -m black`. CI runs plain `black --check` (no `--target-version`), and a
+  file can pass one variant and fail the other: check both, as 63e44eb learned.
+- **2026-10-03 (home) — a mutation check that changes a script's parameter list proves nothing.** Restoring
+  `run-iteration.ps1` from HEAD made all 27 driver tests fail, because the tests pass `-GhExecutable`, which
+  the old script rejects. Add only the new parameter to the old copy, so that exactly the new tests fail
+  (5 of 27 did).
