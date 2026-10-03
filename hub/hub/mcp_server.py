@@ -1938,21 +1938,36 @@ def _judge_word(
         if os.path.isabs(word) and any(char in word for char in _GLOB_CHARS):
             return _glob_links(rewritten, word, root, budget)
         return None
-    return _judge_pieces(word, root, argument, continues, dialect)  # 6: the piece reading (D2)
+    return _judge_pieces(
+        word, root, argument, continues, dialect, budget
+    )  # 6: the piece reading (D2)
 
 
-def _judge_piece(piece: str, root: str, argument: str, continues: bool) -> Optional[Dict[str, Any]]:
-    """One piece of rule 6's reading: a NUL or a leading `~` refuses outright (D2 step 5); else it
-    is judged as the relative or absolute path it spells."""
+def _judge_piece(
+    piece: str, root: str, argument: str, continues: bool, budget: "_Budget"
+) -> Optional[Dict[str, Any]]:
+    """One piece of rule 6's reading, shared by both its readings (D2 step 6, R8): a NUL or a
+    leading `~` refuses outright (D2 step 5); else it is judged as the relative or absolute path
+    it spells. (R5, D8) A piece holding a glob character is also matched against the links it
+    finds, not only judged by its literal text -- mirroring rule 5's own `_glob_links` call, but
+    joined to `root` first when relative, since `_glob_links` reads its piece as rooted at a
+    drive (or, with none, at the filesystem root) rather than at the workspace."""
     if "\x00" in piece:
         return _refuse(piece, _UNRESOLVED)
     if _TILDE_PREFIX_RE.match(piece):
         return _refuse(piece, _UNCHECKED)
-    return _judge_path(_rewrite_dotdot_globs(piece), root, piece, argument, continues)
+    rewritten = _rewrite_dotdot_globs(piece)
+    refusal = _judge_path(rewritten, root, piece, argument, continues)
+    if refusal:
+        return refusal
+    if any(char in piece for char in _GLOB_CHARS):
+        absolute = rewritten if os.path.isabs(rewritten) else os.path.join(root, rewritten)
+        return _glob_links(absolute, piece, root, budget)
+    return None
 
 
 def _judge_pieces_reading(
-    value: str, root: str, argument: str, continues: bool, dialect: str
+    value: str, root: str, argument: str, continues: bool, dialect: str, budget: "_Budget"
 ) -> Optional[Dict[str, Any]]:
     """D2 steps 2-5: mask each extglob group (D3) so splitting at `_PIECE_BREAKS_RE` does not break
     inside one, split (keeping each delimiter, so a piece can be told apart from a redirect
@@ -1979,7 +1994,9 @@ def _judge_pieces_reading(
             and (not _DRIVE_LETTERS or redirect_target)
         ):
             continue
-        refusal = _judge_piece(restored, root, argument, continues and index == len(pieces) - 1)
+        refusal = _judge_piece(
+            restored, root, argument, continues and index == len(pieces) - 1, budget
+        )
         if refusal:
             return refusal
     return None
@@ -2002,7 +2019,7 @@ def _whole_value(word: str) -> str:
 
 
 def _judge_whole_value(
-    value: str, root: str, argument: str, continues: bool
+    value: str, root: str, argument: str, continues: bool, budget: "_Budget"
 ) -> Optional[Dict[str, Any]]:
     """D2 step 6 (R8): after the pieces, the value is also judged as the path it spells, undivided
     by the breaks that only glue it to a host, a revision or a curl `name@file` -- a link or a
@@ -2015,14 +2032,14 @@ def _judge_whole_value(
     `t:d`. Each reading goes through the same per-piece checks a piece already does (`_judge_piece`:
     a NUL, a leading `~`, D3's `..`-rewrite, `_judge_path`)."""
     if not _DRIVE_LETTERS:
-        refusal = _judge_piece(value, root, argument, continues)
+        refusal = _judge_piece(value, root, argument, continues, budget)
         if refusal:
             return refusal
     segments = [segment for segment in value.split(":") if segment]
     if _DRIVE_LETTERS or len(segments) > 1:
         for index, segment in enumerate(segments):
             refusal = _judge_piece(
-                segment, root, argument, continues and index == len(segments) - 1
+                segment, root, argument, continues and index == len(segments) - 1, budget
             )
             if refusal:
                 return refusal
@@ -2030,7 +2047,7 @@ def _judge_whole_value(
 
 
 def _judge_pieces(
-    word: str, root: str, argument: str, continues: bool, dialect: str
+    word: str, root: str, argument: str, continues: bool, dialect: str, budget: "_Budget"
 ) -> Optional[Dict[str, Any]]:
     """Rule 6, replaced (D2, F362): a word that reached here holds a separator, no expansion, is
     not plain and is not absolute. It is split at path-component breaks rather than scanned for an
@@ -2042,20 +2059,24 @@ def _judge_pieces(
         glued = _GLUED_OPTION_RE.match(value)
         if glued:
             value = value[glued.end() :]
-    refusal = _judge_pieces_reading(value, root, argument, continues, dialect)
+    refusal = _judge_pieces_reading(value, root, argument, continues, dialect, budget)
     if refusal:
         return refusal
     whole_value = _whole_value(word)
-    refusal = _judge_whole_value(whole_value, root, argument, continues)
+    refusal = _judge_whole_value(whole_value, root, argument, continues, budget)
     if refusal:
         return refusal
     if any(quote in value for quote in _PIECE_QUOTES):
         unquoted = value.translate(str.maketrans("", "", _PIECE_QUOTES))
-        refusal = _judge_pieces_reading(unquoted, root, argument, continues, dialect)
+        refusal = _judge_pieces_reading(unquoted, root, argument, continues, dialect, budget)
         if refusal:
             return refusal
         refusal = _judge_whole_value(
-            whole_value.translate(str.maketrans("", "", _PIECE_QUOTES)), root, argument, continues
+            whole_value.translate(str.maketrans("", "", _PIECE_QUOTES)),
+            root,
+            argument,
+            continues,
+            budget,
         )
         if refusal:
             return refusal

@@ -658,7 +658,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   that path (an absolute `cp n <ws>/[u]p/` now resolves and refuses), but 1.4c/1.4e's own rows are
   relative words, which still reach rule 6's unrewritten piece reading, not `_glob_links`. 2.1d
   stays unticked until task 2.2 wires `_glob_links` into rule 6 too.
-- [ ] 2.2 D2-D5 (R5: D3 and `_glob_links` also run in rule 5 on an absolute glob word, and in rule 6 on the whole value as well as each piece; `_words` reports a trimmed trailing `:` for D5; (R8) D2 step 6, the whole value's literal judgement, after the pieces, with a colon-joined option dropped, divided at its colons where `_DRIVE_LETTERS` is true (read at call time), and on POSIX judged whole as well, each through step 5. Run 1.4g):
+- [x] 2.2 D2-D5 (R5: D3 and `_glob_links` also run in rule 5 on an absolute glob word, and in rule 6 on the whole value as well as each piece; `_words` reports a trimmed trailing `:` for D5; (R8) D2 step 6, the whole value's literal judgement, after the pieces, with a colon-joined option dropped, divided at its colons where `_DRIVE_LETTERS` is true (read at call time), and on POSIX judged whole as well, each through step 5. Run 1.4g):
   - replace rule 6 of `_judge_word` with the piece reading, including D3's extglob units;
   - add `_PIECE_BREAKS`, `_BASH_DEVICES`, `_SCP_ADDRESS_RE` and `_HOST_PORT_RE` beside `_ABSOLUTE_PATH_RE`, with a comment naming this change;
   - (R4) run the address check after rule 2 and before rule 3;
@@ -793,6 +793,66 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   piece of this task, and the one that needs `budget` threaded all the way down through
   `_judge_pieces`/`_judge_pieces_reading`/`_judge_piece`/`_judge_whole_value`, none of which carry
   it today. That is the natural next slice.
+
+  **Iteration 27 note (fourth slice, closing task 2.2).** Re-derived against the current code
+  before building, per `next_action`: of task 2.2's five bullets and its own header parenthetical,
+  only "`_glob_links` also run ... in rule 6 on the whole value as well as each piece" was still
+  unbuilt (the other four bullets, `_words`' trimmed colon, and the R8/step-6 parenthetical were
+  each confirmed already built by iterations 20-25, re-checked rather than trusted). Threaded
+  `budget` through `_judge_pieces` -> `_judge_pieces_reading`/`_judge_whole_value` -> `_judge_piece`
+  (none of which carried it before this slice), and added the `_glob_links` call **once**, inside
+  `_judge_piece` itself: both of rule 6's readings (the piece reading and the whole-value reading,
+  D2 step 6) already call `_judge_piece` as their shared per-piece/per-segment primitive, so wiring
+  it there reaches both at once rather than needing two separate call sites. The piece is joined to
+  `root` first when relative (mirroring `_where`'s own `os.path.isabs(path) else os.path.join(root,
+  path)` pattern) -- `_glob_links` otherwise reads a relative piece as rooted at the filesystem root
+  or a drive, not the workspace, which would silently never match anything real.
+
+  Measured first (`testbed/scratch/measure_rule6_glob_links.py`, gitignored, not committed),
+  against `_decide` directly: with a workspace link `sub/l` -> an outside directory, `cp n
+  sub/l*/x` was wrongly **allowed** today (the literal component is `l*`, not `l`, so plain
+  `realpath` never follows the link -- only `_glob_links`'s `fnmatch` match against the real
+  listing does). Also measured a second gap the piece split itself causes: `@` is a piece break,
+  so `sub/@s*/p` reaches the piece reading as `s*/p` (not `@s*/p`), matching nothing in `sub` --
+  confirmed (by temporarily monkeypatching `_judge_whole_value` to always return `None` in the same
+  scratch session) that only the undivided whole-value reading still holds `@s*` intact and matches
+  the fixture's own `sub/@s/p` link; the piece reading alone stands allowed. Both gaps close with
+  this one slice, since both readings share `_judge_piece`.
+
+  Two existing tests asserted the old (unbuilt) behaviour by name and needed updating, not just
+  leaving to rot: `test_an_absolute_glob_word_is_also_matched_against_the_links_it_finds`'s own
+  control ("a relative glob reaches rule 6, which this slice does not touch" -- `cp n u*/x`) and
+  `test_an_absolute_glob_word_s_tail_dotdot_moves_the_branch_through_a_link`'s own control ("Stays
+  allowed until that task is built" -- `cp n sub/l*/..`) each now assert the refusal this slice
+  builds, with the comment rewritten to say why. Added one new test,
+  `test_rule_6_also_matches_a_relative_glob_word_against_the_links_it_finds_2_2`, covering: the
+  piece-reading refusal (`u*/x`), a matched-but-lands-inside control through the fixture's own
+  shallower link (`sub/l*/x`, proving a match is followed rather than refused outright), a no-match
+  control (`sub/q*/x`), a no-link control (`sub/*.py`), and the whole-value-only refusal
+  (`sub/@s*/p`) -- every row checked against the real fixture shapes with a throwaway script first
+  (`testbed/scratch/verify_fixture_shapes.py`, gitignored, not committed) before trusting an
+  assertion, since this task's own earlier sizing note had wrongly assumed `sub/l`'s target was
+  outside the workspace (it is the workspace root itself, R6's shallower-link shape) and the first
+  draft of this test asserted the wrong thing.
+
+  Mutation-checked: stashing just `mcp_server.py` fails exactly the three tests this slice touches
+  or adds (the two updated controls, the new test) and no others.
+  `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 100 passed (was 99,
+  +1). Broader regression set
+  (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): 726 passed, 2 skipped, no regressions.
+  `ruff check` clean; `black --check --target-version py311` needed one reformat of
+  `mcp_server.py` (the new parameter wrapping), applied and reverified clean; `mypy src/` (the only
+  path CI runs mypy over) clean. `git diff --stat`: exactly `hub/hub/mcp_server.py`, the one test
+  file, and this task file. **Task 2.2 now ticks**: every bullet, the header parenthetical, and
+  "Run 1.4g" are each built and verified; this slice closed the one remaining gap.
+
+  Not yet built, left to 2.2a-2.2c below (each already scoped, untouched by this slice) and to the
+  sibling tasks that explicitly wait on this wiring: task 1.4f's own rows (the `..`-after-a-
+  relative-glob-link walk, which this slice's `_glob_links` call already answers correctly for the
+  rows measured above, but 1.4f's own task also needs the junction/`os.path.islink`-false check and
+  the named-cost assertions it lists, not yet re-derived against the current code) and task 2.1d
+  (the bracket-kept relative word, same wiring, not yet re-measured).
 - [ ] 2.2a (R3, R4) The platform-keyed drive exception and the tilde-piece refusal in the piece reading; the level-by-level escape-removed readings, each judged by `_judge_word`, and the `::` not-plain rule before rule 5 (design D2 steps 3 and 5, D7). Run 1.7b, 1.7c and 1.7d
 - [ ] 2.2b D6: `approve_tool_call` catches an exception from `_decide`, denies with a reason and reports it; no return annotation
 - [ ] 2.2c (R4, D9) Add the `hub-judge-windows` job to `.github/workflows/ci.yml` (`windows-latest`, `working-directory: hub`, the `hub-test` install steps with `-c ../constraints-dev.txt`, `pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread`). Run `py -3.11 -m pytest tests/test_dev_constraints.py -q`. After pushing, confirm the job ran and passed, or do not tick

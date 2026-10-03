@@ -447,9 +447,12 @@ def test_an_absolute_glob_word_is_also_matched_against_the_links_it_finds(worksp
     # the glob matches nothing at all, so there is no entry to walk a tail through.
     not_last = _decide("Bash", {"command": f"cp n {forward}/nomatch*/x"})
     assert not_last["allow"] is True, not_last["reason"]
-    # a relative glob reaches rule 6, which this slice does not touch.
+    # a relative glob reaches rule 6, which task 2.2 (a later slice of this same change) wires to
+    # `_glob_links` too -- `u*` matches `up`, the same link, so this refuses just like the
+    # absolute row above.
     relative = _decide("Bash", {"command": "cp n u*/x"})
-    assert relative["allow"] is True, relative["reason"]
+    assert relative["allow"] is False
+    assert "it resolves to" in relative["reason"]
 
 
 # 2.1c (design D8 step 4), a further slice: a glob-holding component need not be the piece's last
@@ -517,10 +520,12 @@ def test_an_absolute_glob_word_s_tail_dotdot_moves_the_branch_through_a_link(
     stays_inside = _decide("Bash", {"command": f"cp n {forward}/sub/@s*/.."})
     assert stays_inside["allow"] is True, stays_inside["reason"]
 
-    # Control: the same link, but as a relative word -- reached through rule 6, which this change
-    # has not yet wired to `_glob_links` (task 2.2). Stays allowed until that task is built.
+    # Control: the same link, but as a relative word -- reached through rule 6, which task 2.2
+    # (a later slice of this same change) wires to `_glob_links` too, so this refuses the same
+    # way, naming the workspace's own parent (the piece is joined to `root` before the walk).
     relative = _decide("Bash", {"command": "cp n sub/l*/.."})
-    assert relative["allow"] is True, relative["reason"]
+    assert relative["allow"] is False
+    assert "it resolves to" in relative["reason"]
 
 
 # D8 step 2's bracket relaxation, re-derived from the design text again (not iteration 19's own
@@ -587,6 +592,53 @@ def test_the_glob_link_walk_s_entries_are_charged_against_the_decide_budget(work
     over_bound = _decide("Bash", {"command": f"cp n {forward}/nomatch*/"})
     assert over_bound["allow"] is False
     assert over_bound["reason"].endswith(mcp_server._TOO_MANY)
+
+
+# 2.2's own remaining bullet: rule 6 (D2's piece reading, D2 step 6's whole-value reading) also
+# matches a glob-holding word against the links it finds, not only its literal text -- mirroring
+# rule 5's own `_glob_links` call, but for a relative word, joined to the workspace root first
+# since `_glob_links` otherwise reads a relative piece as rooted at the filesystem root (or a
+# drive) rather than at the workspace. `budget` is now threaded through `_judge_pieces` ->
+# `_judge_pieces_reading`/`_judge_whole_value` -> `_judge_piece`, the one place both readings
+# call, so wiring `_glob_links` in there reaches both at once. Measured first against `_decide`
+# directly (testbed/scratch/measure_rule6_glob_links.py, gitignored, not committed): `cp n
+# sub/l*/x` -- `sub/l` is the fixture's own link, shallower than itself (R6) -- was wrongly
+# **allowed** before this slice (the literal component is `l*`, not `l`, so plain `realpath` never
+# follows the link); confirmed by stashing just `mcp_server.py` and rerunning, below.
+def test_rule_6_also_matches_a_relative_glob_word_against_the_links_it_finds_2_2(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    # The piece reading: `u*` matches `up`, the fixture's own link out, with no break character
+    # between the glob and the match so this is caught by the piece reading itself, before the
+    # whole-value reading ever runs (`_judge_pieces` returns on the piece reading's own refusal).
+    through_link = _decide("Bash", {"command": "cp n u*/x"})
+    assert through_link["allow"] is False
+    assert "it resolves to" in through_link["reason"]
+
+    # Control: `l*` matches `sub/l`, a link whose target (R6) is the workspace root itself --
+    # shallower than the link -- so following it and walking the tail lands at `ws/x`, inside.
+    # Proves the new call follows a matched link rather than refusing on any match.
+    through_shallow_link = _decide("Bash", {"command": "cp n sub/l*/x"})
+    assert through_shallow_link["allow"] is True, through_shallow_link["reason"]
+
+    # Control: no entry in `sub` matches `q*`, so there is nothing to walk a tail through.
+    no_match = _decide("Bash", {"command": "cp n sub/q*/x"})
+    assert no_match["allow"] is True, no_match["reason"]
+
+    # Control: a relative glob matching a plain (non-link) directory stays allowed.
+    no_link = _decide("Bash", {"command": "cp n sub/*.py"})
+    assert no_link["allow"] is True, no_link["reason"]
+
+    # The whole-value reading, reached where the piece split defeats the glob-to-link match: `@`
+    # is itself a piece break, so the piece reading's own component is `s*/p` (not `@s*/p`),
+    # which matches nothing in `sub` -- only the undivided value still holds `@s*` intact, and
+    # matches the fixture's `sub/@s/p` link. Confirmed by monkeypatching `_judge_whole_value` to
+    # `None` and rerunning: the piece reading alone stands allowed.
+    whole_value_only = _decide("Bash", {"command": "cp n sub/@s*/p"})
+    assert whole_value_only["allow"] is False
+    assert "it resolves to" in whole_value_only["reason"]
 
 
 # 2.2, a first slice (design D2 step 2, D3's extglob units): an unquoted extglob group -- a
