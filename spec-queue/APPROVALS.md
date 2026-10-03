@@ -16,6 +16,48 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-10-03
+
+No review page today. **Written in an interactive session with the operator present.** The operator
+asked for a build window today, 13:00-22:00, run exactly like the night window (night-window.md, FIX),
+*"focus on the ghcp implementation"*, and asked that the queue be decided now. It was armed by hand
+(`arm-cycle.ps1 -Window night -StartAt 13:00 -Until 22:00`) on `autonomous/2026-10-03-daily`, and its
+STATE was seeded with the queue below, so it skips compose. **Tonight's 22:55 arm continues the same
+branch and reads this same section**: tonight follows this ORDER from wherever the day stopped.
+
+Copilot slices 1-4 are archived (`each-runner-cli-is-one-adapter` 10-01, `a-copilot-agent-runs-over-acp`
+09-30, `a-run-reaches-the-hub-without-mcp` and `a-copilot-run-shows-its-credits` 10-02), so slice 5's
+gate (`ghcp-d5-order`: "not before slice 4 is archived") is met. Slice 5 is the only ghcp work left.
+
+- **Slice 5, `a-copilot-agent-uses-hooks-and-its-own-agents`, one queue item per group**, in the
+  change's own value order A, C, B, D, so that stopping anywhere leaves whole groups. Each group item
+  takes its own tests-first tasks (group 1) with its build tasks; the untagged task 2.8 rides with A;
+  the UI tests in 1.14 ride with the group whose UI they test; 6.1 closes the last group built. First,
+  inside A: re-read design.md's *Required of slices 1-4* against the slices as built and fix every
+  "(rebase at IMPL)" site. **Task 1.1 is real Copilot calls** (Free plan, ~5 calls); if a type is not
+  delivered, stop group A as the task says and go on to C.
+- **Group C is the security-sensitive one** (a provider key in a run's environment; the exact-value
+  scrub, the whole-prefix strip, the `urlsplit` check). It runs on Opus.
+- **Drive (7.x) on `:8010` only, with a Copilot agent on the Free plan's Auto model, inside the task's
+  own 12-call budget.** That is the exception to the "every drive binds claude-haiku-4-5" limit, for
+  Copilot agents in this change only. **Task 7.6 stays unchecked**: it needs the operator's dedicated
+  capped Anthropic key. Record "not driven: no key".
+- **No archive.** Task 8.1 needs every kept group's tasks checked, which includes 7.6. The change
+  waits for the operator at that point; do not tick, waive or archive it.
+- **Then the Copilot follow-up the operator decided on 10-02** (`DECISIONS.md` `copilot-oneshot-credits`:
+  a Copilot one-shot records its credits from `session.usage_checkpoint`, "a follow-up change, not this
+  one"): R1-R3 and the Opus review, as the operator's explicit exception to "this window writes no
+  proposals" (as with F478 on 10-01). **No `-impl`**: the operator approves it first.
+- **Then the remainder of the 10-02 night's work**: `the-shell-judge-reads-a-word-whole` (20/41), then
+  `a-drive-or-a-home-variable-names-a-directory-by-itself` (12/31), both approved (`B4-approve`).
+
+Merge note for the operator, not for the window: slice 5 adds a migration (`runners.provider_config`)
+and UI. Once merged, `:8000` runs the migration on its next restart, and the rebuilt bundle reaches the
+live app on its next reload.
+
+ORDER: a-copilot-agent-uses-hooks-and-its-own-agents, copilot-oneshot-credits-r1, copilot-oneshot-credits-r2, copilot-oneshot-credits-r3, copilot-oneshot-credits-rev, the-shell-judge-reads-a-word-whole, a-drive-or-a-home-variable-names-a-directory-by-itself
+
+
 ## 2026-10-01
 
 No review page today. **Written in an interactive session with the operator present**, before the
