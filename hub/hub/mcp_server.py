@@ -1962,11 +1962,56 @@ def _judge_pieces_reading(
     return None
 
 
+def _whole_value(word: str) -> str:
+    """D2 step 6: the value rule 6 judges whole is the word after its option run, as step 1 strips
+    it, except a colon-joined option (`-Destination:`) is dropped first -- the same split rule 4
+    already makes between the two option forms (D7). Needed because, unlike step 1, step 6 never
+    splits the value at `:` itself (that would reintroduce the piece break step 6 exists to avoid).
+    """
+    joined = _COLON_OPTION_RE.match(word)
+    if joined:
+        return word[joined.end() :]
+    if word.startswith("-"):
+        glued = _GLUED_OPTION_RE.match(word)
+        if glued:
+            return word[glued.end() :]
+    return word
+
+
+def _judge_whole_value(
+    value: str, root: str, argument: str, continues: bool
+) -> Optional[Dict[str, Any]]:
+    """D2 step 6 (R8): after the pieces, the value is also judged as the path it spells, undivided
+    by the breaks that only glue it to a host, a revision or a curl `name@file` -- a link or a
+    physical `..` just before one of those was never resolved by the piece split alone
+    (`sub/@s/p/w1`, `"../ws(a"`). On a drive-letter host the value is not judged with its colons
+    kept, only divided at them (D9): `ntpath.realpath` misreads a bare `X:` as a drive, which would
+    wrongly refuse a line reference or a regular expression that never names a path
+    (`sed 's/::.*//'`). On POSIX `:` is an ordinary name character, so the value is judged whole
+    with its colons as well as divided -- `cp n t:d/up/x` reaches a directory literally named
+    `t:d`. Each reading goes through the same per-piece checks a piece already does (`_judge_piece`:
+    a NUL, a leading `~`, D3's `..`-rewrite, `_judge_path`)."""
+    if not _DRIVE_LETTERS:
+        refusal = _judge_piece(value, root, argument, continues)
+        if refusal:
+            return refusal
+    segments = [segment for segment in value.split(":") if segment]
+    if _DRIVE_LETTERS or len(segments) > 1:
+        for index, segment in enumerate(segments):
+            refusal = _judge_piece(
+                segment, root, argument, continues and index == len(segments) - 1
+            )
+            if refusal:
+                return refusal
+    return None
+
+
 def _judge_pieces(word: str, root: str, argument: str, continues: bool) -> Optional[Dict[str, Any]]:
     """Rule 6, replaced (D2, F362): a word that reached here holds a separator, no expansion, is
     not plain and is not absolute. It is split at path-component breaks rather than scanned for an
     absolute tail, and judged once more with its quote characters removed -- the reading an inner
-    shell joins (`sh -c "echo hi > '.'./stray.txt"` hands its inner shell `../stray.txt`)."""
+    shell joins (`sh -c "echo hi > '.'./stray.txt"` hands its inner shell `../stray.txt`). The
+    undivided value is then judged too, in both readings (D2 step 6, R8)."""
     value = word
     if value.startswith("-"):  # D2 step 1: drop a short option's own letters, judge its value
         glued = _GLUED_OPTION_RE.match(value)
@@ -1975,9 +2020,18 @@ def _judge_pieces(word: str, root: str, argument: str, continues: bool) -> Optio
     refusal = _judge_pieces_reading(value, root, argument, continues)
     if refusal:
         return refusal
+    whole_value = _whole_value(word)
+    refusal = _judge_whole_value(whole_value, root, argument, continues)
+    if refusal:
+        return refusal
     if any(quote in value for quote in _PIECE_QUOTES):
         unquoted = value.translate(str.maketrans("", "", _PIECE_QUOTES))
         refusal = _judge_pieces_reading(unquoted, root, argument, continues)
+        if refusal:
+            return refusal
+        refusal = _judge_whole_value(
+            whole_value.translate(str.maketrans("", "", _PIECE_QUOTES)), root, argument, continues
+        )
         if refusal:
             return refusal
     return None

@@ -638,3 +638,98 @@ def test_an_unquoted_extglob_group_is_kept_as_one_unit_through_the_lexer_and_rul
     # `_ARGUMENT_ENDS` splitting unaffected by this slice.
     unbalanced = _decide("Bash", {"command": "echo a@(b"})
     assert unbalanced["allow"] is True, unbalanced["reason"]
+
+
+# 2.2's second slice -- task 1.4g (design D2 step 6, R8, the third review's HIGH): after the
+# pieces, the undivided value is also judged as the path it spells. A break character (`@`, `'`,
+# `(`, `:`) is also a name character to the shell, so a link or a physical `..` sitting right
+# before one was never resolved by the piece split alone -- each piece on its own side of the
+# break looks like an ordinary relative name. Measured against `_decide` directly first
+# (`testbed/scratch/measure_whole_value.py`, gitignored, not committed), row by row, and again by
+# `git stash`ing just `mcp_server.py`.
+#
+# Confirmed by stashing: `sub/@s/p/x` (a piece-level split leaves `sub`, `s`, `p`, `x`, none of
+# which crosses the `@s/p` link the fixture sets up; the undivided value does), the same through
+# `-Destination:` (PowerShell's colon-joined option, dropped first by `_whole_value`) and through a
+# `'` (`"a'b/up/x"`), `sub/@s/p/*` (no `_glob_links` match needed here -- the link is literal, only
+# the trailing component is a glob, so the *literal* undivided value already resolves through it,
+# exactly as 1.4g's own text says: "the literal whole value is what refuses"), and `"a@b/l/../y"`
+# (`a@b/l` is a link back to the workspace root itself, so the undivided value's own `..` lands one
+# level above it -- D12's physical reading, already built, fires automatically inside
+# `_judge_path`/`_where`, no new wiring needed here). The run-on rows (`"../work(a"`,
+# `'../work@'`) are the ones the design calls out by name: the piece `../work` is the workspace's
+# own root, allowed on its own, but the undivided value names a *different* sibling that sits
+# outside -- a break the piece split cannot see because nothing glues the two sides together once
+# split at `(`.
+#
+# Windows-only (on a drive-letter host the colons stay divided, never judged whole-with-colons,
+# D9): `grep 'ORM\|:2580' f` and `sed -E 's/(:700)/(:697)/g' f`, both from this repository's own
+# transcripts, are the task's named example of what judging whole-with-colons would wrongly refuse
+# (`ntpath.realpath` reads `|:2580`/`(:700)` as a drive and drops the real prefix -- confirmed by
+# temporarily removing the `_DRIVE_LETTERS` guard in `_judge_whole_value` and rerunning, in the
+# same scratch script). POSIX-only: a directory literally named `t:d` (no name on Windows can hold
+# a `:`) with a link `up` -> outside; `cp n t:d/up/x` is refused, naming where it resolves (the
+# whole value with its colon kept, since POSIX judges it both ways per D2 step 6) -- not measurable
+# on this machine, left to the `hub-test` CI job (`ubuntu-latest`).
+def test_the_undivided_whole_value_is_judged_too_1_4g(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    glued_at_at = _decide("Bash", {"command": "cp n sub/@s/p/x"})
+    assert glued_at_at["allow"] is False
+    assert "resolves to" in glued_at_at["reason"]
+
+    colon_joined_option = _decide("PowerShell", {"command": "Copy-Item n -Destination:sub/@s/p/x"})
+    assert colon_joined_option["allow"] is False
+    assert "resolves to" in colon_joined_option["reason"]
+
+    glued_at_quote = _decide("Bash", {"command": 'cp n "a\'b/up/x"'})
+    assert glued_at_quote["allow"] is False
+    assert "resolves to" in glued_at_quote["reason"]
+
+    glob_base_is_the_link = _decide("Bash", {"command": "cp n sub/@s/p/*"})
+    assert glob_base_is_the_link["allow"] is False
+    assert "resolves to" in glob_base_is_the_link["reason"]
+
+    dotdot_past_a_link = _decide("Bash", {"command": 'cp n "a@b/l/../y"'})
+    assert dotdot_past_a_link["allow"] is False
+    assert "resolves to" in dotdot_past_a_link["reason"]
+
+    run_on_paren = _decide("Bash", {"command": 'cp n "../work(a"'})
+    assert run_on_paren["allow"] is False
+    assert run_on_paren["reason"] == "'../work(a' is outside your workspace"
+
+    run_on_at = _decide("Bash", {"command": "mkdir '../work@'"})
+    assert run_on_at["allow"] is False
+    assert run_on_at["reason"] == "'../work@' is outside your workspace"
+
+    # Windows-only controls: the guard in `_judge_whole_value` keeps a drive-letter host from ever
+    # reading the undivided value with its colons kept (D9) -- without it, both would be wrongly
+    # refused (confirmed directly, see the comment above).
+    if _WINDOWS:
+        line_reference = _decide("Bash", {"command": "grep 'ORM\\|:2580' f"})
+        assert line_reference["allow"] is True, line_reference["reason"]
+        regex_with_colons = _decide("Bash", {"command": "sed -E 's/(:700)/(:697)/g' f"})
+        assert regex_with_colons["allow"] is True, regex_with_colons["reason"]
+
+    # POSIX-only: a directory `work/t:d` holding a link `up` -> outside, judged whole with its
+    # colon kept (D2 step 6 runs both readings on POSIX). Not buildable on this Windows machine
+    # (NTFS refuses a `:` in a file name outside the drive position); left to CI's `hub-test` job.
+    if not _WINDOWS:
+        colon_in_a_directory_name = workspace / "t:d"
+        colon_in_a_directory_name.mkdir()
+        _link(colon_in_a_directory_name / "up", workspace.parent / "outside")
+        posix_colon_component = _decide("Bash", {"command": "cp n t:d/up/x"})
+        assert posix_colon_component["allow"] is False
+        assert "resolves to" in posix_colon_component["reason"]
+
+    # Controls, allowed: a plain word reaching rule 6 that holds a `::` but no link or `..` behind
+    # it must not be refused merely for being judged whole with its colons on POSIX.
+    no_link_or_dotdot = _decide("Bash", {"command": "ls lib/Foo::Bar.pm"})
+    assert no_link_or_dotdot["allow"] is True, no_link_or_dotdot["reason"]
+    redirect_glued_to_a_glob = _decide("Bash", {"command": "sh -c 'ls 2>&1/x'"})
+    assert redirect_glued_to_a_glob["allow"] is True, redirect_glued_to_a_glob["reason"]
+
+    # Control: the same shape with no link behind it stays allowed -- the new step only adds a
+    # refusal through a real link or a physical `..`, never a bare glued name.
+    no_link_behind_it = _decide("Bash", {"command": "cp n sub/@s/q"})
+    assert no_link_behind_it["allow"] is True, no_link_behind_it["reason"]

@@ -72,7 +72,21 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   (R8, design D12 Costs, the third review's LOW) In its own fixture, so that the shared fixture's root globs are unchanged: a sibling `checkout/node_modules` and `checkout/src`, and `work/node_modules` a link → `checkout/node_modules` (the Hub's shared dependency link, `_symlink_shared_dependencies`), each refused, naming `checkout`'s `src/x` after "it resolves to":
   - Bash `cp n node_modules/../src/x`: the correct refusal (Git Bash's `cp n node_modules/../nm1` wrote into `checkout`, measured). On the Windows job it FAILS today (allowed, measured: it escapes today); on Linux it PASSES today (`posixpath.realpath` is physical).
   - `_decide("Write", {"file_path": <work>/node_modules/../src/x})`: the named false refusal (Node writes `work/src/x`), asserted so a change of mind is visible. On the Windows job it FAILS today (allowed, measured); on Linux it PASSES today.
-- [ ] 1.4g (R8, design D2 step 6, the third review's HIGH; the shared fixture's `sub/@s/p`, `a'b/up` and `a@b/l`) **the whole value is judged as the path it spells**. Refused, each naming where it resolves:
+- [x] 1.4g (R8, design D2 step 6, the third review's HIGH; the shared fixture's `sub/@s/p`, `a'b/up` and `a@b/l`) **the whole value is judged as the path it spells**. Refused, each naming where it resolves:
+
+  **Iteration 25 note.** Built as task 2.2's second slice; see that task's own note for the
+  implementation. Every row above is covered by
+  `test_the_undivided_whole_value_is_judged_too_1_4g` in
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, measured against `_decide` directly
+  first, **except** the POSIX-only `work/t:d` row, which cannot be built on this Windows machine
+  (NTFS refuses a `:` in a file name outside the drive position) -- added to the test guarded by
+  `if not _WINDOWS`, so it runs on CI's `hub-test` job (`ubuntu-latest`) but is unverified by this
+  iteration. Ticking this task on that basis, not on a plan: every other row was run and is green;
+  the one row this machine cannot run is reasoned through against the same code path (`not
+  _DRIVE_LETTERS` judges the whole value with its colons kept, matching D2 step 6's own POSIX
+  text) and will fail loudly in CI if that reasoning is wrong, not silently pass. A future iteration
+  should confirm the `hub-test` job actually ran this row green after this change's first push,
+  and downgrade this tick if it did not.
   - `cp n sub/@s/p/x` (Bash) and PowerShell `Copy-Item n -Destination:sub/@s/p/x`: through a link behind a package scope's `@`, and behind a colon-joined option;
   - `cp n "a'b/up/x"`: through a link behind a quote;
   - `cp n sub/@s/p/*`: the glob's base is the link, and the literal whole value is what refuses (design D8 step 1);
@@ -693,6 +707,43 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   after the pieces) is not touched by this slice at all** and remains the largest unbuilt piece of
   this task; `_glob_links` integration for an extglob group ("For D8's matching, each group counts
   as `*`") is also still unbuilt, as the existing 2.1c/2.1d notes already flagged.
+
+  **Iteration 25 note (second slice, D2 step 6, R8).** Re-derived against the current code: the
+  value rule 6 should judge whole is the word after its option run (a colon-joined option dropped
+  first, else the glued option step 1 already drops), divided at `:` on a drive-letter host
+  (keeping each divided segment, never the whole-with-colons reading there -- `ntpath.realpath`
+  misreads a component whose second character is `:` as a drive and drops the real workspace
+  prefix, measured: `realpath(<ws>\src\a:1)` is `a:1`), and on POSIX judged both whole-with-colons
+  and divided. Built `_whole_value` (the value computation) and `_judge_whole_value` (the
+  judgement itself, both readings, calling the existing `_judge_piece` for each), wired into
+  `_judge_pieces` after its own piece-reading call, for both the quoted and quote-stripped
+  readings. No new threading of `budget` was needed: unlike pieces (D8's `_glob_links` for rule 6
+  remains unbuilt for both pieces and the whole value, per the note above), the whole value's own
+  test row needing a glob (`sub/@s/p/*`, task 1.4g) turns out to need no `_glob_links` match at
+  all -- the link sits behind a literal path, and only the trailing component is a glob, so the
+  *literal* undivided value already resolves through the link via plain `_judge_path`, exactly as
+  1.4g's own text anticipates ("the literal whole value is what refuses"). `_glob_links`
+  integration into rule 6 is therefore not blocking this slice, contrary to the previous iteration's
+  own sizing note -- it remains a real gap (a link whose *own path* is reached only by expanding a
+  glob, e.g. `sub/@s/*/x` where `*` matches `p`), just not one task 1.4g's test list exercises.
+  Measured directly against `_decide` first (`testbed/scratch/measure_whole_value.py`, gitignored,
+  not committed), then against task 1.4g's own row list one by one, including two from this
+  repository's real transcripts (`grep 'ORM\|:2580' f`, `sed -E 's/(:700)/(:697)/g' f`) that would
+  be wrongly refused without the drive-letter guard (confirmed by temporarily removing the guard in
+  the same scratch session and rerunning). Added one test,
+  `test_the_undivided_whole_value_is_judged_too_1_4g`, covering every 1.4g row this machine can run
+  (see that task's own tick for the one POSIX-only row it cannot). Mutation-checked: stashing just
+  `mcp_server.py` fails exactly that one test, the other 97 unchanged.
+  `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 98 passed (was 97,
+  +1). Broader regression set
+  (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): 724 passed, 2 skipped, no regressions.
+  `ruff check` clean; `black --check --target-version py311` clean on both changed files; `mypy
+  src/` clean. `git diff --stat`: exactly `hub/hub/mcp_server.py`, the one test file, and this task
+  file. **Task 2.2 stays unticked**: its other bullets (`_glob_links` in rule 5 and rule 6's
+  pieces, the piece-level `_BASH_DEVICES` check threading `dialect` through, "Run 1.4g" now done)
+  are a mix of built-elsewhere-unchecked and genuinely unbuilt; task 1.4g itself now ticks (see its
+  own note).
 - [ ] 2.2a (R3, R4) The platform-keyed drive exception and the tilde-piece refusal in the piece reading; the level-by-level escape-removed readings, each judged by `_judge_word`, and the `::` not-plain rule before rule 5 (design D2 steps 3 and 5, D7). Run 1.7b, 1.7c and 1.7d
 - [ ] 2.2b D6: `approve_tool_call` catches an exception from `_decide`, denies with a reason and reports it; no return annotation
 - [ ] 2.2c (R4, D9) Add the `hub-judge-windows` job to `.github/workflows/ci.yml` (`windows-latest`, `working-directory: hub`, the `hub-test` install steps with `-c ../constraints-dev.txt`, `pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread`). Run `py -3.11 -m pytest tests/test_dev_constraints.py -q`. After pushing, confirm the job ran and passed, or do not tick
