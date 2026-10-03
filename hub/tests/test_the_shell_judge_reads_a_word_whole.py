@@ -161,6 +161,45 @@ _TABLE = [
     # which `_SCP_ADDRESS_RE` (needing a trailing `:`) never matched. FAILS today (allowed,
     # measured).
     _row("1.5n", "scp n user@example.com:", False),
+    # 1.7: negative controls that must stay refused. Re-derived independently against `_decide`
+    # (iteration 9 did not trust iteration 7's note as given -- see the night log); the task's own
+    # four bullets split into three that already refuse correctly today and a fourth that does not
+    # (below, left out of this table). These eleven are regression guards: each names the design
+    # step that is the actual reason it refuses, so a future change that removes that step is
+    # caught here rather than by a different row's accident.
+    # D2 step 1: a glued short option's letters are dropped; the value `/tmp/x` is then absolute
+    # (rule 5).
+    _row("1.7a", "curl -o/tmp/x $HUB_URL/api", False),
+    # D2 step 3: `@` is a break where "a path is glued to a curl `name@file`" (design's own
+    # example); the piece `/etc/passwd` is absolute.
+    _row("1.7e", "curl -F file=@/etc/passwd x", False),
+    # D2 step 1: a glued short option (`-xvf`); the value `/tmp/a.tar` is absolute.
+    _row("1.7f", "tar -xvf/tmp/a.tar", False),
+    # D2 step 3: `(` is a break ("opens a subshell or a call"); the piece `b/../../x` resolves
+    # outside.
+    _row("1.7g", "ls a(b/../../x", False),
+    # D2 step 3: a leading `@` break; the piece `../y` resolves outside.
+    _row("1.7h", "cp x @../y", False),
+    # D2 step 3: `<` survives lexing only when quoted and matters to an inner shell; the piece
+    # `/etc/passwd` is absolute.
+    _row("1.7i", "sh -c 'cat</etc/passwd'", False),
+    # D2 step 3: `>` survives lexing only when quoted and matters to an inner shell (design's own
+    # example); the piece `../x` resolves outside.
+    _row("1.7j", 'sh -c "echo hi>../x"', False),
+    # D2 step 3: `(` is a break for "a call" (design's own example, `open('../x','w')`); the piece
+    # `/etc/x` is absolute.
+    _row("1.7k", "python -c \"open('/etc/x','w')\"", False),
+    # D2 step 3: `(` is a break for "a call"; the piece `../x` resolves outside.
+    _row("1.7l", "node -e \"require('fs').writeFileSync('../x','')\"", False),
+    # D2 step 3: `:` is a break where "a path is glued to a host" (design's own example,
+    # `host:/x`); the piece `/x` is absolute.
+    _row("1.7m", "scp a host:/x", False),
+    # Rule 5: an ordinary absolute path. `/dev/tcp/...` is not one of D4's named devices (the null
+    # device and standard streams), so D4's exemption must not reach it.
+    _row("1.7n", "cat /dev/tcp/1.2.3.4/80", False),
+    # Rule 5: D4's device exemption is bash-only ("may be named, in bash only"); on the PowerShell
+    # dialect `/dev/null` is an ordinary absolute path, outside.
+    _row("1.7o", "echo hi > /dev/null", False, tool="PowerShell"),
 ]
 
 

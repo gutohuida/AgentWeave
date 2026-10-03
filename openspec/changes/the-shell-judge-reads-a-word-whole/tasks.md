@@ -118,6 +118,18 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   - `scp a host:/x`, `cat /dev/tcp/1.2.3.4/80`, PowerShell `echo hi > /dev/null`;
   - Windows only, with `<other>` a drive letter that is not the workspace's: PowerShell `Copy-Item x <other>:foo\bar` and `Copy-Item x -Destination:<other>:foo\bar`.
 
+  **Iteration 9 re-derived this independently against `_decide`** (not reused from iteration 7's
+  note), with the shared `workspace` fixture, on this machine (Windows, only `C:` real, `Z:`
+  substituted for `<other>`): the first three bullets (11 named cases) do refuse correctly today
+  and are now in `_TABLE` as rows 1.7a, 1.7e-1.7o (measured, regression guards only, each naming the
+  design step it exercises). **The fourth bullet does not hold**: `_judge_pieces`'s
+  `_PIECE_BREAKS_RE` splits at `:`, so `Z:foo\bar` becomes pieces `Z` and `foo\bar`, both judged as
+  inside relative paths -- the drive letter is dropped, not refused (measured: both `Copy-Item x
+  Z:foo\bar` and `Copy-Item x -Destination:Z:foo\bar` are **allowed**, not refused as this task's
+  own "each PASSES today" framing claims for the whole group). This needs D9's `_DRIVE_LETTERS` and
+  D2 step 3's platform-keyed drive exception (task 2.2a, not built) before it can be refused. Task
+  left unticked; its fourth bullet's rows are not added to `_TABLE` until 2.2a lands.
+
   Each names in a comment the implementation it catches.
 - [ ] 1.7b (R3) Regressions of R2's rule set. Each PASSES today (refused by the tail) and FAILS against pieces built as R2 wrote them:
   - Windows, Bash tool, `Z` not the workspace's drive: `python w.py 'Z:foo\bar'`, `python w.py Z:foo/bar` and `powershell -c "Copy-Item x Z:foo\bar"`, refused as outside naming `Z:foo…`.
