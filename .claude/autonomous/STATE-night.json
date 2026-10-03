@@ -1,40 +1,60 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-10-03-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "72b95db",
-    "stop_at":  "2026-10-04T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-10-03-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-10-03-daily",
+    "parent_branch": "master",
+    "parent_sha": "72b95db",
+    "stop_at": "2026-10-04T07:00:00+01:00",
+    "iteration": 34,
+    "log_file": ".claude/autonomous/2026-10-03-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "the-shell-judge-reads-a-word-whole-impl",
+    "next_action": "Continue openspec/changes/the-shell-judge-reads-a-word-whole/tasks.md task 1.6. Next unbuilt residual: the memo key's trimmed-colon flag (R6) -- tasks.md line 153, `echo a@example.com,a@example.com:` refused with the network reason naming `a@example.com:`; FAILS today because the first word's allow is reused for the second (the memo key does not yet carry the flag -- see design D2/'The bounds', `_memo_judge_word`'s existing 6-tuple key already names `trailing_colon` per iteration 16's note, so re-derive from the real code whether it is wired into the key before assuming it is missing). Size to one firing; if it does not fit, split by sub-row, never below one row. After that: the extglob/backslash-run rows (`@(` x 3000, `*(*(*(a)))b` x 50, a 70,000-char backslash run) are the only thing left in task 1.6.",
+    "queue": [
+        {
+            "id": "ghcp-s5-a-impl",
+            "status": "blocked",
+            "title": "Slice 5 group A: Copilot's lifecycle reaches the Hub",
+            "detail": "STOPPED 2026-10-03: task 1.1's real capture found subagent.started/completed/failed not delivered, confirmed three more ways (7.1, 7.2, 7.3 addenda). Blocked on spec-queue/DECISIONS.md 'ghcp-s5-subagent-capture' (OPEN). Rebase sites and task 1.1 are done; 1.2-1.6, 2.1-2.8 and its part of 1.14 are not started. Do not resume until that row is no longer OPEN."
+        },
+        {
+            "id": "a-copilot-one-shot-records-its-credits-approve",
+            "status": "blocked",
+            "title": "Follow-up change, R1-R3 and Opus review done -- waiting on operator approval",
+            "detail": "R1/R2/R3 and the Opus review are all done (2026-10-03 afternoon, iters 21-24). Blocked on spec-queue/DECISIONS.md 'copilot-oneshot-credits-approve' (OPEN) -- approve for -impl, or send back. 'copilot-oneshot-credits-oq1' (OPEN) is a secondary question about worker-spend-counts-against-the-budget's next round. No -impl until approved; this window writes no new proposal rounds for it either."
+        },
+        {
+            "id": "the-shell-judge-reads-a-word-whole-impl",
+            "status": "open",
+            "title": "B4 continues (24/41 tasks ticked, task 1.6 partially built): extglob/backslash rows and the R6 colon flag remain",
+            "detail": "Iter 31 built the per-pattern listing memo (`_Budget.list_directory`), ticking 2.1c. Iter 32 built and tested task 1.6's two listing-memo rows (lines 151, 155) off that memo, no production diff. Iter 34 built design D6: `approve_tool_call` now wraps `_decide` in try/except, denies and reports on any raise (hub/hub/mcp_server.py); test added and mutation-checked (107 passed, was 106); full regression 626 passed/2 skipped, CLI suite 565 passed/3 skipped, ruff/black/mypy clean (mypy's one finding is the pre-existing deliberate approve_tool_call gap). Task 1.6 as a whole still stays unticked: the memo key's colon flag (R6) and the extglob/backslash-run rows remain, separate unbuilt residuals -- see next_action."
+        },
+        {
+            "id": "a-drive-or-a-home-variable-names-a-directory-by-itself-impl",
+            "status": "open",
+            "title": "B4 sibling (12/31), drive-gated tasks only once the sibling's pieces land",
+            "detail": "Untouched this window so far (not regressed, simply not reached -- the-shell-judge is ahead of it in ORDER and ahead of it in completion). Re-derive from its own tasks.md and design.md before building; do not assume iter 32's note about it still applies without checking."
+        }
+    ],
+    "decisions_for_user": [
+        "ghcp-s5-subagent-capture",
+        "copilot-oneshot-credits-approve",
+        "copilot-oneshot-credits-oq1"
+    ],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
 }
