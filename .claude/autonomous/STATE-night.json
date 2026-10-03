@@ -1,102 +1,40 @@
 {
-    "purpose": "FIX, 13:00-22:00 build window armed by hand on 2026-10-03 (operator: 'focus on the ghcp implementation'). Playbook night-window.md, in full. Queue decided with the operator and seeded here; spec-queue/APPROVALS.md ## 2026-10-03 is its authority. Compose is skipped.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-03-daily",
-    "parent_branch": "master",
-    "parent_sha": "72b95db",
-    "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 33,
-    "log_file": ".claude/autonomous/2026-10-03-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "ghcp-s5-a-impl",
-            "status": "blocked",
-            "title": "Slice 5 group A: Copilot's lifecycle reaches the Hub",
-            "detail": "STOPPED 2026-10-03: task 1.1's real capture found subagent.started/completed/failed not delivered. Blocked on spec-queue/DECISIONS.md 'ghcp-s5-subagent-capture' (OPEN). Rebase sites and task 1.1 are done; 1.2-1.6, 2.1-2.8 (2.8 untagged, never cut) and its part of 1.14 are not started."
-        },
-        {
-            "id": "ghcp-s5-c-impl",
-            "status": "done",
-            "model": "opus",
-            "title": "Slice 5 group C: BYOK on a Copilot runner (security-sensitive, on Opus)",
-            "detail": "Done iters 3-8 (1.7-1.10, 3.1-3.5, runner half of 1.14). Its drive tasks 7.5/7.6 belong to ghcp-s5-drive."
-        },
-        {
-            "id": "ghcp-s5-b-impl",
-            "status": "done",
-            "title": "Slice 5 group B: Copilot review agents on review turns",
-            "detail": "Done iters 9-10 (1.11, 1.12, 4.1, 4.2, 4.3, its part of 1.14). Drove on a fresh source Hub (port 8024, profile drive1003g); found and fixed a real-browser-only layout bug the unit test could not see (unconstrained help-text width crushing the row's label column)."
-        },
-        {
-            "id": "ghcp-s5-d-impl",
-            "status": "done",
-            "title": "Slice 5 group D: the GitHub MCP server toggle, then 6.1",
-            "detail": "Done iters 11-12 (1.13, 5.1, 5.2, 1.14's D half, the UI-bundle refresh, 6.1). 6.1: ruff/black/mypy clean; CLI 565 passed/3 skipped; hub/tests/ 6522 passed/88 skipped (0:46:02, first full-repo run of this window); hub/ui lint and vitest (1863 passed) clean. Drove 5.2 on a fresh source Hub (port 8026, profile drive1003h)."
-        },
-        {
-            "id": "ghcp-s5-drive",
-            "status": "done",
-            "title": "Slice 5 drive on :8010 (7.1-7.5, 7.7, 7.8); 7.6 left for the operator",
-            "detail": "7.1 done iter 13 (1 of 12 Free-model calls spent): no subagent_started/completed -- addendum on ghcp-s5-subagent-capture (OPEN). /usage before/after found not to work via the bare CLI outside a real interactive session (spent 0.42 untracked AI credits finding this out) -- skip until the operator says how. 7.2 BLOCKED iter 14 (0 calls spent, no live turn): CopilotEventMapper emits no event for session.compaction_start/complete -- tasks 2.3/2.4 (group A) unwritten; second addendum on ghcp-s5-subagent-capture (OPEN). 7.3 BLOCKED iter 15 (1 call spent, real live turn): restarted :8010 with MY_ANTHROPIC_KEY=invalid, built a group C BYOK runner, ran cp5 for real -- GET /agent/cp5/chat (not the admin timeline) showed 3 error entries, not 1, each code=copilot_session_error not copilot.<errorType>, no facts/status_code/remediation -- task 1.3 (group A) unwritten; third addendum on ghcp-s5-subagent-capture (OPEN). cp5 restored to its original runner. :8010 process still carries MY_ANTHROPIC_KEY=invalid pending next restart (matters to 7.5). 7.4 done iter 17 (0 calls spent, no live turn): cp5's COPILOT_HOME has no hooks/ dir and config.json names no trusted folder -- both expectations hold. 7.5 done iter 18 (0 calls spent, no live turn): restarted :8010 with no MY_ANTHROPIC_KEY (killed the actually-listening stale-pid-file process first); bad api_key_var refused 400 verbatim; unset-var runner created then agent-on-it refused 409 naming $MY_ANTHROPIC_KEY; 0 db matches for the pasted string. 7.7, 7.8 remain. 7.6: record 'not driven: no key'. No archive: 8.1 waits on 7.6 and the operator. 7.7 BLOCKED iter 19 (1 operator trigger call spent, 2 underlying Copilot sessions via Hub auto-retry): code-review never dispatched (open question 7 still open) AND cp5 falsely claimed it was in its verdict/update_task notes -- new finding F484, fourth addendum on ghcp-s5-subagent-capture (OPEN). Task ended revision_needed genuinely; underlying defect (provider key reconstructable across an event-boundary split) real and reproduced. 7.8 BLOCKED iter 20 (4 real turns spent, Free-model Auto): first bullet held (--disable-builtin-mcps present/absent exactly as copilot_github_mcp toggled, confirmed on the live copilot.exe each way). Second bullet does not hold: no ask-me card ever observed for a real github-mcp-server call (search_code completed with zero permission.requested rows in the logs); the Hub's own D9 github_rule only runs once Copilot's ACP session sends session/request_permission, which it never did. New finding F485. copilot_github_mcp reverted to false afterward (an unreviewed live config toggle, unlike 7.7's left-in-place task/evidence). Drive finished: 7.1-7.5, 7.7, 7.8 all attempted with real findings; 7.6 (operator key) and 8.1 (waits on 7.6) are not this session's."
-        },
-        {
-            "id": "copilot-oneshot-credits-r1",
-            "status": "done",
-            "title": "Follow-up proposal: a Copilot one-shot records its credits (R1)",
-            "detail": "Done iter 21: openspec/changes/a-copilot-one-shot-records-its-credits/ written (proposal, design D1-D6, tasks, test-guide, usage-accounting ADDED requirement); openspec validate --strict valid. Found: the one-shot stream has no tokens at all; no route reads worker_invocations credits and the sibling worker-spend-counts never mentions the credit sums it owns (F486); int(inf) would make run_worker raise, so the shared checkpoint_totals helper adds isfinite."
-        },
-        {
-            "id": "copilot-oneshot-credits-r2",
-            "status": "done",
-            "title": "R2: re-derive independently against the code",
-            "detail": "Done iter 22: four corrections. (1) The capture does nest token figures: prompt_tokens 1612 in the checkpoint's promptCacheBreakState diagnostic, input-only; D3 says why it is not read. (2) NaN/1e400 are non-finite like inf. (3) New 64-bit bound: totalNanoAiu >= 2**63 makes the sqlite insert raise and _record drops the whole row (measured); checkpoint_totals refuses it, the spec delta says so. (4) Test 2 needs copilot_exe and a Path.home patch. validate --strict valid."
-        },
-        {
-            "id": "copilot-oneshot-credits-r3",
-            "status": "done",
-            "title": "R3: re-derive again, independently",
-            "detail": "Done iter 23: three corrections. (1) R2's helper raised: math.isfinite/float on a >308-digit JSON int raise OverflowError; D2 now one ceiling comparison per figure (<= 2**63-1, <= sys.float_info.max), never raises, covers nan/inf. (2) Run side worse than R2 said: 2**63 raises builtin OverflowError through aiosqlite/SQLAlchemy (measured), inside the RPC executor's uncommitted finalisation, so a completed run is relabelled failed (read, not driven). (3) Checkpoint POST would 500 with no invocation row. D3 sharper via the sibling's COALESCE rule. validate --strict valid."
-        },
-        {
-            "id": "copilot-oneshot-credits-rev",
-            "status": "done",
-            "title": "Opus adversarial review; then an OPEN approval row in DECISIONS.md. No -impl.",
-            "detail": "Done iter 24: Opus review confirmed 7, all applied (review at spec-queue/tracks/reviews/copilot-oneshot-credits-2026-10-03.md). Biggest: R3's 2**63-1 ceiling let SQLite sum() raise integer overflow on the accounting routes (re-measured); D2 ceiling now 2**53-1 for both figures, residual 1025 rows. Spec delta scoped to a successful exit, plus a MODIFIED run requirement. 0.4 ticked; OPEN rows copilot-oneshot-credits-approve and copilot-oneshot-credits-oq1. No -impl."
-        },
-        {
-            "id": "the-shell-judge-reads-a-word-whole-impl",
-            "status": "open",
-            "title": "B4 continues (24/41): task 1.6's two listing-memo rows, now unblocked",
-            "detail": "Iter 27 built and ticked task 2.2. Iter 28 re-derived task 2.1c fresh, fixed a real dot-rewrite/_glob_links bug. Iter 30 built the globstar rule; ticked task 1.4d; full regression green (729 passed, 2 skipped). Iter 31 built `_Budget.list_directory`, the per-pattern listing memo keyed by resolved directory (design 'The bounds', R5), used by both `_glob_links` and `_globstar_walk`; ticked task 2.1c (every row/bullet it names now built); full regression green (730 passed, 2 skipped). Iter 32 built and tested task 1.6's own two listing-memo rows (tasks.md lines 151, 155), both already served by iter 31's memo, no production file changed; mutation-checked against the pre-memo mcp_server.py; full regression green (732 passed, 2 skipped). What remains in task 1.6: the extglob/backslash-run rows, the colon-flag row (R6), and the D6-catch row -- separate, unbuilt residuals. See this window's iter 32 entry for the measurement."
-        },
-        {
-            "id": "a-drive-or-a-home-variable-names-a-directory-by-itself-impl",
-            "status": "open",
-            "title": "B4 sibling (12/31), drive-gated tasks only once the sibling's pieces land"
-        }
-    ],
-    "decisions_for_user": [
-        "ghcp-s5-subagent-capture",
-        "copilot-oneshot-credits-approve",
-        "copilot-oneshot-credits-oq1"
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5 -- except Copilot agents in slice 5's own tasks (1.1, 7.x), which use the Copilot Free plan's Auto model within that change's stated call budget (operator, 2026-10-03). Never set a real provider key; 7.6 is the operator's. Never leave a job enabled."
-    ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-10-03-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "72b95db",
+    "stop_at":  "2026-10-04T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-10-03-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
