@@ -322,3 +322,63 @@ def test_the_brace_budget_is_one_per_decide_not_per_reading_or_argument(workspac
     )
     assert two_arguments["allow"] is False
     assert two_arguments["reason"].endswith(mcp_server._TOO_MANY)
+
+
+# 1.6 (partial), the brace/budget rows only -- task 2.1's `_expand_braces` is iterative (an explicit
+# stack, no recursion) and task 2.0's `_Budget.expand_braces` caps every call at
+# `min(_BRACE_ARGUMENT_BUDGET, _BRACE_TOTAL_BUDGET - spent)` before building any alternative
+# (`_brace_absorb` checks `len(parent) * len(alternatives) > budget` before multiplying), so each row
+# below is answered, and refused with `_TOO_MANY`, in well under a second rather than raising
+# (a naive recursive expander would overflow the stack on the unbalanced rows, or build 2**40
+# strings on the last one). Measured directly against `_decide` before writing this test (a
+# throwaway script; every row below answered in under 5ms). The rest of task 1.6 -- the extglob and
+# backslash-run rows (no raise, but not brace-specific), the link-cycle `**` row and the listing memo
+# (both need `_glob_links`, task 2.1c, not built), the memo key's colon flag, and `approve_tool_call`
+# catching a raise from `_decide` (D6, task 2.2b, not built) -- is not covered here and task 1.6
+# itself stays unticked.
+def test_the_totality_rows_for_brace_expansion_never_raise_or_hang(workspace, monkeypatch):
+    from hub import mcp_server
+
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    unbalanced_open = _decide("Bash", {"command": "cp n " + "{" * 5000 + "x"})
+    assert unbalanced_open["allow"] is False
+    assert unbalanced_open["reason"].endswith(mcp_server._TOO_MANY)
+
+    unbalanced_open_quoted = _decide("Bash", {"command": "cp n '" + "{" * 5000 + "x'"})
+    assert unbalanced_open_quoted["allow"] is False
+    assert unbalanced_open_quoted["reason"].endswith(mcp_server._TOO_MANY)
+
+    twenty_arguments = " ".join(_brace_list(f"a{i}", 100) for i in range(20))
+    over_the_decide_bound = _decide("Bash", {"command": f"cmd {twenty_arguments}"})
+    assert over_the_decide_bound["allow"] is False
+    assert over_the_decide_bound["reason"].endswith(mcp_server._TOO_MANY)
+
+    unbalanced_commas = _decide("Bash", {"command": "cp n " + "{a," * 2000 + "x"})
+    assert unbalanced_commas["allow"] is False
+    assert unbalanced_commas["reason"].endswith(mcp_server._TOO_MANY)
+
+    three_hundred_alternatives = _decide("Bash", {"command": f"cp n {_brace_list('a', 300)}"})
+    assert three_hundred_alternatives["allow"] is False
+    assert three_hundred_alternatives["reason"].endswith(mcp_server._TOO_MANY)
+
+    # (R5) `{a,b}` x 40 is 2**40 alternatives if ever built in full; `_brace_absorb` refuses once the
+    # running product would pass the budget, long before that, so this must return quickly.
+    forty_times = _decide("Bash", {"command": "echo " + "{a,b}" * 40})
+    assert forty_times["allow"] is False
+    assert forty_times["reason"].endswith(mcp_server._TOO_MANY)
+
+    # Letter ranges expand in full (`_brace_sequence`): `{a..c}` is `a b c`, all inside.
+    letter_range_inside = _decide("Bash", {"command": "ls {a..c}"})
+    assert letter_range_inside["allow"] is True, letter_range_inside["reason"]
+
+
+@pytest.mark.skipif(not _WINDOWS, reason="a drive-letter host reads a backslash as a separator")
+def test_a_letter_range_through_a_separator_is_refused_on_windows(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    # `{Z..a}` runs the ASCII range `Z [ \ ] ^ _ \x60 a`, so one alternative is `\..`, a parent
+    # traversal through what Windows reads as a path separator.
+    refused = _decide("Bash", {"command": "cp x {Z..a}.."})
+    assert refused["allow"] is False
+    assert refused["reason"].endswith("outside your workspace")

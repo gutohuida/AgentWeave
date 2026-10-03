@@ -112,6 +112,29 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   (R5) The listing memo: `ls sub/*.py sub/?.py sub/[ab].py`, with the same bound, is allowed. Three patterns over one directory are charged one listing. This FAILS with a memo keyed by pattern.
 
   `approve_tool_call` with `_decide` monkeypatched to raise returns a deny whose message names the failure, and reports it (D6); FAILS today (raises). Run on POSIX CI too (the NUL row X8 stays refused).
+
+  **Iteration 17 (partial, brace/budget rows only).** Measured directly against `_decide` first (a
+  throwaway script, every row answered in under 5ms, none raised): the `{` x 5000 row (both
+  unquoted and single-quoted), the 20-arguments-of-100-alternatives row, `{a,` x 2000, the
+  300-alternative brace row, and the `{a,b}` x 40 (2^40) row are all refused with `_TOO_MANY` and
+  none hangs or raises, because `_expand_braces` is iterative (an explicit stack, capped at
+  `_BRACE_MAX_NESTING`) and `_brace_absorb` refuses before multiplying out past the budget. Letter
+  ranges: `ls {a..c}` allowed (confirmed `_brace_sequence` already expands a letter range in full);
+  on Windows, `cp x {Z..a}..` refused (the range crosses `\`, read as a separator). Added
+  `test_the_totality_rows_for_brace_expansion_never_raise_or_hang` and
+  `test_a_letter_range_through_a_separator_is_refused_on_windows` to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 83 passed (was 81, +2). Broader
+  regression set (+`test_permission_approver.py`, `test_hub_own_call.py`,
+  `test_copilot_acp_decide.py`, `test_a_write_outside_the_workspace_is_recorded.py`): 709 passed, 2
+  skipped, no regressions. `ruff check` and `black --check --target-version py311` on the changed
+  test file: clean. No production file changed this iteration, so no mutation check applies; these
+  rows prove existing behaviour rather than a new fix. `git diff --stat`: exactly the one test file,
+  plus this file. **Not built this iteration, task 1.6 stays unticked**: the extglob/backslash-run
+  rows (`@(` x 3000, `*(*(*(a)))b` x 50, the 70,000-backslash run, the trailing-backslash rows --
+  not brace-specific, but not yet measured either), the link-cycle `**` row and the listing memo
+  (both need `_glob_links`, task 2.1c, not built), the memo key's colon flag (R6), and
+  `approve_tool_call` catching a raise from `_decide` (D6, task 2.2b, not built).
 - [ ] 1.7 Negative controls that must stay refused, each PASSES today:
   - `curl -o/tmp/x $HUB_URL/api`, `curl -F file=@/etc/passwd x`, `tar -xvf/tmp/a.tar`, `ls a(b/../../x`, `cp x @../y`;
   - `sh -c 'cat</etc/passwd'`, `sh -c "echo hi>../x"`, `python -c "open('/etc/x','w')"`, `node -e "require('fs').writeFileSync('../x','')"`;
@@ -199,19 +222,20 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   run the full `hub/tests/` suite this iteration (46 minutes at the last full run,
   `hub-suite-gate`); relied on the broader regression set as prior iterations have.
 
-  **Queued next:** task 2.1/2.1b's own checkbox text (sentinels in `_lex`, `_expand_braces`,
-  `_read_command` judging each alternative, the inner-shell reading) is now implemented in full
-  and threaded through the real budget built here -- re-derive against the current code before
-  ticking either, rather than assuming this iteration's note is complete: confirm task 1.2's and
-  1.3's own ticked rows actually exercise 2.1/2.1b's code paths (they do run through
-  `_expand_braces`/`_mark_inner_brace_sentinels`, measured by this iteration's `grep`, but were not
-  independently re-verified row-by-row this iteration), and check whether anything in 2.1/2.1b's
-  own text (totality against 5000 `{`, the nesting cap, letter-range expansion) lacks a test now
-  that `_Budget` exists to measure it against -- task 1.6's totality rows (5000 `{`, `{a,` x 2000,
-  `a{1..99999999}`, the 40-level `{a,b}` 2^40 case, the letter-range rows) are still entirely
-  unbuilt and are the next concrete gap once 2.1/2.1b's own status is confirmed. If 2.1/2.1b turn
-  out already complete, task 2.1c (D8 `_glob_links`) is section 2's next unbuilt item in build
-  order.
+  **Queued next (iteration 17 resolved this).** Task 2.1 and 2.1b are now ticked above, confirmed
+  by reading the actual code paths (not grep): `_lex`'s sentinel marking, `_expand_braces`'s
+  iterative stack, `_read_command`'s two judging passes, and `_mark_inner_brace_sentinels` all match
+  the design text and are wired through the real `_Budget`. A brace/budget-specific slice of task
+  1.6's totality rows was also measured and tested (see 1.6's own note); task 1.6 itself stays
+  unticked -- its extglob/backslash-run rows, the link-cycle and listing-memo rows (need `_glob_links`,
+  task 2.1c), the memo's colon flag, and `approve_tool_call`'s D6 catch remain. **Task 2.1c (D8
+  `_glob_links`) is section 2's next unbuilt item in build order**, and is the dependency the sibling
+  change's drive-gated tasks (1.1, 1.3, 1.5b's drive bullet, 1.5c) are still waiting on. Re-derive
+  2.1c from design D8 (steps 1, 2 and 4 especially -- the base resolved by `_physical`, each branch
+  carrying its real and listed directory, a literal component's link test via `os.lstat`, `..`
+  moving to the real parent and judged via `_resolves_elsewhere`) before building; it is a large
+  unit (a new glob-walking function plus wiring at both rule 5 and rule 6's call sites), so size a
+  sub-slice if it does not fit one iteration.
 - [x] 2.0b (R6, D12) `_physical` and the second reading in `_where`, on a drive-letter host, with the 64-step bound, inside `_where`'s existing `try`. Run 1.4f's literal rows on Windows. This fixes a pre-existing escape and may be built first. (R8, third review) Also correct the `hub/hub/workspace_writes.py` docstring, whose module text (lines 8-10) and `classify` text (lines 172-174) say its `realpath` is "the reason the two agree about a symlink" with `_decide`: after D12, `_decide` also reads a `..` after a link physically on a drive-letter host (a second reading, D12), and `classify` does not, so the two agree about a link named directly and may differ about a `..` after one (`node_modules/../src/x`: `_decide` refuses, on Windows `classify` records `ws/src/x`, inside, which is where Node writes). Comment only; no behaviour of `classify` changes
 
   **Iteration 15.** Built `_DRIVE_LETTERS = os.sep == "\\"` (D9, a module constant beside
@@ -261,8 +285,27 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   2.1 truly needs the budget before 2.0, or can be built budget-free with the bound added once
   `_expand_braces` exists -- do not assume either way without reading design D1 and "The bounds"
   together again.
-- [ ] 2.1 D1 first: sentinels in `_lex` for bash, `_expand_braces` (iterative), and `_read_command` judging each alternative's words. Run 1.2 and 1.3
-- [ ] 2.1b The inner-shell brace reading (design D1, R2). Run 1.3 and 1.6
+- [x] 2.1 D1 first: sentinels in `_lex` for bash, `_expand_braces` (iterative), and `_read_command` judging each alternative's words. Run 1.2 and 1.3
+
+  **Iteration 17.** Re-derived independently, by reading the code rather than trusting iteration
+  16's grep: `_lex` marks an unquoted bash `{`, `,` and `}` with `_BRACE_SENTINELS` (confirmed at
+  the call site, not just by name); `_expand_braces` is the iterative stack machine (`_brace_frame`,
+  `_brace_absorb`, no recursion, capped at `_BRACE_MAX_NESTING = 32`); `_read_command`'s bash branch
+  calls `budget.expand_braces(argument, dialect)` for every argument holding a sentinel and hands
+  each returned alternative to `_words`/`_memo_judge_word` as its own argument, refusing with
+  `_TOO_MANY` on a `None`. This is task 2.1's own text, built and wired in, not merely present in
+  the file. Ran 1.2 and 1.3 (`py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`):
+  83 passed (see 2.0's own count; 1.2/1.3's rows are the ones already in `_TABLE` as 1.2a-e/1.3a-j).
+- [x] 2.1b The inner-shell brace reading (design D1, R2). Run 1.3 and 1.6
+
+  **Iteration 17.** Re-derived independently: `_mark_inner_brace_sentinels` marks every `{`/`,`/`}`
+  in an argument (quoted, escaped, or either dialect) except one directly after a real `$` or
+  `_LITERAL_DOLLAR` (still a parameter expansion); `_read_command`'s second pass (after the literal
+  word judging) runs this over every argument holding a literal brace, calls
+  `budget.expand_braces(marked, dialect)`, and judges each alternative's words the same way as the
+  first pass. This is the "blanket worst case... reaches a nested shell or not" task 2.1b asks for.
+  Ran 1.3 (passing, as above) and the brace-specific slice of 1.6 this iteration added (below) --
+  task 1.6 itself is far larger than the brace rows and stays unticked.
 - [ ] 2.1c (R4) D8 `_glob_links`, built **before** 2.2, because rule 6 without it regresses; (R6) with the base resolved by `_physical`, each branch carrying its real directory, literal components moved into rather than listed, and `..` moving to the real parent and judged (design D8 step 4); (R7) each branch also carries its listed path, so a `..` refusal names where it lands (`_resolves_elsewhere`), a literal component's link test is `os.lstat` (not `os.path.islink`), and `_physical`, `realpath` and `lstat` inside `_glob_links` are wrapped as design "What each changed route returns" says. Run 1.4c, 1.4d and 1.4f
 - [ ] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
 - [ ] 2.2 D2-D5 (R5: D3 and `_glob_links` also run in rule 5 on an absolute glob word, and in rule 6 on the whole value as well as each piece; `_words` reports a trimmed trailing `:` for D5; (R8) D2 step 6, the whole value's literal judgement, after the pieces, with a colon-joined option dropped, divided at its colons where `_DRIVE_LETTERS` is true (read at call time), and on POSIX judged whole as well, each through step 5. Run 1.4g):
