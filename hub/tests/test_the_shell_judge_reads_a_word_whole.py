@@ -1193,8 +1193,14 @@ def test_the_memo_key_carries_the_trailing_colon_flag_1_6(workspace, monkeypatch
 # backslash run followed by `./x` (not quoted, so Bash's own unquoted-backslash escaping is part of
 # what reaches `_decide`) is already covered by this file's other rows' string-length stress
 # (R8, `test_the_physical_readings_64_step_bound` and its neighbours use comparably long names);
-# measured here directly too: answers in well under a tenth of a second, refused as outside the
-# workspace. None of the three rows needs a production change -- this test is coverage, not a fix.
+# measured here directly too: answers in well under a tenth of a second, never raises. Its outcome
+# (allow/refuse) is not asserted here: `_SEPARATORS` is deliberately `os.sep`-dependent (`\` is a
+# separator on Windows, a literal filename character on POSIX, mcp_server.py:1097-1099) and baked
+# in at import, not through the monkeypatchable `_DRIVE_LETTERS` key -- so a 70,000-backslash run
+# resolves to a traversal on Windows and to one long in-workspace filename on POSIX. An earlier
+# version of this row hard-coded the Windows answer and went red on Linux CI (F-shell-judge-ci,
+# 2026-10-03/04) despite being "measured" -- the measurement was real, just only on one platform.
+# None of the three rows needs a production change -- this test is coverage, not a fix.
 def test_the_totality_rows_for_extglob_and_a_long_backslash_run_never_raise_1_6(
     workspace, monkeypatch
 ):
@@ -1207,8 +1213,7 @@ def test_the_totality_rows_for_extglob_and_a_long_backslash_run_never_raise_1_6(
     assert isinstance(nested_extglob_literal, dict) and "allow" in nested_extglob_literal
 
     long_backslash_run = _decide("Bash", {"command": "ls " + "\\" * 70000 + "./x"})
-    assert long_backslash_run["allow"] is False
-    assert long_backslash_run["reason"].startswith("'")
+    assert isinstance(long_backslash_run, dict) and "allow" in long_backslash_run
 
 
 # 1.4b (R4, D3 extglob): the bare-group row above (`test_an_unquoted_extglob_group_is_kept_as_one_
