@@ -308,6 +308,39 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   task 1.6 itself is far larger than the brace rows and stays unticked.
 - [ ] 2.1c (R4) D8 `_glob_links`, built **before** 2.2, because rule 6 without it regresses; (R6) with the base resolved by `_physical`, each branch carrying its real directory, literal components moved into rather than listed, and `..` moving to the real parent and judged (design D8 step 4); (R7) each branch also carries its listed path, so a `..` refusal names where it lands (`_resolves_elsewhere`), a literal component's link test is `os.lstat` (not `os.path.islink`), and `_physical`, `realpath` and `lstat` inside `_glob_links` are wrapped as design "What each changed route returns" says. Run 1.4c, 1.4d and 1.4f
 - [ ] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
+
+  **Iteration 18 (partial).** Measured today's `_decide` directly first (not from this file's old
+  R6/R7 tables, which predate the current rule-6 rewrite): `cp n [u]p/x` and `cp n [.]./x` are both
+  wrongly **allowed** today against a real junction (confirmed live, not assumed). Built the two
+  halves that do not need `_glob_links`: `_bracket_kept_word` plus the `_words` wiring (D11 itself --
+  a piece whose ordinary trim removed a `[` or `]` also yields the same piece trimmed with the
+  brackets left in, when that still holds a `[` with a later `]`), and `_rewrite_dotdot_globs`'s dot
+  rule now also accepts a component opening with `[` (D3's half of this task), both over-approximating
+  per design's own text ("Git Bash 5.2 does not match a leading dot that way, measured, but older
+  bash was not available"). This closes `cp n [.]./x` (task 1.4e's one row that needs no directory
+  listing) end to end. It does **not** close the link-detection rows (`cp n [u]p/x`, `cp n ./u[p]`,
+  `ls sub/[a]`): the bracket-kept word now reaches rule 5/6 correctly, but without `_glob_links`
+  (task 2.1c) nothing yet matches a bracket pattern like `[u]p` against the real directory entry
+  `up` to find the link behind it -- `_judge_path` still resolves the literal nonexistent name
+  `[u]p` lexically and finds it inside. Confirmed the new words do not regress any control: `ls
+  [../x]` stays refused as `'../x'` (the ordinary word, unaffected -- its own bracket-kept word
+  `[../x]`'s first component `[..` has no closing `]` within it, so `fnmatch.fnmatchcase` already
+  returns False, matching the design's own worked example); `arr[0]`, `x[1:]`,
+  `python -c '["a","b"]'` and `ls sub/[ab].py` stay allowed; the separator-less `[u]p`/`u[p]` stay
+  allowed (task 1.4f's own note -- the sibling change's drive machinery, not this one, is what would
+  refuse them). Added rows 1.4e1-1.4e7 to `_TABLE` and one row to `_DOTDOT_GLOB_REASON_TABLE` in
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`. Mutation-checked: stashing the production
+  fix fails exactly the two 1.4e1 rows (the allow/deny table row and the reason-text row) and leaves
+  every other new row passing unchanged, confirming 1.4e2-1.4e7 are true regression guards rather
+  than accidentally dependent on this change. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 91 passed (was 83, +8). Broader
+  regression set (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): 717 passed, 2 skipped, no regressions. ruff
+  and black (`--target-version py311`) clean on both changed files; `mypy src/` (the file is under
+  `hub/`, outside mypy's CI scope) unaffected. `git diff --stat`: exactly `hub/hub/mcp_server.py` and
+  the one test file, plus this task file. **Task 2.1d stays unticked**: its own text also names "D8's
+  reading of a component that opens with a bracket expression," which is `_glob_links`'s job once
+  2.1c exists, and the link-detection rows of 1.4c/1.4e are not run yet.
 - [ ] 2.2 D2-D5 (R5: D3 and `_glob_links` also run in rule 5 on an absolute glob word, and in rule 6 on the whole value as well as each piece; `_words` reports a trimmed trailing `:` for D5; (R8) D2 step 6, the whole value's literal judgement, after the pieces, with a colon-joined option dropped, divided at its colons where `_DRIVE_LETTERS` is true (read at call time), and on POSIX judged whole as well, each through step 5. Run 1.4g):
   - replace rule 6 of `_judge_word` with the piece reading, including D3's extglob units;
   - add `_PIECE_BREAKS`, `_BASH_DEVICES`, `_SCP_ADDRESS_RE` and `_HOST_PORT_RE` beside `_ABSOLUTE_PATH_RE`, with a comment naming this change;

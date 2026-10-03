@@ -1380,11 +1380,16 @@ _SEPARATOR_RE = re.compile(f"([{re.escape(_SEPARATORS)}])")
 def _rewrite_dotdot_globs(path: str) -> str:
     """Each component of `path` that some real bash could still expand to `..` (D3), rewritten to
     `..` before `_judge_path` resolves it. The refusal this feeds still quotes the word as written,
-    not this rewritten value."""
+    not this rewritten value.
+
+    (R6, D11) A component is also accepted when it opens with `[` rather than `.`: Git Bash 5.2.37
+    measured does not match a leading dot that way (`globskipdots` off), but an older bash was not
+    available to check, so this over-approximates rather than depend on it.
+    """
     components = _SEPARATOR_RE.split(path)
     for index, component in enumerate(components):
         if (
-            component.startswith(".")
+            (component.startswith(".") or component.startswith("["))
             and any(char in component for char in _GLOB_CHARS)
             and fnmatch.fnmatchcase("..", component)
         ):
@@ -2027,6 +2032,32 @@ def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
     return arguments, nested
 
 
+# (R6, D11) The trim `_words` also applies to recover a bracket a narrower trim would have lost:
+# `[../x]` is refused today as `../x`, and a trim that removed the brackets by matching them as a
+# pair, rather than as edge delimiters, would change that literal reading. So this is a second word
+# alongside the ordinary one, never a replacement.
+_WORD_TRIM_KEEP_BRACKETS = _WORD_TRIM.translate(str.maketrans("", "", "[]"))
+
+
+def _bracket_kept_word(piece: str, ordinary: str) -> Optional[Tuple[str, str]]:
+    """D11: for a `piece` whose ordinary trim removed a `[` or `]`, the same piece trimmed of
+    `_WORD_TRIM` with the brackets left in -- when that still holds a `[` with a later `]`, so it
+    is a word a glob reading can use. None otherwise (including when the brackets sat in the
+    middle of the piece untouched by either trim, so `kept == ordinary`).
+
+    Returns the word and the text it was left-trimmed to, so a trailing colon can be read off it
+    the same way `_words` reads one off the ordinary word.
+    """
+    left = piece.lstrip(_WORD_TRIM_KEEP_BRACKETS)
+    kept = left.rstrip(_WORD_TRIM_KEEP_BRACKETS)
+    if not kept or kept == ordinary:
+        return None
+    open_index = kept.find("[")
+    if open_index < 0 or "]" not in kept[open_index + 1 :]:
+        return None
+    return kept, left
+
+
 def _words(arguments: List[str]) -> List[Tuple[str, str, bool, bool]]:
     """Each argument's words, as (word, its argument, whether the argument carries on past it,
     whether a `:` was trimmed directly after the word).
@@ -2036,6 +2067,10 @@ def _words(arguments: List[str]) -> List[Tuple[str, str, bool, bool]]:
     `sh -c "echo > '.'./x"` hands its inner shell `'.'./x`, which that shell joins into `../x`. The
     trailing-colon flag (D5, R5) lets `scp n user@example.com:` be matched with its colon restored,
     since `_WORD_TRIM` removes it before the word ever reaches a judge.
+
+    (R6, D11) A piece whose trim removed a `[` or `]` also yields the bracket-kept word alongside
+    it (`_bracket_kept_word`), so a bracket expression at a word's edge (`[u]p/x`, `u[p]`) is judged
+    with its brackets intact too, not only with them stripped.
     """
     words: List[Tuple[str, str, bool, bool]] = []
     for argument in arguments:
@@ -2047,6 +2082,11 @@ def _words(arguments: List[str]) -> List[Tuple[str, str, bool, bool]]:
                 continues = position < len(pieces) - 1 or piece.rstrip(_WORD_TRIM) != piece
                 trailing_colon = left_trimmed[len(word) : len(word) + 1] == ":"
                 words.append((word, argument, continues, trailing_colon))
+                kept = _bracket_kept_word(piece, word)
+                if kept is not None:
+                    kept_word, kept_left = kept
+                    kept_trailing_colon = kept_left[len(kept_word) : len(kept_word) + 1] == ":"
+                    words.append((kept_word, argument, continues, kept_trailing_colon))
     return words
 
 

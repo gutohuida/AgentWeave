@@ -213,6 +213,24 @@ _TABLE = [
     _row("1.4f4", "ls in/../sub", True),
     _row("1.4f5", "ls sub/../sub/a.py", True),
     _row("1.4f6", "ls in/../sub/*.py", True),
+    # 1.4e/2.1d (R6, D11), the part built this iteration: the bracket-kept word `_words` now also
+    # yields, and D3's dot rule (`_rewrite_dotdot_globs`) now also reads a component that opens
+    # with `[` rather than `.`. `cp n [.]./x` needs only these two (no directory listing): the
+    # ordinary word is `.]./x` (no rewrite, inside today), and the bracket-kept word `[.]./x`'s
+    # first component is rewritten to `..`. The link-detection half of 1.4e (`[u]p/x`, `./u[p]`,
+    # where a bracket-kept word must be matched against a real directory entry that is a link) needs
+    # `_glob_links` (task 2.1c, not built) and is not covered here; task 2.1d itself stays unticked.
+    _row("1.4e1", "cp n [.]./x", False),
+    # Controls: the bracket-kept word can only ever add a refusal, never replace the ordinary
+    # word's reading or introduce a false one of its own.
+    _row("1.4e2", "ls [../x]", False),  # unaffected: still refused as '../x', the ordinary word
+    _row("1.4e3", "echo arr[0] x[1:]", True),
+    _row("1.4e4", 'python -c \'["a","b"]\'', True),
+    _row("1.4e5", "ls sub/[ab].py", True),
+    # The separator-less forms stay allowed under this change alone (task 1.4e's own note); the
+    # sibling change's 1.4f refuses them once its drive machinery lands.
+    _row("1.4e6", "cp n [u]p", True),
+    _row("1.4e7", "cp n u[p]", True),
 ]
 
 
@@ -234,6 +252,9 @@ _DOTDOT_GLOB_REASON_TABLE = [
     ("1.4j", "Bash", "ls ../*", "../*"),
     ("1.4k", "Bash", "rm -rf ../*.py", "../*.py"),
     ("1.4l", "PowerShell", r"Get-ChildItem ..\*", r"..\*"),
+    # (R6, D11) The bracket-kept word, not the ordinary one (`.]./x`, which is not rewritten): the
+    # refusal quotes `[.]./x` as written, not the ordinary word's own reading of the same piece.
+    ("1.4e1", "Bash", "cp n [.]./x", "[.]./x"),
 ]
 
 
