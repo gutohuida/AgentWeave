@@ -1708,6 +1708,34 @@ has not), **correction** (sibling text that is wrong about this change), or **no
   that delegation errors before a subagent session opens. Filed as an addendum to
   `spec-queue/DECISIONS.md` `ghcp-s5-subagent-capture` (still OPEN; the operator's call).
 
+- **Task 7.2, real mapping, 2026-10-03**: before driving the compaction backstop on `:8010`, ran
+  the captured `hub/tests/fixtures/copilot/compaction.jsonl` through the production
+  `copilot_acp.CopilotEventMapper` directly (`testbed/drive1003-ghcp-s5-drive/task72_map_compaction.py`),
+  feeding every `session/update` to `on_session_update` and every `github.com/copilot/sessionEvent`
+  to `on_raw_event`, then calling `finish()`. **Result: zero events fire for either
+  `session.compaction_start` or `session.compaction_complete`.** The only output from the whole
+  fixture is `finish()`'s ordinary accumulated-text event (`"okCompacted conversation history..."`)
+  — the ordinary `agent_message_chunk` text, not a `compacted` card or any diagnostic. Grepping
+  `hub/hub/copilot_acp.py`'s `on_raw_event` confirms why: it branches on `_NOTICE_PREFIXES`
+  (`session.error`/`warning`/`info`), `session.mcp_servers_loaded`/`mcp_server_status_changed`, and
+  the three model-resolution types; `session.compaction_start`/`session.compaction_complete` match
+  none of those and fall through to `return []`. Task 2.3 (*"a root `session.compaction_complete`
+  becomes `compacted` or a diagnostic..."*, design D4) is the mapper-side half of this; it is
+  unwritten. Grepping all of `hub/hub/*.py` for the literal `"compacted"` found zero matches, and
+  `checkpoint_trigger.py` has no `consider_from_compaction` (task 2.4) or `_compaction_pending`
+  (task 2.4/2.5) — the whole D4 backstop is unbuilt, not just its mapper branch.
+
+  **Task 7.2 cannot be completed as written: there is nothing for the one-off script to `POST`
+  that would produce a `compacted` card, because the code that would turn a mapped event into one
+  does not exist yet.** This is not the D5 per-turn-context-block conditional the night queue's
+  `next_action` resolved (that conditional was about whether a bare `/compact` message reaches
+  Copilot as text, and it does not need to for this path) — it is `ghcp-s5-subagent-capture`'s own
+  already-documented scope: *"group A (tasks 1.2-1.6, 2.1-2.8) has **not** been started"*. 2.3, 2.4
+  and 2.5 are exactly the compaction-backstop tasks inside that blocked range. Filed as a second
+  addendum on the same `spec-queue/DECISIONS.md` row rather than a new one, since it is the same
+  blocked range surfacing a second time, now against a different drive task. No code was written to
+  work around this; `tasks.md` 7.2 is left unchecked, marked blocked with this evidence inline.
+
 ## Open questions for R2/R3
 
 1. **Slice 2 alignment.** *(Answered in R2; R3 moved the answers into *Required of slices 1–4*, D5 and D9.)* What does slice 2's raw-event subscription list contain? Where does its

@@ -67,6 +67,19 @@ DECIDED. Absence is not consent.
   one more attempt with `model` passed from the start (both failures here came from an initial
   call that omitted it), but that is itself a guess, not something driven this iteration.
 
+  **Addendum, 2026-10-03 night, task 7.2 (the compaction backstop)** (design.md Round log, *Task
+  7.2, real mapping, 2026-10-03*): ran the captured `compaction.jsonl` through the production
+  `CopilotEventMapper` directly, before touching the trial Hub. It emits **zero** events for either
+  `session.compaction_start` or `session.compaction_complete` — `on_raw_event` only branches on
+  `session.error`/`warning`/`info`, the two MCP-server-status types, and the three model-resolution
+  types; compaction falls through to `return []`. Task 2.3 (the mapper's compaction branch) and
+  task 2.4 (`consider_from_compaction`, `checkpoint_trigger.py`) are both unwritten — grepping all
+  of `hub/hub/*.py` for `"compacted"` found zero matches. Task 7.2 cannot be completed as written:
+  there is nothing for its one-off script to map or `POST` that would produce a `compacted` card,
+  because the code that would create one does not exist. This is the same blocked range this row
+  already names (*"group A (tasks 1.2-1.6, 2.1-2.8) has not been started"*), now confirmed against
+  a second drive task rather than just task 1.1's. `tasks.md` 7.2 left unchecked, marked blocked.
+
 ### `a-run-reaches-the-hub-without-mcp` task 10.1 needs the operator on the work PC -- 2026-10-01 night, DECIDED 2026-10-02
 
 - DECIDED   a-run-reaches-hub-10.1  **Waived on the work-PC evidence** (operator, 2026-10-02, as recommended):

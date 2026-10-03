@@ -850,17 +850,29 @@ every run id, and paste each surface's text verbatim into the Round log.
   external check attempted; it was not retried a third way to avoid spending further unaccounted
   allowance. The operator should decide how (or whether) to measure `/usage` before 7.2 onward, or
   accept recording model-reported consumption only.
-- [ ] 7.2 (A) **The compaction backstop.**
-  - R2 answered the condition: slice 2's D5 sends a per-turn context block ahead of every message,
-    so a `/compact` message never reaches Copilot as a bare prompt. So a one-off script in
-    `testbed/` maps the captured `compaction.jsonl` with the Copilot mapper **in the script**, then
-    `POST`s the resulting event to `POST /agents/cp5/output` on `:8010` (`kind: "status"`, the
-    mapped payload, `cp5`'s real `run_id`/`session_id`), with the trial project's operator key.
-    (Review 2026-09-28, finding 12: calling `record_agent_output` in the script's own process would
-    run the consideration there, where it finds no loop or broadcasts to nobody; the POST makes the
-    trial Hub's own process dispatch it.)
-  - The timeline shows the `compacted` card with its token counts, and the conversation shows the
-    (unchanged) checkpoint-due banner. No checkpoint row is created. Paste both texts verbatim.
+- [ ] 7.2 (A) **The compaction backstop. BLOCKED, 2026-10-03 night (iter 14), real mapping not
+  the expected outcome.** Before touching `:8010`, ran the captured `compaction.jsonl` through the
+  production `copilot_acp.CopilotEventMapper` directly
+  (`testbed/drive1003-ghcp-s5-drive/task72_map_compaction.py`): feeding every `session/update` to
+  `on_session_update` and every `github.com/copilot/sessionEvent` to `on_raw_event`, then calling
+  `finish()`. **Zero events fire for `session.compaction_start` or `session.compaction_complete`**
+  — the only output is `finish()`'s ordinary accumulated-text event
+  (`"okCompacted conversation history and removed 1 message and -745 tokens."`), not a `compacted`
+  card or any diagnostic. `on_raw_event` (`hub/hub/copilot_acp.py`) only branches on
+  `session.error`/`warning`/`info`, the two MCP-server-status types, and the three model-resolution
+  types; compaction falls through to `return []`. Task 2.3 (the mapper's own `compacted`/diagnostic
+  branch, design D4) and task 2.4 (`checkpoint_trigger.consider_from_compaction`) are both
+  unwritten — grepping all of `hub/hub/*.py` for the literal `"compacted"` found zero matches.
+
+  **There is nothing for a one-off script to map or `POST` that would produce a `compacted` card,
+  because the code that would create one does not exist yet.** This is not the D5 per-turn-context
+  conditional (already answered, and irrelevant to this path); it is the same blocked range
+  `spec-queue/DECISIONS.md` `ghcp-s5-subagent-capture` already names — *"group A (tasks 1.2-1.6,
+  2.1-2.8) has not been started"* — tasks 2.3/2.4/2.5 sit inside that range. Filed as a second
+  addendum on that row (still OPEN) and in `design.md`'s Round log (*Task 7.2, real mapping,
+  2026-10-03*), rather than worked around. No Copilot allowance spent (no live turn; the mapper was
+  exercised directly against the captured fixture). Left unchecked; the trial Hub `:8010` was not
+  touched for this task since there was nothing meaningful to send it.
 - [ ] 7.3 (A) Error once. Give `cp5` an invalid provider key through a group C runner whose key
   variable holds `invalid`. Run one turn. (Review 2026-09-28, finding 6: the old "if C was cut,
   ambient `COPILOT_PROVIDER_*`" fallback relied on exactly the hole task 2.8 closes, so it no longer
