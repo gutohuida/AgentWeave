@@ -55,6 +55,31 @@ Merge note for the operator, not for the window: slice 5 adds a migration (`runn
 and UI. Once merged, `:8000` runs the migration on its next restart, and the rebuilt bundle reaches the
 live app on its next reload.
 
+### Tonight (the 22:55 arm, 23:00-07:00) — decided now, because the operator is away all day
+
+The operator will not be back before tonight's arm, so nothing below waits for them.
+
+- **Compose keeps the afternoon's queue rather than rebuilding it from `ORDER:`.** The arm resets
+  `STATE-night.json` to compose, but the afternoon's last state is one commit back. Read it with
+  `git show <the arm commit>^:.claude/autonomous/STATE-night.json` (the arm commit is the newest
+  `arm(night): 2026-10-03` in `git log`). Carry every item that is not `done` into tonight's queue
+  **verbatim and in order**: same ids, same `model` overrides (group C stays on Opus), same detail.
+  Then append any `ORDER:` entry the carried queue does not already cover. Read the afternoon's last
+  log entry for where it stopped mid-item. The `ORDER:` line below is the fallback only if that
+  state cannot be read.
+- **Step 3's suite gate is satisfied by CI.** The branch was built all afternoon under the driver's
+  CI check, so if the CI verdict for the inherited tip is `success`, record that and skip the local
+  full Hub suite run. Last night that run cost 9 firings and 46 minutes. If CI is `failure`, fixing
+  it is the first item, as the playbook says. If it is unfinished, read the newest finished run.
+- **When the queue empties, take the backlog default** (unarchived changes, then open findings by
+  severity), not a null `next_action`. A night that finishes early should keep working.
+- **The weekly limit resets 2026-10-04 15:00.** A usage-limit pause is acceptable tonight: the driver
+  waits it out, and there is no need to slow down to avoid one.
+- **Decisions still go to `DECISIONS.md` as `OPEN` rows**, and the window moves on to the next item.
+  Nobody will answer before morning.
+- **No merge.** Leave the branch for the operator. The day arm is disabled, so nothing else will
+  merge it either.
+
 ORDER: a-copilot-agent-uses-hooks-and-its-own-agents, copilot-oneshot-credits-r1, copilot-oneshot-credits-r2, copilot-oneshot-credits-r3, copilot-oneshot-credits-rev, the-shell-judge-reads-a-word-whole, a-drive-or-a-home-variable-names-a-directory-by-itself
 
 
