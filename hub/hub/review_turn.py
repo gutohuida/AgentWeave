@@ -19,6 +19,7 @@ only enforce where the agent may act, never what it thinks it is doing.
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
@@ -27,12 +28,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import requirement_evidence, worktrees
-from .db.models import Agent, SpecDocument, Task
+from .db.models import Agent, Project, SpecDocument, Task
 from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 from .repo_hygiene import seed_repo_excludes
 from .spec_documents import read_document
 from .spec_manifest import SpecPathError
 from .spec_payload import extract_payload
+from .subprocess_windows import no_console_kwargs
 
 
 class ReviewTurnRefused(RuntimeError):  # noqa: N818 - "refused" is the outcome, not a fault
@@ -57,6 +59,12 @@ class ReviewContext:
     branch: Optional[str] = None
     #: Commits named by *earlier* evidence for the same task, oldest first (design D5).
     earlier_commits: List[requirement_evidence.EarlierCommit] = None  # type: ignore[assignment]
+    #: `git merge-base <commit_sha> <Project.main_branch>` (design D8) -- where the reviewed
+    #: branch left the project's main branch, so a review-agents consult can be told a range
+    #: rather than just a commit. `None` when there is nothing to name beyond the commit itself:
+    #: no main branch is set, it does not exist, the command failed, or the merge base *is* the
+    #: commit (the commit is already on the main branch, so the range would be empty).
+    base_sha: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.earlier_commits is None:
@@ -237,6 +245,42 @@ async def verdict_evidence_sentence(
     )
 
 
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
+    """`task_integration._git`'s pattern, not its instance: this module's own git spawns are one
+    call deep and never share that module's `GIT_TIMEOUT_SECONDS` contextvar."""
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+        **no_console_kwargs(),
+    )
+
+
+async def _merge_base_sha(
+    session: AsyncSession, *, project_id: str, repo_root: Path, commit_sha: str
+) -> Optional[str]:
+    """`<base>` for design D8's review-agents bullet, or `None` when there is nothing to add to
+    naming the commit alone. **Never raises**: a missing base narrows one bullet, not whether the
+    review can happen at all (design D8, R3)."""
+    project = await session.get(Project, project_id)
+    main_branch = project.main_branch if project else None
+    if not main_branch:
+        return None
+    try:
+        result = _git(repo_root, "merge-base", commit_sha, main_branch)
+    except (subprocess.SubprocessError, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    base = result.stdout.strip()
+    if not base or base == commit_sha:
+        return None
+    return base
+
+
 async def prepare_review_turn(
     session: AsyncSession,
     *,
@@ -271,6 +315,13 @@ async def prepare_review_turn(
     # would leave a project whose only turns are reviews with no ignore rules at all.
     seed_repo_excludes(repo_root)
 
+    # Computed before the checkout is provisioned (design D8, R3): the alternative order would let
+    # an escaping `TimeoutExpired` leak a provisioned-but-unclaimed checkout, the F326 class. This
+    # call cannot raise -- see `_merge_base_sha` -- but the order matters whether or not it does.
+    base_sha = await _merge_base_sha(
+        session, project_id=project_id, repo_root=repo_root, commit_sha=target.commit_sha
+    )
+
     try:
         workspace = worktrees.ensure_review_checkout(repo_root, reviewer, target.commit_sha)
     except worktrees.ReviewCommitUnavailableError as exc:
@@ -290,4 +341,5 @@ async def prepare_review_turn(
         workspace=workspace,
         branch=target.branch,
         earlier_commits=target.earlier_commits,
+        base_sha=base_sha,
     )

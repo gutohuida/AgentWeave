@@ -655,7 +655,19 @@ def _merge_patch(target: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any
 #: An allow-list, because `config` is an open object any PATCH can fill, and a credential under a
 #: key nobody thought to deny (`env_vars` values, a token inside `mcp_servers`) must not reach a
 #: listing the UI polls.
-ROSTER_CONFIG_KEYS = ("read_only", "yolo", "runner", "model", "cli", "hub_client")
+ROSTER_CONFIG_KEYS = (
+    "read_only",
+    "yolo",
+    "runner",
+    "model",
+    "cli",
+    "hub_client",
+    "copilot_review_agents",
+)
+
+#: The closed vocabulary for `config.copilot_review_agents` (design D8): Copilot's own built-in
+#: review agents, named in the order the Settings UI offers them.
+COPILOT_REVIEW_AGENTS = ("code-review", "security-review", "rubber-duck")
 
 
 @router.post("", response_model=OperatorAgentResponse, status_code=status.HTTP_201_CREATED)
@@ -1935,6 +1947,36 @@ async def _render_hub_agent_context(
                 "if it is not. Leaving it where it is ends your turn without a review having "
                 "happened, and the work waits for a person."
             )
+            # Design D8. Copilot's own built-in review agents, consulted only on a Copilot runner
+            # (the setting has no effect for any other CLI) and only when the operator turned at
+            # least one on. The renderer filters the stored value to the closed vocabulary and
+            # ignores anything that is not a list (review 2026-09-28, finding 14): a value another
+            # writer put in `Agent.config` without going through the PATCH check can only narrow
+            # this bullet, never inject into it.
+            if runner == "copilot" and agent_row is not None:
+                stored_review_agents = (agent_row.config or {}).get("copilot_review_agents")
+                review_agent_names = (
+                    [name for name in stored_review_agents if name in COPILOT_REVIEW_AGENTS]
+                    if isinstance(stored_review_agents, list)
+                    else []
+                )
+                if review_agent_names:
+                    first, *rest = review_agent_names
+                    agent_phrase = f"`{first}`"
+                    if rest:
+                        agent_phrase += f" (and {', '.join(f'`{name}`' for name in rest)})"
+                    range_phrase = (
+                        f"the changes from `{review.base_sha}` to `{review.commit_sha}`"
+                        if review.base_sha
+                        else f"`{review.commit_sha}`'s own changes"
+                    )
+                    lines.append(
+                        f"- Before your verdict, run Copilot's {agent_phrase} agent as a "
+                        f"subagent on {range_phrase}. Weigh what it reports and check it "
+                        "yourself. It does not see this repository's instructions, and its "
+                        "findings are not your verdict. The verdict is yours, and it is "
+                        "recorded only by `update_task`."
+                    )
             # F357: the evidence gate, beside the verdict it can refuse. The loop briefing says the
             # same thing through the same helper.
             review_task = await db.get(Task, review.task_id)
@@ -2699,6 +2741,27 @@ def _validated_waiting_seconds(field: str, value: object) -> Optional[int]:
     return value
 
 
+def _validated_copilot_review_agents(value: object) -> None:
+    """Refuse a bad `config.copilot_review_agents` before the merge patch touches the row.
+
+    A list first (review 2026-09-28, finding 14: the string `"code-review"` is iterable and must
+    not be accepted, then silently read back as three one-character entries by anything that
+    trusts the stored shape), then each entry against the closed vocabulary. Only refuses; the
+    merged value is whatever `_merge_patch` produces, so this does not also need to return it.
+    """
+    if not isinstance(value, list):
+        raise HTTPException(status_code=400, detail="config.copilot_review_agents must be a list")
+    unknown = sorted({item for item in value if item not in COPILOT_REVIEW_AGENTS})
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"config.copilot_review_agents: unknown {', '.join(repr(u) for u in unknown)}. "
+                f"Valid: {', '.join(COPILOT_REVIEW_AGENTS)}"
+            ),
+        )
+
+
 # What `patch_agent` below reads from its body, and nothing else. A key added to the handler must be
 # added here too, or the route refuses it -- which is the direction this is meant to fail in.
 _PATCH_AGENT_FIELDS = frozenset(
@@ -2825,6 +2888,8 @@ async def patch_agent(
         elif not isinstance(new_config, dict):
             raise HTTPException(status_code=400, detail="config must be an object or null")
         else:
+            if "copilot_review_agents" in new_config:
+                _validated_copilot_review_agents(new_config["copilot_review_agents"])
             merged_config = _merge_patch(agent_row.config or {}, new_config)
         # Where the agent works must not change under held work (F242). Raised before the row is
         # written; nothing commits a refused body, so no field of it is kept.

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "ghcp-s5-b-impl",
-    "next_action": "Group B (ghcp-s5-b-impl), first slice, backend: write hub/tests/test_review_turn_copilot_agents.py (tests 1.11 and 1.12) with tasks 4.1 (review_turn.prepare_review_turn computes ReviewContext.base_sha = git merge-base <commit> <Project.main_branch> BEFORE ensure_review_checkout, None on any failure or when equal to the commit, never raising) and 4.2 (the D8 bullet in _render_hub_agent_context's review section; copilot_review_agents validated in the agent PATCH route, list first then vocabulary; renderer filters/ignores a non-list; add to ROSTER_CONFIG_KEYS and fix tests pinning that tuple). Red then green, mutation-check, the F392 regression union, CLI suite. Drive a review turn's rendered context on a source Hub. Second slice after it: 4.3 (Agent Settings review-agents control, copilot only, help text per finding 13) with its part of copilotAgentSettings.test.tsx, browser-driven, bundle refreshed.",
+    "next_action": "Group B (ghcp-s5-b-impl), second and last slice, UI: task 4.3 -- an Agent Settings review-agents control shown only for copilot agents, offering the closed vocabulary (code-review, security-review, rubber-duck; hub/hub/api/v1/agents.py's new COPILOT_REVIEW_AGENTS tuple, PATCH-validated by _validated_copilot_review_agents), its help text stating that on a provider runner (group C) Copilot's review agents may not run (finding 13). Pass its part of test 1.14 (copilotAgentSettings.test.tsx). Lint, vitest, build and refresh the UI bundle (hub/ui/src and hub/hub/static/ui together) as task 3.4 did. Browser-drive it against the served bundle. This closes group B (1.11, 1.12, 4.1, 4.2 done iter 9); group D (ghcp-s5-d-impl) is next in the queue.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -32,7 +32,7 @@
             "id": "ghcp-s5-b-impl",
             "status": "open",
             "title": "Slice 5 group B: Copilot review agents on review turns",
-            "detail": "1.11, 1.12, 4.1, 4.2 (slice 1, backend); 4.3 with its part of 1.14 (slice 2, UI)."
+            "detail": "Slice 1 (backend: 1.11, 1.12, 4.1, 4.2) done iter 9. Slice 2 open: 4.3 with its part of 1.14 (UI)."
         },
         {
             "id": "ghcp-s5-d-impl",

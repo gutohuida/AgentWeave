@@ -378,7 +378,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
   (`test_migration_adds_runner_provider_config_and_keeps_an_existing_runner`, `..._downgrade_drops_...`)
   red before `0118` existed (3 failed + the persistence head), green after: 129 passed, 1 skipped
   over both files.
-- [ ] 1.11 (B) `hub/tests/test_review_turn_copilot_agents.py`, rendering through
+- [x] 1.11 (B) `hub/tests/test_review_turn_copilot_agents.py`, rendering through
   `_render_hub_agent_context` with a real `ReviewContext` (pattern:
   `test_review_turn.py::test_the_turn_context_says_this_is_a_review_and_names_the_task_and_commit`).
   Cases:
@@ -396,13 +396,22 @@ scratch copy (DEAD-ENDS 2026-09-27).
     `prepare_review_turn` returns a context with `base_sha is None`, and the patched call happened
     **before** `worktrees.ensure_review_checkout` (assert call order), so a raise there could not
     leave a provisioned checkout unclaimed.
-- [ ] 1.12 (B) Same file: `PATCH /agents/{name}` with `config.copilot_review_agents == ["research"]`,
+  **Done 2026-10-03 (night iter 9):** all cases pass. Red before 4.1/4.2 existed (15 of 16
+  tests in the file failed; the 16th, the ordinary-turn case, passes either way). Two mutations
+  run and caught (dropping the vocabulary filter on render; swapping the merge-base/checkout
+  order) -- both failed the case they target.
+- [x] 1.12 (B) Same file: `PATCH /agents/{name}` with `config.copilot_review_agents == ["research"]`,
   `["x"]` or the string `"code-review"` (review 2026-09-28, finding 14: not iterated as characters)
   is refused with a 400 sentence, and the stored config is unchanged. A value stored through
   `POST /agents/register` as `["code-review", "research"]` renders a bullet naming `code-review`
   only, and one stored as `"code-review"` renders no bullet.
   `["code-review", "security-review"]` is accepted, and `GET /agents` returns it in the agent's
   `config` (it is in `ROSTER_CONFIG_KEYS`; design D8).
+  **Done 2026-10-03 (night iter 9):** `POST /agents/register` no longer exists
+  (`agents-no-longer-register-themselves`); its stand-in for "a writer the PATCH check does not
+  see" is the `add_agent` test fixture, which inserts the `Agent` row directly, exactly what that
+  route's replacement note says to use. Both narrowing cases (an unknown vocabulary entry mixed
+  with a valid one; a stored string instead of a list) pass against that fixture.
 - [ ] 1.13 (D) `hub/tests/test_copilot_github_mcp_toggle.py`:
   - slice 2's `copilot_acp.build_acp_argv` contains `--disable-builtin-mcps` when
     `RpcTurnRequest.agent_config["copilot_github_mcp"]` is false or absent, and omits it when true;
@@ -632,16 +641,29 @@ scratch copy (DEAD-ENDS 2026-09-27).
 
 ## 4. Group B — Copilot review agents on review turns
 
-- [ ] 4.1 `hub/hub/review_turn.py::prepare_review_turn`: read `Project.main_branch`, compute
+- [x] 4.1 `hub/hub/review_turn.py::prepare_review_turn`: read `Project.main_branch`, compute
   `git merge-base <commit> <main_branch>` (no helper exists; follow `task_integration._git`), and
   carry it as `ReviewContext.base_sha`, `None` on any failure or when it equals the commit. Never
   raise for it: catch `(subprocess.SubprocessError, OSError)`, and compute it **before**
   `ensure_review_checkout` (R3, design D8).
-- [ ] 4.2 `hub/hub/api/v1/agents.py`, the review section of `_render_hub_agent_context`: add the D8
+  **Done 2026-10-03 (night iter 9):** `review_turn._git` (module-level, `**no_console_kwargs()`,
+  matching `test_no_console_flash.py`'s static check) and `_merge_base_sha`, called from
+  `prepare_review_turn` after `is_git_repo`/`seed_repo_excludes` and before
+  `ensure_review_checkout`. `ReviewContext.base_sha: Optional[str] = None` added.
+- [x] 4.2 `hub/hub/api/v1/agents.py`, the review section of `_render_hub_agent_context`: add the D8
   bullet after the verdict line, under the D8 conditions. Validate `copilot_review_agents` in the
   agent PATCH route before the merge: a list first, then the vocabulary (review 2026-09-28,
   finding 14); the renderer filters the stored value to the vocabulary and ignores a non-list. Add it to `ROSTER_CONFIG_KEYS` (`agents.py:651`) and update
   any test that pins that tuple. Pass tests 1.11 and 1.12.
+  **Done 2026-10-03 (night iter 9):** `COPILOT_REVIEW_AGENTS` vocabulary tuple,
+  `_validated_copilot_review_agents` wired into `PATCH /agents/{name}` before the merge, the D8
+  bullet inserted between the verdict line and the evidence-gate sentence, gated on
+  `runner == "copilot"` and a non-empty filtered list. `copilot_review_agents` added to
+  `ROSTER_CONFIG_KEYS`; no existing test pinned that tuple literally, so none needed updating.
+  Tests 1.11 and 1.12 pass (16/16); CLI suite and the F392 regression union (135 tests across
+  `test_review_turn*`, `test_agent_tool_surface*`, `test_a_request_means_what_it_says.py`,
+  `test_request_agent_models_an_existing_agent.py`, `test_no_console_flash.py`) all pass. `ruff`,
+  `black --check --target-version py311`, `mypy src/` clean.
 - [ ] 4.3 Agent Settings UI: add a review-agents control shown only for `copilot` agents; its help
   text says that on a provider runner Copilot's review agents may not run (review 2026-09-28,
   finding 13). Pass its part of test 1.14. Run lint, vitest, build and bundle refresh as in 3.4.
