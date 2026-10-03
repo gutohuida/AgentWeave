@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "ghcp-s5-d-impl",
-    "next_action": "Group D (ghcp-s5-d-impl): task 5.1 (hub/hub/copilot_acp.py, hub/hub/agent_trigger.py) -- RpcTurnRequest.agent_config, the github_mcp flag threaded through build_acp_argv and decide_permission exactly as task 5.1 specifies (review 2026-09-28 findings 4, 5, 14), the permission_card_label and workspace_verdict=None cases, the CopilotEventMapper unavailable-server diagnostic (conditioned on what task 1.1's capture showed -- if it showed nothing, delete the requirement's paragraph and its two scenarios from specs/agent-configuration/spec.md instead, per the operator's 2026-09-28 acceptance), and copilot_github_mcp added to ROSTER_CONFIG_KEYS. Pass test 1.13. Then 5.2: the Agent Settings GitHub-server toggle (same copilotAgentSettings.test.tsx this iteration created, gated on runner==='copilot' like CopilotReviewAgentsSetting), its help text naming the Workspace-only-asks-every-call behaviour and the pre-approval-flag bypass (finding 11). Pass the rest of test 1.14. Lint, vitest, build and refresh the UI bundle (hub/ui/src and hub/hub/static/ui together) as task 3.4 and this iteration's 4.3 did. Then 6.1: run exactly what CI runs (ruff, black --target-version py311, mypy src/, both pytest suites, hub/ui lint+vitest) and confirm all green. This closes group D; ghcp-s5-drive is next in the queue.",
+    "next_action": "Group D (ghcp-s5-d-impl), task 5.2 (hub/ui/src/components/agents/AgentSettingsControls.tsx, AgentSettingsPage.tsx): add a GitHub-server toggle control for a copilot-bound agent only, in the same copilotAgentSettings.test.tsx iteration 10 created (gated on agent.runner==='copilot' like CopilotReviewAgentsSetting; backs config.copilot_github_mcp, already in ROSTER_CONFIG_KEYS and already readable/writable through the agents API per iter 11's 5.1). Its help text must name both things review 2026-09-28 finding 11 asked for: that while it is on, every non-Hub MCP call is asked under Workspace only (not allowed outright), and that a runner's own pre-approval flags (--allow-tool, --allow-all-tools) bypass the card regardless of this toggle. Pass the GitHub-server-control bullet of test 1.14 (hub/ui/src/__tests__/copilotAgentSettings.test.tsx: appears only for copilot, shows the served value, toggling PATCHes the agent). Then lint, vitest, build and refresh the UI bundle (hub/ui/src and hub/hub/static/ui together) exactly as task 3.4 and iteration 10's 4.3 did, and drive it in a browser against the served bundle on a fresh source Hub (never :8000/:8010) the same way iteration 10 drove the review-agents control -- check the real layout, not just jsdom. Then task 6.1: run exactly what CI runs over the whole repo (ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/; py -3.11 -m pytest tests/ -q; py -3.11 -m pytest hub/tests/ -q; cd hub/ui && npm run lint && npx vitest run) and confirm every one is green -- this is the first full-repo run of this window, not a targeted regression, so read its result rather than trusting the targeted ones iterations 1-11 ran. Before any of that, read the result of the full `py -3.11 -m pytest hub/tests/ -q` iteration 11 started in the background (its output was not yet read at iteration 11's commit) -- if it found anything the targeted regression missed, fix that first. Closing 6.1 closes group D; ghcp-s5-drive is next in the queue.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -38,7 +38,7 @@
             "id": "ghcp-s5-d-impl",
             "status": "open",
             "title": "Slice 5 group D: the GitHub MCP server toggle, then 6.1",
-            "detail": "1.13, 5.1, 5.2, the rest of 1.14 and the UI-bundle refresh (hub/ui/src and hub/hub/static/ui together), then 6.1 exactly what CI runs."
+            "detail": "Done iter 11 (1.13, 5.1 -- backend: argv/decide_permission/permission_label/workspace_verdict/CopilotEventMapper all threading agent_config's github_mcp, ROSTER_CONFIG_KEYS). Open: 5.2 (the Agent Settings UI control), the rest of 1.14, the UI-bundle refresh, then 6.1 exactly what CI runs."
         },
         {
             "id": "ghcp-s5-drive",

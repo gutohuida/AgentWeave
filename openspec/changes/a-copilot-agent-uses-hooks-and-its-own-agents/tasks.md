@@ -694,7 +694,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
 
 ## 5. Group D — the GitHub MCP server toggle
 
-- [ ] 5.1 `RpcTurnRequest.agent_config: Mapping = {}` (slice 1's D16 name; contract reconciliation,
+- [x] 5.1 `RpcTurnRequest.agent_config: Mapping = {}` (slice 1's D16 name; contract reconciliation,
   2026-09-28), filled by the trigger from the agent's config. `copilot_acp.run_turn` passes
   `agent_config.get("copilot_github_mcp", False)` as `github_mcp`. Slice 2's
   `copilot_acp.build_acp_argv` gains `github_mcp: bool = False`: omit `--disable-builtin-mcps` when
@@ -710,6 +710,51 @@ scratch copy (DEAD-ENDS 2026-09-27).
   `specs/agent-configuration/spec.md` too: the requirement's paragraph on an unavailable server and
   its two scenarios; operator-accepted 2026-09-28). Add `copilot_github_mcp`
   to `ROSTER_CONFIG_KEYS`. `mcp_server.py` is not touched. Pass test 1.13.
+  **Done 2026-10-03 (night iter 11).** Task 1.1's real capture (iter 2's log, design.md's "Task
+  1.1, real capture" entry) *did* deliver a `session.mcp_servers_loaded`/`mcp_server_status_changed`
+  report naming `github-mcp-server` (`pending`→`connected`) -- not "none arrived" -- so per the
+  task's own conditional the diagnostic is built, not deleted; no failing-status fixture exists
+  from the real capture, so its five statuses are exercised synthetically, as D9's own text
+  names them (`failed`, `needs-auth`, `disabled`, `stopped`, `not_configured`), never `pending`
+  or `connected`.
+  - `RpcTurnRequest.agent_config` and the trigger's fill (`agent_trigger.py:3450`,
+    `{"copilot_github_mcp": config.get("copilot_github_mcp") is True}`) already existed on disk
+    before this task (an earlier slice's landing); what this task actually built is the other
+    half -- `CopilotAcpTransport.run_turn` passing `agent_config=req.agent_config` through
+    (`runner_adapters/copilot.py`), and `copilot_acp.run_turn` itself reading it and threading
+    `github_mcp` to `build_acp_argv`, the `judge`/`answer_permission` closures' `decide_permission`
+    and `workspace_verdict` calls, and the `CopilotEventMapper` constructor.
+  - `copilot_acp.py`: `GITHUB_MCP_SERVER_NAME`, `_GITHUB_MCP_UNAVAILABLE_STATUSES`; `_decide_permission`'s
+    `github_rule` (computed once, applied only at the `workspace` fallback -- `manual`/full
+    access/`acceptEdits` already answered the way D9 asks for, unchanged); `permission_label`'s
+    GitHub/foreign-server sentence (truncated to the `tool_name` column's 128 bytes via the
+    existing `_truncate_utf8`); `workspace_verdict`'s early `None` return for the same shape,
+    before `decide_permission` would compute a false two-valued `allow`; `CopilotEventMapper`'s
+    `github_mcp`/`_github_mcp_failure_reported` and its own branch in `_server_status`
+    (independent of the pre-existing `agentweave` branch: a failed GitHub server does not
+    suppress or duplicate the Hub's own server's diagnostic).
+  - `api/v1/agents.py`: `copilot_github_mcp` added to `ROSTER_CONFIG_KEYS` (no dedicated PATCH
+    validator, same as `yolo`/`read_only` -- the `is True` read downstream is already robust to
+    a non-bool stored value, unlike `copilot_review_agents`'s list, so no finding-14-shaped bug
+    is possible here to validate against).
+  - Verified: new `hub/tests/test_copilot_github_mcp_toggle.py`, 39 tests, covering the fail-before
+    evidence (a direct call into `mcp_server._decide` reproducing today's `allow`), `build_acp_argv`,
+    every posture of the D9 rule plus finding 4 (a non-GitHub built-in server) and finding 5 (an
+    unidentified server, untouched), the `permission_label`/`permission_subject` sentences,
+    `workspace_verdict`'s `None` case and its regression (an ordinary request, and the `agentweave`
+    server, both still compute a real verdict), the mapper's diagnostic (five statuses, the
+    `pending`/`connected` no-ops, once-per-turn, independence from the `agentweave` diagnostic),
+    full wiring through the real `run_turn` (`_drive`/`_new_with`, reused from
+    `test_copilot_acp_run_turn.py` rather than rebuilt) proving the spawn argv, the card's label and
+    `workspace_verdict`, and the mapper diagnostic all follow `agent_config` end to end including
+    finding 14's string-`"false"` case, and `GET /agents` roster exposure. Three real mutations run
+    against the implementation and each caught (the `github_rule` branch disabled; the mapper's
+    unavailable-status set emptied): 7-10 tests failed per mutation, restored and reconfirmed green
+    after. Regression: `test_copilot_acp_decide.py`, `test_copilot_acp_mapper.py`,
+    `test_copilot_acp_run_turn.py`, `test_review_turn_copilot_agents.py`, `test_copilot_byok_env.py`,
+    `test_runner_provider_config.py` -- 320 passed. `ruff check`, `black --check --target-version
+    py311` (after one reformat of the new file), `mypy src/` clean. Full `hub/tests/` and CLI suite
+    not yet run this iteration -- queued as part of 6.1, the full-suite task next in the group.
 - [ ] 5.2 Agent Settings UI: add a GitHub-server toggle shown only for `copilot` agents; its help
   text says that while it is on every non-Hub MCP call under Workspace only is asked, and that a
   runner's pre-approval flags (`--allow-tool`, `--allow-all-tools`) bypass the card (review

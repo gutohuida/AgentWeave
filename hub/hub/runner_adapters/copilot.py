@@ -192,6 +192,7 @@ class CopilotAcpTransport(RpcTransport):
             cli=req.cli,
             mcp_command=req.mcp_command,
             yolo=req.yolo,
+            agent_config=req.agent_config,
             on_event=cb.on_event,
             on_usage=cb.on_usage,
             on_accounting=cb.on_accounting,

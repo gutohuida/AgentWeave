@@ -229,6 +229,14 @@ OTHER_REQUEST_LABEL = "a Copilot request this Hub does not recognise"
 
 _UNIDENTIFIED_REASON = "Copilot did not report which server this tool belongs to"
 
+#: Copilot's own built-in GitHub MCP server (D9). The toggle disables `--disable-builtin-mcps`
+#: for every built-in server Copilot ships, not only this one; the card label below still calls
+#: out GitHub by name only when the reported server is exactly this.
+GITHUB_MCP_SERVER_NAME = "github-mcp-server"
+_GITHUB_MCP_REASON = (
+    "the GitHub-tools toggle is on, and the operator decides a built-in MCP server's calls"
+)
+
 
 class CopilotACPError(AppServerError):
     """A Copilot ACP failure. An `AppServerError`, so the executor's pre-spawn `except`
@@ -572,6 +580,7 @@ def _decide_permission(
     calls: Mapping[str, CallFacts],
     spec_turn: bool,
     servers: Optional[Mapping[str, Sequence[Mapping[str, Any]]]],
+    github_mcp: bool = False,
 ) -> Dict[str, Any]:
     tool_call = _tool_call(params)
     kind = tool_call.get("kind")
@@ -604,6 +613,20 @@ def _decide_permission(
         unverified = hub_server_unverified(servers, facts)
         hub_own = unverified is None
     extra: Dict[str, Any] = {"hub_server_unverified": unverified} if unverified else {}
+
+    # D9: with the toggle on, a built-in MCP server other than `agentweave` is the operator's
+    # call under `workspace` -- before `_judge`/`_decide` ever sees it (R2's "has no ground to
+    # allow it" was wrong: `_decide` allows a GitHub tool's input by default). Under `manual`,
+    # `full` and `acceptEdits` the postures below already answer the same way the rule asks for
+    # (card, allow, refusal respectively), so this only changes the `workspace` fallback.
+    github_rule = (
+        github_mcp
+        and is_mcp
+        and not hub_own
+        and facts is not None
+        and bool(facts.mcp_server)
+        and facts.mcp_server != HUB_MCP_SERVER_NAME
+    )
 
     if kind == "fetch" and raw.get("requestSandboxBypass") is True:
         return _decision(
@@ -645,6 +668,8 @@ def _decide_permission(
         )
 
     # `workspace`.
+    if github_rule:
+        return _decision(ASK_OPERATOR, _GITHUB_MCP_REASON, **extra)
     if kind == "fetch" and facts is not None and facts.tool_name == "web_fetch":
         # Claude's `WebFetch` parity: `_decide` reads no fetch URL.
         return _decision(ALLOW, "a web fetch", **extra)
@@ -660,6 +685,7 @@ def decide_permission(
     calls: Mapping[str, CallFacts],
     spec_turn: bool = False,
     servers: Optional[Mapping[str, Sequence[Mapping[str, Any]]]] = None,
+    github_mcp: bool = False,
 ) -> Dict[str, Any]:
     """Decide one `session/request_permission` (D8). Pure and total: returns
     `{"outcome": ALLOW|REJECT|ASK_OPERATOR, "reason": str}`, plus `hub_server_unverified` when an
@@ -669,7 +695,9 @@ def decide_permission(
     Order (R3): identify -> normalise -> step 3 -> judge -> answer; the caller answers. `servers` is
     the turn's load report (`track_servers`); without one no call is the Hub's own. `workspace` and
     `hub_url` are the run's: an absent one refuses rather than reading the Hub process's own
-    environment. Call it through `asyncio.to_thread` (review, finding 7).
+    environment. Call it through `asyncio.to_thread` (review, finding 7). `github_mcp` is the
+    agent's own toggle (D9): with it on, a request whose reported server is not `agentweave` is
+    the operator's call under `workspace`.
     """
     try:
         return _decide_permission(
@@ -680,6 +708,7 @@ def decide_permission(
             calls=calls or {},
             spec_turn=bool(spec_turn),
             servers=servers,
+            github_mcp=bool(github_mcp),
         )
     except Exception as exc:  # noqa: BLE001 - a judge that raises must still answer
         logger.warning("Deciding a Copilot permission request failed: %s", exc, exc_info=True)
@@ -693,12 +722,29 @@ def workspace_verdict(
     hub_url: Optional[str] = None,
     calls: Optional[Mapping[str, CallFacts]] = None,
     servers: Optional[Mapping[str, Sequence[Mapping[str, Any]]]] = None,
+    github_mcp: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """What Workspace only would decide for this request, for an Ask me card
     (`an-ask-me-card-says-what-workspace-only-would-decide`): `{"allow": bool, "reason": str}`, or
     None on any failure. Never raises. Blocking like the judge: call it through `asyncio.to_thread`.
+
+    D9 (R3): a two-valued `allow` cannot say "Workspace only would ask you too" -- so for a
+    request D9's own rule sends to the operator (the toggle on, a reported server that is not
+    `agentweave`), this returns `None` rather than computing `decide_permission`'s ASK_OPERATOR
+    as a false `allow`.
     """
     try:
+        tool_call = _tool_call(params)
+        kind = tool_call.get("kind")
+        facts = _facts_for(tool_call, calls or {})
+        if (
+            github_mcp
+            and _is_mcp_request(kind)
+            and facts is not None
+            and bool(facts.mcp_server)
+            and facts.mcp_server != HUB_MCP_SERVER_NAME
+        ):
+            return None
         decided = decide_permission(
             params,
             posture=WORKSPACE_PERMISSION_MODE,
@@ -706,6 +752,7 @@ def workspace_verdict(
             hub_url=hub_url,
             calls=calls or {},
             servers=servers,
+            github_mcp=github_mcp,
         )
         verdict = {"allow": decided["outcome"] == ALLOW, "reason": decided["reason"]}
         if verdict["allow"] and _tool_call(params).get("kind") == "execute":
@@ -716,15 +763,35 @@ def workspace_verdict(
         return None
 
 
-def permission_label(params: Mapping[str, Any], calls: Mapping[str, CallFacts]) -> str:
+#: The card's `tool_name` column is `String(128)` (`db/models.py:1646`); either suffix below is
+#: well inside it for any tool name Copilot's built-in servers have (D9).
+_PERMISSION_LABEL_MAX_BYTES = 128
+
+
+def permission_label(
+    params: Mapping[str, Any], calls: Mapping[str, CallFacts], *, github_mcp: bool = False
+) -> str:
     """The readable name of what a request asks for, for the operator card and a refusal row. An
-    MCP request is `<server>/<tool>` from Copilot's own report, never its model-written title."""
+    MCP request is `<server>/<tool>` from Copilot's own report, never its model-written title.
+
+    D9 (review 2026-09-28, finding 4): with the toggle on, a reported server names which built-in
+    MCP server the card's sentence is about -- GitHub by name only when the server is exactly
+    `github-mcp-server`; any other reported server gets a sentence naming itself, never GitHub's.
+    """
     tool_call = _tool_call(params)
     kind = tool_call.get("kind")
     facts = _facts_for(tool_call, calls)
     if _is_mcp_request(kind):
         if facts is not None and facts.mcp_server:
-            return f"{facts.mcp_server}/{facts.mcp_tool or facts.tool_name or '?'}"
+            tool = facts.mcp_tool or facts.tool_name or "?"
+            server = facts.mcp_server
+            if github_mcp and server != HUB_MCP_SERVER_NAME:
+                if server == GITHUB_MCP_SERVER_NAME:
+                    label = f"{server}/{tool} — acts on GitHub as you"
+                else:
+                    label = f"{server}/{tool} — a tool of MCP server {server}, not the Hub's"
+                return _truncate_utf8(label, _PERMISSION_LABEL_MAX_BYTES)[0]
+            return f"{server}/{tool}"
         if facts is not None and facts.tool_name:
             return facts.tool_name
         return MCP_UNIDENTIFIED_LABEL
@@ -735,7 +802,9 @@ def permission_label(params: Mapping[str, Any], calls: Mapping[str, CallFacts]) 
     return OTHER_REQUEST_LABEL
 
 
-def permission_subject(params: Mapping[str, Any], calls: Mapping[str, CallFacts]) -> Dict[str, Any]:
+def permission_subject(
+    params: Mapping[str, Any], calls: Mapping[str, CallFacts], *, github_mcp: bool = False
+) -> Dict[str, Any]:
     """What a request asks about, in the shape the operator card and the refusal recorder read:
     `tool_name` is the readable label, `tool_input` the `rawInput` plus `locations`."""
     tool_call = _tool_call(params)
@@ -747,7 +816,7 @@ def permission_subject(params: Mapping[str, Any], calls: Mapping[str, CallFacts]
     if isinstance(locations, list) and locations:
         tool_input["locations"] = locations
     return {
-        "tool_name": permission_label(params, calls),
+        "tool_name": permission_label(params, calls, github_mcp=github_mcp),
         "tool_input": tool_input,
         "kind": tool_call.get("kind"),
         "tool_call_id": tool_call.get("toolCallId"),
@@ -800,6 +869,12 @@ _DROPPED_UPDATES = (
 _NOTICE_PREFIXES = {"session.error": "Error", "session.warning": "Warning", "session.info": "Info"}
 #: Statuses a server passes through on its way to `connected`; not a failure (unmeasured enum).
 _TRANSIENT_SERVER_STATUSES = ("connected", "pending", "connecting", "starting")
+#: The GitHub server's own statuses that mean it will not run (D9, R3): never `pending` (still
+#: establishing) or `connected`. `stopped` is included because the schema says a managed policy
+#: can pin it there.
+_GITHUB_MCP_UNAVAILABLE_STATUSES = frozenset(
+    {"failed", "needs-auth", "disabled", "stopped", "not_configured"}
+)
 
 
 @dataclass
@@ -864,10 +939,13 @@ class CopilotEventMapper:
         told_access_path: Optional[str] = None,
         requested_model: Optional[str] = None,
         calls: Optional[Dict[str, CallFacts]] = None,
+        github_mcp: bool = False,
     ) -> None:
         self.told_access_path = told_access_path
         self.requested_model = requested_model
         self.calls: Dict[str, CallFacts] = calls if calls is not None else {}
+        #: The agent's own GitHub-tools toggle (D9): arms the GitHub-server-unavailable diagnostic.
+        self.github_mcp = github_mcp
         #: The model Copilot actually ran, from the first raw event naming one.
         self.resolved_model: Optional[str] = None
         #: The root agent's first `session.error` message this turn; it fails the turn (D10, R3).
@@ -879,6 +957,7 @@ class CopilotEventMapper:
         self._changes: Dict[str, List[Dict[str, Any]]] = {}
         self._last_plan: Optional[str] = None
         self._server_failure_reported = False
+        self._github_mcp_failure_reported = False
         self._available_models: Optional[List[str]] = None
 
     # ACP session updates ---------------------------------------------------------------------
@@ -1103,7 +1182,32 @@ class CopilotEventMapper:
         for entry in entries:
             name = entry.get("name") or entry.get("serverName")
             status = entry.get("status")
-            if name != HUB_MCP_SERVER_NAME or not isinstance(status, str):
+            if not isinstance(status, str):
+                continue
+            if name == GITHUB_MCP_SERVER_NAME and self.github_mcp:
+                # D9, R3: only a status that means the server will not run, never `pending`
+                # (still establishing) or `connected`; the toggle being off disables the server
+                # on purpose, so nothing is reported then.
+                if (
+                    status not in _GITHUB_MCP_UNAVAILABLE_STATUSES
+                    or self._github_mcp_failure_reported
+                ):
+                    continue
+                self._github_mcp_failure_reported = True
+                return [
+                    diagnostic_event(
+                        stream="copilot",
+                        severity="warning",
+                        summary=(
+                            f"Copilot reported its built-in GitHub MCP server ({name}) as "
+                            f"{status}; this agent's GitHub-tools toggle is on, but its GitHub "
+                            "calls will not run."
+                        ),
+                        code="copilot.github_mcp_unavailable",
+                        facts={"status": status},
+                    )
+                ]
+            if name != HUB_MCP_SERVER_NAME:
                 continue
             if status in _TRANSIENT_SERVER_STATUSES or self._server_failure_reported:
                 continue
@@ -1509,15 +1613,20 @@ def build_acp_argv(
     runner_flags: Optional[Sequence[str]] = None,
     full_access: bool = False,
     mcp_config: Optional[str] = None,
+    github_mcp: bool = False,
 ) -> List[str]:
     """The spawn argv of one Copilot turn (D3). `--agent` is never passed (it does not reach an
     ACP session, VERIFIED); the agent is selected over ACP instead (D6). `--model` is omitted for
     `auto`, Copilot's own default. Effort is a flag control, rendered from the raw controls
     (`render_control_args`), since the trigger builds no Copilot argv. Widening runner flags are
-    removed unless the run is under Full access; a spec turn never is (D9)."""
+    removed unless the run is under Full access; a spec turn never is (D9). `github_mcp` is the
+    agent's own toggle (D9): omits `--disable-builtin-mcps` so Copilot's built-in MCP servers
+    (GitHub's among them) load."""
     from .model_catalog import render_control_args
 
-    argv = [str(executable), "--acp", "--stdio", "--no-auto-update", "--disable-builtin-mcps"]
+    argv = [str(executable), "--acp", "--stdio", "--no-auto-update"]
+    if not github_mcp:
+        argv.append("--disable-builtin-mcps")
     if mcp_config:
         argv += ["--additional-mcp-config", f"@{mcp_config}"]
     if model and model != "auto":
@@ -1670,6 +1779,7 @@ async def run_turn(
     cli: Optional[str] = None,
     mcp_command: Optional[Sequence[str]] = None,
     yolo: bool = False,
+    agent_config: Optional[Mapping[str, Any]] = None,
     on_event: "Callable[[RunEvent], Awaitable[None]]",
     on_usage: "Optional[Callable[[ContextUsageSample], Awaitable[None]]]" = None,
     on_accounting: "Optional[Callable[[Any], Awaitable[None]]]" = None,
@@ -1699,7 +1809,10 @@ async def run_turn(
     as-is. `mcp_command`, when set, means the access path is MCP: the argv names the home's
     `agentweave-mcp.json`. `cli` is a runner's pinned executable. `on_accounting` is called exactly
     once on every return once a session exists, with this call's `CopilotUsageLedger` sample
-    (`a-copilot-run-shows-its-credits` D2); a raise delivers none.
+    (`a-copilot-run-shows-its-credits` D2); a raise delivers none. `agent_config` is the agent's own
+    config, filtered to the keys a turn reads (D9); `copilot_github_mcp` is read as `is True` (review
+    2026-09-28, finding 14), since the trigger stores a raw `config` and a string `"false"` is
+    truthy.
 
     Raises (`CopilotACPError`, `FileNotFoundError`, `OSError`, `asyncio.TimeoutError`) only before
     the prompt is written; returns a `TurnOutcome` for everything after (D12, R3). A stop sends
@@ -1707,6 +1820,7 @@ async def run_turn(
     """
     posture = posture_for(permission_mode, yolo=yolo)
     spec_turn = bool(restrict_spec_writes)
+    github_mcp = (agent_config or {}).get("copilot_github_mcp") is True
     session_cwd = cwd or workspace
     if not session_cwd:
         raise CopilotACPError("A Copilot turn needs a working directory for its session.")
@@ -1746,6 +1860,7 @@ async def run_turn(
         runner_flags=extra_flags,
         full_access=full_flags,
         mcp_config=mcp_config,
+        github_mcp=github_mcp,
     )
 
     calls: Dict[str, CallFacts] = {}
@@ -1753,7 +1868,10 @@ async def run_turn(
     # One ledger per call, fed only armed events and the prompt's own answer (D2).
     ledger = CopilotUsageLedger()
     mapper = CopilotEventMapper(
-        told_access_path=told_access_path, requested_model=model, calls=calls
+        told_access_path=told_access_path,
+        requested_model=model,
+        calls=calls,
+        github_mcp=github_mcp,
     )
     # Server reports that arrive before arming (a load can bring one) reach the mapper at arming.
     early_server_events: List[Tuple[str, Dict[str, Any], Dict[str, Any]]] = []
@@ -1912,12 +2030,13 @@ async def run_turn(
             calls=dict(calls),
             spec_turn=spec_turn,
             servers={k: [dict(e) for e in v] for k, v in servers.items()},
+            github_mcp=github_mcp,
         )
 
     async def answer_permission(params: Dict[str, Any]) -> Dict[str, Any]:
         """D8 step 5: every request gets exactly one answer, whichever step decided it, and every
         answer reaches the recorders."""
-        subject = permission_subject(params, calls)
+        subject = permission_subject(params, calls, github_mcp=github_mcp)
         asked_operator = False
         try:
             decided = await judge(params, state["judged_posture"])
@@ -1947,6 +2066,7 @@ async def run_turn(
                         hub_url=run_hub_url,
                         calls=dict(calls),
                         servers={k: [dict(e) for e in v] for k, v in servers.items()},
+                        github_mcp=github_mcp,
                     )
                     allowed = bool(await request_approval(PERMISSION_METHOD, subject))
             else:

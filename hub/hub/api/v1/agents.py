@@ -663,6 +663,7 @@ ROSTER_CONFIG_KEYS = (
     "cli",
     "hub_client",
     "copilot_review_agents",
+    "copilot_github_mcp",
 )
 
 #: The closed vocabulary for `config.copilot_review_agents` (design D8): Copilot's own built-in
