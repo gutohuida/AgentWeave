@@ -135,7 +135,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   - (R4) Allowed: `docker pull alpine@sha256:abc`, `npm i x@npm:y`, `pnpm add x@workspace:y`, `scp a host:x/y`, `scp n user@myserver:file`. `docker run -p 8080:80 img` stays allowed, and `docker run -v data:/app img` stays refused as `'/app'`.
   - (R4) `npm i x@file:../lib` refused as `'../lib'`, outside.
   - (R5) `scp n user@example.com:` refused with the network reason. FAILS today (allowed, measured) and FAILS against R4 (`_words` trims the colon).
-- [ ] 1.6 Totality. `_decide` answers, and never raises, for these `Bash` commands:
+- [x] 1.6 Totality. `_decide` answers, and never raises, for these `Bash` commands:
   - `{` × 5000, and a single-quoted `{` × 5000;
   - 20 arguments of 100 alternatives each (refused by the per-`_decide` bound);
   - `{a,` × 2000, `a{1..99999999}`, `[[[[.*`, `.[`, `@(` × 3000, `*(*(*(a)))b` × 50;
@@ -276,6 +276,32 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   is ticked by this iteration's own evidence; task 1.6 as a whole stays unticked**: the
   extglob/backslash-run rows (`@(` x 3000, `*(*(*(a)))b` x 50, the 70,000-backslash run) are the
   only thing left.
+
+  **Iteration 36 (the extglob/backslash-run rows -- the last unbuilt part of this task).** Measured
+  all three directly against `_decide` first (a throwaway script, not committed), in a real
+  `AW_WORKSPACE_DIR`: none raises. `ls ` + `@(` x 3000 + `x` (3000 unbalanced extglob opens, no
+  closing `)` anywhere) answers in a little over a second -- `_extglob_group_spans` rescans from the
+  next trigger character each time a `(` fails to balance, which is quadratic in the length of an
+  unbalanced run, but it terminates and never hangs. The literal `*(*(*(a)))b` x 50 (50
+  self-contained, already-balanced nested groups concatenated with no separator) answers in under a
+  millisecond, since each unit's matching `)` is found in one pass. A backslash run of 70,000
+  characters followed by `./x` (unquoted, so Bash's own escape handling is part of what reaches
+  `_decide`) answers in well under a tenth of a second, refused as outside the workspace. No
+  production change needed for any of the three; this iteration is test coverage only, same pattern
+  as iterations 29, 32, 34 and 35's rows in this task. Added
+  `test_the_totality_rows_for_extglob_and_a_long_backslash_run_never_raise_1_6` to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`. Mutation-checked: a throwaway monkeypatch
+  of `_extglob_span_at` to raise (not committed) makes `_decide` raise on the `@(` x 3000 row, which
+  this test's call would propagate uncaught -- confirming the test is not vacuous, it would fail on
+  a defect of the shape this row guards against. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 109 passed (was 108, +1). Broader
+  regression set (`test_permission_approver.py`, `test_hub_own_call.py`,
+  `test_copilot_acp_decide.py`, `test_a_write_outside_the_workspace_is_recorded.py`): 626 passed, 2
+  skipped, no regressions. `py -3.11 -m pytest tests/ -q` (CLI suite, since this iteration also
+  edits `tasks.md`): 565 passed, 3 skipped. `ruff check` and `black --check --target-version py311`
+  on the changed test file: both clean, no reformat needed. No production file changed, so `mypy` is
+  unaffected. `git diff --stat`: exactly the one test file, plus this task file. **Every row named
+  in this task's own text is now built and verified; ticked `[x]`.**
 - [ ] 1.7 Negative controls that must stay refused, each PASSES today:
   - `curl -o/tmp/x $HUB_URL/api`, `curl -F file=@/etc/passwd x`, `tar -xvf/tmp/a.tar`, `ls a(b/../../x`, `cp x @../y`;
   - `sh -c 'cat</etc/passwd'`, `sh -c "echo hi>../x"`, `python -c "open('/etc/x','w')"`, `node -e "require('fs').writeFileSync('../x','')"`;

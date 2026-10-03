@@ -1045,3 +1045,32 @@ def test_the_memo_key_carries_the_trailing_colon_flag_1_6(workspace, monkeypatch
     decision = _decide("Bash", {"command": "echo a@example.com,a@example.com:"})
     assert decision["allow"] is False
     assert "'a@example.com:'" in decision["reason"]
+
+
+# 1.6 (the last unbuilt rows): `@(` x 3000 (3000 unbalanced extglob opens, never a trigger-`(` pair
+# that balances) and the literal `*(*(*(a)))b` x 50 (50 self-contained, already-balanced nested
+# extglob groups run together with no separator) must each be answered, not raised. Measured
+# directly against `_decide` first (a throwaway script, not committed): neither raises. `@(` x 3000
+# answers in a little over a second -- `_extglob_group_spans` rescans from the next trigger each
+# time a `(` fails to balance, which is quadratic on a long run of unbalanced opens -- but it
+# completes and never hangs. The nested-literal row answers in under a millisecond (each unit is
+# already balanced, so `_extglob_span_at` finds its matching `)` in one pass). The 70,000-character
+# backslash run followed by `./x` (not quoted, so Bash's own unquoted-backslash escaping is part of
+# what reaches `_decide`) is already covered by this file's other rows' string-length stress
+# (R8, `test_the_physical_readings_64_step_bound` and its neighbours use comparably long names);
+# measured here directly too: answers in well under a tenth of a second, refused as outside the
+# workspace. None of the three rows needs a production change -- this test is coverage, not a fix.
+def test_the_totality_rows_for_extglob_and_a_long_backslash_run_never_raise_1_6(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    unbalanced_extglob_opens = _decide("Bash", {"command": "ls " + "@(" * 3000 + "x"})
+    assert isinstance(unbalanced_extglob_opens, dict) and "allow" in unbalanced_extglob_opens
+
+    nested_extglob_literal = _decide("Bash", {"command": "ls " + "*(*(*(a)))b" * 50})
+    assert isinstance(nested_extglob_literal, dict) and "allow" in nested_extglob_literal
+
+    long_backslash_run = _decide("Bash", {"command": "ls " + "\\" * 70000 + "./x"})
+    assert long_backslash_run["allow"] is False
+    assert long_backslash_run["reason"].startswith("'")
