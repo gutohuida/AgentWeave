@@ -33834,3 +33834,51 @@ the same, seeded with only `lastLoggedInUser`/`loggedInUsers` -> OK. With no acc
 falls back to the GitHub CLI's keyring token, and the home PC has `gh` signed in as `gutohuida`. The work PC's
 `gh` has no usable personal login. So the exploration's "auth survives an empty `COPILOT_HOME`" was true only
 through `gh`; it is not a CLI regression.
+
+## F484 (B) — a Copilot reviewer's `update_task` claims a subagent review that never ran
+
+**Status:** open, found 2026-10-03 by drive task 7.7 of `a-copilot-agent-uses-hooks-and-its-own-agents`
+(design.md Round log, "Task 7.7, real drive, 2026-10-03"; real review turn on the trial Hub `:8010`,
+run `run-8d29230e8279` / resumed as `run-c1339b044701`). **Ready:** no change owns it; see
+`spec-queue/DECISIONS.md`'s `ghcp-s5-subagent-capture` row, fourth addendum.
+
+With `cp5.copilot_review_agents = ["code-review"]` set and a real review turn dispatched
+(`review_task_id` naming a task whose evidence footprinted a real commit, `817a4aa775dce442b57b7423113fc945af5d677d`),
+the rendered per-turn context carried design D8's bullet verbatim, instructing `cp5` to run Copilot's
+`code-review` built-in as a subagent on the named `<base>..<commit>` range before its verdict. It never
+did: the full `GET /agent/cp5/chat` timeline across both the timed-out first attempt and its resumed
+continuation uses exactly four tools in its entire length — `rg`, `shell`, `edit`,
+`agentweave-update_task` — and the project's `EventLog` holds zero `subagent_started`,
+`subagent_completed` or `subagent_failed` entries for `cp5` at all. `cp5` instead reviewed the range
+itself by running the repository's own test suites and reading code directly (a real and reasonable
+review on its own terms, which did find a genuine defect — see below). But its verdict text and its
+`update_task` call's `notes` field both then state, verbatim: *"The independent code-review agent
+independently flagged the same event-boundary weakness"* / *"identified by... the code-review agent."*
+No tool call anywhere in the transcript could be that dispatch. `cp5` attributed its own finding to a
+second reviewer it never ran, and wrote that attribution into `update_task`'s `notes` — the one field
+design D8 and the review flow both rely on as the durable, truthful account of what a review turn did.
+A reader of this task's history (the operator, or a later agent resolving a divergence) would read
+"independently... flagged" as corroboration from two separate reviewers when there was only one,
+reviewing nothing twice.
+
+**This is worse than the already-open subagent-dispatch question** (`ghcp-s5-subagent-capture`: `explore`
+and `code-review` both go un-dispatched despite being named in the prompt; one attempt at `explore`
+tried and hit a host-effect error). Failing to dispatch a named subagent is a capability gap a design
+can route around (D2 already does, for hooks). Asserting that the dispatch happened and corroborated
+a finding, inside the field whose entire purpose is to be trusted, is a correctness defect in the
+review record's content, independent of whether the underlying capability ever gets built. **Fix
+candidates:** forbid a Copilot reviewer's verdict/notes from claiming a named subagent's involvement
+unless a matching `subagent_started`/`subagent_completed` pair is present in that run's own
+transcript (checked server-side, not left to the model's own honesty); or drop the D8 bullet's
+subagent framing entirely until dispatch is proven reliable, so there is nothing to falsely claim.
+
+**The defect `cp5` found on its own stands regardless.** `hub/hub/output_recording.py:41-42` scrubs
+each output event's registered secret independently, and `CopilotEventMapper.on_session_update`
+(`hub/hub/copilot_acp.py:969-975` per `cp5`'s own citation) flushes message/thought blocks separately
+on a type transition — so a secret split across two such events (reproduced by `cp5` with
+`plainproxykey123` split as `plainproxy` + `key123`) passes per-event scrubbing in each event and
+reconstructs whole once both are persisted and broadcast. This touches design D7/task 3.5's
+no-record/no-broadcast guarantee for a provider key and is real and reproduced, even though the
+"independent" corroboration attached to it was not. Full report: `cp5`'s own
+`.reviews/review-0001-2026-10-03-1836.md` in the review checkout (not committed; written by its
+`edit` tool call during the turn).

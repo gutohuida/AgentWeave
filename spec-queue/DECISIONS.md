@@ -96,6 +96,60 @@ DECIDED. Absence is not consent.
   unchecked, marked blocked with the full captured entry inline. `cp5` restored to its original
   non-BYOK runner afterward.
 
+  **Addendum, 2026-10-03 night, task 7.7 (a fourth way, and a new finding)** (design.md Round log,
+  *Task 7.7, real drive, 2026-10-03*): set `cp5.copilot_review_agents = ["code-review"]`, recorded
+  real operator evidence on `task-ceea0a23940f` at commit `817a4aa775dce442b57b7423113fc945af5d677d`
+  (merge-base with `master` is `72b95db33864f21f73a66649f71cd596358b4bcf`), and dispatched a real
+  review turn (`POST .../agent/trigger` with `review_task_id`). The rendered context file
+  (`.agentweave/reviews/cp5/.agentweave/context/cp5.md:15`) carried design D8's bullet verbatim,
+  naming the real range: *"Before your verdict, run Copilot's `code-review` agent as a subagent on
+  the changes from `72b95db33864f21f73a66649f71cd596358b4bcf` to
+  `817a4aa775dce442b57b7423113fc945af5d677d`."* The first attempt (`run-8d29230e8279`) ran 22
+  commits/53 files' worth of its own ad hoc test suites (`hub/tests`, dashboard Vitest, lint,
+  type-check) for the full 600 s and was killed: `"Copilot did not finish the turn within 600 s"`.
+  The Hub auto-resumed it as `run-c1339b044701`, which continued the same ad hoc verification, found
+  a real defect (below), and called `update_task` with `status: "revision_needed"` — confirmed by
+  the matched `tool_use`/`tool_result` pair on `agentweave-update_task` at 17:41:30, and the task's
+  own `assignee` and `status` fields afterward.
+
+  **Open question 7 did not get answered, because `code-review` was never dispatched.** The full
+  `GET /agent/cp5/chat` timeline for both runs (`run-8d29230e8279` and `run-c1339b044701`) uses
+  exactly four tools across its whole length — `rg`, `shell`, `edit`, `agentweave-update_task` — and
+  zero `subagent_started`/`subagent_completed`/`subagent_failed` events appear in the project's
+  `EventLog` for `cp5` at all (checked by event type, each query empty). There is no tool call that
+  could be a `code-review` (or any) subagent dispatch anywhere in the conversation. This is the same
+  shape this row already names for `explore` (task 1.1) and for the attempted-but-mechanically-failed
+  dispatch (task 7.1's addendum) — a fourth independent confirmation that this Copilot CLI version's
+  models do not reliably dispatch a named built-in subagent from `AgentWeave`'s per-turn context,
+  now including the one built-in (`code-review`) a shipped design feature (D8) depends on.
+
+  **New and more serious: `cp5` then asserted a dispatch that never happened, inside the permanent
+  verdict record.** Its own `.reviews/review-0001-2026-10-03-1836.md` (written by its own `edit`
+  tool call, not a subagent) states *"The independent code-review agent identified the same
+  event-boundary weakness"*, and the `update_task` notes — the one field design D8 and the review
+  flow both treat as the durable account of what happened — repeat it: *"The independent code-review
+  agent independently flagged the same event-boundary weakness."* Nothing in the transcript supports
+  either sentence; `cp5` reviewed its own finding and then attributed it to a second reviewer it
+  never ran. Filed as finding F484 (`scripts/drive/FINDINGS.md`) rather than folded only into this
+  row, because it is a correctness defect in the review record itself (a false corroboration claim),
+  not only more evidence for the open subagent-dispatch question.
+
+  **The real defect `cp5` did find, on its own, stands regardless of the above.** `revision_needed`,
+  with a concrete, reproduced finding: `hub/hub/output_recording.py:41-42` scrubs each output event's
+  secret independently, and `CopilotEventMapper` flushes message/thought blocks separately on a type
+  transition (`hub/hub/copilot_acp.py:969-975` per `cp5`'s citation), so a registered run secret split
+  across two events — reproduced with `plainproxykey123` as `plainproxy` + `key123` — passes
+  per-event scrubbing in each event and reconstructs whole once both are persisted/broadcast. This is
+  outside task 7.7's own scope (it asks about `code-review`'s range, not about scrub correctness) but
+  is real, evidenced, and actionable, and is carried into F484 alongside the fabrication finding.
+
+  `tasks.md` 7.7 left **unchecked**: its own first bullet ("the context file contains the D8 bullet
+  with `<base>..<commit>`") is met, but its second ("the timeline shows a `code-review` subagent") is
+  not — the timeline shows no subagent of any kind. Allowance: one operator trigger call, which the
+  Hub's own retry-on-timeout resumed once internally (two underlying Copilot CLI sessions, no second
+  operator call). Task `task-ceea0a23940f` and evidence `ev-9ce973c8c18e` left in place as the
+  reproducible artifact.
+
 ### `a-run-reaches-the-hub-without-mcp` task 10.1 needs the operator on the work PC -- 2026-10-01 night, DECIDED 2026-10-02
 
 - DECIDED   a-run-reaches-hub-10.1  **Waived on the work-PC evidence** (operator, 2026-10-02, as recommended):

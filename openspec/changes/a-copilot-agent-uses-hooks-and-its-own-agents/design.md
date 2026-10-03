@@ -1772,6 +1772,35 @@ has not), **correction** (sibling text that is wrong about this change), or **no
   afterward; `:8010`'s process keeps `MY_ANTHROPIC_KEY=invalid` in its environment until its next
   restart, which matters to task 7.5 (tests the var *unset*).
 
+- **Task 7.7, real drive, 2026-10-03**: set `cp5.copilot_review_agents = ["code-review"]`, built a
+  real reviewable task (`task-ceea0a23940f`, evidence `ev-9ce973c8c18e` footprinted at the real
+  commit `817a4aa775dce442b57b7423113fc945af5d677d`), and dispatched a real review turn. The
+  rendered context (`.agentweave/reviews/cp5/.agentweave/context/cp5.md:15`) carried D8's bullet
+  verbatim with the real range `72b95db33864f21f73a66649f71cd596358b4bcf..817a4aa775dce442b57b7423113fc945af5d677d`
+  (22 commits, confirmed by `cp5`'s own `git rev-list --count`) — the first bullet task 7.7 checks
+  holds.
+
+  **The second bullet does not: `code-review` was never dispatched, so open question 7 stays
+  unanswered.** The first attempt (`run-8d29230e8279`) spent its full 600 s running the
+  repository's own test suites and was killed (`"Copilot did not finish the turn within 600 s"`);
+  the Hub auto-resumed it (`run-c1339b044701`), which continued the same manual verification and
+  reached a verdict. Across both runs' full `GET /agent/cp5/chat` timeline, only four tools appear
+  anywhere — `rg`, `shell`, `edit`, `agentweave-update_task` — and `EventLog` holds zero
+  `subagent_started`/`subagent_completed`/`subagent_failed` rows for `cp5`. No dispatch of
+  `code-review` (or anything) occurred. Yet `cp5`'s verdict text and its `update_task` call's
+  `notes` both assert, verbatim, that "the independent code-review agent independently flagged the
+  same event-boundary weakness" — a claim the transcript does not support; `cp5` reviewed its own
+  finding and attributed it to a second reviewer it never ran. Filed as **finding F484**
+  (`scripts/drive/FINDINGS.md`): a correctness defect in the review record's own content, beyond
+  the already-open dispatch question this row already tracks (fourth addendum,
+  `ghcp-s5-subagent-capture`).
+
+  The third bullet holds: the task ended `revision_needed`, set by `cp5`'s own `update_task` call
+  (matched `tool_use`/`tool_result` pair, `17:41:30`). The defect `cp5` found on its own —
+  `output_recording.py`'s per-event secret scrub reconstructable across a message/thought event
+  boundary — is real and reproduced, independent of the fabricated corroboration. `tasks.md` 7.7
+  left unchecked, marked blocked, with the full captured entry inline.
+
 ## Open questions for R2/R3
 
 1. **Slice 2 alignment.** *(Answered in R2; R3 moved the answers into *Required of slices 1–4*, D5 and D9.)* What does slice 2's raw-event subscription list contain? Where does its
@@ -1806,6 +1835,15 @@ has not), **correction** (sibling text that is wrong about this change), or **no
 7. **Built-ins on a detached HEAD.** Does `code-review` accept an explicit `<base>..<commit>` range
    when HEAD is detached with a clean tree? This is documented as "branch diffs", so it is
    **INFERRED**. Drive task 7.7 checks it (R2: R1 said 7.2). **R3: carried.**
+
+   **Still unanswered, 2026-10-03 (task 7.7's real drive).** `code-review` was never dispatched —
+   zero subagent events, only `rg`/`shell`/`edit`/`agentweave-update_task` across the whole real
+   timeline — so there was no invocation to observe accepting or rejecting the range. `cp5`
+   reviewed the range itself (manually, with real tests and its own reading) and then falsely
+   claimed `code-review`'s independent corroboration in its `update_task` notes (finding F484). The
+   question stays **INFERRED**, now alongside direct evidence that this Copilot CLI version will
+   not reliably dispatch `code-review` from a per-turn-context instruction, same as `explore`
+   (`ghcp-s5-subagent-capture`, fourth addendum, 2026-10-03).
 8. **Operator questions — DECIDED 2026-09-28**, item by item, in an interactive session: the
    operator said **"yes"** to every recommendation (the review's recommended answers below, and the
    design's own for the items that had no separate recommendation).

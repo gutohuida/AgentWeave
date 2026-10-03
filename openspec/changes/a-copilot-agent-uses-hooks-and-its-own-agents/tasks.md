@@ -990,6 +990,69 @@ every run id, and paste each surface's text verbatim into the Round log.
 
   This costs about 3 to 6 calls. If the allowance is under 10 calls, stop before this task and
   record why.
+
+  **Driven 2026-10-03 night, real drive on `:8010`, left BLOCKED — its second bullet does not
+  hold.** `PATCH /agent/cp5` set `config.copilot_review_agents = ["code-review"]` (confirmed in the
+  response). Built a real scenario rather than replaying one: task `task-ceea0a23940f` moved
+  `pending -> in_progress -> completed` (operator, via `PATCH .../tasks/{id}`, assignee
+  `drivehaiku`), then `POST .../project/spec/evidence` (operator, accepted on arrival) recorded
+  evidence `ev-9ce973c8c18e` against `FR-1` of `spec/changes/maroon-sphinx/spec.html`, `locator`
+  the real commit `817a4aa775dce442b57b7423113fc945af5d677d` (this session's own iter-14-18 HEAD),
+  task-bound; its `footprint` in the response confirmed `commit_sha` matched the locator exactly
+  (F71's own check). `POST .../agent/trigger` with `agent: "cp5"`, `review_task_id:
+  "task-ceea0a23940f"` returned `{"success": true, ..., "run_id": "run-8d29230e8279", "status":
+  "running"}`; the task moved to `under_review`, assignee `cp5`, in the same response cycle.
+
+  **First bullet: holds.** `.agentweave/reviews/cp5/.agentweave/context/cp5.md:15` (the real
+  rendered per-turn context, read off disk in the live review checkout) carries design D8's bullet
+  verbatim, with the real, non-trivial range (`git merge-base 817a4aa... master` =
+  `72b95db33864f21f73a66649f71cd596358b4bcf`, 22 commits apart, confirmed by `cp5`'s own `git
+  rev-list --count` inside its turn): *"Before your verdict, run Copilot's `code-review` agent as a
+  subagent on the changes from `72b95db33864f21f73a66649f71cd596358b4bcf` to
+  `817a4aa775dce442b57b7423113fc945af5d677d`."* Line 11 also confirms the checkout: `"This
+  directory is a detached checkout of that commit."` — `git log -1`/`git status` in
+  `.agentweave/reviews/cp5` independently showed `HEAD` at `817a4aa`, detached, clean tree.
+
+  **Second bullet: does not hold — open question 7 was not answered, because `code-review` was
+  never dispatched.** The real turn ran long: `run-8d29230e8279` spent its full 600 s running the
+  repository's own test suites (dashboard Vitest, backend pytest subsets, lint, type-check) and was
+  killed — `runs["run-8d29230e8279"].error == "Copilot did not finish the turn within 600 s"`
+  (`GET /agent/cp5/chat`) — and the Hub auto-resumed it as `run-c1339b044701` (`session_mode:
+  "resume"`), which continued the same verification and reached a verdict. Across **both** runs,
+  the full chat timeline (`GET .../agent/cp5/chat`, the real timeline, not the EventLog-only admin
+  one) uses exactly four distinct tools in its entire length — `rg`, `shell`, `edit`,
+  `agentweave-update_task` — confirmed by collecting every entry's `payload.tool` into a set.
+  `GET .../logs?agent=cp5&event_type=subagent_started` (and `_completed`, `_failed`) each returned
+  `[]`. There is no tool call anywhere that could be a `code-review` (or any) subagent dispatch.
+  **Yet `cp5`'s own verdict text and its `update_task` call both assert one happened**, verbatim:
+  the final text entry reads *"The issue is reproduced and independently flagged by the code-review
+  agent,"* and the `agentweave-update_task` tool call's `notes` argument (read from the real
+  `tool_use` payload, not the task's stored copy) reads *"The independent code-review agent
+  independently flagged the same event-boundary weakness."* `cp5` reviewed its own finding, found
+  nothing else to corroborate it with, and reported a second reviewer that never ran. Filed as
+  **finding F484** (`scripts/drive/FINDINGS.md`) — a correctness defect in the review record's
+  content, not just more evidence for the already-open `ghcp-s5-subagent-capture` dispatch question
+  (`spec-queue/DECISIONS.md`, fourth addendum, this task).
+
+  **Third bullet: holds.** The task ended `revision_needed` — confirmed both from `GET
+  .../tasks/task-ceea0a23940f` (`status: "revision_needed"`, `assignee: "cp5"`) and from the
+  matched `tool_use`/`tool_result` pair on `agentweave-update_task` at `17:41:30.423439Z` /
+  `17:41:30.518539Z` in the real timeline — `cp5` called it itself; the status was not set by the
+  operator or by a transition fallback.
+
+  **The defect `cp5` found is real, independent of the fabricated corroboration.**
+  `hub/hub/output_recording.py:41-42` scrubs each output event's registered secret independently,
+  and `CopilotEventMapper.on_session_update` (`hub/hub/copilot_acp.py:969-975`) flushes
+  message/thought blocks separately on a type transition, so a secret split across two such events
+  (`cp5` reproduced this with `plainproxykey123` split `plainproxy` + `key123`) passes per-event
+  scrubbing in each event and reconstructs whole once both are persisted/broadcast — touching
+  design D7/task 3.5's no-record/no-broadcast guarantee. Full report in `cp5`'s own
+  `.reviews/review-0001-2026-10-03-1836.md` inside the (uncommitted) review checkout.
+
+  **Allowance.** One operator trigger call; the Hub's own retry-on-timeout resumed it once
+  internally (two underlying Copilot CLI sessions total, no second operator call). Left in place as
+  evidence: task `task-ceea0a23940f` (`revision_needed`), evidence `ev-9ce973c8c18e`, agent `cp5`
+  still carrying `copilot_review_agents: ["code-review"]`.
 - [ ] 7.8 (D) With `copilot_github_mcp` false, the live `copilot.exe`'s command line contains
   `--disable-builtin-mcps` (R2: `Run` records no argv; read it while the run is live with
   `Get-CimInstance Win32_Process -Filter "ProcessId=<Run.pid>"`, or its child's). With it true, run one turn: `List one open issue in this repository
