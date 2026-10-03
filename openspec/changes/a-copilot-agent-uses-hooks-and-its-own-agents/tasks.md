@@ -97,7 +97,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
 
 ## 1. Tests first — each fails on today's code
 
-- [ ] 1.1 (A, C) **Capture real Copilot events before writing fixtures**, so that every
+- [x] 1.1 (A, C) **Capture real Copilot events before writing fixtures**, so that every
   test uses the order Copilot actually emits.
   - **Harness.** Adapt `acp_probe.py` into `testbed/copilot-capture/capture.py`. It uses a scratch
     `COPILOT_HOME` and a scratch cwd under `%TEMP%`, and spawns
@@ -135,6 +135,14 @@ scratch copy (DEAD-ENDS 2026-09-27).
   If a type is **not** delivered, stop group A. Tell the operator that D1's source does not hold.
   Do **not** build D2's hook transport (operator decision 2026-09-28: no hooks; the fallback is not
   pre-built, and any revisit is the operator's call).
+
+  **Done 2026-10-03.** Real capture: `session.compaction_start`, `session.compaction_complete` and
+  `session.error` delivered; `subagent.started`/`completed`/`failed` did not arrive (the model
+  declined to dispatch the explore agent for a trivial prompt). **Group A stops here**, per this
+  task's own instruction — see design.md's Round log (*Task 1.1, real capture, 2026-10-03*) and
+  `spec-queue/DECISIONS.md` `ghcp-s5-subagent-capture` (OPEN, the operator's call: retry with a
+  heavier capture, or drop the three `subagent.*` scenarios and ship compaction+error only). Tasks
+  1.2–1.6 and 2.1–2.8 below are **not** started pending that decision.
 - [ ] 1.2 (A) `hub/tests/test_copilot_lifecycle_events.py`: feed each fixture from 1.1 through the
   Copilot adapter's `map_events` in its recorded order.
   - `compaction.jsonl` gives exactly one `status` event with `phase == "compacted"`, carrying

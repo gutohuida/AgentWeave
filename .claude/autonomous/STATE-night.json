@@ -8,18 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ghcp-s5-a-impl",
-    "next_action": "Slice 5 (openspec/changes/a-copilot-agent-uses-hooks-and-its-own-agents), group A. The 'Before you start' rebase-at-IMPL check is DONE (2026-10-03, this iteration): every site naming an archived sibling (slices 1-4, a-claude-run-is-told-its-agentweave-tools-by-their-full-names, an-ask-me-card-says-what-workspace-only-would-decide) is VERIFIED-CODE in design.md's Round log; nothing needed correcting. The three sites naming still-open siblings (worker-spend-counts-against-the-budget, a-run-records-that-its-calls-were-allowed, a-file-path-is-not-redacted-as-a-credential) are untouched. Next: task 1.1, capture real Copilot events (Free plan, ~5 calls) into hub/tests/fixtures/copilot/ per tasks.md's Harness/Run (a)/(b)/(c) steps. If a type is not delivered, stop group A as 1.1 says and move to ghcp-s5-c-impl. Size each firing to finish; group A spans several firings.",
+    "current": "ghcp-s5-c-impl",
+    "next_action": "Task 1.1 is DONE (2026-10-03, real capture): session.compaction_start/compaction_complete/error held real over ACP; subagent.started/completed/failed did NOT arrive (run (b)'s explore-agent prompt never dispatched a subagent -- see design.md Round log 'Task 1.1, real capture, 2026-10-03'). Per 1.1's own instruction, group A (ghcp-s5-a-impl: tasks 1.2-1.6, 2.1-2.8) is STOPPED and blocked on the operator -- spec-queue/DECISIONS.md 'ghcp-s5-subagent-capture' (OPEN), carried in decisions_for_user. Do not start group A tasks. Move to ghcp-s5-c-impl (group C, BYOK on a Copilot runner): task 1.7 first (hub/tests/test_runner_provider_config.py, through POST/PATCH /runners -- the full case list is in tasks.md). This group is tagged 'opus' in the queue; run it on that model. Size each firing to finish; group C spans several firings (1.7-1.10, 3.1-3.5, its part of 1.14).",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
-            "status": "open",
+            "status": "blocked",
             "title": "Slice 5 group A: Copilot's lifecycle reaches the Hub",
-            "detail": "Rebase sites first, then 1.1 (real capture), 1.2-1.6, 2.1-2.8 (2.8 is untagged, never cut), its part of 1.14."
+            "detail": "STOPPED 2026-10-03: task 1.1's real capture found subagent.started/completed/failed not delivered. Blocked on spec-queue/DECISIONS.md 'ghcp-s5-subagent-capture' (OPEN). Rebase sites and task 1.1 are done; 1.2-1.6, 2.1-2.8 (2.8 untagged, never cut) and its part of 1.14 are not started."
         },
         {
             "id": "ghcp-s5-c-impl",
@@ -79,7 +79,7 @@
             "title": "B4 sibling (12/31), drive-gated tasks only once the sibling's pieces land"
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": ["ghcp-s5-subagent-capture"],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

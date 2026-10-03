@@ -1613,6 +1613,75 @@ has not), **correction** (sibling text that is wrong about this change), or **no
     `a-run-records-that-its-calls-were-allowed` and `a-file-path-is-not-redacted-as-a-credential`
     are left as genuinely unbuilt dependencies.
 
+- **Task 1.1, real capture, 2026-10-03** (Copilot CLI 1.0.90 self-updated past the npm package's
+  1.0.88 at spawn time despite `--no-auto-update`; `copilot.exe --version` read 1.0.90, the
+  `initialize` response's `agentInfo.version` still said "1.0.88"). Harness:
+  `testbed/copilot-capture/capture.py` (adapted from slice 2's evidence probes, not committed —
+  `testbed/` is gitignored). Three real ACP sessions under a scratch `COPILOT_HOME`/cwd:
+  - **Run (a)** (signed in, via the account-pointer copy `copilot_home.sync_account_pointer` does —
+    `lastLoggedInUser`/`loggedInUsers` copied from the operator's real `~/.copilot/config.json`):
+    `Reply with the single word ok.` then `/compact`. 2 Free-model calls.
+  - **Run (b)** (same sign-in): `Use the explore agent to name one file in this directory, then
+    stop.` 3 model turns (a `list_agents` call, a `glob` call, then the final text).
+  - **Run (c)** (deliberately **not** signed in; `--disable-builtin-mcps` **omitted**): BYOK env
+    (`COPILOT_PROVIDER_TYPE=anthropic`, `COPILOT_PROVIDER_BASE_URL=https://api.anthropic.com`,
+    `COPILOT_PROVIDER_API_KEY=invalid`, `COPILOT_MODEL=claude-haiku-4-5-20251001`), prompt `ok`.
+    0 Copilot allowance (Anthropic answers 401 before any Free-plan model call).
+
+  Fixtures saved: `hub/tests/fixtures/copilot/{compaction,subagent,error}.jsonl` (every
+  `github.com/copilot/sessionEvent` and `session/update` notification, arrival order, `sessionId`
+  and `cwd` redacted).
+
+  **Delivery (open question 2): three of the six types held, three did not.**
+  `session.compaction_start`, `session.compaction_complete` and `session.error` all arrived, real,
+  over ACP. **`subagent.started`, `subagent.completed` and `subagent.failed` did not arrive in run
+  (b)**, despite the prompt explicitly naming the explore agent and a built-in
+  `definitions/explore.agent.yaml` existing in the 1.0.90 package. The model (Auto routed it to
+  `mai-code-1.1-flash`) called `list_agents` (returned `"<no background agents>"` — a different,
+  unrelated background-job listing, not a subagent dispatch), then did the `glob` itself inline and
+  answered; it never dispatched a subagent for a task this trivial. This is one real attempt, not
+  an exhaustive one: it shows the Auto model does not reliably delegate to `explore` for a
+  one-line ask even when told to by name, not that the ACP layer cannot carry the three types.
+  `subagent.jsonl` therefore holds no `subagent.*` event; it was still saved (`tool_call`/
+  `tool.execution_start` pairs only) so the mapper's no-op path has real data too.
+
+  **Per task 1.1's own instruction: group A stops here**, pending the operator (open question 2's
+  "if not" branch; D2's hook transport stays not pre-built, operator decision 2026-09-28). Filed as
+  `spec-queue/DECISIONS.md` `ghcp-s5-subagent-capture` (OPEN): retry with a heavier exploration
+  task and a non-empty scratch workspace (costs a few more Free-plan calls), or drop the three
+  `subagent.*` scenarios from `agent-stream-events`/task 2.2/2.3 and ship compaction+error mapping
+  only, is the operator's call.
+
+  **The other Round-log questions, answered from real data:**
+  - `session.error` arrived **before** the `Error: ` chunk in run (c) (R3's prediction, confirmed):
+    wire order was ...`session.tools_updated`, `usage_update`, `session.error`,
+    `agent_message_chunk`. The chunk's text is byte-identical to `"Error: " + data.message`
+    (verified, both captured in full: `"Error: Authentication failed with provider at
+    https://api.anthropic.com (HTTP 401).\n  Check your COPILOT_PROVIDER_API_KEY,
+    COPILOT_PROVIDER_API_KEY_COMMAND, or COPILOT_PROVIDER_BEARER_TOKEN."`, `errorType:
+    "authentication"`).
+  - The captured `session.compaction_complete` (run a) is 5525 bytes on the wire, `success: true`,
+    `summaryContent` present inline (3872 chars) — no `dataOmitted` (as expected; this conversation
+    never neared 32 KB). `trigger: "manual"` (R3's "not `auto`" held — `/compact` is manual by
+    construction). Field names are Copilot's own (`preCompactionTokens`, `postCompactionTokens`,
+    `tokenLimit`, `checkpointNumber`, `checkpointPath`, `compactionTokensUsed`, `requestId`,
+    `serviceRequestId`), not the Hub's mapped names (`pre_tokens`/`post_tokens`/`percent`); the
+    mapper (task 2.3) still has to do that translation. `checkpointPath` is a local filesystem path
+    (under the scratch `COPILOT_HOME`) that the redaction list (`sessionId`, `cwd`, token-shaped
+    keys) does not catch — worth a look when task 2.1's `_SECRET_FIELD_RE` is extended, though the
+    fixture's own path is already the harmless scratch one.
+  - Run (c) without `--disable-builtin-mcps` and with **no** GitHub sign-in in the scratch home
+    still connected `github-mcp-server` (`session.mcp_server_status_changed`:
+    `pending`→`connected`, then `session.mcp_servers_loaded` naming it `connected`) — **not** the
+    predicted auth failure. `session/new` answered `authRequired: false`. So design open question 9
+    is answered the other way than R3 predicted: a scratch home with no sign-in still got a
+    connected GitHub MCP server (no API call was attempted against it in this run, so whether an
+    actual GitHub call would then 401 is untested). No `tool.execution_start` reached
+    `github-mcp-server` in run (c) (no tool call happened at all before the error ended the turn),
+    so the `mcpServerName` question is unanswered by this capture.
+  - `subagent.started` vs. its `task` call's `tool_use` ordering: **not observed** — no subagent
+    call happened in run (b) (see above).
+
 ## Open questions for R2/R3
 
 1. **Slice 2 alignment.** *(Answered in R2; R3 moved the answers into *Required of slices 1–4*, D5 and D9.)* What does slice 2's raw-event subscription list contain? Where does its
@@ -1624,6 +1693,15 @@ has not), **correction** (sibling text that is wrong about this change), or **no
    narrowed:** the passthrough forwards any subscribed type the session emits (VERIFIED-CODE, D1
    table), so what is open is whether an ACP session emits them, not whether they are relayed.
    Still carried to task 1.1.
+
+   **Settled, partially, 2026-10-03 (task 1.1's real capture).** `session.compaction_start`,
+   `session.compaction_complete` and `session.error` all held, real, over ACP. `subagent.started`,
+   `subagent.completed` and `subagent.failed` did **not** arrive in the one capture attempt
+   budgeted for this task — the model declined to dispatch a subagent for a trivial exploration
+   prompt, so this is evidence the three types are harder to elicit than assumed, not proof the ACP
+   layer cannot carry them. Per this question's own "if not" branch, **group A stops here**,
+   operator told (`spec-queue/DECISIONS.md` `ghcp-s5-subagent-capture`, OPEN); D2's hook transport
+   stays not pre-built. See the Round log, *Task 1.1, real capture, 2026-10-03*.
 3. **Folder trust.** *(Answered in R2: no; VERIFIED-CODE, D3.)* Does ACP `allow_all: on` trust the folder (and so load repo hooks)? Read
    `app.js` around `allow_all` and `trusted_folders` (D3).
 4. **`ReviewContext` and the merge target.** *(Answered in R2: `Project.main_branch`, a new merge-base, `base_sha`; D8.)* Does `ReviewContext` already know the merge target?

@@ -20,6 +20,35 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### `a-copilot-agent-uses-hooks-and-its-own-agents` task 1.1: the explore agent didn't dispatch as a subagent -- 2026-10-03 night
+
+- OPEN      ghcp-s5-subagent-capture  **Real capture (task 1.1, 2026-10-03) found `subagent.started`/
+  `subagent.completed`/`subagent.failed` not delivered**, the one part of design D1's six-type claim
+  this capture could not confirm. `session.compaction_start`, `session.compaction_complete` and
+  `session.error` all held, real, over ACP (fixtures: `hub/tests/fixtures/copilot/
+  {compaction,error}.jsonl`). For `subagent.*`, run (b) prompted `Use the explore agent to name one
+  file in this directory, then stop.` on the Free plan's Auto model (routed to `mai-code-1.1-flash`)
+  against an empty scratch workspace. The model called `list_agents` (a background-job listing,
+  unrelated), then did the `glob` itself and answered — it never dispatched a subagent, even though
+  a built-in `explore.agent.yaml` exists in the installed 1.0.90 package and the prompt named it by
+  name. `subagent.jsonl` was saved anyway (the `tool_call`/`tool.execution_start` pairs from that
+  run, no `subagent.*` event in it). Per task 1.1's own instruction ("if a type is not delivered,
+  stop group A, tell the operator"), group A (tasks 1.2-1.6, 2.1-2.8) has **not** been started.
+  Full capture detail: design.md Round log, *Task 1.1, real capture, 2026-10-03*.
+
+  **The question: how to proceed with group A.** Options, not mutually exclusive:
+  (a) retry the capture with a bigger exploration task and a non-empty scratch workspace (a few
+  more Free-plan calls — the operator's budget note for 1.1 was "~5 calls", already spent by runs
+  a-c; a retry needs fresh authorization for however many more it costs);
+  (b) drop the three `subagent.*` scenarios from `agent-stream-events` and tasks 2.2/2.3, and build
+  group A's compaction+error mapping only (1.2's first and second bullets, 1.3, not 1.2's
+  `subagent.jsonl` bullet);
+  (c) leave group A stopped and move to groups C/B/D (already the night queue's order) until the
+  operator has time to look at this.
+  Recommendation: (c) now, (a) or (b) when the operator is next interactive — this is exactly the
+  kind of real-capture surprise the round discipline exists to surface, not something to guess
+  past unattended.
+
 ### `a-run-reaches-the-hub-without-mcp` task 10.1 needs the operator on the work PC -- 2026-10-01 night, DECIDED 2026-10-02
 
 - DECIDED   a-run-reaches-hub-10.1  **Waived on the work-PC evidence** (operator, 2026-10-02, as recommended):
