@@ -1074,3 +1074,34 @@ def test_the_totality_rows_for_extglob_and_a_long_backslash_run_never_raise_1_6(
     long_backslash_run = _decide("Bash", {"command": "ls " + "\\" * 70000 + "./x"})
     assert long_backslash_run["allow"] is False
     assert long_backslash_run["reason"].startswith("'")
+
+
+# 1.4b (R4, D3 extglob): the bare-group row above (`test_an_unquoted_extglob_group_is_kept_as_one_
+# unit_through_the_lexer_and_rule_6`) hands `cp n @(..)/x` to `_decide` directly. This row instead
+# wraps the same two groups in `bash -O extglob -c '...'`, the exact form the task names, to check
+# the inner-shell reading reaches the same D3 rewrite rather than being judged as the outer word
+# `bash` is part of. Measured against `_decide` directly first (no script committed): both rows
+# already refuse today, each naming the whole extglob piece, not only the tail `/x` the task's own
+# text describes as today's behaviour -- that text is stale, like most of 1.6's rows. The grep
+# controls use `(` and `)` as ordinary regex syntax, not an extglob trigger (`a`/`x` precede the
+# `(`, not `@`/`?`/`*`/`+`/`!`), so `_extglob_span_at` never opens a group there and the word is
+# never treated as a path at all.
+def test_an_extglob_dotdot_group_still_refuses_inside_an_inner_bash_invocation_1_4b(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    bare_star = _decide("Bash", {"command": "bash -O extglob -c 'cp n @(..)/x'"})
+    assert bare_star["allow"] is False
+    assert bare_star["reason"].startswith("'@(..)/x'")
+
+    question = _decide("Bash", {"command": "bash -O extglob -c 'cp n ?(..)/x'"})
+    assert question["allow"] is False
+    assert question["reason"].startswith("'?(..)/x'")
+
+    # Controls: a regex group, not an extglob group, so the word is an ordinary inside path.
+    grep_star = _decide("Bash", {"command": "grep -E 'a*(b|c)' f"})
+    assert grep_star["allow"] is True, grep_star["reason"]
+
+    grep_plus = _decide("Bash", {"command": "grep -E 'x+(y)' f"})
+    assert grep_plus["allow"] is True, grep_plus["reason"]

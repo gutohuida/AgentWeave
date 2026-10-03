@@ -30,7 +30,36 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   - `echo hi > ${X}/y` stays refused as uncheckable.
   - `cp notes.md '.{,.}'/x` is now refused (the accepted cost).
 - [x] 1.4 Glob parents (D3): `ls .*/x`, `ls ..*/x`, `cp x .[.]/y`, `ls ../*`, `rm -rf ../*.py`, PowerShell `Get-ChildItem ..\*` refused, each quoting the whole piece. `ls sub/.*/x`, `cp x sub/..?/y` allowed. The refused rows PASS today with a fragment reason and FAIL on the reason assertion. Rows 1.4a, 1.4h-n added to `_TABLE`, plus a dedicated reason-text table (`_DOTDOT_GLOB_REASON_TABLE`) asserting each refused row quotes the whole piece, not a fragment -- made to pass by `_rewrite_dotdot_globs` in `hub/hub/mcp_server.py`, applied before `_judge_path` at both rule 5's and rule 6's call sites. Verified, not assumed: measured against real Git Bash 5.2.37 with `shopt -u globskipdots` (off, matching the pre-5.2 bash this rule guards against) -- `.*` -> `. ..`, `..*` -> `..`, `.[.]` -> `..`, `..?` stays literal (no match). Checked today's actual pre-change behaviour (not the task's own framing) with a throwaway script first: `ls .*/x`, `ls ..*/x`, `cp x .[.]/y` were actually **allowed** today (not refused-with-fragment as queued), while `ls ../*`, `rm -rf ../*.py` and the PowerShell row were already correctly refused quoting the whole piece (no fragment bug reached rule 6's own piece reading) -- the three already-refused rows are now regression controls, not new behaviour. Mutation check (`git stash` the `mcp_server.py` change): exactly rows 1.4a, 1.4h, 1.4i fail in both tables without the fix; 1.4j/k/l and 1.4m/n unaffected. Full regression set (`test_the_shell_judge_reads_a_word_whole.py` + the six D2-named files): 686 passed, 2 skipped. ruff/black/mypy clean (mypy's one pre-existing `approve_tool_call` error now at line 2390, same annotation gap, confirmed unrelated by reading the function there)
-- [ ] 1.4b (R4, D3 extglob) `bash -O extglob -c 'cp n @(..)/x'` and `bash -O extglob -c 'cp n ?(..)/x'` refused, the reason quoting `'@(..)/x'` / `'?(..)/x'`. Each PASSES today (tail `'/x'`) and FAILS against the R3 design (piece `..)/x`, inside); assert the reason, which FAILS today too. Controls allowed: `grep -E 'a*(b|c)' f`, `grep -E 'x+(y)' f`
+- [x] 1.4b (R4, D3 extglob) `bash -O extglob -c 'cp n @(..)/x'` and `bash -O extglob -c 'cp n ?(..)/x'` refused, the reason quoting `'@(..)/x'` / `'?(..)/x'`. Each PASSES today (tail `'/x'`) and FAILS against the R3 design (piece `..)/x`, inside); assert the reason, which FAILS today too. Controls allowed: `grep -E 'a*(b|c)' f`, `grep -E 'x+(y)' f`
+
+  **Iteration 37.** Re-derived against the current code before building, same discipline as 1.6's
+  rows: measured `_decide` directly (throwaway `py -3.11 -c` one-liner, not committed, real
+  `AW_WORKSPACE_DIR`) for `bash -O extglob -c 'cp n @(..)/x'` and the `?(..)/x` row. Both are
+  **already refused today**, each naming the whole extglob piece (`'@(..)/x'`, `'?(..)/x'`), not
+  only the tail `'/x'` -- the task's own text is stale, describing the pre-D3-extglob world task
+  2.2's slice (iteration 25, this file's task group below) already fixed; the R3-design framing
+  ("FAILS against the R3 design") is likewise moot once R4's `_rewrite_dotdot_globs` extglob
+  handling landed. The grep controls (`a*(b|c)`, `x+(y)`) are also already allowed: `(` there
+  follows `a`/`x`, not an extglob trigger (`@ ? * + !`), so `_extglob_span_at` never opens a group
+  and the word is read as an ordinary inside path. So this task needed test coverage only, not a
+  production change -- the bare-group form (`cp n @(..)/x` with no `bash -c` wrapper) already had
+  a reason-asserting test from task 2.2's slice; this task specifically asks for the `bash -O
+  extglob -c` wrapper and the grep controls, which had no test yet.
+
+  Added `test_an_extglob_dotdot_group_still_refuses_inside_an_inner_bash_invocation_1_4b` to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`. **Mutation-checked**: temporarily forced
+  `_rewrite_dotdot_globs` to never find an extglob group (`spans = []`) -- the new test's first
+  assertion fails (`allow: True`) against the mutation, confirming it is load-bearing; reverted
+  with a backup copy and confirmed `git diff --stat hub/hub/mcp_server.py` is empty afterward. `py
+  -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **110 passed** (was
+  109, +1). Broader regression set (`test_permission_approver.py`, `test_hub_own_call.py`,
+  `test_copilot_acp_decide.py`, `test_a_write_outside_the_workspace_is_recorded.py`): **736 passed,
+  2 skipped**, no regressions. CLI suite (`py -3.11 -m pytest tests/ -q`, run because this
+  iteration also edits `tasks.md`): **565 passed, 3 skipped**. `py -3.11 -m ruff check` and `py
+  -3.11 -m black --check --target-version py311` on the changed test file: both clean. No
+  production file changed, so `mypy` is unaffected. `git diff --stat`: exactly
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py` and this change's `tasks.md`. `py -3.11
+  scripts/backlog_page.py --check`: current, nothing moved.
 - [ ] 1.4c (R4, D8, link fixture) **globs through a link**, refused as outside, the reason naming where the match resolves:
   - `cp n u*/`, `cp n u?/x`, `cp n [u]p/x`, and `cp n '[[:alpha:]]p'/x` (Bash; the first bracket matched exactly, the POSIX class relaxed, D8 step 2 as R8 wrote it);
   - `bash -c 'cp n u*/'` (inner shell);
