@@ -1028,3 +1028,20 @@ def test_approve_tool_call_denies_and_reports_when_the_judge_raises_1_6(workspac
     assert reported_tool_name == "Bash"
     assert reported_decision["allow"] is False
     assert "RecursionError" in reported_decision["reason"]
+
+
+# 1.6 (R6): the memo key must carry the trimmed-colon flag, or the first comma-split word's allow
+# (no trailing colon) is reused for the second, identical-text word that does carry one. Re-derived
+# directly against `_decide` before writing this (not trusting iteration 16's note that the key
+# already lists `trailing_colon`): `echo a@example.com,a@example.com:` is already refused today,
+# naming `'a@example.com:'`, because `_memo_judge_word`'s key is
+# `(word, argument, continues, trailing_colon, dialect, trusted)` -- the flag has been part of the
+# key since the memo itself was built, not added separately for R6. Mutation-checked: dropping
+# `trailing_colon` from the key (a throwaway monkeypatch of `_memo_judge_word`, not committed)
+# reproduces the failure this row describes -- the second word's judgement is skipped as an
+# already-memoized hit on the first word's allow, and the command is wrongly allowed.
+def test_the_memo_key_carries_the_trailing_colon_flag_1_6(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    decision = _decide("Bash", {"command": "echo a@example.com,a@example.com:"})
+    assert decision["allow"] is False
+    assert "'a@example.com:'" in decision["reason"]
