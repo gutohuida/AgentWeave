@@ -1,6 +1,6 @@
 # Design — a Copilot one-shot records its credits
 
-Re-verified at `957fc84` (2026-10-03, R1) and `9d1f617` (R2). Labels follow the archived
+Re-verified at `957fc84` (2026-10-03, R1), `9d1f617` (R2) and `3233108` (R3). Labels follow the archived
 `a-copilot-run-shows-its-credits`: **MEASURED** is read from the capture or the code today, and
 **UNVERIFIED** has not been observed.
 
@@ -68,21 +68,42 @@ ledger replaces its whole `_Checkpoint` on each event. The two readers agree, by
 ```python
 def checkpoint_totals(data: Dict[str, Any]) -> Tuple[Optional[float], Optional[float]]:
     """(totalNanoAiu, totalPremiumRequests) of one `session.usage_checkpoint`, each through
-    `_nonneg_number`, then refused (None) if not finite; `totalNanoAiu` also refused above
-    2**63 - 1, the BigInteger range both of its columns share."""
+    `_nonneg_number`, then refused (None) unless it is at most its column's ceiling:
+    `totalNanoAiu <= 2**63 - 1` (BigInteger), `totalPremiumRequests <= sys.float_info.max`
+    (Float). The comparison is the whole check: it is False for NaN and both infinities, and
+    it never raises."""
 ```
 
-**The 64-bit bound (R2).** Both stores of this figure are `BigInteger`:
+**One comparison, not `math.isfinite` (R3).** R2 specified `_nonneg_number`, then
+`math.isfinite`, then the bound. That helper raises. `json.loads` reads an integer literal of up
+to 4300 digits as a Python `int` (longer ones raise `ValueError`, which the parser's existing
+`except ValueError` skips). An `int` of more than 308 digits passes `_nonneg_number`, and then
+`math.isfinite(10**400)` raises `OverflowError: int too large to convert to float`, and so does
+`float(10**400)` (MEASURED under `py -3.11`). So `"totalPremiumRequests": 1000…0` (400 digits)
+would escape R2's helper. The same literal as `totalNanoAiu` would escape too, if `isfinite` ran
+before the bound. Python compares an `int` with a `float` exactly, without converting either,
+so `value <= ceiling` cannot raise. It is False for `nan`, `inf` and `10**400` alike, and True
+for `2**63 - 1` and `1e308` (MEASURED). That one comparison per figure replaces both of R2's
+checks. Once it has passed, `int(nano)` and `float(premium)` cannot raise either.
+
+**The 64-bit bound (R2; re-measured R3).** Both stores of this figure are `BigInteger`:
 `worker_invocations.ai_nano_aiu` (`models.py:1922`) and `turn_usage.session_nano_aiu_total`
 (`:1300`). Python's `sqlite3` raises `OverflowError: Python int too large to convert to SQLite
 INTEGER` for `2**63` (MEASURED under `py -3.11`; `2**63 - 1` inserts). On the worker path that
 raise lands in `_record`'s catch-all, so `run_worker` still returns. But the invocation row,
 which holds the outcome, the error and every other figure, is lost, and `invocation_id` is
-`None`. That breaks `run_worker`'s own promise that *"every exit records an invocation"*. A
+`None`. That breaks `run_worker`'s own promise that *"every exit records an invocation"*. *(R3.)*
+The same raise reaches the Hub's real stack unchanged: an `insert` of `2**63` into a
+`BigInteger` column through `create_async_engine("sqlite+aiosqlite://")` raises the builtin
+`OverflowError`, not a SQLAlchemy `DBAPIError` (MEASURED), so no `except DBAPIError` anywhere
+would catch it. On PostgreSQL `bigint` has the same range. That is UNVERIFIED here: no
+PostgreSQL driver is a Hub dependency (`hub/pyproject.toml` lists `aiosqlite` only), and
+`engine.py` passes `DATABASE_URL` straight through. So the ceiling is right for every database
+the Hub can reach today, and not wrong for the one it might. A
 malformed credit figure must cost only itself, so the helper refuses it, exactly as it refuses a
 negative one. The comparison is exact (`9.223372036854776e18 <= 2**63 - 1` is `False` in Python),
-so no float rounding lets one through. `totalPremiumRequests` is stored as `Float` and needs only
-the finiteness check.
+so no float rounding lets one through. `totalPremiumRequests` is stored as `Float`. Its ceiling,
+`sys.float_info.max`, is what a `float()` conversion can reach.
 
 `CopilotUsageLedger.observe_event` builds its `_Checkpoint` from it, and `parse_copilot_envelope`
 calls it. The adapter imports `copilot_usage` at module level. That stays clear of `hub.db` and
@@ -110,7 +131,12 @@ figure in the stream, and three reasons keep it out. It is input-only. It is nes
 diagnostic structure (`promptCacheBreakState`) that nothing in the Hub reads, and the run ledger
 does not read it for runs either. And filling `input_tokens` while `output_tokens` and
 `total_tokens` stay NULL would put a partial figure into a row that `worker-spend-counts-against-the-budget`
-will sum into a budget, under-counting while looking measured. The decision row asked for
+will sum into a budget, under-counting while looking measured. *(R3, re-derived from the
+sibling's own text.)* That sibling's rule forms `total_tokens` as `COALESCE(input,0)+…` wherever
+`input_tokens` **or** `output_tokens` is not null
+(`worker-spend-counts-against-the-budget/design.md:39-43`). So an `input_tokens`-only Copilot row
+would be counted as a measured total of exactly the prompt, not left unknown. The refusal is what
+keeps the sibling's own "unknown, never zero" rule true for Copilot. The decision row asked for
 credits. Whether worker token accounting for Copilot should use it is that sibling's question. It
 is noted in D5.
 
@@ -172,7 +198,8 @@ infers.
 - `parse_copilot_envelope` already skips any line that is not JSON or not an object. A
   `session.usage_checkpoint` whose `data` is not an object reaches the helper as `{}` (the loop's
   existing `data` guard) and yields `(None, None)`. The helper raises on nothing: `_nonneg_number`
-  only does type checks and a comparison.
+  only does type checks and a comparison, and D2's ceiling is one more comparison. *(R3: R2's
+  `math.isfinite` step did raise, on an integer literal of more than 308 digits. See D2.)*
 - `int()`/`float()` run only on values `_nonneg_number` has accepted (finite or not). **Non-finite
   values are the case:** `json.loads` accepts `Infinity`, `NaN`, and an overflowing literal such
   as `1e400` (read as `inf`) (MEASURED under `py -3.11`). `_nonneg_number` returns both `inf` and
@@ -181,7 +208,16 @@ infers.
   for a checkpoint (`copilot_usage.py:348`), but there it is inside `finish()`'s catch-all, so a run
   survives it. The worker's path has no catch-all around the parser: `_interpret` →
   `parse_envelope` raising would escape `run_worker`, whose contract is "never raises". **D2's
-  helper therefore rejects non-finite values** (`math.isfinite`). For the ledger's checkpoint this
+  helper therefore rejects non-finite values**, by its ceiling comparison (R3; R2 used
+  `math.isfinite`). *(R3, read from the code, not driven.)* Here is what the callers would then
+  return. `POST /conversations/{conversation_id}/checkpoint` (`checkpoints.py:134`) awaits
+  `generate_checkpoint` → `run_worker` with no handler of its own. Its `finally` releases the
+  claim, and the request ends in FastAPI's 500. No checkpoint and no invocation row are written,
+  and `run_worker` skips `worker_dir_context.cleanup()`, so the temporary directory is left behind.
+  The context-pressure trigger (`checkpoint_trigger.py:341`) and the handover
+  (`checkpoint_handover.py:263`) call `generate_checkpoint` the same way. The titler is the third
+  caller of the parser, and it is safe: `maybe_generate_title`'s catch-all
+  (`conversation_titles.py:325`) logs and drops the title. For the ledger's checkpoint this
   is strictly narrower than today: an infinite checkpoint now gives unknown session totals, instead
   of the catch-all dropping the whole sample (tokens, allowance and all). The ledger's per-call
   `copilotUsage.totalNanoAiu` still goes through the bare `_nonneg_number`, and is still caught by
@@ -189,8 +225,17 @@ infers.
 - `run_worker` → `_record`: unchanged. A recording failure is already logged and swallowed. That
   swallow is what made R2 add the 64-bit bound (D2): a figure that converts cleanly but cannot be
   inserted would not raise out of `run_worker`, but it would silently cost the operator the whole
-  audit row. The run side has the same exposure today: `record_turn_usage` would fail to flush
-  `session_nano_aiu_total`. The shared helper closes it for the checkpoint figure. The per-call
+  audit row. *(R3: R2 understated the run side.)* Today the run side is worse off.
+  `finish()` → `settle_copilot_credits` → `stored_total = checkpoint_total` →
+  `record_turn_usage`'s `flush()` (`agent_trigger.py:3985`) runs inside the RPC executor's
+  finalising session. That session already set `run.status = final_status` (`:3954`) and has
+  not yet committed (`:4018`). The `OverflowError` therefore rolls back the whole finalisation
+  and reaches the executor's catch-all (`:4093`), and `_record_run_failure_tail` relabels the
+  still-`running` row `failed` (read from the code, not driven). A Copilot turn that completed
+  would be recorded as failed because of one telemetry figure. `settle_copilot_credits`'s own
+  catch-all cannot help, because the raise comes after it, at the flush. The settled
+  `ai_nano_aiu` (`diff <= checkpoint_total`) is bounded once the checkpoint is. The shared
+  helper closes all of this for the checkpoint figure. The per-call
   `copilotUsage.totalNanoAiu` sum stays out of scope, as above.
 
 ## Tests that can fail
@@ -219,13 +264,20 @@ infers.
 5. **A bad figure is unknown, field by field.** `totalNanoAiu: -1` with `totalPremiumRequests: 1`
    gives `(None, 1.0)`. `true` gives None. A string gives None.
 6. **Non-finite, and too large to store.** `totalNanoAiu: Infinity` gives None, and so do `NaN` and
-   `1e400` (*R2*). `totalPremiumRequests: NaN` gives None. `parse_copilot_envelope` does not
-   raise. Today's parser ignores the checkpoint, so this test passes today. It is a guard on the
-   new conversion, and it fails (with `OverflowError`) if the `isfinite` check is removed. Also, for the ledger,
+   `1e400` (*R2*). `totalPremiumRequests: NaN` gives None. *(R3.)* So does a 400-digit integer
+   literal, in either field: `"totalPremiumRequests": 1` followed by 400 zeros, with a valid
+   `totalNanoAiu`, gives `(32_840_000, None)`. The same literal as `totalNanoAiu` gives
+   `(None, 1.0)`. This fails with `OverflowError` if the helper calls `math.isfinite` or `float`
+   before its ceiling. `parse_copilot_envelope` does not raise. Today's parser ignores the
+   checkpoint, so this test passes today. It is a guard on the new conversion, and it fails (with
+   `OverflowError` or `ValueError`) if the ceiling comparison is removed. Also, for the ledger,
    one `assistant.usage` call with tokens, then
    `observe_event("session.usage_checkpoint", {"totalNanoAiu": inf, "totalPremiumRequests": 1})`,
    then `finish()`, gives `session_nano_aiu_total is None`, `session_premium_requests_total == 1`,
-   and the call's tokens. This fails today: the catch-all's sample carries no tokens.
+   and the call's tokens. This fails today: the catch-all's sample carries no tokens. *(R3.)*
+   The same with `totalNanoAiu: 2**63` gives `session_nano_aiu_total is None`. That passes
+   today (the int converts), so it is a guard on the bound for the run side, whose unguarded
+   failure is the relabel described in "What each route returns".
    *(R2.)* The 64-bit bound gets two cases. `checkpoint_totals({"totalNanoAiu": 2**63,
    "totalPremiumRequests": 1})` gives `(None, 1)`, and `2**63 - 1` is kept. Then through
    `run_worker` (test 2's setup, with the checkpoint's `totalNanoAiu` edited to `2**63`), exactly
@@ -292,3 +344,30 @@ tokens (design D3)"*.
   spec delta says so, and test 6 pins it at the row. (4) Test 2 now names the `copilot_exe`
   fixture and the `Path.home` patch that it cannot run without. Nothing else changed: D1, D3's
   premium-request rule, D4, D5's read-side finding, and D6 re-derived the same.
+- **R3, 2026-10-03 night (iter 23).** Re-derived at `3233108`, aimed at R2's own additions
+  first. Measured that `json.loads` turns a long integer literal into an `int` (up to 4300 digits;
+  longer raises `ValueError`, which the parser already skips), and that `math.isfinite(10**400)`
+  and `float(10**400)` raise `OverflowError`. Measured that `value <= 2**63 - 1` and
+  `value <= sys.float_info.max` never raise and are False for `nan`, `inf` and `10**400`.
+  Measured `2**63` through `create_async_engine("sqlite+aiosqlite://")` into a `BigInteger`:
+  the builtin `OverflowError`, not a `DBAPIError`. Read `settle_copilot_credits`,
+  `record_turn_usage`, the RPC executor's finalising session (`agent_trigger.py:3951-4018`) and its
+  catch-all (`:4093`), the checkpoint route and the two other `generate_checkpoint` callers, the
+  titler's catch-all, `engine.py` and `hub/pyproject.toml`'s drivers, and
+  `worker-spend-counts-against-the-budget`'s backfill rule. **Changed:** (1) **R2's helper
+  raised.** Its `math.isfinite` step raises on an integer literal of more than 308 digits, in
+  either field, so a checkpoint of `"totalPremiumRequests": 1` followed by 400 zeros would escape
+  `run_worker`. D2 now specifies one ceiling comparison per figure instead
+  (`<= 2**63 - 1`, `<= sys.float_info.max`). That comparison also covers non-finite values. The
+  proposal, the spec delta ("a figure too large", both figures now), task 2.1 and test 6 follow.
+  (2) **R2 understated the run side.** A `>= 2**63` checkpoint does not just fail one column's
+  flush. It rolls back the RPC executor's whole finalisation, and the catch-all relabels a
+  completed run `failed` (read from the code, not driven). Test 6 gains a run-side guard. (3)
+  "What each route returns" now names the answer: the operator's checkpoint `POST` would end in
+  a 500 with no invocation row and a leaked temporary directory. The titler is safe behind its
+  catch-all. **Re-derived the same:** the bound belongs in the shared helper, because both
+  `BigInteger` stores take the checkpoint figure and the run side's settled `ai_nano_aiu` is
+  `<= checkpoint_total`. PostgreSQL's `bigint` has the same range, UNVERIFIED because no
+  PostgreSQL driver is a Hub dependency. D3's refusal of `prompt_tokens` holds, and it is now
+  sharper: the sibling's `COALESCE` rule would count an input-only row as a measured total. D1,
+  D4, D5 and D6 are unchanged.

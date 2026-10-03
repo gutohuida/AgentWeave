@@ -37,10 +37,11 @@ at all.
   `session.usage_checkpoint` it sees, because the figure is cumulative. `totalNanoAiu` goes into
   `WorkerUsage.ai_nano_aiu` and `totalPremiumRequests` into `WorkerUsage.premium_requests`. Each
   value is accepted by the rule the run ledger already applies: a bool, a non-number or a negative
-  value is ignored, and that field stays unknown. Two cases are added to that rule. A non-finite
-  value (`Infinity`, `NaN`) is ignored, because converting it would raise. A credit figure too
-  large for the 64-bit column is also ignored, because inserting it would lose the whole
-  invocation row (design D2).
+  value is ignored, and that field stays unknown. One case is added to that rule: a figure above
+  what its column can hold is ignored too. That covers `Infinity` and `NaN`, which would raise on
+  conversion; a credit figure past the 64-bit column, which would lose the whole invocation row
+  on insert; and an integer literal too long to become a float, which would raise even in a
+  finiteness check. It is one comparison per figure, which cannot itself raise (design D2).
 - **One rule, two readers.** The checkpoint-reading rule moves into one public helper in
   `copilot_usage.py`. `CopilotUsageLedger.observe_event` and `parse_copilot_envelope` both call it,
   so a Copilot schema change is fixed in one place. Importing it does not reach `hub.db`, which the
@@ -75,7 +76,9 @@ at all.
 ## Impact
 
 - `hub/hub/copilot_usage.py`: a public `checkpoint_totals(data)`. `observe_event` calls it, so a
-  Copilot run's checkpoint gains the same two refusals (non-finite, and too large to store).
+  Copilot run's checkpoint gains the same refusal (above what its column holds, which includes
+  non-finite). Today that checkpoint, if too large, would fail the whole run's finalisation
+  (design, "What each route returns").
 - `hub/hub/runner_adapters/copilot.py`: `parse_copilot_envelope` reads the last checkpoint and
   returns it on every exit, and its docstring stops saying "usage stays empty".
 - `hub/tests/test_worker.py`: `test_the_captured_copilot_one_shot_has_no_session_shutdown` is

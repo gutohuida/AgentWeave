@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 22,
+    "iteration": 23,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "copilot-oneshot-credits-r3",
-    "next_action": "copilot-oneshot-credits-r3: R3 of the spec loop for openspec/changes/a-copilot-one-shot-records-its-credits/ (R1 iter 21, R2 iter 22). Per tasks.md 0.3, re-derive independently against the code, a fresh comparison and not a re-read of R2. In particular re-check R2's own additions: the 2**63-1 bound on totalNanoAiu in checkpoint_totals (is the helper the right place, does Postgres BigInteger behave the same, does the ledger path really reach record_turn_usage with it), and D3's refusal to read the promptCacheBreakState prompt_tokens. Also ask what each route returns when what it calls raises. Fix where the code disagrees, append to design.md's Round log, tick 0.3, keep openspec validate --strict passing.",
+    "current": "copilot-oneshot-credits-rev",
+    "next_action": "copilot-oneshot-credits-rev: tasks.md 0.4 for openspec/changes/a-copilot-one-shot-records-its-credits/ (R1 iter 21, R2 iter 22, R3 iter 23). Run an adversarial Opus subagent over the change and its decisions D1-D6, in particular R3's ceiling-comparison helper (<= 2**63-1, <= sys.float_info.max, no isfinite/float before it), R3's read-from-code claim that a >= 2**63 run checkpoint relabels a completed run failed, and Open question 1 (F486). Fix what it confirms, log it in design.md's round log, keep openspec validate --strict passing, tick 0.4, then add an OPEN approval row 'copilot-oneshot-credits-approve' to spec-queue/DECISIONS.md (approval + Open question 1) and put only its id in decisions_for_user. No -impl.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -60,8 +60,9 @@
         },
         {
             "id": "copilot-oneshot-credits-r3",
-            "status": "open",
-            "title": "R3: re-derive again, independently"
+            "status": "done",
+            "title": "R3: re-derive again, independently",
+            "detail": "Done iter 23: three corrections. (1) R2's helper raised: math.isfinite/float on a >308-digit JSON int raise OverflowError; D2 now one ceiling comparison per figure (<= 2**63-1, <= sys.float_info.max), never raises, covers nan/inf. (2) Run side worse than R2 said: 2**63 raises builtin OverflowError through aiosqlite/SQLAlchemy (measured), inside the RPC executor's uncommitted finalisation, so a completed run is relabelled failed (read, not driven). (3) Checkpoint POST would 500 with no invocation row. D3 sharper via the sibling's COALESCE rule. validate --strict valid."
         },
         {
             "id": "copilot-oneshot-credits-rev",

@@ -6,7 +6,7 @@ The system SHALL record, for every Copilot one-shot call (a checkpoint, its prob
 A one-shot call is one process that opens one new session, so the session's final cumulative total
 is the call's whole charge. The last checkpoint SHALL be taken, and checkpoints SHALL NOT be summed.
 Each figure SHALL be read by the same rule as a Copilot run's session checkpoint: a negative,
-non-numeric, boolean or non-finite figure, or a credit figure too large for the invocation record to
+non-numeric, boolean or non-finite figure, or a figure too large for the invocation record to
 hold, SHALL be ignored and that figure SHALL be unknown, while the other figure is still recorded. A call whose output carries no checkpoint SHALL record both
 figures as unknown, never as zero, and no other part of the output SHALL be used in their place.
 The credits SHALL be recorded whether the call produced a usable answer, reported an error, or
