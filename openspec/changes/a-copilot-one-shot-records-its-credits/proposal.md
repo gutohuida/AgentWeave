@@ -38,10 +38,13 @@ at all.
   `WorkerUsage.ai_nano_aiu` and `totalPremiumRequests` into `WorkerUsage.premium_requests`. Each
   value is accepted by the rule the run ledger already applies: a bool, a non-number or a negative
   value is ignored, and that field stays unknown. One case is added to that rule: a figure above
-  what its column can hold is ignored too. That covers `Infinity` and `NaN`, which would raise on
-  conversion; a credit figure past the 64-bit column, which would lose the whole invocation row
-  on insert; and an integer literal too long to become a float, which would raise even in a
-  finiteness check. It is one comparison per figure, which cannot itself raise (design D2).
+  `2**53 - 1` is ignored too. That covers `Infinity` and `NaN`, which would raise on conversion;
+  a credit figure past the 64-bit column, which would lose the whole invocation row on insert;
+  one just below it, which would make every later `sum()` over the column raise; and an integer
+  literal too long to become a float, which would raise even in a finiteness check. It is one
+  comparison per figure, which cannot itself raise (design D2). Only a call whose process exited
+  successfully is read: a non-zero exit, a timeout or a failed spawn leaves both figures unknown,
+  as today (D4).
 - **One rule, two readers.** The checkpoint-reading rule moves into one public helper in
   `copilot_usage.py`. `CopilotUsageLedger.observe_event` and `parse_copilot_envelope` both call it,
   so a Copilot schema change is fixed in one place. Importing it does not reach `hub.db`, which the
@@ -57,7 +60,7 @@ at all.
 ## What does not change
 
 - **The read side.** No API returns `worker_invocations.ai_nano_aiu` today. Its only readers are
-  the checkpoint routes, and they read `error` (`api/v1/checkpoints.py:106`, `:207`). The archived
+  the checkpoint routes, and they read `error` (`api/v1/checkpoints.py:107`, `:208`). The archived
   change's D12 and task 6.4 assigned the `workers`-line credit sums to
   `worker-spend-counts-against-the-budget`, the second of the two changes to land. That change's
   `tasks.md` does not yet carry them (design D5, Open question 1). Until it does, this change's
@@ -76,9 +79,9 @@ at all.
 ## Impact
 
 - `hub/hub/copilot_usage.py`: a public `checkpoint_totals(data)`. `observe_event` calls it, so a
-  Copilot run's checkpoint gains the same refusal (above what its column holds, which includes
+  Copilot run's checkpoint gains the same refusal (above `2**53 - 1`, which includes
   non-finite). Today that checkpoint, if too large, would fail the whole run's finalisation
-  (design, "What each route returns").
+  (design, "What each route returns"). The spec delta MODIFIES the run requirement to say so.
 - `hub/hub/runner_adapters/copilot.py`: `parse_copilot_envelope` reads the last checkpoint and
   returns it on every exit, and its docstring stops saying "usage stays empty".
 - `hub/tests/test_worker.py`: `test_the_captured_copilot_one_shot_has_no_session_shutdown` is

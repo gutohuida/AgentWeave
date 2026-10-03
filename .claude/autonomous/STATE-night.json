@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 23,
+    "iteration": 24,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "copilot-oneshot-credits-rev",
-    "next_action": "copilot-oneshot-credits-rev: tasks.md 0.4 for openspec/changes/a-copilot-one-shot-records-its-credits/ (R1 iter 21, R2 iter 22, R3 iter 23). Run an adversarial Opus subagent over the change and its decisions D1-D6, in particular R3's ceiling-comparison helper (<= 2**63-1, <= sys.float_info.max, no isfinite/float before it), R3's read-from-code claim that a >= 2**63 run checkpoint relabels a completed run failed, and Open question 1 (F486). Fix what it confirms, log it in design.md's round log, keep openspec validate --strict passing, tick 0.4, then add an OPEN approval row 'copilot-oneshot-credits-approve' to spec-queue/DECISIONS.md (approval + Open question 1) and put only its id in decisions_for_user. No -impl.",
+    "current": "the-shell-judge-reads-a-word-whole-impl",
+    "next_action": "the-shell-judge-reads-a-word-whole-impl (B4, 20/41): re-derive task 2.2's remaining bullets in openspec/changes/the-shell-judge-reads-a-word-whole/tasks.md fresh against hub/hub/mcp_server.py (where _decide and _glob_links live; read .claude/rules/ for mcp_server.py first). Do not trust iteration 25's notes (2026-10-02 night log, iterations 24-25). In particular check _glob_links (D8) in rule 5 (an absolute glob word) and in rule 6 (the whole value as well as each piece), which needs the _Budget/memo threaded through, and the piece-level _BASH_DEVICES check, which needs dialect threaded through. Build the one slice that fits this turn, test-first from the matching 1.4x rows, and run hub/tests/test_permission_approver.py plus hub/tests/test_the_shell_judge_reads_a_word_whole.py under py -3.11. Tick 2.2 only when every bullet is built and verified. Mind stop_at 22:00.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -66,8 +66,9 @@
         },
         {
             "id": "copilot-oneshot-credits-rev",
-            "status": "open",
-            "title": "Opus adversarial review; then an OPEN approval row in DECISIONS.md. No -impl."
+            "status": "done",
+            "title": "Opus adversarial review; then an OPEN approval row in DECISIONS.md. No -impl.",
+            "detail": "Done iter 24: Opus review confirmed 7, all applied (review at spec-queue/tracks/reviews/copilot-oneshot-credits-2026-10-03.md). Biggest: R3's 2**63-1 ceiling let SQLite sum() raise integer overflow on the accounting routes (re-measured); D2 ceiling now 2**53-1 for both figures, residual 1025 rows. Spec delta scoped to a successful exit, plus a MODIFIED run requirement. 0.4 ticked; OPEN rows copilot-oneshot-credits-approve and copilot-oneshot-credits-oq1. No -impl."
         },
         {
             "id": "the-shell-judge-reads-a-word-whole-impl",
@@ -82,7 +83,9 @@
         }
     ],
     "decisions_for_user": [
-        "ghcp-s5-subagent-capture"
+        "ghcp-s5-subagent-capture",
+        "copilot-oneshot-credits-approve",
+        "copilot-oneshot-credits-oq1"
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",

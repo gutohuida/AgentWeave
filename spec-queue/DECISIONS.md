@@ -20,6 +20,38 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### `a-copilot-one-shot-records-its-credits` is ready for approval -- 2026-10-03 night
+
+R1, R2 and R3 are done (iters 21-23). The adversarial Opus review
+(`spec-queue/tracks/reviews/copilot-oneshot-credits-2026-10-03.md`) confirmed seven problems, and
+all seven fixes are applied. The change's `design.md` round log lists them. No code is written.
+The change does what `copilot-oneshot-credits` (DECIDED 2026-10-02) asked for. A Copilot
+checkpoint call, and its probe, would record the AI credits and premium requests from the last
+`session.usage_checkpoint` in the one-shot's output into `worker_invocations`. Today both columns
+are NULL for every Copilot worker call. No screen shows them yet, because no route reads them
+(D5). Its code reaches `:8000`'s agents on the operator's next restart.
+
+- OPEN      copilot-oneshot-credits-approve  **Approve the change for implementation, or send it
+  back?** The decision that matters most is design D2. One shared helper reads a checkpoint's two
+  figures for both the one-shot and the Copilot run ledger. It refuses any figure that is
+  negative, boolean, non-numeric, non-finite, or above `2**53 - 1`. That last bound came from the
+  review. It found that R3's column-sized bound (`2**63 - 1`) would let one bad run checkpoint
+  make SQLite's `sum()` raise `integer overflow` on that project's accounting routes, a lasting
+  500 (measured). The new bound leaves a residual: it takes 1025 rows at the ceiling to overflow a
+  sum. The same helper also changes a **run's** behaviour. Today a malformed checkpoint makes a
+  completed Copilot run be recorded `failed` (read from the code, not driven). After the change,
+  that run's session credit total is unknown and the run stays completed. The spec delta
+  MODIFIES the run requirement to say so. Credits on a non-zero exit stay unread (D4), as no
+  failing one-shot has ever been captured. The drive (task 3.1) spends at most two Copilot
+  Free-plan calls on `:8010`.
+- OPEN      copilot-oneshot-credits-oq1  **Should `worker-spend-counts-against-the-budget`'s next
+  round gain a real task, a test and a spec-delta line for the per-`workers`-line credit sums,
+  carrying D2's sum-overflow hazard (design Open question 1, F486)?** The archived
+  `a-copilot-run-shows-its-credits` assigned those sums to that change (its D12 and task 6.4). The
+  change's own files never mention them. The recommendation is **yes**, as a real task rather
+  than a round-log note: a note is not a task, and that gap is how F486 arose. Your D7 answer on
+  that change does not affect this, because every D7 branch keeps the `workers` lines.
+
 ### `a-copilot-agent-uses-hooks-and-its-own-agents` task 1.1: the explore agent didn't dispatch as a subagent -- 2026-10-03 night
 
 - OPEN      ghcp-s5-subagent-capture  **Real capture (task 1.1, 2026-10-03) found `subagent.started`/

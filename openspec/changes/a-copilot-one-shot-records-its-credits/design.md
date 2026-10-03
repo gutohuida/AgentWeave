@@ -1,6 +1,6 @@
 # Design — a Copilot one-shot records its credits
 
-Re-verified at `957fc84` (2026-10-03, R1), `9d1f617` (R2) and `3233108` (R3). Labels follow the archived
+Re-verified at `957fc84` (2026-10-03, R1), `9d1f617` (R2), `3233108` (R3) and `0b784b1` (the Opus review). Labels follow the archived
 `a-copilot-run-shows-its-credits`: **MEASURED** is read from the capture or the code today, and
 **UNVERIFIED** has not been observed.
 
@@ -68,11 +68,15 @@ ledger replaces its whole `_Checkpoint` on each event. The two readers agree, by
 ```python
 def checkpoint_totals(data: Dict[str, Any]) -> Tuple[Optional[float], Optional[float]]:
     """(totalNanoAiu, totalPremiumRequests) of one `session.usage_checkpoint`, each through
-    `_nonneg_number`, then refused (None) unless it is at most its column's ceiling:
-    `totalNanoAiu <= 2**63 - 1` (BigInteger), `totalPremiumRequests <= sys.float_info.max`
-    (Float). The comparison is the whole check: it is False for NaN and both infinities, and
-    it never raises."""
+    `_nonneg_number`, then refused (None) unless `value <= 2**53 - 1` (the review's plausibility
+    ceiling, one constant for both figures). The comparison is the whole check: it is False
+    for NaN and both infinities, and it never raises."""
 ```
+
+*(Opus review.)* The ceiling was R3's `2**63 - 1` for `totalNanoAiu` and `sys.float_info.max`
+for `totalPremiumRequests`, the largest each column can store. That is not enough, as the next
+paragraphs explain. The comparison argument below is R3's, and it holds unchanged for the new
+constant.
 
 **One comparison, not `math.isfinite` (R3).** R2 specified `_nonneg_number`, then
 `math.isfinite`, then the bound. That helper raises. `json.loads` reads an integer literal of up
@@ -87,7 +91,7 @@ for `2**63 - 1` and `1e308` (MEASURED). That one comparison per figure replaces 
 checks. Once it has passed, `int(nano)` and `float(premium)` cannot raise either.
 
 **The 64-bit bound (R2; re-measured R3).** Both stores of this figure are `BigInteger`:
-`worker_invocations.ai_nano_aiu` (`models.py:1922`) and `turn_usage.session_nano_aiu_total`
+`worker_invocations.ai_nano_aiu` (`hub/hub/db/models.py:1922`) and `turn_usage.session_nano_aiu_total`
 (`:1300`). Python's `sqlite3` raises `OverflowError: Python int too large to convert to SQLite
 INTEGER` for `2**63` (MEASURED under `py -3.11`; `2**63 - 1` inserts). On the worker path that
 raise lands in `_record`'s catch-all, so `run_worker` still returns. But the invocation row,
@@ -102,8 +106,33 @@ PostgreSQL driver is a Hub dependency (`hub/pyproject.toml` lists `aiosqlite` on
 the Hub can reach today, and not wrong for the one it might. A
 malformed credit figure must cost only itself, so the helper refuses it, exactly as it refuses a
 negative one. The comparison is exact (`9.223372036854776e18 <= 2**63 - 1` is `False` in Python),
-so no float rounding lets one through. `totalPremiumRequests` is stored as `Float`. Its ceiling,
-`sys.float_info.max`, is what a `float()` conversion can reach.
+so no float rounding lets one through.
+
+**A row's ceiling is not its sum's (Opus review, re-measured).** A row that holds `2**63 - 1`
+can be stored, but it cannot be summed. `_aggregate_columns` runs `func.sum(TurnUsage.ai_nano_aiu)`
+(`usage_accounting.py:304`), and SQLite's integer `sum()` raises `OperationalError: integer
+overflow` once the total passes `2**63 - 1`. The review measured that through aiosqlite. This
+round measured it again with plain `sqlite3`: rows of `2**63 - 1` and `1` raise. `accounting_snapshot`
+and `conversation_usage` have no handler, and `PATCH budget` calls `accounting_snapshot`. With
+R3's ceiling, then, one near-ceiling run checkpoint would turn today's single failed finalisation
+into a 500 on that project's accounting routes, lasting until the row is removed. The sibling
+change will sum `worker_invocations.ai_nano_aiu` the same way. So the ceiling is a plausibility
+bound, `2**53 - 1`, for both figures:
+
+- It is about 9.0 million AI credits in one session. The capture's call cost 0.033 credits.
+- It is the largest integer that a float and a JavaScript number hold exactly. That matters,
+  because `recent_turns` sends the raw figure to the UI.
+- It takes 1025 rows at the ceiling to overflow a sum: 1024 sum to `9223372036854774784`, and
+  1025 raise (MEASURED this round). That is the accepted residual. It needs a thousand malformed
+  checkpoints in one project, and at the capture's cost a thousand real ones add up to about 33
+  credits.
+- `totalPremiumRequests` takes the same constant. A `Float` sum does not raise (the review
+  measured SQLite 3.45.1 returning NULL), so the reason there is simpler: no plausible premium
+  count is near `2**53`, and one constant is one rule.
+
+Python compares `2**53` and `float(2**53)` with `2**53 - 1` exactly, so both are refused
+(MEASURED). The run side's per-call `copilotUsage.totalNanoAiu` sum still goes unbounded into
+`turn_usage.ai_nano_aiu`. That is out of scope, as R3 left it (see "What each route returns").
 
 `CopilotUsageLedger.observe_event` builds its `_Checkpoint` from it, and `parse_copilot_envelope`
 calls it. The adapter imports `copilot_usage` at module level. That stays clear of `hub.db` and
@@ -132,10 +161,14 @@ diagnostic structure (`promptCacheBreakState`) that nothing in the Hub reads, an
 does not read it for runs either. And filling `input_tokens` while `output_tokens` and
 `total_tokens` stay NULL would put a partial figure into a row that `worker-spend-counts-against-the-budget`
 will sum into a budget, under-counting while looking measured. *(R3, re-derived from the
-sibling's own text.)* That sibling's rule forms `total_tokens` as `COALESCE(input,0)+…` wherever
-`input_tokens` **or** `output_tokens` is not null
-(`worker-spend-counts-against-the-budget/design.md:39-43`). So an `input_tokens`-only Copilot row
-would be counted as a measured total of exactly the prompt, not left unknown. The refusal is what
+sibling's own text; citation corrected by the Opus review.)* R3 cited the sibling's
+`design.md:39-43`, but that is migration `0106`'s one-time backfill, and it covers only
+`cli='claude'` and `cli='codex'`. The rule that would apply to a new Copilot row is the sibling's
+forward rule (its D1, `design.md:26`). That rule forms the total with
+`runner_parsing._accounting_from_dimensions(raw_usage, source="worker", …)`, and the review
+measured `_accounting_from_dimensions({'input_tokens': 1612}, source='worker')` → `(1612, None,
+1612)`. So an `input_tokens`-only Copilot row would be counted as a measured total of exactly the
+prompt, not left unknown. The refusal is what
 keeps the sibling's own "unknown, never zero" rule true for Copilot. The decision row asked for
 credits. Whether worker token accounting for Copilot should use it is that sibling's question. It
 is noted in D5.
@@ -149,6 +182,13 @@ is noted in D5.
 | no assistant message, checkpoint | error, empty usage | error, **credits** |
 | no checkpoint | empty usage | empty usage (unchanged) |
 | process exited non-zero | stdout not parsed (`worker.py:432-438`) | **unchanged** |
+| timed out, or failed to spawn | no stdout captured (`worker.py:249`, `:251`) | **unchanged** |
+
+*(Opus review.)* The spec delta's requirement now names only a call *"whose process exited
+successfully"*. As R3 left it, it covered any call whose output carried a checkpoint, and a
+non-zero exit's stdout can carry one. That would have required what this section deliberately
+leaves out. A scenario now says that a non-zero, timed-out or unspawned call records both
+figures as unknown.
 
 The parser computes the usage once and returns it on every exit. `_interpret` already passes
 `usage` into the `unparseable` result when there is an envelope error, so the row receives it with
@@ -164,8 +204,8 @@ If a future capture shows a charged non-zero exit, that is its own finding.
 
 The rule *"also ask what each route returns"* gives an uncomfortable answer here: **no route
 returns these figures.** `GET /accounting` aggregates `turn_usage` only (`usage_accounting.py:304-305`,
-`_aggregate_columns`). The only `WorkerInvocation` readers are `api/v1/checkpoints.py:106` and
-`:207`, and both read `.error`. After this change, a Copilot checkpoint's credits are in the
+`_aggregate_columns`). The only `WorkerInvocation` readers are `api/v1/checkpoints.py:107` and
+`:208`, and both read `.error`. After this change, a Copilot checkpoint's credits are in the
 database and on no screen.
 
 That is still what the decision asked for. The row is the durable record, and leaving it NULL loses
@@ -227,7 +267,7 @@ infers.
   inserted would not raise out of `run_worker`, but it would silently cost the operator the whole
   audit row. *(R3: R2 understated the run side.)* Today the run side is worse off.
   `finish()` → `settle_copilot_credits` → `stored_total = checkpoint_total` →
-  `record_turn_usage`'s `flush()` (`agent_trigger.py:3985`) runs inside the RPC executor's
+  `record_turn_usage`'s `flush()` (`hub/hub/api/v1/agent_trigger.py:3985`) runs inside the RPC executor's
   finalising session. That session already set `run.status = final_status` (`:3954`) and has
   not yet committed (`:4018`). The `OverflowError` therefore rolls back the whole finalisation
   and reaches the executor's catch-all (`:4093`), and `_record_run_failure_tail` relabels the
@@ -257,34 +297,42 @@ infers.
    parser).
 3. **Last checkpoint wins.** Two checkpoint lines, `(10, 1)` then `(25, 2)`, give `(25, 2.0)`, not
    `(35, 3)` and not `(10, 1)`. The ordering is the capture's (checkpoint after `assistant.message`),
-   and the test fails if the parser takes the first checkpoint instead.
+   and the test fails if the parser takes the first checkpoint instead. *(Opus review.)* A second
+   case pins D1's "a later checkpoint without a figure": `(10, 1)` then `(-1, 2)` give
+   `(None, 2.0)`. Without it, an implementation that kept the last *good* value per field would
+   pass every test.
 4. **Credits on error exits.** The capture with its `assistant.message` replaced by a
    `session.error` line gives an error and `(32_840_000, 1.0)`. The capture with the
    `assistant.message` removed gives "no assistant message" and the same credits. Both fail today.
 5. **A bad figure is unknown, field by field.** `totalNanoAiu: -1` with `totalPremiumRequests: 1`
-   gives `(None, 1.0)`. `true` gives None. A string gives None.
+   gives `(None, 1.0)`. `true` gives None. A string gives None. It fails today: today's parser
+   returns empty usage, so the valid `1.0` is missing too (`(None, None)`, measured by the Opus
+   review; R1-R3 called it a guard that passes today).
 6. **Non-finite, and too large to store.** `totalNanoAiu: Infinity` gives None, and so do `NaN` and
    `1e400` (*R2*). `totalPremiumRequests: NaN` gives None. *(R3.)* So does a 400-digit integer
    literal, in either field: `"totalPremiumRequests": 1` followed by 400 zeros, with a valid
    `totalNanoAiu`, gives `(32_840_000, None)`. The same literal as `totalNanoAiu` gives
    `(None, 1.0)`. This fails with `OverflowError` if the helper calls `math.isfinite` or `float`
-   before its ceiling. `parse_copilot_envelope` does not raise. Today's parser ignores the
-   checkpoint, so this test passes today. It is a guard on the new conversion, and it fails (with
-   `OverflowError` or `ValueError`) if the ceiling comparison is removed. Also, for the ledger,
+   before its ceiling. `parse_copilot_envelope` does not raise. *(Opus review.)* This fails
+   today, because today's parser returns no figure at all, so the valid one is missing. R3 said
+   it passed today. It also fails (with `OverflowError` or `ValueError`) if the ceiling
+   comparison is removed. Also, for the ledger,
    one `assistant.usage` call with tokens, then
    `observe_event("session.usage_checkpoint", {"totalNanoAiu": inf, "totalPremiumRequests": 1})`,
    then `finish()`, gives `session_nano_aiu_total is None`, `session_premium_requests_total == 1`,
    and the call's tokens. This fails today: the catch-all's sample carries no tokens. *(R3.)*
-   The same with `totalNanoAiu: 2**63` gives `session_nano_aiu_total is None`. That passes
-   today (the int converts), so it is a guard on the bound for the run side, whose unguarded
-   failure is the relabel described in "What each route returns".
-   *(R2.)* The 64-bit bound gets two cases. `checkpoint_totals({"totalNanoAiu": 2**63,
-   "totalPremiumRequests": 1})` gives `(None, 1)`, and `2**63 - 1` is kept. Then through
-   `run_worker` (test 2's setup, with the checkpoint's `totalNanoAiu` edited to `2**63`), exactly
-   one `worker_invocations` row is written, with `ai_nano_aiu is None`, `premium_requests == 1.0`
-   and `outcome == "ok"`. It passes today, because the parser ignores the checkpoint. It fails if
-   2.2 lands without 2.1's bound: the row is lost to the measured `OverflowError` and the test
-   finds zero rows. So it is a guard on the bound.
+   The same with `totalNanoAiu: 2**63` gives `session_nano_aiu_total is None`. It fails today:
+   the ledger keeps `9223372036854775808`, as the Opus review measured (R3 said it passed). It
+   is also the guard on the bound for the run side, whose unguarded failure is the relabel
+   described in "What each route returns".
+   *(R2; ceiling moved by the Opus review.)* The ceiling gets these cases.
+   `checkpoint_totals({"totalNanoAiu": 2**53, "totalPremiumRequests": 1})` gives `(None, 1)`,
+   `2**53 - 1` is kept, and `float(2**53)` is refused. Then through `run_worker` (test 2's setup,
+   with the checkpoint's `totalNanoAiu` edited to `2**63`), exactly one `worker_invocations` row
+   is written, with `ai_nano_aiu is None`, `premium_requests == 1.0` and `outcome == "ok"`. It
+   fails today: the parser reads no checkpoint, so `premium_requests` is NULL. (R2 and R3 said it
+   passed.) It also fails if 2.2 lands without 2.1's bound, because the row is lost to the measured
+   `OverflowError` and the test finds zero rows.
 7. **The run ledger is unchanged otherwise.** The existing `copilot_usage` tests pass untouched.
    This is the control: D2 moved the rule and did not change it.
 8. **The import restriction.** `test_runner_adapters_imports.py` passes with the module-level
@@ -302,9 +350,15 @@ tokens (design D3)"*.
    Options: (a) add a task, a test and a delta line to that change in its next round (it is still
    unapproved: its `0.3`, the operator's D7 answer, is open). (b) Put the sums in this change, ahead
    of the `workers` lines existing, which is impossible because there is no line to sum into. (c)
-   Do nothing and let it be rediscovered. **Recommendation: (a)**, done as a note in that change's
-   round log, not by this change carrying it. A change must never be carried in two places.
-   Recorded as finding **F486**.
+   Do nothing and let it be rediscovered. Option (b) is listed for completeness: it is not
+   really available. **Recommendation: (a), as a real task, a test and a spec-delta line in
+   that change's next round.** A round-log note is not enough *(Opus review)*: a note is not a
+   task, and that gap is exactly how F486 arose. This change does not carry it, because a
+   change must never be carried in two places. The sibling's task should also carry D2's
+   sum-overflow hazard, since it will `sum()` `worker_invocations.ai_nano_aiu`. What the
+   operator decides is only whether the sibling's next round gains that task. Their D7 answer
+   does not affect it, because every D7 branch keeps the `workers` lines (the sibling's
+   `design.md:5-6`). Recorded as finding **F486**.
 2. **Should a later capture be taken under BYOK and on a paid plan?** Both would turn D6's and
    D1's UNVERIFIED items into measurements. Neither blocks this change, since the parser records
    what the stream says. This is the operator's call because it spends credits (the Free plan's
@@ -351,7 +405,7 @@ tokens (design D3)"*.
   `value <= sys.float_info.max` never raise and are False for `nan`, `inf` and `10**400`.
   Measured `2**63` through `create_async_engine("sqlite+aiosqlite://")` into a `BigInteger`:
   the builtin `OverflowError`, not a `DBAPIError`. Read `settle_copilot_credits`,
-  `record_turn_usage`, the RPC executor's finalising session (`agent_trigger.py:3951-4018`) and its
+  `record_turn_usage`, the RPC executor's finalising session (`hub/hub/api/v1/agent_trigger.py:3951-4018`) and its
   catch-all (`:4093`), the checkpoint route and the two other `generate_checkpoint` callers, the
   titler's catch-all, `engine.py` and `hub/pyproject.toml`'s drivers, and
   `worker-spend-counts-against-the-budget`'s backfill rule. **Changed:** (1) **R2's helper
@@ -371,3 +425,29 @@ tokens (design D3)"*.
   PostgreSQL driver is a Hub dependency. D3's refusal of `prompt_tokens` holds, and it is now
   sharper: the sibling's `COALESCE` rule would count an input-only row as a measured total. D1,
   D4, D5 and D6 are unchanged.
+- **Adversarial Opus review, 2026-10-03 night (iter 24).** An Opus subagent re-derived the change
+  at `0b784b1` and measured under `py -3.11`. It found **seven problems**, all applied. (1) **The
+  ceiling was a row's, not its sum's.** `func.sum` over `turn_usage.ai_nano_aiu` raises
+  `integer overflow` once one near-`2**63 - 1` row meets any other, and the accounting routes
+  have no handler. So R3's bound would have turned a failed finalisation into a lasting 500
+  (this round re-measured it with plain `sqlite3`). D2's ceiling is now `2**53 - 1` for both
+  figures, and the residual is 1025 rows at the ceiling (MEASURED). (2) **Five "passes today"
+  labels were wrong.** Tests 5 and 6 (the 400-digit case, the ledger's `2**63`, and the bound's
+  row) all fail today, because today's parser returns empty usage and the ledger keeps `2**63`.
+  The labels in design and in tasks 1.1/1.3 are corrected. (3) **The spec delta required what D4
+  leaves out.** It covered any call whose output carried a checkpoint, including a non-zero
+  exit. It is now scoped to a process that exited successfully, with a scenario for non-zero,
+  timeout and spawn failure, and the timeout row is added to D4's table. (4) **The run side
+  changed with no spec delta.** The delta now MODIFIES the run requirement (non-numeric, boolean,
+  non-finite or above `2**53 - 1` is ignored, and does not fail the run or lose its tokens), with
+  a scenario. (5) **No test pinned D1's later-unusable-checkpoint rule.** Test 3 gains `(10, 1)`
+  then `(-1, 2)` → `(None, 2.0)`, and the delta gains a scenario. (6) **D3 cited the wrong rule.**
+  `design.md:39-43` is migration `0106`'s claude/codex backfill. The forward rule is the sibling's
+  D1, via `_accounting_from_dimensions` (`{'input_tokens': 1612}` → `(1612, None, 1612)`). The
+  conclusion holds. (7) **File references** corrected: `checkpoints.py:107`/`:208`,
+  `hub/hub/db/models.py`, `hub/hub/api/v1/agent_trigger.py`. Open question 1's recommendation is
+  now a real task, a test and a delta line in the sibling, with the sum-overflow hazard, not a
+  round-log note. **Survived:** the comparison never raises for any `json.loads` value (all types,
+  4300-digit ints, `-0.0`). `Float` stores up to the float maximum. R3's relabel-to-failed trace
+  holds line by line, and nothing guards it today. D1, D4 and the import claim hold. `--strict`
+  passed. The review is kept at `spec-queue/tracks/reviews/copilot-oneshot-credits-2026-10-03.md`.
