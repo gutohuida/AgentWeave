@@ -3277,7 +3277,16 @@ def approve_tool_call(
         else:
             decision = _ask_operator(tool_name, tool_input, tool_use_id)
     else:
-        decision = _decide(tool_name, tool_input)
+        try:
+            decision = _decide(tool_name, tool_input)
+        except Exception as exc:  # noqa: BLE001 - D6: fail closed, visibly, on any judge failure
+            decision = {
+                "allow": False,
+                "reason": (
+                    f"the workspace check failed on this call ({type(exc).__name__}); "
+                    "ask the operator with ask_user"
+                ),
+            }
     _report_decision(tool_name, decision, tool_use_id)
     if decision["allow"]:
         return json.dumps({"behavior": "allow", "updatedInput": input})

@@ -1000,3 +1000,31 @@ def test_a_globstar_walk_does_not_descend_through_a_link_cycle_1_6(tmp_path, mon
 
     cycle = _decide("Bash", {"command": "bash -O globstar -c 'ls **/x'"})
     assert cycle["allow"] is True
+
+
+def test_approve_tool_call_denies_and_reports_when_the_judge_raises_1_6(workspace, monkeypatch):
+    """Task 1.6, design D6: a raise from `_decide` must not reach FastMCP as a tool error.
+
+    Today the exception propagates out of `approve_tool_call` with no reason given to the model
+    and no call to `_report_decision`. This asserts the fix: a reported deny naming the failure.
+    """
+    import json
+
+    from hub import mcp_server
+
+    def explode(*_a, **_k):
+        raise RecursionError("boom")
+
+    monkeypatch.setattr(mcp_server, "_decide", explode)
+    reported = []
+    monkeypatch.setattr(mcp_server, "_report_decision", lambda *a, **k: reported.append((a, k)))
+
+    answer = json.loads(mcp_server.approve_tool_call("Bash", {"command": "ls"}, "tu-1"))
+
+    assert answer["behavior"] == "deny"
+    assert "RecursionError" in answer["message"]
+    assert reported, "a judge failure must still be reported like any other refusal"
+    reported_tool_name, reported_decision, _ = reported[0][0]
+    assert reported_tool_name == "Bash"
+    assert reported_decision["allow"] is False
+    assert "RecursionError" in reported_decision["reason"]

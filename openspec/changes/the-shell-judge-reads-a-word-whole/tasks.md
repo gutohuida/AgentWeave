@@ -195,6 +195,32 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   `approve_tool_call`'s D6 catch are all still unbuilt, exactly as the iteration-17 note above left
   them.
 
+  **Iteration 34 (partial, the D6 row only).** Built design D6: `approve_tool_call`'s workspace-posture
+  branch now wraps the `_decide` call in `try/except Exception`, answering `{"allow": False,
+  "reason": "the workspace check failed on this call (<exception class name>); ask the operator
+  with ask_user"}` and still routing that decision through `_report_decision` like any other
+  refusal. Matches design D6's exact wording. The operator-posture branch (`_ask_operator`) is
+  untouched, per D6's own note that it must not be wrapped here (that path catches its own verdict
+  failure in the sibling change). Added
+  `test_approve_tool_call_denies_and_reports_when_the_judge_raises_1_6` to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`: monkeypatches `mcp_server._decide` to
+  raise `RecursionError`, monkeypatches `_report_decision` to record its call, and asserts the
+  JSON answer is `behavior: deny` naming `RecursionError`, and that the reported decision is also
+  `allow: False` naming `RecursionError`. Mutation-checked (`git stash` just `mcp_server.py`):
+  exactly this one new test fails (the raise propagates uncaught), the other 106 rows in the file
+  pass unchanged. `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 107
+  passed (was 106, +1). Broader regression set (`test_permission_approver.py`,
+  `test_hub_own_call.py`, `test_copilot_acp_decide.py`,
+  `test_a_write_outside_the_workspace_is_recorded.py`): 626 passed, 2 skipped, no regressions.
+  `py -3.11 -m pytest tests/ -q` (CLI suite, per CLAUDE.md -- a `tasks.md` edit can break it): 565
+  passed, 3 skipped. `ruff check` on both changed files: clean. `black --check --target-version
+  py311` on the test file needed one reformat, applied, then clean. `mypy hub/hub/mcp_server.py`:
+  the same pre-existing `approve_tool_call` no-return-annotation gap only (deliberate, D6's own
+  note: FastMCP would derive `structuredContent` from one and silently defeat an `allow`). `git
+  diff --stat`: exactly `hub/hub/mcp_server.py`, the one test file, and this task file. **Only the
+  D6 row is ticked by this iteration's own evidence; task 1.6 as a whole stays unticked**: the
+  extglob/backslash-run rows and the memo key's colon flag (R6) remain separate, unbuilt residuals.
+
   **Iteration 32 (partial, the two listing-memo rows only -- line 151 and line 155).** Task 2.1c's
   own iteration (iter 31, this window) built `_Budget.list_directory`, keyed by the resolved
   directory, used by both `_glob_links` and `_globstar_walk`. Re-derived both rows fresh against
