@@ -1177,6 +1177,36 @@ _SUBSTITUTION = "$(…)"
 _LITERAL_DOLLAR = "\ue024"
 _MAX_NESTING = 8
 
+# D2 (F401): a bare reference to a variable the shell, the host or the platform sets for every
+# process, whose value is one directory, is uncheckable by itself. Matched at the start of rule
+# 4's `value` (task 1.4's base list only; the extended spelling table is task 1.4b and after).
+# `\{?` reaches the brace form (`_words` trims the closing `}`, so `${HOME}` arrives as `${HOME`),
+# and the lookahead -- "not followed by a name character" -- is what leaves `$HOMEDIR` alone while
+# still refusing `$HOME.bak` and `$PWD..`, siblings of home and of the workspace (R2).
+_DIRECTORY_VARIABLE_NAMES = {
+    "bash": ("HOME", "OLDPWD", "TMP", "PWD"),
+    "powershell_env": ("USERPROFILE", "TEMP"),
+    "powershell_auto": ("HOME",),
+}
+_DIRECTORY_VARIABLE_RE = {
+    "bash": re.compile(
+        "^[$" + _LITERAL_DOLLAR + "]\\{?(?:" + "|".join(_DIRECTORY_VARIABLE_NAMES["bash"]) + ")"
+        "(?![A-Za-z0-9_])"
+    ),
+    "powershell": re.compile(
+        "(?i)^[$"
+        + _LITERAL_DOLLAR
+        + "]\\{?(?:env:(?:"
+        + "|".join(_DIRECTORY_VARIABLE_NAMES["powershell_env"])
+        + ")|(?:"
+        + "|".join(_DIRECTORY_VARIABLE_NAMES["powershell_auto"])
+        + "))(?![A-Za-z0-9_])"
+    ),
+}
+# The `%NAME%` form (a nested `cmd`) is read in either dialect, the same way rule 3's `_expands`
+# already treats it as an expansion regardless of dialect.
+_CMD_DIRECTORY_VARIABLE_NAMES = {"USERPROFILE"}
+
 # D1: an unquoted, unescaped `{`, `,` and `}` in bash, marked so `_expand_braces` can tell one
 # from a literal character the lexer already rendered plain (a quoted or escaped one, or one
 # inside a `${...}` parameter expansion). Never produced for the PowerShell dialect: `{...}` is a
@@ -1327,6 +1357,29 @@ def _expands(text: str) -> bool:
     )
 
 
+def _directory_variable_reference(value: str, dialect: str) -> bool:
+    """Whether `value` opens with a bare reference to a directory variable (D2, F401): the
+    dialect's own spelling, or a `%NAME%` form read in either dialect, each not followed by a name
+    character."""
+    if _DIRECTORY_VARIABLE_RE[dialect].match(value):
+        return True
+    match = _CMD_VARIABLE_RE.match(value)
+    if match and match.group()[1:-1].upper() in _CMD_DIRECTORY_VARIABLE_NAMES:
+        tail = value[match.end() :]
+        return not tail[:1].isalnum() and tail[:1] != "_"
+    return False
+
+
+def _first_expansion_start(value: str) -> int:
+    """The index of the first mark `_expands` would count as an expansion in `value`, or -1 when
+    there is none (design D3)."""
+    starts = [index for index in (value.find("$"), value.find(_LITERAL_DOLLAR)) if index >= 0]
+    match = _CMD_VARIABLE_RE.search(value)
+    if match:
+        starts.append(match.start())
+    return min(starts) if starts else -1
+
+
 def _effective_port(parts: urllib.parse.SplitResult) -> Optional[int]:
     return parts.port if parts.port is not None else _DEFAULT_PORTS.get(parts.scheme.lower())
 
@@ -1433,6 +1486,11 @@ def _judge_word(
             glued = _GLUED_OPTION_RE.match(word)
             if glued:
                 value = word[glued.end() :]
+        if _directory_variable_reference(value, dialect):  # D2 (F401)
+            return _refuse(word, _UNCHECKED)
+        expansion_start = _first_expansion_start(value)
+        if expansion_start >= 0 and value[:expansion_start] == "..":  # D3 (F401)
+            return _refuse(word, _UNCHECKED)
         if value.partition("\x00")[0] == "..":
             return _judge_path("..", root, word, argument, continues)
         return None

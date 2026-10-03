@@ -21,11 +21,38 @@
 - [ ] 1.3 F402 `Temp:`: PowerShell `Copy-Item x Temp:` refused as outside, with `TMP`/`TEMP` monkeypatched to a directory outside the workspace; FAILS today. (R6, design D1) In the bash reading `temp:` stays an ordinary word, with `_DRIVE_LETTERS` monkeypatched True and the same `TMP`/`TEMP`: Bash `cat <<'EOF'` / `temp: 5` / `EOF` is allowed (FAILS against R5, which kept the colon in bash on a drive-letter host), and Bash `pwsh -c 'Copy-Item x Temp:'` is allowed (the named residual, asserted so a change of mind is visible)
 
   **Not attempted, flagged only (inferred from the design text, not measured).** The row's own wording monkeypatches `_DRIVE_LETTERS`, a symbol that does not exist in `hub/hub/mcp_server.py` today (confirmed by `grep`, same gap as task 1.1). Same block as 1.1; leave for whoever builds D9.
-- [ ] 1.4 F401, refused as uncheckable (the reason contains "cannot be checked", not "outside"). Each FAILS today:
+- [x] 1.4 F401, refused as uncheckable (the reason contains "cannot be checked", not "outside"). Each FAILS today:
   - Bash: `cp notes.md $HOME`, `"$HOME"`, `${HOME}`, `$OLDPWD`, `$TMP`, `--target-directory=$HOME`, `cp x %USERPROFILE%`.
   - PowerShell: `Copy-Item x $HOME`, `$env:USERPROFILE`, `$ENV:temp`, `-Destination:$HOME`.
   - Bash: `cp notes.md ..$x` and `..$(echo)`.
   - (R2) Bash: `cp x $HOME.bak`, `cp x $PWD..`, `cp x ${HOME-y}`.
+
+  **Built.** Measured each row directly against `_decide` before touching production code (all 16
+  were `allow=True` today, matching the claim). Added rows `1.4a`, `1.4g`-`1.4u` to `_TABLE` in
+  `hub/tests/test_permission_approver.py` (letters `b`-`f` skipped: tasks.md reserves them for
+  1.4b-1.4f, the extended-spellings/colon-after/inner-shell/`..`-survives/link families, each its
+  own later task). Added the minimal D2 and D3 checks to rule 4 in `hub/hub/mcp_server.py`
+  (`_directory_variable_reference`, `_first_expansion_start`, and the `_DIRECTORY_VARIABLE_RE`/
+  `_CMD_DIRECTORY_VARIABLE_NAMES` tables), with only the names task 1.4's own rows exercise (bash
+  `HOME`/`OLDPWD`/`TMP`/`PWD`, PowerShell `HOME` bare and `USERPROFILE`/`TEMP` via `env:`, and
+  `%USERPROFILE%` either dialect) -- the rest of D2's spelling table is 1.4b's own measurement, not
+  assumed here.
+
+  **A side effect, not in the task's own list:** the fix also changes two pre-existing rows,
+  `X2p`/`X3p`, on the non-Windows branch of `_BACKSLASH_ROWS` (`type %USERPROFILE%\x` and
+  `Get-Content $env:USERPROFILE\x`, PowerShell tool). On POSIX `\` is not a separator, so these
+  reach rule 4 rather than rule 3, and now correctly refuse by D2 -- the same verdict the Windows
+  branch already reached by a different rule (rule 3, where `\` is a separator). Verified by
+  monkeypatching `mcp_server._SEPARATORS` to `"/"` on this Windows machine to simulate the POSIX
+  reading directly against `_decide`, since the real POSIX branch cannot run here; updated both
+  rows from `True` to `False`/`_UNCHECKED`.
+
+  **Mutation check:** `git stash`-ed `hub/hub/mcp_server.py` only; all 16 new rows failed (allowed)
+  without the fix, confirming each measures real behaviour; restored and reconfirmed green.
+  `py -3.11 -m pytest hub/tests/test_permission_approver.py -q`: 321 passed, 1 skipped (up from
+  305; +16 rows). `ruff check`: clean. `black --check --target-version py311`: required one
+  reformat of the test file (the new rows' line wrapping); reapplied and reconfirmed clean, still
+  321 passed.
 - [ ] 1.4b (R4, the extended list and spellings), refused as uncheckable. Each FAILS today (allowed; measured for most at `b7d976a`) and FAILS against the R3 design (not on its list, or its PowerShell regex does not match):
   - Bash: `cp n $HOMEPATH`, `cp n $HOMEDRIVE$HOMEPATH`, `cp n $PUBLIC`, `cp n $OneDrive`, `cp n $ONEDRIVE`, `cp n $ProgramData`, `cp n $ALLUSERSPROFILE`, `cp n $SYSTEMROOT`, `cp n $windir`, `cp n $PROGRAMFILES`, `cp n $XDG_CONFIG_HOME`, `cp n $XDG_RUNTIME_DIR`.
   - PowerShell: `Copy-Item x ${env:TEMP}`, `${HOME}`, `$variable:HOME`, `$global:HOME`, `$script:PWD`, `$PROFILE`, `$PSHOME`, `${env:ProgramFiles(x86)}`.

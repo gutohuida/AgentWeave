@@ -412,6 +412,29 @@ _TABLE = [
             sys.platform != "win32", reason="drive letters are a Windows concept"
         ),
     ),
+    # a-drive-or-a-home-variable-names-a-directory-by-itself, task 1.4: F401, a bare reference to a
+    # directory variable (D2) or a `..` that survives an expansion (D3) is uncheckable, not outside
+    # -- the shell may put any value there. IDs skip 1.4b-1.4f: each names a separate, later task
+    # (the extended spelling list, the colon-after form, the inner-shell reading, the `..`-survives
+    # family, and the link/glob family). Each row FAILS today (allowed).
+    _row("1.4a", "cp notes.md $HOME", False, _UNCHECKED),
+    _row("1.4g", 'cp notes.md "$HOME"', False, _UNCHECKED),
+    _row("1.4h", "cp notes.md ${HOME}", False, _UNCHECKED),
+    _row("1.4i", "cp notes.md $OLDPWD", False, _UNCHECKED),
+    _row("1.4j", "cp notes.md $TMP", False, _UNCHECKED),
+    _row("1.4k", "cp notes.md --target-directory=$HOME", False, _UNCHECKED),
+    _row("1.4l", "cp notes.md %USERPROFILE%", False, _UNCHECKED),
+    _row("1.4m", "Copy-Item x $HOME", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4n", "Copy-Item x $env:USERPROFILE", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4o", "Copy-Item x $ENV:temp", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4p", "Copy-Item x -Destination:$HOME", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4q", "cp notes.md ..$x", False, _UNCHECKED),
+    _row("1.4r", "cp notes.md ..$(echo)", False, _UNCHECKED),
+    # (R2) a reference not followed by a name character is still refused -- `$HOME.bak` and
+    # `$PWD..` are siblings of home and of the workspace, not home or the workspace themselves.
+    _row("1.4s", "cp x $HOME.bak", False, _UNCHECKED),
+    _row("1.4t", "cp x $PWD..", False, _UNCHECKED),
+    _row("1.4u", "cp x ${HOME-y}", False, _UNCHECKED),
 ]
 
 # Windows reads `\` as a separator, so these rows moved there. On POSIX, where `\` is an ordinary
@@ -449,8 +472,12 @@ _BACKSLASH_ROWS = (
     else [
         _row("X1b", r'echo hi > "..\stray.txt"', True),
         _row("X1c", r"echo hi > ..\stray.txt", True, tool="PowerShell"),
-        _row("X2p", r"type %USERPROFILE%\x", True, tool="PowerShell"),
-        _row("X3p", r"Get-Content $env:USERPROFILE\x", True, tool="PowerShell"),
+        # D2 (a-drive-or-a-home-variable-names-a-directory-by-itself): on POSIX `\` is not a
+        # separator, so rule 4 (not rule 3's `_expands`) decides these, and now refuses the
+        # directory-variable reference it opens with -- the same verdict the Windows branch above
+        # already reaches, by a different rule. Each used to PASS (allowed); now FAILS against D2.
+        _row("X2p", r"type %USERPROFILE%\x", False, _UNCHECKED, tool="PowerShell"),
+        _row("X3p", r"Get-Content $env:USERPROFILE\x", False, _UNCHECKED, tool="PowerShell"),
         _row("Z1", r'sort -o"..\stray.txt" notes.md', True),
         _row("Z2", r'curl -o"..\out" http://127.0.0.1:8016/api', True),
         _row("Z3", r'gcc -I"sub\include" x.c', True),
