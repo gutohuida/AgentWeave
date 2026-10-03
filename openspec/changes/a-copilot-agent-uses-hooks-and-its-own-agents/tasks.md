@@ -783,7 +783,6 @@ scratch copy (DEAD-ENDS 2026-09-27).
   - `py -3.11 -m pytest tests/ -q`
   - `py -3.11 -m pytest hub/tests/ -q`
   - `cd hub/ui && npm run lint && npx vitest run`
-
   All green.
   **Done 2026-10-03 (night iter 12).** `ruff check` clean; `black --check --target-version py311`
   clean (689 files unchanged); `mypy src/` clean (22 files). `pytest tests/ -q`: 565 passed, 3
