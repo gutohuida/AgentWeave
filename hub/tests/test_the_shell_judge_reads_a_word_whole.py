@@ -885,3 +885,53 @@ def test_a_dot_leading_glob_is_also_matched_against_the_link_it_finds_2_1c(works
     literal_dotdot = _decide("Bash", {"command": "ls sub/l*/../x"})
     assert literal_dotdot["allow"] is False
     assert "it resolves to" in literal_dotdot["reason"]
+
+
+# 2.1c (1.4d): design D8 step 2/step 4's own globstar rule, built this iteration. Before this,
+# `**` was read as a plain `*` unconditionally (`fnmatch` does not tell the two apart on its own),
+# so a glob matched only one directory level no matter what the command named. Measured directly
+# against `_decide` first (a throwaway script, not committed): `bash -O globstar -c 'ls
+# sub/**/x'`, with `sub/deep/l` a link out two levels below `sub`, was wrongly **allowed** (the
+# single-level match found only `sub/deep`, never listed `l`). Confirmed by `git stash`ing just
+# `mcp_server.py` and rerunning: reverts to allowed. The pattern starts at `sub/`, not at the top
+# level, because a top-level `**` would also match the shared fixture's own `up` link and be
+# refused either way (design 1.4d's own note) -- naming `sub/` isolates the globstar rule itself.
+def test_a_globstar_walk_also_matches_a_link_several_levels_down_1_4d(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    sub = workspace / "sub"
+    deep = sub / "deep"
+    deep.mkdir()
+    _link(deep / "l", workspace.parent / "outside")
+
+    with_globstar = _decide("Bash", {"command": "bash -O globstar -c 'ls sub/**/x'"})
+    assert with_globstar["allow"] is False
+    assert "it resolves to" in with_globstar["reason"]
+
+    # The named residual (task 1.4d): without `globstar`, `**` stays a one-level `*`, so the link
+    # two levels down is never reached, and the command stays allowed.
+    without_globstar = _decide("Bash", {"command": "ls sub/**/x"})
+    assert without_globstar["allow"] is True
+
+
+# 1.6's own link-cycle row: design D8 step 4's "(R5) a `**` walk under `globstar` does not
+# descend through a link" rule. A minimal workspace holding only a link `loop` -> the workspace
+# root (no link out, so nothing else refuses first, per the design's own framing of this row) --
+# the shared `workspace` fixture is not used here, because its own `up` link would refuse the
+# top-level `**` first and never exercise the cycle guard. Measured directly against `_decide`
+# first: before `_globstar_walk` existed, `**` was a one-level `*`, so this command was wrongly
+# allowed with nothing ever hanging; building the recursive walk with the stop-at-a-link `continue`
+# removed (a throwaway monkeypatch, not committed) recursed on this exact fixture until Python's
+# own call-stack limit raised `RecursionError` -- confirming the guard is load-bearing (the real
+# function recurses, rather than looping, so without the guard it is a stack overflow rather than a
+# true infinite loop, but the underlying defect -- no termination on a link cycle -- is the same
+# one design D8 step 4 names) -- before restoring the guard.
+def test_a_globstar_walk_does_not_descend_through_a_link_cycle_1_6(tmp_path, monkeypatch):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    _link(ws / "loop", ws)
+    monkeypatch.setenv("AW_WORKSPACE_DIR", str(ws))
+    monkeypatch.setenv("HUB_URL", _HUB)
+    monkeypatch.delenv("AW_RUN_TOKEN", raising=False)
+
+    cycle = _decide("Bash", {"command": "bash -O globstar -c 'ls **/x'"})
+    assert cycle["allow"] is True

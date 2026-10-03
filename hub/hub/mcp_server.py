@@ -1385,6 +1385,11 @@ def _resolves_elsewhere(absolute: str, resolved: str) -> str:
 _GLOB_CHARS = "*?["
 _SEPARATOR_RE = re.compile(f"([{re.escape(_SEPARATORS)}])")
 
+# D8 step 2, step 4 (R5): whether the command names the `globstar` shell option, read once per
+# `_decide` from the whole command text (design: "so that the memo below cannot hold a result from
+# a nested text read under different flags") -- not re-derived for a nested substitution's own text.
+_GLOBSTAR_RE = re.compile(r"\bglobstar\b")
+
 # D3, extglob: one of `@ ? * + !` directly followed by `(`, up to its matching `)`, with nesting
 # counted -- an unbalanced `(` is not a group. `(`, `|` and `@` inside a group are glob syntax, not
 # piece breaks or curl `name@file` glue, so D2 step 2 must not split there, and the group's
@@ -1679,11 +1684,23 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
     larger than the bound cannot be materialized into memory first and counted after. The literal
     tail walk lists nothing, so it adds no further charge.
 
-    A piece holding more than one glob-holding component, an extglob group, or a `**` under
-    `globstar`, is left to a further slice of this same task (the globstar-does-not-descend-
-    through-a-link rule) -- this returns None for those rather than guess. The bash dot rule (D8
-    step 2, "a name beginning with `.` matches only when the component does too") is also left to
-    that slice: skipping it only widens what matches, which the design allows
+    **(D8 step 2, step 4; R5) A component that is exactly `**`, when `budget.globstar_named` says
+    the command names `globstar`, is walked recursively** by `_globstar_walk` rather than matched
+    as one `fnmatch` component: it stands for zero or more directory levels, so the tail is first
+    tried straight from the base (the zero-levels reading), then `_globstar_walk` lists the base
+    and, for every entry found at any depth, tries the tail from there too. **A `**` walk does not
+    descend through a link**: a matched entry that is itself a link is judged (as any matched link
+    is) and the tail is tried from where it resolves, but the walk does not then list the link's
+    own target for further `**` matches -- without this, a link whose target reaches it again
+    (`loop` -> the workspace itself) would recurse without end, since a real directory tree with no
+    link in it cannot cycle back to an ancestor. When `budget.globstar_named` is false, or the
+    component is `**` beside other characters (`a**b`), `**` is read as `*` (fnmatch does not
+    tell the two apart), one level, as it already was before this was built.
+
+    A piece holding more than one glob-holding component, or an extglob group, is left to a
+    further slice of this same task -- this returns None for those rather than guess. The bash dot
+    rule (D8 step 2, "a name beginning with `.` matches only when the component does too") is also
+    left unbuilt: skipping it only widens what matches, which the design allows
     ("over-approximation... can only add a refusal"), and nothing in this slice's own test needs
     it. The per-pattern listing memo ("The bounds": "directory listings keyed by the resolved
     directory") is also left to a further slice -- its absence only means a directory already
@@ -1715,6 +1732,11 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
         base = _physical(listed_base)
     except (OSError, ValueError):
         return None
+    if pattern == "**" and budget.globstar_named:
+        refusal = _glob_tail_walk(tail, base, listed_base, root, shown)
+        if refusal:
+            return refusal
+        return _globstar_walk(base, listed_base, tail, root, shown, budget)
     normalized_pattern = os.path.normcase(_relax_bracket_pattern(pattern))
     try:
         with os.scandir(base) as listing:
@@ -1738,27 +1760,94 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
                         continue
                 elif not tail:
                     continue
-                for component in tail:
-                    listed = os.path.join(listed, component)
-                    if component == "..":
-                        try:
-                            real = os.path.realpath(os.path.dirname(real))
-                        except (OSError, ValueError):
-                            break
-                        why = _judge_resolved(listed, real, root)
-                        if why:
-                            return _refuse(shown, why)
-                        continue
-                    real = os.path.join(real, component)
-                    if not _is_link_path(real):
-                        continue
+                refusal = _glob_tail_walk(tail, real, listed, root, shown)
+                if refusal:
+                    return refusal
+    except (OSError, ValueError):
+        return None
+    return None
+
+
+def _glob_tail_walk(
+    tail: List[str], real: str, listed: str, root: str, shown: str
+) -> Optional[Dict[str, Any]]:
+    """D8 step 4: walk the literal components after a matched (or globstar-skipped) glob
+    component, one at a time, from `real`/`listed` (R7's two paths for the same branch, kept in
+    step by the caller). Shared by the single-component match loop above and by each candidate
+    `_globstar_walk` finds, so both read the design's one rule the same way. None ends the branch
+    without a refusal -- a raise from a followed link's `realpath`, or from `..`'s, does the same,
+    per design "What each changed route returns"."""
+    for component in tail:
+        listed = os.path.join(listed, component)
+        if component == "..":
+            try:
+                real = os.path.realpath(os.path.dirname(real))
+            except (OSError, ValueError):
+                return None
+            why = _judge_resolved(listed, real, root)
+            if why:
+                return _refuse(shown, why)
+            continue
+        real = os.path.join(real, component)
+        if not _is_link_path(real):
+            continue
+        refusal = _judge_path(real, root, shown, shown, False)
+        if refusal:
+            return refusal
+        try:
+            real = os.path.realpath(real)
+        except (OSError, ValueError):
+            return None
+    return None
+
+
+def _globstar_walk(
+    directory: str,
+    listed_directory: str,
+    tail: List[str],
+    root: str,
+    shown: str,
+    budget: "_Budget",
+) -> Optional[Dict[str, Any]]:
+    """(D8 step 2, step 4; R5) `**` under `globstar`: every entry of `directory`, at any depth, is
+    a candidate the tail is tried from -- the zero-levels reading (the tail tried straight from
+    `directory` itself) is the caller's job, not this one's. A matched entry that is a link is
+    judged, exactly as the single-component loop above judges one, and the tail is tried from
+    where it resolves; the walk does **not** then list the link's own target for further `**`
+    matches (the rule this task builds), so a link cycle (a link whose target reaches it again)
+    ends every branch in one step rather than recursing without end -- a real directory tree holds
+    no such cycle without a link in it. None when nothing refuses, including when a directory
+    cannot be listed (the same as the single-component loop's own error reading)."""
+    try:
+        with os.scandir(directory) as listing:
+            for entry in listing:
+                budget.glob_entries_examined += 1
+                if budget.glob_entries_examined > _GLOB_ENTRY_BUDGET:
+                    return _refuse(shown, _TOO_MANY)
+                real = entry.path
+                listed = os.path.join(listed_directory, entry.name)
+                is_link = _is_link_entry(entry)
+                if is_link:
                     refusal = _judge_path(real, root, shown, shown, False)
                     if refusal:
                         return refusal
                     try:
                         real = os.path.realpath(real)
                     except (OSError, ValueError):
-                        break
+                        continue
+                refusal = _glob_tail_walk(tail, real, listed, root, shown)
+                if refusal:
+                    return refusal
+                if is_link:
+                    continue
+                try:
+                    descend = entry.is_dir(follow_symlinks=False)
+                except OSError:
+                    descend = False
+                if descend:
+                    refusal = _globstar_walk(real, listed, tail, root, shown, budget)
+                    if refusal:
+                        return refusal
     except (OSError, ValueError):
         return None
     return None
@@ -2329,11 +2418,16 @@ class _Budget:
     argument the same text, sharing the key is exactly what lets the second reading reuse the
     first's answer instead of paying for it again; where they differ (an ANSI-C escape above
     0x100), the text itself differs, so the key still separates them without naming `reading`.
+
+    `globstar_named` (D8 step 2, step 4) is read once from the whole top-level `command`, by the
+    caller, before any nested substitution's own text is read -- so a nested command cannot flip
+    the flag a `_glob_links` call made on the outer text's say-so.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, globstar_named: bool = False) -> None:
         self.alternatives_spent = 0
         self.glob_entries_examined = 0
+        self.globstar_named = globstar_named
         self._expansions: Dict[Tuple[str, str], Optional[List[str]]] = {}
         self.judgements: Dict[Tuple[str, str, bool, bool, str, bool], Optional[Dict[str, Any]]] = {}
 
@@ -2966,8 +3060,10 @@ def _decide(
         # which is where the run started; the shell's current directory is not seen.
         # One `_Budget` for the whole decision (design "The bounds", R4): shared across both
         # dialects and both readings below, so the same brace argument or word read more than
-        # once for that reason is charged, and judged, only once.
-        budget = _Budget()
+        # once for that reason is charged, and judged, only once. `globstar_named` (D8 step 2,
+        # step 4, R5) is read once here, from the whole top-level command text, not re-derived
+        # for a nested substitution's own text.
+        budget = _Budget(globstar_named=bool(_GLOBSTAR_RE.search(command)))
         for dialect in _TOOL_DIALECTS.get(tool_name, ("bash", "powershell")):
             # Two passes, unconditionally: a `$'...'` escape from 0x100 to 0x7FFFFFFF renders
             # differently by locale, and both renderings must be judged (design D1, Round 4).

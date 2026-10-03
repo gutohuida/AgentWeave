@@ -99,7 +99,36 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   POSIX only: a directory `work/t:d` holding a link `up` → `outside`; `cp n t:d/up/x` refused, naming where it resolves (the whole value with its colon). PASSES today by the tail, FAILS against R7. On Windows no name can hold a colon (design D2 step 6; the msys residual is named in design Residuals).
 
   Controls allowed (the review's measured-nil costs; each must stay allowed with step 6 in place): `git show HEAD:src/a.py`, `git show HEAD~2:src/a.py`, `ls node_modules/@babel/core` (no link), `npm install @types/node`, `python -c 'print(1/2)'`, `sed -E 's/(foo)/\1/' f`, `git log --format=%h/%s`, `grep -E '^(a|b)/c' f`, `rg 'foo(bar)/baz'`, `sh -c 'ls 2>&1/x'` (each refused today by its tail, measured), and `ls lib/Foo::Bar.pm` (allowed today as a plain word; after D7 it reaches rule 6, whose whole value must not refuse it). On the Windows job also `grep 'ORM\|:2580' f` and `sed -E 's/(:700)/(:697)/g' f` (both from this repository's transcripts), which a whole-value reading that kept the colons on Windows would refuse (measured: `ntpath.realpath` reads `|:2580` and `(:700)` as drives; design D2 step 6). Controls refused by their pieces, as under R7: `npm i x@file:../lib` (`'../lib'`), `sh -c "echo hi>../x"` (`'../x'`), `sh -c 'cat</etc/passwd'`.
-- [ ] 1.4d (R4, bounds) A directory `big/` of 8193 empty files: `ls big/*` is refused with the too-many reason (FAILS against R3, which allows it). `ls sub/*` is allowed. With `globstar` named (`bash -O globstar -c 'ls sub/**/x'`) a link two levels down (`sub/deep/l` → outside) is refused, and without it the same `ls sub/**/x` is allowed (the named residual; assert it, so a change of mind is visible). R5: the pattern starts at `sub/`, because a top-level `**` matches the fixture's `up` link and would be refused either way
+- [x] 1.4d (R4, bounds) A directory `big/` of 8193 empty files: `ls big/*` is refused with the too-many reason (FAILS against R3, which allows it). `ls sub/*` is allowed. With `globstar` named (`bash -O globstar -c 'ls sub/**/x'`) a link two levels down (`sub/deep/l` → outside) is refused, and without it the same `ls sub/**/x` is allowed (the named residual; assert it, so a change of mind is visible). R5: the pattern starts at `sub/`, because a top-level `**` matches the fixture's `up` link and would be refused either way
+
+  **Iteration 29.** Built the globstar rule this row needs (`_glob_links`'s own docstring named it
+  as the true reason 2.1c could not tick): a `_Budget.globstar_named` flag, read once per `_decide`
+  from the whole top-level command text (`_GLOBSTAR_RE`, design R5 -- not re-derived for a nested
+  substitution's own text, so a nested command cannot flip the flag an outer `_glob_links` call
+  already made on the outer text's say-so); a component that is exactly `**`, when the flag is set,
+  is now walked recursively by a new `_globstar_walk` rather than matched as one `fnmatch`
+  component (which could not tell `**` apart from `*` on its own) -- the shared tail-walk logic
+  (D8 step 4) was pulled out of the single-component match loop into `_glob_tail_walk` so both
+  readings use the one rule. Measured directly against `_decide` first (a throwaway script, not
+  committed): `bash -O globstar -c 'ls sub/**/x'`, with `sub/deep/l` a link out two levels below
+  `sub`, was wrongly **allowed** before this fix (the one-level match found only `sub/deep`, never
+  listed `l`); `ls sub/**/x` with no `globstar` named stays allowed, unchanged, confirming the
+  named residual. The budget-bound two bullets (`big/*`/`sub/*`) needed no new code -- task 2.0's
+  `_Budget.glob_entries_examined` already covers them, exercised by the existing
+  `test_the_glob_link_walk_s_entries_are_charged_against_the_decide_budget` (a monkeypatched bound
+  against the fixture's own entry count, not a literal 8193-file directory, the same surrogate that
+  test already used). Added
+  `test_a_globstar_walk_also_matches_a_link_several_levels_down_1_4d` to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`. Mutation-checked (`git stash`ing just
+  `mcp_server.py`): exactly this one new test fails, the other 102 rows pass unchanged. `py -3.11 -m
+  pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 103 passed (was 101, +2 -- the
+  second is 1.6's own row below). Broader regression set
+  (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): 729 passed, 2 skipped, no regressions.
+  `ruff check` clean; `black --check --target-version py311` clean, no reformat needed; `mypy
+  hub/hub/mcp_server.py` clean (the one pre-existing `approve_tool_call` gap only). `git diff
+  --stat`: exactly `hub/hub/mcp_server.py`, the one test file, and this task file. Ticked: every row
+  this task's own text names is now built and verified.
 - [x] 1.5 Network (D5), each with the network reason naming the whole word:
   - `git clone git@github.com:o/r.git` and `curl -s 127.0.0.1:9/x` refused. Both FAIL today on the reason.
   - (R4) `git clone git@github.com:repo`, `scp n user@example.com:file` and `scp n root@10.0.0.5:f` refused. Each FAILS today (allowed) and FAILS against R3 (D5 in rule 6 never sees a separator-less word).
@@ -149,6 +178,22 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   not brace-specific, but not yet measured either), the link-cycle `**` row and the listing memo
   (both need `_glob_links`, task 2.1c, not built), the memo key's colon flag (R6), and
   `approve_tool_call` catching a raise from `_decide` (D6, task 2.2b, not built).
+
+  **Iteration 29 (partial, the link-cycle row only).** Built the globstar walk task 2.1c's own note
+  named as the true blocker (see task 1.4d's iteration-29 note for the production change). Measured
+  the cycle row directly against `_decide` first, in a minimal workspace holding only a link `loop`
+  -> the workspace root (not the shared fixture, whose own `up` link would refuse the top-level `**`
+  first and never reach the cycle guard): before this iteration, `**` was a one-level `*`, so `bash
+  -O globstar -c 'ls **/x'` was already allowed with nothing ever hanging -- there was no recursive
+  walk to hang. Confirmed the guard itself is load-bearing, not decorative, with a throwaway
+  monkeypatch that removed the stop-at-a-link `continue` from the real recursive walk: on this exact
+  fixture it recursed until Python's own call-stack limit raised `RecursionError` (a real function
+  recurses rather than loops, so without the guard it is a stack overflow, not a true infinite
+  loop, but the underlying defect -- no termination on a link cycle -- is the one this row names).
+  Added `test_a_globstar_walk_does_not_descend_through_a_link_cycle_1_6`. **Task 1.6 still stays
+  unticked**: the extglob/backslash-run rows, the listing memo, the memo key's colon flag, and
+  `approve_tool_call`'s D6 catch are all still unbuilt, exactly as the iteration-17 note above left
+  them.
 - [ ] 1.7 Negative controls that must stay refused, each PASSES today:
   - `curl -o/tmp/x $HUB_URL/api`, `curl -F file=@/etc/passwd x`, `tar -xvf/tmp/a.tar`, `ls a(b/../../x`, `cp x @../y`;
   - `sh -c 'cat</etc/passwd'`, `sh -c "echo hi>../x"`, `python -c "open('/etc/x','w')"`, `node -e "require('fs').writeFileSync('../x','')"`;
@@ -670,6 +715,15 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   globstar rule is the more load-bearing of the two (task 1.6's link-cycle hang row and 1.4d's own
   test need it); re-derive design D8 step 2's `**` rule and D8 step 4's link-cycle note fresh
   before building it, sizing down further if it does not fit one slice whole.
+
+  **Iteration 29.** Built the globstar rule (see task 1.4d's own iteration-29 note for the
+  production change and measurement, and task 1.6's for the link-cycle row it also closes). **Task
+  2.1c still stays unticked, but for only one remaining reason now**: the per-pattern listing memo
+  ("The bounds": "directory listings keyed by the resolved directory") is still unbuilt. Its
+  absence does not threaten correctness (a directory already listed for one word's glob may be
+  listed again for a different word's or a deeper `**` level, which only spends budget sooner,
+  never later), so it is a genuine, narrow residual rather than a hidden gap -- the next slice to
+  build before this task can tick.
 - [ ] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
 
   **Iteration 18 (partial).** Measured today's `_decide` directly first (not from this file's old
