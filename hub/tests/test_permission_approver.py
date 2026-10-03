@@ -475,6 +475,24 @@ _TABLE = [
     # Costs). FAILS today (allowed): `powershell_auto` never carried bare `PWD`.
     _row("1.5a5", "Copy-Item x $PWD.Path", False, _UNCHECKED, tool="PowerShell"),
     _row("1.5a6", "Write-Output $HOME.Length", False, _UNCHECKED, tool="PowerShell"),
+    # task 1.5b (design D4), the two bullets buildable without `_DRIVE_LETTERS`/`_drive_exists`
+    # (task 2.0, the sibling's D9 -- still absent, so this task's own drive bullet stays unbuilt,
+    # tracked on tasks.md's own line). Bash expands a tilde after a `:` in an assignment-shaped
+    # argument (`dd of=c:~` writes through `~`'s expansion, same as `cp x ~`), so the tilde check
+    # also applies to the text after a word's last `:`, both dialects. Each FAILS today (allowed).
+    _row("1.5b1", "dd if=x of=c:~", False, _UNCHECKED),
+    _row("1.5b2", "echo PATH=a:~", False, _UNCHECKED),
+    # (R3) The cost design D4 names directly: `git show HEAD:~` moves from allowed to refused.
+    _row("1.5b3", "git show HEAD:~", False, _UNCHECKED, tool="PowerShell"),
+    # A separator-less glob beginning with `..` (not `.`: `.*`/`.?` stay a quoted regex, D4/D10)
+    # that `fnmatch` proves can expand to `..` is judged as `..`. Each FAILS today (allowed).
+    _row("1.5b4", "cp x ..*", False, _outside("..*")),
+    # `.{,.}*` brace-expands (sibling D1) to `.* ` and `..*`; the second is this task's glob, the
+    # first is 1.5b6's control, both from one argument.
+    _row("1.5b5", "cp x .{,.}*", False, _outside("..*")),
+    # Controls that stand: a quoted regular expression, and a dot-glob with no dot-named link.
+    _row("1.5b6", "grep '.*' f", True),
+    _row("1.5b7", "ls -d .*", True),
 ]
 
 # Windows reads `\` as a separator, so these rows moved there. On POSIX, where `\` is an ordinary

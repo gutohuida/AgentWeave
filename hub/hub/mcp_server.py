@@ -1486,12 +1486,23 @@ def _judge_word(
             glued = _GLUED_OPTION_RE.match(word)
             if glued:
                 value = word[glued.end() :]
+        last_colon = value.rfind(":")
+        if last_colon >= 0 and _TILDE_PREFIX_RE.fullmatch(value[last_colon + 1 :]):  # D4
+            return _refuse(word, _UNCHECKED)
         if _directory_variable_reference(value, dialect):  # D2 (F401)
             return _refuse(word, _UNCHECKED)
         expansion_start = _first_expansion_start(value)
         if expansion_start >= 0 and value[:expansion_start] == "..":  # D3 (F401)
             return _refuse(word, _UNCHECKED)
-        if value.partition("\x00")[0] == "..":
+        cut = value.partition("\x00")[0]
+        if cut == "..":
+            return _judge_path("..", root, word, argument, continues)
+        # D4: `.*`/`.?` are not rewritten -- as often a quoted regular expression (`grep '.*' f`).
+        if (
+            cut.startswith("..")
+            and any(char in cut for char in _GLOB_CHARS)
+            and fnmatch.fnmatchcase("..", cut)
+        ):
             return _judge_path("..", root, word, argument, continues)
         return None
     if dialect == "bash" and word in _BASH_DEVICES:  # D4: the null device, stdin/out/err

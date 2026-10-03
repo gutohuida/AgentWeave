@@ -132,6 +132,31 @@
   - `cp x ..*` and `cp x .{,.}*`, refused as outside.
 
   Controls that stand: `grep '.*' f`, `ls -d .*` (no dot-named link), and, on Windows, Bash `cp notes.md C:` with the workspace on C.
+
+  **Partially built, iteration 14.** Re-measured all three bullets directly against `_decide` before
+  touching anything (not trusting a prior note): the first bullet's drive refusal still needs
+  `_DRIVE_LETTERS`/`_drive_exists` (task 2.0, the sibling change's D9) -- confirmed still absent
+  (`grep -n "_DRIVE_LETTERS" hub/hub/mcp_server.py` returns nothing) -- so it stays unbuilt and this
+  task stays unticked. The other two bullets needed no drive machinery at all, so they were built:
+  **`hub/hub/mcp_server.py`**, in `_judge_word`'s rule 4 (no-separator) branch -- (a) the tilde check
+  now also reads the text after a word's *last* `:` (`value.rfind(":")`, `_TILDE_PREFIX_RE.fullmatch`
+  on the suffix), both dialects, not just PowerShell's colon-option case already there (confirmed
+  `_words` already splits `dd of=c:~` into the standalone word `c:~` at the lexer's own `=` split, so
+  no assignment-prefix handling was needed); (b) a separator-less value cut at a NUL that starts with
+  `..` (two dots, not one -- `.*`/`.?` stay a quoted regex per D10), holds a glob character, and
+  `fnmatch.fnmatchcase("..", cut)` proves it can expand to `..`, is judged as `..` the same way an
+  exact `..` already was. Added rows `1.5b1`-`1.5b7` to `_TABLE` in
+  `hub/tests/test_permission_approver.py` (the two controls as `1.5b6`/`1.5b7`, regression guards).
+  **Mutation check:** `git stash -- hub/hub/mcp_server.py`, reran the new rows: exactly `1.5b1`-`1.5b5`
+  failed (the two controls, `1.5b6`/`1.5b7`, passed unchanged); popped the stash, all seven pass.
+  `py -3.11 -m pytest hub/tests/test_permission_approver.py -q`: 344 passed, 1 skipped (+7 rows). The
+  broader regression set (adds `test_the_shell_judge_reads_a_word_whole.py`, `test_hub_own_call.py`,
+  `test_copilot_acp_decide.py`, `test_a_write_outside_the_workspace_is_recorded.py`): 698 passed, 2
+  skipped, nothing broken. `ruff check` and `black --check --target-version py311` on both changed
+  files: clean. `mypy hub/hub/mcp_server.py`: the same pre-existing `approve_tool_call`
+  no-return-annotation gap (line shifted only). `git diff --stat`: only the two expected files
+  changed. The `cp notes.md C:` control (bullet 1's own) was not added as a row here -- it belongs
+  with the drive machinery it is a control *for*, same as 1.5c's own controls.
 - [ ] 1.5c (operator, `B4-drive-exists`; design D1, `_drive_exists`) A drive word is judged only when the drive exists:
   - **Both platforms (Linux CI included), with `_DRIVE_LETTERS` monkeypatched True and `_drive_exists` monkeypatched**, and a spy on `_judge_path`:
     - probe answers False for E and A: `py - <<'PY'` / `try:` / `    pass` / `except Exception as e:` / `    print(e)` / `PY`, and `jq '{a: .x, b: .y}' f`, are allowed, and `_judge_path` never receives `e:`, `a:` or `b:`. Each FAILS against R4 as written (judged as a drive regardless);
