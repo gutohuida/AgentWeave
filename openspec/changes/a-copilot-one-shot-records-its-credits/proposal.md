@@ -23,10 +23,13 @@ names no `--resume`, so it opens one fresh session. That makes the session's cum
 the call's whole charge. It is the same event, with the same two keys, that `CopilotUsageLedger`
 already trusts for a Copilot run (`copilot_usage.py:181-185`, the archived change's D4).
 
-For a Copilot one-shot, credits are the only spend figure there is. The capture has **no
-`assistant.usage` line and no token count anywhere**: the `result` line's `usage` holds only
-`premiumRequests`, durations and `codeChanges`. So without this change a Copilot checkpoint, probe
-or title costs the operator credits that the Hub never records at all.
+For a Copilot one-shot, credits are the only spend figure the stream reports as usage. The capture
+has **no `assistant.usage` line and no usage token count**: the `result` line's `usage` holds only
+`premiumRequests`, durations and `codeChanges`. (The checkpoint's `promptCacheBreakState` does
+nest a prompt-cache diagnostic with `prompt_tokens: 1612` and per-segment system-prompt sizes, but
+it has no output count, so no token total can be formed from it. See design D3.) So without this
+change a Copilot checkpoint, probe or title costs the operator credits that the Hub never records
+at all.
 
 ## What changes
 
@@ -34,7 +37,10 @@ or title costs the operator credits that the Hub never records at all.
   `session.usage_checkpoint` it sees, because the figure is cumulative. `totalNanoAiu` goes into
   `WorkerUsage.ai_nano_aiu` and `totalPremiumRequests` into `WorkerUsage.premium_requests`. Each
   value is accepted by the rule the run ledger already applies: a bool, a non-number or a negative
-  value is ignored, and that field stays unknown.
+  value is ignored, and that field stays unknown. Two cases are added to that rule. A non-finite
+  value (`Infinity`, `NaN`) is ignored, because converting it would raise. A credit figure too
+  large for the 64-bit column is also ignored, because inserting it would lose the whole
+  invocation row (design D2).
 - **One rule, two readers.** The checkpoint-reading rule moves into one public helper in
   `copilot_usage.py`. `CopilotUsageLedger.observe_event` and `parse_copilot_envelope` both call it,
   so a Copilot schema change is fixed in one place. Importing it does not reach `hub.db`, which the
@@ -44,7 +50,8 @@ or title costs the operator credits that the Hub never records at all.
   already keeps usage on an envelope error (`worker.py:440-450`): *"a worker that burned tokens
   producing prose still cost money."*
 - **No other source is read.** `result.usage.premiumRequests` is not a fallback (design D3). No
-  token columns are filled, because the stream reports none.
+  token columns are filled. The stream reports no usage tokens, and the cache diagnostic's
+  `prompt_tokens` is not read (D3).
 
 ## What does not change
 
@@ -67,7 +74,8 @@ or title costs the operator credits that the Hub never records at all.
 
 ## Impact
 
-- `hub/hub/copilot_usage.py`: a public `checkpoint_totals(data)`. `observe_event` calls it.
+- `hub/hub/copilot_usage.py`: a public `checkpoint_totals(data)`. `observe_event` calls it, so a
+  Copilot run's checkpoint gains the same two refusals (non-finite, and too large to store).
 - `hub/hub/runner_adapters/copilot.py`: `parse_copilot_envelope` reads the last checkpoint and
   returns it on every exit, and its docstring stops saying "usage stays empty".
 - `hub/tests/test_worker.py`: `test_the_captured_copilot_one_shot_has_no_session_shutdown` is

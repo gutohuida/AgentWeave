@@ -6,13 +6,14 @@ The system SHALL record, for every Copilot one-shot call (a checkpoint, its prob
 A one-shot call is one process that opens one new session, so the session's final cumulative total
 is the call's whole charge. The last checkpoint SHALL be taken, and checkpoints SHALL NOT be summed.
 Each figure SHALL be read by the same rule as a Copilot run's session checkpoint: a negative,
-non-numeric, boolean or non-finite figure SHALL be ignored and that figure SHALL be unknown, while
-the other figure is still recorded. A call whose output carries no checkpoint SHALL record both
+non-numeric, boolean or non-finite figure, or a credit figure too large for the invocation record to
+hold, SHALL be ignored and that figure SHALL be unknown, while the other figure is still recorded. A call whose output carries no checkpoint SHALL record both
 figures as unknown, never as zero, and no other part of the output SHALL be used in their place.
 The credits SHALL be recorded whether the call produced a usable answer, reported an error, or
 produced no answer. Like a Copilot run's credits, they SHALL NOT be converted into a monetary
 figure, SHALL NOT be added to any token total, and SHALL NOT count toward a project's token budget.
-Reading a malformed figure SHALL NOT make the call fail.
+Reading a malformed figure SHALL NOT make the call fail, and SHALL NOT prevent the call's invocation
+record from being written.
 
 #### Scenario: A checkpoint's credits reach its invocation record
 - **WHEN** a Copilot one-shot call's output carries a session usage checkpoint
@@ -32,6 +33,6 @@ Reading a malformed figure SHALL NOT make the call fail.
 - **THEN** the call's invocation record carries unknown credits and unknown premium requests
 
 #### Scenario: A malformed figure is unknown and does not fail the call
-- **WHEN** a Copilot one-shot call's checkpoint carries a negative or non-finite credit figure and a valid premium-request figure
-- **THEN** the call's invocation record carries unknown credits and the premium-request figure
+- **WHEN** a Copilot one-shot call's checkpoint carries a negative, non-finite or too-large credit figure and a valid premium-request figure
+- **THEN** the call's invocation record is written, carrying unknown credits and the premium-request figure
 - **AND** the call's outcome is decided by its answer as if the checkpoint were absent

@@ -1,6 +1,6 @@
 # Design — a Copilot one-shot records its credits
 
-Re-verified at `957fc84` (2026-10-03, R1). Labels follow the archived
+Re-verified at `957fc84` (2026-10-03, R1) and `9d1f617` (R2). Labels follow the archived
 `a-copilot-run-shows-its-credits`: **MEASURED** is read from the capture or the code today, and
 **UNVERIFIED** has not been observed.
 
@@ -18,9 +18,16 @@ plan's Auto model (`mai-code-1.1-flash`). It has 15 lines, in this order (MEASUR
   "modelCacheState": [], "promptCacheBreakState": [...]}`.
 - `result` = `{"sessionId": "48580219-…", "exitCode": 0, "usage": {"premiumRequests": 1,
   "totalApiDurationMs": 1023, "sessionDurationMs": 2729, "codeChanges": {...}}}`. It has no `data`.
-- There is **no** `assistant.usage`, **no** `session.shutdown` and **no** token count on any line.
-  The stream does carry ephemeral events (`"ephemeral": true` on `session.info`, the message
-  delta and others), so the absence is not an ephemeral filter hiding them.
+- There is **no** `assistant.usage`, **no** `session.shutdown` and **no usage token count**
+  (no input/output/total on any line's `data` or `usage`). The stream does carry ephemeral events
+  (`"ephemeral": true` on `session.info`, the message delta and others), so the absence is not an
+  ephemeral filter hiding them.
+- *(R2 correction.)* The checkpoint's `data.promptCacheBreakState[0].models["mai-code-1.1-flash"]`
+  is a prompt-cache diagnostic. It carries `prompt_tokens: 1612`, `tool_tokens: 0`,
+  `frontier_tokens: 0`, `cache_read: 0`, `cache_write: 0`, and 18 `system_segments`, each with
+  its own `tokens`. R1's "no token count on any line" missed these (`grep -o '"tokens"'` counts 18
+  in line 13). There is still no output or completion count anywhere, so no total can be formed.
+  D3 says why none of it is read.
 
 **The parser today** (`runner_adapters/copilot.py:96-130`). It reads `assistant.message.content` and
 `session.error`, and returns `WorkerUsage()` on all three exits (failure, no answer, answer).
@@ -61,8 +68,21 @@ ledger replaces its whole `_Checkpoint` on each event. The two readers agree, by
 ```python
 def checkpoint_totals(data: Dict[str, Any]) -> Tuple[Optional[float], Optional[float]]:
     """(totalNanoAiu, totalPremiumRequests) of one `session.usage_checkpoint`, each through
-    `_nonneg_number`."""
+    `_nonneg_number`, then refused (None) if not finite; `totalNanoAiu` also refused above
+    2**63 - 1, the BigInteger range both of its columns share."""
 ```
+
+**The 64-bit bound (R2).** Both stores of this figure are `BigInteger`:
+`worker_invocations.ai_nano_aiu` (`models.py:1922`) and `turn_usage.session_nano_aiu_total`
+(`:1300`). Python's `sqlite3` raises `OverflowError: Python int too large to convert to SQLite
+INTEGER` for `2**63` (MEASURED under `py -3.11`; `2**63 - 1` inserts). On the worker path that
+raise lands in `_record`'s catch-all, so `run_worker` still returns. But the invocation row,
+which holds the outcome, the error and every other figure, is lost, and `invocation_id` is
+`None`. That breaks `run_worker`'s own promise that *"every exit records an invocation"*. A
+malformed credit figure must cost only itself, so the helper refuses it, exactly as it refuses a
+negative one. The comparison is exact (`9.223372036854776e18 <= 2**63 - 1` is `False` in Python),
+so no float rounding lets one through. `totalPremiumRequests` is stored as `Float` and needs only
+the finiteness check.
 
 `CopilotUsageLedger.observe_event` builds its `_Checkpoint` from it, and `parse_copilot_envelope`
 calls it. The adapter imports `copilot_usage` at module level. That stays clear of `hub.db` and
@@ -84,6 +104,15 @@ source for one field brings a disagreement rule that nothing has ever measured. 
 read the ACP prompt result's premium requests either. In the capture the two agree (1 and 1). A
 stream with a `result` and no checkpoint is UNVERIFIED and leaves both fields NULL, which
 under-reports and never misreports, the property the decision row named as the safe floor.
+
+**The cache diagnostic's `prompt_tokens` is not read either (R2).** It is the only token-shaped
+figure in the stream, and three reasons keep it out. It is input-only. It is nested in a
+diagnostic structure (`promptCacheBreakState`) that nothing in the Hub reads, and the run ledger
+does not read it for runs either. And filling `input_tokens` while `output_tokens` and
+`total_tokens` stay NULL would put a partial figure into a row that `worker-spend-counts-against-the-budget`
+will sum into a budget, under-counting while looking measured. The decision row asked for
+credits. Whether worker token accounting for Copilot should use it is that sibling's question. It
+is noted in D5.
 
 ## D4 — which exits keep the credits
 
@@ -123,9 +152,11 @@ nothing). The obligation was written only into the archived change. See Open que
 
 The same sibling also states (in the archived design's composition note) that *"a Copilot one-shot's
 `total_tokens` comes from slice 2's envelope parser through its normaliser"*. The capture has no
-token counts, so that `total_tokens` will be NULL for every Copilot worker call (MEASURED against
-the capture, not against a live call). This change cannot fix that. It is recorded for the
-sibling's own next round.
+usage token counts, so that `total_tokens` will be NULL for every Copilot worker call (MEASURED
+against the capture, not against a live call). The only token-shaped figure is the cache
+diagnostic's input-only `prompt_tokens` (see the evidence and D3). This change cannot fix that. It
+is recorded for the sibling's own next round, along with the question of whether that diagnostic
+is worth reading.
 
 ## D6 — BYOK
 
@@ -142,9 +173,11 @@ infers.
   `session.usage_checkpoint` whose `data` is not an object reaches the helper as `{}` (the loop's
   existing `data` guard) and yields `(None, None)`. The helper raises on nothing: `_nonneg_number`
   only does type checks and a comparison.
-- `int()`/`float()` run only on values `_nonneg_number` has accepted (finite or not). **`inf` is
-  the one case:** `json.loads` accepts `Infinity`, `_nonneg_number(inf)` returns `inf`, and
-  `int(inf)` raises `OverflowError` (MEASURED under `py -3.11`). The run ledger has the same exposure
+- `int()`/`float()` run only on values `_nonneg_number` has accepted (finite or not). **Non-finite
+  values are the case:** `json.loads` accepts `Infinity`, `NaN`, and an overflowing literal such
+  as `1e400` (read as `inf`) (MEASURED under `py -3.11`). `_nonneg_number` returns both `inf` and
+  `nan`, since `nan < 0` is `False`. Then `int(inf)` raises `OverflowError` and `int(nan)` raises
+  `ValueError`. *(R2: R1 named only `inf`.)* The run ledger has the same exposure
   for a checkpoint (`copilot_usage.py:348`), but there it is inside `finish()`'s catch-all, so a run
   survives it. The worker's path has no catch-all around the parser: `_interpret` →
   `parse_envelope` raising would escape `run_worker`, whose contract is "never raises". **D2's
@@ -153,7 +186,12 @@ infers.
   of the catch-all dropping the whole sample (tokens, allowance and all). The ledger's per-call
   `copilotUsage.totalNanoAiu` still goes through the bare `_nonneg_number`, and is still caught by
   `finish()`. That is out of scope here. Test 6 pins the checkpoint case.
-- `run_worker` → `_record`: unchanged. A recording failure is already logged and swallowed.
+- `run_worker` → `_record`: unchanged. A recording failure is already logged and swallowed. That
+  swallow is what made R2 add the 64-bit bound (D2): a figure that converts cleanly but cannot be
+  inserted would not raise out of `run_worker`, but it would silently cost the operator the whole
+  audit row. The run side has the same exposure today: `record_turn_usage` would fail to flush
+  `session_nano_aiu_total`. The shared helper closes it for the checkpoint figure. The per-call
+  `copilotUsage.totalNanoAiu` sum stays out of scope, as above.
 
 ## Tests that can fail
 
@@ -163,8 +201,13 @@ infers.
    the old condition. The `session.shutdown`-absent assertion stays as a line in the new test, so
    the reason the figure comes from the checkpoint stays pinned.
 2. **Through `run_worker` to the row, unpatched parser.** `_patch_spawn` returns the capture with
-   the answer line's `content` replaced by a valid output-model JSON body, and `cli="copilot"`.
-   The `worker_invocations` row reads `(32_840_000, 1.0)`. It fails today. This is the evidence
+   the answer line's `content` replaced by a valid output-model JSON body (`Answer`: `objective`,
+   `state`, `confidence`), and `_run(cli="copilot", model="auto")`. *(R2.)* It needs the
+   `copilot_exe` fixture, because `copilot_one_shot_command` resolves the platform executable
+   before `_patch_spawn`'s `resolve_executable` stub is reached. It also needs `Path.home`
+   monkeypatched to `tmp_path`, as `test_the_copilot_spawn_gets_the_worker_home_and_no_token` does,
+   or `ensure_copilot_worker_home` writes under the real home. The `worker_invocations` row reads
+   `outcome == "ok"` and `(32_840_000, 1.0)`. It fails today. This is the evidence
    that `test_a_workers_copilot_credits_reach_its_invocation_row` is not (that one patches the
    parser).
 3. **Last checkpoint wins.** Two checkpoint lines, `(10, 1)` then `(25, 2)`, give `(25, 2.0)`, not
@@ -175,21 +218,30 @@ infers.
    `assistant.message` removed gives "no assistant message" and the same credits. Both fail today.
 5. **A bad figure is unknown, field by field.** `totalNanoAiu: -1` with `totalPremiumRequests: 1`
    gives `(None, 1.0)`. `true` gives None. A string gives None.
-6. **Non-finite.** `totalNanoAiu: Infinity` gives None, and `parse_copilot_envelope` does not
+6. **Non-finite, and too large to store.** `totalNanoAiu: Infinity` gives None, and so do `NaN` and
+   `1e400` (*R2*). `totalPremiumRequests: NaN` gives None. `parse_copilot_envelope` does not
    raise. Today's parser ignores the checkpoint, so this test passes today. It is a guard on the
    new conversion, and it fails (with `OverflowError`) if the `isfinite` check is removed. Also, for the ledger,
    one `assistant.usage` call with tokens, then
    `observe_event("session.usage_checkpoint", {"totalNanoAiu": inf, "totalPremiumRequests": 1})`,
    then `finish()`, gives `session_nano_aiu_total is None`, `session_premium_requests_total == 1`,
    and the call's tokens. This fails today: the catch-all's sample carries no tokens.
+   *(R2.)* The 64-bit bound gets two cases. `checkpoint_totals({"totalNanoAiu": 2**63,
+   "totalPremiumRequests": 1})` gives `(None, 1)`, and `2**63 - 1` is kept. Then through
+   `run_worker` (test 2's setup, with the checkpoint's `totalNanoAiu` edited to `2**63`), exactly
+   one `worker_invocations` row is written, with `ai_nano_aiu is None`, `premium_requests == 1.0`
+   and `outcome == "ok"`. It passes today, because the parser ignores the checkpoint. It fails if
+   2.2 lands without 2.1's bound: the row is lost to the measured `OverflowError` and the test
+   finds zero rows. So it is a guard on the bound.
 7. **The run ledger is unchanged otherwise.** The existing `copilot_usage` tests pass untouched.
    This is the control: D2 moved the rule and did not change it.
 8. **The import restriction.** `test_runner_adapters_imports.py` passes with the module-level
    import.
 
 `test_the_captured_copilot_envelope_yields_its_answer`'s `usage.input_tokens is None, "usage and
-credits are slice 4's"` keeps its assertion. It is still true, since there are no tokens to read. Its
-message becomes *"the one-shot stream reports no tokens (design D5)"*.
+credits are slice 4's"` keeps its assertion. It is still true, since there are no usage tokens and
+D3 does not read the cache diagnostic. Its message becomes *"the one-shot stream reports no usage
+tokens (design D3)"*.
 
 ## Open questions
 
@@ -216,3 +268,27 @@ message becomes *"the one-shot stream reports no tokens (design D5)"*.
   all, so credits are a Copilot worker call's only spend figure. (2) No route reads the columns, and
   the sibling change that is meant to never mentions credits (F486). (3) `int(inf)` would make
   `run_worker` raise, so the shared helper must refuse non-finite values.
+- **R2, 2026-10-03 night (iter 22).** Re-derived from the code at `9d1f617`, not from R1's lists.
+  Parsed the capture line by line with `json.loads` (15 lines, the order and the `data` keys as
+  R1 said; `result` has no `data`). Grepped `hub/hub` for `parse_copilot_envelope`,
+  `parse_envelope`, `parse_one_shot`, `.ai_nano_aiu`, `.premium_requests` and `WorkerInvocation`.
+  The parser's callers are `worker.parse_envelope` (via `CopilotAdapter.parse_one_shot`) and the
+  titler (`conversation_titles.py:290`, usage discarded). The only `WorkerInvocation` readers are
+  `checkpoints.py:107`/`:208`, both `.error`. `run_worker`'s callers are `checkpoint_generation.py:556`
+  (`kind="checkpoint"`) and `:644` (`"checkpoint_probe"`), matching drive 3.1. Nothing in `src/`
+  reads the columns. `COPILOT_ONE_SHOT_FLAGS` plus the optional `--no-custom-instructions` and
+  `--model` contain no resume flag. `_interpret` carries `usage` on the envelope-error, no-JSON,
+  schema-invalid and ok exits, and drops it only for `spawn.outcome != "ok"` (where
+  `_run_worker_process` does keep `stdout`, but `_interpret` never reads it), so D4's table holds.
+  `copilot_usage` imports only `runner_events`/`runner_parsing`/`model_catalog`/`workspace_writes`
+  (MEASURED in a fresh process), so D2's import claim holds. The sibling directory still has no
+  `credit|nano|copilot` (F486 holds). **Changed:** (1) the "no token count on any line" claim was
+  wrong. The checkpoint nests a prompt-cache diagnostic with `prompt_tokens: 1612` and 18
+  per-segment `tokens`. The evidence, the proposal, D3 (why it is not read) and D5 (the sibling's
+  question) are corrected, and test 1.4's message is restated. (2) `NaN` and `1e400` join `inf` as
+  non-finite (`int(nan)` raises `ValueError`). (3) A new **64-bit bound**: a finite `totalNanoAiu
+  >= 2**63` passes R1's helper, and inserting it raises `OverflowError` (MEASURED), which
+  `_record` swallows by dropping the whole invocation row. The helper now refuses it (D2), the
+  spec delta says so, and test 6 pins it at the row. (4) Test 2 now names the `copilot_exe`
+  fixture and the `Path.home` patch that it cannot run without. Nothing else changed: D1, D3's
+  premium-request rule, D4, D5's read-side finding, and D6 re-derived the same.

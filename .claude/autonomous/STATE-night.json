@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 21,
+    "iteration": 22,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "copilot-oneshot-credits-r2",
-    "next_action": "copilot-oneshot-credits-r2: R2 of the spec loop for openspec/changes/a-copilot-one-shot-records-its-credits/ (R1 done iter 21). Independently re-derive against the code per its tasks.md 0.2: re-read hub/tests/fixtures/copilot_acp/oneshot_ok.jsonl line by line; grep every caller of parse_copilot_envelope/parse_envelope and every reader of WorkerInvocation.ai_nano_aiu/premium_requests; confirm COPILOT_ONE_SHOT_FLAGS cannot resume a session and _interpret carries usage on each exit design D4 names; check the inf/OverflowError argument and the ledger narrowing claim. Fix the proposal where the code disagrees, append to design.md's Round log (say so if nothing changed), tick 0.2, keep openspec validate --strict passing. Do not collapse into R3.",
+    "current": "copilot-oneshot-credits-r3",
+    "next_action": "copilot-oneshot-credits-r3: R3 of the spec loop for openspec/changes/a-copilot-one-shot-records-its-credits/ (R1 iter 21, R2 iter 22). Per tasks.md 0.3, re-derive independently against the code, a fresh comparison and not a re-read of R2. In particular re-check R2's own additions: the 2**63-1 bound on totalNanoAiu in checkpoint_totals (is the helper the right place, does Postgres BigInteger behave the same, does the ledger path really reach record_turn_usage with it), and D3's refusal to read the promptCacheBreakState prompt_tokens. Also ask what each route returns when what it calls raises. Fix where the code disagrees, append to design.md's Round log, tick 0.3, keep openspec validate --strict passing.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -54,9 +54,9 @@
         },
         {
             "id": "copilot-oneshot-credits-r2",
-            "status": "open",
+            "status": "done",
             "title": "R2: re-derive independently against the code",
-            "detail": "Change name: a-copilot-one-shot-records-its-credits. Follow its tasks.md 0.2. Independent re-derivation against the code, not a re-read of R1's design; log what changed or that nothing did."
+            "detail": "Done iter 22: four corrections. (1) The capture does nest token figures: prompt_tokens 1612 in the checkpoint's promptCacheBreakState diagnostic, input-only; D3 says why it is not read. (2) NaN/1e400 are non-finite like inf. (3) New 64-bit bound: totalNanoAiu >= 2**63 makes the sqlite insert raise and _record drops the whole row (measured); checkpoint_totals refuses it, the spec delta says so. (4) Test 2 needs copilot_exe and a Path.home patch. validate --strict valid."
         },
         {
             "id": "copilot-oneshot-credits-r3",
