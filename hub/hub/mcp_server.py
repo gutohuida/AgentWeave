@@ -1685,6 +1685,28 @@ def _expand_braces(argument: str, budget: int) -> Optional[List[str]]:
     return stack[0]["results"]
 
 
+def _mark_inner_brace_sentinels(text: str) -> str:
+    """`text` (already lexed) with every `{`, `,` and `}` marked as `_lex` marks an unquoted bash
+    one (design D1, R2) -- the blanket worst case run over any argument, quoted or not, proven to
+    reach a nested shell or not: a brace an inner shell would expand reaches `_words` literal, and
+    under D2 its own piece would read as a name inside. A `{` directly after a real `$` or a
+    `_LITERAL_DOLLAR` still opens a parameter expansion, exactly as `_lex` treats it, so it and its
+    matching `}` are carried over literally rather than marked.
+    """
+    marked: List[str] = []
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char in ("$", _LITERAL_DOLLAR) and text[index + 1 : index + 2] == "{":
+            inner, end = _substitution(text, index + 2, "}")
+            marked.append(char + "{" + inner + "}")
+            index = end
+            continue
+        marked.append(_BRACE_SENTINELS.get(char, char))
+        index += 1
+    return "".join(marked)
+
+
 def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
     """The arguments the shell will produce from `command`, and its substitutions' command texts.
 
@@ -1849,6 +1871,22 @@ def _read_command(
         refusal = _judge_word(word, argument, continues, root, dialect, trusted, hub_url)
         if refusal:
             return refusal
+    # D1, R2: a brace an inner shell will expand is judged as expanded too -- the blanket worst
+    # case applied to every argument holding a literal brace, whether the outer shell left it
+    # literal by quoting or escaping it (bash) or never marks one at all (PowerShell).
+    for argument in arguments:
+        if "{" not in argument and "}" not in argument:
+            continue
+        marked = _mark_inner_brace_sentinels(argument)
+        if not any(sentinel in marked for sentinel in _BRACE_RESTORE):
+            continue
+        inner_alternatives = _expand_braces(marked, _BRACE_ARGUMENT_BUDGET)
+        if inner_alternatives is None:
+            return _refuse(argument, _TOO_MANY)
+        for word, inner_argument, continues in _words(inner_alternatives):
+            refusal = _judge_word(word, inner_argument, continues, root, dialect, trusted, hub_url)
+            if refusal:
+                return refusal
     for inner in nested:
         refusal = _read_command(inner, root, dialect, reading, depth + 1, hub_url)
         if refusal:

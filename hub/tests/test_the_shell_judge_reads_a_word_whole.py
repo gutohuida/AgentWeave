@@ -93,6 +93,29 @@ _TABLE = [
     _row("1.2c", "cp notes.md .{,.}/x", False),
     _row("1.2d", "cp notes.md {.,.}./x", False),
     _row("1.2e", "cp x src/{a,..}/../y", False),
+    # 1.3 (R2): a brace the outer shell left literal (quoted, escaped, or any brace in the
+    # PowerShell dialect) is still judged as an inner shell would expand it. Each of the first four
+    # PASSES today (the old tail backstop quotes only `'/x'`) and FAILS against rule 6's piece
+    # reading alone, because `.{,.}/x` and `{,..}/x` have no separator-adjacent `..` once the
+    # braces are read as ordinary word characters.
+    _row("1.3a", "bash -c 'cp n .{,.}/x'", False),
+    _row("1.3b", "sh -c 'cp n {,..}/x'", False),
+    _row("1.3c", 'bash -c "cp x src/{a,..}/../y"', False),
+    _row("1.3d", "bash -c 'cp n .{,.}/x'", False, tool="PowerShell"),
+    # `.{,.}` alone (no trailing `/x`), quoted into an inner shell, expands to `.` and `..` -- the
+    # outer bash never sentinel-marks it (it is inside the single-quoted `-c` argument), so this is
+    # refused only once R2's own reading judges the expansion, not D1's top-level one (task 1.2).
+    _row("1.3e", "bash -c 'cp n .{,.}'", False),
+    # Controls: a literal brace an inner shell never gets to, so R2's reading must not fire.
+    _row("1.3f", "awk '{print $1, $2}' f", True),
+    _row("1.3g", "jq '{a: .x, b: .y}' f", True),
+    _row("1.3h", "sed 's/a{2}/b/' f", True),
+    # A `${...}` parameter expansion stays uncheckable (rule 3, `_expands`) -- R2 must not mistake
+    # the `{` right after `$` for a brace group and expand `X}/y` on its own.
+    _row("1.3i", "echo hi > ${X}/y", False),
+    # The accepted cost: a file literally named `.{,.}` is refused, because R2 cannot tell this
+    # word apart from one handed to an inner shell.
+    _row("1.3j", "cp notes.md '.{,.}'/x", False),
 ]
 
 

@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "4c88a74",
     "stop_at":  "2026-10-03T07:00:00+01:00",
-    "iteration":  4,
+    "iteration":  5,
     "log_file":  ".claude/autonomous/2026-10-02-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
     "current":  "the-shell-judge-reads-a-word-whole-impl",
-    "next_action":  "Continue the-shell-judge-reads-a-word-whole at task 1.3 + 2.1b (design.md D1, 'R2: a brace an inner shell will expand is judged as expanded too'): for an argument holding a brace the outer shell left literal (quoted, escaped, or any brace in the PowerShell dialect), _read_command must also judge the words that argument expands to when every brace is treated as bash treats an unquoted one. Add task 1.3's rows to hub/tests/test_the_shell_judge_reads_a_word_whole.py's _TABLE (refused: bash -c 'cp n .{,.}/x', sh -c 'cp n {,..}/x', bash -c \"cp x src/{a,..}/../y\" and the PowerShell-tool form, plus bash -c 'cp n .{,.}'; allowed: awk/jq/sed brace-literal rows, echo hi > ${X}/y, cp notes.md '.{,.}'/x). Verify against real Git Bash first (not assumed) the same way 1.2 was. Tick 1.3 and, once 1.6's Totality rows are also run against this code (not required yet -- only tick 2.1b once both 1.3 and 1.6 pass), 2.1b. Do not write 1.4's rows yet.",
+    "next_action":  "Continue the-shell-judge-reads-a-word-whole at task 1.4 (design.md D3, line 385, 'A glob component that could match .. is judged as ..'): a component that begins with '.', contains *, ? or [, and for which fnmatch.fnmatchcase('..', component) is true, is rewritten to '..' before _judge_path (the refusal still quotes the piece as written). Add task 1.4's rows to hub/tests/test_the_shell_judge_reads_a_word_whole.py's _TABLE -- refused, each quoting the whole piece: ls .*/x, ls ..*/x, cp x .[.]/y, ls ../*, rm -rf ../*.py, PowerShell Get-ChildItem ..\\*; allowed: ls sub/.*/x, cp x sub/..?/y (a third character after the dot, so fnmatchcase('..', '..?') is false). Each refused row PASSES today with a fragment reason, so also assert the reason text changes, which FAILS today. Verify against real Git Bash first (not assumed), including globskipdots behaviour if it bears on a row. Tick 1.4 only -- 1.4b (extglob) and 1.4c (link globs, needs D8) are separately numbered and not this task's scope. 2.1b still needs 1.6 (Totality, not written) before it can be ticked.",
     "queue":  [
                   {
                       "id":  "hub-suite-gate",
@@ -24,8 +24,8 @@
                   {
                       "id":  "the-shell-judge-reads-a-word-whole-impl",
                       "status":  "open",
-                      "title":  "Continue B4: the-shell-judge-reads-a-word-whole (11/41 tasks)",
-                      "detail":  "Iteration 4: found task 1.2 + D1 (brace sentinels in _lex, _expand_braces, _read_command judging each alternative) already written on disk, uncommitted, matching iteration 3's next_action exactly -- no log entry or commit recorded it, so this iteration treated it as unverified work and verified it fresh rather than trusting it: ran hub/tests/test_the_shell_judge_reads_a_word_whole.py + test_permission_approver.py + test_hub_own_call.py (487 passed), the full D2 file set (662 passed, 2 skipped), confirmed .{,.} -> . .. and {.,.}. -> .. .. against real Git Bash (not assumed), ruff/black/mypy clean (mypy's one error is the pre-existing approve_tool_call no-return-annotation at line 2327, unrelated). Ticked task 1.2. Did not tick 2.1 (it also requires 1.3, not yet written). Next: task 1.3 + 2.1b, the inner-shell brace reading. Design/rounds in spec-queue/tracks/B4.md."
+                      "title":  "Continue B4: the-shell-judge-reads-a-word-whole (12/41 tasks)",
+                      "detail":  "Iteration 5: implemented task 1.3 (design D1, R2: a brace an inner shell will expand is judged as expanded too). Added _mark_inner_brace_sentinels and a second _read_command pass that judges, for any argument holding a literal brace (quoted, escaped, or any brace in the PowerShell dialect), the words its bash-unquoted expansion would produce. Rows 1.3a-j added to _TABLE; caught and fixed a wrong first-draft row (1.3e) via the stash mutation check -- 6 of 10 rows fail without the fix, 4 controls pass unchanged. Verified against real Git Bash (not assumed): .{,.}/x -> ./x ../x, {,..}/x -> /x ../x, src/{a,..}/../y -> src/a/../y src/../../y, .{,.} -> . ... Full regression set 672 passed, 2 skipped; ruff/black/mypy clean (mypy's one pre-existing error now at line 2365, same approve_tool_call annotation, unrelated). Ticked 1.3. Not ticked: 2.1b (needs 1.3 AND 1.6, 1.6 not written). Next: task 1.4, D3 glob-component rewriting. Design/rounds in spec-queue/tracks/B4.md."
                   },
                   {
                       "id":  "a-drive-or-a-home-variable-names-a-directory-by-itself-impl",
