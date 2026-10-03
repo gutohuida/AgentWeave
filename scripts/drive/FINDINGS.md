@@ -33925,3 +33925,25 @@ tool to list from and no card to deny.
 
 **Allowance.** Four real turns on `cp5` (Free-model Auto, per this change's call budget), no review
 dispatch. No finding-13 note (B's optional) applicable here.
+
+## F486 (C) — a cross-change obligation lives only in the archived change: `worker-spend-counts-against-the-budget` never mentions the worker credit sums it owns
+
+**Status:** open, found 2026-10-03 by R1 of `a-copilot-one-shot-records-its-credits` (its design D5 and
+Open question 1). **Ready:** yes, as a note in that change's next round. No code is involved.
+
+`a-copilot-run-shows-its-credits` (archived 2026-10-02) decided in D12 that *"whichever lands second
+adds `ai_nano_aiu` / `premium_requests` sums to each `workers` line"*. Its task 6.4 recorded that
+`worker-spend-counts-against-the-budget` had not landed, so *"that change owns them now"*. Nothing in
+`openspec/changes/worker-spend-counts-against-the-budget/` says so: `grep -i "credit\|nano\|copilot"`
+over its `proposal.md`, `design.md`, `tasks.md`, `test-guide.md` and spec delta finds nothing. An IMPL
+of that change built from its own files would ship `workers` lines without credits, and the Copilot
+worker credits that `a-copilot-one-shot-records-its-credits` starts recording would reach no screen.
+
+The same archived note also assumes that *"a Copilot one-shot's `total_tokens` comes from slice 2's
+envelope parser"*. The real one-shot capture (`hub/tests/fixtures/copilot_acp/oneshot_ok.jsonl`) has no
+token count on any line, so every Copilot worker row's `total_tokens` will be NULL. That change's
+round should know this before it designs a Copilot line.
+
+**Fix candidate:** the sibling's next round adds a task, a test and a delta sentence for the credit
+sums, and records the token-less Copilot stream. The spec-flow lesson is that an obligation handed to
+an unarchived change has to be written into that change's own files at the time it is handed over.

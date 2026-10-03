@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 20,
+    "iteration": 21,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "copilot-oneshot-credits-r1",
-    "next_action": "ghcp-s5-drive finished (iter 20): task 7.8 driven for real on :8010. First bullet held (--disable-builtin-mcps present with copilot_github_mcp false/unset, absent once set true -- confirmed via Get-CimInstance Win32_Process on the live copilot.exe each way). Second bullet does not hold across four real turns: plain 'list an open issue' fell back to gh CLI over shell; forcing the MCP path got 'no issue-listing tool in this toolset'; naming search_code directly did reach a real github-mcp-server call that completed with zero ask-me card and zero permission.requested-family log rows; an issue-creation attempt got the same 'no such tool' answer (confirmed after: gh issue list on the real repo returned []). hub/hub/copilot_acp.py confirms the Hub's own D9 github_rule/ASK_OPERATOR branch only runs once Copilot's ACP session sends session/request_permission, which it never did here -- the gate is unreached, not overridden. Filed finding F485 (scripts/drive/FINDINGS.md), real-drive writeup in tasks.md and design.md Round log. 7.8 left unchecked (blocked: task as specified cannot complete in this environment). Reverted cp5.config.copilot_github_mcp back to false afterward (unlike 7.7's left-in-place evidence, this is a live config toggle that would silently widen every future cp5 turn's GitHub MCP surface with no gate -- not worth leaving on). ghcp-s5-drive queue item marked done: 7.1-7.5, 7.7, 7.8 are all attempted with real-drive findings recorded; 7.6 is explicitly the operator's own task (needs their key) and 8.1 waits on 7.6 -- neither is this session's to start. Resume: copilot-oneshot-credits-r1 -- R1 of the 3-round spec loop proposing that a Copilot one-shot records its credits (DECISIONS.md 'copilot-oneshot-credits', 2026-10-02: read session.usage_checkpoint). Explore the codebase fresh, write the proposal under openspec/changes/. R2 and R3 each independently re-derive against the code afterward; do not collapse rounds.",
+    "current": "copilot-oneshot-credits-r2",
+    "next_action": "copilot-oneshot-credits-r2: R2 of the spec loop for openspec/changes/a-copilot-one-shot-records-its-credits/ (R1 done iter 21). Independently re-derive against the code per its tasks.md 0.2: re-read hub/tests/fixtures/copilot_acp/oneshot_ok.jsonl line by line; grep every caller of parse_copilot_envelope/parse_envelope and every reader of WorkerInvocation.ai_nano_aiu/premium_requests; confirm COPILOT_ONE_SHOT_FLAGS cannot resume a session and _interpret carries usage on each exit design D4 names; check the inf/OverflowError argument and the ledger narrowing claim. Fix the proposal where the code disagrees, append to design.md's Round log (say so if nothing changed), tick 0.2, keep openspec validate --strict passing. Do not collapse into R3.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -48,14 +48,15 @@
         },
         {
             "id": "copilot-oneshot-credits-r1",
-            "status": "open",
+            "status": "done",
             "title": "Follow-up proposal: a Copilot one-shot records its credits (R1)",
-            "detail": "DECISIONS.md copilot-oneshot-credits (10-02): read the one-shot's session.usage_checkpoint. Operator's exception to 'no proposals'. Propose under openspec/changes/."
+            "detail": "Done iter 21: openspec/changes/a-copilot-one-shot-records-its-credits/ written (proposal, design D1-D6, tasks, test-guide, usage-accounting ADDED requirement); openspec validate --strict valid. Found: the one-shot stream has no tokens at all; no route reads worker_invocations credits and the sibling worker-spend-counts never mentions the credit sums it owns (F486); int(inf) would make run_worker raise, so the shared checkpoint_totals helper adds isfinite."
         },
         {
             "id": "copilot-oneshot-credits-r2",
             "status": "open",
-            "title": "R2: re-derive independently against the code"
+            "title": "R2: re-derive independently against the code",
+            "detail": "Change name: a-copilot-one-shot-records-its-credits. Follow its tasks.md 0.2. Independent re-derivation against the code, not a re-read of R1's design; log what changed or that nothing did."
         },
         {
             "id": "copilot-oneshot-credits-r3",
