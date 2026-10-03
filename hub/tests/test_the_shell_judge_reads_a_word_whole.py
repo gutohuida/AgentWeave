@@ -136,6 +136,31 @@ _TABLE = [
     # character after the dot.
     _row("1.4m", "ls sub/.*/x", True),
     _row("1.4n", "cp x sub/..?/y", True),
+    # 1.5 (D5): a schemeless network address (`user@host:`, `host:port/…`) is refused with the
+    # network reason, read on the whole word after rule 2 and before rule 3, in both dialects --
+    # so a separator-less address (`git@github.com:repo`) is seen at all, not only a word rule 6
+    # would otherwise reach. These eleven already pass today (regression guards: the trailing-colon
+    # fix below touches `_words`, which every rule uses).
+    _row("1.5a", "git clone git@github.com:o/r.git", False),
+    _row("1.5b", "curl -s 127.0.0.1:9/x", False),
+    _row("1.5c", "git clone git@github.com:repo", False),
+    _row("1.5d", "scp n user@example.com:file", False),
+    _row("1.5e", "scp n root@10.0.0.5:f", False),
+    # Not addresses: the host before the colon is dotless (a package-manager or digest form), or
+    # there is no port-shaped tail after it.
+    _row("1.5f", "docker pull alpine@sha256:abc", True),
+    _row("1.5g", "npm i x@npm:y", True),
+    _row("1.5h", "pnpm add x@workspace:y", True),
+    _row("1.5i", "scp a host:x/y", True),
+    _row("1.5j", "scp n user@myserver:file", True),
+    _row("1.5k", "docker run -p 8080:80 img", True),
+    # Refused anyway, as the outside piece rule 6 already finds -- not as a network address.
+    _row("1.5l", "docker run -v data:/app img", False),
+    _row("1.5m", "npm i x@file:../lib", False),
+    # (R5) `_words` trims a word's trailing `:`, so this reached the judge as `user@example.com`,
+    # which `_SCP_ADDRESS_RE` (needing a trailing `:`) never matched. FAILS today (allowed,
+    # measured).
+    _row("1.5n", "scp n user@example.com:", False),
 ]
 
 
@@ -172,3 +197,13 @@ def test_the_glob_dotdot_rows_quote_the_whole_piece(workspace, monkeypatch, tool
     decision = _decide(tool, {"command": command})
     assert decision["allow"] is False
     assert decision["reason"] == f"{shown!r} is outside your workspace"
+
+
+# 1.5 (R5, R7): an allow-only check would not catch a wrong quote -- the refusal for the
+# trailing-colon row must quote the word with its colon restored (`'user@example.com:'`), the text
+# D5 actually matched, not the colon-trimmed word `_words` otherwise yields.
+def test_the_trailing_colon_address_quotes_the_colon_restored(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    decision = _decide("Bash", {"command": "scp n user@example.com:"})
+    assert decision["allow"] is False
+    assert "'user@example.com:'" in decision["reason"]
