@@ -924,9 +924,18 @@ every run id, and paste each surface's text verbatim into the Round log.
   (`runner-4a2a9d634569`) was left (harmless, inert) rather than deleted mid-turn-risk. `:8010`'s
   process still carries `MY_ANTHROPIC_KEY=invalid` in its environment until next restart — relevant
   to 7.5, which tests the var *unset*; note for whichever iteration drives 7.5.
-- [ ] 7.4 (A) `dir <cp5's COPILOT_HOME>\hooks` holds no deciding hook, and the home's config names
+- [x] 7.4 (A) `dir <cp5's COPILOT_HOME>\hooks` holds no deciding hook, and the home's config names
   no trusted folder. (R2: `Run` records no environment, so the `COPILOT_ALLOW_ALL` half is test
   1.6's.)
+  **Done 2026-10-03 (night iter 16).** Resolved `cp5`'s `COPILOT_HOME` from
+  `hub/hub/copilot_home.py` (`~/.agentweave/hub/copilot-home/projects/<pid>/<agent>/`) as
+  `proj-d85a82bf4216/cp5`; checked the real directory on disk, not a guess. No `hooks/`
+  subdirectory exists at all (`agents`, `installed-plugins`, `logs`, `session-state`,
+  `config.json`, `agentweave-mcp.json`, `.agentweave-owned.json` are the only entries) — so there
+  is trivially no deciding hook. `config.json`'s only keys are `lastLoggedInUser`, `loggedInUsers`
+  and `firstLaunchAt` (GitHub login state); no `trustedFolders` key or anything naming a trusted
+  folder. Both expectations hold. No Copilot allowance spent (filesystem/config check, no live
+  turn).
 - [ ] 7.5 (C) On the Runners page, create a Copilot provider runner:
   - with the key field set to `sk-ant-not-a-name`. It is refused; record the sentence verbatim;
   - with `MY_ANTHROPIC_KEY` unset. The agent's launchability reason names the variable.
