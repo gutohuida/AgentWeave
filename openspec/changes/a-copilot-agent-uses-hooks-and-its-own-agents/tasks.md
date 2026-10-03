@@ -329,6 +329,9 @@ scratch copy (DEAD-ENDS 2026-09-27).
   "auto"}` written directly on the agent's conversation (as one stored before the runner gained a
   provider would be), a triggered run's request carries `model == "claude-haiku-4-5-20251001"`.
   This fails on today's `agent_trigger.py:802`.
+  **Per-run half done 2026-10-03 (night iter 4)** in `hub/tests/test_copilot_byok_env.py` (the
+  stored model reaches the conversation through a real override on a plain runner, then a rebind,
+  rather than a direct write). Environment, one-shot and launchability halves are task 3.3's.
 - [ ] 1.9 (C) Same file (review fixes 2026-09-28, finding 2): a fake run on the provider runner, with
   the key registered for it as the trigger registers it, records the key value through a **text**
   event, a **thinking** event, an error event, a diagnostic, a `POST /agents/{name}/output` with its
@@ -484,7 +487,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
 - [x] 3.1 Add the migration for `runners.provider_config` (nullable JSON), following
   `.claude/rules/db-migrations.md`: guard a missing table, and bump both head assertions. Add the
   column to `hub/hub/db/models.py::Runner`. Pass test 1.10. **Done 2026-10-03: `0118_runner_provider_config.py`.**
-- [ ] 3.2 `hub/hub/schemas/runners.py`: add a `ProviderConfig` model with the validation in design D7,
+- [x] 3.2 `hub/hub/schemas/runners.py`: add a `ProviderConfig` model with the validation in design D7,
   and add it to the create, update and response schemas. `hub/hub/api/v1/runners.py`: add the
   checks as 400s with a string `detail` (CLI is `copilot`; `type` is `anthropic`; `api_key_var` is a
   name; model set; model a declared **id** of the literal `CATALOG["claude"]`, with its own
@@ -503,9 +506,14 @@ scratch copy (DEAD-ENDS 2026-09-27).
   `hub/hub/runner_provider.py` holds the rules (sentences never repeat a submitted value);
   `RunnerCreate`/`RunnerUpdate.provider_config` are `Optional[Any]` (not `Dict`: a string there
   would 422 with the value echoed); `ProviderConfig` is the response's stored shape, read
-  defensively; the runner routes and the settings route apply the checks. Test 1.7 passes. **Still
-  open:** the `:1618` override refusal and the `:802` stored-override bypass, taken with 1.8's
-  per-run half.
+  defensively; the runner routes and the settings route apply the checks. Test 1.7 passes.
+  **Finished 2026-10-03 (night iter 4):** the trigger route refuses a per-run `model` override on a
+  provider runner (400, `runner_provider.provider_override_problem`, checked before
+  `validate_overrides`; nothing queued, no conversation stored), and the spawn's model resolution
+  uses `runner_row.model` for a provider runner whatever `runtime_overrides` holds (the stored value
+  is kept). 1.8's per-run half passes (`test_copilot_byok_env.py`, 5 passed; each site's removal
+  fails a named test). Driven on a source Hub (`:8018`, profile `drive1003b`): both `auto` and
+  `claude-haiku-4.5` refused with the sentence, 0 runs / 0 queue entries / 0 conversations after.
 - [ ] 3.3 Environment and launchability (design D7):
   - `provider_config` reaches `resolve_agent_env` through `config` (R3: no new parameter), and the
     Copilot `guard_env` (given `config`; *Required of slices 1–4*, 1.3) sets the provider

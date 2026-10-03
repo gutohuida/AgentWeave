@@ -126,6 +126,7 @@ from ...runner_adapters.base import RpcCallbacks as TransportRpcCallbacks
 from ...runner_adapters.base import RpcTransport, RpcTurnRequest, RunnerAdapter, StreamTransport
 from ...runner_commands import OPERATOR_POSTURE, UnsupportedRunnerError
 from ...runner_events import AccountingSample, status_event
+from ...runner_provider import has_provider, provider_override_problem
 from ...scheduler import (
     REVIEWABLE_LOOP_TASK_STATUSES,
     WITH_REVIEWER_LOOP_TASK_STATUSES,
@@ -925,7 +926,14 @@ async def _trigger_agent_directly(
     # catalog when the operator set them (`trigger_agent`'s /trigger handler), so they are
     # trusted here rather than re-validated per turn.
     conversation_overrides = dict(conversation.runtime_overrides or {})
-    model = conversation_overrides.get("model") or config.get("model")
+    if has_provider(runner_row.provider_config):
+        # A provider runner's model is the runner's, whatever the conversation stores: one stored
+        # before the runner gained a provider, or before the agent was rebound to it, is a `copilot`
+        # catalog id the provider's API does not know. Left in place, not applied, so rebinding
+        # back restores it (design D7, R3).
+        model = config.get("model")
+    else:
+        model = conversation_overrides.get("model") or config.get("model")
     control_overrides = {k: v for k, v in conversation_overrides.items() if k != "model"}
     # The agent's default posture sits between the conversation's own choice and the built-in
     # fallback. It has to be applied here rather than only in the composer, because a run
@@ -1851,6 +1859,12 @@ async def trigger_agent(
             raise HTTPException(
                 status_code=409, detail=f"{body.agent}'s bound runner no longer exists."
             )
+        if has_provider(runner_row.provider_config):
+            # Before the catalog check: the per-run model is refused outright here, not judged
+            # against the `copilot` catalog that would accept one (design D7).
+            problem = provider_override_problem(body.overrides)
+            if problem is not None:
+                raise HTTPException(status_code=400, detail=problem)
         accepted, rejection = validate_overrides(runner_row.cli, body.overrides)
         if rejection is not None:
             raise HTTPException(status_code=400, detail=rejection.reason)

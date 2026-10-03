@@ -79,6 +79,18 @@ def provider_flags_problem(flags: Optional[Iterable[Any]]) -> Optional[str]:
     return None
 
 
+def provider_override_problem(overrides: Optional[Mapping[str, Any]]) -> Optional[str]:
+    """A run on a provider runner may not choose its model (design D7): the provider is sent the
+    runner's model, and a per-run one comes from the `copilot` catalog, which the provider's API
+    does not know. Other controls are Copilot's either way and validate as on any runner."""
+    if overrides and "model" in overrides:
+        return (
+            "This agent's runner sends its model to a model provider, so every run uses the "
+            "runner's own model and a run cannot choose another. Change the runner's model instead."
+        )
+    return None
+
+
 def _base_url_problem(base_url: str) -> Optional[str]:
     refusal = (
         "base_url must be an https address, or an http address on this machine (localhost, "
