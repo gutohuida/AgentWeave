@@ -369,7 +369,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   first pass. This is the "blanket worst case... reaches a nested shell or not" task 2.1b asks for.
   Ran 1.3 (passing, as above) and the brace-specific slice of 1.6 this iteration added (below) --
   task 1.6 itself is far larger than the brace rows and stays unticked.
-- [ ] 2.1c (R4) D8 `_glob_links`, built **before** 2.2, because rule 6 without it regresses; (R6) with the base resolved by `_physical`, each branch carrying its real directory, literal components moved into rather than listed, and `..` moving to the real parent and judged (design D8 step 4); (R7) each branch also carries its listed path, so a `..` refusal names where it lands (`_resolves_elsewhere`), a literal component's link test is `os.lstat` (not `os.path.islink`), and `_physical`, `realpath` and `lstat` inside `_glob_links` are wrapped as design "What each changed route returns" says. Run 1.4c, 1.4d and 1.4f
+- [x] 2.1c (R4) D8 `_glob_links`, built **before** 2.2, because rule 6 without it regresses; (R6) with the base resolved by `_physical`, each branch carrying its real directory, literal components moved into rather than listed, and `..` moving to the real parent and judged (design D8 step 4); (R7) each branch also carries its listed path, so a `..` refusal names where it lands (`_resolves_elsewhere`), a literal component's link test is `os.lstat` (not `os.path.islink`), and `_physical`, `realpath` and `lstat` inside `_glob_links` are wrapped as design "What each changed route returns" says. Run 1.4c, 1.4d and 1.4f
 
   **Iteration 19 (partial, a first slice).** Re-derived D8 from the design text again, as iteration
   18's own note asked, rather than trusting that reading. Confirmed it is still too large to build
@@ -724,6 +724,52 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   listed again for a different word's or a deeper `**` level, which only spends budget sooner,
   never later), so it is a genuine, narrow residual rather than a hidden gap -- the next slice to
   build before this task can tick.
+
+  **Iteration 30 (closes 2.1c).** Built the per-pattern listing memo, the one thing left of this
+  task's own checklist: `_Budget.list_directory(directory)`, a new method on `_Budget` (the same
+  object `expand_braces` already memoizes on), keyed by the directory already resolved real by the
+  caller (`_glob_links`'s `_physical`-resolved base, or a non-link branch `_globstar_walk` recurses
+  into -- itself real, since a non-link child of a real directory is real). A hit returns the
+  memoized `os.DirEntry` list and charges nothing; a miss reads `os.scandir`, charging
+  `glob_entries_examined` one entry at a time exactly as the two call sites already did inline, and
+  returns a new `_LISTING_TOO_MANY` sentinel (not memoized, since the scan never finished a listing
+  to reuse) when that pushes past `_GLOB_ENTRY_BUDGET`; `None` ("cannot be listed") is memoized, a
+  deterministic answer for that path. Both `_glob_links`'s single-component match loop and
+  `_globstar_walk` now call it instead of opening `os.scandir` themselves, then iterate the
+  returned list with the same per-entry matching/judging logic as before, unchanged.
+
+  Measured directly against `_decide` first (a throwaway script, not committed): three absolute
+  glob words landing on the same 50-entry directory (`ls .../a*.txt .../b*.txt .../c*.txt`), bound
+  tightened to 60 entries. With today's code (`git stash`ing just `mcp_server.py`), the second
+  word's scan pushes the running total to 100, over the bound, and the call is wrongly refused as
+  `_TOO_MANY` even though the shell would run it fine (one 50-entry directory, read twice, is not
+  "more files than can be checked"). With the memo, the second and third words are served from the
+  first's listing, examined count stays 50, and the call is allowed, matching the shell. Confirmed
+  the reverse holds too: a single `_Budget` is created once per `_decide` call (one listing
+  survives across both dialects and both readings of the same command, as the design's own `budget`
+  threading already implied, not newly introduced here).
+
+  Added `test_a_second_glob_word_against_the_same_directory_is_served_from_the_listing_memo_2_1c`
+  to `test_the_shell_judge_reads_a_word_whole.py`: the fixture's workspace root (5 direct entries),
+  bound pinned to 6 so one listing fits but an unmemoized second listing of the same 5 would not,
+  two distinct non-matching patterns (`nomatch1*`, `nomatch2*` -- distinct patterns, so a
+  per-*pattern* memo, which design D8's own docstring explicitly rejected in favor of per-directory,
+  would still list the root twice and refuse) each with a literal tail so only the budget can
+  refuse. Mutation-checked (`git stash`ing just `mcp_server.py`): exactly this one new test fails,
+  the other 103 rows passing unchanged. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 104 passed (was 103, +1). Broader
+  regression set (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): 730 passed, 2 skipped, no regressions. `ruff
+  check` clean on both files; `black --check --target-version py311` clean, no reformat needed;
+  `mypy src/` (the only path CI runs mypy over) clean. `openspec validate
+  the-shell-judge-reads-a-word-whole --strict`: valid. `git diff --stat`: exactly
+  `hub/hub/mcp_server.py`, the one test file, and this task file.
+
+  **Task 2.1c ticks.** Its own checklist line ("Run 1.4c, 1.4d and 1.4f") and every residual this
+  file's own notes have tracked since iteration 16 (the base's real/listed directory tracking, the
+  `..`-moves-to-the-real-parent rule, the globstar rule, and now the listing memo) are built and
+  verified. Task 1.6 stays separately unticked: the extglob/backslash-run rows, the memo key's
+  colon flag (R6), and `approve_tool_call`'s D6 catch remain, none of which this slice touched.
 - [ ] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
 
   **Iteration 18 (partial).** Measured today's `_decide` directly first (not from this file's old

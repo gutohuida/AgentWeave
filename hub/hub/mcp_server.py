@@ -1239,6 +1239,11 @@ _BRACE_TOTAL_BUDGET = 1024
 # call, charged on `budget` as each is read from `os.scandir` -- not after the listing is built,
 # so an unbounded directory cannot be materialized into memory before the bound is checked.
 _GLOB_ENTRY_BUDGET = 8192
+# `_Budget.list_directory`'s own sentinel for "this directory went past `_GLOB_ENTRY_BUDGET` while
+# being listed" -- distinct from `None` ("cannot be listed"), and never memoized (design "The
+# bounds" only promises the memo serves a *listing*; a scan that never finished one is not a
+# listing to reuse, and the budget it already spent keeps every later call over the bound anyway).
+_LISTING_TOO_MANY = object()
 _BRACE_INT_SEQUENCE_RE = re.compile(r"^([+-]?[0-9]+)\.\.([+-]?[0-9]+)$")
 _BRACE_LETTER_SEQUENCE_RE = re.compile(r"^([A-Za-z])\.\.([A-Za-z])$")
 _BRACE_MAX_LETTER_SPAN = 58
@@ -1702,10 +1707,10 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
     rule (D8 step 2, "a name beginning with `.` matches only when the component does too") is also
     left unbuilt: skipping it only widens what matches, which the design allows
     ("over-approximation... can only add a refusal"), and nothing in this slice's own test needs
-    it. The per-pattern listing memo ("The bounds": "directory listings keyed by the resolved
-    directory") is also left to a further slice -- its absence only means a directory already
-    listed for one word's glob may be listed again for a different word's, which spends budget
-    sooner, never later, so it cannot turn a refusal into an allow.
+    it. **("The bounds", R5) The directory listing itself is memoized on `budget`, keyed by the
+    resolved directory** (`_Budget.list_directory`): a directory already listed for one word's
+    glob, or by a deeper `**` level, is served from the memo for a different word's, charging
+    nothing further, rather than listed again.
     """
     drive, rest = os.path.splitdrive(piece)
     anchor = drive + os.sep
@@ -1738,33 +1743,31 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
             return refusal
         return _globstar_walk(base, listed_base, tail, root, shown, budget)
     normalized_pattern = os.path.normcase(_relax_bracket_pattern(pattern))
-    try:
-        with os.scandir(base) as listing:
-            for entry in listing:
-                budget.glob_entries_examined += 1
-                if budget.glob_entries_examined > _GLOB_ENTRY_BUDGET:
-                    return _refuse(shown, _TOO_MANY)
-                if not fnmatch.fnmatchcase(os.path.normcase(entry.name), normalized_pattern):
-                    continue
-                real = entry.path
-                listed = os.path.join(listed_base, entry.name)
-                if _is_link_entry(entry):
-                    refusal = _judge_path(real, root, shown, shown, False)
-                    if refusal:
-                        return refusal
-                    if not tail:
-                        continue
-                    try:
-                        real = os.path.realpath(real)
-                    except (OSError, ValueError):
-                        continue
-                elif not tail:
-                    continue
-                refusal = _glob_tail_walk(tail, real, listed, root, shown)
-                if refusal:
-                    return refusal
-    except (OSError, ValueError):
+    entries = budget.list_directory(base)
+    if entries is _LISTING_TOO_MANY:
+        return _refuse(shown, _TOO_MANY)
+    if entries is None:
         return None
+    for entry in entries:
+        if not fnmatch.fnmatchcase(os.path.normcase(entry.name), normalized_pattern):
+            continue
+        real = entry.path
+        listed = os.path.join(listed_base, entry.name)
+        if _is_link_entry(entry):
+            refusal = _judge_path(real, root, shown, shown, False)
+            if refusal:
+                return refusal
+            if not tail:
+                continue
+            try:
+                real = os.path.realpath(real)
+            except (OSError, ValueError):
+                continue
+        elif not tail:
+            continue
+        refusal = _glob_tail_walk(tail, real, listed, root, shown)
+        if refusal:
+            return refusal
     return None
 
 
@@ -1818,38 +1821,36 @@ def _globstar_walk(
     ends every branch in one step rather than recursing without end -- a real directory tree holds
     no such cycle without a link in it. None when nothing refuses, including when a directory
     cannot be listed (the same as the single-component loop's own error reading)."""
-    try:
-        with os.scandir(directory) as listing:
-            for entry in listing:
-                budget.glob_entries_examined += 1
-                if budget.glob_entries_examined > _GLOB_ENTRY_BUDGET:
-                    return _refuse(shown, _TOO_MANY)
-                real = entry.path
-                listed = os.path.join(listed_directory, entry.name)
-                is_link = _is_link_entry(entry)
-                if is_link:
-                    refusal = _judge_path(real, root, shown, shown, False)
-                    if refusal:
-                        return refusal
-                    try:
-                        real = os.path.realpath(real)
-                    except (OSError, ValueError):
-                        continue
-                refusal = _glob_tail_walk(tail, real, listed, root, shown)
-                if refusal:
-                    return refusal
-                if is_link:
-                    continue
-                try:
-                    descend = entry.is_dir(follow_symlinks=False)
-                except OSError:
-                    descend = False
-                if descend:
-                    refusal = _globstar_walk(real, listed, tail, root, shown, budget)
-                    if refusal:
-                        return refusal
-    except (OSError, ValueError):
+    entries = budget.list_directory(directory)
+    if entries is _LISTING_TOO_MANY:
+        return _refuse(shown, _TOO_MANY)
+    if entries is None:
         return None
+    for entry in entries:
+        real = entry.path
+        listed = os.path.join(listed_directory, entry.name)
+        is_link = _is_link_entry(entry)
+        if is_link:
+            refusal = _judge_path(real, root, shown, shown, False)
+            if refusal:
+                return refusal
+            try:
+                real = os.path.realpath(real)
+            except (OSError, ValueError):
+                continue
+        refusal = _glob_tail_walk(tail, real, listed, root, shown)
+        if refusal:
+            return refusal
+        if is_link:
+            continue
+        try:
+            descend = entry.is_dir(follow_symlinks=False)
+        except OSError:
+            descend = False
+        if descend:
+            refusal = _globstar_walk(real, listed, tail, root, shown, budget)
+            if refusal:
+                return refusal
     return None
 
 
@@ -2430,6 +2431,39 @@ class _Budget:
         self.globstar_named = globstar_named
         self._expansions: Dict[Tuple[str, str], Optional[List[str]]] = {}
         self.judgements: Dict[Tuple[str, str, bool, bool, str, bool], Optional[Dict[str, Any]]] = {}
+        self._listings: Dict[str, Optional[List["os.DirEntry[str]"]]] = {}
+
+    def list_directory(self, directory: str) -> Any:
+        """`os.scandir(directory)`, materialized and memoized by `directory` (design "The bounds",
+        R5: "directory listings keyed by the resolved directory") -- a base `_glob_links` resolved
+        with `_physical`, or a branch `_globstar_walk` recurses into, which is itself real because a
+        non-link child of a real directory is real (design, "Why only links are resolved"). A
+        second glob word, or a deeper `**` level, that lands on the same real directory is served
+        from the memo and charges nothing; only a miss reads `os.scandir` and spends the budget,
+        one entry at a time, exactly as before this memo existed.
+
+        Returns the entry list on a hit or a clean miss; `None`, memoized, when the directory
+        itself cannot be listed (`OSError`/`ValueError`, including the iterator raising partway,
+        per design "What each changed route returns" -- deterministic for that path, so caching it
+        costs nothing later); or `_LISTING_TOO_MANY`, **not** memoized, when the scan now reading
+        this directory pushed `glob_entries_examined` past `_GLOB_ENTRY_BUDGET` -- the caller turns
+        that into the same `_TOO_MANY` refusal a direct `os.scandir` loop would have given.
+        """
+        if directory in self._listings:
+            return self._listings[directory]
+        entries: List["os.DirEntry[str]"] = []
+        try:
+            with os.scandir(directory) as listing:
+                for entry in listing:
+                    self.glob_entries_examined += 1
+                    if self.glob_entries_examined > _GLOB_ENTRY_BUDGET:
+                        return _LISTING_TOO_MANY
+                    entries.append(entry)
+        except (OSError, ValueError):
+            self._listings[directory] = None
+            return None
+        self._listings[directory] = entries
+        return entries
 
     def expand_braces(self, marked: str, dialect: str) -> Optional[List[str]]:
         """`_expand_braces(marked, ...)`, memoized by the marked argument text and dialect (design

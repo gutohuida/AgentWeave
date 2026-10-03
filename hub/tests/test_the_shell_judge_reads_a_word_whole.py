@@ -594,6 +594,35 @@ def test_the_glob_link_walk_s_entries_are_charged_against_the_decide_budget(work
     assert over_bound["reason"].endswith(mcp_server._TOO_MANY)
 
 
+# Design "The bounds" (R5): "directory listings keyed by the resolved directory" -- a second glob
+# word landing on the same directory the first already listed is served from
+# `_Budget.list_directory`'s memo, charging nothing further, rather than listed again. The fixture's
+# workspace root holds exactly 5 direct entries (`sub`, `up`, `in`, `a'b`, `a@b`); bound at 6 so one
+# listing of it fits but a second, unmemoized listing of the same 5 entries would not (5 + 5 = 10 >
+# 6). Two distinct glob words (`nomatch1*`, `nomatch2*` -- distinct patterns, so a per-pattern memo
+# would still list the root twice) that match nothing, each with a literal tail, so the refusal (if
+# any) can only come from the budget. Measured directly against `_decide` first
+# (testbed/scratch/memo_probe4.py, gitignored, not committed): confirmed wrongly refused with this
+# same bound when `mcp_server.py`'s own memo is stashed out, allowed with it in place.
+def test_a_second_glob_word_against_the_same_directory_is_served_from_the_listing_memo_2_1c(
+    workspace, monkeypatch
+):
+    from hub import mcp_server
+
+    monkeypatch.setenv("HUB_URL", _HUB)
+    forward = str(workspace).replace("\\", "/")
+
+    monkeypatch.setattr(mcp_server, "_GLOB_ENTRY_BUDGET", 6)
+
+    one_word = _decide("Bash", {"command": f"cp n {forward}/nomatch1*/x"})
+    assert one_word["allow"] is True, one_word["reason"]
+
+    two_words_same_directory = _decide(
+        "Bash", {"command": f"cp n {forward}/nomatch1*/x {forward}/nomatch2*/x"}
+    )
+    assert two_words_same_directory["allow"] is True, two_words_same_directory["reason"]
+
+
 # 2.2's own remaining bullet: rule 6 (D2's piece reading, D2 step 6's whole-value reading) also
 # matches a glob-holding word against the links it finds, not only its literal text -- mirroring
 # rule 5's own `_glob_links` call, but for a relative word, joined to the workspace root first
