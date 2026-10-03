@@ -81,9 +81,16 @@ spell that form out.
   to accept it. Closing it by requiring an absolute path would stop the fix firing for the relative form 9.10
   actually wrote. If you want it closed later, per-run arguments-file names in slice 3 would remove the collision.
 
-### The MISREPORT ratchet measures a decayed table -- 2026-09-21 night, OPEN
+### The MISREPORT ratchet measures a decayed table -- 2026-09-21 night, DECIDED 2026-10-03
 
-- OPEN      F396-rekey  **How should `RENDERS` be re-anchored, and who triages the 18 sites that
+- DECIDED   F396-rekey  **Closed as already done** (operator, 2026-10-03 interactive, as recommended):
+  the 2026-09-22 interactive fix answered all three parts the way the row proposed -- (1) rows are
+  keyed by `(path, hook, occurrence)`, (2) the ceiling was re-measured deliberately (52 -> 55, then
+  53 after two real repairs on 2026-09-23), (3) all 18 unclassified sites were triaged in that
+  change -- and a stale row or an unclassified site is now a test failure (F396's FIXED section).
+  Re-measured 2026-10-03 on master `108a99b`: 97 unhandled, 53 MISREPORT = `MISREPORT_CEILING`,
+  0 stale, 0 unclassified; `test_surface_ceilings.py` 6 passed. The row had stayed OPEN only because
+  nobody flipped it, so every window carried it forward. The question was: **How should `RENDERS` be re-anchored, and who triages the 18 sites that
   now carry no classification at all?** Measured tonight (F396 in `scripts/drive/FINDINGS.md`):
   `n11_query_error_surface.RENDERS` is keyed by `(file, line)`, **8** of its 57 `MISREPORT`
   classifications match no live call site, and the ceiling `MISREPORT_CEILING = 52` was **already
@@ -101,7 +108,7 @@ spell that form out.
   **What must not happen meanwhile:** lowering `MISREPORT_CEILING` to 49. `_ratchet`'s warning text
   asks for exactly that on every run, and this window's own iteration 8 wrote it down as a chore.
 
-**One row is open, immediately above. The two rows below it are discharged, and both were
+**No row is open as of 2026-10-03 (F396-rekey, immediately above, was closed then). The two rows below it are discharged, and both were
 verified so on 2026-09-19.**
 They are kept in place, not deleted, because each carries the reasoning and the measurements behind
 a decision the corpus still relies on — and a decision log that is silently rewritten stops being

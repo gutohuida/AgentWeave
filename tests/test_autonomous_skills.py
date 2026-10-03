@@ -203,11 +203,14 @@ def _run_routed_iteration(
     *,
     stdout_json: dict | None = None,
     with_policy: bool = True,
+    gh_runs: list[dict] | None = None,
 ) -> tuple[subprocess.CompletedProcess, Path, Path]:
     """Run run-iteration.ps1 once against a fake Claude that records its args and env.
 
     Returns (process, repo, fake-agent work dir). The fake prints `stdout_json` as the
-    `--output-format json` result line when given.
+    `--output-format json` result line when given. With `gh_runs`, the repo gets a commit and
+    a fake `gh` answers `gh run list` with those runs, `<TIP>` replaced by that commit's sha;
+    without it the driver is told not to read CI at all.
     """
     if not shutil.which("powershell") or not shutil.which("git"):
         pytest.skip("PowerShell and Git are required")
@@ -234,6 +237,21 @@ def _run_routed_iteration(
 
     work = tmp_path / "fake"
     work.mkdir(exist_ok=True)
+    gh_executable = "none"
+    if gh_runs is not None:
+        git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "tip"], check=True)
+        tip = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        runs_file = work / "runs.json"
+        runs_file.write_text(json.dumps(gh_runs).replace("<TIP>", tip), encoding="utf-8")
+        fake_gh = tmp_path / "fake-gh.ps1"
+        fake_gh.write_text(f"Get-Content -Raw '{runs_file}'\nexit 0\n", encoding="ascii")
+        gh_executable = str(fake_gh)
     result_file = work / "result.json"
     if stdout_json is not None:
         result_file.write_text(json.dumps(stdout_json), encoding="utf-8")
@@ -275,6 +293,8 @@ def _run_routed_iteration(
             ".claude\\autonomous\\STATE-night.json",
             "-LogFile",
             ".claude\\autonomous\\driver-night.log",
+            "-GhExecutable",
+            gh_executable,
         ],
         capture_output=True,
         text=True,
@@ -479,3 +499,96 @@ def test_an_unparseable_policy_refuses_to_launch(tmp_path: Path):
     )
     assert proc.returncode == 2
     assert not (work / "args.txt").exists()
+
+
+def _run(sha: str, conclusion: str, minutes_ago: int, status: str = "completed") -> dict:
+    created = (datetime.now().astimezone() - timedelta(minutes=minutes_ago)).isoformat()
+    return {
+        "databaseId": 1000 + minutes_ago,
+        "headSha": sha,
+        "status": status,
+        "conclusion": conclusion if status == "completed" else "",
+        "createdAt": created,
+    }
+
+
+def _prompt_and_ledger(tmp_path: Path, runs: list[dict]) -> tuple[str, dict]:
+    proc, repo, work = _run_routed_iteration(
+        tmp_path,
+        {"current": "a-change-impl", "queue": [{"id": "a-change-impl"}]},
+        stdout_json=RESULT_OK,
+        gh_runs=runs,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    args = (work / "args.txt").read_text(encoding="utf-8").splitlines()
+    prompt = "\n".join(args[args.index("-p") + 1 : args.index("--model")])
+    ledger = repo / ".claude" / "autonomous" / "usage-ledger.jsonl"
+    return prompt, json.loads(ledger.read_text(encoding="utf-8").splitlines()[-1])
+
+
+# The night window pushed onto a red branch three nights running (2026-09-22: 16 commits,
+# 09-29: 40, 10-02: 26) while the playbook told every firing to read CI first. The driver now
+# reads it and puts the verdict at the top of the prompt, ahead of next_action.
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows Scheduled Task driver")
+def test_a_red_tip_is_the_first_thing_the_prompt_says_and_replaces_next_action(tmp_path: Path):
+    prompt, row = _prompt_and_ledger(
+        tmp_path, [_run("<TIP>", "failure", 5), _run("a" * 40, "success", 30)]
+    )
+    assert prompt.startswith("CI, read by the driver")
+    assert "**failure**" in prompt
+    assert "CI is red" in prompt and "replaces next_action" in prompt
+    assert "gh run view 1005 --log-failed" in prompt
+    assert prompt.index("CI is red") < prompt.index("Continue the autonomous work session")
+    assert (row["ci_verdict"], row["ci_red"]) == ("failure", True)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows Scheduled Task driver")
+def test_an_unfinished_tip_does_not_hide_the_red_run_before_it(tmp_path: Path):
+    # The 10-02 shape: a ~20-minute CI run against ~15-minute firings leaves the tip unfinished
+    # most of the time, so the verdict that matters is the newest FINISHED one.
+    prompt, row = _prompt_and_ledger(
+        tmp_path,
+        [_run("<TIP>", "", 3, status="in_progress"), _run("b" * 40, "failure", 18)],
+    )
+    assert "**in_progress**" in prompt
+    assert "Newest finished run: bbbbbbb: **failure**" in prompt
+    assert "CI is red (failure on bbbbbbb)" in prompt
+    assert (row["ci_verdict"], row["ci_red"]) == ("in_progress", True)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows Scheduled Task driver")
+def test_a_green_tip_reports_the_word_and_asks_for_no_fix(tmp_path: Path):
+    prompt, row = _prompt_and_ledger(
+        tmp_path, [_run("<TIP>", "success", 5), _run("c" * 40, "failure", 40)]
+    )
+    assert "**success**" in prompt
+    assert "CI is red" not in prompt
+    assert "Newest finished run" not in prompt
+    assert (row["ci_verdict"], row["ci_red"]) == ("success", False)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows Scheduled Task driver")
+def test_a_tip_unfinished_for_an_hour_is_called_hung(tmp_path: Path):
+    prompt, _ = _prompt_and_ledger(
+        tmp_path,
+        [_run("<TIP>", "", 75, status="in_progress"), _run("d" * 40, "success", 90)],
+    )
+    assert "HUNG (F394)" in prompt
+    assert "CI is red" not in prompt
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows Scheduled Task driver")
+def test_an_unreadable_verdict_still_launches_and_says_so(tmp_path: Path):
+    proc, repo, work = _run_routed_iteration(
+        tmp_path,
+        {"current": "a-change-impl", "queue": [{"id": "a-change-impl"}]},
+        stdout_json=RESULT_OK,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "CI verdict: unavailable to the driver" in (work / "args.txt").read_text(
+        encoding="utf-8"
+    )
+    log = (repo / ".claude" / "autonomous" / "driver-night.log").read_text(encoding="utf-8")
+    assert "CI verdict unavailable" in log

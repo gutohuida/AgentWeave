@@ -37,7 +37,10 @@ param(
   [string] $LogFile = ".claude\autonomous\driver.log",
   # Repo-relative model/effort routing and metering settings (Claude runner only). Absent file =
   # the previous behaviour exactly: STATE's top-level model, the user's default effort, no caps.
-  [string] $PolicyFile = ".claude\loops\usage-policy.json"
+  [string] $PolicyFile = ".claude\loops\usage-policy.json",
+  # The GitHub CLI used to read the branch's CI verdict before launching. Empty = `gh` on PATH;
+  # "none" skips the read (the prompt then says the verdict is unavailable).
+  [string] $GhExecutable = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -249,6 +252,102 @@ if ($routeEffort -and @("low", "medium", "high", "xhigh", "max") -notcontains $r
   $routeEffort = ""; $effortFrom = ""
 }
 
+# --- the branch's CI verdict ---------------------------------------------------------------------
+# Read here, by the driver, and put at the top of the prompt. The playbooks told every firing to
+# read it first, and three nights in a row the firings did not: measured 2026-09-22 (16 commits onto
+# red), 2026-09-29 (40 consecutive red pushes) and 2026-10-02 (26). A rule the agent has to remember
+# failed three times; a verdict already in front of it cannot be skipped. The firing still decides
+# how to fix a red branch -- the driver only reports, it does not reschedule (operator, 2026-10-03).
+#
+# One `gh run list` call in a job with a timeout, so an unreachable GitHub costs a minute rather than
+# hanging the window. Any failure to read degrades to "unavailable", never to a refusal to launch.
+$failWords = @("failure", "cancelled", "timed_out", "startup_failure", "action_required")
+function Get-ShaVerdict($runs) {
+  if (-not $runs) { return "no run" }
+  $unfinished = @($runs | Where-Object { $_.status -ne "completed" })
+  if ($unfinished.Count -gt 0) { return [string]$unfinished[0].status }
+  foreach ($w in $failWords) { if (@($runs | Where-Object { $_.conclusion -eq $w }).Count -gt 0) { return $w } }
+  $other = @($runs | Where-Object { $_.conclusion -ne "success" })
+  if ($other.Count -gt 0) { return [string]$other[0].conclusion }
+  return "success"
+}
+function Get-CiBlock {
+  $ErrorActionPreference = "Continue"   # a native stderr line must degrade, not throw
+  if ($GhExecutable -eq "none") { return @{ word = "unavailable"; red = $false; text = "the driver was told not to read it" } }
+  $gh = $GhExecutable
+  if (-not $gh) {
+    $ghCommand = Get-Command gh -ErrorAction SilentlyContinue
+    if (-not $ghCommand) { return @{ word = "unavailable"; red = $false; text = "gh is not on PATH" } }
+    $gh = $ghCommand.Source
+  }
+  $tip = (& git -C $Repo rev-parse HEAD 2>$null)
+  if ($LASTEXITCODE -ne 0 -or -not $tip) { return @{ word = "unavailable"; red = $false; text = "the branch has no commit" } }
+  $tip = ([string]$tip).Trim()
+  $job = Start-Job -ScriptBlock {
+    param($exe, $repo, $branch)
+    Set-Location $repo
+    & $exe run list --branch $branch --limit 20 --json databaseId,headSha,status,conclusion,createdAt 2>$null
+  } -ArgumentList $gh, $Repo, $currentBranch
+  $done = Wait-Job $job -Timeout 60
+  if (-not $done) {
+    Stop-Job $job; Remove-Job $job -Force
+    return @{ word = "unavailable"; red = $false; text = "gh run list did not answer within 60 s" }
+  }
+  $raw = (Receive-Job $job -ErrorAction SilentlyContinue | Out-String)
+  Remove-Job $job -Force
+  # PowerShell 5.1's ConvertFrom-Json emits a JSON array as ONE object; piping it on unrolls it.
+  try { $parsed = $raw | ConvertFrom-Json -ErrorAction Stop; $runs = @($parsed | ForEach-Object { $_ }) } catch {
+    return @{ word = "unavailable"; red = $false; text = "gh run list returned no readable JSON" }
+  }
+  $runs = @($runs | Sort-Object { [string]$_.createdAt } -Descending)
+  $tipShort = $tip.Substring(0, [Math]::Min(7, $tip.Length))
+  $tipWord = Get-ShaVerdict @($runs | Where-Object { $_.headSha -eq $tip })
+  $lines = New-Object System.Collections.Generic.List[string]
+  $lines.Add("- Branch tip ${tipShort}: **$tipWord**.")
+  $hung = @($runs | Where-Object { $_.headSha -eq $tip -and $_.status -ne "completed" -and $_.createdAt -and
+    ([datetimeoffset]::Now - [datetimeoffset]::Parse([string]$_.createdAt, [System.Globalization.CultureInfo]::InvariantCulture)).TotalMinutes -gt 60 })
+  if ($hung.Count -gt 0) { $lines.Add("- The tip's run $($hung[0].databaseId) has been unfinished for over 60 minutes: treat it as HUNG (F394), not pending.") }
+  $redWord = ""; $redSha = ""; $redRun = ""
+  if ($failWords -contains $tipWord) {
+    $redWord = $tipWord; $redSha = $tipShort
+    $redRun = [string](@($runs | Where-Object { $_.headSha -eq $tip -and $_.conclusion -eq $tipWord })[0].databaseId)
+  } elseif ($tipWord -ne "success") {
+    # The tip is still running (or never ran). A window that pushes every ~15 minutes against a
+    # ~20-minute CI run sees an unfinished tip most of the time, so the newest finished verdict is
+    # the one that says whether the branch is red.
+    foreach ($sha in @($runs | ForEach-Object { $_.headSha } | Select-Object -Unique)) {
+      if ($sha -eq $tip) { continue }
+      $shaRuns = @($runs | Where-Object { $_.headSha -eq $sha })
+      if (@($shaRuns | Where-Object { $_.status -ne "completed" }).Count -gt 0) { continue }
+      $w = Get-ShaVerdict $shaRuns
+      $short = ([string]$sha).Substring(0, [Math]::Min(7, ([string]$sha).Length))
+      $lines.Add("- Newest finished run: ${short}: **$w**.")
+      if ($failWords -contains $w) {
+        $redWord = $w; $redSha = $short
+        $redRun = [string](@($shaRuns | Where-Object { $_.conclusion -eq $w })[0].databaseId)
+      }
+      break
+    }
+  }
+  return @{ word = $tipWord; red = [bool]$redWord; text = ($lines -join "`n"); redWord = $redWord; redSha = $redSha; redRun = $redRun; tip = $tipShort }
+}
+try { $ci = Get-CiBlock } catch { $ci = @{ word = "unavailable"; red = $false; text = "reading it threw: $_" } }
+if ($ci.word -eq "unavailable") {
+  $ciPrompt = "CI verdict: unavailable to the driver ($($ci.text)). Read it yourself with " +
+    "``gh run list --branch $currentBranch --limit 5`` before next_action, and write gh's word in your log entry's first line."
+  Write-Log "CI verdict unavailable: $($ci.text)"
+} else {
+  $ciPrompt = "CI, read by the driver just before launching you (``gh run list --branch $currentBranch``):`n" + $ci.text + "`n" +
+    "Write the tip's word, exactly as above, in your log entry's first line."
+  if ($ci.red) {
+    $ciPrompt += "`n`n**CI is red ($($ci.redWord) on $($ci.redSha)). Fixing it is this firing's unit of work and replaces " +
+      "next_action.** Read the failing job with ``gh run view $($ci.redRun) --log-failed`` and classify from its FAILED/ERROR " +
+      "lines. Only if a commit pushed after $($ci.redSha) already fixes exactly that failure, say so in the log and do " +
+      "next_action instead. Never push product work onto a branch you know is red."
+  }
+  Write-Log ("CI: tip {0} {1}{2}" -f $ci.tip, $ci.word, $(if ($ci.red) { " - RED ($($ci.redWord) on $($ci.redSha), run $($ci.redRun)); prompt says fix first" } else { "" }))
+}
+
 # --- the prompt ---------------------------------------------------------------------------------
 # Deliberately short. Everything the iteration needs to know is on disk; restating it here would
 # create a second source of truth that drifts from the file the session actually maintains.
@@ -300,6 +399,10 @@ $prompt = $prompt.Replace('.claude/autonomous/STATE.json', '<<STATE>>').
                   Replace('<<STATE>>', $stateRelative).
                   Replace('<<LOG>>', $stateLogFile).
                   Replace('<<LOCK>>', $lockRelative)
+
+# The CI verdict goes first, ahead of the standing instructions, because it can replace next_action.
+# Added after the token expansion so nothing gh returned can be mistaken for a token.
+$prompt = $ciPrompt + "`n`n" + $prompt
 
 Set-Location $Repo
 $startedIso = Get-Date -Format "yyyy-MM-ddTHH:mm:sszzz"
@@ -450,6 +553,8 @@ $row = [ordered]@{
   model_usage      = $modelUsage
   snapshot         = $snapshot
   snapshot_captured_at = $snapshotCapturedAt
+  ci_verdict       = $ci.word
+  ci_red           = [bool]$ci.red
 }
 try {
   [System.IO.File]::AppendAllText((Join-Path $autonomousDir "usage-ledger.jsonl"), (($row | ConvertTo-Json -Compress -Depth 8) + [Environment]::NewLine), $script:LogEncoding)

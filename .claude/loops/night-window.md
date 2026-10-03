@@ -6,6 +6,12 @@
 names, then rewrite the state and commit and push. One unit per firing. Never end an iteration with
 a dirty tree.
 
+**Since 2026-10-03 the driver reads it for you:** `run-iteration.ps1` runs `gh run list` before
+launching and puts the verdict at the very top of your prompt — the tip's word, the newest finished
+run's word when the tip is still running, and, when either is red, the instruction to fix it first.
+Act on that block; the paragraph below is why it exists, and is still the rule when the block says
+the verdict was unavailable. Measured 2026-10-02 night: 26 more red pushes with this paragraph in place.
+
 **Every firing, before `next_action`: read CI's verdict for the previous firing's pushed sha.** One
 `gh run list --branch <branch> --limit 5 --json headSha,conclusion,createdAt` call, no waiting — the
 previous push is normally 10-20 minutes old and concluded. Write the verdict in the iteration's first
