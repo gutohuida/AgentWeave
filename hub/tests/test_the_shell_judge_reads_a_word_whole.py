@@ -841,6 +841,50 @@ def test_a_bracket_expression_is_matched_or_kept_exact_as_fnmatch_can_read_it_1_
     assert "it resolves to" in powershell_negated["reason"]
 
 
+# Task 1.4c's POSIX character class row (`cp n '[[:alpha:]]p'/x`), re-derived fresh against
+# `_decide` (`testbed/scratch/measure_1_4c_posix_extglob.py`, gitignored, not committed), not
+# trusting iteration 38's own note that it is "still wrongly allowed" without saying on which
+# platform -- it is platform-split, confirmed by direct investigation, not reasoned from the source
+# alone: `_relax_bracket_pattern` already relaxes `[[:alpha:]]p` to `?p` correctly (`_GLOB_CHARS`
+# sees the leading `[`, and `_bracket_expression_end` already walks past a POSIX class's own `:]`),
+# and `fnmatchcase("up", "?p")` is True -- but that pattern only ever reaches `_glob_links` through
+# `_judge_whole_value`'s *undivided* reading (D9), and D9 takes that reading only `if not
+# _DRIVE_LETTERS` (a drive-letter host instead only judges the value split at each `:`, since a bare
+# `X:` there is read as a drive). Splitting `[[:alpha:]]p/x` at `:` breaks the bracket expression
+# into `[[`, `alpha`, `]]p/x` -- none of which matches `up` -- so a drive-letter host never runs the
+# one reading that would catch it, even though the colons here are POSIX bracket-class syntax, not
+# drive letters. Confirmed directly: `_judge_piece` on the undivided value, called standalone,
+# refuses correctly; `_judge_whole_value` on the same value, with `_DRIVE_LETTERS` true, returns
+# `None` without ever calling `_judge_piece` on the undivided text, only on the broken segments.
+# This machine cannot build a real symlink (no privilege, measured: `OSError: WinError 1314`), so
+# the refused side below is confirmed by forcing `_is_link_entry`/`_is_link_path` to answer as a
+# real POSIX symlink's `os.lstat` would (`S_ISLNK` true, independent of `_DRIVE_LETTERS` in
+# production -- only a Windows junction's reparse-point fallback reads that flag) rather than by a
+# junction, which does not set `S_ISLNK` and so cannot stand in for a real symlink once
+# `_DRIVE_LETTERS` is forced false; reasoned through for the real-symlink case the same way task
+# 1.4g's own POSIX-only `work/t:d` row was (iteration 25) -- a future iteration should confirm
+# CI's `hub-test` job (`ubuntu-latest`, a real symlink, natively `_DRIVE_LETTERS` false) ran the
+# `not _WINDOWS` branch below green, and downgrade this note if it did not. The allowed side is
+# measured directly and natively on this Windows machine: no production change made here, so this
+# row stays open (D9 would need a POSIX-class carve-out to fix the Windows side, which risks
+# reopening D9's own drive-letter reasoning -- left for a further round, not attempted here).
+def test_a_posix_character_class_is_caught_whole_only_off_a_drive_letter_host_1_4c(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    if not _WINDOWS:
+        posix_class = _decide("Bash", {"command": "cp n '[[:alpha:]]p'/x"})
+        assert posix_class["allow"] is False
+        assert "it resolves to" in posix_class["reason"]
+    else:
+        # The named residual on a drive-letter host: D9 never judges the value undivided here,
+        # so `_glob_links` never sees the bracket expression as one pattern. Asserted so a change
+        # of mind (a D9 POSIX-class carve-out) is visible.
+        posix_class = _decide("Bash", {"command": "cp n '[[:alpha:]]p'/x"})
+        assert posix_class["allow"] is True, posix_class["reason"]
+
+
 # 2.2, a first slice (design D2 step 2, D3's extglob units): an unquoted extglob group -- a
 # trigger (`@ ? * + !`) directly followed by `(`, up to its matching `)` -- is kept as one unit
 # through both the lexer and rule 6's piece reading, rather than fragmented at the `(`, `|` and `@`

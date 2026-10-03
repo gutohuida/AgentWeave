@@ -190,6 +190,60 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   entirely -- confirm against design.md before treating it as blocking); and the (R6/D11) rows,
   which need task 2.1d (unticked, not started). Each needs its own fresh measurement before
   building.
+
+  **Iteration 41 (the dot-rule row and the POSIX character class row, both re-derived; extglob
+  untouched).** The dot-rule row (`ls sub/.*/y`, `sub/.l` a link out) is **already covered**: a
+  fresh, independent measurement against `_decide` (`testbed/scratch/measure_1_4c_posix_extglob.py`,
+  gitignored, not committed, built without reading 2.1c's own test first) refuses it, naming the
+  resolved target -- the same row task 2.1c's own
+  `test_a_dot_leading_glob_is_also_matched_against_the_link_it_finds_2_1c` already exercises
+  (iteration 22). No gap, no new test needed; this task's remaining dot-rule item is closed.
+
+  The POSIX character class row (`cp n '[[:alpha:]]p'/x`) turned out to be **platform-split**,
+  which no prior iteration's note said -- confirmed by direct investigation of `_judge_whole_value`
+  and `_judge_piece`, not reasoned from the source alone: `_relax_bracket_pattern` already relaxes
+  `[[:alpha:]]p` to `?p` correctly, and `fnmatchcase("up", "?p")` is True, but that pattern only
+  ever reaches `_glob_links` through D9's *undivided* whole-value reading, which design D9 takes
+  only `if not _DRIVE_LETTERS` -- a drive-letter host instead splits the value at every `:` first
+  (`[[`, `alpha`, `]]p/x`), none of which matches `up`, because D9 reads any colon as a possible
+  drive letter, not knowing some colons are POSIX bracket-class syntax instead. Confirmed by calling
+  `_judge_piece` on the undivided value directly (refuses) versus `_judge_whole_value` on the same
+  value with `_DRIVE_LETTERS` forced true (returns `None`, never reaching the undivided call). This
+  machine has no symlink privilege (`OSError: WinError 1314`, measured), so the POSIX-side refusal
+  is confirmed by forcing `_is_link_entry`/`_is_link_path` to answer as a real symlink's `os.lstat`
+  would (`S_ISLNK`, independent of `_DRIVE_LETTERS` in production) rather than by a junction, which
+  needs `_DRIVE_LETTERS` true for its own reparse-point check and so cannot stand in once that flag
+  is forced false -- reasoned through for the real case the same way task 1.4g's own POSIX-only
+  `work/t:d` row was (iteration 25); a future iteration should confirm CI's `hub-test` job
+  (ubuntu-latest, a real symlink, natively `_DRIVE_LETTERS` false) ran the `not _WINDOWS` branch
+  green. The Windows side is measured directly and natively on this machine: still wrongly allowed.
+  No production change made -- fixing the Windows side would need a POSIX-class carve-out in D9,
+  which risks reopening D9's own drive-letter reasoning, so it is left for a further round rather
+  than patched here.
+
+  Added `test_a_posix_character_class_is_caught_whole_only_off_a_drive_letter_host_1_4c` to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, pinning both platforms' current answer
+  (refused off a drive-letter host, allowed on one) so a future design change shows up as a test
+  failure rather than silently. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **116 passed** (was 115, +1). Broader
+  regression set (`test_permission_approver.py`, `test_hub_own_call.py`,
+  `test_copilot_acp_decide.py`, `test_a_write_outside_the_workspace_is_recorded.py`): **626 passed,
+  2 skipped**, no regressions (same count as iteration 39's same four files). `py -3.11 -m ruff
+  check` and `py -3.11 -m black --check --target-version py311` on the changed test file: both
+  clean. No production file changed, so `mypy` is unaffected. `git diff --stat`: exactly
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py` and this task file.
+
+  **Task 1.4c still stays unticked.** What remains: the extglob row (`bash -O extglob -c 'cp n
+  @(u)p/x'`, confirmed still wrongly allowed on this platform, untouched this iteration --
+  `_GLOB_CHARS` does not include extglob's own trigger characters at all, so `_glob_links` never
+  sees it as a glob-holding component regardless of platform; needs its own `_glob_links` slice, not
+  the D9 carve-out the POSIX-class row needs); the Windows-side POSIX-class gap just found (needs a
+  design round for D9's carve-out, not a quick fix); the absolute top-level dot-glob gap (iteration
+  39's finding (2), needs a design thought about rule 5's call order); the bash-dot-rule control gap
+  (iteration 39's finding (1), likely out of scope, confirm against design.md); and the (R6/D11)
+  rows, which need task 2.1d (unticked, not started -- read its own line and design.md's D11 section
+  first before building, it touches `_words`, not only `_glob_links`). Each needs its own fresh
+  measurement before building, same discipline as every iteration so far.
 - [ ] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
   - `cp n [u]p/` and `cp n ./u[p]` (a trailing `]` the trim removes). Each PASSES today only by the tail (`'/'`, `'/u[p'`), so assert the resolved target, which FAILS today; each FAILS against R5 (allowed).
   - `cp n [.]./x` refused as outside, quoting `'[.]./x'`. PASSES today by the tail `'/x'`, FAILS on the reason assertion and against R5 (the word `.]./x` is inside).
