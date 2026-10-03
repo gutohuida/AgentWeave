@@ -458,6 +458,12 @@ scratch copy (DEAD-ENDS 2026-09-27).
     runner's model (design D7).
 
   Run `cd hub/ui && npx vitest run runnerProviderConfig copilotAgentSettings`.
+  **B half done 2026-10-03 (night iter 9):** `copilotAgentSettings.test.tsx` created, 10 passed —
+  the review-agents control only (the GitHub-server control is group D's). Shown only for a
+  `copilot`-bound agent, absent for `claude`/`codex`/unbound; checked state matches the served
+  `config.copilot_review_agents`; a toggle PATCHes the whole next list; the provider-runner caveat
+  sentence renders. Two mutations caught (dropping the `runner === 'copilot'` gate; a broken
+  uncheck that never filtered the stored list).
   **Runner half done 2026-10-03 (night iter 8):** `runnerProviderConfig.test.tsx`, 10 passed (the
   first and third bullets; the composer case renders `NewConversationSurface`). Each of 12
   mutations of the code it covers fails a named case. `copilotAgentSettings.test.tsx` (B, D) is
@@ -664,9 +670,27 @@ scratch copy (DEAD-ENDS 2026-09-27).
   `test_review_turn*`, `test_agent_tool_surface*`, `test_a_request_means_what_it_says.py`,
   `test_request_agent_models_an_existing_agent.py`, `test_no_console_flash.py`) all pass. `ruff`,
   `black --check --target-version py311`, `mypy src/` clean.
-- [ ] 4.3 Agent Settings UI: add a review-agents control shown only for `copilot` agents; its help
+- [x] 4.3 Agent Settings UI: add a review-agents control shown only for `copilot` agents; its help
   text says that on a provider runner Copilot's review agents may not run (review 2026-09-28,
   finding 13). Pass its part of test 1.14. Run lint, vitest, build and bundle refresh as in 3.4.
+  **Done 2026-10-03 (night iter 9):** `CopilotReviewAgentsSetting` (`AgentSettingsControls.tsx`),
+  three checkboxes (`code-review`, `security-review`, `rubber-duck`) under the Execution section,
+  gated on `agent.runner === 'copilot'`. Reads `agent.config.copilot_review_agents` (added to
+  `AgentSummary`); a toggle sends the whole next list through a new `useUpdateAgentReviewAgents`
+  PATCH hook. Help text states the provider-runner caveat by name, matching design D8's wording.
+  Pass; lint clean; `npx vitest run` 1853 passed (178 files, +10/+1 over iter 8's 1843/177); `npm
+  run build`; bundle refreshed. `AW_CHECK_UI_BUNDLE=1 test_ui_build_stamp.py` and
+  `test_runner_provider_config.py`: 58 passed. CLI suite 565 passed, 3 skipped (no Python
+  changed). **Drove it** in Chromium against the served bundle, source Hub port 8024, fresh
+  profile `drive1003g`, project `proj-864690d136c4` (`testbed/drive1003-reviewagents/drive.py`):
+  a `copilot`-bound agent shows all three checkboxes, `code-review` pre-checked from a seeded
+  `config`; checking `security-review` PATCHes `["code-review","security-review"]` and the DOM
+  updates; unchecking `code-review` PATCHes `["security-review"]`; the caveat sentence renders;
+  a `claude`-bound agent and an unbound agent show none of the three boxes; 0 Hub-log tracebacks.
+  **Found by the drive and fixed:** the control's help paragraph had no width constraint, so in
+  the real browser (unlike jsdom, which never lays out) it grew to its unwrapped max-content
+  width and crushed the row's label column to one word per line. Gave the control's wrapper
+  `max-w-[320px]`; re-driven, confirmed fixed, re-screenshotted, bundle rebuilt again.
 
 ## 5. Group D — the GitHub MCP server toggle
 

@@ -9,6 +9,7 @@ import { tint } from '@/lib/colorTint'
 import {
   CharterPicker,
   CheckpointGrantsSetting,
+  CopilotReviewAgentsSetting,
   EvidenceGrantSetting,
   CheckpointOverrideSetting,
   DescriptionSetting,
@@ -118,6 +119,14 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
           >
             <PermissionDefaultSetting agent={agent} />
           </SettingsRow>
+          {agent.runner === 'copilot' && (
+            <SettingsRow
+              label="Review agents"
+              description="Copilot's own built-in agents this agent may consult before recording a review verdict."
+            >
+              <CopilotReviewAgentsSetting agent={agent} />
+            </SettingsRow>
+          )}
         </SettingsSection>
       )
 

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ghcp-s5-b-impl",
-    "next_action": "Group B (ghcp-s5-b-impl), second and last slice, UI: task 4.3 -- an Agent Settings review-agents control shown only for copilot agents, offering the closed vocabulary (code-review, security-review, rubber-duck; hub/hub/api/v1/agents.py's new COPILOT_REVIEW_AGENTS tuple, PATCH-validated by _validated_copilot_review_agents), its help text stating that on a provider runner (group C) Copilot's review agents may not run (finding 13). Pass its part of test 1.14 (copilotAgentSettings.test.tsx). Lint, vitest, build and refresh the UI bundle (hub/ui/src and hub/hub/static/ui together) as task 3.4 did. Browser-drive it against the served bundle. This closes group B (1.11, 1.12, 4.1, 4.2 done iter 9); group D (ghcp-s5-d-impl) is next in the queue.",
+    "current": "ghcp-s5-d-impl",
+    "next_action": "Group D (ghcp-s5-d-impl): task 5.1 (hub/hub/copilot_acp.py, hub/hub/agent_trigger.py) -- RpcTurnRequest.agent_config, the github_mcp flag threaded through build_acp_argv and decide_permission exactly as task 5.1 specifies (review 2026-09-28 findings 4, 5, 14), the permission_card_label and workspace_verdict=None cases, the CopilotEventMapper unavailable-server diagnostic (conditioned on what task 1.1's capture showed -- if it showed nothing, delete the requirement's paragraph and its two scenarios from specs/agent-configuration/spec.md instead, per the operator's 2026-09-28 acceptance), and copilot_github_mcp added to ROSTER_CONFIG_KEYS. Pass test 1.13. Then 5.2: the Agent Settings GitHub-server toggle (same copilotAgentSettings.test.tsx this iteration created, gated on runner==='copilot' like CopilotReviewAgentsSetting), its help text naming the Workspace-only-asks-every-call behaviour and the pre-approval-flag bypass (finding 11). Pass the rest of test 1.14. Lint, vitest, build and refresh the UI bundle (hub/ui/src and hub/hub/static/ui together) as task 3.4 and this iteration's 4.3 did. Then 6.1: run exactly what CI runs (ruff, black --target-version py311, mypy src/, both pytest suites, hub/ui lint+vitest) and confirm all green. This closes group D; ghcp-s5-drive is next in the queue.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -30,9 +30,9 @@
         },
         {
             "id": "ghcp-s5-b-impl",
-            "status": "open",
+            "status": "done",
             "title": "Slice 5 group B: Copilot review agents on review turns",
-            "detail": "Slice 1 (backend: 1.11, 1.12, 4.1, 4.2) done iter 9. Slice 2 open: 4.3 with its part of 1.14 (UI)."
+            "detail": "Done iters 9-10 (1.11, 1.12, 4.1, 4.2, 4.3, its part of 1.14). Drove on a fresh source Hub (port 8024, profile drive1003g); found and fixed a real-browser-only layout bug the unit test could not see (unconstrained help-text width crushing the row's label column)."
         },
         {
             "id": "ghcp-s5-d-impl",

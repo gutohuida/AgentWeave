@@ -48,6 +48,12 @@ export interface AgentSummary {
   can_recall?: boolean
   /** Authority over what ships: accepted evidence is what lets approval merge an agent's work. */
   can_accept_evidence?: boolean
+  /** Only the keys `ROSTER_CONFIG_KEYS` (hub/hub/api/v1/agents.py) allows back (F244) — a
+   *  credential stored under some other key never reaches this listing. */
+  config?: {
+    /** Copilot's own built-in review agents this agent consults before its verdict (design D8). */
+    copilot_review_agents?: string[]
+  }
 }
 
 export interface AgentLaunchability {
@@ -358,6 +364,28 @@ export function useUpdateAgentGrant() {
       grant: 'can_read_checkpoints' | 'can_recall' | 'can_accept_evidence'
       enabled: boolean
     }) => patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { [grant]: enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'project' &&
+          query.queryKey[1] === projectId &&
+          query.queryKey[2] === 'agents',
+      })
+    },
+  })
+}
+
+/** Which of Copilot's own built-in review agents this agent consults before its verdict (design
+ *  D8). Sent as the whole list, like the checkpoint override above — a toggle computes the next
+ *  list and sends that, rather than one entry at a time. */
+export function useUpdateAgentReviewAgents() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, agents }: { agent: string; agents: string[] }) =>
+      patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, {
+        config: { copilot_review_agents: agents },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({
         predicate: (query) =>

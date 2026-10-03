@@ -7,6 +7,7 @@ import {
   useUpdateAgentDescription,
   useUpdateAgentGrant,
   useUpdateAgentPermissionDefault,
+  useUpdateAgentReviewAgents,
   useAgentLaunchability,
 } from '@/api/agents'
 import { permissionModeValues, useModelCatalog } from '@/api/modelCatalog'
@@ -293,6 +294,63 @@ export function RunnerPicker({ agent }: { agent: AgentSummary }) {
         <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
           Could not update runner binding.
         </p>
+      )}
+    </div>
+  )
+}
+
+/** Copilot's own built-in review agents, in the order the closed vocabulary
+ *  (`COPILOT_REVIEW_AGENTS`, `hub/hub/api/v1/agents.py`) declares them. */
+const COPILOT_REVIEW_AGENT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'code-review', label: 'code-review' },
+  { value: 'security-review', label: 'security-review' },
+  { value: 'rubber-duck', label: 'rubber-duck' },
+]
+
+/** Which of Copilot's built-ins this `copilot`-bound agent consults as a subagent before
+ *  recording its verdict (design D8). Shown only for a `copilot` agent — *"A setting with no
+ *  backing state is not presented"* — because the setting does nothing for any other runner.
+ *
+ *  Off by default: each consult is at least one extra model call. The note below the checkboxes
+ *  states the one caveat the design calls out by name — on a provider runner (the Runners page's
+ *  own setting), these built-in subagents may send Copilot's own model id to the provider or
+ *  spend the operator's key running them, so they may not run at all; group B deliberately does
+ *  not read group C's state to suppress the setting itself (design D10).
+ */
+export function CopilotReviewAgentsSetting({ agent }: { agent: AgentSummary }) {
+  const update = useUpdateAgentReviewAgents()
+  const stored = agent.config?.copilot_review_agents ?? []
+
+  const toggle = (value: string, checked: boolean) => {
+    const next = checked
+      ? [...stored, value]
+      : stored.filter((entry) => entry !== value)
+    update.mutate({ agent: agent.name, agents: next })
+  }
+
+  return (
+    <div className="max-w-[320px] space-y-3">
+      {COPILOT_REVIEW_AGENT_OPTIONS.map((option) => (
+        <label key={option.value} className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={stored.includes(option.value)}
+            onChange={(event) => toggle(option.value, event.target.checked)}
+            disabled={update.isPending}
+            aria-label={`Consult ${option.label} for ${agent.name}`}
+            className="control-choice mt-0.5"
+          />
+          <span className="text-sm font-mono" style={{ color: 'var(--text)' }}>{option.label}</span>
+        </label>
+      ))}
+      <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+        Consulted as a subagent before this agent records its verdict. It does not see this
+        repository's instructions, and its findings are not the verdict — the verdict is still
+        recorded only by <code>update_task</code>. On a provider runner, Copilot's review agents
+        may not run.
+      </p>
+      {update.isError && (
+        <p className="text-xs" style={{ color: 'var(--red)' }}>Could not save.</p>
       )}
     </div>
   )
