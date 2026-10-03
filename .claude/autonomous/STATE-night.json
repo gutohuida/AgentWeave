@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 26,
+    "iteration": 27,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "the-shell-judge-reads-a-word-whole-impl",
-    "next_action": "the-shell-judge-reads-a-word-whole-impl (B4, 21/41): re-derive task 2.2's one remaining bullet fresh against hub/hub/mcp_server.py (read .claude/rules/ for mcp_server.py first). Iteration 26 (this run's log entry) built and ticked task 1.7d: the piece-level _BASH_DEVICES check, with dialect threaded through _judge_pieces/_judge_pieces_reading. What is left of task 2.2 itself: _glob_links (D8) is still not called from either of rule 6's readings -- the piece reading (_judge_pieces_reading -> _judge_piece) or the undivided-value reading (_judge_whole_value -> _judge_piece). This needs budget threaded all the way down through _judge_pieces -> _judge_pieces_reading/_judge_whole_value -> _judge_piece (none of which take it today), mirroring how rule 5 already passes budget into _glob_links. Do not trust this note uncritically -- re-derive against the current code first, including whether _judge_piece's absolute-word branch is the right place to call _glob_links or whether it needs its own glob-aware branch alongside _judge_path. Build the one slice that fits this turn, test-first (measure today's real behaviour with a gitignored testbed/scratch script before writing the fix, per this task's own discipline), and run hub/tests/test_permission_approver.py plus hub/tests/test_the_shell_judge_reads_a_word_whole.py under py -3.11. Tick 2.2 only when every bullet is built and verified. Mind stop_at 22:00.",
+    "next_action": "the-shell-judge-reads-a-word-whole-impl (B4, 22/41): re-derive task 2.1c fresh against hub/hub/mcp_server.py (read .claude/rules/ for mcp_server.py first). Iteration 27 (this run's log entry) built and ticked task 2.2: budget threaded through _judge_pieces -> _judge_pieces_reading/_judge_whole_value -> _judge_piece, and _glob_links wired into the shared _judge_piece so both of rule 6's readings reach it (one call site, since both readings already call _judge_piece). Task 2.1c's own notes (iterations 19-22) named exactly this wiring as its last blocker: 'Task 2.2 (rule-6 rewiring) is the natural next slice ... unblocks the sibling change's drive-gated relative-word rows the same way this task's absolute-word rows already did.' Re-derive which of 2.1c's own remaining rows (task 1.4c's relative-word rows -- cp n u*/, cp n [u]p/x, the inner-shell and PowerShell rows; task 1.4d's globstar-does-not-descend-through-a-link rule; task 1.4f's relative ..-after-glob-link rows) now pass against the current code and which still do not -- 2.1c's own text says the bash dot rule (D8 step 2), the globstar rule itself, and the per-pattern listing memo are still unbuilt regardless of this wiring. Do not trust this note uncritically -- measure first with a gitignored testbed/scratch script against _decide directly, then build the one slice that fits this turn. Run hub/tests/test_permission_approver.py plus hub/tests/test_the_shell_judge_reads_a_word_whole.py under py -3.11. Tick 2.1c only when every row and bullet it names is built and verified. Mind stop_at 22:00.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -73,8 +73,8 @@
         {
             "id": "the-shell-judge-reads-a-word-whole-impl",
             "status": "open",
-            "title": "B4 continues (21/41): task 2.2's remaining _glob_links/budget plumbing in rule 6",
-            "detail": "Iter 26 built and ticked task 1.7d (the piece-level _BASH_DEVICES check, dialect threaded through _judge_pieces/_judge_pieces_reading). Task 2.2 itself stays open: _glob_links is still not called from either of rule 6's readings (pieces or the whole value), which needs budget threaded through _judge_pieces -> _judge_pieces_reading/_judge_whole_value -> _judge_piece. See the 2026-10-02 night log, iterations 25-28, and this window's iter 26 entry, for the sizing notes."
+            "title": "B4 continues (22/41): task 2.1c's remaining relative-word/globstar/dot-rule rows in rule 6",
+            "detail": "Iter 27 built and ticked task 2.2 (budget threaded through _judge_pieces -> _judge_pieces_reading/_judge_whole_value -> _judge_piece; _glob_links wired into the shared _judge_piece, reaching both of rule 6's readings at once). Task 2.1c stays open: its own notes (iterations 19-22) named task 2.2's rule-6 rewiring as its last blocker for 1.4c's relative-word rows and 1.4f's relative rows, now built -- but 2.1c's text also says the bash dot rule (D8 step 2), the globstar-does-not-descend-through-a-link rule, and the per-pattern listing memo are still unbuilt regardless. Re-derive what now passes and what is still genuinely missing before building. See this window's iter 27 entry for the sizing note."
         },
         {
             "id": "a-drive-or-a-home-variable-names-a-directory-by-itself-impl",
