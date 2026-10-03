@@ -1381,6 +1381,111 @@ def _resolves_elsewhere(absolute: str, resolved: str) -> str:
 _GLOB_CHARS = "*?["
 _SEPARATOR_RE = re.compile(f"([{re.escape(_SEPARATORS)}])")
 
+# D3, extglob: one of `@ ? * + !` directly followed by `(`, up to its matching `)`, with nesting
+# counted -- an unbalanced `(` is not a group. `(`, `|` and `@` inside a group are glob syntax, not
+# piece breaks or curl `name@file` glue, so D2 step 2 must not split there, and the group's
+# alternatives feed D3's own `..`-capable test rather than being read as literal text.
+_EXTGLOB_TRIGGERS = "@?*+!"
+# Sentinels for the three break characters a group can itself contain (`)` is never a break, so it
+# needs none). Distinct code points from `_BRACE_*`/`_LITERAL_DOLLAR` above, restored before a
+# piece is judged or quoted.
+_EXTGLOB_PAREN = ""
+_EXTGLOB_AT = ""
+_EXTGLOB_PIPE = ""
+_EXTGLOB_SENTINELS = {"(": _EXTGLOB_PAREN, "@": _EXTGLOB_AT, "|": _EXTGLOB_PIPE}
+_EXTGLOB_RESTORE = {sentinel: literal for literal, sentinel in _EXTGLOB_SENTINELS.items()}
+
+
+def _extglob_span_at(text: str, index: int) -> Optional[int]:
+    """`text[index]` is a trigger directly followed by `(` (checked by the caller): the position
+    just past its matching `)`, with nesting counted, or None when the `(` never balances -- an
+    unbalanced one is not a group (design D3)."""
+    depth = 1
+    scan = index + 2
+    length = len(text)
+    while scan < length and depth:
+        if text[scan] == "(":
+            depth += 1
+        elif text[scan] == ")":
+            depth -= 1
+        scan += 1
+    return scan if depth == 0 else None
+
+
+def _extglob_group_spans(text: str) -> List[Tuple[int, int]]:
+    """D3: the `(start, end)` span of each extglob group in `text`, `end` just past its matching
+    `)`. A trigger whose `(` never balances is not a group, and scanning resumes one character
+    later, as design D3 says."""
+    spans = []
+    index = 0
+    length = len(text)
+    while index < length:
+        if text[index] in _EXTGLOB_TRIGGERS and index + 1 < length and text[index + 1] == "(":
+            end = _extglob_span_at(text, index)
+            if end is not None:
+                spans.append((index, end))
+                index = end
+                continue
+        index += 1
+    return spans
+
+
+def _mask_extglob_groups(value: str) -> str:
+    """D2 step 2: within each of `value`'s extglob groups (D3), `(`, `@` and `|` are replaced by
+    sentinels so `_PIECE_BREAKS_RE` does not split there. `_restore_extglob_sentinels` undoes this
+    once a piece is carved out."""
+    spans = _extglob_group_spans(value)
+    if not spans:
+        return value
+    chars = list(value)
+    for start, end in spans:
+        for position in range(start, end):
+            sentinel = _EXTGLOB_SENTINELS.get(chars[position])
+            if sentinel:
+                chars[position] = sentinel
+    return "".join(chars)
+
+
+def _restore_extglob_sentinels(text: str) -> str:
+    """The literal characters `_mask_extglob_groups` sentinel-marked, rendered back before a piece
+    is judged or quoted in a refusal."""
+    for sentinel, literal in _EXTGLOB_RESTORE.items():
+        text = text.replace(sentinel, literal)
+    return text
+
+
+def _extglob_alternative_begins_with_dot(component: str, spans: List[Tuple[int, int]]) -> bool:
+    """(D3, extglob) Any `|`-separated alternative of any group in `component` begins with `.` --
+    nesting-aware, so a group inside another group's alternatives is read correctly."""
+    for start, end in spans:
+        inner = component[start + 2 : end - 1]
+        alternative: List[str] = []
+        depth = 0
+        for char in inner:
+            if char == "(":
+                depth += 1
+                alternative.append(char)
+            elif char == ")":
+                depth -= 1
+                alternative.append(char)
+            elif char == "|" and depth == 0:
+                if "".join(alternative).startswith("."):
+                    return True
+                alternative = []
+            else:
+                alternative.append(char)
+        if "".join(alternative).startswith("."):
+            return True
+    return False
+
+
+def _mask_extglob_as_star(component: str, spans: List[Tuple[int, int]]) -> str:
+    """Each extglob group in `component` replaced by one `*`, as D3's fallback test reads it."""
+    masked = component
+    for start, end in sorted(spans, reverse=True):
+        masked = masked[:start] + "*" + masked[end:]
+    return masked
+
 
 def _rewrite_dotdot_globs(path: str) -> str:
     """Each component of `path` that some real bash could still expand to `..` (D3), rewritten to
@@ -1390,13 +1495,23 @@ def _rewrite_dotdot_globs(path: str) -> str:
     (R6, D11) A component is also accepted when it opens with `[` rather than `.`: Git Bash 5.2.37
     measured does not match a leading dot that way (`globskipdots` off), but an older bash was not
     available to check, so this over-approximates rather than depend on it.
+
+    (R4, extglob) A component holding an extglob group is `..`-capable when any `|`-separated
+    alternative of a group in it begins with `.`, or when the component -- each group read as one
+    `*` -- passes the test above (measured: `@(..)/x`, `?(..)/x` and `@(.|..)/x` all expand to
+    `../x` in Git Bash 5.2.37 with `globskipdots` off).
     """
     components = _SEPARATOR_RE.split(path)
     for index, component in enumerate(components):
+        spans = _extglob_group_spans(component)
+        if spans and _extglob_alternative_begins_with_dot(component, spans):
+            components[index] = ".."
+            continue
+        candidate = _mask_extglob_as_star(component, spans) if spans else component
         if (
-            (component.startswith(".") or component.startswith("["))
-            and any(char in component for char in _GLOB_CHARS)
-            and fnmatch.fnmatchcase("..", component)
+            (candidate.startswith(".") or candidate.startswith("["))
+            and any(char in candidate for char in _GLOB_CHARS)
+            and fnmatch.fnmatchcase("..", candidate)
         ):
             components[index] = ".."
     return "".join(components)
@@ -1835,11 +1950,13 @@ def _judge_piece(piece: str, root: str, argument: str, continues: bool) -> Optio
 def _judge_pieces_reading(
     value: str, root: str, argument: str, continues: bool
 ) -> Optional[Dict[str, Any]]:
-    """D2 steps 3-5: split `value` at `_PIECE_BREAKS_RE` and judge each non-empty piece, the last
-    one carrying `continues` on to `_judge_path`."""
-    pieces = [piece for piece in _PIECE_BREAKS_RE.split(value) if piece]
+    """D2 steps 2-5: mask each extglob group (D3) so splitting at `_PIECE_BREAKS_RE` does not break
+    inside one, split, restore the group's own text in each surviving piece, and judge each
+    non-empty piece, the last one carrying `continues` on to `_judge_path`."""
+    pieces = [piece for piece in _PIECE_BREAKS_RE.split(_mask_extglob_groups(value)) if piece]
     for index, piece in enumerate(pieces):
-        refusal = _judge_piece(piece, root, argument, continues and index == len(pieces) - 1)
+        restored = _restore_extglob_sentinels(piece)
+        refusal = _judge_piece(restored, root, argument, continues and index == len(pieces) - 1)
         if refusal:
             return refusal
     return None
@@ -2254,6 +2371,18 @@ def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
             started = True
             index += 1
             continue
+        if bash and char in _EXTGLOB_TRIGGERS and following == "(":  # quote is None (D3)
+            # Unquoted `(` and `|` are in `_ARGUMENT_ENDS` -- a bare subshell or pipe ends the
+            # argument there -- but inside a balanced extglob group they are glob syntax, so the
+            # whole group is kept as one run of literal characters in the current argument. An
+            # unbalanced `(` (`_extglob_span_at` returns None) is not a group, and falls through to
+            # the ordinary `_ARGUMENT_ENDS` handling below, ending the argument as before.
+            end = _extglob_span_at(command, index)
+            if end is not None:
+                current.append(command[index:end])
+                started = True
+                index = end
+                continue
         if char in "'\"":
             quote, started = char, True
             index += 1

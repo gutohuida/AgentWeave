@@ -646,6 +646,53 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   - (R4) run the address check after rule 2 and before rule 3;
   - allow `_BASH_DEVICES` before rule 5 in bash (on a drive-letter host, only a whole word or a redirect-target piece);
   - keep `_ABSOLUTE_PATH_RE` for `_read_command`'s nesting-depth fallback, and say so in its comment.
+
+  **Iteration 24 note.** Re-derived this task from scratch against the current code before building:
+  most of this bullet list turned out to be already built by earlier iterations under other task
+  numbers -- `_PIECE_BREAKS_RE`/`_BASH_DEVICES`/`_SCP_ADDRESS_RE`/`_HOST_PORT_RE` all exist, the
+  address check already runs between rules 2 and 3, `_BASH_DEVICES` already stands before rule 5 as
+  a whole word, and rule 6 is already `_judge_pieces`, the piece reading. What D3's "extglob units"
+  phrase in this bullet still named, unbuilt: an unquoted extglob group (`@(..)/x`) was not kept as
+  one unit at all, at **two** layers, not just rule 6's. `_lex`'s `_ARGUMENT_ENDS` already ends an
+  argument at any bare `(`, `|` or `)` (mimicking a real subshell/pipe) -- so `@(..)/x` was split
+  into three separate *arguments* ("@", "..", "/x") before rule 6's own piece reading ever ran,
+  which the design text (written assuming the group reaches rule 6 intact) does not address. Built:
+  `_lex` now recognises a trigger (`@ ? * + !`) directly followed by `(`, up to its balanced `)`
+  (`_extglob_span_at`), and keeps the whole span as literal characters in the current argument
+  rather than ending it there (an unbalanced `(` is not a group, and falls through to the ordinary
+  `_ARGUMENT_ENDS` handling unaffected). Once the group survives into rule 6 intact, `_judge_pieces_reading`
+  now masks `(`, `@` and `|` inside each group (`_mask_extglob_groups`) before splitting at
+  `_PIECE_BREAKS_RE`, and restores them (`_restore_extglob_sentinels`) in the surviving piece before
+  it is judged -- so the group is not re-fragmented there either. `_rewrite_dotdot_globs` now also
+  recognises a component holding a group as `..`-capable (D3's own two-bullet test:
+  `_extglob_alternative_begins_with_dot`, or the component with each group read as one `*`,
+  `_mask_extglob_as_star`, against the existing `fnmatch` test). Measured live first in real Git
+  Bash 5.2.37 with `extglob` on and `globskipdots` off (`testbed/scratch/measure_extglob.sh`,
+  gitignored, not committed): `@(..)/x`, `?(..)/x` and `@(.|..)/x` all expand to `../x`. Measured
+  against `_decide` next (`testbed/scratch/measure_extglob_decide.py`, gitignored): every
+  dotdot-capable row was already refused before this slice too, but each by accident -- the old
+  fragmentation isolates a bare `..` as its own argument, caught by rule 4's unrelated
+  `cut == ".."` check, or (`@(.*)/y`) isolates a spurious absolute-looking `/y` fragment refused for
+  an unrelated reason. Two rows are not just a reason change: `@(a|b)/x` and `sub/@(..)/x` (resolves
+  to `sub`'s own parent, genuinely inside) were both wrongly **refused** by the same accidental
+  fragmentation before this slice, and are correctly allowed after. Confirmed by stashing just
+  `mcp_server.py` and rerunning. Added one test,
+  `test_an_unquoted_extglob_group_is_kept_as_one_unit_through_the_lexer_and_rule_6`. Mutation-checked:
+  stashing `mcp_server.py` fails exactly that one test, the other 96 unchanged.
+  `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 97 passed (was 96,
+  +1). Broader regression set
+  (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): 723 passed, 2 skipped, no regressions. `ruff
+  check` and `black --check --target-version py311` clean on both changed files; `mypy src/` (the
+  only path CI runs mypy over) clean. `git diff --stat`: exactly `hub/hub/mcp_server.py`, the one
+  test file, and this task file. **Task 2.2 stays unticked**: this bullet's own text ("replace rule
+  6 ... including D3's extglob units") is now built, but the task's other three bullets (the address
+  check, `_BASH_DEVICES`, keeping `_ABSOLUTE_PATH_RE`) were already built under earlier task numbers
+  and never checked off here, so the task line as a whole still needs "Run 1.4g" measured and
+  recorded before it can tick -- not run this iteration. **D2 step 6 (R8, the whole-value judgement
+  after the pieces) is not touched by this slice at all** and remains the largest unbuilt piece of
+  this task; `_glob_links` integration for an extglob group ("For D8's matching, each group counts
+  as `*`") is also still unbuilt, as the existing 2.1c/2.1d notes already flagged.
 - [ ] 2.2a (R3, R4) The platform-keyed drive exception and the tilde-piece refusal in the piece reading; the level-by-level escape-removed readings, each judged by `_judge_word`, and the `::` not-plain rule before rule 5 (design D2 steps 3 and 5, D7). Run 1.7b, 1.7c and 1.7d
 - [ ] 2.2b D6: `approve_tool_call` catches an exception from `_decide`, denies with a reason and reports it; no return annotation
 - [ ] 2.2c (R4, D9) Add the `hub-judge-windows` job to `.github/workflows/ci.yml` (`windows-latest`, `working-directory: hub`, the `hub-test` install steps with `-c ../constraints-dev.txt`, `pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread`). Run `py -3.11 -m pytest tests/test_dev_constraints.py -q`. After pushing, confirm the job ran and passed, or do not tick

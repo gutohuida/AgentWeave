@@ -568,3 +568,73 @@ def test_the_glob_link_walk_s_entries_are_charged_against_the_decide_budget(work
     over_bound = _decide("Bash", {"command": f"cp n {forward}/nomatch*/"})
     assert over_bound["allow"] is False
     assert over_bound["reason"].endswith(mcp_server._TOO_MANY)
+
+
+# 2.2, a first slice (design D2 step 2, D3's extglob units): an unquoted extglob group -- a
+# trigger (`@ ? * + !`) directly followed by `(`, up to its matching `)` -- is kept as one unit
+# through both the lexer and rule 6's piece reading, rather than fragmented at the `(`, `|` and `@`
+# it contains. Two layers were both wrong before this slice: `_lex` already ends an argument at any
+# bare `(`, `|` or `)` (`_ARGUMENT_ENDS`, mimicking a real subshell/pipe), which splits
+# `@(..)/x` into three separate arguments ("@", "..", "/x") before rule 6 ever runs -- so rule 6's
+# own `_PIECE_BREAKS_RE` split (which already left `)` alone, for regex back-references) was never
+# reached by an intact group at all. Measured against real Git Bash 5.2.37 with `extglob` on and
+# `globskipdots` off (`testbed/scratch/measure_extglob.sh`, gitignored, not committed):
+# `@(..)/x`, `?(..)/x` and `@(.|..)/x` all expand to `../x` in a directory one level inside the
+# workspace. Measured against `_decide` next (testbed/scratch/measure_extglob_decide.py, gitignored,
+# not committed) before writing this test; confirmed by stashing just `mcp_server.py` and rerunning.
+#
+# Measured against old code too (git-stashing just `mcp_server.py`), row by row, rather than
+# assumed: every dotdot-capable row above was already refused before this slice, but each for an
+# accidental reason -- the lexer's fragmentation happens to isolate a bare `..` as its own argument
+# (`@(..)/x`, `?(..)/x`, `@(.|..)/x`, `sub@(..)x/y`), which rule 4's `cut == ".."` then catches by
+# coincidence, or (`@(.*)/y`) isolates a spurious absolute-looking `/y` fragment that is outside for
+# an unrelated reason. Each reason before this slice names only the isolated fragment (`'..'`,
+# `'/y'`); after it, the reason names the whole word, because the group survives intact into
+# `_judge_pieces`/`_rewrite_dotdot_globs` rather than being torn apart by `_lex` or by
+# `_PIECE_BREAKS_RE`. Two rows below are not just a reason change: `@(a|b)/x` and `sub/@(..)/x` were
+# both wrongly **refused** before this slice (the same accidental fragmentation: an isolated `/x`
+# read as absolute, and an isolated bare `..` read apart from the `sub` it is actually glued after,
+# which cancels it out), and are correctly allowed after.
+def test_an_unquoted_extglob_group_is_kept_as_one_unit_through_the_lexer_and_rule_6(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    # The design's own worked example: run from the workspace root, so `..` is genuinely outside.
+    bare_star_trigger = _decide("Bash", {"command": "cp n @(..)/x"})
+    assert bare_star_trigger["allow"] is False
+    assert bare_star_trigger["reason"].startswith("'@(..)/x'")
+
+    question_trigger = _decide("Bash", {"command": "cp n ?(..)/x"})
+    assert question_trigger["allow"] is False
+    assert question_trigger["reason"].startswith("'?(..)/x'")
+
+    # One of two alternatives begins with `.` -- the whole component is dotdot-capable.
+    one_alternative = _decide("Bash", {"command": "cp n @(.|..)/x"})
+    assert one_alternative["allow"] is False
+    assert one_alternative["reason"].startswith("'@(.|..)/x'")
+
+    # Refused before this slice too, but by accident (see the note above) -- the reason now
+    # names the whole word rather than an isolated fragment.
+    glob_alternative = _decide("Bash", {"command": "cp n @(.*)/y"})
+    assert glob_alternative["allow"] is False
+    assert glob_alternative["reason"].startswith("'@(.*)/y'")
+
+    glued_prefix = _decide("Bash", {"command": "cp n sub@(..)x/y"})
+    assert glued_prefix["allow"] is False
+    assert glued_prefix["reason"].startswith("'sub@(..)x/y'")
+
+    # Control: neither alternative is dotdot-capable, so the component is a literal (if odd) name,
+    # lexically inside the workspace -- stays allowed.
+    no_dot_alternative = _decide("Bash", {"command": "cp n @(a|b)/x"})
+    assert no_dot_alternative["allow"] is True, no_dot_alternative["reason"]
+
+    # Control: the same group one level inside the workspace resolves to the workspace root
+    # itself (`sub`'s parent) -- genuinely inside, not merely allowed by accident.
+    resolves_inside = _decide("Bash", {"command": "cp n sub/@(..)/x"})
+    assert resolves_inside["allow"] is True, resolves_inside["reason"]
+
+    # Control: an unbalanced trigger+`(` is not a group, and falls through to the ordinary
+    # `_ARGUMENT_ENDS` splitting unaffected by this slice.
+    unbalanced = _decide("Bash", {"command": "echo a@(b"})
+    assert unbalanced["allow"] is True, unbalanced["reason"]
