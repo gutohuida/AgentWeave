@@ -425,12 +425,49 @@ def test_an_absolute_glob_word_is_also_matched_against_the_links_it_finds(worksp
     # a match with no link behind it (the base is listed, but nothing there refuses).
     no_link = _decide("Bash", {"command": f"cp n {forward}/sub/*.py"})
     assert no_link["allow"] is True, no_link["reason"]
-    # the glob is not the piece's last component -- left to the walk, not this slice.
+    # the glob matches nothing at all, so there is no entry to walk a tail through.
     not_last = _decide("Bash", {"command": f"cp n {forward}/nomatch*/x"})
     assert not_last["allow"] is True, not_last["reason"]
     # a relative glob reaches rule 6, which this slice does not touch.
     relative = _decide("Bash", {"command": "cp n u*/x"})
     assert relative["allow"] is True, relative["reason"]
+
+
+# 2.1c (design D8 step 4), a further slice: a glob-holding component need not be the piece's last
+# one -- the literal components after it are walked too, one at a time, with no new listing (they
+# hold no glob character to match against). This is D8 step 4's walk, sized down to exclude `..`
+# anywhere in the piece (still returns None for that, left to a further slice): a literal
+# component after the glob is read by `os.lstat` (`_is_link_path`, since it has no `DirEntry`),
+# and, if it is a link, judged and followed to its `realpath` the same way a matched glob entry
+# is. Reachable only through the fixture's `sub/@s/p` shape (a plain directory matched by the
+# glob, holding a link in its own literal tail) and `up`/`x` (a glob match that is itself a link,
+# with a literal tail after it) -- before this slice, `_glob_links` returned None the moment the
+# glob was not the piece's last component, so neither reached a link at all. PASSES today only by
+# the tail (`'/p'`/`'/x'`); measured first with a throwaway script
+# (`testbed/scratch/measure_glob_tail.py`, gitignored, not committed) against the real fixture
+# shape, then confirmed by stashing just `mcp_server.py` and rerunning, below.
+def test_an_absolute_glob_word_s_tail_is_also_walked_through_a_link(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    forward = str(workspace).replace("\\", "/")
+
+    # The glob matches `sub/@s`, a plain (non-link) directory; the link is in the literal
+    # component after it (`p`, to the fixture's outside target).
+    through_tail_link = _decide("Bash", {"command": f"cp n {forward}/sub/@s*/p"})
+    assert through_tail_link["allow"] is False
+    assert "it resolves to" in through_tail_link["reason"]
+
+    # The glob match itself is the link (`up`), with a literal tail (`x`) after it -- already
+    # refused by the first slice's own judgement of the matched entry, but the walk must still
+    # reach that judgement rather than bailing out for having a non-empty tail.
+    through_glob_link = _decide("Bash", {"command": f"cp n {forward}/u*/x"})
+    assert through_glob_link["allow"] is False
+    assert "it resolves to" in through_glob_link["reason"]
+
+    # Control: the same shape, but the tail component does not exist. `lstat` raises, read as
+    # "not a link" (design "What each changed route returns": a name that does not exist still
+    # moves the branch), so nothing is judged and the word stands allowed.
+    missing_tail = _decide("Bash", {"command": f"cp n {forward}/sub/@s*/missing"})
+    assert missing_tail["allow"] is True, missing_tail["reason"]
 
 
 # D8 step 2's bracket relaxation, re-derived from the design text again (not iteration 19's own

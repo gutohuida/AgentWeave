@@ -477,6 +477,90 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   down further if it still does not fit one iteration, with task 2.2's rule-6 rewiring as the
   fallback slice (now smaller by exactly the budget-threading work this iteration already did, since
   rule 6's own future call to `_glob_links` will need `budget` passed the same way rule 5's does).
+
+  **Iteration 22 (a fourth slice: step 4's literal tail, without `..`).** Re-derived step 4 from
+  the design text again rather than trusting iteration 21's note. Step 4 bundles several concerns
+  that do not all depend on each other: (a) a glob-holding component need not be the piece's last
+  one -- literal components after it are walked too; (b) each branch tracks its real directory
+  across descent, separately from its listed path, so a `..` refusal can name where it lands; (c) a
+  `..` component moves the branch to the real parent and is judged there. (b) and (c) exist only to
+  make (a) correct in the presence of `..`; without `..` anywhere in the piece, the real and listed
+  paths never diverge, so (a) stands on its own and was sized out as this iteration's slice, still
+  excluding `..` entirely (bails to `None` for it, same as before).
+
+  **The gap found by re-deriving:** before this iteration `_glob_links` required the glob-holding
+  component to be the piece's **last** one (`pattern = components[-1]`; any earlier component
+  holding a glob character made it bail to `None`, and so did a literal component held in `pattern`
+  itself). This is the exact shape of the original regression report's second and third rows (`u?/x`,
+  `[u]p/x` -- a glob matching a link, with a literal path component after it) and the task's own
+  `not_last` control (`nomatch*/x`, deliberately a non-match so it could not expose this): a glob
+  anywhere but last, with any literal tail after it, was not merely unoptimized but entirely
+  unreached by `_glob_links`, so a link anywhere in that tail -- in the matched glob entry itself,
+  or in a plain literal component after it -- went unjudged and the piece stood allowed by the
+  literal reading alone.
+
+  Built: `_glob_links` now finds the piece's **one** glob-holding component at any index (bails to
+  `None`, as before, when there is more than one or none); everything before it is still the base,
+  resolved by `_physical` as before; everything after it is the new `tail`, a list of literal
+  components. For each base entry the relaxed pattern matches: if the entry is itself a link
+  (`_is_link_entry`, as before), it is judged by `_judge_path` first (as before); if that does not
+  refuse and `tail` is non-empty, the branch continues from the link's `os.path.realpath` (it has
+  just been judged inside, so this call resolves the same target `_judge_path` already read). Then,
+  for each component in `tail` in order: the branch moves to `<current>/<component>`; a new helper,
+  `_is_link_path(path)`, reads whether that is a link by `os.lstat` directly (there is no `DirEntry`
+  for a literal component, matching design step 4 R7's own note) -- the two cases `_is_link_entry`
+  already reads from a listing, `stat.S_ISLNK` or, on a drive-letter host, the reparse-point
+  attribute, with `OSError`/`ValueError` read as "not a link" rather than raised. When it is a link,
+  it is judged by `_judge_path` (quoting `shown`, the whole piece, exactly as every other link
+  judgement in this function does) and, if inside, followed to its own `realpath` to keep walking;
+  when it is not, the branch simply continues from the literal child path, which needs no
+  re-resolution -- a non-link child of a real directory is itself real (design, "Why only links are
+  resolved"). A `realpath` call that raises (an extremely rare case -- the same path has just been
+  proven to resolve, once by `_judge_path`'s own internal `_where`) ends that one branch without
+  refusing or raising, per design "What each changed route returns"; the outer `try`/`except
+  (OSError, ValueError)` around the whole listing remains as the backstop it already was.
+
+  Measured directly against `_decide` first, before writing a test (a throwaway script,
+  `testbed/scratch/measure_glob_tail.py`, gitignored, not committed, built on the shared fixture's
+  own shape): `sub/@s*/p`, where the glob `@s*` matches `sub/@s` -- a **plain, non-link** directory
+  -- and the literal tail component `p` is itself a link to the fixture's outside target, was
+  **allowed** before this slice and is now refused, naming where it resolves. `u*/x`, where the glob
+  match `up` is itself the link and `x` is a literal tail after it, was also wrongly allowed before
+  (the first slice, iteration 19, only reached this when `x` was absent) and is now refused too.
+  Both confirmed by stashing just `mcp_server.py` and rerunning: both revert to allowed. A control,
+  `sub/@s*/missing` (the same shape, but the tail component does not exist), stays allowed both
+  before and after, as the design's own "a name that does not exist still moves the branch" note
+  predicts.
+
+  Added one test, `test_an_absolute_glob_word_s_tail_is_also_walked_through_a_link`, to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py` (not a `_TABLE` row, for the same reason as
+  the neighbouring budget test -- needs the fixture's own link shapes). Also corrected a now-stale
+  comment on the existing `not_last` control in `test_an_absolute_glob_word_is_also_matched_against
+  _the_links_it_finds`: it used to say the glob-not-last case was "left to the walk, not this
+  slice"; it is partly built now, and that row (`nomatch*/x`) stays allowed only because it matches
+  nothing, not because the shape is out of scope. Mutation-checked: `git stash`ing just
+  `mcp_server.py` and rerunning the test file fails exactly the one new test, leaving the other 94
+  rows passing unchanged. `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py
+  -q`: 95 passed (was 94, +1). Broader regression set
+  (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): 721 passed, 2 skipped, no regressions. `ruff
+  check` and `black --check --target-version py311` both clean on the first pass (no reformat
+  needed this time). `mypy hub/hub/mcp_server.py`'s one error is the same pre-existing
+  `approve_tool_call` return-annotation gap `.claude/rules/mcp-server.md` documents, unrelated to
+  this change. `git diff --stat` confirmed only `hub/hub/mcp_server.py`, the one test file, and this
+  task file changed.
+
+  **Task 2.1c still stays unticked**: `..` anywhere in the piece still bails the whole function to
+  `None` (unchanged), so the dual real/listed path tracking, the `..`-after-a-link refusal naming
+  where it lands (`_resolves_elsewhere`), and the globstar-does-not-descend-through-a-link rule are
+  still unbuilt -- that is what remains of step 4, and it is the true reason 2.1c cannot tick yet.
+  The bash dot rule (step 2) also remains deferred, as iterations 19-21 already noted; nothing in
+  this slice needed it. Re-derive the `..` handling from the design text again before building it
+  (D8 step 4's bullets on `..`, plus D12's physical-reading precedent in `_physical` itself, which
+  already walks a path component-by-component resolving `..` against a tracked "current" location --
+  a close structural parallel worth reading before inventing a new shape for `_glob_links`'s own
+  branch tracking). Task 2.2's rule-6 rewiring remains the fallback slice if `..` still does not fit
+  whole.
 - [ ] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
 
   **Iteration 18 (partial).** Measured today's `_decide` directly first (not from this file's old

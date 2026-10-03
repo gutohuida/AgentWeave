@@ -1437,6 +1437,23 @@ def _is_link_entry(entry: "os.DirEntry[str]") -> bool:
     return False
 
 
+def _is_link_path(path: str) -> bool:
+    """Whether `path` is a link, read without following it (D8 step 4, R7): a literal (non-glob)
+    component matched during the walk has no `DirEntry`, so the test is made on `os.lstat`
+    directly -- the same two cases `_is_link_entry` reads from a listing. An `OSError` or
+    `ValueError` (the name does not exist, or its directory cannot be searched) means "not a
+    link", as the design's error table says, not a raise."""
+    try:
+        info = os.lstat(path)
+        if stat.S_ISLNK(info.st_mode):
+            return True
+        if _DRIVE_LETTERS:
+            return bool(info.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except (OSError, ValueError):
+        pass
+    return False
+
+
 _BRACKET_CLASS_OPENERS = {":": ":]", "=": "=]", ".": ".]"}
 
 
@@ -1498,31 +1515,45 @@ def _relax_bracket_pattern(pattern: str) -> str:
 
 
 def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optional[Dict[str, Any]]:
-    """D8, a first slice: a `piece` (already rewritten by `_rewrite_dotdot_globs`) whose only
-    glob-holding component is its last one, with no `..` anywhere. The base -- the piece's
-    leading components -- is listed once with `os.scandir`, resolved first by `_physical` (D12)
-    so a link in the base is followed; each entry matching the final component's *relaxed*
-    pattern (D8 step 2, `_relax_bracket_pattern`) under `fnmatch.fnmatchcase` (`os.path.normcase`
-    of both sides) that is itself a link is judged by `_judge_path`, quoting `shown` (the word as
-    written). None when nothing refuses, including when the directory cannot be listed (the shell
-    cannot list it either, and the literal reading -- already judged by the caller -- stands
-    alone).
+    """D8, a further slice: a `piece` (already rewritten by `_rewrite_dotdot_globs`) holding
+    exactly one glob-holding component, anywhere in the piece, with every other component literal
+    (no glob character, no `..`). The leading literal components -- the base -- are listed once
+    with `os.scandir`, resolved first by `_physical` (D12) so a link in the base is followed; each
+    entry matching the glob component's *relaxed* pattern (D8 step 2, `_relax_bracket_pattern`)
+    under `fnmatch.fnmatchcase` (`os.path.normcase` of both sides) that is itself a link is judged
+    by `_judge_path`, quoting `shown` (the word as written).
+
+    **(D8 step 4) The literal components after the glob are then walked, one at a time**, without
+    listing them (they hold no glob character to match): the branch moves to `<current>/<component>`
+    and, when that is itself a link -- read by `os.lstat`, `_is_link_path`, since there is no
+    `DirEntry` for a literal component -- the link is judged by `_judge_path` exactly as a matched
+    entry is, then followed to its `os.path.realpath` so the walk continues from where it really
+    is. A matched glob entry that is itself a link is followed the same way before its own tail is
+    walked. A non-link directory is not re-resolved: it is real already, because a child of a real
+    directory that is not a link is itself real (design, "Why only links are resolved"). None when
+    nothing refuses, including when the base cannot be listed (the shell cannot list it either,
+    and the literal reading -- already judged by the caller -- stands alone), or when a step in
+    the tail does not exist or cannot be read (`_is_link_path`/`os.path.realpath` then read as "not
+    a link" or "end this branch", per design "What each changed route returns": a name that does
+    not exist still moves the branch, and a raise from a followed link's `realpath` ends that
+    branch rather than refusing or raising).
 
     **("The bounds") Each entry read from the listing is charged against `budget` as it is read**,
     not after the listing is built, and past `_GLOB_ENTRY_BUDGET` the call is refused with
     `_TOO_MANY`, quoting `shown` -- the same shared budget `_expand_braces` spends, so a directory
-    larger than the bound cannot be materialized into memory first and counted after.
+    larger than the bound cannot be materialized into memory first and counted after. The literal
+    tail walk lists nothing, so it adds no further charge.
 
-    A piece holding more than one glob-holding component, a glob followed by further components,
-    an extglob group, or a `..`, is left to a further slice of this same task (step 4's
-    multi-component walk and `..`-after-a-link judging) -- this returns None for those rather than
-    guess. The bash dot rule (D8 step 2, "a name beginning with `.` matches only when the
-    component does too") is also left to that slice: skipping it only widens what matches, which
-    the design allows ("over-approximation... can only add a refusal"), and nothing in this
-    slice's own test needs it. The per-pattern listing memo ("The bounds": "directory listings
-    keyed by the resolved directory") is also left to a further slice -- its absence only means a
-    directory already listed for one word's glob may be listed again for a different word's, which
-    spends budget sooner, never later, so it cannot turn a refusal into an allow.
+    A piece holding more than one glob-holding component, an extglob group, a `**` under
+    `globstar`, or a `..` anywhere, is left to a further slice of this same task (the `..`-after-a-
+    link judging, and the globstar-does-not-descend-through-a-link rule) -- this returns None for
+    those rather than guess. The bash dot rule (D8 step 2, "a name beginning with `.` matches only
+    when the component does too") is also left to that slice: skipping it only widens what
+    matches, which the design allows ("over-approximation... can only add a refusal"), and nothing
+    in this slice's own test needs it. The per-pattern listing memo ("The bounds": "directory
+    listings keyed by the resolved directory") is also left to a further slice -- its absence only
+    means a directory already listed for one word's glob may be listed again for a different
+    word's, which spends budget sooner, never later, so it cannot turn a refusal into an allow.
     """
     drive, rest = os.path.splitdrive(piece)
     anchor = drive + os.sep
@@ -1533,13 +1564,20 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
     ]
     if not components or ".." in components:
         return None
-    pattern = components[-1]
-    if not any(char in pattern for char in _GLOB_CHARS):
+    glob_positions = [
+        index
+        for index, component in enumerate(components)
+        if any(char in component for char in _GLOB_CHARS)
+    ]
+    if len(glob_positions) != 1:
         return None
-    if any(char in component for component in components[:-1] for char in _GLOB_CHARS):
-        return None
+    glob_index = glob_positions[0]
+    pattern = components[glob_index]
+    tail = components[glob_index + 1 :]
     try:
-        base = _physical(os.path.join(anchor, *components[:-1]) if components[:-1] else anchor)
+        base = _physical(
+            os.path.join(anchor, *components[:glob_index]) if components[:glob_index] else anchor
+        )
     except (OSError, ValueError):
         return None
     normalized_pattern = os.path.normcase(_relax_bracket_pattern(pattern))
@@ -1551,11 +1589,30 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
                     return _refuse(shown, _TOO_MANY)
                 if not fnmatch.fnmatchcase(os.path.normcase(entry.name), normalized_pattern):
                     continue
-                if not _is_link_entry(entry):
+                current = entry.path
+                if _is_link_entry(entry):
+                    refusal = _judge_path(current, root, shown, shown, False)
+                    if refusal:
+                        return refusal
+                    if not tail:
+                        continue
+                    try:
+                        current = os.path.realpath(current)
+                    except (OSError, ValueError):
+                        continue
+                elif not tail:
                     continue
-                refusal = _judge_path(entry.path, root, shown, shown, False)
-                if refusal:
-                    return refusal
+                for component in tail:
+                    current = os.path.join(current, component)
+                    if not _is_link_path(current):
+                        continue
+                    refusal = _judge_path(current, root, shown, shown, False)
+                    if refusal:
+                        return refusal
+                    try:
+                        current = os.path.realpath(current)
+                    except (OSError, ValueError):
+                        break
     except (OSError, ValueError):
         return None
     return None
