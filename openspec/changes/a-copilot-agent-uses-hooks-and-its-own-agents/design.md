@@ -1682,6 +1682,32 @@ has not), **correction** (sibling text that is wrong about this change), or **no
   - `subagent.started` vs. its `task` call's `tool_use` ordering: **not observed** — no subagent
     call happened in run (b) (see above).
 
+- **Task 7.1, real capture, 2026-10-03** (the drive section, not task 1.1's scratch harness): agent
+  `cp5` created on the trial Hub `:8010` (project `proj-d85a82bf4216`, runner `cli: copilot`, no
+  `provider_config` — Free plan), `checkpoint_mode: offered`, one turn through the Hub's normal
+  `agent/trigger` path: `Use the explore agent to name one file here, then stop.` This time the
+  model **did** attempt a subagent dispatch, twice, via the `task` tool with
+  `rawInput.agent_type: "Explore"` — unlike run (b) above, which never tried. Both attempts errored
+  before any subagent session could start: the first `Model 'sonnet' is not available` (the
+  dispatch defaulted to a model name absent from the session's own advertised list — `auto`,
+  `claude-haiku-4.5`, `gpt-6-luna`, `mai-code-1.1-flash`, etc., no `sonnet`); the second, retried
+  with `model: "auto"` set explicitly, `host interaction call failed: Error: Unsupported native
+  sessions host effect 'custom_agent_prompt'`. The model then fell back to its own built-in
+  `search_code_subagent`/`file_search`/`read_file` tools (not a Hub-routed dispatch) and answered
+  with a real file (`validate_spec.py`). The timeline (`GET .../agents/cp5/timeline`) and chat
+  (`GET .../agent/cp5/chat`) show no `subagent_started`/`subagent_completed`/`subagent_failed`
+  event of any kind — only ordinary `tool_use`/`tool_result` entries for `task` (twice, both
+  errors) and the built-in search tools.
+
+  **This sharpens `ghcp-s5-subagent-capture` rather than just repeating it.** Run (b)'s finding was
+  "the model doesn't try"; this capture shows that when it *does* try, through the Hub's own ACP
+  session (not a bare scratch harness), the dispatch mechanism itself errors out server-side on
+  `custom_agent_prompt`, a host effect this Copilot CLI version's native-session path does not
+  support. That means recommendation (a) in the DECISIONS.md row ("retry with a bigger exploration
+  task") would not help on its own — the blocker is not that the model declines to delegate, it is
+  that delegation errors before a subagent session opens. Filed as an addendum to
+  `spec-queue/DECISIONS.md` `ghcp-s5-subagent-capture` (still OPEN; the operator's call).
+
 ## Open questions for R2/R3
 
 1. **Slice 2 alignment.** *(Answered in R2; R3 moved the answers into *Required of slices 1–4*, D5 and D9.)* What does slice 2's raw-event subscription list contain? Where does its

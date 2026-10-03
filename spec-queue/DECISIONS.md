@@ -49,6 +49,24 @@ DECIDED. Absence is not consent.
   kind of real-capture surprise the round discipline exists to surface, not something to guess
   past unattended.
 
+  **Addendum, 2026-10-03 night, task 7.1's real capture on the trial Hub `:8010`** (design.md
+  Round log, *Task 7.1, real capture, 2026-10-03*): the same prompt, this time through the Hub's
+  own `agent/trigger` path rather than a scratch harness, got the model to *try* dispatching a
+  subagent via the `task` tool (`agent_type: "Explore"`) twice — unlike run (b), which never tried.
+  Both attempts errored before any subagent session opened: first on an unavailable default model
+  (`'sonnet'`), then, retried with `model: "auto"`, on `host interaction call failed: Error:
+  Unsupported native sessions host effect 'custom_agent_prompt'`. No `subagent.*` event of any kind
+  reached the timeline or chat either way.
+
+  **This narrows the question.** It is no longer "does the model try" (sometimes it does) but
+  "can this Copilot CLI version's native-session dispatch path succeed at all" — and on this one
+  real attempt, it could not, on a host effect the session apparently does not support. That makes
+  option (a) above (a bigger exploration task) look unlikely to help by itself, since the failure
+  is mechanical, not a matter of the model declining. Still OPEN pending the operator — this is
+  more precise evidence for the same open call, not a new recommendation; (a) might still be worth
+  one more attempt with `model` passed from the start (both failures here came from an initial
+  call that omitted it), but that is itself a guess, not something driven this iteration.
+
 ### `a-run-reaches-the-hub-without-mcp` task 10.1 needs the operator on the work PC -- 2026-10-01 night, DECIDED 2026-10-02
 
 - DECIDED   a-run-reaches-hub-10.1  **Waived on the work-PC evidence** (operator, 2026-10-02, as recommended):

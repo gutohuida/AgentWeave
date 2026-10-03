@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "ghcp-s5-drive",
-    "next_action": "ghcp-s5-drive, task 7.1 (A): on the trial Hub :8010 only -- start it from hub/, from source, with DATABASE_URL naming the trial profile (.claude/reference/hubs.md), and confirm which database it serves before trusting it; never touch :8000. Create a Copilot agent cp5 and set its checkpoint mode to offered. Run one turn: 'Use the explore agent to name one file here, then stop.' Confirm the run's timeline shows a subagent_started and a subagent_completed sharing the task call's id. This spends from the section's 12-Copilot-Free-model-call budget (operator, 2026-10-03) -- record /usage before and after the whole section (7.1-7.8), not just this task, and paste the timeline text verbatim into tasks.md's Round log under 7.1. Mark 7.1 done with actuals. Tasks 7.2-7.5, 7.7, 7.8 are the rest of this group, each its own iteration; 7.6 (the operator's own provider key) and 8.1 (archive) are not this session's to start. See tasks.md section 7 for each task's exact wording.",
+    "next_action": "ghcp-s5-drive, task 7.2 (A, the compaction backstop) on the trial Hub :8010, which is already running (pid printed in /tmp/hub8010.log this session; confirm it is still up and serving the trial profile before trusting it -- restart it the documented way if not). Since 7.2's own text says slice 2's D5 already answers its conditional (a per-turn context block precedes every message, so a bare /compact never reaches Copilot), its path is: a one-off script in testbed/ maps hub/tests/fixtures/copilot/compaction.jsonl with the Copilot mapper IN THE SCRIPT, then POSTs the resulting event to POST /projects/proj-d85a82bf4216/agent/cp5/output on :8010 (kind: status, the mapped payload, cp5's real run_id/session_id from this session's testbed/drive1003-ghcp-s5-drive/ state) using the trial project's operator key -- do not call record_agent_output in the script's own process (review 2026-09-28 finding 12: no loop there, broadcasts to nobody). Confirm the timeline shows the compacted card with its token counts and the conversation shows the unchanged checkpoint-due banner, and that no checkpoint row is created. Paste both texts verbatim into tasks.md's Round log under 7.2, mark it done with actuals. This spends no additional Copilot allowance (no real turn). 7.3-7.5, 7.7, 7.8 remain after; 7.6 and 8.1 are not this session's to start. See tasks.md section 7 for each task's exact wording. Task 7.1 is done (iter 13) -- its real capture did NOT show subagent_started/subagent_completed (the model's two task-tool dispatch attempts both errored server-side before any subagent session opened); this is now an addendum on the already-OPEN spec-queue/DECISIONS.md row ghcp-s5-subagent-capture, not a new blocker -- read that addendum and design.md's Round log entry 'Task 7.1, real capture, 2026-10-03' before touching group A questions again. Separately, iter 13 found the section's planned /usage before/after check does not work as assumed outside a true interactive session (recorded in tasks.md under 7.1) -- do not retry /usage via the bare CLI with -p or piped stdin, it spends real, untracked allowance; skip that bookkeeping for now unless the operator says how to do it safely.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -44,7 +44,7 @@
             "id": "ghcp-s5-drive",
             "status": "open",
             "title": "Slice 5 drive on :8010 (7.1-7.5, 7.7, 7.8); 7.6 left for the operator",
-            "detail": "Copilot agent on the Free plan's Auto model, the task's 12-call budget, /usage before and after. 7.6: record 'not driven: no key'. No archive: 8.1 waits on 7.6 and the operator."
+            "detail": "7.1 done iter 13 (1 of 12 Free-model calls spent): no subagent_started/completed -- addendum on ghcp-s5-subagent-capture (OPEN). /usage before/after found not to work via the bare CLI outside a real interactive session (spent 0.42 untracked AI credits finding this out) -- skip until the operator says how. 7.2-7.5, 7.7, 7.8 remain. 7.6: record 'not driven: no key'. No archive: 8.1 waits on 7.6 and the operator."
         },
         {
             "id": "copilot-oneshot-credits-r1",

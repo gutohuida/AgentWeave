@@ -806,9 +806,50 @@ Keep turns few and tiny. Before and after the section, record the allowance with
 prompt, which makes no model call. The budget for this whole section is 12 Free model calls. Record
 every run id, and paste each surface's text verbatim into the Round log.
 
-- [ ] 7.1 (A) Create a Copilot agent `cp5` on `:8010` and set its checkpoint mode to `offered`. Run
+- [x] 7.1 (A) Create a Copilot agent `cp5` on `:8010` and set its checkpoint mode to `offered`. Run
   one turn: `Use the explore agent to name one file here, then stop.` The run's timeline shows a
   `subagent_started` and a `subagent_completed` sharing the `task` call's id.
+  **Done 2026-10-03 (night iter 13), real capture, not the expected outcome.** Trial Hub `:8010`
+  confirmed serving `~/.agentweave/hub/profiles/trial/agentweave.db` (startup line read before
+  trusting it). `cp5` created on project `proj-d85a82bf4216` (runner `cli: copilot`, no
+  `provider_config`), `checkpoint_mode` PATCHed to `offered`, one turn fired through
+  `POST /projects/{pid}/agent/trigger`. **1 Free-model call spent** (the turn itself; its two failed
+  `task` dispatches and the fallback search tools are all inside this one turn, not separate
+  calls).
+
+  Round log (`GET .../agents/cp5/timeline` and `GET .../agent/cp5/chat`, verbatim facts, not
+  paraphrase): the model called `task` with `rawInput.agent_type: "Explore"` — twice. First call
+  (no `model` set): result `"Model 'sonnet' is not available. Available models: claude-haiku-4.5,
+  gpt-6-luna, gpt-5.6-luna, gpt-5-mini, mai-code-1.1-flash, ... auto"` (`is_error: true`). Second
+  call (`model: "auto"` added): result `"host interaction call failed: Error: Unsupported native
+  sessions host effect 'custom_agent_prompt'"` (`is_error: true`). The model then used its own
+  built-in `search` tool (`title: "search_code_subagent"`) plus `file_search`/`read_file`, and
+  answered with a real file: `` `validate_spec.py` ``. **No `subagent_started`, `subagent_completed`
+  or `subagent_failed` event anywhere in the timeline or chat** — only ordinary `run_*`,
+  `queue_entry_*`, `context_warning` events and `tool_use`/`tool_result` entries.
+
+  This is new evidence on the already-OPEN `spec-queue/DECISIONS.md` `ghcp-s5-subagent-capture`
+  row, not a fresh blocker: task 1.1's capture showed the model declining to try; this capture shows
+  the model trying and the dispatch itself erroring server-side on an unsupported host effect,
+  before any subagent session could open. Addendum filed in DECISIONS.md and design.md's Round log
+  (*Task 7.1, real capture, 2026-10-03*). The checkbox's literal acceptance criterion did not hold;
+  recorded as measured, not worked around or guessed past.
+
+  **Not driven this task: the section's before/after `/usage` reading.** Tried the bare `copilot`
+  CLI directly (outside the Hub) as `copilot -p "/usage" -s`: with `MSYS_NO_PATHCONV` unset, Git
+  Bash rewrote `/usage` to a filesystem path (`C:\Program Files\Git\usage`) and the model answered
+  about a permission error — a shell quoting trap, not a Copilot behavior. Retried with
+  `MSYS_NO_PATHCONV=1`: the model answered a prose explanation of what `/usage` *does*, not a real
+  quota reading — `/usage`'s slash-command short-circuit (the one `_mcp_list_quote` in
+  `copilot_acp.py` relies on for `/mcp list`, "no model call") did not fire over a non-interactive
+  `-p`/piped-stdin session; both attempts reached the model as ordinary text and **spent real
+  allowance** (the piped-stdin retry's footer showed `AI Credits 0.42`, `Tokens ↑20.2k ↓366`) that
+  this task's 12-call section budget did not plan for and does not track (it was outside the Hub
+  entirely). Recorded here rather than hidden: the slash-command short-circuit this task assumed for
+  `/usage` needs a true interactive TTY or the Hub's own ACP session, neither available to the
+  external check attempted; it was not retried a third way to avoid spending further unaccounted
+  allowance. The operator should decide how (or whether) to measure `/usage` before 7.2 onward, or
+  accept recording model-reported consumption only.
 - [ ] 7.2 (A) **The compaction backstop.**
   - R2 answered the condition: slice 2's D5 sends a per-turn context block ahead of every message,
     so a `/compact` message never reaches Copilot as a bare prompt. So a one-off script in
