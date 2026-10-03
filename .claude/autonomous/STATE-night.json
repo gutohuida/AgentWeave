@@ -1,40 +1,95 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-10-03-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "72b95db",
-    "stop_at":  "2026-10-03T22:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-10-03-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX, 13:00-22:00 build window armed by hand on 2026-10-03 (operator: 'focus on the ghcp implementation'). Playbook night-window.md, in full. Queue decided with the operator and seeded here; spec-queue/APPROVALS.md ## 2026-10-03 is its authority. Compose is skipped.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-10-03-daily",
+    "parent_branch": "master",
+    "parent_sha": "72b95db",
+    "stop_at": "2026-10-03T22:00:00+01:00",
+    "iteration": 0,
+    "log_file": ".claude/autonomous/2026-10-03-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "ghcp-s5-a-impl",
+    "next_action": "Slice 5 (openspec/changes/a-copilot-agent-uses-hooks-and-its-own-agents), group A. Read tasks.md 'Before you start', then re-read design.md's 'Required of slices 1-4' against the slices as built (all four are archived) and fix every '(rebase at IMPL)' site. Then task 1.1: capture real Copilot events (Free plan, ~5 calls) into hub/tests/fixtures/copilot/. If a type is not delivered, stop group A as 1.1 says and move to ghcp-s5-c-impl. Size each firing to finish; group A spans several firings.",
+    "queue": [
+        {
+            "id": "ghcp-s5-a-impl",
+            "status": "open",
+            "title": "Slice 5 group A: Copilot's lifecycle reaches the Hub",
+            "detail": "Rebase sites first, then 1.1 (real capture), 1.2-1.6, 2.1-2.8 (2.8 is untagged, never cut), its part of 1.14."
+        },
+        {
+            "id": "ghcp-s5-c-impl",
+            "status": "open",
+            "model": "opus",
+            "title": "Slice 5 group C: BYOK on a Copilot runner (security-sensitive, on Opus)",
+            "detail": "1.7-1.10, 3.1-3.5 (migration runners.provider_config; exact-value scrub; whole-prefix strip; urlsplit check), its part of 1.14. Follow the migration rules in .claude/rules/."
+        },
+        {
+            "id": "ghcp-s5-b-impl",
+            "status": "open",
+            "title": "Slice 5 group B: Copilot review agents on review turns",
+            "detail": "1.11, 1.12, 4.1-4.3, its part of 1.14."
+        },
+        {
+            "id": "ghcp-s5-d-impl",
+            "status": "open",
+            "title": "Slice 5 group D: the GitHub MCP server toggle, then 6.1",
+            "detail": "1.13, 5.1, 5.2, the rest of 1.14 and the UI-bundle refresh (hub/ui/src and hub/hub/static/ui together), then 6.1 exactly what CI runs."
+        },
+        {
+            "id": "ghcp-s5-drive",
+            "status": "open",
+            "title": "Slice 5 drive on :8010 (7.1-7.5, 7.7, 7.8); 7.6 left for the operator",
+            "detail": "Copilot agent on the Free plan's Auto model, the task's 12-call budget, /usage before and after. 7.6: record 'not driven: no key'. No archive: 8.1 waits on 7.6 and the operator."
+        },
+        {
+            "id": "copilot-oneshot-credits-r1",
+            "status": "open",
+            "title": "Follow-up proposal: a Copilot one-shot records its credits (R1)",
+            "detail": "DECISIONS.md copilot-oneshot-credits (10-02): read the one-shot's session.usage_checkpoint. Operator's exception to 'no proposals'. Propose under openspec/changes/."
+        },
+        {
+            "id": "copilot-oneshot-credits-r2",
+            "status": "open",
+            "title": "R2: re-derive independently against the code"
+        },
+        {
+            "id": "copilot-oneshot-credits-r3",
+            "status": "open",
+            "title": "R3: re-derive again, independently"
+        },
+        {
+            "id": "copilot-oneshot-credits-rev",
+            "status": "open",
+            "title": "Opus adversarial review; then an OPEN approval row in DECISIONS.md. No -impl."
+        },
+        {
+            "id": "the-shell-judge-reads-a-word-whole-impl",
+            "status": "open",
+            "title": "B4 continues (20/41): task 2.2's _glob_links/budget plumbing",
+            "detail": "See the 2026-10-02 night log, iterations 25-28, for the sizing notes."
+        },
+        {
+            "id": "a-drive-or-a-home-variable-names-a-directory-by-itself-impl",
+            "status": "open",
+            "title": "B4 sibling (12/31), drive-gated tasks only once the sibling's pieces land"
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5 -- except Copilot agents in slice 5's own tasks (1.1, 7.x), which use the Copilot Free plan's Auto model within that change's stated call budget (operator, 2026-10-03). Never set a real provider key; 7.6 is the operator's. Never leave a job enabled."
+    ]
 }
