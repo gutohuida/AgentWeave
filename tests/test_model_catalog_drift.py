@@ -393,9 +393,7 @@ def test_main_exits_two_when_the_cache_is_present_but_unreadable(tmp_path, capsy
 # --provider copilot (`a-copilot-agent-runs-over-acp`, design D13)
 # ---------------------------------------------------------------------------
 
-HELP_CONFIG = (
-    REPO_ROOT / "tests" / "fixtures" / "copilot" / "help-config-1.0.90.txt"
-)
+HELP_CONFIG = REPO_ROOT / "tests" / "fixtures" / "copilot" / "help-config-1.0.90.txt"
 
 
 def _help_text(*ids):

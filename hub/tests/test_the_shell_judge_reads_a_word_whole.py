@@ -54,8 +54,15 @@ def workspace(tmp_path, monkeypatch):
     return ws
 
 
-def _row(label, command, allow, *, tool="Bash"):
-    return pytest.param(tool, command, allow, id=label)
+def _row(label, command, allow, *, tool="Bash", windows_only=False):
+    marks = (
+        pytest.mark.skipif(
+            not _WINDOWS, reason="a drive-letter host reads a backslash as a separator"
+        )
+        if windows_only
+        else ()
+    )
+    return pytest.param(tool, command, allow, id=label, marks=marks)
 
 
 _TABLE = [
@@ -131,7 +138,7 @@ _TABLE = [
     # not change whether they refuse, only (below) whether the reason still quotes the whole piece.
     _row("1.4j", "ls ../*", False),
     _row("1.4k", "rm -rf ../*.py", False),
-    _row("1.4l", r"Get-ChildItem ..\*", False, tool="PowerShell"),
+    _row("1.4l", r"Get-ChildItem ..\*", False, tool="PowerShell", windows_only=True),
     # Allowed: a dot-glob not at a component that could reach `..`, and a glob needing a third
     # character after the dot.
     _row("1.4m", "ls sub/.*/x", True),
@@ -261,7 +268,19 @@ _DOTDOT_GLOB_REASON_TABLE = [
 @pytest.mark.parametrize(
     "tool, command, shown",
     [
-        pytest.param(tool, command, shown, id=label)
+        pytest.param(
+            tool,
+            command,
+            shown,
+            id=label,
+            marks=(
+                pytest.mark.skipif(
+                    not _WINDOWS, reason="a drive-letter host reads a backslash as a separator"
+                )
+                if label == "1.4l"
+                else ()
+            ),
+        )
         for label, tool, command, shown in _DOTDOT_GLOB_REASON_TABLE
     ],
 )
