@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import run_secrets
 from .conversations import latest_open_conversation, new_conversation
 from .db.models import AgentOutput, Conversation, EventLog, Run
 from .model_catalog import context_window_for_model
@@ -32,7 +33,13 @@ async def record_agent_output(
     run_id: Optional[str] = None,
     sequence: Optional[int] = None,
 ) -> AgentOutput:
-    """Persist one AgentOutput row and broadcast it, mirroring `POST .../output`."""
+    """Persist one AgentOutput row and broadcast it, mirroring `POST .../output`.
+
+    Every kind's `content` and every string in its `payload` are scrubbed of the run's registered
+    secrets first (slice 5 D7), so neither the row nor the broadcast ever holds them.
+    """
+    content = run_secrets.scrub(run_id, content)
+    payload = run_secrets.scrub(run_id, payload)
     if conversation_id is None and run_id:
         run_result = await db.execute(
             select(Run.conversation_id).where(

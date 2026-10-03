@@ -10,6 +10,7 @@ probes, handovers, titles) get the same variables, and the runner's model.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -844,3 +845,214 @@ async def test_the_worker_refuses_a_model_the_provider_would_not_take(
     accepted = await _work(HAIKU)
     assert accepted.outcome == "ok", accepted.error
     assert len(spawns) == 1
+
+
+# Task 1.9 (review 2026-09-28, finding 2): the per-run exact-value scrub (task 3.5). The key is in
+# the run's environment, so the agent can repeat it anywhere; every carrier below is one the
+# pattern rules either never see (text, thinking, error, a permission card, the failure text) or
+# cannot match (a key of any format, on a localhost proxy).
+
+
+def _surfaces_without(key: str, *texts: str) -> None:
+    for text in texts:
+        assert key not in text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("key", ["sk-ant-test-value", "plainproxykey123"])
+async def test_a_provider_key_is_scrubbed_from_everything_its_run_records(
+    app, auth_headers, monkeypatch, _copilot_installed, key
+):
+    from hub import run_secrets
+    from hub.api.v1 import agent_trigger
+    from hub.db.models import AgentOutput, EventLog, PermissionRequest
+    from hub.runner_adapters.copilot import CopilotAcpTransport
+    from hub.runner_events import diagnostic_event, error_event, thinking_event
+
+    monkeypatch.setenv("MY_ANTHROPIC_KEY", key)
+    monkeypatch.setattr(agent_trigger, "CODEX_OPERATOR_POLL_SECONDS", 0.05)
+    await _agent_with(app, auth_headers, "sec-1", env_vars={"OTHER_SECRET": "kept-in-config"})
+    runner_id = await _runner(
+        app, auth_headers, "sec-1-byok", model=HAIKU, provider_config=PROVIDER
+    )
+    await _bind(app, auth_headers, "sec-1", runner_id)
+
+    broadcasts: list = []
+    real_broadcast = agent_trigger.sse_manager.broadcast
+
+    async def _record(project_id, event_type, payload):
+        broadcasts.append((event_type, json.dumps(payload, default=str)))
+        return await real_broadcast(project_id, event_type, payload)
+
+    requests: list = []
+    real_transport_turn = CopilotAcpTransport.run_turn
+
+    async def _transport_turn(self, req, cb):
+        requests.append(req)
+        return await real_transport_turn(self, req, cb)
+
+    seen: dict = {}
+
+    async def _run(**kwargs):
+        run_id = kwargs["env"]["AW_RUN_ID"]
+        seen.setdefault("run_ids", []).append(run_id)
+        # Registered as the trigger registers it: before the spawn, from the resolved variable.
+        seen.setdefault("registered", []).append(run_secrets.registered(run_id))
+        await kwargs["on_session"]("sess-1")
+        on_event = kwargs["on_event"]
+        await on_event(text_event(f"Your key is {key}."))
+        await on_event(thinking_event(f"I should not repeat {key}"))
+        await on_event(error_event(code="provider", message=f"rejected {key}"))
+        await on_event(
+            diagnostic_event(
+                stream="copilot",
+                severity="warning",
+                summary=f"provider key {key} in use",
+                facts={"key": key, "nested": [{"again": f"x{key}x"}]},
+            )
+        )
+        posted = await app.post(
+            f"/api/v1/projects/{PROJECT}/agents/sec-1/output",
+            json={
+                "content": f"self-reported {key}",
+                "run_id": run_id,
+                "session_id": "sess-1",
+                "kind": "text",
+                "payload": {"text": f"self-reported {key}"},
+            },
+            headers=auth_headers,
+        )
+        assert posted.status_code == 201, posted.text
+        subject = {
+            "tool_name": f"Shell: echo {key}",
+            "tool_input": {"command": f"echo {key}"},
+            "kind": "execute",
+            "tool_call_id": "call-1",
+        }
+        asking = asyncio.create_task(
+            kwargs["request_approval"]("session/request_permission", subject)
+        )
+        for _ in range(200):
+            async with async_session_factory() as db:
+                card = (
+                    await db.execute(
+                        select(PermissionRequest).where(PermissionRequest.run_id == run_id)
+                    )
+                ).scalar_one_or_none()
+                if card is not None:
+                    card.status = "denied"
+                    await db.commit()
+                    break
+            await asyncio.sleep(0.02)
+        assert await asyncio.wait_for(asking, 10) is False
+        # A refusal Copilot's own judge decided records the command it refused.
+        await kwargs["on_refusal"](
+            "session/request_permission",
+            {**subject, "tool_input": {"command": f"cat {key}"}, "reason": f"no {key}"},
+        )
+        return TurnOutcome(
+            session_id="sess-1",
+            status="failed",
+            error=f"Authentication failed for {key}",
+            stderr_tail=f"401 for key {key}",
+        )
+
+    with (
+        patch("hub.copilot_acp.run_turn", AsyncMock(side_effect=_run)),
+        patch.object(CopilotAcpTransport, "run_turn", _transport_turn),
+        patch.object(agent_trigger.sse_manager, "broadcast", AsyncMock(side_effect=_record)),
+    ):
+        response = await _trigger(app, auth_headers, "sec-1", session_mode="new")
+        assert response.status_code == 200, response.text
+        await await_background_runs()
+
+    # The failed turn's input goes back to the queue and is retried, so there is a run per attempt;
+    # the last is read below, and every one was registered and forgotten.
+    run_ids = seen["run_ids"]
+    run_id = run_ids[-1]
+    assert seen["registered"] == [(key,)] * len(run_ids)
+    # Finding 14: the request carries the one config key a run needs, not the agent's config.
+    assert [dict(req.agent_config) for req in requests] == [{"copilot_github_mcp": False}] * len(
+        run_ids
+    )
+
+    async with async_session_factory() as db:
+        outputs = (
+            (await db.execute(select(AgentOutput).where(AgentOutput.run_id == run_id)))
+            .scalars()
+            .all()
+        )
+        cards = (
+            (await db.execute(select(PermissionRequest).where(PermissionRequest.run_id == run_id)))
+            .scalars()
+            .all()
+        )
+        run = await db.get(Run, run_id)
+        events = (await db.execute(select(EventLog))).scalars().all()
+
+    recorded = [(row.content, json.dumps(row.payload)) for row in outputs]
+    # Every carrier was recorded, scrubbed: none of them was dropped instead.
+    contents = [content for content, _payload in recorded]
+    for expected in (
+        "Your key is <redacted>.",
+        "I should not repeat <redacted>",
+        "rejected <redacted>",
+        "provider key <redacted> in use",
+        "self-reported <redacted>",
+    ):
+        assert expected in contents, contents
+    diagnostic = next(row for row in outputs if row.content == "provider key <redacted> in use")
+    assert diagnostic.payload["facts"] == {
+        "key": "<redacted>",
+        "nested": [{"again": "x<redacted>x"}],
+    }
+    _surfaces_without(key, *(content + payload for content, payload in recorded))
+
+    assert [(card.tool_name, card.tool_input) for card in cards] == [
+        ("Shell: echo <redacted>", {"command": "echo <redacted>"})
+    ]
+    assert run.status == "failed"
+    assert run.error == "Authentication failed for <redacted>"
+    refused = [event.data for event in events if event.event_type == "permission_denied"]
+    assert [(data["tool_name"], data["detail"], data["reason"]) for data in refused][-1] == (
+        "Shell: echo <redacted>",
+        "cat <redacted>",
+        "no <redacted>",
+    )
+    failed = [event.data for event in events if event.event_type == "run_failed"]
+    assert failed[-1]["stderr_tail"] == "401 for key <redacted>"
+    _surfaces_without(key, *(json.dumps(event.data, default=str) for event in events))
+    assert {"permission_requested", "agent_output", "run_failed"} <= {
+        event_type for event_type, _payload in broadcasts
+    }
+    _surfaces_without(key, *(payload for _event_type, payload in broadcasts))
+
+    runners = await app.get(f"/api/v1/projects/{PROJECT}/runners", headers=auth_headers)
+    assert runners.status_code == 200
+    _surfaces_without(key, runners.text)
+    context_files = [
+        path for path in _copilot_installed.rglob("*") if path.is_file() and path.suffix != ".exe"
+    ]
+    assert any("sec-1" in path.read_text(errors="replace") for path in context_files)
+    _surfaces_without(key, *(path.read_text(errors="replace") for path in context_files))
+
+    # Forgotten when each run was finalised.
+    assert [run_secrets.registered(each) for each in run_ids] == [()] * len(run_ids)
+
+
+def test_the_registry_scrubs_only_its_own_runs_values():
+    from hub import run_secrets
+
+    run_secrets.register("run-a", ["plainproxykey123", "", None])
+    try:
+        assert run_secrets.scrub("run-a", "k=plainproxykey123") == "k=<redacted>"
+        assert run_secrets.scrub("run-b", "k=plainproxykey123") == "k=plainproxykey123"
+        assert run_secrets.scrub(None, "k=plainproxykey123") == "k=plainproxykey123"
+        assert run_secrets.scrub("run-a", {"plainproxykey123": ("plainproxykey123", 3)}) == {
+            "<redacted>": ("<redacted>", 3)
+        }
+    finally:
+        run_secrets.forget("run-a")
+    assert run_secrets.registered("run-a") == ()
+    run_secrets.register("run-c", ["", None])
+    assert run_secrets.registered("run-c") == ()

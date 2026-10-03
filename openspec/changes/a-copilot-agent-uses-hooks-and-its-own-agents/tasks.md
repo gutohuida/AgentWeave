@@ -349,7 +349,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
   carry no `COPILOT_PROVIDER_*` with the outranking names ambient. Added beyond the text: a damaged
   stored provider spawns no one-shot (worker `spawn_failed`, no title), and the worker refuses
   `auto` on a provider runner (`unknown_model`) while accepting the runner's Claude API id.
-- [ ] 1.9 (C) Same file (review fixes 2026-09-28, finding 2): a fake run on the provider runner, with
+- [x] 1.9 (C) Same file (review fixes 2026-09-28, finding 2): a fake run on the provider runner, with
   the key registered for it as the trigger registers it, records the key value through a **text**
   event, a **thinking** event, an error event, a diagnostic, a `POST /agents/{name}/output` with its
   `run_id`, and a permission request whose subject quotes it (`{"command": "echo sk-ant-test-value"}`
@@ -365,6 +365,12 @@ scratch copy (DEAD-ENDS 2026-09-27).
   Repeat with `MY_ANTHROPIC_KEY=plainproxykey123` (a key no `sk-`/`aw_live_` pattern matches, as on a
   localhost proxy). A tool result must not be the only carrier: this test fails on today's
   `text_event` (the F190 pattern). After the run is finalised the registry holds nothing for it.
+  **Done 2026-10-03 (night iter 7)**, same file, both keys, with task 3.5: 2 red before 3.5
+  (`seen["registered"] == ()`), green after (28 passed in the file). Added beyond the text: a
+  refusal Copilot's own judge decided (`on_refusal`, its `permission_denied` event) and the
+  `run_failed` lifecycle's `stderr_tail` as carriers; each carrier is asserted recorded as
+  `<redacted>`, not dropped. The failed turn's input is retried, so the run is three runs; each was
+  registered and forgotten. Plus `test_the_registry_scrubs_only_its_own_runs_values`.
 - [x] 1.10 (C) Migration. `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py`
   head assertions name the new revision, and `runners.provider_config` exists after upgrade from the
   previous head. These fail until the migration exists.
@@ -588,13 +594,26 @@ scratch copy (DEAD-ENDS 2026-09-27).
   Pass the runner half of test 1.14. Then run `cd hub/ui && npm run lint && npx vitest run`, then
   `npm run build` and `py -3.11 scripts/refresh_ui_bundle.py`. Commit `hub/ui/src` and
   `hub/hub/static/ui` together.
-- [ ] 3.5 (C; review 2026-09-28, finding 2) The per-run exact-value scrub: a `run_secrets` registry
+- [x] 3.5 (C; review 2026-09-28, finding 2) The per-run exact-value scrub: a `run_secrets` registry
   (in-process, never persisted), registered by the trigger with the resolved
   `COPILOT_PROVIDER_API_KEY` before the spawn and forgotten when the run is finalised; applied in
   `record_agent_output` to `content` and every string in `payload` before storing and broadcasting,
   in `_await_operator_permission` to `tool_input` before storing and broadcasting, and to
   `Run.error`. The trigger fills `RpcTurnRequest.agent_config` with only `copilot_github_mcp`
   (finding 14). Pass test 1.9.
+  **Done 2026-10-03 (night iter 7):** `hub/hub/run_secrets.py` (`register`/`forget`/`registered`/
+  `scrub`; dict keys and values, lists, tuples). Registered from the run's built `env` just before
+  `asyncio.create_task(_execute_run(...))`; forgotten by that task's done callback, so every end
+  (completed, failed, raised, cancelled) forgets. Scrubbed: `record_agent_output` (`content`,
+  `payload`); the card's `tool_input`, `tool_name` and `workspace_verdict`, and its broadcast;
+  `Run.error` at all four sites that store a foreign string; `_broadcast_run_lifecycle`'s payload
+  (its event row and SSE); the runtime refusal's `permission_denied` event and broadcast.
+  `RpcTurnRequest.agent_config: Mapping = field(default_factory=dict)`, filled through
+  `_CopilotTurn` with `{"copilot_github_mcp": config.get("copilot_github_mcp") is True}`; nothing
+  reads it until group D. Eleven mutations (each site, register, forget, `agent_config`) each fail
+  test 1.9. **Driven** (port 8021, real Copilot CLI, a local fake Anthropic provider, key
+  `plaindrivekey77731`): the `powershell` call, its output, the reply and a `manual`-posture card
+  were recorded with `<redacted>`; the key appeared in 0 rows, events, runs, routes and Hub log lines.
 
 ## 4. Group B — Copilot review agents on review turns
 

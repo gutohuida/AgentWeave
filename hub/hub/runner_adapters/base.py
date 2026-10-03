@@ -141,6 +141,9 @@ class RpcTurnRequest:
     stable_context: Optional[str] = None
     control_overrides: Optional[Dict[str, str]] = None
     told_access_path: Optional[str] = None
+    # Only the config keys a turn reads (`copilot_github_mcp`), filled by the trigger -- never the
+    # agent's whole config, which carries its `env_vars` (slice 5, review 2026-09-28, finding 14).
+    agent_config: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

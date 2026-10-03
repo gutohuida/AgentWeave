@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "ghcp-s5-c-impl",
-    "next_action": "Group C (ghcp-s5-c-impl), fifth slice: task 3.5 (the per-run exact-value scrub) with test 1.9, in hub/tests/test_copilot_byok_env.py. A run_secrets registry (in-process, never persisted): the trigger registers the resolved COPILOT_PROVIDER_API_KEY (from the env guard_env built, ~agent_trigger.py spawn) before the spawn, forgets it when the run is finalised; applied in output_recording.record_agent_output to content and every string in payload before storing AND broadcasting, in _await_operator_permission to tool_input before storing and broadcasting, and to Run.error. The trigger fills RpcTurnRequest.agent_config with only copilot_github_mcp (finding 14). 1.9's carriers: text, thinking, error, diagnostic, POST /agents/{name}/output with run_id, a permission request quoting the key, a failure text; absent from GET /runners, the rendered context file, AgentOutput rows + SSE, PermissionRequest row + broadcast, Run.error; repeat with plainproxykey123; registry empty after finalise. If 3.5 is too big for one firing, split by carrier and say so in tasks.md.",
+    "next_action": "Group C (ghcp-s5-c-impl), sixth and last slice: task 3.4, the Runners page (hub/ui/src/components/runners/RunnersPage.tsx): provider fields for `copilot` only (type select, base URL, key variable name), the D7 API-key/Claude Max sentence, a refusal's own sentence beside the key field (in the order POST /runners returns it), the composer's model control hidden for an agent on a provider runner in favour of the runner's model, and (finding 9) with a provider set the model picker lists `claude` catalog ids only, toggling the provider resets the model. With the runner half of test 1.14 (hub/ui/src/__tests__/runnerProviderConfig.test.tsx, plus the composer case). Then npm run lint, npx vitest run, npm run build, py -3.11 scripts/refresh_ui_bundle.py; commit hub/ui/src and hub/hub/static/ui together; drive in a browser against the served bundle on a source Hub (scripts/drive/d1_aturn_browser.py is the pattern). Then close group C.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -26,7 +26,7 @@
             "status": "open",
             "model": "opus",
             "title": "Slice 5 group C: BYOK on a Copilot runner (security-sensitive, on Opus)",
-            "detail": "Done iters 3-6: 1.7, 1.8, 1.10, 3.1, 3.2, 3.3. Left: 1.9 + 3.5 (run_secrets scrub), 3.4 (UI), its part of 1.14."
+            "detail": "Done iters 3-7: 1.7, 1.8, 1.9, 1.10, 3.1, 3.2, 3.3, 3.5. Left: 3.4 (UI) with the runner half of 1.14."
         },
         {
             "id": "ghcp-s5-b-impl",

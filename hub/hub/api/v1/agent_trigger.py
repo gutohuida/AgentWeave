@@ -24,7 +24,7 @@ import asyncio
 import logging
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
@@ -43,6 +43,7 @@ from ... import (
     requirement_evidence,
     review_turn,
     run_liveness,
+    run_secrets,
     task_workspace,
     tool_server,
     worktrees,
@@ -1609,6 +1610,10 @@ async def _trigger_agent_directly(
         session.add(run)
         await session.commit()
 
+    # A provider runner's key, resolved into this run's environment, is scrubbed by its exact value
+    # from everything the run records (slice 5 D7, review finding 2). Registered just before the
+    # task exists and forgotten when it ends, however it ends.
+    run_secrets.register(run_id, [env.get("COPILOT_PROVIDER_API_KEY")])
     # Register execution immediately after the atomic Run + delivery commit. Event rows are
     # observability; a transient failure while writing one must never strand a running Run
     # whose queue entries are already marked delivered but which has no process task.
@@ -1662,6 +1667,7 @@ async def _trigger_agent_directly(
     )
     _background_runs.add(task)
     task.add_done_callback(_background_runs.discard)
+    task.add_done_callback(lambda _task: run_secrets.forget(run_id))
     # The run owns the review checkout now; nothing after this is a refusal of it (F326).
     review_claim.handed_off = True
 
@@ -2205,7 +2211,9 @@ async def _broadcast_run_lifecycle(
     output lines — see design.md's Typed activity stream section.
     """
     assert event_type in _RUN_LIFECYCLE_EVENTS
-    payload = {"agent": agent, "run_id": run_id, **fields}
+    # Scrubbed of the run's registered secrets (slice 5 D7): a failure's `error` and `stderr_tail` can
+    # quote a provider key the runtime echoed.
+    payload = run_secrets.scrub(run_id, {"agent": agent, "run_id": run_id, **fields})
     # L9-1's rule — "a broadcast payload is a display surface" — applied here rather than at each
     # caller, which is how the pty path came to miss it: `_transport_failure_fields` and
     # `_runtime_failure_fields` render, and the Claude path passes `exit_code=exit_code` straight
@@ -2339,7 +2347,7 @@ async def _record_run_failure_tail(
         # is the release below.
         if run is not None and run.status == "running":
             run.status = "failed"
-            run.error = str(exc) or type(exc).__name__
+            run.error = run_secrets.scrub(run_id, str(exc) or type(exc).__name__)
             run.ended_at = datetime.now(timezone.utc)
             await expire_pending_for_run(db, run_id)
             # The last terminal site either transport reaches, and the only one reached without
@@ -2658,7 +2666,7 @@ async def _execute_run(
             run = await db.get(Run, run_id)
             if run:
                 run.status = "failed"
-                run.error = str(exc)
+                run.error = run_secrets.scrub(run_id, str(exc))
                 run.ended_at = datetime.now(timezone.utc)
                 # Nothing spawned, so nothing can have asked — swept anyway, because the rule is
                 # "a terminal run leaves nothing pending", not "the paths where we expect some".
@@ -3264,6 +3272,9 @@ async def _await_operator_permission(
     Codex is waiting on a JSON-RPC response the whole time.
     """
     request_id = f"perm-{short_id()}"
+    # A command quoting the run's provider key is stored and broadcast with it scrubbed (slice 5
+    # D7): the card, its label and the advice all describe the request's own input.
+    tool_name = run_secrets.scrub(run_id, label or method)
     async with async_session_factory() as db:
         db.add(
             PermissionRequest(
@@ -3272,10 +3283,12 @@ async def _await_operator_permission(
                 agent=agent,
                 run_id=run_id,
                 conversation_id=await conversation_id_for_run(db, run_id),
-                tool_name=label or method,
+                tool_name=tool_name,
                 tool_use_id="",
-                tool_input=dict(tool_input if tool_input is not None else subject),
-                workspace_verdict=workspace_verdict,
+                tool_input=run_secrets.scrub(
+                    run_id, dict(tool_input if tool_input is not None else subject)
+                ),
+                workspace_verdict=run_secrets.scrub(run_id, workspace_verdict),
                 status="pending",
             )
         )
@@ -3286,7 +3299,7 @@ async def _await_operator_permission(
         {
             "id": request_id,
             "agent": agent,
-            "tool_name": label or method,
+            "tool_name": tool_name,
             "run_id": run_id,
         },
     )
@@ -3345,6 +3358,8 @@ class _CopilotTurn:
     pre_turn_events: List[Any]
     #: Both surfaces' notice, tool section and canonical context (D9), for `render_surface`.
     surfaces: Optional[Dict[str, Dict[str, str]]] = None
+    #: `RpcTurnRequest.agent_config`: only the keys the turn reads (slice 5, finding 14).
+    agent_config: Dict[str, Any] = field(default_factory=dict)
 
 
 async def _prepare_copilot_turn(
@@ -3431,6 +3446,8 @@ async def _prepare_copilot_turn(
         extra_flags=list(runner_flags),
         cli=str(cli) if cli else None,
         pre_turn_events=events,
+        # Read as `is True` (D9): a stored "true" or 1 is not the operator's choice.
+        agent_config={"copilot_github_mcp": config.get("copilot_github_mcp") is True},
     )
 
 
@@ -3477,6 +3494,7 @@ async def _execute_copilot_run(
         stable_context=turn.stable_context,
         control_overrides=turn.control_overrides,
         told_access_path=turn.told_access_path,
+        agent_config=turn.agent_config,
     )
 
     async def _start_turn(cb: RpcCallbacks):
@@ -3805,25 +3823,32 @@ async def _execute_rpc_run(
                 or copilot_input.get("url")
                 or ""
             )
+            # The refused command can quote the run's provider key, as a card's can (D7).
+            label = run_secrets.scrub(run_id, refusal_label(method, subject))
             async with async_session_factory() as db:
                 await persist_event(
                     db,
                     project_id=project_id,
                     event_type="permission_denied",
                     agent=agent,
-                    data={
-                        "tool_name": refusal_label(method, subject),
-                        "reason": reason or (f"outside {agent}'s workspace" if detail else ""),
-                        "detail": detail if isinstance(detail, str) else " ".join(map(str, detail)),
-                        "run_id": run_id,
-                        "decided_by": "runtime",
-                    },
+                    data=run_secrets.scrub(
+                        run_id,
+                        {
+                            "tool_name": label,
+                            "reason": reason or (f"outside {agent}'s workspace" if detail else ""),
+                            "detail": (
+                                detail if isinstance(detail, str) else " ".join(map(str, detail))
+                            ),
+                            "run_id": run_id,
+                            "decided_by": "runtime",
+                        },
+                    ),
                     severity="warn",
                 )
             await sse_manager.broadcast(
                 project_id,
                 "permission_denied",
-                {"agent": agent, "tool_name": refusal_label(method, subject), "run_id": run_id},
+                {"agent": agent, "tool_name": label, "run_id": run_id},
             )
 
         for event in pre_turn_events:
@@ -3849,7 +3874,7 @@ async def _execute_rpc_run(
                 run = await db.get(Run, run_id)
                 if run:
                     run.status = "failed"
-                    run.error = str(exc)
+                    run.error = run_secrets.scrub(run_id, str(exc))
                     run.ended_at = datetime.now(timezone.utc)
                     # See `_execute_run`'s spawn-failure branch.
                     await expire_pending_for_run(db, run_id)
@@ -3931,7 +3956,7 @@ async def _execute_rpc_run(
                 if binding_conflict is not None:
                     run.error = binding_conflict
                 elif outcome.error:
-                    run.error = outcome.error
+                    run.error = run_secrets.scrub(run_id, outcome.error)
                 run.ended_at = datetime.now(timezone.utc)
                 # NULL when the turn changed nothing — see `_execute_run`.
                 run.snapshot_commit_sha = snapshot_sha
