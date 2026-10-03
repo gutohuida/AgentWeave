@@ -816,6 +816,14 @@ def test_the_undivided_whole_value_is_judged_too_1_4g(workspace, monkeypatch):
 # whole-word check at rule 4 did). Confirmed by `git stash`ing just `mcp_server.py` and rerunning.
 def test_a_redirect_target_piece_names_a_bash_device_1_7d(workspace, monkeypatch):
     monkeypatch.setenv("HUB_URL", _HUB)
+    # The two controls below assert the drive-letter host's narrower half of D4/R4 (a piece that is
+    # neither a redirect target nor a whole word stays refused there); pinned rather than left to
+    # whichever host runs the suite, since `_DRIVE_LETTERS` is False on CI's Linux runner, where
+    # that same piece is exempted unconditionally instead (D4's other half) -- this made the test
+    # fail on every CI run while passing on every Windows dev machine.
+    from hub import mcp_server
+
+    monkeypatch.setattr(mcp_server, "_DRIVE_LETTERS", True)
 
     inner_shell_redirect = _decide("Bash", {"command": "sh -c 'ls 2>/dev/null'"})
     assert inner_shell_redirect["allow"] is True, inner_shell_redirect["reason"]
