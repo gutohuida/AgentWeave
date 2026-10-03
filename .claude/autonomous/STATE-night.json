@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 32,
+    "iteration": 33,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "the-shell-judge-reads-a-word-whole-impl",
-    "next_action": "the-shell-judge-reads-a-word-whole-impl (B4, 24/41, unchanged): first check stop_at (22:00 BST, 2026-10-03) against the clock; if past or within one iteration's reach, end the window per night-window.md's 'Ending the window' section (final log entry covering what changed/proven/open/decisions-waiting/what-to-distrust, then next_action null) rather than starting new work. If there is runway, build task 1.6's remaining extglob/backslash-run rows (tasks.md line 141/143: `@(` x 3000, `*(*(*(a)))b` x 50, a 70,000-character backslash run followed by `./x`) -- unmeasured since iteration 17's note, separate from the listing-memo rows iteration 32 closed. Iteration 32 built and tested task 1.6's two listing-memo rows (tasks.md lines 151 and 155 -- 'ls sub/* with the entry bound monkeypatched to the number of entries in sub' and 'ls sub/*.py sub/?.py sub/[ab].py ... three patterns over one directory are charged one listing'), both already served by iteration 31's `_Budget.list_directory`; no production file changed. Added test_a_bash_command_read_in_both_readings_charges_the_listing_once_1_6 and test_three_glob_patterns_over_one_directory_are_charged_one_listing_1_6; mutation-checked against the pre-memo mcp_server.py (both wrongly refused there, allowed now); full regression green (732 passed, 2 skipped, was 730). Task 1.6 stays unticked: the extglob/backslash-run rows, the colon-flag row (R6), and the D6-catch row remain separate unbuilt residuals -- same style, throwaway-script-first then mutation-checked, as iterations 31 and 32. Run the same regression set and quality gates (ruff, black --target-version py311, mypy src/, openspec validate --strict).",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
