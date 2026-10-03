@@ -41,6 +41,7 @@ from .db.models import (
 )
 from .inbound_queue import new_entry
 from .runner_adapters import get_adapter
+from .runner_provider import one_shot_model
 from .sse import sse_manager
 
 logger = logging.getLogger(__name__)
@@ -150,7 +151,7 @@ async def _resolve_runner(
     runner = await db.get(Runner, project.checkpoint_runner_id)
     if runner is None or runner.project_id != project.id:
         return None, None, None
-    return runner.cli, project.checkpoint_model or runner.model, runner.id
+    return runner.cli, one_shot_model(runner, project.checkpoint_model), runner.id
 
 
 async def _agent_compaction_percent(db, agent: Optional[Agent]) -> Optional[int]:

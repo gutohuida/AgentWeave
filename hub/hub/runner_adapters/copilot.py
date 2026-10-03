@@ -80,12 +80,15 @@ def copilot_one_shot_command(
 
 def copilot_one_shot_env(config: Optional[Mapping[str, Any]] = None) -> Dict[str, str]:
     """The Hub's environment through the one Copilot filter, under the worker home (D14): no
-    GitHub token, no allow-all or trust variable, no provider override. `config` is the runner's,
-    for slice 5's providers; nothing reads it yet."""
+    GitHub token, no allow-all or trust variable, no ambient provider override. Then the runner's
+    own model provider from `config` (`runner_probe_config`'s shape, `model` the one the spawn
+    names), through the same function as a run's `guard_env` (slice 5 D7, finding 1)."""
     from ..copilot_home import ensure_copilot_worker_home
 
+    config = config or {}
     home = ensure_copilot_worker_home()
     env, _removed = copilot_guard_env(dict(os.environ), {})
+    env = copilot_provider_env(env, config.get("provider_config"), config.get("model"))
     env["COPILOT_HOME"] = str(home)
     return env
 

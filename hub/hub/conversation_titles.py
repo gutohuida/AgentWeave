@@ -38,6 +38,7 @@ from .db.models import (
 from .file_mentions import restore_file_mentions
 from .pty_runner import resolve_executable
 from .runner_adapters import get_adapter
+from .runner_provider import damaged_provider, runner_probe_config
 from .subprocess_windows import no_console_kwargs
 from .utils import persist_event
 
@@ -246,6 +247,10 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
         runner = await _resolve_runner(db, project, conversation.agent)
         if runner is None or get_adapter(runner.cli) is None:
             return None
+        if damaged_provider(runner.provider_config):
+            # Not titled on the GitHub subscription instead (slice 5 D7): the truncated title is
+            # the floor, as for any runner that cannot spawn.
+            return None
         agent_name = conversation.agent
 
         # F195: the project's own directory, resolved here rather than passed in. A `cwd`
@@ -267,7 +272,8 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
         cmd = build_title_command(
             cli=runner.cli, model=runner.model, prompt=_PROMPT.format(excerpt=excerpt)
         )
-        env = one_shot_env(runner.cli)
+        # The runner's own model provider, or none (slice 5 D7, finding 1).
+        env = one_shot_env(runner.cli, runner_probe_config(runner))
     except FileNotFoundError as exc:
         # The CLI could not be resolved (Copilot's executable, D14): no title, the floor.
         logger.debug("conversation titling could not resolve %s: %s", runner.cli, exc)

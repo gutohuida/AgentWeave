@@ -197,6 +197,12 @@ def has_provider(value: Any) -> bool:
     return value is not None
 
 
+DAMAGED_PROVIDER_REASON = (
+    "This runner's model provider settings are incomplete or damaged, so it cannot run. "
+    "Edit the runner and set its provider again, or remove it."
+)
+
+
 def runner_probe_config(runner_row: Any) -> dict:
     """`{runner, model, provider_config}` from a bound `Runner` row: what `probe_agent`, the
     adapter's `launchability` and `resolve_agent_env` read (design D7). Every probe site builds its
@@ -210,6 +216,27 @@ def runner_probe_config(runner_row: Any) -> dict:
         "model": runner_row.model,
         "provider_config": getattr(runner_row, "provider_config", None),
     }
+
+
+def one_shot_model(runner_row: Any, checkpoint_model: Optional[str]) -> Optional[str]:
+    """The model a checkpoint, handover or probe spawn on *runner_row* is given (design D7,
+    finding 1): the project's `checkpoint_model`, else the runner's own.
+
+    A provider runner sends its model to the provider's API as is, so a stored `checkpoint_model`
+    that is not a Claude API id (one stored before the runner gained a provider) is ignored in
+    favour of the runner's, as a run ignores a stored model override. It is left in place.
+    """
+    if has_provider(getattr(runner_row, "provider_config", None)) and not is_provider_model(
+        checkpoint_model
+    ):
+        return runner_row.model
+    return checkpoint_model or runner_row.model
+
+
+def damaged_provider(provider_config: Any) -> bool:
+    """A provider runner whose stored `provider_config` is not valid: it may not spawn, and is
+    never quietly run on the GitHub subscription instead."""
+    return has_provider(provider_config) and stored_provider_config(provider_config) is None
 
 
 def _provider_or_model_name(name: str) -> bool:
@@ -257,11 +284,7 @@ def provider_launch_verdict(probe: Mapping[str, Any], provider_config: Any) -> d
     if not present:
         authorized, reason = False, probe.get("reason")
     elif stored is None:
-        authorized = False
-        reason = (
-            "This runner's model provider settings are incomplete or damaged, so it cannot run. "
-            "Edit the runner and set its provider again, or remove it."
-        )
+        authorized, reason = False, DAMAGED_PROVIDER_REASON
     elif not os.environ.get(stored["api_key_var"]):
         authorized = False
         reason = (

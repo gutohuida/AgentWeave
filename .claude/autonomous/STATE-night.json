@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72b95db",
     "stop_at": "2026-10-03T22:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-03-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "ghcp-s5-c-impl",
-    "next_action": "Group C (ghcp-s5-c-impl), fourth slice: task 3.3's second half (one-shots) with test 1.8's one-shot half, in hub/tests/test_copilot_byok_env.py. worker.one_shot_env(cli) and the titler pass the runner's config ({provider_config, model}) to adapter.one_shot_env: run_worker already gets runner_id (read the row there, or have the three callers pass provider_config), conversation_titles holds the runner row. copilot_one_shot_env(config) ends in runner_provider.copilot_provider_env(env, config provider_config, model). one_shot_model(runner, checkpoint_model) in runner_provider (a provider runner ignores a checkpoint_model failing is_provider_model and uses runner.model) at checkpoint_trigger.py (~:153), checkpoint_handover.py (~:188), api/v1/checkpoints.py (~:183). Tests patch the worker's and titler's process spawn to capture env/argv (1.8's bullets). Then tick 3.3 and 1.8 if both halves pass. Group A stays blocked on DECISIONS ghcp-s5-subagent-capture.",
+    "next_action": "Group C (ghcp-s5-c-impl), fifth slice: task 3.5 (the per-run exact-value scrub) with test 1.9, in hub/tests/test_copilot_byok_env.py. A run_secrets registry (in-process, never persisted): the trigger registers the resolved COPILOT_PROVIDER_API_KEY (from the env guard_env built, ~agent_trigger.py spawn) before the spawn, forgets it when the run is finalised; applied in output_recording.record_agent_output to content and every string in payload before storing AND broadcasting, in _await_operator_permission to tool_input before storing and broadcasting, and to Run.error. The trigger fills RpcTurnRequest.agent_config with only copilot_github_mcp (finding 14). 1.9's carriers: text, thinking, error, diagnostic, POST /agents/{name}/output with run_id, a permission request quoting the key, a failure text; absent from GET /runners, the rendered context file, AgentOutput rows + SSE, PermissionRequest row + broadcast, Run.error; repeat with plainproxykey123; registry empty after finalise. If 3.5 is too big for one firing, split by carrier and say so in tasks.md.",
     "queue": [
         {
             "id": "ghcp-s5-a-impl",
@@ -26,7 +26,7 @@
             "status": "open",
             "model": "opus",
             "title": "Slice 5 group C: BYOK on a Copilot runner (security-sensitive, on Opus)",
-            "detail": "Done iters 3-5: 1.7, 1.10, 3.1, 3.2, 1.8's per-run/env/launchability halves, 3.3's run half (env + launchability + runner_probe_config at four sites). Left: 3.3's one-shot half + 1.8's one-shot half, 1.9, 3.4 (UI), 3.5 (run_secrets scrub), its part of 1.14."
+            "detail": "Done iters 3-6: 1.7, 1.8, 1.10, 3.1, 3.2, 3.3. Left: 1.9 + 3.5 (run_secrets scrub), 3.4 (UI), its part of 1.14."
         },
         {
             "id": "ghcp-s5-b-impl",

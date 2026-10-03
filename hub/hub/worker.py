@@ -45,7 +45,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 from pydantic import BaseModel, ValidationError
 
 from .db.engine import async_session_factory
-from .db.models import WorkerInvocation
+from .db.models import Runner, WorkerInvocation
 from .file_mentions import restore_file_mentions
 from .model_catalog import get_provider, undeclared_model_reason
 from .pty_runner import resolve_executable
@@ -59,6 +59,14 @@ from .runner_adapters.copilot import (  # noqa: F401
     parse_copilot_envelope,
 )
 from .runner_adapters.one_shot import WorkerUsage, _int_or_none, extract_json_object  # noqa: F401
+from .runner_provider import (
+    DAMAGED_PROVIDER_REASON,
+    damaged_provider,
+    has_provider,
+    is_provider_model,
+    provider_model_problem,
+    runner_probe_config,
+)
 from .subprocess_windows import no_console_kwargs
 from .utils import short_id
 
@@ -108,10 +116,26 @@ class WorkerResult:
         return self.outcome == "ok"
 
 
-def one_shot_env(cli: str) -> Optional[Dict[str, str]]:
-    """The environment a one-shot spawn of *cli* gets: its adapter's, or None (inherit the Hub's)."""
+def one_shot_env(cli: str, config: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, str]]:
+    """The environment a one-shot spawn of *cli* gets: its adapter's, or None (inherit the Hub's).
+
+    `config` is the runner's (`runner_provider.runner_probe_config`, with `model` the one the
+    spawn names), so a provider runner's one-shot gets its provider's variables (slice 5 D7).
+    """
     adapter = get_adapter(cli)
-    return adapter.one_shot_env("worker") if adapter is not None else None
+    return adapter.one_shot_env("worker", config) if adapter is not None else None
+
+
+async def _runner_config(runner_id: Optional[str], model: Optional[str]) -> Dict[str, Any]:
+    """The spawning runner's config for `one_shot_env`, read from its row in a session of its own
+    that is closed before the spawn. `{}` for no runner id, or a row that no longer exists."""
+    if not runner_id:
+        return {}
+    async with async_session_factory() as db:
+        runner = await db.get(Runner, runner_id)
+    if runner is None:
+        return {}
+    return {**runner_probe_config(runner), "model": model}
 
 
 def build_worker_command(
@@ -305,7 +329,23 @@ async def run_worker(
     never spawn — an operator asking why no checkpoint appeared should find the answer in one
     place regardless of how early it failed.
     """
-    if not model_is_declared(cli, model):
+    try:
+        config: Optional[Dict[str, Any]] = await _runner_config(runner_id, model)
+    except Exception:  # noqa: BLE001 — this function never raises; the row decides the env
+        logger.warning("worker could not read runner %s", runner_id, exc_info=True)
+        config = None
+    provider_config = (config or {}).get("provider_config")
+    if config is None:
+        result = WorkerResult("spawn_failed", error="the runner's record could not be read")
+    elif damaged_provider(provider_config):
+        # No launchability check precedes a one-shot, so this is it: a damaged provider is not
+        # quietly run on the GitHub subscription (slice 5 D7).
+        result = WorkerResult("spawn_failed", error=DAMAGED_PROVIDER_REASON)
+    elif has_provider(provider_config) and not is_provider_model(model):
+        # A provider runner's model is a Claude API id the `copilot` catalog does not declare: the
+        # runner registry judges it by the provider rule, and so does this.
+        result = WorkerResult("unknown_model", error=provider_model_problem(model))
+    elif not has_provider(provider_config) and not model_is_declared(cli, model):
         result = WorkerResult("unknown_model", error=undeclared_model_reason(cli, model))
     else:
         adapter = get_adapter(cli)
@@ -326,7 +366,7 @@ async def run_worker(
                 prompt=prompt,
                 output_schema_path=schema_path,
             )
-            env = one_shot_env(cli)
+            env = one_shot_env(cli, config)
         except FileNotFoundError as exc:
             # Copilot's executable cannot be resolved (D14, R3). Not `unsupported_cli`, which is
             # what a `None` command means: the CLI is supported and could not be spawned.

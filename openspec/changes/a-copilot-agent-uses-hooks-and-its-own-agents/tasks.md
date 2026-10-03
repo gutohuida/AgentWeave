@@ -281,7 +281,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
   `PUT /projects/{id}/settings`, the one settings write there is. It is judged only when the
   `(checkpoint_runner_id, checkpoint_model)` pair changes, so a model stored before the runner
   gained a provider does not block unrelated saves (generation ignores it instead, task 3.3).
-- [ ] 1.8 (C) `hub/tests/test_copilot_byok_env.py`: with `monkeypatch.setenv("MY_ANTHROPIC_KEY",
+- [x] 1.8 (C) `hub/tests/test_copilot_byok_env.py`: with `monkeypatch.setenv("MY_ANTHROPIC_KEY",
   "sk-ant-test-value")`, the run environment built for the provider runner (`resolve_agent_env`
   with the runner's `provider_config`, as the trigger calls it; design D7) has
   `COPILOT_PROVIDER_TYPE=anthropic`, `COPILOT_PROVIDER_BASE_URL=https://api.anthropic.com`,
@@ -339,7 +339,16 @@ scratch copy (DEAD-ENDS 2026-09-27).
   routes' verdicts with the variable unset/set and Copilot "not signed in" patched, `POST /agents`
   201. One deviation: with the variable unset, `POST /agent/trigger` answers 200 `queued` with the
   sentence as `waiting_reason` (and no run), the route's launchability refusal for any agent, not a
-  409. **Left: the one-shot half** (3.3's second slice).
+  409. **One-shot half done 2026-10-03 (night iter 6)**, same file, **25 passed** (7 of the 9 new
+  fail at `05cbc21`; the plain-runner control and the worker-gate test's accepted half hold there):
+  the operator's checkpoint and its probe, a handover (`consider_handover` on `_flow_handover`'s
+  rows), a title on the project's provider title runner and on an agent's own provider runner each
+  get exactly the provider's four variables and `--model`/`COPILOT_MODEL` = the runner's model; a
+  stored `checkpoint_model` of `auto` (written directly) is ignored at the route, the handover and
+  `checkpoint_trigger._resolve_runner`, and left in place; a plain runner's worker and titler spawns
+  carry no `COPILOT_PROVIDER_*` with the outranking names ambient. Added beyond the text: a damaged
+  stored provider spawns no one-shot (worker `spawn_failed`, no title), and the worker refuses
+  `auto` on a provider runner (`unknown_model`) while accepting the runner's Claude API id.
 - [ ] 1.9 (C) Same file (review fixes 2026-09-28, finding 2): a fake run on the provider runner, with
   the key registered for it as the trigger registers it, records the key value through a **text**
   event, a **thinking** event, an error event, a diagnostic, a `POST /agents/{name}/output` with its
@@ -522,7 +531,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
   is kept). 1.8's per-run half passes (`test_copilot_byok_env.py`, 5 passed; each site's removal
   fails a named test). Driven on a source Hub (`:8018`, profile `drive1003b`): both `auto` and
   `claude-haiku-4.5` refused with the sentence, 0 runs / 0 queue entries / 0 conversations after.
-- [ ] 3.3 Environment and launchability (design D7):
+- [x] 3.3 Environment and launchability (design D7):
   - `provider_config` reaches `resolve_agent_env` through `config` (R3: no new parameter), and the
     Copilot `guard_env` (given `config`; *Required of slices 1–4*, 1.3) sets the provider
     environment from it, or strips the provider variables from both the ambient environment and
@@ -555,6 +564,18 @@ scratch copy (DEAD-ENDS 2026-09-27).
   session.json; the trigger; `POST /agents`; `GET /runners/launchability`). **Left (second
   slice):** `one_shot_env` given the runner's `config` at the worker and titler spawns,
   `one_shot_model` at the three checkpoint/handover/title sites, and 1.8's one-shot half.
+  **Second slice done (night iter 6):** `worker.one_shot_env(cli, config)`; `run_worker` reads
+  its runner's row by `runner_id` in a session of its own, closed before the spawn, and passes
+  `{**runner_probe_config(row), "model": model}`; the titler passes `runner_probe_config(runner)`;
+  `copilot_one_shot_env(config)` ends in `copilot_provider_env`; `runner_provider.one_shot_model`
+  at the three sites. **Deviation, needed for the plumbing to fire at all:** `run_worker`'s
+  `model_is_declared` gate checked the `copilot` catalog, which declares no Claude API id, so every
+  provider-runner checkpoint would have been refused `unknown_model` before its spawn. A provider
+  runner's model is now judged by the provider rule there (as `runners.py` judges it), and a
+  damaged stored provider is refused (`spawn_failed`; the titler skips) rather than run on the
+  GitHub subscription, since no launchability check precedes a one-shot. Driven on a source Hub
+  (port 8020, a local fake provider): the checkpoint one-shot's requests reached the provider with
+  the key in `x-api-key` and the runner's model.
 - [ ] 3.4 The Runners page (`hub/ui/src/components/runners/RunnersPage.tsx`):
   - provider fields for `copilot` (type select, base URL, key variable name);
   - the API-key/Claude Max sentence;

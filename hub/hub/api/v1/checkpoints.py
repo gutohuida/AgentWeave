@@ -21,6 +21,7 @@ from ...checkpoints import get_checkpoint_by_id
 from ...conversations import get_conversation_by_id
 from ...db.engine import get_session
 from ...db.models import Checkpoint, InboundQueueEntry, Project, Runner, WorkerInvocation
+from ...runner_provider import one_shot_model
 from ...sse import sse_manager
 
 router = APIRouter(tags=["checkpoints"])
@@ -178,7 +179,7 @@ async def take_checkpoint(
             conversation,
             trigger="operator",
             cli=runner.cli,
-            model=project_row.checkpoint_model or runner.model,
+            model=one_shot_model(runner, project_row.checkpoint_model),
             runner_id=runner.id,
         )
     finally:
