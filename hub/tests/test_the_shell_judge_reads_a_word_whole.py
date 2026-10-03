@@ -835,3 +835,45 @@ def test_a_redirect_target_piece_names_a_bash_device_1_7d(workspace, monkeypatch
     glued_not_redirect = _decide("Bash", {"command": 'sh -c "touch @/dev/null"'})
     assert glued_not_redirect["allow"] is False
     assert glued_not_redirect["reason"] == "'/dev/null' is outside your workspace"
+
+
+# 2.1c, re-derived against the current code (1.4c's own `ls sub/.*/y` row, "the dot rule"):
+# `_rewrite_dotdot_globs` (D3) only ever rewrites a component that already holds a glob character
+# (a glob-free component never satisfies its own `_GLOB_CHARS` check) to the literal text `..`,
+# because some real bash could still expand it that way. Both `_judge_word` (rule 5) and
+# `_judge_piece` (rule 6) used to hand that *rewritten* text on to `_glob_links`, which erases the
+# very glob character `_glob_links` needs to find a real entry through: `.*` (or an absolute
+# word's own `.*` component) became the literal `..`, which has no glob character left for
+# `_glob_links` to match against the directory listing, so a dot-leading link (`.l`) in that
+# listing was never even looked for. Measured against `_decide` directly first
+# (`testbed/scratch/measure_21c_relative_rows.py`, gitignored, not committed): `ls sub/.*/y`, with
+# `sub/.l` a link out, was wrongly **allowed** (`.*` rewritten to `sub/../y`, which is inside, and
+# `_glob_links` never reached, since the text handed to it held no glob character at all) both
+# through the relative piece reading and, with an absolute word, through rule 5. Confirmed by
+# `git stash`ing just `mcp_server.py` and rerunning: both revert to allowed. Fixed by matching
+# `_glob_links` on the piece/word as written, not on D3's rewrite of it -- the literal `..`
+# reading that rewrite feeds is `_judge_path`'s own check, just before, and runs independently.
+def test_a_dot_leading_glob_is_also_matched_against_the_link_it_finds_2_1c(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    sub = workspace / "sub"
+    if _WINDOWS:
+        import _winapi
+
+        _winapi.CreateJunction(str(workspace.parent / "outside"), str(sub / ".l"))
+    else:
+        (sub / ".l").symlink_to(workspace.parent / "outside", target_is_directory=True)
+
+    relative = _decide("Bash", {"command": "ls sub/.*/y"})
+    assert relative["allow"] is False
+    assert "it resolves to" in relative["reason"]
+
+    forward = str(workspace).replace("\\", "/")
+    absolute = _decide("Bash", {"command": f"ls {forward}/sub/.*/y"})
+    assert absolute["allow"] is False
+    assert "it resolves to" in absolute["reason"]
+
+    # Control: a `..` written literally (no glob character) is untouched by D3's rewrite either
+    # way, and was already caught by `_glob_links`'s own tail walk (task 2.1c, iteration 22).
+    literal_dotdot = _decide("Bash", {"command": "ls sub/l*/../x"})
+    assert literal_dotdot["allow"] is False
+    assert "it resolves to" in literal_dotdot["reason"]

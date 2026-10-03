@@ -617,6 +617,59 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   slice**: it is independent of what remains here, is explicitly named as this task's own fallback
   across the last several iterations, and unblocks the sibling change's drive-gated relative-word
   rows the same way this task's absolute-word rows already did.
+
+  **Iteration 27's night-window follow-up (re-derived fresh now that task 2.2 is built, before
+  building anything).** Measured directly against `_decide` first
+  (`testbed/scratch/measure_21c_relative_rows.py`, gitignored, not committed), with the fixture's
+  own link shape: with task 2.2 now built, 1.4c's relative-word glob rows all now pass on their
+  own, with no further code change -- `cp n u*/`, `cp n u?/x`, `cp n [u]p/x`, the inner-shell row
+  (`bash -c 'cp n u*/'`) and the PowerShell row (`Copy-Item n u*/x`) are each refused, naming where
+  the match resolves. 1.4f's relative `..`-after-glob-link rows (`cp n sub/l*/..`,
+  `ls sub/l*/../x`) also already pass, through the same `_glob_links` tail walk task 2.1c's own
+  iteration 22 built. The extglob row (`bash -O extglob -c 'cp n @(u)p/x'`) stays allowed, as
+  documented (extglob is not in `_GLOB_CHARS`, so `_glob_links` never sees it as a glob at all --
+  left to a further slice, unaffected by this one).
+
+  **A real, previously unnoticed gap found by this measurement, not named by any note above:**
+  1.4c's own `ls sub/.*/y` row ("the dot rule") was wrongly **allowed**, through both the relative
+  piece reading and, separately measured with an absolute word, rule 5 too. The cause was not the
+  bash dot rule step 2 defers (that only widens what matches, safe by design) -- it was an
+  interaction between D3's `..`-rewrite and D8's matching that no prior iteration's note
+  mentioned: `_rewrite_dotdot_globs` rewrites a dot-leading glob-holding component (`.*`) to the
+  literal text `..` before `_judge_path`'s literal check runs, and both `_judge_word` (rule 5) and
+  `_judge_piece` (rule 6) then handed that *rewritten* text on to `_glob_links` too, which erased
+  the one glob character `_glob_links` needs to find a real entry (`.l`, a link out) through --
+  `_glob_links` saw `..` with no glob character left, found no glob-holding component at all, and
+  returned `None`. Confirmed by `git stash`ing just `mcp_server.py` and rerunning: both the
+  relative and the absolute row revert to allowed.
+
+  Fixed by matching `_glob_links` on the piece/word exactly as written, not on D3's rewrite of it,
+  in both call sites: the literal `..` interpretation that rewrite feeds is `_judge_path`'s own
+  check, which already runs first and independently, so nothing is lost by leaving `_glob_links`
+  the original text. This is safe because `_rewrite_dotdot_globs` only ever rewrites a component
+  that already holds a glob character (a glob-free component never satisfies its own `_GLOB_CHARS`
+  check), so no base or already-literal-`..` tail component is affected either way -- confirmed by
+  rereading `_rewrite_dotdot_globs`'s own condition, not assumed. Added
+  `test_a_dot_leading_glob_is_also_matched_against_the_link_it_finds_2_1c` to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, covering the relative row, the absolute
+  row, and a literal-`..`-tail control (unaffected either way). Mutation-checked: `git stash`ing
+  just `mcp_server.py` and rerunning the test file fails exactly this one new test, leaving the
+  other 100 rows passing unchanged. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 101 passed (was 100, +1). Broader
+  regression set (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): 727 passed, 2 skipped, no regressions. `ruff
+  check` clean; `black --check --target-version py311` clean on both files, no reformat needed;
+  `mypy src/` (the only path CI runs mypy over) clean. `git diff --stat`: exactly
+  `hub/hub/mcp_server.py`, the one test file, and this task file.
+
+  **Task 2.1c still stays unticked**, but what remains has narrowed further: 1.4c's and 1.4f's
+  named rows now all pass (bar the extglob row, explicitly deferred). What is left of 2.1c's own
+  checklist line is the globstar-does-not-descend-through-a-link rule (task 1.4d's own row,
+  `bash -O globstar -c 'ls sub/**/x'`) and the per-pattern listing memo -- both still unbuilt, as
+  `_glob_links`'s own docstring already says, and the true reason 2.1c cannot tick yet. The
+  globstar rule is the more load-bearing of the two (task 1.6's link-cycle hang row and 1.4d's own
+  test need it); re-derive design D8 step 2's `**` rule and D8 step 4's link-cycle note fresh
+  before building it, sizing down further if it does not fit one slice whole.
 - [ ] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
 
   **Iteration 18 (partial).** Measured today's `_decide` directly first (not from this file's old

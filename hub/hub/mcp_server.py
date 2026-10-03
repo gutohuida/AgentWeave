@@ -1934,9 +1934,14 @@ def _judge_word(
             return refusal
         # (R5, D8) An absolute word holding a glob character is also matched against the links it
         # finds, not only judged by its literal text -- `_PLAIN_RELATIVE_RE` already keeps every
-        # relative glob out of this branch (D8, "Where it runs").
+        # relative glob out of this branch (D8, "Where it runs"). Matched on `word`, not
+        # `rewritten`: D3's dot-rewrite only ever touches a component that already holds a glob
+        # character (never a glob-free base or tail component), so handing `_glob_links` the
+        # rewritten text would erase the very glob character it needs to find a real entry
+        # (`.l`) through -- the literal `..` reading that rewrite feeds is `_judge_path`'s job,
+        # just above, not this one's.
         if os.path.isabs(word) and any(char in word for char in _GLOB_CHARS):
-            return _glob_links(rewritten, word, root, budget)
+            return _glob_links(word, word, root, budget)
         return None
     return _judge_pieces(
         word, root, argument, continues, dialect, budget
@@ -1951,7 +1956,13 @@ def _judge_piece(
     it spells. (R5, D8) A piece holding a glob character is also matched against the links it
     finds, not only judged by its literal text -- mirroring rule 5's own `_glob_links` call, but
     joined to `root` first when relative, since `_glob_links` reads its piece as rooted at a
-    drive (or, with none, at the filesystem root) rather than at the workspace."""
+    drive (or, with none, at the filesystem root) rather than at the workspace.
+
+    `_glob_links` is matched on `piece`, not on D3's `..`-rewrite of it: that rewrite only ever
+    touches a component that already holds a glob character (a glob-free component never
+    satisfies its own `_GLOB_CHARS` check), so handing `_glob_links` the rewritten text would
+    erase the one glob character it needs to find a real entry through -- the literal `..`
+    reading the rewrite feeds is `_judge_path`'s job, just above, not this one's."""
     if "\x00" in piece:
         return _refuse(piece, _UNRESOLVED)
     if _TILDE_PREFIX_RE.match(piece):
@@ -1961,7 +1972,7 @@ def _judge_piece(
     if refusal:
         return refusal
     if any(char in piece for char in _GLOB_CHARS):
-        absolute = rewritten if os.path.isabs(rewritten) else os.path.join(root, rewritten)
+        absolute = piece if os.path.isabs(piece) else os.path.join(root, piece)
         return _glob_links(absolute, piece, root, budget)
     return None
 
