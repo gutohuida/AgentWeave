@@ -194,6 +194,37 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   unticked**: the extglob/backslash-run rows, the listing memo, the memo key's colon flag, and
   `approve_tool_call`'s D6 catch are all still unbuilt, exactly as the iteration-17 note above left
   them.
+
+  **Iteration 32 (partial, the two listing-memo rows only -- line 151 and line 155).** Task 2.1c's
+  own iteration (iter 31, this window) built `_Budget.list_directory`, keyed by the resolved
+  directory, used by both `_glob_links` and `_globstar_walk`. Re-derived both rows fresh against
+  `hub/hub/mcp_server.py` and tasks.md's own wording (not reused from iter 31's note): row 151's
+  "both readings" are the unconditional `c`/`utf8` passes `approve_tool_call` always makes (line
+  3104), not the two dialects; a plain `Bash` command has one dialect, so `ls sub/*` reaches
+  `_glob_links` on `sub` twice, once per reading, with no `$'...'` escape to make the two renderings
+  differ. Row 155's three patterns (`sub/*.py`, `sub/?.py`, `sub/[ab].py`) are three distinct
+  pattern texts, so a memo keyed by pattern (which this slice deliberately does not build) would
+  still list `sub` three times. Measured directly against `_decide` first
+  (`testbed/scratch/measure_task_1_6_memo_rows.py`, gitignored, not committed, deleted after use),
+  using the shared fixture's `sub` (4 entries: `a.py`, `b.py`, `l`, `@s`) with `_GLOB_ENTRY_BUDGET`
+  monkeypatched to 4: both commands allowed on this branch. Mutation-checked by running the same
+  script against `mcp_server.py` as it stood at iter 30's tip (`89da542`, before 2.1c's memo),
+  temporarily swapped into place and restored after: both wrongly refused as `_TOO_MANY` there,
+  confirming the rows exercise the memo and not something already true. Added
+  `test_a_bash_command_read_in_both_readings_charges_the_listing_once_1_6` and
+  `test_three_glob_patterns_over_one_directory_are_charged_one_listing_1_6` to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`. Mutation-checked the same way inside
+  pytest (the pre-memo file swapped in, `-k "1_6"`): exactly these two new tests fail, nothing else
+  in that filter. `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 106
+  passed (was 104, +2). Broader regression set (`test_permission_approver.py`,
+  `test_hub_own_call.py`, `test_copilot_acp_decide.py`,
+  `test_a_write_outside_the_workspace_is_recorded.py`): 732 passed, 2 skipped, no regressions.
+  `ruff check` and `black --check --target-version py311` on the changed test file: clean. No
+  production file changed this iteration (`_Budget.list_directory` already existed from 2.1c), so
+  `mypy src/` is unaffected; `git diff --stat`: exactly the one test file, plus this file. **Only
+  these two rows' own test coverage is ticked here; task 1.6 as a whole stays unticked**: the
+  extglob/backslash-run rows, the memo key's colon flag (R6), and `approve_tool_call`'s D6 catch
+  remain separate, unbuilt residuals.
 - [ ] 1.7 Negative controls that must stay refused, each PASSES today:
   - `curl -o/tmp/x $HUB_URL/api`, `curl -F file=@/etc/passwd x`, `tar -xvf/tmp/a.tar`, `ls a(b/../../x`, `cp x @../y`;
   - `sh -c 'cat</etc/passwd'`, `sh -c "echo hi>../x"`, `python -c "open('/etc/x','w')"`, `node -e "require('fs').writeFileSync('../x','')"`;

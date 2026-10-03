@@ -623,6 +623,42 @@ def test_a_second_glob_word_against_the_same_directory_is_served_from_the_listin
     assert two_words_same_directory["allow"] is True, two_words_same_directory["reason"]
 
 
+# Task 1.6, line 151 (R4): "a Bash command read in both readings charges the budget once" -- a
+# `Bash` command carries no `$'...'` escape, so its `c` and `utf8` readings (`approve_tool_call`
+# always runs both, unconditionally) render `sub/*` as the same text and reach the same
+# `_glob_links` call on the same directory. The fixture's `sub` holds exactly 4 direct entries
+# (`a.py`, `b.py`, `l`, `@s`); bound pinned to 4 so one listing fits but an unmemoized second
+# listing, from the second reading, would push the total to 8 and refuse. Measured directly
+# against `_decide` first (testbed/scratch/measure_task_1_6_memo_rows.py, gitignored, not
+# committed, deleted after use): wrongly refused with this same bound when `mcp_server.py` is
+# reverted to its pre-memo version (`git show` of the commit before 2.1c's memo), allowed with
+# the memo in place.
+def test_a_bash_command_read_in_both_readings_charges_the_listing_once_1_6(workspace, monkeypatch):
+    from hub import mcp_server
+
+    monkeypatch.setenv("HUB_URL", _HUB)
+    monkeypatch.setattr(mcp_server, "_GLOB_ENTRY_BUDGET", 4)
+
+    decision = _decide("Bash", {"command": "ls sub/*"})
+    assert decision["allow"] is True, decision["reason"]
+
+
+# Task 1.6, line 155 (R5): "Three patterns over one directory are charged one listing" -- three
+# distinct glob words (`sub/*.py`, `sub/?.py`, `sub/[ab].py`), each a different pattern text, so a
+# memo keyed by pattern (which this slice does not build) would still list `sub` three times. Same
+# fixture and bound as the row above: one listing of `sub`'s 4 entries fits; three would not
+# (4 x 3 = 12 > 4). Measured the same way: wrongly refused on the pre-memo version, allowed with
+# the memo (keyed by the resolved directory, not the pattern) in place.
+def test_three_glob_patterns_over_one_directory_are_charged_one_listing_1_6(workspace, monkeypatch):
+    from hub import mcp_server
+
+    monkeypatch.setenv("HUB_URL", _HUB)
+    monkeypatch.setattr(mcp_server, "_GLOB_ENTRY_BUDGET", 4)
+
+    decision = _decide("Bash", {"command": "ls sub/*.py sub/?.py sub/[ab].py"})
+    assert decision["allow"] is True, decision["reason"]
+
+
 # 2.2's own remaining bullet: rule 6 (D2's piece reading, D2 step 6's whole-value reading) also
 # matches a glob-holding word against the links it finds, not only its literal text -- mirroring
 # rule 5's own `_glob_links` call, but for a relative word, joined to the workspace root first
