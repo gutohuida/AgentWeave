@@ -936,7 +936,7 @@ every run id, and paste each surface's text verbatim into the Round log.
   and `firstLaunchAt` (GitHub login state); no `trustedFolders` key or anything naming a trusted
   folder. Both expectations hold. No Copilot allowance spent (filesystem/config check, no live
   turn).
-- [ ] 7.5 (C) On the Runners page, create a Copilot provider runner:
+- [x] 7.5 (C) On the Runners page, create a Copilot provider runner:
   - with the key field set to `sk-ant-not-a-name`. It is refused; record the sentence verbatim;
   - with `MY_ANTHROPIC_KEY` unset. The agent's launchability reason names the variable.
 
@@ -948,6 +948,21 @@ every run id, and paste each surface's text verbatim into the Round log.
   key itself. Put the key in the Hub's environment and name that variable here.`; the runner on
   unset `MY_ANTHROPIC_KEY` was created, and creating an agent on it was refused 409 naming
   `$MY_ANTHROPIC_KEY`; 0 matches in the database file, any column, and the Hub log.
+  **Done 2026-10-03 (night iter 17), real drive on `:8010` itself.** Restarted `:8010` first (the
+  process actually listening was pid 24376, not the stale `.pid` file's 1062; killed it and
+  relaunched from `hub/` with the trial `DATABASE_URL` and no `MY_ANTHROPIC_KEY` in the shell,
+  confirmed by the startup line). `POST /api/v1/projects/proj-d85a82bf4216/runners` with
+  `provider_config.api_key_var: "sk-ant-not-a-name"` returned 400 with the detail **verbatim**:
+  `api_key_var must be the name of an environment variable (capital letters, digits and
+  underscores, such as MY_ANTHROPIC_KEY), not the key itself. Put the key in the Hub's environment
+  and name that variable here.` — matching iter 8's pre-drive exactly. A runner with
+  `api_key_var: "MY_ANTHROPIC_KEY"` (unset) was created (`runner-a73c0fe80508`); `POST
+  /api/v1/projects/proj-d85a82bf4216/agents` naming it was refused 409: `This runner sends its
+  runs to a model provider, and the variable it names for the key, $MY_ANTHROPIC_KEY, is not set
+  in the Hub's environment. Set it and restart the Hub.` A read-only (`mode=ro`) sqlite3 scan of
+  every table/column in the trial database file for the literal string `sk-ant-not-a-name` found
+  **0 matches**. The runner created above (`runner-a73c0fe80508`) was left in place as evidence,
+  same as prior drive tasks' artifacts.
 - [ ] 7.6 (C, **operator key only**) **Preconditions (operator decision 2026-09-28, design D7 and
   Open question 8), all required before the key is set:**
   - the fixes for review findings 2 (the exact-value scrub, task 3.5), 3 (the whole-prefix strip,
