@@ -147,8 +147,56 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
 
 ## 2. The fix
 
-- [ ] 2.0 (R4) `_Budget` and the per-`_decide` memo (design, "The bounds"), created in `_decide` and passed through `_read_command` (both dialects, both readings, nested); (R6) the memo key includes the trimmed-colon flag. `_TOO_MANY`. `_DRIVE_LETTERS` (D9), read at call time by every rule that consults it: no regex, default argument or module constant is built from it at import (the sibling's task 1.5c monkeypatches it)
-- [ ] 2.0b (R6, D12) `_physical` and the second reading in `_where`, on a drive-letter host, with the 64-step bound, inside `_where`'s existing `try`. Run 1.4f's literal rows on Windows. This fixes a pre-existing escape and may be built first. (R8, third review) Also correct the `hub/hub/workspace_writes.py` docstring, whose module text (lines 8-10) and `classify` text (lines 172-174) say its `realpath` is "the reason the two agree about a symlink" with `_decide`: after D12, `_decide` also reads a `..` after a link physically on a drive-letter host (a second reading, D12), and `classify` does not, so the two agree about a link named directly and may differ about a `..` after one (`node_modules/../src/x`: `_decide` refuses, on Windows `classify` records `ws/src/x`, inside, which is where Node writes). Comment only; no behaviour of `classify` changes
+- [ ] 2.0 (R4) `_Budget` and the per-`_decide` memo (design, "The bounds"), created in `_decide` and passed through `_read_command` (both dialects, both readings, nested); (R6) the memo key includes the trimmed-colon flag. `_TOO_MANY`. ~~`_DRIVE_LETTERS` (D9)~~ -- **built by task 2.0b below**, not here: re-derived this iteration that D9 (one line, `os.sep == "\\"`) and "The bounds" (the budget/memo threaded through `_read_command`, `_expand_braces`, `_glob_links` -- none of which exist yet) are independent in the design text, and 2.0b's own line already said it "may be built first". Still open: `_Budget`, the memo, `_TOO_MANY`
+- [x] 2.0b (R6, D12) `_physical` and the second reading in `_where`, on a drive-letter host, with the 64-step bound, inside `_where`'s existing `try`. Run 1.4f's literal rows on Windows. This fixes a pre-existing escape and may be built first. (R8, third review) Also correct the `hub/hub/workspace_writes.py` docstring, whose module text (lines 8-10) and `classify` text (lines 172-174) say its `realpath` is "the reason the two agree about a symlink" with `_decide`: after D12, `_decide` also reads a `..` after a link physically on a drive-letter host (a second reading, D12), and `classify` does not, so the two agree about a link named directly and may differ about a `..` after one (`node_modules/../src/x`: `_decide` refuses, on Windows `classify` records `ws/src/x`, inside, which is where Node writes). Comment only; no behaviour of `classify` changes
+
+  **Iteration 15.** Built `_DRIVE_LETTERS = os.sep == "\\"` (D9, a module constant beside
+  `_SEPARATORS`, read at call time -- never baked into a regex or default argument) and
+  `_physical(absolute)` in `hub/hub/mcp_server.py`: walks `absolute`'s components past the drive
+  anchor, resolving the current path with `os.path.realpath` (reading any link) before a `..`
+  leaves a name appended since the last resolution, then moving to the parent with
+  `os.path.dirname`; raises past 64 such resolutions (`_PHYSICAL_MAX_STEPS`), caught by `_where`'s
+  existing `try` as `_UNRESOLVED`. Factored `_judge_resolved` out of `_where` so the lexical and
+  physical readings share the same `commonpath`/`_resolves_elsewhere` judgement; `_where` now
+  computes the physical reading only when `_DRIVE_LETTERS` and the path holds a `..`, and refuses
+  if either reading does. Corrected `workspace_writes.py`'s module and `classify` docstrings as this
+  task asks (comment only, `classify` unchanged). Measured directly against `_decide` before
+  writing any test (real junctions via `_winapi.CreateJunction` on this machine, which is the
+  Windows host production runs on): `cp n sub/l/../y`, `echo hi > sub/l/../x1`, `ls sub/l/../x`
+  (literal, no glob) were `allow=True` before the fix and are `allow=False` after; the controls
+  `ls in/../sub`, `ls sub/../sub/a.py`, `ls in/../sub/*.py` stayed `allow=True` throughout. Added
+  rows `1.4f1`-`1.4f6` to `_TABLE` in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`
+  (`_TABLE` runs on both platforms; the three refusals are already true on POSIX, where
+  `os.path.realpath` is itself physical, so they serve as controls there) -- these are **task
+  1.4f's literal rows only**; its glob rows (`sub/l*/..`, `i*/l/../x`) need D8's `_glob_links`
+  (task 2.1c, not built), so 1.4f itself stays unticked. Added two Windows-only tests (`skipif not
+  _WINDOWS`) for the named costs (`Set-Content sub\l\..\p1 hi` through PowerShell, and
+  `_decide("Write", {"file_path": .../sub/l/../z})`, both measured `allow=True` before and
+  `allow=False` after, each asserting the reason names where it resolves) and for the 64-step bound
+  (`"sub/../" * 64` allowed, `* 65` refused as `_UNRESOLVED`, measured both ways with a throwaway
+  script first). Mutation check: `git stash` the two production files, reran the test file --
+  exactly the five new assertions (`1.4f1`-`1.4f3`, the named-costs test, the bound test) failed;
+  `1.4f4`-`1.4f6` and every other row passed unchanged. `py -3.11 -m pytest
+  tests/test_the_shell_judge_reads_a_word_whole.py -q`: 80 passed (was 72 before this iteration's
+  test file edit, confirmed by stashing just that file; +6 `_TABLE` rows, +2 standalone test
+  functions). Broader regression set (adds `test_permission_approver.py`, `test_hub_own_call.py`,
+  `test_copilot_acp_decide.py`, `test_a_write_outside_the_workspace_is_recorded.py`): 706 passed, 2
+  skipped, nothing broken. `ruff check` and `black --check --target-version py311` on the three
+  changed files: clean. `mypy hub/hub/mcp_server.py`: the same pre-existing `approve_tool_call`
+  no-return-annotation gap `.claude/rules/mcp-server.md` names as deliberate. `git diff --stat`:
+  only `hub/hub/mcp_server.py`, `hub/hub/workspace_writes.py` and the one test file changed, plus
+  this file. Did not run the full `hub/tests/` suite this iteration (46 minutes at the last full
+  run, `hub-suite-gate`); relied on the broader regression set as prior iterations have.
+
+  **Queued next:** task 2.1 (D1, brace expansion in `_lex`/`_expand_braces`) is the next item in
+  section 2's stated build order, but re-derive from the design text before starting -- it is a
+  larger unit (an iterative expander, sentinels in the bash lexer, `_read_command` judging each
+  alternative, totality against 5000-`{` inputs) and may need its own sub-slice. Task 2.0's
+  `_Budget`/memo remains open and un-attempted; nothing in section 2.1 onward is known yet to need
+  it (the memo is for readings that do not exist until 2.1/2.1c are built), so re-confirm whether
+  2.1 truly needs the budget before 2.0, or can be built budget-free with the bound added once
+  `_expand_braces` exists -- do not assume either way without reading design D1 and "The bounds"
+  together again.
 - [ ] 2.1 D1 first: sentinels in `_lex` for bash, `_expand_braces` (iterative), and `_read_command` judging each alternative's words. Run 1.2 and 1.3
 - [ ] 2.1b The inner-shell brace reading (design D1, R2). Run 1.3 and 1.6
 - [ ] 2.1c (R4) D8 `_glob_links`, built **before** 2.2, because rule 6 without it regresses; (R6) with the base resolved by `_physical`, each branch carrying its real directory, literal components moved into rather than listed, and `..` moving to the real parent and judged (design D8 step 4); (R7) each branch also carries its listed path, so a `..` refusal names where it lands (`_resolves_elsewhere`), a literal component's link test is `os.lstat` (not `os.path.islink`), and `_physical`, `realpath` and `lstat` inside `_glob_links` are wrapped as design "What each changed route returns" says. Run 1.4c, 1.4d and 1.4f

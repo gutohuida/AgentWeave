@@ -6,8 +6,10 @@ that touches the database. The call site this exists for is `tool_use_event`
 transports, so anything that could block, fail or need a connection does not belong here.
 
 `classify`'s `os.path.realpath` is the module's one piece of filesystem contact, and it is
-deliberate: it reads links, which is the only reason this and `mcp_server._decide` agree about a
-symlinked path. `written_paths`, the half that runs on every tool call, touches nothing --
+deliberate: it reads links, the reason this and `mcp_server._decide` agree about a link named
+directly. They may differ about a `..` after one: on a drive-letter host `_decide` also resolves it
+physically (`mcp_server._physical`, design D12), which this module's `realpath` alone does not.
+`written_paths`, the half that runs on every tool call, touches nothing --
 `classify` runs only for the paths `written_paths` has already picked out as writes.
 
 The module owns the two halves that must not drift apart -- *which tools write*, and *where a
@@ -220,8 +222,11 @@ def classify(
 
     Pure and total: no filesystem writes, no session, and every input maps to a location. The
     only filesystem contact is `os.path.realpath`, which reads links -- the same contact
-    `mcp_server._decide` makes for the same comparison, and the reason the two agree about a
-    symlink.
+    `mcp_server._decide` makes for the same comparison, the reason the two agree about a link
+    named directly. They may differ about a `..` after one: on a drive-letter host `_decide` also
+    resolves it physically (design D12, `mcp_server._physical`), which this `realpath` alone does
+    not -- for example `node_modules/../src/x` through the Hub's shared dependency link, which
+    `_decide` refuses and this records as inside, where Node actually writes.
 
     **Joins before it resolves**, which is not an implementation detail of the comparison:
 

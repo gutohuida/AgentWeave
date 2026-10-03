@@ -200,6 +200,19 @@ _TABLE = [
     # Rule 5: D4's device exemption is bash-only ("may be named, in bash only"); on the PowerShell
     # dialect `/dev/null` is an ordinary absolute path, outside.
     _row("1.7o", "echo hi > /dev/null", False, tool="PowerShell"),
+    # 1.4f (task 2.0b, design D12), the literal (non-glob) rows only -- the glob rows (`sub/l*/..`)
+    # need D8's `_glob_links`, not yet built. `ntpath.realpath` normalises a `..` lexically before
+    # reading any link, so these escape today on Windows (msys itself resolves `..` physically,
+    # measured) -- `_physical`'s second reading in `_where` is what refuses them. Already refused on
+    # POSIX, where `os.path.realpath` is itself physical; this table runs there too, as a control.
+    _row("1.4f1", "cp n sub/l/../y", False),
+    _row("1.4f2", "echo hi > sub/l/../x1", False),
+    _row("1.4f3", "ls sub/l/../x", False),
+    # Controls allowed, both platforms (design D12): a `..` through a link that is not shallower
+    # than where it sits lands back where the lexical reading already put it.
+    _row("1.4f4", "ls in/../sub", True),
+    _row("1.4f5", "ls sub/../sub/a.py", True),
+    _row("1.4f6", "ls in/../sub/*.py", True),
 ]
 
 
@@ -246,3 +259,34 @@ def test_the_trailing_colon_address_quotes_the_colon_restored(workspace, monkeyp
     decision = _decide("Bash", {"command": "scp n user@example.com:"})
     assert decision["allow"] is False
     assert "'user@example.com:'" in decision["reason"]
+
+
+# 2.0b / design D12 Costs: named so that a change of mind is visible. A native program resolves `..`
+# lexically and would write inside the workspace -- `Set-Content` through PowerShell, and the Write
+# tool's own `file_path` -- but `_decide` refuses both, because msys resolves the identical text
+# physically and the judge cannot tell which program a word reaches. Windows-only: `_physical` only
+# runs under `_DRIVE_LETTERS`, and `Set-Content` is a PowerShell cmdlet.
+@pytest.mark.skipif(not _WINDOWS, reason="D12's physical reading only runs on a drive-letter host")
+def test_a_dotdot_after_a_link_is_refused_though_a_native_program_writes_inside(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    decision = _decide("PowerShell", {"command": r"Set-Content sub\l\..\p1 hi"})
+    assert decision["allow"] is False
+    assert "it resolves to" in decision["reason"]
+    decision = _decide("Write", {"file_path": str(workspace / "sub" / "l" / ".." / "z")})
+    assert decision["allow"] is False
+    assert "it resolves to" in decision["reason"]
+
+
+# design D12 "Bound": `_physical` makes at most one `realpath` per `..` that follows a name; a path
+# needing a 65th is answered `_UNRESOLVED` rather than growing the cost without limit. Windows-only:
+# the bound is part of the physical reading, which only runs under `_DRIVE_LETTERS`.
+@pytest.mark.skipif(not _WINDOWS, reason="D12's physical reading only runs on a drive-letter host")
+def test_the_physical_readings_64_step_bound(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    within_bound = _decide("Bash", {"command": "ls " + "sub/../" * 64 + "x"})
+    assert within_bound["allow"] is True, within_bound["reason"]
+    past_bound = _decide("Bash", {"command": "ls " + "sub/../" * 65 + "x"})
+    assert past_bound["allow"] is False
+    assert past_bound["reason"].endswith("could not be resolved")

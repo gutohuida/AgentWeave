@@ -1097,6 +1097,13 @@ _PATH_KEYS = ("file_path", "path", "notebook_path")
 # POSIX it is a file name with a backslash in it. `os.path` answers the same way.
 _SEPARATORS = "/\\" if os.sep == "\\" else "/"
 
+# D9: the one platform key for a Windows-only rule -- the drive exception in D2 step 3, the device
+# limit in D4, D12's physical reading below, and the sibling change's drive rules. Read at call
+# time by every rule that consults it: never baked into a regex or default argument at import, so a
+# test can monkeypatch it on Linux. `_SEPARATORS` and `_ABSOLUTE_PATH_RE` keep their own `os.sep`
+# keys rather than this one.
+_DRIVE_LETTERS = os.sep == "\\"
+
 # Rule 6's backstop, and now its only use: a path glued to something no other rule accounts for
 # (`-o/tmp/x`, `@/etc/passwd`, `host:/x`) is read out of one word at a time, the way whole commands
 # once were. POSIX (/x) and Windows (C:\x, C:/x). On Windows a candidate also opens at a bare `\`,
@@ -1267,17 +1274,47 @@ def _refuse(text: str, why: str) -> Dict[str, Any]:
     return {"allow": False, "reason": f"{_quote(text)} {why}"}
 
 
-def _where(path: str, root: str) -> Optional[str]:
-    """Why `path` is not inside the workspace, or None when it is.
+# D12: `ntpath.realpath` normalises a `..` lexically, before it reads any link, so a `..` right
+# after a link escapes `_where`'s one reading on a drive-letter host (measured: Git Bash and
+# PowerShell both resolve it physically, from where the link really points). `_physical` makes at
+# most one `os.path.realpath` call per `..` that follows a name; a path needing more is answered
+# `_UNRESOLVED`, which refuses. No real path comes near it.
+_PHYSICAL_MAX_STEPS = 64
 
-    A relative path is joined to the workspace root, which is where the run started. Total: a path
-    the platform cannot resolve (on POSIX, a NUL byte raises `ValueError`) is refused, not raised.
+
+def _physical(absolute: str) -> str:
+    """D12: walk `absolute`'s components, resolving the current path (reading any link) before a
+    `..` leaves a name that was appended since the last resolution, then moving to its parent.
+
+    On POSIX this is `os.path.realpath` itself -- it already resolves `..` this way -- so `_where`
+    calls this only on a drive-letter host (`_DRIVE_LETTERS`, read at call time).
     """
-    absolute = path if os.path.isabs(path) else os.path.join(root, path)
-    try:
-        resolved = os.path.realpath(absolute)
-    except (OSError, ValueError):
-        return _UNRESOLVED
+    drive, rest = os.path.splitdrive(absolute)
+    anchor = drive + os.sep
+    current = anchor
+    appended = False
+    steps = 0
+    for component in re.split(f"[{re.escape(_SEPARATORS)}]", rest):
+        if component in ("", "."):
+            continue
+        if component == "..":
+            if appended:
+                steps += 1
+                if steps > _PHYSICAL_MAX_STEPS:
+                    raise ValueError("too many '..' components to resolve physically")
+                current = os.path.realpath(current)
+                appended = False
+            if current != anchor:
+                current = os.path.dirname(current)
+        else:
+            current = os.path.join(current, component)
+            appended = True
+    return os.path.realpath(current)
+
+
+def _judge_resolved(absolute: str, resolved: str, root: str) -> Optional[str]:
+    """Why `resolved` -- a lexical or (D12) physical reading of `absolute` -- lands outside `root`,
+    or None when it is inside."""
     # `commonpath` compares path components, so it cannot be fooled the way a string prefix
     # can (`/work-other` does not start inside `/work`). Both sides are already real paths,
     # so `..` and symlinks have been collapsed before this comparison.
@@ -1287,6 +1324,33 @@ def _where(path: str, root: str) -> Optional[str]:
         return _resolves_elsewhere(absolute, resolved)
     if os.path.normcase(shared) != os.path.normcase(root):
         return _resolves_elsewhere(absolute, resolved)
+    return None
+
+
+def _where(path: str, root: str) -> Optional[str]:
+    """Why `path` is not inside the workspace, or None when it is.
+
+    A relative path is joined to the workspace root, which is where the run started. Total: a path
+    the platform cannot resolve (on POSIX, a NUL byte raises `ValueError`) is refused, not raised.
+
+    (D12) On a drive-letter host, a path holding a `..` after a name is also read physically
+    (`_physical`): a refusal of either reading refuses, because the judge cannot tell whether the
+    word reaches a native program (which resolves `..` lexically) or msys (which resolves it
+    physically, the way `_physical` does).
+    """
+    absolute = path if os.path.isabs(path) else os.path.join(root, path)
+    try:
+        resolved = os.path.realpath(absolute)
+        physical = None
+        if _DRIVE_LETTERS and ".." in re.split(f"[{re.escape(_SEPARATORS)}]", absolute):
+            physical = _physical(absolute)
+    except (OSError, ValueError):
+        return _UNRESOLVED
+    why = _judge_resolved(absolute, resolved, root)
+    if why:
+        return why
+    if physical is not None:
+        return _judge_resolved(absolute, physical, root)
     return None
 
 
