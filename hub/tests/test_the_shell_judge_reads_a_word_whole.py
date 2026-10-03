@@ -753,6 +753,94 @@ def test_a_relative_glob_is_matched_through_the_link_it_finds_windows_powershell
     assert "it resolves to" in windows_powershell["reason"]
 
 
+# Task 1.4c's (R5) sub-group, re-derived fresh against `_decide`
+# (`testbed/scratch/measure_1_4c_r5_r8.py`, gitignored, not committed), not trusting the task's own
+# text, which claims the absolute rows are allowed today -- they are not: an absolute word already
+# reaches `_glob_links` through rule 5's own call (line ~2033), and `sub/@s/u*/` reaches it through
+# rule 6's piece reading, the same way the relative `u*/x` row above does. Each is already refused,
+# naming the resolved target. The PowerShell dot-rule row (`.l` is the only entry `?l` can match)
+# is also already refused: `fnmatch` has no bash dot rule of its own, so `?` matches a leading dot
+# the same way PowerShell's own wildcard does -- the two dialects coincide here by accident, not by
+# a rule either one encodes.
+def test_an_absolute_or_piece_relative_glob_is_matched_through_the_link_it_finds_1_4c_r5(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    forward = str(workspace).replace("\\", "/")
+
+    absolute_star = _decide("Bash", {"command": f"ls {forward}/u*/"})
+    assert absolute_star["allow"] is False
+    assert "it resolves to" in absolute_star["reason"]
+
+    sub = workspace / "sub"
+    _link(sub / "@s" / "up", workspace.parent / "outside")
+    scoped_piece = _decide("Bash", {"command": "ls sub/@s/u*/"})
+    assert scoped_piece["allow"] is False
+    assert "it resolves to" in scoped_piece["reason"]
+
+    _link(sub / ".l", workspace.parent / "outside")
+    powershell_dot = _decide("PowerShell", {"command": "Get-ChildItem sub/?l/x"})
+    assert powershell_dot["allow"] is False
+    assert "it resolves to" in powershell_dot["reason"]
+
+
+# Task 1.4c's (R5) absolute dot-leading row (`cp n <workspace, absolute>/.*/x`), measured against
+# `_decide` the same way, and found NOT to reach `_glob_links`'s dot-rule reading at all when the
+# dot-leading component is the word's first component after the workspace root: `_rewrite_dotdot_globs`
+# (D3) rewrites that first `.*` to the literal `..` before rule 5's own `_judge_path(rewritten, ...)`
+# call ever reaches `_glob_links`, and `<workspace>/../x` already refuses on its own (the parent of
+# the workspace), short-circuiting before the glob-link call below it runs -- confirmed by removing
+# the `.l` link entirely and rerunning: the refusal is identical either way, so no link is actually
+# being matched. This differs from the already-built `sub/.*/y` case (2.1c, above): there the
+# rewritten text is `sub/../y`, which resolves *inside* the workspace, so the early `_judge_path`
+# call does not refuse and execution falls through to `_glob_links`, which does match `.l`. A word
+# whose dot-leading component sits one level deeper is exercised by that existing test; this one
+# documents the top-level case precisely rather than asserting a resolved-target reason that cannot
+# fire there -- left for a further slice, same as the POSIX-class and extglob rows named in
+# `tasks.md`.
+def test_an_absolute_top_level_dot_glob_refuses_by_the_dotdot_rewrite_not_the_link_it_finds_1_4c_r5(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    forward = str(workspace).replace("\\", "/")
+
+    with_link = _decide("Bash", {"command": f"ls {forward}/.*/x"})
+    assert with_link["allow"] is False
+    assert "it resolves to" not in with_link["reason"]
+
+    _link(workspace / ".l", workspace.parent / "outside")
+    still_the_same_reason = _decide("Bash", {"command": f"ls {forward}/.*/x"})
+    assert still_the_same_reason == with_link
+
+
+# Task 1.4c's (R8, design D8 step 2) bracket-relaxation sub-group, re-derived fresh against
+# `_decide` (same throwaway script as the (R5) sub-group above): `_relax_bracket_pattern` (task
+# 2.1c, iteration 20) already keeps a plain numeric bracket exact (no `! ^ [ \` or a backtick to
+# relax), already keeps a `^`-negated bracket exact rather than relaxing it (bash reads `^` as a
+# literal negation `fnmatch` cannot share, so D8 step 2 keeps the exact text instead of widening
+# it), and PowerShell's `!`-negated bracket the same way (`fnmatch` has no negation syntax of its
+# own either). Each row below is already the design's own outcome with no further production
+# change.
+def test_a_bracket_expression_is_matched_or_kept_exact_as_fnmatch_can_read_it_1_4c_r8(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    # `[0-9]` matches only a one-character name, which `up` is not -- stays allowed.
+    numeric_class = _decide("Bash", {"command": "ls ./[0-9]/x"})
+    assert numeric_class["allow"] is True, numeric_class["reason"]
+
+    # Bash negates with `^`; `fnmatch` reads `[^a]` literally the same way, so it matches `up`.
+    bash_negated = _decide("Bash", {"command": "ls ./[^a]p/x"})
+    assert bash_negated["allow"] is False
+    assert "it resolves to" in bash_negated["reason"]
+
+    # PowerShell negates with `!`; `fnmatch` reads `[!a]` literally too, matching `up` the same way.
+    powershell_negated = _decide("PowerShell", {"command": "Get-ChildItem ./[!a]p/x"})
+    assert powershell_negated["allow"] is False
+    assert "it resolves to" in powershell_negated["reason"]
+
+
 # 2.2, a first slice (design D2 step 2, D3's extglob units): an unquoted extglob group -- a
 # trigger (`@ ? * + !`) directly followed by `(`, up to its matching `)` -- is kept as one unit
 # through both the lexer and rule 6's piece reading, rather than fragmented at the `(`, `|` and `@`

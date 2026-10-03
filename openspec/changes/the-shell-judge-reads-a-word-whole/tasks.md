@@ -123,6 +123,73 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   and the (R6/D11) rows, which this task's own text says need 2.1d (unticked, not started). Each
   needs its own fresh measurement against `_decide` before building, same discipline as this
   iteration's slice -- do not assume any of them already pass just because this slice's rows did.
+
+  **Iteration 39 (the (R5) and (R8) sub-groups, resolved differently than either sub-group's own
+  text claims).** Re-measured both fresh against `_decide` (`testbed/scratch/measure_1_4c_r5_r8.py`
+  and three siblings, gitignored, not committed), not trusting the task's own claim that the
+  absolute rows are allowed today: the absolute `u*/` row already reaches `_glob_links` through
+  rule 5's own call (`_judge_word`, line ~2033, built by task 2.2), and `sub/@s/u*/` reaches it
+  through rule 6's piece reading the same way the already-tested relative `u*/x` row does -- both
+  **already refused today**, naming the resolved target, no further production change needed. The
+  three (R8) bracket rows (`[0-9]`, bash `[^a]p`, PowerShell `[!a]p`) are likewise each already the
+  design's own outcome: `_relax_bracket_pattern` (task 2.1c, iteration 20) keeps a plain numeric
+  bracket exact (`[0-9]` stays `[0-9]`, matching only a one-character name, not `up`), and widens a
+  `^`- or `!`-led bracket to `?` (`content[:1] in "!^"` -- confirmed directly with a throwaway
+  `_relax_bracket_pattern('[^a]p')` call, printing `'?p'`), which matches `up`'s two characters
+  either way. Measured directly against `_decide`, not reasoned from the source alone.
+
+  Two further things surfaced, neither in the task's own text, both left open rather than built:
+  (1) the PowerShell dot-rule row this sub-group names (`?l` matching the only-entry `.l`) is
+  already refused too, but not because either dialect encodes a rule -- `fnmatch` has no bash dot
+  rule at all, so `?` matches a leading dot for both dialects alike, and the task's own Bash
+  *control* (`ls sub/?l/x` "allowed, because bash's `?` does not match a leading dot") measures as
+  **refused** today, not allowed: `_glob_links`'s own docstring already names the bash dot rule as
+  left unbuilt for this whole change ("skipping it only widens what matches... over-approximation
+  can only add a refusal"), so this control's failure is that documented, accepted gap, not a new
+  finding -- not built here, consistent with the docstring's own scope. (2) The absolute
+  `.*/x` row (bullet two's own text) does not exercise `_glob_links`'s dot-rule reading at all when
+  the dot-leading component is the *first* component after the workspace root: `_rewrite_dotdot_globs`
+  (D3) rewrites it to the literal `..` before rule 5's `_judge_path(rewritten, ...)` call ever
+  reaches `_glob_links`, and `<workspace>/../x` already refuses on its own (the workspace's parent),
+  short-circuiting before any link is matched -- confirmed by removing the `.l` link entirely and
+  rerunning: the refusal is byte-for-byte identical either way, proving no link is actually being
+  read. The already-built `sub/.*/y` case (2.1c) differs only because its rewrite (`sub/../y`)
+  resolves *inside* the workspace, so the early check does not refuse and execution falls through
+  to `_glob_links`, which does match `.l` there. Left open for a further slice, same bucket as the
+  POSIX-class and extglob rows.
+
+  Added four tests to `hub/tests/test_the_shell_judge_reads_a_word_whole.py`:
+  `test_an_absolute_or_piece_relative_glob_is_matched_through_the_link_it_finds_1_4c_r5` (the
+  already-passing absolute and `sub/@s/u*/` rows, plus the PowerShell dot-rule row),
+  `test_an_absolute_top_level_dot_glob_refuses_by_the_dotdot_rewrite_not_the_link_it_finds_1_4c_r5`
+  (documents finding (2) precisely, asserting the reason does *not* say "it resolves to" and is
+  identical with or without the link), and
+  `test_a_bracket_expression_is_matched_or_kept_exact_as_fnmatch_can_read_it_1_4c_r8` (the three
+  bracket rows). Mutation-checked: backed up `mcp_server.py` to `testbed/scratch/` (not committed),
+  inserted `return None` as `_glob_links`'s first statement, reran the four new tests -- the two
+  that depend on `_glob_links` (the (R5) and (R8) ones) fail (`assert True is False`), confirming
+  they are load-bearing; the dot-rewrite test correctly still passes under the same mutation (it
+  does not reach `_glob_links` at all, which is exactly its own finding); restored from the backup
+  and confirmed `git diff --stat hub/hub/mcp_server.py` is empty. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **115 passed** (was 112, +3 test
+  functions, +4 with the mutation-only check not counted twice -- the file count is tests
+  collected, not assertions). Broader regression set (`test_permission_approver.py`,
+  `test_hub_own_call.py`, `test_copilot_acp_decide.py`, `test_a_write_outside_the_workspace_is_recorded.py`):
+  **626 passed, 2 skipped**, no regressions (a different total from iteration 38's 738 for the same
+  four files -- not re-derived why; no failures either run, which is what the regression check is
+  for). `py -3.11 -m ruff check` and `py -3.11 -m black --check --target-version py311` on the
+  changed test file: both clean. No production file changed, so `mypy` is unaffected. `git diff
+  --stat`: exactly `hub/tests/test_the_shell_judge_reads_a_word_whole.py` and this task file.
+
+  **Task 1.4c still stays unticked.** What remains after this iteration: the dot-rule row in this
+  bullet's second paragraph (still unmeasured -- re-derive, do not assume 2.1c's fix covers it);
+  the POSIX character class and extglob rows (need a further `_glob_links`/`_rewrite_dotdot_globs`
+  slice); the absolute top-level dot-glob gap this iteration found (finding (2) above, needs its
+  own design thought about rule 5's call order, not attempted here); the bash-dot-rule control gap
+  (finding (1) above, deferred per `_glob_links`'s own docstring, likely out of this task's scope
+  entirely -- confirm against design.md before treating it as blocking); and the (R6/D11) rows,
+  which need task 2.1d (unticked, not started). Each needs its own fresh measurement before
+  building.
 - [ ] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
   - `cp n [u]p/` and `cp n ./u[p]` (a trailing `]` the trim removes). Each PASSES today only by the tail (`'/'`, `'/u[p'`), so assert the resolved target, which FAILS today; each FAILS against R5 (allowed).
   - `cp n [.]./x` refused as outside, quoting `'[.]./x'`. PASSES today by the tail `'/x'`, FAILS on the reason assertion and against R5 (the word `.]./x` is inside).
