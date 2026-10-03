@@ -470,6 +470,40 @@ def test_an_absolute_glob_word_s_tail_is_also_walked_through_a_link(workspace, m
     assert missing_tail["allow"] is True, missing_tail["reason"]
 
 
+# D8 step 4, a further slice: a `..` in the tail moves the branch to its real parent and is judged
+# there (R6), naming where it lands through `_resolves_elsewhere` even though the piece as written
+# reads as inside (R7) -- this needs each branch to carry its listed path beside its real one, since
+# they diverge the moment a link is followed. Reachable through the fixture's own `sub/l` -> `work`
+# link (R6's worked example, shallower than the link): before this slice `_glob_links` bailed to
+# `None` the moment any component was `..`, so the literal reading alone stood, and
+# `realpath`'s lexical `..` handling resolved `sub/l*/..` to `sub` -- inside. PASSES today only by
+# the literal reading; measured first with a throwaway script
+# (`testbed/scratch/measure_glob_dotdot.py`, gitignored, not committed) against the real fixture
+# shape, then confirmed by stashing just `mcp_server.py` and rerunning, below.
+def test_an_absolute_glob_word_s_tail_dotdot_moves_the_branch_through_a_link(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    forward = str(workspace).replace("\\", "/")
+
+    # `sub/l` is a junction/symlink to `work` itself (R6's own worked example, shallower than the
+    # link): the glob matches it, is followed inside, and the `..` after it climbs to `work`'s
+    # parent, outside.
+    through_link = _decide("Bash", {"command": f"cp n {forward}/sub/l*/.."})
+    assert through_link["allow"] is False
+    assert "it resolves to" in through_link["reason"]
+
+    # Control: the glob matches a plain (non-link) directory (`@s`); the `..` after it lands back
+    # at `sub`, inside, with no link ever followed, so nothing refuses.
+    stays_inside = _decide("Bash", {"command": f"cp n {forward}/sub/@s*/.."})
+    assert stays_inside["allow"] is True, stays_inside["reason"]
+
+    # Control: the same link, but as a relative word -- reached through rule 6, which this change
+    # has not yet wired to `_glob_links` (task 2.2). Stays allowed until that task is built.
+    relative = _decide("Bash", {"command": "cp n sub/l*/.."})
+    assert relative["allow"] is True, relative["reason"]
+
+
 # D8 step 2's bracket relaxation, re-derived from the design text again (not iteration 19's own
 # reading) and sized the same way: a bracket expression the piece's last component holds is kept
 # exact for `fnmatch` when it is one `fnmatch` already reads as the shell does, and relaxed to `?`

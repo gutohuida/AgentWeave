@@ -561,6 +561,44 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   a close structural parallel worth reading before inventing a new shape for `_glob_links`'s own
   branch tracking). Task 2.2's rule-6 rewiring remains the fallback slice if `..` still does not fit
   whole.
+
+  **Iteration 22's own note (now also stale): built, below.** `_glob_links` now tracks `real` and
+  `listed` as two paths per branch, as `_physical` does for a single `current` -- they coincide
+  until a link is followed, so most of the walk is unchanged; a tail component that is `..` moves
+  `real` to its real parent (one confirming `os.path.realpath`, same cost D12's own wording names:
+  "one `realpath`, which returns it unchanged") and is judged there with `_judge_resolved(listed,
+  real, root)` directly, not through `_judge_path`/`_where` (which would resolve the already-real
+  `real` again and find it unchanged, naming nothing) -- `_resolves_elsewhere` can then say where
+  the piece as spelled actually lands. A `..` in the *base* (before the glob) already worked, since
+  `_physical` (step 1) resolves it physically on its own; only the bail-out was blocking it. Measured
+  live first (`testbed/scratch/measure_glob_dotdot.py`, gitignored): `sub/l*/..`, with `sub/l` R6's
+  own shallower-than-the-link junction to the workspace root, was wrongly **allowed** before this
+  slice (`realpath`'s lexical `..` handling collapses it to `sub` without ever reading the link) and
+  is now refused, naming the real parent it lands in. Confirmed by `git stash`ing just
+  `mcp_server.py` and rerunning: reverts to allowed. Controls: a `..` after a glob match that is a
+  plain (non-link) directory stays allowed (no divergence, nothing to name); the same link as a
+  *relative* word (rule 6, task 2.2, not yet wired) stays allowed too, unaffected by this slice.
+  Added one test, `test_an_absolute_glob_word_s_tail_dotdot_moves_the_branch_through_a_link`.
+  Mutation-checked: stashing just `mcp_server.py` fails exactly that one test, leaving the other 95
+  rows unchanged. `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 96
+  passed (was 95, +1). Broader regression set (+`test_permission_approver.py`/
+  `test_hub_own_call.py`/`test_copilot_acp_decide.py`/`test_a_write_outside_the_workspace_is_recorded.py`):
+  722 passed, 2 skipped, no regressions. `ruff check` clean; `black --check --target-version py311`
+  needed one reformat (the new test's signature line wrap), applied and reverified clean. `mypy
+  src/` (the only path CI runs mypy over) stays clean; `.claude/rules/mcp-server.md`'s pre-existing
+  `approve_tool_call` gap is in `hub/`, outside that path, unchanged either way. `git diff --stat`
+  confirmed only `hub/hub/mcp_server.py`, the one test file, and this task file changed.
+
+  **Task 2.1c still stays unticked, but for a narrower reason now.** The `..` gap this note named is
+  closed. What remains is task 2.1c's own checklist line naming "Run 1.4c, 1.4d and 1.4f": 1.4c's
+  glob rows reached through an *absolute* word (rule 5) now pass, but its relative-word rows
+  (`cp n u*/`, `cp n [u]p/x`, the inner-shell and PowerShell rows) and the globstar-does-not-descend
+  rule still need task 2.2 (rule 6's piece reading wired to `_glob_links`) and the bash dot rule
+  (step 2), neither built. The globstar rule and the per-pattern listing memo are also still
+  unbuilt, as the function's own docstring says. **Task 2.2 (rule-6 rewiring) is the natural next
+  slice**: it is independent of what remains here, is explicitly named as this task's own fallback
+  across the last several iterations, and unblocks the sibling change's drive-gated relative-word
+  rows the same way this task's absolute-word rows already did.
 - [ ] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
 
   **Iteration 18 (partial).** Measured today's `_decide` directly first (not from this file's old
