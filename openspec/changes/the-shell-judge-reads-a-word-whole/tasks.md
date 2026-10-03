@@ -244,6 +244,52 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   rows, which need task 2.1d (unticked, not started -- read its own line and design.md's D11 section
   first before building, it touches `_words`, not only `_glob_links`). Each needs its own fresh
   measurement before building, same discipline as every iteration so far.
+
+  **Iteration 42 (the extglob row, attempted and reverted -- design D8 step 2's own words are not
+  enough to build from directly).** Built a first slice: a shared `_holds_glob_character` helper
+  (`_GLOB_CHARS` or a non-empty `_extglob_group_spans`) at `_glob_links`'s own glob-position check
+  and at both its call sites (rule 5's absolute-word check, `_judge_piece`'s rule-6 check, neither
+  of which tested for an extglob group before, so `_glob_links` was never even reached for one
+  regardless of what `_glob_links` itself could do), plus masking the matched component's extglob
+  group to one `*` (`_mask_extglob_as_star`, already built for D3's `..`-rewrite) before
+  `_relax_bracket_pattern`/`fnmatchcase`, reading D8 step 2's own line ("each extglob group becomes
+  `*`") as literally as task 2.1c's bracket relaxation reads its own line. This made the target row
+  refuse, naming the resolved target, matching this task's own expectation -- but running the full
+  file caught something no prior iteration's note flagged: it also flipped
+  `test_an_unquoted_extglob_group_is_kept_as_one_unit_through_the_lexer_and_rule_6`'s own
+  `cp n @(a|b)/x` row (task 2.2, already built, no dot alternative, lexically inside) from allowed to
+  **wrongly refused** -- `@(a|b)` masked to `*` matches every entry in the workspace, including the
+  fixture's own `up` link to outside, although the shell can only ever expand `@(a|b)` to the
+  literal name `a` or `b`, neither of which is a link here. Confirmed this is the masking, not a
+  typo: printing `_relax_bracket_pattern(_mask_extglob_as_star("@(a|b)", _extglob_group_spans("@(a|b)")))`
+  gives `'*'`, and `fnmatchcase("up", "*")` is True. D8 step 2's own line describes the *bracket*
+  relaxation's budget correctly (`?` is the narrowest fnmatch can give a one-character class), but
+  for an extglob group `*` is not the narrowest over-approximation available for every trigger --
+  `@(u)` (exactly one alternative, D3's `@`/`?` triggers) could become the literal alternative text
+  itself (`u`) rather than `*`, and `?(u)` (zero-or-one) could become an alternation of `""` and `u`
+  tried in turn, each bounded and no wider than the shell's own expansion; only `*`, `+` (repetition)
+  and `!` (negation) have no finite literal form `fnmatch` can express and genuinely need `*`'s own
+  width. Masking every trigger to `*` alike, as this iteration first tried, is correct only for
+  those last three and is already too wide for `@`/`?`'s own enumerable case, which is exactly the
+  row `test_an_unquoted_extglob_group...`'s `@(a|b)` already covers and already pins as allowed.
+  Building the enumerable `@`/`?` translation correctly (generating one concrete pattern per
+  alternative, or per alternative crossed with the empty string, including across more than one
+  group in the same component) is real work, not a one-line reading of D8 step 2 -- reverted both
+  the production change and its own new test entirely (`git checkout --
+  hub/hub/mcp_server.py hub/tests/test_the_shell_judge_reads_a_word_whole.py`; confirmed `git status
+  --short` is empty before any of this entry's own edits), rather than leave a breaking change or an
+  untested one. `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q` back to
+  **116 passed** (unchanged from iteration 41) after the revert, confirmed before writing this entry.
+
+  **Task 1.4c still stays unticked; the extglob row's own remaining work narrows to this:** a
+  correct fix needs `_glob_links` (or a helper it calls) to translate `@(...)`/`?(...)` by
+  enumerating each `|`-separated alternative (plus, for `?`, the empty string) into its own
+  concrete pattern tried against each entry, falling back to `*` only for `*(...)`, `+(...)` and
+  `!(...)`, whose repetition/negation `fnmatch` cannot express exactly either way -- and a new test
+  covering `@(a|b)/x` (must stay allowed, task 2.2's own row) alongside `@(u)p/x` (must now refuse)
+  in the same file, so a future attempt cannot regress one while fixing the other without the suite
+  catching it. Not sized for a further quick slice without that translator; the other open items
+  named two paragraphs up are unaffected by this entry.
 - [ ] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
   - `cp n [u]p/` and `cp n ./u[p]` (a trailing `]` the trim removes). Each PASSES today only by the tail (`'/'`, `'/u[p'`), so assert the resolved target, which FAILS today; each FAILS against R5 (allowed).
   - `cp n [.]./x` refused as outside, quoting `'[.]./x'`. PASSES today by the tail `'/x'`, FAILS on the reason assertion and against R5 (the word `.]./x` is inside).
