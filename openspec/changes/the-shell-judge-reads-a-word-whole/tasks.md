@@ -307,6 +307,62 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   Ran 1.3 (passing, as above) and the brace-specific slice of 1.6 this iteration added (below) --
   task 1.6 itself is far larger than the brace rows and stays unticked.
 - [ ] 2.1c (R4) D8 `_glob_links`, built **before** 2.2, because rule 6 without it regresses; (R6) with the base resolved by `_physical`, each branch carrying its real directory, literal components moved into rather than listed, and `..` moving to the real parent and judged (design D8 step 4); (R7) each branch also carries its listed path, so a `..` refusal names where it lands (`_resolves_elsewhere`), a literal component's link test is `os.lstat` (not `os.path.islink`), and `_physical`, `realpath` and `lstat` inside `_glob_links` are wrapped as design "What each changed route returns" says. Run 1.4c, 1.4d and 1.4f
+
+  **Iteration 19 (partial, a first slice).** Re-derived D8 from the design text again, as iteration
+  18's own note asked, rather than trusting that reading. Confirmed it is still too large to build
+  whole in one iteration (a directory-walking function with a relaxed bracket/extglob translator,
+  multi-component descent, link tests via both `is_symlink()` and the Windows reparse-point bit,
+  and `..`-after-a-link judging) and sized a genuinely minimal slice instead: `_glob_links(piece,
+  shown, root)` in `hub/hub/mcp_server.py`, reachable only through rule 5 (`_judge_word`), on an
+  absolute word that holds a glob character. It handles exactly the case design D8's "(R5) In rule
+  5" bullet names -- a piece whose **only** glob-holding component is its **last** one, holding
+  `*`/`?` only (no bracket expression, no extglob group), with **no `..` anywhere** in the piece.
+  The base (the piece's leading components) is resolved by `_physical` (so a link in the base,
+  including a junction, is followed, exactly as D8 step 1 asks) and listed once with
+  `os.scandir`; a matching entry is judged a link by a new `_is_link_entry` helper
+  (`is_symlink()`, or on a drive-letter host the reparse-point bit of `DirEntry.stat(follow_symlinks=False).st_file_attributes`,
+  since `is_symlink()` is False for a junction on Python 3.11 -- D8 step 3), and a matching link is
+  judged by `_judge_path(entry.path, root, shown, shown, False)`, quoting the word as written.
+  Everything else D8 asks for -- more than one glob-holding component, a glob followed by further
+  components, a bracket expression or extglob group (D8 step 2's relaxation), `..` anywhere (step
+  4's walk and its `_resolves_elsewhere`-naming refusal), and the entry budget (`_Budget` has no
+  `_glob_links` hook yet) -- returns `None` from this slice rather than guess, deferred to a
+  further one.
+
+  Measured directly against `_decide` first, on this Windows machine, with a real junction (a
+  throwaway script in `testbed/scratch/measure_glob_links.py`, gitignored, not committed): `cp n
+  <workspace, absolute, forward slashes>/u*/` -- design D8's own R5 example -- was wrongly
+  **allowed** today (confirmed live), and is now refused, the reason naming where `up` resolves.
+  Confirmed no regression with the same script: `cp n <ws>/sub/*.py` (a match with no link behind
+  it) and `cp n <ws>/nomatch*/x` (the glob is not the piece's last component, so this slice does
+  not touch it) stay allowed; a relative glob (`cp n u*/x`) is untouched (rule 6, not this slice).
+  Mutation-checked: `git stash`ing just `mcp_server.py` and rerunning the test file fails exactly
+  the one new test, `test_an_absolute_glob_word_is_also_matched_against_the_links_it_finds`
+  (`hub/tests/test_the_shell_judge_reads_a_word_whole.py`), leaving the other 91 rows passing
+  unchanged -- confirming its three control assertions are true regression guards, not
+  accidentally dependent on this change. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 92 passed (was 91, +1). Broader
+  regression set (+`test_permission_approver.py`/`test_hub_own_call.py`/
+  `test_copilot_acp_decide.py`/`test_a_write_outside_the_workspace_is_recorded.py`): 718 passed, 2
+  skipped, no regressions. `ruff check` and `black --check --target-version py311` on both changed
+  files: clean. `git diff --stat`: exactly `hub/hub/mcp_server.py` and the one test file, plus this
+  file.
+
+  **Task 2.1c stays unticked**: its own text names the base's real/listed directory tracking, the
+  literal-component link test via `os.lstat`, and `..` moving to the real parent -- none of which
+  this slice builds, since it excludes `..` and multi-component pieces entirely. The link-detection
+  rows of 1.4c that need a bracket expression or a relative word (`cp n [u]p/x`, `ls sub/[a]`, `cp n
+  u*/` relative) still do not pass; only the one absolute, bracket-free, `..`-free row above does.
+
+  **Queued next:** the design's D8 step 2 (relaxed bracket-expression matching, which `_glob_links`
+  needs before task 2.1d's remaining half -- the bracket-kept word reaching a real link match --
+  can close) is the next natural slice, sized the same way: re-derive from D8 step 2's text again
+  (the bracket-scanning rule from `[` to its closing `]`, past an optional leading `!`/`^`, with
+  POSIX classes `[: =. ]` read as bash reads them) before building, and wire it into the same
+  `_glob_links` so the bracket rows of 1.4c and 1.4e become reachable. After that, D8 step 4's
+  multi-component walk (carrying each branch's real and listed directory, moving on `..`) is what
+  the rest of 1.4c, 1.4d and 1.4f still need, and the entry budget is what task 2.0's `_Budget`
+  still has no hook for.
 - [ ] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
 
   **Iteration 18 (partial).** Measured today's `_decide` directly first (not from this file's old

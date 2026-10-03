@@ -403,3 +403,31 @@ def test_a_letter_range_through_a_separator_is_refused_on_windows(workspace, mon
     refused = _decide("Bash", {"command": "cp x {Z..a}.."})
     assert refused["allow"] is False
     assert refused["reason"].endswith("outside your workspace")
+
+
+# 2.1c (design D8), a first slice: rule 5 also matches an absolute glob word against the links it
+# finds, not only its literal text (R5's "cp n <workspace, absolute, forward slashes>/u*/" row).
+# Reachable only on this slice's own terms -- the glob is the piece's last component, holds only
+# `*`/`?`, and nothing in the piece is `..` -- the fuller walk (more than one glob component, a
+# glob followed by further components, a bracket expression, `..`) is left to a further slice; see
+# this task's own note in tasks.md. PASSES today only by the tail (`'/'`), so this asserts the
+# reason names where the match resolves, which FAILS today (measured with a throwaway script
+# first; confirmed by stashing just `mcp_server.py` and rerunning, below).
+def test_an_absolute_glob_word_is_also_matched_against_the_links_it_finds(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    forward = str(workspace).replace("\\", "/")
+
+    refused = _decide("Bash", {"command": f"cp n {forward}/u*/"})
+    assert refused["allow"] is False
+    assert "it resolves to" in refused["reason"]
+
+    # Controls, unaffected by this slice:
+    # a match with no link behind it (the base is listed, but nothing there refuses).
+    no_link = _decide("Bash", {"command": f"cp n {forward}/sub/*.py"})
+    assert no_link["allow"] is True, no_link["reason"]
+    # the glob is not the piece's last component -- left to the walk, not this slice.
+    not_last = _decide("Bash", {"command": f"cp n {forward}/nomatch*/x"})
+    assert not_last["allow"] is True, not_last["reason"]
+    # a relative glob reaches rule 6, which this slice does not touch.
+    relative = _decide("Bash", {"command": "cp n u*/x"})
+    assert relative["allow"] is True, relative["reason"]

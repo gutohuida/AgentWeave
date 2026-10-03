@@ -13,6 +13,7 @@ import json
 import locale
 import os
 import re
+import stat
 import sys
 import time
 import urllib.error
@@ -1416,6 +1417,75 @@ def _judge_path(
     return None
 
 
+def _is_link_entry(entry: "os.DirEntry[str]") -> bool:
+    """Whether `entry` (from an `os.scandir` listing) is a link (D8 step 3). `is_symlink()` is
+    False for a Windows junction on Python 3.11 (measured), so a reparse point served from the
+    same listing is also read, on a drive-letter host only -- `st_file_attributes` does not exist
+    on a POSIX `stat_result`."""
+    try:
+        if entry.is_symlink():
+            return True
+        if _DRIVE_LETTERS:
+            attributes = entry.stat(follow_symlinks=False).st_file_attributes
+            return bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except (OSError, ValueError):
+        pass
+    return False
+
+
+def _glob_links(piece: str, shown: str, root: str) -> Optional[Dict[str, Any]]:
+    """D8, a first slice: a `piece` (already rewritten by `_rewrite_dotdot_globs`) whose only
+    glob-holding component is its last one, holding `*` and/or `?` only, with no `..` anywhere.
+    The base -- the piece's leading components -- is listed once with `os.scandir`, resolved first
+    by `_physical` (D12) so a link in the base is followed; each entry matching the final
+    component under `fnmatch.fnmatchcase` (`os.path.normcase` of both sides) that is itself a link
+    is judged by `_judge_path`, quoting `shown` (the word as written). None when nothing refuses,
+    including when the directory cannot be listed (the shell cannot list it either, and the
+    literal reading -- already judged by the caller -- stands alone).
+
+    A piece holding more than one glob-holding component, a glob followed by further components,
+    a bracket expression, or a `..`, is left to a further slice of this same task (D8 step 2's
+    bracket relaxation, and step 4's multi-component walk and `..`-after-a-link judging) -- this
+    returns None for those rather than guess. The bash dot rule (D8 step 2, "a name beginning with
+    `.` matches only when the component does too") is also left to that slice: skipping it only
+    widens what matches, which the design allows ("over-approximation... can only add a refusal"),
+    and nothing in this slice's own test needs it.
+    """
+    drive, rest = os.path.splitdrive(piece)
+    anchor = drive + os.sep
+    components = [
+        component
+        for component in re.split(f"[{re.escape(_SEPARATORS)}]", rest)
+        if component and component != "."
+    ]
+    if not components or ".." in components:
+        return None
+    pattern = components[-1]
+    if "[" in pattern or not any(char in pattern for char in "*?"):
+        return None
+    if any(char in component for component in components[:-1] for char in _GLOB_CHARS):
+        return None
+    try:
+        base = _physical(os.path.join(anchor, *components[:-1]) if components[:-1] else anchor)
+    except (OSError, ValueError):
+        return None
+    try:
+        with os.scandir(base) as listing:
+            entries = list(listing)
+    except (OSError, ValueError):
+        return None
+    normalized_pattern = os.path.normcase(pattern)
+    for entry in entries:
+        if not fnmatch.fnmatchcase(os.path.normcase(entry.name), normalized_pattern):
+            continue
+        if not _is_link_entry(entry):
+            continue
+        refusal = _judge_path(entry.path, root, shown, shown, False)
+        if refusal:
+            return refusal
+    return None
+
+
 def _expands(text: str) -> bool:
     """Whether `text` holds anything the shell may substitute when it runs: a `$` (or one it will
     not expand -- conservatively, still counted), a command substitution, a leading `~`, or a
@@ -1579,7 +1649,16 @@ def _judge_word(
     if dialect == "bash" and word in _BASH_DEVICES:  # D4: the null device, stdin/out/err
         return None
     if os.path.isabs(word) or _PLAIN_RELATIVE_RE.match(word):  # 5: a path, resolved
-        return _judge_path(_rewrite_dotdot_globs(word), root, word, argument, continues)
+        rewritten = _rewrite_dotdot_globs(word)
+        refusal = _judge_path(rewritten, root, word, argument, continues)
+        if refusal:
+            return refusal
+        # (R5, D8) An absolute word holding a glob character is also matched against the links it
+        # finds, not only judged by its literal text -- `_PLAIN_RELATIVE_RE` already keeps every
+        # relative glob out of this branch (D8, "Where it runs").
+        if os.path.isabs(word) and any(char in word for char in _GLOB_CHARS):
+            return _glob_links(rewritten, word, root)
+        return None
     return _judge_pieces(word, root, argument, continues)  # 6: the piece reading (D2)
 
 
