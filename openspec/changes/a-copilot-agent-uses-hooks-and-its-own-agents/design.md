@@ -1013,13 +1013,23 @@ models: claude-haiku-4.5, …`). The bullet becomes:
 
 > Before your verdict, run Copilot's `code-review` agent as a subagent on the changes from `<base>`
 > to `<commit>`: call the `task` tool with `agent_type` exactly `"code-review"`. If it fails because
-> a model is not available, call it again with `model` set to a named model the error lists, not
-> `auto`. Weigh what it
+> a model is not available, call it again with `model` set to the model you are running on if the
+> error lists it, otherwise to the first named model it lists, never `auto`. Weigh what it
 > reports and check it yourself. It does not see this repository's instructions, and its findings
 > are not your verdict. If it did not run, say so; never describe a review it did not give. The
 > verdict is yours, and it is recorded only by `update_task`.
 
-(With several agents chosen, one `task` call each, every id named exactly.)
+With several agents chosen, the first sentence is exactly (pre-approval review, 2026-10-04, finding
+7: the template is written out so a test can assert it): *"Before your verdict, run Copilot's
+`code-review`, `security-review` agents as subagents on …: call the `task` tool once for each, with
+`agent_type` exactly `"code-review"`, then `"security-review"`."* The names are de-duplicated at
+render in their stored order (finding 8: `/agents/register` can store `["code-review",
+"code-review"]`). Only `code-review`'s dispatch id is captured; `security-review` and `rubber-duck`
+are INFERRED to dispatch by the same lowercase id.
+
+**Which named model (pre-approval review, 2026-10-04, finding 7).** "A named model the error lists"
+would let a paid plan pick its most expensive one. The reviewer's own model is the one the operator
+already chose to pay for; the first listed model is the fallback.
 
 **Why "not `auto`" (amendment verification, 2026-10-04; INFERRED).** Copilot's error lists `auto`
 among the available models (drive 7.1, `tasks.md` 7.1), and 7.1's retry with `model: "auto"` failed
@@ -1097,6 +1107,26 @@ the same timeline as the reviewer's verdict text and its `update_task` call.
     would be retried. So the report is built inside `try/except Exception` that logs and emits
     nothing (the ledger's rule, `:2131-2134`): a broken report loses the card, never the turn.
     Test 4.4 covers it.
+**Pre-approval review fixes (2026-10-04, Opus adversarial review of D8a/D9a).**
+
+- **The report names its run (finding 4).** A review turn that times out is failed, its queue entry
+  returned, and the next run renders as a review turn again with a fresh mapper (drive 7.7:
+  `run-8d29230e8279` resumed as `run-c1339b044701`). If `code-review` ran in the first run and the
+  verdict lands in the second, the second's card would say "no subagent ran" beside a true claim.
+  So the summary says *"in this run"*, the facts carry `run_id`, and each run of a review reports
+  its own; reading a review means reading every run's card. Carrying earlier runs' reports into the
+  next run (by `review_task_id` and conversation) is **not built**: a possible follow-up.
+- **Matching is on the dispatch id, not a name a repository could choose (finding 6).** Each `ran`
+  entry records `agent_name`, `agent_type` (when Copilot reports it; the capture's
+  `subagent.started` carries `agentType`) and `agent_id` (the envelope's `agentId`). An asked name
+  counts as run only when `agent_name` equals it **and** `agent_type`, where reported, equals it
+  too, so a repository's own custom agent named `code-review` (not verified either way to load in
+  an untrusted folder) cannot satisfy the report as a built-in review. A nested subagent's events
+  are reported with their `agent_id`, so the reader can tell it apart.
+- **The trigger reads the rendered list, never the stored config (finding 5).** Test 4.4 gains a
+  non-review route case on an agent that **has** `copilot_review_agents=["code-review"]` stored
+  and asserts no `review_agents` key, and a case delivered through a staged flow entry (the
+  queue's `review_task_id`, `agent_trigger.py:1000-1001`), not only `review_task_id` in the body.
 - **Not built:** stamping the report onto the task's transition row (a migration and a UI read for
   a fact the run's timeline already holds, one click from the transition's `run_id`). Recorded as a
   possible follow-up.
@@ -1293,17 +1323,46 @@ write tool added by a flag, or a server whose tool is not marked read-only). Thr
      Copilot 1.0.91 keeps these keys canonically ("User settings belong in settings.json",
      strings dump), is already removed from the home whole on every ensure
      (`copilot_home.py:306-309`); item 2 closes the `config.json` fallback.
-   - **Not covered: repository-scope settings.** 1.0.91 has a repository settings scope
-     (`/model --repo` writes `.github/copilot/settings.json`, `--local` a git-ignored
-     `settings.local.json`; "unknown repo settings scope" in the native strings). Whether that
-     scope accepts `enableAllGithubMcpTools`/`githubMcpToolsets`/`githubMcpTools`, and whether an
-     untrusted folder (D3) is read for it, is **unknown** (not visible in the strings). If it does
-     and is, a file in the agent's own worktree could add write tools under Workspace only. What
-     bounds it is D9's rule, if a write tool's call arrives as a permission request (the INFERRED
-     point below). Recorded as an open question; nothing is built for it here.
-3. **The words say what happens.** The Settings toggle's help text, and the spec, say: *"Gives this
-   agent Copilot's built-in GitHub tools, read-only. Copilot runs them without asking you. A tool
-   that writes to GitHub is put to you first, and only a runner with Full access can add one."*
+   - **Repository-scope settings: answered (investigation, 2026-10-04).** 1.0.91 reads
+     `.github/copilot/settings.json` and `settings.local.json` (`app.js@1085098`, VERIFIED-CODE),
+     but every merge of them into a session is gated on `COPILOT_ALLOW_ALL==="true" ||
+     folderTrustIsTrusted(cwd, …)` (VERIFIED-CODE at `app.js@7416650` MCP config, `@4718800`,
+     `@5539700` plugins, `@5541300` skills, `@1619700` repo hooks, `@2186150` workspace MCP
+     sources); the one ungated read (`@1050900`) returns only `.mergeStrategy` for the interactive
+     `/pr` command. ACP startup reads **user** settings only (`loadAcpMcpBootConfig`, `@4032000`,
+     `includeWorkspaceSources:!1`), and the GitHub tool options come from user settings plus flags
+     (`@4033200`, `resolveBuiltInGitHubMcpConfig` `@2187300`). INFERRED: the native ACP host, handed
+     `allowAllEnv` (`@4035350`), applies the same gate. So a file an agent writes in its own
+     worktree does not add GitHub write tools for its next run, **as long as the Hub keeps three
+     invariants**: no trusted folder in the home (D3, swept), no `COPILOT_ALLOW_ALL` (D3, stripped,
+     test 1.6), and no `workspaceTrust`/`authoritativeWorkspaceTrust` in its session options (the
+     ACP client sends neither today; VERIFIED by reading `copilot_acp.py`'s `session/new` params).
+     The user `settings.json` in the Hub-owned home *does* control these keys unconditionally, which
+     is why it is removed whole on every ensure, and why the home must stay outside the agent's
+     writable reach (it is outside every workspace; Workspace only refuses writes there).
+   - **The `config.json` sweep is defence in depth (finding 9).** Nothing shows Copilot reads these
+     keys from `config.json`; `settings.json` is where 1.0.91 keeps them. The sweep costs nothing
+     and closes a fallback if a version reads it; it is not claimed as a closed path.
+3. **The words say what happens.** The Settings toggle's help text, and the spec, say (pre-approval
+   review, 2026-10-04, finding 1, corrected; finding 3; finding 10): *"Gives this agent Copilot's
+   built-in GitHub tools, read-only. Copilot runs them without asking you, in every posture,
+   Ask me included. Tools that write to GitHub can be added only on a runner with Full access,
+   where they run without asking too. This setting does not govern the `gh` command, which a shell
+   call runs and the Hub decides like any other command."* The first draft said *"a tool that
+   writes to GitHub is put to you first"*: false, because the flags are stripped under every
+   posture but Full access (`full_flags = posture == _FULL and not spec_turn`,
+   `copilot_acp.py:2036`), and Full access allows every call (`_decide_permission`, `:664-665`), so
+   no card can ever come from a write tool. That Copilot runs read tools without asking under Ask
+   me too is **INFERRED** from the same `mcp-read-only` auto-approval and is driven in 7.8.
+4. **`--additional-mcp-config` is a widening flag too (finding 2).** It is not in
+   `COPILOT_WIDENING_FLAGS` (`copilot_acp.py:169-183`), and runner flags are appended after the
+   Hub's own occurrence (`:1829`, `:1835-1836`), so a runner could add any MCP server, a GitHub
+   write server included, under Workspace only: with the toggle off its requests fall to `_judge`,
+   which allows a call naming no path (D9's own R2 note, `:678-684`). It joins the table with arity
+   `one`. Only runner flags pass through `strip_widening_flags`; the Hub's own
+   `--additional-mcp-config` is built from `mcp_config` after it (`:1829`), so it survives. Its
+   removal summary: *"The runner flag `--additional-mcp-config` was not passed to Copilot: it adds
+   MCP servers, which only a run with Full access may have."*
    - *(Amendment verification, 2026-10-04.)* VERIFIED-CODE: the text lives in
      `CopilotGithubMcpSetting` (`hub/ui/src/components/agents/AgentSettingsControls.tsx:389-393`,
      with a doc comment at `:360-369` restating the old claim), and the existing UI test
@@ -1315,13 +1374,16 @@ write tool added by a flag, or a server whose tool is not marked read-only). Thr
      (`copilot_acp.py:171-175`) and are stripped from every run without Full access.
 
 **Not measured, and why it is acceptable:** that a write tool would arrive as a
-`session/request_permission` (`readOnly: false`). Under Workspace only no write tool can now be
-added by a runner flag or the agent's home (repository-scope settings are the open point above), so the card is reachable only under Ask me (every call goes to the operator anyway) or Full
-access (everything is allowed). The operator chose not to spend a throwaway-repo drive on it.
+`session/request_permission` (`readOnly: false`). Outside Full access no write tool can now be
+added (runner flags, the home, `--additional-mcp-config`; repository settings need folder trust,
+above), and under Full access every call is allowed. So D9's card for a GitHub write call is not
+reachable today; D9's rule stays as the decision for any request Copilot does send (a server whose
+tool is not marked read-only). The operator chose not to spend a throwaway-repo drive on it.
 
 **Drive 7.8's second bullet is rewritten** (it asked for a card that cannot appear): with the toggle
-on, a `search_code` call runs with no card; and a runner flag `--enable-all-github-mcp-tools` is
-absent from the live command line under Workspace only, with a diagnostic naming it.
+on, a `search_code` call runs with no card, under Workspace only and (finding 3) under Ask me; and a
+runner flag `--enable-all-github-mcp-tools` is absent from the live command line under Workspace
+only, with a diagnostic naming it.
 
 ## D10 — Independence of the groups
 
@@ -2068,6 +2130,19 @@ has not), **correction** (sibling text that is wrong about this change), or **no
       key-only case is covered (`test_copilot_byok_env.py:975`). Left unticked.
   12. **Tasks 7.7 and 7.8:** expectations rewritten to D8a and D9a. Their drive histories are kept
       and the new expectations appended.
+
+- **Pre-approval review (D8a/D9a), 2026-10-04, Opus adversarial.** Two blocking, three should-fix,
+  five notes; all taken. Blocking: (1) the help text promised a card for write tools that can never
+  appear (flags stripped outside Full access, everything allowed under it): reworded, and the "Not
+  measured" paragraph corrected; (2) `--additional-mcp-config` let a runner add any MCP server under
+  Workspace only: added to the widening flags. Should-fix: (3) Ask me is said and driven; (4) the
+  review report names its run, because an auto-resumed review splits across runs; (5) 4.4 gains a
+  non-review case on an agent with review agents stored, and a staged-flow-entry case. Notes: (6)
+  report matching also requires `agentType` where reported and records `agentId`; (7) the retry
+  model is the reviewer's own if listed, the multi-agent template is written out; (8) names are
+  de-duplicated at render; (9) the `config.json` sweep is defence in depth; (10) the help text says
+  it does not govern `gh` in a shell. The repository-settings open question was answered by a
+  separate read of the bundle (D9a, item 2).
 
 ## Open questions for R2/R3
 

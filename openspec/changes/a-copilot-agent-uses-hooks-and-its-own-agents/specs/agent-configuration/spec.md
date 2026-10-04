@@ -15,9 +15,11 @@ Hub's own, not only one named for GitHub.
 Copilot approves on its own, without asking the Hub, a call it knows to be read-only, and with the
 server enabled it offers only its read-only GitHub tools. Such a call is not put to the operator,
 and the setting SHALL be described to the operator as giving the agent read-only GitHub tools that
-Copilot runs without asking. A runner setting that adds GitHub tools beyond the read-only ones
+Copilot runs without asking, in every posture, and as not governing the `gh` command run in a shell.
+A runner setting that adds GitHub tools beyond the read-only ones, or adds MCP servers of its own,
 SHALL be removed from a run that does not have full access, and the run SHALL say it was removed,
-as for every other runner setting that widens what Copilot approves on its own. Settings in the
+as for every other runner setting that widens what Copilot approves on its own. Tools that write to
+GitHub are therefore available only to a run with full access, where every call is allowed. Settings in the
 agent's Copilot home that would add them SHALL be removed from that home.
 
 A call whose server Copilot did not report SHALL be refused, as it is with the server disabled. The
@@ -31,7 +33,8 @@ A setting stored for the agent SHALL enable the server only when it is the value
 stored value leaves it disabled.
 
 Under Edit files such a call is refused, as a call to any server other than the Hub's own is. Under
-full access it is allowed, as every call is. Under Ask me it goes to the operator, as every call does.
+full access it is allowed, as every call is. Under Ask me a call Copilot asks the Hub about goes to
+the operator, as every such call does.
 
 Where the server is enabled and Copilot reports it failed, needs sign-in, or was disabled, stopped
 or not configured, the run SHALL record that it is unavailable. A server Copilot reports as still

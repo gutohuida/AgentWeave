@@ -791,6 +791,18 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
     before its prompt (e.g. allow-all kept on) emits none; and with the report's builder patched
     to raise, `run_turn` still returns its `TurnOutcome` (status unchanged) and no report event
     is emitted.
+  - (pre-approval review 2026-10-04) a **non-review** turn through `POST /agent/trigger` for an
+    agent that has `copilot_review_agents=["code-review"]` stored gives no `review_agents` key (a
+    trigger that read the stored config would fail it); a review turn delivered through a staged
+    flow entry (the queue's `review_task_id`) carries the list; the multi-agent bullet's first
+    sentence is asserted exactly as D8a writes it out; a stored `["code-review", "code-review"]`
+    renders and reports the name once; the retry sentence names the reviewer's own model first;
+  - (pre-approval review) the report's facts carry `run_id`-free mapper output plus the summary
+    phrase *"in this run"* (the trigger-side `run_id` is added where the mapper's events are
+    recorded; assert it on the stored row through the `_drive` harness); a `subagent.completed`
+    whose `agentName` is `code-review` but whose `agentType` (reported on its `subagent.started`)
+    is something else does **not** count as `code-review` having run; each `ran` entry carries
+    `agent_id`.
   Each fails today (no such wording, key, keyword or phase), except the cases asserting that
   nothing is emitted, which pass today and guard the build.
 - [ ] 4.5 (B; D8a) Build: the bullet wording; `_render_hub_agent_context` returns
@@ -895,8 +907,14 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
     and `githubMcpTools` removes all three and reports them as one `removed` entry,
     `config.json (enableAllGithubMcpTools, githubMcpToolsets, githubMcpTools)`, in
     `_CONFIG_PERMISSION_KEYS` order;
-  - (UI) the GitHub toggle's help text says read-only, run without asking, and that a write tool
-    is put to the operator and needs Full access to add. The existing case
+  - (pre-approval review 2026-10-04, finding 2) `--additional-mcp-config <path>` in runner flags is
+    removed under `workspace`, `acceptEdits` and `manual`, kept under full access, with its own
+    removal summary; the Hub's own `--additional-mcp-config` (from `mcp_config`) is still in the
+    spawned argv under every posture;
+  - (UI) the GitHub toggle's help text is D9a item 3's (corrected) text: read-only, run without
+    asking in every posture including Ask me, write tools only on a Full access runner where they
+    also run without asking, and not governing `gh` in a shell. It does **not** say a write tool is
+    put to the operator. The existing case
     `hub/ui/src/__tests__/copilotAgentSettings.test.tsx:206-212` asserts the old sentences and is
     rewritten, not kept beside the new one;
   - (verification 2026-10-04, 1.13's gap) through `POST /agent/trigger`, an agent whose stored
@@ -904,8 +922,8 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
     True`, and a stored `"true"` string gives `False` (this one passes today: it is coverage the
     built code lacked, not fail-first evidence).
   Each of the others fails today.
-- [ ] 5.4 (D; D9a) Build: the three flags in `COPILOT_WIDENING_FLAGS` (`none`, `one`, `one`) and
-  their own removal summary; the three keys in `_CONFIG_PERMISSION_KEYS`; the help text and
+- [ ] 5.4 (D; D9a) Build: the three flags in `COPILOT_WIDENING_FLAGS` (`none`, `one`, `one`),
+  `--additional-mcp-config` (`one`), and their own removal summaries; the three keys in `_CONFIG_PERMISSION_KEYS`; the help text and
   `CopilotGithubMcpSetting`'s doc comment (`AgentSettingsControls.tsx:360-393`) (refresh the bundle: `hub/ui/src` and
   `hub/hub/static/ui` committed together). Pass 5.3.
 - [ ] 5.5 (D; D9a) Record F485 in `scripts/drive/FINDINGS.md` as fixed by the commit that builds 5.4,
