@@ -562,3 +562,28 @@ operator then decided all three as recommended (above).
      (Non-goals; to be filed as its own finding by the coordinator).
   Open questions 1-3 unchanged and still the operator's: recommended no hold, `m = min(8, len // 2)`
   with no floor; join across cards; fold the log line in with D6's guard.
+
+- **Drive, task 3.4 (2026-10-04, at `fee17dc`).** Source Hub on port 8031 with a fresh database
+  (`testbed/drive1004-f488/f488.db`), the real Copilot CLI on an Anthropic provider runner whose
+  base URL is a local fake (`testbed/drive1004-f488/fake_provider.py`), key
+  `plainsplitkey20261004x` split 10|12 (`plainsplit` | `key20261004x`), each block streamed as two
+  deltas. Stored `agent_outputs` rows, by `sequence`:
+
+  | Agent / run | seq | kind | content |
+  |---|---|---|---|
+  | s1 thought→text, `run-ba84a58e3805` | 1 | thinking | `I will use <redacted>` |
+  | | 2 | text | `<redacted> now.` |
+  | | 3 | status | `Run completed (exit 0).` |
+  | s2 text→tool→text, `run-d58b4a5acf3c` | 1 | text | `Key: <redacted>` |
+  | | 2 | tool_use | `Print hello` |
+  | | 3 | tool_result | `shell completed` |
+  | | 4 | text | `<redacted> done` |
+  | | 5 | status | `Run completed (exit 0).` |
+  | s3 thought ending `\n\n`→text, `run-8f9cfac967cd` | 1 | thinking | `I will use <redacted>\n\n` |
+  | | 2 | text | `<redacted> now.` |
+  | | 3 | status | `Run completed (exit 0).` |
+
+  The full key, `plainsplit` alone and `key20261004x` alone each appear 0 times in `agent_outputs`,
+  `event_logs`, `runs.error`, `permission_requests`, the project SSE stream (11 `agent_output`
+  frames, identical to the rows), the three `GET .../agent/<agent>/chat` responses and the Hub log.
+  s3's thinking row keeps its blank line as written, as D1 step 4 requires.
