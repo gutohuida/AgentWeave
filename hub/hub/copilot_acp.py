@@ -1204,7 +1204,7 @@ class CopilotEventMapper:
         params = params if isinstance(params, Mapping) else {}
         track_call(self.calls, event_type, data)
         if event_type == "session.error":
-            return self._session_error(data, params)
+            return self._after_open_blocks(self._session_error(data, params))
         if event_type in _NOTICE_PREFIXES:
             message = data.get("message")
             if not isinstance(message, str) or not message:
@@ -1217,9 +1217,9 @@ class CopilotEventMapper:
                 self._compaction_start = dict(data)
             return []
         if event_type == "session.compaction_complete":
-            return self._compaction(data, params)
+            return self._after_open_blocks(self._compaction(data, params))
         if event_type in _SUBAGENT_PHASES:
-            return self._subagent(event_type, data)
+            return self._after_open_blocks(self._subagent(event_type, data))
         if event_type in ("session.mcp_servers_loaded", "session.mcp_server_status_changed"):
             return self._server_status(event_type, data)
         if event_type in (
@@ -1229,6 +1229,13 @@ class CopilotEventMapper:
         ):
             return self._model(event_type, data)
         return []
+
+    def _after_open_blocks(self, events: List[RunEvent]) -> List[RunEvent]:
+        """A card a raw event produces closes the open text and thought blocks first, so the
+        timeline reads in the order things happened: the text was streamed before the raw event
+        arrived (drive 7.2, 2026-10-04, found the `compacted` card ahead of the reply before it).
+        A raw event that produces nothing leaves the blocks open."""
+        return self.flush() + events if events else events
 
     def _session_error(self, data: Mapping[str, Any], params: Mapping[str, Any]) -> List[RunEvent]:
         """A `session.error` is one error event, recorded when it arrives (D5). Only the root

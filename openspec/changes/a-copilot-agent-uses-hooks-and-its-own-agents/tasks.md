@@ -945,7 +945,7 @@ every run id, and paste each surface's text verbatim into the Round log.
   external check attempted; it was not retried a third way to avoid spending further unaccounted
   allowance. The operator should decide how (or whether) to measure `/usage` before 7.2 onward, or
   accept recording model-reported consumption only.
-- [ ] 7.2 (A) **The compaction backstop. BLOCKED, 2026-10-03 night (iter 14), real mapping not
+- [x] 7.2 (A) **The compaction backstop. BLOCKED, 2026-10-03 night (iter 14), real mapping not
   the expected outcome.** Before touching `:8010`, ran the captured `compaction.jsonl` through the
   production `copilot_acp.CopilotEventMapper` directly
   (`testbed/drive1003-ghcp-s5-drive/task72_map_compaction.py`): feeding every `session/update` to
@@ -968,6 +968,24 @@ every run id, and paste each surface's text verbatim into the Round log.
   2026-10-03*), rather than worked around. No Copilot allowance spent (no live turn; the mapper was
   exercised directly against the captured fixture). Left unchecked; the trial Hub `:8010` was not
   touched for this task since there was nothing meaningful to send it.
+
+  **Driven 2026-10-04 (interactive), after group A was built (`4c054be`): holds.** Trial Hub
+  restarted from `hub/` on the trial database (startup line: `...profiles\trial\agentweave.db`,
+  existed before: True, pid 7500). The "otherwise" path, as before: `testbed/drive1004-ghcp-s5-
+  group-a/task72_replay.py` maps the captured `compaction.jsonl` through the production
+  `CopilotEventMapper` and POSTs the events to `POST /agents/cp5/output` with `run_id`
+  `run-d77553067285` (the newest run of `cp5`'s open conversation `conv-55b7ad36620e`). Read back
+  `mode=ro` (`task72_check.py`): one `status` row, phase `compacted`, content *"Copilot compacted
+  this conversation as requested (45 → 790 tokens of 128,000)."*, payload `pre_tokens: 45,
+  post_tokens: 790, token_limit: 128000` as integers, `trigger: "manual"`, `percent: 0.04`, stored
+  on `conv-55b7ad36620e`; the conversation's `checkpoint_warning` went `None → due`
+  (`cp5` is `offered`); checkpoints for it: 0 before and after (warn, do not spend). No banner
+  variant was expected (D4, R2: dropped). **Found and fixed here:** the card was emitted ahead of
+  the "ok" reply that preceded `/compact`, because a raw event's card came out while the message
+  block was still open. `CopilotEventMapper._after_open_blocks` now flushes the open blocks before
+  any card a raw event produces (error, compaction, subagent); three ordering tests in
+  `test_copilot_lifecycle_events.py` failed before it. The script crashed printing `→` to the
+  console after the first POST, so only the `compacted` card (the event under test) was posted.
 - [ ] 7.3 (A) Error once. Give `cp5` an invalid provider key through a group C runner whose key
   variable holds `invalid`. Run one turn. (Review 2026-09-28, finding 6: the old "if C was cut,
   ambient `COPILOT_PROVIDER_*`" fallback relied on exactly the hole task 2.8 closes, so it no longer

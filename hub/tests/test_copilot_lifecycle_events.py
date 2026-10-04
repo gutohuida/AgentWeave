@@ -414,3 +414,37 @@ async def test_recording_a_quota_error_places_no_hold_of_its_own(app):
 
     assert before is None and after is None
     assert len(rows) == 1
+
+
+# --------------------------------------------------------------------------- timeline order
+
+
+def test_text_written_before_a_compaction_reads_before_its_card():
+    """Drive 7.2 (2026-10-04) posted the card ahead of the "ok" reply the conversation held before
+    `/compact`: a raw event's card was emitted while the earlier message was still open. A card
+    a raw event produces closes the open block first, so the timeline reads in the order it
+    happened."""
+    events = _feed(_load("compaction.jsonl"))
+    kinds = [(e.kind, e.payload.get("phase") or e.content[:12]) for e in events]
+    assert kinds.index(("text", "ok")) < kinds.index(("status", "compacted"))
+
+
+def test_prose_before_an_error_reads_before_the_error():
+    messages = _load("error.jsonl")
+    at = _index_of(messages, "session.error")
+    messages.insert(at, _chunk("Let me run the tests."))
+
+    events = _feed(messages)
+
+    assert [e.kind for e in events if e.kind in ("text", "error")] == ["text", "error"]
+    assert _texts(events) == ["Let me run the tests."]
+
+
+def test_a_subagents_streamed_text_reads_before_its_completion():
+    events = _feed(_load("subagent.jsonl"))
+    order = [
+        (e.kind, e.payload.get("phase"))
+        for e in events
+        if e.kind == "text" or (e.kind == "status" and "subagent" in e.payload.get("phase", ""))
+    ]
+    assert order.index(("text", None)) < order.index(("status", "subagent_completed"))
