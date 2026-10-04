@@ -1167,6 +1167,13 @@ _PIECE_BREAKS_RE = re.compile(r"[<>|;&(@:\s'\"`]+")
 # just before a piece, which plain `.split()` throws away.
 _PIECE_BREAKS_SPLIT_RE = re.compile(f"({_PIECE_BREAKS_RE.pattern})")
 _PIECE_QUOTES = "'\"`"
+# D2 step 3's drive exception (R2, R3, D9): on a drive-letter host, a `:` directly after a single
+# ASCII letter that begins the value or a piece -- i.e. immediately preceded by a break or the
+# start of the value -- is not a break. The alternation's break-char branch reuses
+# `_PIECE_BREAKS_RE`'s own class so the two stay in agreement about what a break is.
+_DRIVE_COLON_RE = re.compile(rf"(?:\A|{_PIECE_BREAKS_RE.pattern[:-1]})[A-Za-z]:")
+# Distinct code point from `_EXTGLOB_*`/`_BRACKET_COLON_SENTINEL` above.
+_DRIVE_COLON_SENTINEL = ""
 
 # A reference to the run's own Hub, in the spelling the tool's shell expands to the environment's
 # value. Bash's variables are case-sensitive and PowerShell's are not, and a bare `$HUB_URL` in
@@ -1698,6 +1705,21 @@ def _mask_bracket_colons(value: str) -> str:
     return "".join(chars)
 
 
+def _mask_drive_colons(value: str) -> str:
+    """D2 step 3's drive exception (R2, R3): on a drive-letter host (`_DRIVE_LETTERS`, D9, read at
+    call time, not baked in at import), the `:` right after a single ASCII letter that begins
+    `value` or a piece is replaced by `_DRIVE_COLON_SENTINEL` so `_PIECE_BREAKS_RE` does not split
+    there -- `Z:foo\\bar` and `-Destination:Z:foo\\bar` each keep `Z:foo\\bar` as one piece, which
+    `_where` then resolves on drive `Z` (outside). On a POSIX host `value` is returned unchanged:
+    `:` is an ordinary name character there, not a break the drive exception needs to protect.
+    `_DRIVE_COLON_RE`'s match already ends right after the colon (the drive letter is the single
+    character the alternation's break-or-start branch requires before it), so replacing the match's
+    last character is exactly the colon."""
+    if not _DRIVE_LETTERS:
+        return value
+    return _DRIVE_COLON_RE.sub(lambda match: match.group(0)[:-1] + _DRIVE_COLON_SENTINEL, value)
+
+
 def _glob_links(
     piece: str, shown: str, root: str, budget: "_Budget", bash: bool
 ) -> Optional[Dict[str, Any]]:
@@ -2166,13 +2188,13 @@ def _judge_pieces_reading(
     opens a real `C:\\dev\\...` path, which msys does not map), and on every other host for any
     piece, since there `/dev/null` is a real device for every program.
     """
-    split = _PIECE_BREAKS_SPLIT_RE.split(_mask_extglob_groups(value))
+    split = _PIECE_BREAKS_SPLIT_RE.split(_mask_drive_colons(_mask_extglob_groups(value)))
     pieces = [
         (split[index], split[index - 1] if index > 0 else "") for index in range(0, len(split), 2)
     ]
     pieces = [(piece, delimiter) for piece, delimiter in pieces if piece]
     for index, (piece, delimiter) in enumerate(pieces):
-        restored = _restore_extglob_sentinels(piece)
+        restored = _restore_extglob_sentinels(piece).replace(_DRIVE_COLON_SENTINEL, ":")
         redirect_target = delimiter[-1:] in ("<", ">")
         if (
             dialect == "bash"

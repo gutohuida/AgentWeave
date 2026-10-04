@@ -895,7 +895,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   on the changed test file: both clean, no reformat needed. No production file changed, so `mypy` is
   unaffected. `git diff --stat`: exactly the one test file, plus this task file. **Every row named
   in this task's own text is now built and verified; ticked `[x]`.**
-- [ ] 1.7 Negative controls that must stay refused, each PASSES today:
+- [x] 1.7 Negative controls that must stay refused, each PASSES today:
   - `curl -o/tmp/x $HUB_URL/api`, `curl -F file=@/etc/passwd x`, `tar -xvf/tmp/a.tar`, `ls a(b/../../x`, `cp x @../y`;
   - `sh -c 'cat</etc/passwd'`, `sh -c "echo hi>../x"`, `python -c "open('/etc/x','w')"`, `node -e "require('fs').writeFileSync('../x','')"`;
   - `scp a host:/x`, `cat /dev/tcp/1.2.3.4/80`, PowerShell `echo hi > /dev/null`;
@@ -909,9 +909,38 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   `_PIECE_BREAKS_RE` splits at `:`, so `Z:foo\bar` becomes pieces `Z` and `foo\bar`, both judged as
   inside relative paths -- the drive letter is dropped, not refused (measured: both `Copy-Item x
   Z:foo\bar` and `Copy-Item x -Destination:Z:foo\bar` are **allowed**, not refused as this task's
-  own "each PASSES today" framing claims for the whole group). This needs D9's `_DRIVE_LETTERS` and
-  D2 step 3's platform-keyed drive exception (task 2.2a, not built) before it can be refused. Task
-  left unticked; its fourth bullet's rows are not added to `_TABLE` until 2.2a lands.
+  own "each PASSES today" framing claims for the whole group). This needed D9's `_DRIVE_LETTERS` and
+  D2 step 3's platform-keyed drive exception (task 2.2a).
+
+  **Iteration 54.** Built that one piece of 2.2a -- the drive exception in the piece reading (D2
+  step 3) only, not 2.2a's other three parts (the tilde-piece refusal for a drive piece, the
+  level-by-level escape-removed readings through `_judge_word`, and the `::` not-plain rule; left
+  unticked below for a later iteration to re-derive fresh). Re-read `_judge_pieces_reading`
+  (`hub/hub/mcp_server.py`) first: it splits at `_PIECE_BREAKS_SPLIT_RE` with no drive awareness, so
+  `Z:foo\bar` always broke at the colon, same bug as the task's own measurement. Added
+  `_DRIVE_COLON_RE` (an alternation of `_PIECE_BREAKS_RE`'s own break-char class or `\A`, then a
+  single `[A-Za-z]`, then `:` -- reusing the existing class so the two stay in agreement about what
+  a break is) and `_mask_drive_colons`, gated on `_DRIVE_LETTERS` read at call time (D9's own rule,
+  not baked in at import). Wired into `_judge_pieces_reading` the same way `_mask_extglob_groups`
+  already is: masked before the split, restored (to `:`) alongside the extglob sentinels once a
+  piece is carved out. Measured directly against `_decide` before writing a test
+  (`testbed/scratch/measure_17_drive_exception.py`, gitignored, deleted after use): both
+  `Copy-Item x Z:foo\bar` and `Copy-Item x -Destination:Z:foo\bar` were **allowed** before the fix
+  (confirming the bug) and **refused**, resolving to `'Z:foo\bar'`, after it -- no real `Z:` drive
+  needed, matching design D2 step 3's own "(R6) this holds whether or not drive A exists" (measured
+  directly: `os.path.realpath` on a missing drive raises nothing, just returns the unresolved
+  drive-relative text, and `os.path.commonpath` against the workspace root then raises `ValueError`
+  on the differing drive, which `_judge_resolved` already turns into `_resolves_elsewhere`). Added
+  rows `1.7p`/`1.7q` to `_TABLE` (`hub/tests/test_the_shell_judge_reads_a_word_whole.py`,
+  `windows_only=True`, PowerShell tool) for this task's own fourth bullet.
+  `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **126 passed** (was
+  124, +2). Broader regression set (`test_permission_approver.py`/`test_hub_own_call.py`/
+  `test_copilot_acp_decide.py`/`test_a_write_outside_the_workspace_is_recorded.py`): 626 passed, 2
+  skipped, no regressions. `ruff check` and `black --check --target-version py311` on both changed
+  files: clean. `mypy src/`: no issues (the CLI suite; CI never runs mypy on `hub/`). `openspec
+  validate the-shell-judge-reads-a-word-whole --strict`: valid. `git diff --stat`: exactly
+  `hub/hub/mcp_server.py` and the one test file changed. **Every row this task's own text names is
+  now refused as claimed; ticked `[x]`.**
 
   Each names in a comment the implementation it catches.
 - [ ] 1.7b (R3) Regressions of R2's rule set. Each PASSES today (refused by the tail) and FAILS against pieces built as R2 wrote them:
@@ -1720,6 +1749,16 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   the named-cost assertions it lists, not yet re-derived against the current code) and task 2.1d
   (the bracket-kept relative word, same wiring, not yet re-measured).
 - [ ] 2.2a (R3, R4) The platform-keyed drive exception and the tilde-piece refusal in the piece reading; the level-by-level escape-removed readings, each judged by `_judge_word`, and the `::` not-plain rule before rule 5 (design D2 steps 3 and 5, D7). Run 1.7b, 1.7c and 1.7d
+
+  **Iteration 54.** Built this task's first part only: the platform-keyed drive exception in the
+  piece reading (D2 step 3), as task 1.7's own note above records (`_mask_drive_colons`, wired into
+  `_judge_pieces_reading`). Not yet built: the tilde-piece refusal for a drive piece whose text
+  after the colon begins with `~` (step 5's second clause -- `_judge_piece` today only checks
+  whether the piece itself begins with `~`, not a drive piece's text after the colon), the
+  level-by-level escape-removed readings through `_judge_word`, and the `::` not-plain rule before
+  rule 5 (D7). Task left unticked; 1.7b and 1.7c (both still named below) were not run this
+  iteration and need their own fresh re-derivation once the remaining three parts land -- do not
+  assume they now pass just because the drive exception does, each names more than that one piece.
 - [ ] 2.2b D6: `approve_tool_call` catches an exception from `_decide`, denies with a reason and reports it; no return annotation
 - [ ] 2.2c (R4, D9) Add the `hub-judge-windows` job to `.github/workflows/ci.yml` (`windows-latest`, `working-directory: hub`, the `hub-test` install steps with `-c ../constraints-dev.txt`, `pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread`). Run `py -3.11 -m pytest tests/test_dev_constraints.py -q`. After pushing, confirm the job ran and passed, or do not tick
 - [ ] 2.3 Run the eight files named in design D2 plus the new file; expected moves are exactly task 1.8's rows plus the new rows. Record counts

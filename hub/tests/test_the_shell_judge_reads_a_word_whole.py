@@ -207,6 +207,19 @@ _TABLE = [
     # Rule 5: D4's device exemption is bash-only ("may be named, in bash only"); on the PowerShell
     # dialect `/dev/null` is an ordinary absolute path, outside.
     _row("1.7o", "echo hi > /dev/null", False, tool="PowerShell"),
+    # 1.7, fourth bullet (task 2.2a, D2 step 3's drive exception, D9): a drive letter that is not
+    # the workspace's. Built by `_mask_drive_colons` -- the `:` right after `Z` is not a piece
+    # break, so the piece stays `Z:foo\bar` (or `-Destination:Z:foo\bar`'s own copy of it) and
+    # `_where` resolves it on drive `Z`, outside. FAILED before 2.2a's drive-exception slice
+    # (measured: both allowed, `_PIECE_BREAKS_RE` split at the colon and dropped the drive).
+    _row("1.7p", r"Copy-Item x Z:foo\bar", False, tool="PowerShell", windows_only=True),
+    _row(
+        "1.7q",
+        r"Copy-Item x -Destination:Z:foo\bar",
+        False,
+        tool="PowerShell",
+        windows_only=True,
+    ),
     # 1.4f (task 2.0b, design D12), the literal (non-glob) rows only -- the glob rows (`sub/l*/..`)
     # need D8's `_glob_links`, not yet built. `ntpath.realpath` normalises a `..` lexically before
     # reading any link, so these escape today on Windows (msys itself resolves `..` physically,
