@@ -1883,3 +1883,17 @@ disappears is indistinguishable from one that was forgotten.
   `run-iteration.ps1` from HEAD made all 27 driver tests fail, because the tests pass `-GhExecutable`, which
   the old script rejects. Add only the new parameter to the old copy, so that exactly the new tests fail
   (5 of 27 did).
+- **2026-10-04 (home) — running a downloaded Copilot binary installs it.** `copilot.exe --version` on
+  an `npm pack`-extracted `@github/copilot-win32-x64` prerelease registered it in
+  `%LOCALAPPDATA%\copilot\pkg\win32-x64\<ver>`, and the global `copilot` then ran it. The Hubs launch
+  with `--no-auto-update`, which pins the newest *stable* version (1.0.91 here), so they were unaffected.
+  To read a version's code without installing it, read `pkg\win32-x64\<ver>\app.js`; never run the exe.
+- **2026-10-04 (home) — Copilot subagent dispatch over ACP works only when spelled exactly.** The
+  `task` tool needs the built-in's lowercase id (`explore`, `code-review`; `Explore` fails with "Unknown
+  agent_type"), and on the Free plan a model the plan offers (`claude-haiku-4.5`). Without one, it fails
+  with `Model 'sonnet' is not available`. The `custom_agent_prompt` host-effect error is upstream bug
+  github/copilot-cli#5030 (custom agents under ACP, 1.0.89+), not something more prompting fixes.
+- **2026-10-04 (home) — Python `write_text` on this machine writes CRLF.** With `core.autocrlf=true`,
+  the commit is normalized and correct. But stripping the CR in the working copy afterwards leaves the
+  file "modified" with an empty diff. Write with `newline="\n"` or `write_bytes`, or restore the file
+  with `git checkout -- <file>` once it is committed.
