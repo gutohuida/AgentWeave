@@ -1,6 +1,6 @@
 ## 0. Rounds. No task below may start until R2 and R3 are recorded in design.md's round log
 
-- [ ] 0.1 R2: an independent comparison of the proposal against the code at the then-current
+- [x] 0.1 R2: an independent comparison of the proposal against the code at the then-current
   `HEAD`. Re-derive design.md's call-site table (grep `run_secrets.` in `hub/hub`), the mapper's
   emission order at every boundary (`CopilotEventMapper.on_session_update`, `flush`, `finish`,
   `fail_turn`), and every claim tagged INFERRED. In particular: whether a Claude or Codex run can
@@ -9,13 +9,19 @@
   whether slice 5 group A's edits (uncommitted during R1) changed any flush path. Re-run D1's
   prototype table yourself. Decide whether the `session.error` log line
   (`copilot_acp.py:1922-1934`) is filed as its own finding. Record the result in the round log.
+  **Done 2026-10-04 at `4c054be`:** design survives; 10 corrections in the round log (line numbers;
+  raw-event cards now flush, a new boundary; Copilot's notification path swallows a raise, so
+  "fails closed" not "fails the run"; Claude/Codex runs can register a key; `scrub_stream` must sit
+  beside `sequence += 1`; short-value false positives measured; log line folded in as D6).
 - [ ] 0.2 R3: a second independent comparison, not a re-read of R2. Also ask what each changed
-  call site does when `scrub_stream` raises. `openspec validate
+  call site does when `scrub_stream` raises. Re-derive the `copilot_acp.py` numbers once
+  `_after_open_blocks` is committed (R2 read it as an uncommitted diff). `openspec validate
   a-secret-split-across-two-events-is-still-scrubbed --strict` passes.
 - [ ] 0.3 The pre-approval Opus adversarial review of the change and its decisions (D1-D5, open
   questions 1-4). Record its findings and what was done about each in the round log.
 - [ ] 0.4 The operator approves the change in `spec-queue/APPROVALS.md`, and answers open
-  questions 1-3 (hold or not, and *m*; joining across tool cards; the log line).
+  questions 1-3 (hold or not, and *m*, including the short-value floor; joining across tool
+  cards; folding in the log line).
 
 ## 1. Tests first. Each must fail on today's code unless marked as a control
 
@@ -31,7 +37,10 @@
 - [ ] 1.2 In `hub/tests/test_copilot_byok_env.py`, beside
   `test_a_provider_key_is_scrubbed_from_everything_its_run_records`:
   `test_a_provider_key_split_across_events_is_scrubbed`, parametrised over thought→message,
-  message→tool_call→message, message→thought and message→finish (dangling). The fake
+  message→tool_call→message, message→thought, message→finish (dangling), and the raw-event card
+  boundaries: text→`session.error`→echo chunk→text, thought→root `session.compaction_complete`→text,
+  and text→`subagent.completed`→text (design, boundary table). The raw events are fed through
+  `mapper.on_raw_event` in wire order between the `session/update` chunks. The fake
   `copilot_acp.run_turn` builds a **real** `CopilotEventMapper`, feeds it ACP `session/update`
   params shaped as the wire sends them (`{"sessionUpdate": "agent_thought_chunk", "content":
   {"type": "text", "text": …}}`, a `tool_call` with a `toolCallId`), passes every event each call
@@ -49,8 +58,9 @@
 - [ ] 1.4 The `exec` stream executor (`_execute_run`): a Claude run whose stream holds one assistant
   message with a `thinking` block ending in `plainproxy` and a `text` block beginning with
   `key123`, with the run's value registered. Patch `agent_trigger.run_secrets.register` so the run
-  registers `plainproxykey123`; how a Claude run would get a value is R2's question, not this
-  test's. Reuse the fake-process harness an existing `_execute_run` stream test uses. Assert the
+  registers `plainproxykey123`. (R2: a Claude run registers one in production when the Hub's
+  environment or the agent's `env_vars` carry `COPILOT_PROVIDER_API_KEY`; a second case may set
+  that in `env_vars` instead of patching.) Reuse the fake-process harness an existing `_execute_run` stream test uses. Assert the
   same as 1.2. **Fails today:** the two rows hold the two halves.
 - [ ] 1.5 Placement guard: in the 1.2 harness, make the first attempt of the second text row's
   write raise `OperationalError("database is locked")` (patch `async_session_factory` for one
@@ -64,6 +74,17 @@
   state for it; `hub/tests/test_operator_is_told_the_truth.py` and
   `hub/tests/test_write_paths_on_run_events.py` (F278's) pass unchanged. Run them before group 2
   and record the count.
+- [ ] 1.7 The log line (design D6, if open question 3 is "fold in"): with a key registered, feed
+  `run_turn`'s armed raw-event path a `session.error` whose `message` quotes the key, and assert
+  with `caplog` that no record of the `copilot_acp` logger contains it and the `Copilot
+  session.error` line is still written. A second case puts the key across the 2000-character cut
+  and asserts no prefix of `m` or more characters survives. **Fails today:** the payload is logged
+  whole.
+- [ ] 1.8 Order under interleaving: two `_on_event` calls for one run whose writes are made to
+  complete in the reverse order (the first write's `_record_observation` blocked on an event until
+  the second has returned). The stored rows, read by `sequence`, carry `<redacted>` exactly as in
+  the sequential case. **Fails today** (nothing joins). After group 2, record that it also FAILS
+  with the `scrub_stream` call moved after the first `await` in `_on_event`.
 
 ## 2. The fix
 
@@ -77,13 +98,17 @@
   explain the stream case and cite F488.
 - [ ] 2.2 `hub/hub/api/v1/agent_trigger.py`: call `run_secrets.scrub_stream(run_id, event)` once
   per event, before building the `_record_observation` write, at `_execute_run`'s event loop and
-  at `_execute_rpc_run`'s `_on_event`. Use the scrubbed event for the write. `outside_writes.note`
+  at `_execute_rpc_run`'s `_on_event`, **in the same synchronous step as `sequence += 1`** (no
+  `await` between them; design, *Order and concurrency*). Use the scrubbed event for the write. `outside_writes.note`
   keeps the original event: it reads `write_paths`, which this does not change. No broad `except`
   around the call (design, *What each caller returns when this raises*).
 - [ ] 2.3 `hub/hub/output_recording.py`: amend `record_agent_output`'s docstring. Its per-event
   scrub is the floor, and joining across events happens at the executors, because a retry re-invokes
   this function.
-- [ ] 2.4 Run the files from group 1 with `claude` stripped from PATH, then the code-quality block.
+- [ ] 2.4 `hub/hub/copilot_acp.py` (if open question 3 is "fold in"): in `_on_armed_raw_event`, pass
+  `data` through `run_secrets.scrub(env.get("AW_RUN_ID") if env else None, data)` before
+  `json.dumps` and before the `[:2000]` cut (design D6). Nothing else in the line changes.
+- [ ] 2.5 Run the files from group 1 with `claude` stripped from PATH, then the code-quality block.
 
 ## 3. Verify
 

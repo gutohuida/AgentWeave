@@ -5,14 +5,16 @@
 **F488 (B).** Slice 5 group C (`a-copilot-agent-uses-hooks-and-its-own-agents`, design D7, task
 3.5) registers a run's provider key with `run_secrets` and removes it by its exact value from
 everything the run records. The removal works on **one event at a time**:
-`record_agent_output` (`hub/hub/output_recording.py:41-42`) calls `run_secrets.scrub` on that
+`record_agent_output` (`hub/hub/output_recording.py:44-45`) calls `run_secrets.scrub` on that
 event's `content` and `payload`, and `scrub` replaces whole literal occurrences
 (`hub/hub/run_secrets.py:50-56`).
 
 Model text is not recorded as one event. It is recorded as a sequence of `thinking` and `text`
 events, with tool events between them. `CopilotEventMapper.on_session_update`
-(`hub/hub/copilot_acp.py:965-988`, at `10df5fc`) joins streamed chunks into blocks, and emits a
-block as an event whenever the stream switches between thought, message and tool call. So when a
+(`hub/hub/copilot_acp.py:1019-1048`, at `4c054be`) joins streamed chunks into blocks, and emits a
+block as an event whenever the stream switches between thought, message and tool call, and (being
+committed after `4c054be`) whenever a raw event produces an error, compaction or subagent card. So
+when a
 key's characters fall on both sides of a switch, each event holds only part of it. Each part passes
 the scrub. The timeline shows the two rows one after the other, and the reader sees the whole key.
 `cp5` reproduced this with `plainproxykey123`, split as `plainproxy` + `key123` (F488, during drive
@@ -21,8 +23,10 @@ task 7.7).
 The mapper is not the root cause. Claude and Codex record whole content blocks (`thinking`, `text`,
 reasoning, agent message) as separate events too (`hub/hub/runner_parsing.py:282-287`,
 `hub/hub/codex_appserver.py:415-429`). A value that spans two of a model's own blocks splits the
-same way on every runner. Only Copilot runs register a value today
-(`hub/hub/api/v1/agent_trigger.py:1616`), so only Copilot shows the defect.
+same way on every runner. A Copilot provider runner always registers its key
+(`hub/hub/api/v1/agent_trigger.py:1616`); a Claude or Codex run registers one only when the Hub's
+own environment or the agent's `env_vars` carry `COPILOT_PROVIDER_API_KEY` (design, *Which runs
+register a value*). The drive saw it on Copilot.
 
 The guarantee D7 states, that "neither the row nor the broadcast ever holds them", holds for each
 row and fails for the run.
@@ -42,22 +46,28 @@ row and fails for the run.
   redacted there. For an `sk-ant-…` key, those 7 characters are the public `sk-ant-` prefix.
 - **Nothing is held back.** Every event is recorded and broadcast when it arrives, in the order
   it arrives. Tool cards and the text around them are not delayed.
-- **The tail spans tool events.** A value split as text, tool card, text is redacted the same way
-  as text followed directly by text.
+- **The tail spans every other kind.** A value split as text, tool card, text (or around an
+  error, compaction or subagent card) is redacted the same way as text followed directly by text.
 - It is applied **once per event, where the executors record the run's stream**: the Claude and
-  Codex `exec` loop and the RPC executor's `_on_event` (`agent_trigger.py:2836-2852`,
-  `:3763-3779`). It is not applied inside `record_agent_output`, because `_record_observation`
+  Codex `exec` loop and the RPC executor's `_on_event` (`agent_trigger.py:2836-2856`,
+  `:3763-3784`), in the same synchronous step that assigns the event's `sequence`, so the tail
+  follows the order the timeline reads even when two `_on_event` calls interleave. It is not
+  applied inside `record_agent_output`, because `_record_observation`
   retries that call on a locked database (`agent_trigger.py:2257-2275`), and a retry would feed
   the same text in twice. `record_agent_output`'s per-event scrub stays as it is, as the floor for
   every kind and every caller.
 - `run_secrets.forget` also drops the run's tail.
+- **The `session.error` log line is scrubbed** (design D6; R2-recommended, subject to the
+  operator's open question 3). `copilot_acp.py:2117-2123` logs a `session.error` payload whole to
+  the Hub log; it is passed through `run_secrets.scrub` with the run's id before it is serialised
+  and cut at 2000 characters.
 
 ## Non-Goals
 
 - **Joining any kind other than `text` and `thinking`.** Tool inputs and outputs, diagnostics,
   errors, status rows, lifecycle events, permission cards and `Run.error` each hold one complete
   string from one source. They are scrubbed per event, as now.
-- **Self-reported output** (`POST /agents/{name}/output`, `hub/hub/api/v1/agents.py:3186`) is not
+- **Self-reported output** (`POST /agents/{name}/output`, `hub/hub/api/v1/agents.py:3178`) is not
   joined to the run's stream. It is scrubbed per post, as now.
 - **A value cut by truncation.** `text_event`, `thinking_event` and the tool builders truncate
   before the scrub runs (`hub/hub/runner_events.py:171-184`, `:213`, `:242`). A value straddling a
@@ -68,8 +78,8 @@ row and fails for the run.
   a value that the model writes on its own, and this change does not start.
 - **Holding events back** so that no fragment is ever visible. Rejected in design D3; see the
   operator's open question 1.
-- **The Hub's own log.** `copilot_acp.py:1927-1934` logs a `session.error` payload whole. That is
-  not a recorded run event. It is noted for R2 as a separate gap.
+- **The Hub's log beyond the `session.error` line.** No other log line is known to carry model
+  text or a provider error payload; none is swept here.
 - **No migration, no UI change, no backfill.** Rows already stored stay as they are.
 
 ## Capabilities
@@ -91,9 +101,12 @@ None.
 - `hub/hub/run_secrets.py`: per-run tail state, a `scrub_stream(run_id, event)` that returns the
   event with `content` and `payload["text"]` rewritten for `text` and `thinking` events, and
   `forget` clearing the tail.
-- `hub/hub/api/v1/agent_trigger.py`: the two stream-recording sites call it before building the
-  `_record_observation` write.
+- `hub/hub/api/v1/agent_trigger.py`: the two stream-recording sites call it, beside
+  `sequence += 1`, before building the `_record_observation` write.
+- `hub/hub/copilot_acp.py`: the `session.error` log line scrubs its payload (D6, if open question 3
+  is answered "fold in").
 - Tests: `hub/tests/test_run_secrets_stream.py` (new), `hub/tests/test_copilot_byok_env.py`
-  (driven through the real `CopilotEventMapper`), and a Claude-stream case.
+  (driven through the real `CopilotEventMapper`, including the card boundaries), a Claude-stream
+  case, and a `caplog` case for the log line.
 - No change to `runner_events.redact_secrets` (F278's `_redaction_for`). The two apply to disjoint
   kinds (design D5).

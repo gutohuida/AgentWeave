@@ -2,7 +2,7 @@
 
 ## Agent-verifiable
 
-1. **The split is caught in the order the runner emits it.** Tests 1.1-1.4 fail before group 2 and
+1. **The split is caught in the order the runner emits it.** Tests 1.1-1.4, 1.7 and 1.8 fail before group 2 and
    pass after it. 1.2 and 1.3 drive the real `CopilotEventMapper`, so their fixture order is the
    mapper's. Check that no case builds its event list by hand.
 2. **Mutations, one at a time, each restored afterwards:**
@@ -12,6 +12,8 @@
    - set `m` to 1: the `explai` false-positive row of 1.1 fails;
    - move the call from the executors into `record_agent_output`: 1.5 fails;
    - call it at only one of the two executor sites: 1.2 (RPC) or 1.4 (`exec`) fails.
+   - move the call after `_on_event`'s first `await`: 1.8 fails;
+   - drop the scrub from the `session.error` log line (if folded in): 1.7 fails.
 3. **Nothing else moved.** The controls in 1.6 pass before and after. The full Hub and CLI suites
    pass with their counts on tasks 3.1 and 3.2, and the lint block is clean.
 4. **Drive 3.4.** Zero occurrences of the key in rows, events, SSE frames, the timeline response and

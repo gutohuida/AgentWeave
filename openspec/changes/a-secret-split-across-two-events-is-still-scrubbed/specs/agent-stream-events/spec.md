@@ -4,7 +4,7 @@
 The Hub SHALL remove a value registered for a run from that run's recorded model text when the value runs across two or more of the run's `text` and `thinking` events, as well as when it lies inside one.
 
 The run's `text` and `thinking` events are joined in the order they are recorded, and other events
-between them, such as tool calls and their results, do not break the join. Where a registered value
+between them, such as tool calls and their results, errors, and status cards, do not break the join. Where a registered value
 crosses an event boundary, the part of it inside each event recorded after the value began SHALL be
 replaced with `<redacted>`, in the stored row and in its broadcast alike. An event that ends with the
 first characters of a registered value SHALL have them replaced with `<redacted>` when it is
@@ -24,6 +24,11 @@ database SHALL produce the same row as one that succeeded first time.
 - **WHEN** a run with the registered value `plainproxykey123` records a text event ending in `plainproxy`, then a tool call, then a text event beginning with `key123`
 - **THEN** both text rows carry `<redacted>` where their part of the value was
 - **AND** the tool call is recorded between them, in its original position, unchanged
+
+#### Scenario: A value split around an error card
+- **WHEN** a run with the registered value `plainproxykey123` records a text event ending in `plainpro`, then an error event its runner reported between the two, then a text event beginning with `xykey123`
+- **THEN** both text rows carry `<redacted>` where their part of the value was
+- **AND** the error row is recorded between them, unchanged
 
 #### Scenario: A short dangling start
 - **WHEN** a run with the registered value `plainproxykey123` records a text event ending in `plain` and then a thinking event beginning with `proxykey123`
