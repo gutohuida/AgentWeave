@@ -15,7 +15,8 @@
   16-character letter-and-digit segment rule, empty segments ignored, conditional scenarios, task
   1.3's guard stub replaced, task 1.2b added. Recorded in design.md's round log with its
   measurements. `openspec validate --strict`: valid.
-- [ ] 0.3 The operator approves the change in `spec-queue/APPROVALS.md`.
+- [x] 0.3 The operator approves the change in `spec-queue/APPROVALS.md`.
+  Approved 2026-10-04 in an interactive session (`## 2026-10-04`, after R4).
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
 

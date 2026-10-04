@@ -23,6 +23,7 @@ briefing. The operator answered all five open `DECISIONS.md` rows; each is recor
 with its evidence. What tonight needs from them:
 
 - APPROVED  a-copilot-one-shot-records-its-credits   as R3 and the Opus review's seven fixes left it (`copilot-oneshot-credits-approve`). Its drive spends at most two Copilot Free calls on `:8010`.
+- APPROVED  a-file-path-is-not-redacted-as-a-credential   added 2026-10-04 in an interactive session (operator: "APPROVED"), as R4 left it after the pre-approval Opus review; option (a), the 16-character letter-and-digit segment rule. Being built in the same session; if `openspec/changes/archive/` holds it, there is nothing to do.
 - **`worker-spend-counts-against-the-budget`'s next round gains a real task** for the per-`workers`-line
   credit sums, with a test and a spec-delta line (`copilot-oneshot-credits-oq1`).
 - **Slice 5 group A is unblocked, subagent scenarios included** (`ghcp-s5-subagent-capture`). The 10-04
