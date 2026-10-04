@@ -797,10 +797,11 @@ def test_a_bracket_at_a_words_edge_is_matched_through_the_link_it_finds_windows_
 # text, which claims the absolute rows are allowed today -- they are not: an absolute word already
 # reaches `_glob_links` through rule 5's own call (line ~2033), and `sub/@s/u*/` reaches it through
 # rule 6's piece reading, the same way the relative `u*/x` row above does. Each is already refused,
-# naming the resolved target. The PowerShell dot-rule row (`.l` is the only entry `?l` can match)
-# is also already refused: `fnmatch` has no bash dot rule of its own, so `?` matches a leading dot
-# the same way PowerShell's own wildcard does -- the two dialects coincide here by accident, not by
-# a rule either one encodes.
+# naming the resolved target. The PowerShell dot-rule row (`.l` is the only entry `?l` can match) is
+# also refused: PowerShell has no dot rule of its own, so its own wildcard matches a leading dot the
+# same way. (D14) The Bash form of the same row is different: bash's own `?` does not match a
+# leading dot by default, so `sub/?l/x` must stay allowed even with `.l` linked out -- this is the
+# control task 1.4c's own text names (line 74 of `tasks.md`), fixed by `_glob_links`'s new dot rule.
 def test_an_absolute_or_piece_relative_glob_is_matched_through_the_link_it_finds_1_4c_r5(
     workspace, monkeypatch
 ):
@@ -821,6 +822,17 @@ def test_an_absolute_or_piece_relative_glob_is_matched_through_the_link_it_finds
     powershell_dot = _decide("PowerShell", {"command": "Get-ChildItem sub/?l/x"})
     assert powershell_dot["allow"] is False
     assert "it resolves to" in powershell_dot["reason"]
+
+    # (D14) Bash's `?` does not match a leading dot, so this stays allowed even though the
+    # PowerShell form of the identical text, just above, is refused.
+    bash_dot = _decide("Bash", {"command": "ls sub/?l/x"})
+    assert bash_dot["allow"] is True, bash_dot["reason"]
+
+    # (D14) `shopt -s dotglob` turns the bash dot rule off, so the same command is refused once
+    # the command itself names `dotglob`.
+    bash_dotglob = _decide("Bash", {"command": "shopt -s dotglob; ls sub/?l/x"})
+    assert bash_dotglob["allow"] is False
+    assert "it resolves to" in bash_dotglob["reason"]
 
 
 # Task 1.4c's (R5) absolute dot-leading row (`cp n <workspace, absolute>/.*/x`), measured against
@@ -923,6 +935,29 @@ def test_an_extglob_group_is_masked_to_star_through_the_link_it_finds_1_4c(works
     # testing) to show the mask does not refuse by itself.
     no_match = _decide("Bash", {"command": "cp n sub/@(nomatch)/"})
     assert no_match["allow"] is True, no_match["reason"]
+
+
+# (D14) The bash dot rule's own exemption must not stop at a pattern that literally opens with `.`
+# or `[`: an extglob group whose `|`-separated alternative itself begins with `.` (`@(.hidden|zzz)`)
+# reads raw as starting with `@`, so a dot rule that only checked the written text's first
+# character would wrongly skip a dot-leading entry here -- an under-refusal, not a residual, since
+# real bash's own `@(.hidden|zzz)` expansion can still reach `.hidden`. `sub/` (not the workspace
+# root) isolates the question from the shared fixture's own top-level `up` link.
+def test_an_extglob_alternative_beginning_with_dot_is_not_exempted_from_the_bash_dot_rule_d14(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    sub = workspace / "sub"
+    _link(sub / ".hidden", workspace.parent / "outside")
+
+    alternative_begins_with_dot = _decide("Bash", {"command": "ls sub/@(.hidden|zzz)/x"})
+    assert alternative_begins_with_dot["allow"] is False
+    assert "it resolves to" in alternative_begins_with_dot["reason"]
+
+    # Control: an extglob whose alternatives do not begin with `.` stays subject to the ordinary
+    # dot rule -- `.hidden` is skipped, and nothing else under `sub` matches, so this stays allowed.
+    no_dot_alternative = _decide("Bash", {"command": "ls sub/@(zzz)/x"})
+    assert no_dot_alternative["allow"] is True, no_dot_alternative["reason"]
 
 
 # Task 1.4c's POSIX character class row (`cp n '[[:alpha:]]p'/x`), re-derived fresh against

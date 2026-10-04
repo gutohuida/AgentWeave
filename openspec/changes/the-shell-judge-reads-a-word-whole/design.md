@@ -1127,7 +1127,7 @@ was relied on as evidence). **120 passed**, broader regression set **746 passed,
 and `black` clean. Task 1.4c's Windows-side POSIX-class/colon-split gap is closed; its other two
 named gaps are untouched.
 
-### D14 (R2 — independent re-derivation; corrects two gaps in R1's draft) — `_glob_links` has no bash dot rule
+### D14 (R3 confirmed — all three required rounds done; implemented) — `_glob_links` has no bash dot rule
 
 **The defect (task 1.4c's (R5) control row, carried unconfirmed since iteration 39's finding (1);
 re-measured this round fresh against the running code, not assumed from either iteration 39's or
@@ -1313,6 +1313,80 @@ as final.**
 
 **Still docs-only; no production file touched this round.** `git diff --stat` is empty for
 `hub/hub/mcp_server.py`.
+
+**R3 (independent re-derivation against the running code and R2's corrected proposal, fresh —
+not a re-read of R1's or R2's own text).** Re-read `_judge_word`, `_judge_piece`,
+`_judge_pieces_reading`, `_judge_whole_value`, `_judge_pieces`, `_glob_links`, `_globstar_walk`,
+`_rewrite_dotdot_globs`, `_extglob_group_spans`, `_extglob_alternative_begins_with_dot` and
+`_Budget` directly from `hub/hub/mcp_server.py` once more, then checked each of (a), (b) and (c)
+against that reading independently before looking at R2's own conclusions.
+
+**(a) confirmed exactly as R2 corrected it.** `grep -n "_judge_piece("` finds the same three call
+sites R2 found: `_judge_pieces_reading` and `_judge_whole_value`'s own two. `_judge_whole_value`'s
+signature (`value, root, argument, continues, budget`) indeed carries no `dialect`, and both of its
+callers inside `_judge_pieces` (the plain and quote-stripped readings) already hold `dialect` in
+scope as their own parameter. Walked the same fixture rows R2 walked (the PowerShell `.l`-via-`?l`
+row, the `sub/.*/y` dot-rewrite row, the globstar row, every bracket and extglob row) and reached
+the same conclusion independently: none of their matched entries begin with `.`, so none move.
+**No further gap.**
+
+**(b) confirmed exactly as R2 corrected it, with one additional check.** Re-derived
+`_extglob_alternative_begins_with_dot`'s own nesting-aware walk directly (not from R2's
+description of it) to confirm it answers correctly for a *nested* group — e.g. `@(a|@(.x|y))` —
+since the dot rule's new exemption depends on this helper being right generally, not only for the
+flat case R2's own example (`@(.|..)p`) used. Read the function body: it tracks `depth` across `(`
+and `)` and only treats `|` as an alternative break at `depth == 0`, so a nested group's own `|` is
+correctly kept inside the outer alternative's text rather than splitting it early — `@(a|@(.x|y))`
+reads as two outer alternatives, `a` and `@(.x|y)`, neither of which *itself* starts with `.` (the
+inner group is nested, not a bare `.x`), so this specific case correctly returns `False`, not `True`
+— a different, already-correct answer from the flat case, confirming the helper is read once, not
+twice with different results.  This is consistent with the (already-existing) use the same helper
+gets in `_rewrite_dotdot_globs`, not a new behavior D14 depends on uniquely. No disagreement found
+between the two calls, and no change needed to either helper. **No further gap.**
+
+**(c) confirmed exactly as R2 did, from the same single construction site.** `grep -n "_Budget("`
+still finds exactly one call, and `dotglob_named` can only ever be read the same way
+`globstar_named` already is. **No further gap.**
+
+**R3 verdict: the R1+R2 corrected proposal confirmed with no further gaps.** Implemented in this
+same round, per `next_action`'s instruction: a new `_DOTGLOB_RE = re.compile(r"\bdotglob\b")`
+beside `_GLOBSTAR_RE`; `_Budget.dotglob_named: bool`, read at the one construction site beside
+`globstar_named`; `dialect`/`bash` threaded through `_judge_word`'s rule-5 call, `_judge_piece`
+(all three call sites), `_judge_whole_value` (both its own callers) into `_glob_links` and
+`_globstar_walk`, both of which now take a `bash: bool`; the dot-rule guard itself — in
+`_glob_links`'s matching loop, an entry is skipped when `bash and not budget.dotglob_named and
+entry.name.startswith(".")`, unless the written `pattern` (before masking) starts with `.` or `[`,
+or holds an extglob group with a dot-leading alternative (`_extglob_group_spans`/
+`_extglob_alternative_begins_with_dot`, reused directly); in `_globstar_walk`'s own per-level loop,
+the same condition with no exemption clause, since `**` itself never starts with `.` or `[` and
+holds no extglob group.
+
+Measured directly against `_decide` (`testbed/scratch/measure_d14_impl.py`, gitignored, not
+committed, deleted after use): `ls sub/?l/x` with `sub/.l` linked out is now **allowed** in Bash
+(was refused before this round); the identical `Get-ChildItem sub/?l/x` in PowerShell is still
+refused, unchanged; `shopt -s dotglob; ls sub/?l/x` is refused once `dotglob` is named; `ls
+sub/@(.hidden|zzz)/x` with `sub/.hidden` linked out is refused (the extglob-alternative exemption);
+`ls sub/@(zzz)/x` against the same fixture stays allowed (the ordinary dot rule, not exempted,
+still applies). All five match the proposal exactly.
+
+**Tests.** Added the Bash form of the `sub/?l/x` control row (previously untested, task 1.4c's own
+line 74) and the `dotglob`-named counterpart to
+`test_an_absolute_or_piece_relative_glob_is_matched_through_the_link_it_finds_1_4c_r5`; added
+`test_an_extglob_alternative_beginning_with_dot_is_not_exempted_from_the_bash_dot_rule_d14` for
+(b)'s corrected case, with a negative control (`@(zzz)`, no dot-leading alternative) in the same
+test. `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **121 passed**
+(120 unchanged + 1 new test function; the two new assertions live inside the existing 1_4c_r5
+test). **Mutation-checked**: `git stash`ing only `hub/hub/mcp_server.py` and rerunning fails
+exactly the two new assertions/tests (`bash_dotglob`/`bash_dot` inside 1_4c_r5, and the new extglob
+test's `no_dot_alternative` row) while the other 119 stay green — both new tests are load-bearing,
+not vacuous. `ruff check` and `black --check --target-version py311` both clean on the two changed
+files; `mypy hub/hub/mcp_server.py` shows only the pre-existing, unrelated `approve_tool_call`
+no-return-annotation note (confirmed present on the unmodified file too, at its own line number —
+the rule in `.claude/rules/mcp-server.md` says not to add one).
+
+**Task 1.4c is now fully closed**: all three of its named gaps (the Windows POSIX-class/drive-letter
+split, D13; the absolute top-level dot-glob row, confirmed already closed; the bash dot rule, D14)
+are closed.
 
 ## The bounds (R4: per `_decide`)
 

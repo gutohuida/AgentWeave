@@ -60,7 +60,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   production file changed, so `mypy` is unaffected. `git diff --stat`: exactly
   `hub/tests/test_the_shell_judge_reads_a_word_whole.py` and this change's `tasks.md`. `py -3.11
   scripts/backlog_page.py --check`: current, nothing moved.
-- [ ] 1.4c (R4, D8, link fixture) **globs through a link**, refused as outside, the reason naming where the match resolves:
+- [x] 1.4c (R4, D8, link fixture) **globs through a link**, refused as outside, the reason naming where the match resolves:
   - `cp n u*/`, `cp n u?/x`, `cp n [u]p/x`, and `cp n '[[:alpha:]]p'/x` (Bash; the first bracket matched exactly, the POSIX class relaxed, D8 step 2 as R8 wrote it);
   - `bash -c 'cp n u*/'` (inner shell);
   - `bash -O extglob -c 'cp n @(u)p/x'`;
@@ -520,6 +520,35 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   before any line of `mcp_server.py` changes. **Task 1.4c stays unticked**: one of its two remaining
   gaps is now closed (the dot-glob rewrite row), the other (the bash dot rule) has an R1 draft but no
   implementation yet.
+
+  **R2 (independent re-derivation, fresh)** found two real gaps in R1's draft, both corrected in
+  `design.md`: `_judge_piece` has three call sites, not one (`_judge_whole_value`'s own two also
+  need `dialect` threaded into its signature, or the whole-value reading built for D13's
+  drive-letter/bracket-colon split never becomes bash-aware); and the `[`/`.`-prefix hedge alone
+  misses an extglob group whose alternative itself begins with `.` (`@(.|..)p`), an under-refusal
+  risk -- corrected to also waive the dot-skip via `_extglob_group_spans`/
+  `_extglob_alternative_begins_with_dot`. (c) confirmed clean, directly from the one `_Budget`
+  construction site. No already-passing test moves. Still docs-only.
+
+  **R3 (independent re-derivation against the running code and R2's corrected proposal, fresh)**
+  confirmed the corrected proposal with no further gap, and implemented it in the same round:
+  `_DOTGLOB_RE`/`_Budget.dotglob_named`; `dialect`/`bash` threaded through `_judge_word`'s rule-5
+  call, all three `_judge_piece` call sites, and `_judge_whole_value`'s own two callers, into
+  `_glob_links` and `_globstar_walk` (both now take `bash: bool`); the dot-rule guard in each
+  matching loop (`_glob_links`'s exempts a pattern starting with `.`/`[` or holding a dot-leading
+  extglob alternative; `_globstar_walk`'s has no exemption clause, since `**` qualifies for neither).
+  Measured directly against `_decide`: `ls sub/?l/x` (Bash) is now allowed with `.l` linked out,
+  `Get-ChildItem sub/?l/x` (PowerShell) stays refused, `shopt -s dotglob; ls sub/?l/x` is refused
+  once named, and the extglob-alternative fix is confirmed both ways (`@(.hidden|zzz)` refused,
+  `@(zzz)` against the same fixture stays allowed). Added the Bash and `dotglob`-named rows to
+  `test_an_absolute_or_piece_relative_glob_is_matched_through_the_link_it_finds_1_4c_r5` and a new
+  `test_an_extglob_alternative_beginning_with_dot_is_not_exempted_from_the_bash_dot_rule_d14`.
+  `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **121 passed**.
+  Mutation-checked (`git stash` on `mcp_server.py` alone): fails exactly the new assertions/test,
+  the other 119 stay green. `ruff check` and `black --check` clean; `mypy` shows only the
+  pre-existing, unrelated `approve_tool_call` note. **Task 1.4c now ticks**: all three of its named
+  gaps (the Windows POSIX-class/drive-letter split, the absolute top-level dot-glob row, and the
+  bash dot rule) are closed.
 - [x] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
   - `cp n [u]p/` and `cp n ./u[p]` (a trailing `]` the trim removes). Each PASSES today only by the tail (`'/'`, `'/u[p'`), so assert the resolved target, which FAILS today; each FAILS against R5 (allowed).
   - `cp n [.]./x` refused as outside, quoting `'[.]./x'`. PASSES today by the tail `'/x'`, FAILS on the reason assertion and against R5 (the word `.]./x` is inside).

@@ -1395,6 +1395,11 @@ _SEPARATOR_RE = re.compile(f"([{re.escape(_SEPARATORS)}])")
 # a nested text read under different flags") -- not re-derived for a nested substitution's own text.
 _GLOBSTAR_RE = re.compile(r"\bglobstar\b")
 
+# D14: whether the command names the `dotglob` shell option, read the same way and for the same
+# reason as `_GLOBSTAR_RE` above -- a nested substitution's own `shopt -s dotglob` is still a
+# substring of the whole top-level command text, so the one regex search finds it there too.
+_DOTGLOB_RE = re.compile(r"\bdotglob\b")
+
 # D3, extglob: one of `@ ? * + !` directly followed by `(`, up to its matching `)`, with nesting
 # counted -- an unbalanced `(` is not a group. `(`, `|` and `@` inside a group are glob syntax, not
 # piece breaks or curl `name@file` glue, so D2 step 2 must not split there, and the group's
@@ -1693,7 +1698,9 @@ def _mask_bracket_colons(value: str) -> str:
     return "".join(chars)
 
 
-def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optional[Dict[str, Any]]:
+def _glob_links(
+    piece: str, shown: str, root: str, budget: "_Budget", bash: bool
+) -> Optional[Dict[str, Any]]:
     """D8, a further slice: a `piece` (already rewritten by `_rewrite_dotdot_globs`) holding
     exactly one glob-holding component, anywhere in the piece, with every other component literal
     (no glob character, no `..`). The leading literal components -- the base -- are listed once
@@ -1760,14 +1767,18 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
     enumerable, narrower translation is possible but not what the design asks for) -- an accepted
     over-approximation (design, "Over-approximation, on purpose", which names extglob groups
     directly): it can only add a refusal, never miss one that the shell's own expansion would catch.
-    The bash dot
-    rule (D8 step 2, "a name beginning with `.` matches only when the component does too") is also
-    left unbuilt: skipping it only widens what matches, which the design allows
-    ("over-approximation... can only add a refusal"), and nothing in this slice's own test needs
-    it. **("The bounds", R5) The directory listing itself is memoized on `budget`, keyed by the
-    resolved directory** (`_Budget.list_directory`): a directory already listed for one word's
-    glob, or by a deeper `**` level, is served from the memo for a different word's, charging
-    nothing further, rather than listed again.
+
+    **(D14) In the bash dialect, when the command does not name `dotglob`, an entry whose name
+    begins with `.` is skipped unless the matched component itself can account for it**: the
+    component (as written, before `_relax_bracket_pattern`/`_mask_extglob_as_star`) begins with `.`
+    or `[` -- the same over-approximating hedge `_rewrite_dotdot_globs` already uses for its own,
+    adjacent question (R6, D11) -- or the component holds an extglob group with a `|`-separated
+    alternative that itself begins with `.` (`_extglob_alternative_begins_with_dot`), since real
+    bash's own expansion there can still reach a dot-leading name. `bash` is false for every other
+    dialect, which has no such rule. **("The bounds", R5) The directory listing itself is memoized
+    on `budget`, keyed by the resolved directory** (`_Budget.list_directory`): a directory already
+    listed for one word's glob, or by a deeper `**` level, is served from the memo for a different
+    word's, charging nothing further, rather than listed again.
     """
     drive, rest = os.path.splitdrive(piece)
     anchor = drive + os.sep
@@ -1796,9 +1807,13 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
         refusal = _glob_tail_walk(tail, base, listed_base, root, shown)
         if refusal:
             return refusal
-        return _globstar_walk(base, listed_base, tail, root, shown, budget)
+        return _globstar_walk(base, listed_base, tail, root, shown, budget, bash)
+    pattern_spans = _extglob_group_spans(pattern)
     normalized_pattern = os.path.normcase(
-        _relax_bracket_pattern(_mask_extglob_as_star(pattern, _extglob_group_spans(pattern)))
+        _relax_bracket_pattern(_mask_extglob_as_star(pattern, pattern_spans))
+    )
+    dot_exempt = pattern.startswith((".", "[")) or (
+        bool(pattern_spans) and _extglob_alternative_begins_with_dot(pattern, pattern_spans)
     )
     entries = budget.list_directory(base)
     if entries is _LISTING_TOO_MANY:
@@ -1806,6 +1821,8 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
     if entries is None:
         return None
     for entry in entries:
+        if bash and not budget.dotglob_named and entry.name.startswith(".") and not dot_exempt:
+            continue
         if not fnmatch.fnmatchcase(os.path.normcase(entry.name), normalized_pattern):
             continue
         real = entry.path
@@ -1868,6 +1885,7 @@ def _globstar_walk(
     root: str,
     shown: str,
     budget: "_Budget",
+    bash: bool,
 ) -> Optional[Dict[str, Any]]:
     """(D8 step 2, step 4; R5) `**` under `globstar`: every entry of `directory`, at any depth, is
     a candidate the tail is tried from -- the zero-levels reading (the tail tried straight from
@@ -1877,13 +1895,21 @@ def _globstar_walk(
     matches (the rule this task builds), so a link cycle (a link whose target reaches it again)
     ends every branch in one step rather than recursing without end -- a real directory tree holds
     no such cycle without a link in it. None when nothing refuses, including when a directory
-    cannot be listed (the same as the single-component loop's own error reading)."""
+    cannot be listed (the same as the single-component loop's own error reading).
+
+    **(D14) In the bash dialect, when `dotglob` is not named, a dot-leading entry is skipped**
+    before it is tried or descended into: `**` never itself begins with `.` or `[`, and holds no
+    extglob group, so unlike the single-component loop above there is no written pattern that can
+    exempt it -- a real shell's own `**` does not reach a dot-leading name or directory either,
+    under the same default."""
     entries = budget.list_directory(directory)
     if entries is _LISTING_TOO_MANY:
         return _refuse(shown, _TOO_MANY)
     if entries is None:
         return None
     for entry in entries:
+        if bash and not budget.dotglob_named and entry.name.startswith("."):
+            continue
         real = entry.path
         listed = os.path.join(listed_directory, entry.name)
         is_link = _is_link_entry(entry)
@@ -1905,7 +1931,7 @@ def _globstar_walk(
         except OSError:
             descend = False
         if descend:
-            refusal = _globstar_walk(real, listed, tail, root, shown, budget)
+            refusal = _globstar_walk(real, listed, tail, root, shown, budget, bash)
             if refusal:
                 return refusal
     return None
@@ -2088,7 +2114,7 @@ def _judge_word(
         # real entry (`.l`) through -- the literal `..` reading that rewrite feeds is
         # `_judge_path`'s job, just above, not this one's.
         if os.path.isabs(word) and _holds_glob_character(word):
-            return _glob_links(word, word, root, budget)
+            return _glob_links(word, word, root, budget, dialect == "bash")
         return None
     return _judge_pieces(
         word, root, argument, continues, dialect, budget
@@ -2096,7 +2122,7 @@ def _judge_word(
 
 
 def _judge_piece(
-    piece: str, root: str, argument: str, continues: bool, budget: "_Budget"
+    piece: str, root: str, argument: str, continues: bool, dialect: str, budget: "_Budget"
 ) -> Optional[Dict[str, Any]]:
     """One piece of rule 6's reading, shared by both its readings (D2 step 6, R8): a NUL or a
     leading `~` refuses outright (D2 step 5); else it is judged as the relative or absolute path
@@ -2104,7 +2130,8 @@ def _judge_piece(
     against the links it finds, not only judged by its literal text -- mirroring rule 5's own
     `_glob_links` call, but joined to `root` first when relative, since `_glob_links` reads its
     piece as rooted at a drive (or, with none, at the filesystem root) rather than at the
-    workspace.
+    workspace. `dialect` (D14) is only ever used to tell `_glob_links` whether the bash dot rule
+    applies; it changes no other reading here.
 
     `_glob_links` is matched on `piece`, not on D3's `..`-rewrite of it: that rewrite only ever
     touches a component that already holds a glob character (a glob-free component never
@@ -2121,7 +2148,7 @@ def _judge_piece(
         return refusal
     if _holds_glob_character(piece):
         absolute = piece if os.path.isabs(piece) else os.path.join(root, piece)
-        return _glob_links(absolute, piece, root, budget)
+        return _glob_links(absolute, piece, root, budget, dialect == "bash")
     return None
 
 
@@ -2154,7 +2181,7 @@ def _judge_pieces_reading(
         ):
             continue
         refusal = _judge_piece(
-            restored, root, argument, continues and index == len(pieces) - 1, budget
+            restored, root, argument, continues and index == len(pieces) - 1, dialect, budget
         )
         if refusal:
             return refusal
@@ -2178,7 +2205,7 @@ def _whole_value(word: str) -> str:
 
 
 def _judge_whole_value(
-    value: str, root: str, argument: str, continues: bool, budget: "_Budget"
+    value: str, root: str, argument: str, continues: bool, dialect: str, budget: "_Budget"
 ) -> Optional[Dict[str, Any]]:
     """D2 step 6 (R8): after the pieces, the value is also judged as the path it spells, undivided
     by the breaks that only glue it to a host, a revision or a curl `name@file` -- a link or a
@@ -2197,7 +2224,7 @@ def _judge_whole_value(
     in each surviving segment before it is judged, so the text judged and quoted is exactly the
     substring of `value` as written."""
     if not _DRIVE_LETTERS:
-        refusal = _judge_piece(value, root, argument, continues, budget)
+        refusal = _judge_piece(value, root, argument, continues, dialect, budget)
         if refusal:
             return refusal
     segments = [segment for segment in _mask_bracket_colons(value).split(":") if segment]
@@ -2205,7 +2232,12 @@ def _judge_whole_value(
         for index, segment in enumerate(segments):
             restored = segment.replace(_BRACKET_COLON_SENTINEL, ":")
             refusal = _judge_piece(
-                restored, root, argument, continues and index == len(segments) - 1, budget
+                restored,
+                root,
+                argument,
+                continues and index == len(segments) - 1,
+                dialect,
+                budget,
             )
             if refusal:
                 return refusal
@@ -2229,7 +2261,7 @@ def _judge_pieces(
     if refusal:
         return refusal
     whole_value = _whole_value(word)
-    refusal = _judge_whole_value(whole_value, root, argument, continues, budget)
+    refusal = _judge_whole_value(whole_value, root, argument, continues, dialect, budget)
     if refusal:
         return refusal
     if any(quote in value for quote in _PIECE_QUOTES):
@@ -2242,6 +2274,7 @@ def _judge_pieces(
             root,
             argument,
             continues,
+            dialect,
             budget,
         )
         if refusal:
@@ -2487,13 +2520,15 @@ class _Budget:
 
     `globstar_named` (D8 step 2, step 4) is read once from the whole top-level `command`, by the
     caller, before any nested substitution's own text is read -- so a nested command cannot flip
-    the flag a `_glob_links` call made on the outer text's say-so.
+    the flag a `_glob_links` call made on the outer text's say-so. `dotglob_named` (D14) is read
+    the same way, for the same reason.
     """
 
-    def __init__(self, globstar_named: bool = False) -> None:
+    def __init__(self, globstar_named: bool = False, dotglob_named: bool = False) -> None:
         self.alternatives_spent = 0
         self.glob_entries_examined = 0
         self.globstar_named = globstar_named
+        self.dotglob_named = dotglob_named
         self._expansions: Dict[Tuple[str, str], Optional[List[str]]] = {}
         self.judgements: Dict[Tuple[str, str, bool, bool, str, bool], Optional[Dict[str, Any]]] = {}
         self._listings: Dict[str, Optional[List["os.DirEntry[str]"]]] = {}
@@ -3162,7 +3197,10 @@ def _decide(
         # once for that reason is charged, and judged, only once. `globstar_named` (D8 step 2,
         # step 4, R5) is read once here, from the whole top-level command text, not re-derived
         # for a nested substitution's own text.
-        budget = _Budget(globstar_named=bool(_GLOBSTAR_RE.search(command)))
+        budget = _Budget(
+            globstar_named=bool(_GLOBSTAR_RE.search(command)),
+            dotglob_named=bool(_DOTGLOB_RE.search(command)),
+        )
         for dialect in _TOOL_DIALECTS.get(tool_name, ("bash", "powershell")):
             # Two passes, unconditionally: a `$'...'` escape from 0x100 to 0x7FFFFFFF renders
             # differently by locale, and both renderings must be judged (design D1, Round 4).
