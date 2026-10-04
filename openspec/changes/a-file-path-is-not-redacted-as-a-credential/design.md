@@ -154,3 +154,19 @@ raise on a `str` input. None of the three callers catches around it today, and n
   the proposal; task 1.3's guard stub replaced (its `sk-abc` segment failed item 3, so the test
   could not fail); D4 added; line references corrected (`spec.md:124`, `FINDINGS.md:21742`,
   `api/v1/jobs.py:61`).
+- **IMPL (2026-10-04, interactive, task 3.1):** `tool_use_event(tool="Write", input_data={"file_path": p})`
+  on the built code, stored `payload["input"]`:
+
+  | `file_path` | stored `payload["input"]` |
+  |---|---|
+  | `/Users/operator/code/agentweave/hub/main.py` | `{"file_path": "/Users/operator/code/agentweave/hub/main.py"}` |
+  | `src/services/user/repository/handler.py` | `{"file_path": "src/services/user/repository/handler.py"}` |
+  | `/workspace/proj/.agentweave/worktrees/beta/src/app.py` | `{"file_path": "/workspace/proj/.agentweave/worktrees/beta/src/app.py"}` |
+  | `/home/runner/work/AgentWeave/AgentWeave/hub/hub/scheduler.py` | `{"file_path": "/home/runner/work/AgentWeave/AgentWeave/hub/hub/scheduler.py"}` |
+  | `https://api.example.com/v1/tokens/<40 hex>` | `{"file_path": "https://api.example.com/v1/tokens/<redacted>"}` |
+  | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` | `{"file_path": "<redacted>"}` |
+  | `/run/secrets/postgres/password/hunter2hunter2hunter2` | `{"file_path": "/run/secrets/postgres/password/<redacted>"}` |
+
+  Residuals re-measured on the module itself (test guide 4 and 5): 0 of 400,000 random base64 keys
+  with `/` keep anything; tokens stored in `…/v1/hooks/<token>/send` per 20,000: hex 16–23 6,
+  24–31 1; lowercase-and-digit 16–23 32, 24–31 2.

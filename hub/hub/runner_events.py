@@ -54,10 +54,45 @@ _SECRET_FIELD_RE = re.compile(r"(api[_-]?key|token|secret|password|authorization
 #: since a task id is the join between a transcript and the board, that is the identifier the
 #: reading exists to recover. The lookbehind rejects only `[A-Za-z0-9_]`, not `-`, because a
 #: hyphen does not start a word: `x-sk-...` is still a key wearing its prefix, `task-...` is not.
+#:
+#: **A file path is not a credential, but a token inside one still is** (F278). `/` has to be in
+#: the catch-all's class, because base64 uses it, so on a Linux host an ordinary path was eaten
+#: whole: `/Users/operator/code/agentweave/hub/main.py` was stored as `<redacted>.py`, and the
+#: agent's own checkout under `.agentweave/worktrees/` lost its name. A catch-all match is kept
+#: when it splits on `/` into at least three non-empty segments that are each an ordinary word
+#: (`_PATH_SEGMENT_RE`). Inside a kept match, a segment of 32 or more characters, or of 16 or more
+#: holding both a letter and a digit, is still redacted: today a short token in a path is caught
+#: only because the path around it brings the run to 32. Measured 2026-10-04: no fragment of
+#: 400,000 random base64 keys containing `/` survives; of 20,000 random 16-23 character
+#: lowercase-and-digit tokens in a URL path, 49 are stored (a letter-only draw reads as a word);
+#: 28 of 200,205 real paths lose a segment (`contentsecuritypolicy2.js`). A path with a segment
+#: that is not an ordinary word (`Claude2`, `README`) is still redacted whole.
 _SECRET_VALUE_RE = re.compile(
-    r"((?<![A-Za-z0-9_])aw_live_[A-Za-z0-9_=-]+|(?<![A-Za-z0-9_])sk-[A-Za-z0-9_=-]+"
-    r"|[A-Za-z0-9+/=]{32,})"
+    r"(?<![A-Za-z0-9_])aw_live_[A-Za-z0-9_=-]+|(?<![A-Za-z0-9_])sk-[A-Za-z0-9_=-]+"
+    r"|(?P<entropy>[A-Za-z0-9+/=]{32,})"
 )
+_PATH_SEGMENT_RE = re.compile(r"[a-z0-9]+|[A-Z]?[a-z]+(?:[A-Z][a-z]+)*")
+_TOKEN_SEGMENT_RE = re.compile(r"(?=.*[A-Za-z])(?=.*[0-9])")
+
+
+def _redaction_for(match: "re.Match[str]") -> str:
+    """What one `_SECRET_VALUE_RE` match is stored as: a path keeps its words (F278)."""
+    text = match.group(0)
+    segments = [segment for segment in text.split("/") if segment]
+    if (
+        match.lastgroup != "entropy"
+        or len(segments) < 3
+        or not all(_PATH_SEGMENT_RE.fullmatch(segment) for segment in segments)
+    ):
+        return "<redacted>"
+    return "/".join(
+        (
+            "<redacted>"
+            if len(segment) >= 32 or (len(segment) >= 16 and _TOKEN_SEGMENT_RE.match(segment))
+            else segment
+        )
+        for segment in text.split("/")
+    )
 
 
 def redact_secrets(value: Any) -> Any:
@@ -77,7 +112,7 @@ def redact_secrets(value: Any) -> Any:
     if isinstance(value, tuple):
         return tuple(redact_secrets(item) for item in value)
     if isinstance(value, str):
-        return _SECRET_VALUE_RE.sub("<redacted>", value)
+        return _SECRET_VALUE_RE.sub(_redaction_for, value)
     return value
 
 
@@ -161,10 +196,10 @@ def tool_use_event(
     # below. This ordering is not defensive tidiness: both of the next two lines were measured
     # (2026-09-04) to destroy the path outright.
     #
-    #   `redact_secrets` eats ordinary POSIX paths. `/` is inside `_SECRET_VALUE_RE`'s
-    #   high-entropy class, so any 32-character run without `.`, `_` or `-` matches:
-    #   `/workspace/project/src/services/handler.py` -> `<redacted>.py`. Filed as F278; a
-    #   Windows path survives only because `\` is not in the class.
+    #   `redact_secrets` used to eat ordinary POSIX paths (F278). A path now survives, but one
+    #   whose segment looks like a credential still loses that segment:
+    #   `/workspace/project/<32 hex>/app.py` -> `/workspace/project/<redacted>/app.py`, and a
+    #   path with a segment that is not an ordinary word is still redacted whole.
     #
     #   `_truncate_utf8` cuts the JSON text at 8 KiB, and `json.dumps(sort_keys=True)` puts
     #   `content` before `file_path`. A `Write` whose body exceeds 8 KiB therefore keeps the

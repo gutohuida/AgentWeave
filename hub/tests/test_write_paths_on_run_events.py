@@ -127,8 +127,9 @@ def test_the_field_is_read_before_the_payload_is_redacted_and_truncated():
     Both halves were measured on 2026-09-04 and both destroy the path outright, which is why
     reading first is the design and not a nicety:
 
-    * `redact_secrets` matches `/` inside its high-entropy class, so an ordinary POSIX path with
-      a 32-character run free of `.`, `_` and `-` is replaced wholesale (filed as **F278**).
+    * `redact_secrets` matches `/` inside its high-entropy class. An ordinary POSIX path survives
+      since F278 (`a-file-path-is-not-redacted-as-a-credential`), but a path one of whose
+      segments looks like a credential still loses that segment.
     * `json.dumps(sort_keys=True)` orders `content` before `file_path`, and the result is cut at
       `MAX_TOOL_RESULT_BYTES`. A `Write` with a body over 8 KiB therefore keeps the content and
       loses the name of the file it is writing.
@@ -136,7 +137,8 @@ def test_the_field_is_read_before_the_payload_is_redacted_and_truncated():
     So `payload["input"]` is not a lesser copy of this field. For both of these shapes it holds
     nothing at all, and this test fails if the read is ever moved below either transformation.
     """
-    redacted_away = "/workspace/project/src/services/handler.py"
+    segment = "0123456789abcdef" * 2
+    redacted_away = f"/workspace/project/{segment}/app.py"
     event = tool_use_event(
         tool="Write",
         category="tool",
@@ -144,7 +146,7 @@ def test_the_field_is_read_before_the_payload_is_redacted_and_truncated():
         call_id="toolu_03",
     )
     assert event.write_paths == (redacted_away,)
-    assert redacted_away not in event.payload["input"]
+    assert segment not in event.payload["input"]
     assert "<redacted>" in event.payload["input"]
 
     big_body = "some ordinary source line - not a secret\n" * 400

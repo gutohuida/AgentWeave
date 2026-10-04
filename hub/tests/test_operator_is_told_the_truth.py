@@ -132,6 +132,89 @@ def test_a_loop_error_summary_still_hides_a_credential():
 
 
 # ---------------------------------------------------------------------------
+# F278: a file path is not a credential, but a token inside one still is
+# ---------------------------------------------------------------------------
+
+_HEX = "0123456789abcdef"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        # Measured 2026-09-24 and again 2026-10-04: `<redacted>.py` for all but the third, which
+        # was `/workspace/proj/.<redacted>.py` -- the agent's own checkout.
+        "/Users/operator/code/agentweave/hub/main.py",
+        "src/services/user/repository/handler.py",
+        "/workspace/proj/.agentweave/worktrees/beta/src/app.py",
+        "/home/runner/work/AgentWeave/AgentWeave/hub/hub/scheduler.py",
+    ],
+)
+def test_a_posix_path_is_not_a_credential(path):
+    """`/` is in the catch-all's class because base64 uses it, so a Linux path was eaten whole."""
+    assert redact_secrets(path) == path
+    assert redact_secrets({"file_path": path}) == {"file_path": path}
+
+
+def test_a_credential_used_as_a_path_segment_is_still_redacted():
+    """A kept path still loses a segment of credential length (today it lost the whole tail)."""
+    out = redact_secrets("https://api.example.com/v1/tokens/" + (_HEX * 3)[:40])
+    assert out.endswith("/v1/tokens/<redacted>"), out
+    assert "0123456789" not in out
+
+
+@pytest.mark.parametrize(
+    "value, stored",
+    [
+        (
+            "/api/v1/projects/123/trigger/pipeline/token/a1b2c3d4e5f6a7b8c9d0e1f2a3b4",
+            "/api/v1/projects/123/trigger/pipeline/token/<redacted>",
+        ),
+        (
+            "/run/secrets/postgres/password/hunter2hunter2hunter2",
+            "/run/secrets/postgres/password/<redacted>",
+        ),
+        # The measured cost (28 of 200,205 real paths): a long name holding a digit is read as a
+        # token. Asserted so that a change of mind is visible.
+        ("/srv/data/assets/contentsecuritypolicy2.js", "/srv/data/assets/<redacted>.js"),
+    ],
+)
+def test_a_short_token_in_a_path_is_still_redacted(value, stored):
+    """Today a 16-31 character token in a path is redacted only because the path around it makes
+    the run reach 32. Keeping the path must not keep the token: 16 or more characters holding a
+    letter and a digit is redacted as a segment (design R4)."""
+    assert redact_secrets(value) == stored
+
+
+@pytest.mark.parametrize(
+    "value, stored",
+    [
+        # Base64 with `/`: its segments are not ordinary words, so nothing of it is kept.
+        ("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "<redacted>"),
+        ("/workspace/project/Kq9xZ2mPvT4rLw8sN1bY6cHd3fJg7aQe/app.py", "<redacted>.py"),
+        # The prefix alternatives' class has no `/`, so they stop at the first one.
+        ("sk-abc/def/ghi/jkl/mno/pqr", "<redacted>/def/ghi/jkl/mno/pqr"),
+        ("aw_live_abc/def/ghi/jkl/mno/pqr", "<redacted>/def/ghi/jkl/mno/pqr"),
+    ],
+)
+def test_a_base64_credential_with_slashes_is_still_redacted(value, stored):
+    assert redact_secrets(value) == stored
+
+
+def test_only_the_high_entropy_rule_can_keep_a_path():
+    """A prefix match can never contain `/`, so this guard is unreachable through `redact_secrets`;
+    it is tested on the replacement function with a match that is path-shaped."""
+    from hub.runner_events import _redaction_for
+
+    class _PrefixMatch:
+        lastgroup = None
+
+        def group(self, index=0):
+            return "abc/def/ghi/jkl"
+
+    assert _redaction_for(_PrefixMatch()) == "<redacted>"
+
+
+# ---------------------------------------------------------------------------
 # F30: the probe and the spawn cannot disagree about the same agent
 # ---------------------------------------------------------------------------
 
