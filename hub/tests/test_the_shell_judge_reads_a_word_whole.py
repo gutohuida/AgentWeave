@@ -54,16 +54,22 @@ def workspace(tmp_path, monkeypatch):
     return ws
 
 
-def _row(label, command, allow, *, tool="Bash", windows_only=False, posix_only=False):
+def _row(
+    label, command, allow, *, tool="Bash", windows_only=False, posix_only=False, skip_reason=None
+):
     if windows_only:
         marks = pytest.mark.skipif(
-            not _WINDOWS, reason="a drive-letter host reads a backslash as a separator"
+            not _WINDOWS,
+            reason=skip_reason or "a drive-letter host reads a backslash as a separator",
         )
     elif posix_only:
         marks = pytest.mark.skipif(
             _WINDOWS,
-            reason="D7's escape-removed levels are gated off a drive-letter host (task 2.2a:"
-            " `\\` is already a separator there, which can disagree with escape-reduction)",
+            reason=skip_reason
+            or (
+                "D7's escape-removed levels are gated off a drive-letter host (task 2.2a:"
+                " `\\` is already a separator there, which can disagree with escape-reduction)"
+            ),
         )
     else:
         marks = ()
@@ -290,6 +296,36 @@ _TABLE = [
     ),
     # Control (the design's own cost note): both pieces of a `::`-split word can still be inside.
     _row("2.2a-doublecolon2", "cp lib/Foo::Bar.pm n", True),
+    # Task 1.7b (R3): regressions of R2's piece rewrite to check for. Each already refuses today
+    # (the old tail backstop caught them too) and must keep refusing once rule 6 reads pieces
+    # instead of scanning for an absolute tail -- confirmed by measuring directly against `_decide`
+    # (`testbed/scratch/measure_17b.py`, gitignored, deleted after use): all three still refuse,
+    # naming `Z:foo...`, with the current code.
+    _row("1.7b1", r"python w.py 'Z:foo\bar'", False, windows_only=True),
+    _row("1.7b2", r"python w.py Z:foo/bar", False, windows_only=True),
+    _row("1.7b3", r'powershell -c "Copy-Item x Z:foo\bar"', False, windows_only=True),
+    # Both platforms: a drive-letter-shaped or revision-shaped colon glued directly to a tilde is
+    # genuinely uncheckable (the shell, not this process, expands the `~`), so these refuse as
+    # `_UNCHECKED`, not `_OUTSIDE` -- asserted by reason below, not only by `allow`.
+    _row("1.7b4", r"dd if=x of=c:~/y", False),
+    _row("1.7b5", r"git show HEAD:~/x", False),
+    # POSIX only: off a drive-letter host `Z:foo/bar` is just two pieces at an ordinary `:` break
+    # (`Z`, `foo/bar`), both inside. Cannot be forced locally on this Windows machine the way D7's
+    # escape levels were (task 2.2a): `_DRIVE_LETTERS` is a code flag this file reads fresh, but
+    # `os.path` itself is bound to `ntpath` at interpreter start and keeps reading `Z:` as a drive
+    # regardless of that flag -- measured directly (`testbed/scratch/measure_17b_posix.py`,
+    # gitignored, deleted after use): forcing `_DRIVE_LETTERS` False here and judging the same
+    # command still refused, resolving through `ntpath`'s own drive rule, not the POSIX reading
+    # this row claims. Zero local coverage of this row is the accepted cost, same as it would be
+    # for any POSIX-only CI-only row.
+    _row(
+        "1.7b6",
+        r"python w.py Z:foo/bar",
+        True,
+        posix_only=True,
+        skip_reason="ntpath reads 'Z:' as a drive regardless of _DRIVE_LETTERS; cannot be forced"
+        " to a POSIX reading on a real drive-letter host (task 1.7b)",
+    ),
 ]
 
 
@@ -1618,3 +1654,49 @@ def test_an_extglob_dotdot_group_still_refuses_inside_an_inner_bash_invocation_1
 
     grep_plus = _decide("Bash", {"command": "grep -E 'x+(y)' f"})
     assert grep_plus["allow"] is True, grep_plus["reason"]
+
+
+# Task 1.7b: the `_TABLE` rows above (`1.7b1`-`1.7b5`) only assert `allow`; this checks the reason
+# each one names, per the task's own text -- the first bullet's rows name where the piece resolves
+# (`_OUTSIDE`), the second bullet's rows refuse as uncheckable (`_UNCHECKED`), a different reason,
+# because a shell genuinely expands the `~` there rather than this process resolving a path of its
+# own. Measured directly against `_decide` first (`testbed/scratch/measure_17b.py`, gitignored,
+# deleted after use): every reason below already matches on the current code -- these are
+# regression guards for R2's rewrite, not a new fix.
+def test_the_1_7b_rows_name_the_claimed_reason(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    if _WINDOWS:
+        quoted = _decide("Bash", {"command": r"python w.py 'Z:foo\bar'"})
+        assert quoted["allow"] is False
+        assert quoted["reason"] == (
+            "'Z:foo\\\\bar' is outside your workspace: it resolves to 'Z:foo\\\\bar'"
+        )
+
+        forward_slash = _decide("Bash", {"command": r"python w.py Z:foo/bar"})
+        assert forward_slash["allow"] is False
+        assert forward_slash["reason"] == (
+            "'Z:foo/bar' is outside your workspace: it resolves to 'Z:foo\\\\bar'"
+        )
+
+        inner_powershell = _decide("Bash", {"command": r'powershell -c "Copy-Item x Z:foo\bar"'})
+        assert inner_powershell["allow"] is False
+        assert inner_powershell["reason"] == (
+            "'Z:foo\\\\bar' is outside your workspace: it resolves to 'Z:foo\\\\bar'"
+        )
+
+    dd_target = _decide("Bash", {"command": r"dd if=x of=c:~/y"})
+    assert dd_target["allow"] is False
+    assert dd_target["reason"] == (
+        "'c:~/y' contains a variable, '~' or a command substitution that the shell expands "
+        "when it runs, so where it points cannot be checked against your workspace; write a "
+        "path relative to your workspace instead"
+    )
+
+    git_revision = _decide("Bash", {"command": r"git show HEAD:~/x"})
+    assert git_revision["allow"] is False
+    assert git_revision["reason"] == (
+        "'~/x' contains a variable, '~' or a command substitution that the shell expands "
+        "when it runs, so where it points cannot be checked against your workspace; write a "
+        "path relative to your workspace instead"
+    )

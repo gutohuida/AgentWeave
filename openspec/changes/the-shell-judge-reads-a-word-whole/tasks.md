@@ -943,10 +943,58 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   now refused as claimed; ticked `[x]`.**
 
   Each names in a comment the implementation it catches.
-- [ ] 1.7b (R3) Regressions of R2's rule set. Each PASSES today (refused by the tail) and FAILS against pieces built as R2 wrote them:
+- [x] 1.7b (R3) Regressions of R2's rule set. Each PASSES today (refused by the tail) and FAILS against pieces built as R2 wrote them:
   - Windows, Bash tool, `Z` not the workspace's drive: `python w.py 'Z:foo\bar'`, `python w.py Z:foo/bar` and `powershell -c "Copy-Item x Z:foo\bar"`, refused as outside naming `Z:foo…`.
   - Both platforms: `dd if=x of=c:~/y` and `git show HEAD:~/x`, refused as uncheckable. Assert the reason.
   - POSIX only: `python w.py Z:foo/bar` allowed. FAILS today (tail `'/bar'`).
+
+  **Iteration 57.** Re-derived fresh against the current code, not reusing iteration 56's notes
+  (per `next_action`). Measured all five rows directly against `_decide` first
+  (`testbed/scratch/measure_17b.py`, gitignored, deleted after use), on this Windows dev machine:
+  the first bullet's three rows and the second bullet's two rows all **already refuse today**, with
+  the current rule-6 piece reading (R2) in place -- the task's own framing ("FAILS against pieces
+  built as R2 wrote them") does not hold; R2's rewrite does not regress any of the five. The first
+  bullet's reasons each name `Z:foo...` as claimed (`_OUTSIDE`, with the resolved text, e.g. `'Z:foo
+  \\bar' is outside your workspace: it resolves to 'Z:foo\\bar'`); the second bullet's reasons are
+  `_UNCHECKED`, not `_OUTSIDE`, exactly as the task's own text distinguishes ("refused as
+  uncheckable", a different reason from "outside").
+
+  The third bullet (POSIX-only, `python w.py Z:foo/bar` allowed) could not be forced locally the
+  way task 2.2a's escape-level reading was: that reading only ever substitutes on the word's own
+  text (`_BACKSLASH_ESCAPE_RE`) before handing it back to `_judge_word`, so forcing `_DRIVE_LETTERS`
+  False exercises the real POSIX code path even on a drive-letter host. This row instead depends on
+  `os.path` itself reading `Z:` as a drive, which Python binds to the real OS (`ntpath` here) at
+  interpreter start -- `_DRIVE_LETTERS` is only this file's own code flag and cannot override that.
+  Measured directly (`testbed/scratch/measure_17b_posix.py`, gitignored, deleted after use): forcing
+  `_DRIVE_LETTERS` False and judging `Z:foo/bar` on this machine still refused, resolving through
+  `ntpath`'s own drive rule (`'Z:foo/bar' is outside your workspace: it resolves to 'Z:foo\\bar'`),
+  not the POSIX allow this row claims. Added as a `posix_only` row with a dedicated `skip_reason`
+  (not the shared default, which names task 2.2a's unrelated conflict) explaining why, unlike the
+  other `posix_only` rows in this file, it has zero local coverage and cannot be given any by
+  monkeypatching -- it only runs, and is only exercised, on POSIX CI.
+
+  Added rows `1.7b1`-`1.7b6` to `_TABLE` (`hub/tests/test_the_shell_judge_reads_a_word_whole.py`;
+  `_row` gained an optional `skip_reason` to let `1.7b6` state its own reason rather than reuse
+  `posix_only`'s D7-specific default text) and a dedicated
+  `test_the_1_7b_rows_name_the_claimed_reason` asserting the exact reason text of all five
+  non-POSIX rows, per the task's own "assert the reason" instruction (extended to the first bullet
+  too, which names what the reason should say even though it does not use that exact phrase).
+  `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **136 passed, 4
+  skipped** (was 130 passed, 3 skipped -- +6 passing/skipped rows: 5 table rows plus one dedicated
+  test, minus the one new `posix_only` skip). Broader regression set
+  (`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`, plus this file): **762 passed, 6 skipped, no
+  regressions** (was 756 passed, 5 skipped). `ruff check`: clean. `black --check
+  --target-version py311`: one reformat needed (ran it, re-verified clean, re-ran the test file to
+  confirm no behavioural change -- still 136 passed, 4 skipped). `mypy src/`: clean (CI never runs
+  mypy on `hub/`). `openspec validate the-shell-judge-reads-a-word-whole --strict`: valid. `git
+  diff --stat`: exactly the one test file and this file changed; both scratch scripts gitignored
+  and deleted, confirmed by `git status --short`.
+
+  **No production code change was needed or made** -- this task is purely regression guards
+  (confirming R2's rewrite did not break what R3 worried about) plus one documented, un-forceable
+  POSIX-only gap. Ticked `[x]`: every row this task's own text names is now built and passing (or,
+  for the one genuinely un-forceable row, added and explained why it cannot run here).
 - [ ] 1.7c (R3, R4; design D7) Escapes allowed today:
   - (R5, POSIX CI) `grep -rn '\.\./' src` refused: the named cost, asserted so that a change of mind is visible. FAILS today on POSIX (allowed).
   - `bash -c 'cp n .\./x'` refused, from both the Bash and the PowerShell tool. FAILS today.
