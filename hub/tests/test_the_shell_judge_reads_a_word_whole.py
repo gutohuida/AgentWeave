@@ -1310,6 +1310,46 @@ def test_a_redirect_target_piece_names_a_bash_device_1_7d(workspace, monkeypatch
     assert glued_not_redirect["reason"] == "'/dev/null' is outside your workspace"
 
 
+# Task 2.2a, D2 step 5's second clause: a drive piece (kept whole by D2 step 3's drive exception)
+# whose text after the colon begins with `~` is refused as `_UNCHECKED`, even though the piece
+# itself does not begin with `~` -- bash expands a tilde after `:` in an assignment-shaped
+# argument (measured: `echo of=c:~/y` prints `of=c:/c/Users/huida/y`). Not reachable as a
+# `_decide`-level divergence: D2 step 6's whole-value reading always splits the same value at
+# every unmasked colon regardless of the drive exception, so any `:~` already lands its own
+# `~`-leading segment there, which this function's own first clause already refuses -- measured
+# directly (`testbed/scratch/measure_22a_divergence_search.py`, gitignored, deleted after use):
+# `git stash`ing just this slice of `mcp_server.py` and rerunning `_decide` on
+# `echo a:b:C:~/y`, `Copy-Item x -Destination:C:~/y`, `echo -xvC:~/y` and `echo [C:~/y]` gave the
+# identical refusal before and after every time, through the whole-value reading's own copy of
+# the rule. So this test calls `_judge_piece` directly -- the piece reading's own copy of the
+# clause is still a regression guard for D2 step 5's own text, even though no single-word
+# `_decide` input distinguishes it from the whole-value reading's independent coverage of the
+# same text.
+def test_a_drive_piece_whose_text_after_the_colon_begins_with_a_tilde_2_2a(monkeypatch):
+    from hub import mcp_server
+
+    monkeypatch.setattr(mcp_server, "_DRIVE_LETTERS", True)
+    budget = mcp_server._Budget()
+    refusal = mcp_server._judge_piece("C:~/y", "C:\\ws", "C:~/y", True, "bash", budget)
+    assert refusal is not None
+    assert refusal["reason"] == (
+        "'C:~/y' contains a variable, '~' or a command substitution that the shell expands "
+        "when it runs, so where it points cannot be checked against your workspace; write a "
+        "path relative to your workspace instead"
+    )
+
+    # Control: the same drive piece with no tilde after the colon is unaffected -- D2 step 5's
+    # second clause must not refuse a drive piece merely for holding a second colon-shaped name.
+    no_tilde = mcp_server._judge_piece("C:plain/y", "C:\\ws", "C:plain/y", True, "bash", budget)
+    assert no_tilde is None or "contains a variable" not in no_tilde["reason"]
+
+    # Control: off a drive-letter host the clause must not fire even on the same text -- there is
+    # no "drive piece" concept there, `:` is an ordinary name character (D2 step 3).
+    monkeypatch.setattr(mcp_server, "_DRIVE_LETTERS", False)
+    posix_reading = mcp_server._judge_piece("C:~/y", "/ws", "C:~/y", True, "bash", budget)
+    assert posix_reading is None or "contains a variable" not in posix_reading["reason"]
+
+
 # 2.1c, re-derived against the current code (1.4c's own `ls sub/.*/y` row, "the dot rule"):
 # `_rewrite_dotdot_globs` (D3) only ever rewrites a component that already holds a glob character
 # (a glob-free component never satisfies its own `_GLOB_CHARS` check) to the literal text `..`,

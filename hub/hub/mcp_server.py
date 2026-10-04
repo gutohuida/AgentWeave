@@ -1174,6 +1174,10 @@ _PIECE_QUOTES = "'\"`"
 _DRIVE_COLON_RE = re.compile(rf"(?:\A|{_PIECE_BREAKS_RE.pattern[:-1]})[A-Za-z]:")
 # Distinct code point from `_EXTGLOB_*`/`_BRACKET_COLON_SENTINEL` above.
 _DRIVE_COLON_SENTINEL = ""
+# D2 step 5's second clause: tells `_judge_piece` whether a piece that survived the drive
+# exception above IS such a drive piece, so it can check the text after the colon for a leading
+# `~` (bash expands a tilde after `:` in an assignment-shaped argument: `echo of=c:~/y`).
+_DRIVE_PIECE_RE = re.compile(r"\A[A-Za-z]:")
 
 # A reference to the run's own Hub, in the spelling the tool's shell expands to the environment's
 # value. Bash's variables are case-sensitive and PowerShell's are not, and a bare `$HUB_URL` in
@@ -2146,9 +2150,11 @@ def _judge_word(
 def _judge_piece(
     piece: str, root: str, argument: str, continues: bool, dialect: str, budget: "_Budget"
 ) -> Optional[Dict[str, Any]]:
-    """One piece of rule 6's reading, shared by both its readings (D2 step 6, R8): a NUL or a
-    leading `~` refuses outright (D2 step 5); else it is judged as the relative or absolute path
-    it spells. (R5, D8) A piece holding a glob character or an extglob group is also matched
+    """One piece of rule 6's reading, shared by both its readings (D2 step 6, R8): a NUL, a
+    leading `~`, or (on a drive-letter host) a drive piece whose text after the colon begins with
+    `~` refuses outright (D2 step 5 -- bash expands a tilde after `:` in an assignment-shaped
+    argument); else it is judged as the relative or absolute path it spells. (R5, D8) A piece
+    holding a glob character or an extglob group is also matched
     against the links it finds, not only judged by its literal text -- mirroring rule 5's own
     `_glob_links` call, but joined to `root` first when relative, since `_glob_links` reads its
     piece as rooted at a drive (or, with none, at the filesystem root) rather than at the
@@ -2163,6 +2169,8 @@ def _judge_piece(
     if "\x00" in piece:
         return _refuse(piece, _UNRESOLVED)
     if _TILDE_PREFIX_RE.match(piece):
+        return _refuse(piece, _UNCHECKED)
+    if _DRIVE_LETTERS and _DRIVE_PIECE_RE.match(piece) and _TILDE_PREFIX_RE.match(piece, 2):
         return _refuse(piece, _UNCHECKED)
     rewritten = _rewrite_dotdot_globs(piece)
     refusal = _judge_path(rewritten, root, piece, argument, continues)

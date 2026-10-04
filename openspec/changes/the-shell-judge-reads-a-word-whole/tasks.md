@@ -1759,6 +1759,42 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   rule 5 (D7). Task left unticked; 1.7b and 1.7c (both still named below) were not run this
   iteration and need their own fresh re-derivation once the remaining three parts land -- do not
   assume they now pass just because the drive exception does, each names more than that one piece.
+
+  **Iteration 55.** Built this task's second part: the tilde-piece refusal's second clause (step
+  5, "or a drive piece whose text after the colon does [begin with `~`]"). Added `_DRIVE_PIECE_RE`
+  (`\A[A-Za-z]:`, `hub/hub/mcp_server.py`, beside `_DRIVE_COLON_RE`) and one new check in
+  `_judge_piece`, gated on `_DRIVE_LETTERS` read at call time (D9's own rule): a piece matching
+  `_DRIVE_PIECE_RE` whose text after the colon matches `_TILDE_PREFIX_RE` (`.match(piece, 2)`,
+  reusing the existing tilde regex rather than duplicating it) is refused `_UNCHECKED`, same as the
+  first clause.
+
+  Searched hard for a `_decide`-level input where this clause changes the overall answer, per the
+  measurement discipline, before writing anything (`testbed/scratch/measure_22a_divergence_search.py`,
+  gitignored, deleted after use) -- found none: D2 step 6's whole-value reading always splits the
+  same value at every unmasked colon regardless of the drive exception (D13's own measurement
+  already shows `Z:foo\bar` splitting to `['Z', 'foo\bar']` there, unaffected by the piece
+  reading's drive mask), so any `:~` text always lands its own `~`-leading segment in that other
+  reading, already refused by `_judge_piece`'s pre-existing first clause. `git stash`ing just the
+  production file and rerunning `_decide` on `echo a:b:C:~/y`, `Copy-Item x -Destination:C:~/y`,
+  `echo -xvC:~/y` and `echo [C:~/y]` gave the identical refusal before and after, every time,
+  through the whole-value reading's own copy of the rule -- not this clause. So the new test
+  (`test_a_drive_piece_whose_text_after_the_colon_begins_with_a_tilde_2_2a`) calls `_judge_piece`
+  directly rather than going through `_decide` as every other row in this file does: confirmed by
+  `git stash` that it fails without the fix and passes with it, so it is real evidence the piece
+  reading's own copy of D2 step 5's second clause fires, even though no single-word `_decide` input
+  found so far distinguishes it from the whole-value reading's independent coverage of the same
+  text. `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **127 passed**
+  (was 126, +1). Broader regression set (`test_permission_approver.py`/`test_hub_own_call.py`/
+  `test_copilot_acp_decide.py`/`test_a_write_outside_the_workspace_is_recorded.py`, plus this file):
+  753 passed, 2 skipped, no regressions. `ruff check` and `black --check --target-version py311` on
+  both changed files: clean. `mypy src/`: clean. `openspec validate
+  the-shell-judge-reads-a-word-whole --strict`: valid. `git diff --stat`: exactly
+  `hub/hub/mcp_server.py` and the one test file changed (51 lines), plus this file.
+
+  **Still not built**: the level-by-level escape-removed readings through `_judge_word`, and the
+  `::` not-plain rule before rule 5 (D7). Task stays unticked. 1.7b and 1.7c still need their own
+  fresh re-derivation once those two land -- do not assume they now pass just because both tilde
+  clauses do, each names more than that.
 - [ ] 2.2b D6: `approve_tool_call` catches an exception from `_decide`, denies with a reason and reports it; no return annotation
 - [ ] 2.2c (R4, D9) Add the `hub-judge-windows` job to `.github/workflows/ci.yml` (`windows-latest`, `working-directory: hub`, the `hub-test` install steps with `-c ../constraints-dev.txt`, `pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread`). Run `py -3.11 -m pytest tests/test_dev_constraints.py -q`. After pushing, confirm the job ran and passed, or do not tick
 - [ ] 2.3 Run the eight files named in design D2 plus the new file; expected moves are exactly task 1.8's rows plus the new rows. Record counts
