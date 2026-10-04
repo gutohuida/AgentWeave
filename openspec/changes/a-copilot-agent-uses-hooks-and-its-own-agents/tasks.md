@@ -589,6 +589,8 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
   slice 2's, *Required* 2.9. If slice 2 landed without it, task 2.8 adds it.)
 - [x] 2.7 Run `py -3.11 -m pytest hub/tests/ -q -x` and `ruff check hub/` and
   `black --check --target-version py311 hub/hub/ hub/tests/`.
+  **Done 2026-10-04:** 6632 passed, 93 skipped at 4c054be (full Hub suite, `-n 8`, `claude` off
+  PATH); `ruff check src/ hub/ tests/` and both `black --check` variants clean.
 - [x] 2.8 (**no group; never cut**; review 2026-09-28, finding 6) Confirm slice 2's Copilot
   `guard_env` and `one_shot_env` strip `COPILOT_ALLOW_ALL`, every `COPILOT_PROVIDER_*` name,
   `COPILOT_MODEL` and `COPILOT_OFFLINE` from both the ambient environment and `env_vars` for a spawn
