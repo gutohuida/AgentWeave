@@ -34072,3 +34072,19 @@ recorded error now carries Copilot's `errorType` (`authentication`) and `remedia
 that failed with a root `session.error` whose `errorType` is `authentication` (or `quota`, which
 slice 4 already holds the queue for) is not retried; the entry waits for the operator, as an
 allowance hold does.
+
+## F490 (B) — a run's registered secret is not scrubbed from what the agent writes through its Hub tools
+
+**Status:** open, found 2026-10-04 by the pre-approval Opus review of
+`a-secret-split-across-two-events-is-still-scrubbed` (F488's change; recorded in its Non-goals).
+**Ready:** yes; no change owns it.
+
+`run_secrets.scrub` is applied only where a run's output is recorded: `output_recording.py` and
+`api/v1/agent_trigger.py` are the only importers of `run_secrets` (VERIFIED by the review). Content
+an agent sends through its AgentWeave tools is stored by other routes and never passes it:
+`send_message`, `ask_user`, task updates (`update_task` notes), checkpoint notes, spec documents and
+evidence. A Copilot provider run's key is in its environment (slice 5 D7, accepted), so an agent
+that reads `$MY_ANTHROPIC_KEY` and passes it to one of those tools stores it in the Hub's database,
+outside the run's own stream, and the D7 guarantee ("neither the row nor the broadcast ever holds
+them") does not cover it. **Fix direction (not decided):** scrub with the calling run's registry at
+the tool routes, which already know the run from its credential (`agent_auth.py`).

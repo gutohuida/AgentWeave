@@ -11,6 +11,9 @@ replaced with `<redacted>`, in the stored row and in its broadcast alike. An eve
 first characters of a registered value SHALL have them replaced with `<redacted>` when it is
 recorded, without waiting for the next event, once they number at least half the value's length
 (rounded down) or eight, whichever is fewer. A shorter dangling start MAY be recorded as written.
+A registered value that itself contains whitespace MAY be recorded unredacted where an event
+boundary falls on that whitespace. Whitespace at the start or end of a registered value is not
+part of it: the value SHALL be removed both as registered and without that whitespace.
 
 No event SHALL be delayed, held back or reordered to achieve this, and an event of a run with no
 registered value SHALL be recorded exactly as it was emitted. A recording retried after a locked
@@ -51,6 +54,15 @@ database SHALL produce the same row as one that succeeded first time.
 #### Scenario: Prose that only resembles the start of a value
 - **WHEN** a run with the registered value `plainproxykey123` records a thinking event ending in `Let me explai` and then a text event `n this.`
 - **THEN** both rows are recorded exactly as emitted
+
+#### Scenario: A value split shorter than the dangling-start threshold
+- **WHEN** a run with the registered value `plainproxykey123` records a text event ending in `plainpr`, then a tool call, then a text event beginning with `oxykey123`
+- **THEN** the first text row still ends in `plainpr` and the second text row begins with `<redacted>`
+- **AND** the two text rows read together do not contain `plainproxykey123`
+
+#### Scenario: A value registered with surrounding whitespace
+- **WHEN** a run registers the value `plainproxykey123` followed by a newline, and records a text event `use plainproxykey123 now`
+- **THEN** the row reads `use <redacted> now`
 
 #### Scenario: A run with nothing registered
 - **WHEN** a run that registered no value records text and thinking events

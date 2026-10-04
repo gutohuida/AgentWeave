@@ -22,8 +22,14 @@
   could not fail on the wrong placement, now locks at `commit`; 1.2 must end `completed`; D6 guarded
   so a raise cannot drop the error card; bound re-measured (worst exactly `m - 1`); line numbers
   re-derived; validate passes. Ten corrections in the round log.
-- [ ] 0.3 The pre-approval Opus adversarial review of the change and its decisions (D1-D5, open
+- [x] 0.3 The pre-approval Opus adversarial review of the change and its decisions (D1-D5, open
   questions 1-4). Record its findings and what was done about each in the round log.
+  **Done 2026-10-04 at `9e9bb83`** (no `hub/hub` change since `13f7421`): five findings, each
+  re-measured (`scratchpad/f488rev/subm.py`, `order.py`, `adv.py`). 1.2 now runs every boundary
+  at a split below *m* and asserts exact rows; `register` strips (D7, new 1.1 row); a value
+  containing whitespace is a stated non-goal; 1.8's mutation replaced (the reviewer's
+  `asyncio.sleep(0)` cannot be caught, measured; the scrub moved into the write closure can);
+  over-redaction, tail lifetime and MCP-written content recorded. Open questions 1-3 unchanged.
 - [ ] 0.4 The operator approves the change in `spec-queue/APPROVALS.md`, and answers open
   questions 1-3 (hold or not, and *m*, including the short-value floor; joining across tool
   cards; folding in the log line).
@@ -39,8 +45,11 @@
   output), plus: a value registered next to a longer value that contains it is replaced whole, once;
   `payload["text"] == content` after every rewrite; a `tool_use`/`tool_result`/`error` event is
   returned unchanged and does not move the tail; `forget` drops the tail, so a value split across
-  a forget and a new registration is not joined. **Fails today:** `run_secrets` has no
-  `scrub_stream` (AttributeError).
+  a forget and a new registration is not joined. (Review) Registration strips (design D7):
+  with `plainproxykey123\n` registered, `use plainproxykey123 now` is scrubbed by `scrub` and by
+  `scrub_stream` alike (today it is stored unchanged, measured), the raw value is still replaced
+  where it occurs as written, and a whitespace-only value registers nothing. **Fails today:**
+  `run_secrets` has no `scrub_stream` (AttributeError); the strip row fails on `scrub` alone.
 - [ ] 1.2 In `hub/tests/test_copilot_byok_env.py`, beside
   `test_a_provider_key_is_scrubbed_from_everything_its_run_records`:
   `test_a_provider_key_split_across_events_is_scrubbed`, parametrised over thought→message,
@@ -60,10 +69,22 @@
   Assert: no stored `AgentOutput` row and no `agent_output` broadcast contains the key, and the
   `text`/`thinking` rows' contents, ordered by `sequence`, each stripped and concatenated with
   nothing between them, do not contain it either (R3: "two consecutive rows" missed the
-  tool-card case, where the two text rows are not consecutive); the rows carry `<redacted>` where design D1
-  says; the tool row is unchanged and between the two text rows. **Fails today:** the rows are
-  `I will use plainproxy` and `key123 now.`. Each half passes the per-event scrub, and their
-  concatenation contains the key.
+  tool-card case, where the two text rows are not consecutive); and **every stored row's `kind`
+  and `content`, in `sequence` order, equals the expected list exactly** (review: "carries
+  `<redacted>`" passes with a broken join, because at a split of *m* or more the dangling-start
+  rule alone redacts the first half and the concatenation `I will use <redacted>key123 now.` no
+  longer spells the key). The tool, error and status rows are unchanged and between the text rows.
+  **Every boundary case runs twice** (review): at the split above (10|6, 8|8) and at a split
+  **below *m***, `plainpr` + `oxykey123` (7|9), where the dangling-start rule does not fire and only
+  the carried tail can redact anything. Expected rows at 7|9 (measured through the committed mapper,
+  `scratchpad/f488rev/subm.py`): thought→message `I will use plainpr` / `<redacted> now.`;
+  message→tool→message `Key: plainpr` / tool_use / tool_result / `<redacted> done`; error card
+  `a plainpr` / `boom` / `<redacted> b` (the echo is dropped); compaction `use plainpr` / status /
+  `<redacted> now`; subagent `k plainpr` / `explore finished` / `<redacted> z`; whitespace
+  `I will use plainpr\n\n` / `<redacted> now.`; plus a three-way case at 3|4|9 (`x pla` / `inpr` /
+  `<redacted> y`). message→thought is already 5|11 and message→finish is one event (no join; it
+  tests the dangling rule only). **Fails today:** the rows are `I will use plainproxy` and
+  `key123 now.`. Each half passes the per-event scrub, and their concatenation contains the key.
 - [ ] 1.3 Order guard, in the same file: the thought→message case asserts that the thinking row's
   `sequence` is lower than the text row's. A second assertion feeds the mapper's output to the
   scrub **reversed** and shows the expected rows differ. A test whose fixture order the mapper
@@ -101,11 +122,22 @@
   call's scrub raise and asserts the line is logged without its payload and the `session.error`
   card still reaches `on_event` (design D6, *If that scrub raised*). **Fails today:** the payload is
   logged whole.
-- [ ] 1.8 Order under interleaving: two `_on_event` calls for one run whose writes are made to
-  complete in the reverse order (the first write's `_record_observation` blocked on an event until
-  the second has returned). The stored rows, read by `sequence`, carry `<redacted>` exactly as in
-  the sequential case. **Fails today** (nothing joins). After group 2, record that it also FAILS
-  with the `scrub_stream` call moved after the first `await` in `_on_event`.
+- [ ] 1.8 Order under interleaving: two `_on_event` calls for one run (`I will use plainpr` then
+  `oxykey123 now.`, the 7|9 split, so only the tail can redact), started as two tasks from the fake
+  `run_turn`, whose writes complete in the reverse order: wrap `agent_trigger._record_observation`
+  (module-global, called by name from `_on_event`) so that, for the first of the two events' `what`
+  (`output <n>`), it awaits an `asyncio.Event` before delegating to the real function; the test sets
+  the event only after the second `_on_event` has returned. The first call is then blocked **before its write closure is
+  invoked**. The stored rows, read by `sequence`, equal the sequential case exactly. **Fails today**
+  (nothing joins). **Mutation (review, corrected):** after group 2, move the `scrub_stream` call
+  into the write closure (`lambda db, …: record_agent_output(…, content=scrub_stream(…).content, …)`);
+  record that 1.8 then FAILS, because the second event is scrubbed against an empty tail and the
+  first against a tail ending in `oxykey123 now.`. The reviewer's suggested mutation, an
+  `await asyncio.sleep(0)` before the scrub, cannot be caught by any test and is not used: asyncio
+  resumes ready tasks in FIFO order, so both calls still scrub in `sequence` order (measured,
+  `scratchpad/f488rev/order.py`: sync and `sleep(0)` keep order, the closure placement reverses it).
+  The hazard is an `await` that waits on something else (a session, a lock), which is what the
+  closure placement puts there.
 
 ## 2. The fix
 
@@ -116,8 +148,9 @@
   `RunEvent` with `content` and `payload["text"]` rewritten for `text`/`thinking`, and returns any
   other event unchanged. A run with nothing registered returns the event unchanged and creates no
   state. Whitespace at an event boundary is skipped (D1 steps 1, 2 and 4) and kept as written in
-  the output. `forget` drops the tail. Update the module docstring's "Every writer…" paragraph to
-  explain the stream case and cite F488.
+  the output. `forget` drops the tail. `register` keeps each value stripped, and the raw value too
+  when it differs, dropping any that strip to empty (design D7). Update the module docstring's
+  "Every writer…" paragraph to explain the stream case and cite F488.
 - [ ] 2.2 `hub/hub/api/v1/agent_trigger.py`: call `run_secrets.scrub_stream(run_id, event)` once
   per event, before building the `_record_observation` write, at `_execute_run`'s event loop and
   at `_execute_rpc_run`'s `_on_event`, **in the same synchronous step as `sequence += 1`** (no

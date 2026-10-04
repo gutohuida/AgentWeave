@@ -6,9 +6,13 @@
    pass after it. 1.2 and 1.3 drive the real `CopilotEventMapper`, so their fixture order is the
    mapper's. Check that no case builds its event list by hand.
 2. **Mutations, one at a time, each restored afterwards:**
-   - drop the carried tail (`joined = c`): every row of 1.2 fails;
-   - drop the dangling-start rule: the "message → finish" and three-way rows fail, and so does
-     1.2's thought→message row, because the thinking row keeps `plainproxy`;
+   - drop the carried tail (`joined = c`): every multi-event row of 1.2 fails, at both splits,
+     because 1.2 asserts exact rows (at 10|6 the later row stays `key123 now.`; at 7|9 the
+     concatenation spells the key). The one-event message→finish row does not, by construction: it
+     tests the dangling rule, not the join. Measured, `scratchpad/f488rev/subm.py`;
+   - drop the dangling-start rule: the "message → finish" and three-way rows fail, and so do
+     1.2's 10|6 and 8|8 rows, because the first text row keeps its half; the 7|9 rows pass (the rule
+     does not fire below *m*), which is why both splits are run;
    - set `m` to 1: the `explai` false-positive row of 1.1 fails;
    - drop the boundary-whitespace skip (`joined = tail + c`, tail not right-stripped): 1.1's two
      whitespace rows and 1.2's thought-ending-in-a-blank-line row fail;
@@ -16,7 +20,11 @@
      is raised at the real function's `commit`, not before the real function runs; otherwise this
      mutation passes;
    - call it at only one of the two executor sites: 1.2 (RPC) or 1.4 (`exec`) fails.
-   - move the call after `_on_event`'s first `await`: 1.8 fails;
+   - move the call into `_on_event`'s write closure, so it runs when `_record_observation` invokes
+     the write: 1.8 fails (its first write is held before the closure runs). An
+     `await asyncio.sleep(0)` before the call is not a usable mutation: asyncio resumes in FIFO
+     order, so no test can see it (measured, `scratchpad/f488rev/order.py`);
+   - make `register` keep values unstripped: 1.1's strip row fails;
    - drop the scrub from the `session.error` log line (if folded in): 1.7 fails;
    - let a raise from that scrub propagate: 1.7's third case fails (the error card is lost).
 3. **Nothing else moved.** The controls in 1.6 pass before and after. The full Hub and CLI suites

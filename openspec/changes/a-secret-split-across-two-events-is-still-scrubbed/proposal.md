@@ -58,6 +58,9 @@ row and fails for the run.
   the same text in twice. `record_agent_output`'s per-event scrub stays as it is, as the floor for
   every kind and every caller.
 - `run_secrets.forget` also drops the run's tail.
+- **`run_secrets.register` strips each value** (design D7, from the pre-approval review): a key
+  resolved with a trailing newline or space is registered without it as well as as written, so
+  the model's copy of it, which carries no such whitespace, is matched.
 - **The `session.error` log line is scrubbed** (design D6; R2- and R3-recommended, subject to the
   operator's open question 3). `copilot_acp.py:2124-2130` logs a `session.error` payload whole to
   the Hub log; it is passed through `run_secrets.scrub` with the run's id before it is serialised
@@ -79,7 +82,15 @@ row and fails for the run.
 - **Fragments that are not at an event boundary.** Exact-value matching has never hidden a part of
   a value that the model writes on its own, and this change does not start. That includes a value
   split across two parts of one Codex app-server reasoning item, which the Hub joins with a space
-  inside one event (`hub/hub/codex_appserver.py:428`): it is inside an event, so it is not joined.
+  inside one event (`hub/hub/codex_appserver.py:426-428`): it is inside an event, so it is not joined.
+- **A registered value that contains whitespace, split at that whitespace.** Whitespace at an event
+  boundary is skipped when joining, so such a value is not matched across that boundary (design
+  D1). API keys contain no whitespace.
+- **A value split across two runs.** The tail is per run and in memory; the next run of a
+  conversation, or a Hub restart, starts with none (design D1).
+- **What an agent writes through the Hub's MCP tools** (`send_message`, `ask_user`, task updates,
+  checkpoint notes, evidence, spec documents). None of those routes scrubs registered values at all
+  today; that is a separate gap, filed as its own finding, not a split-value case.
 - **Holding events back** so that no fragment is ever visible. Rejected in design D3; see the
   operator's open question 1.
 - **The Hub's log beyond the `session.error` line.** No other log line is known to carry model
@@ -105,8 +116,8 @@ None.
 ## Impact
 
 - `hub/hub/run_secrets.py`: per-run tail state, a `scrub_stream(run_id, event)` that returns the
-  event with `content` and `payload["text"]` rewritten for `text` and `thinking` events, and
-  `forget` clearing the tail.
+  event with `content` and `payload["text"]` rewritten for `text` and `thinking` events,
+  `forget` clearing the tail, and `register` keeping each value stripped as well as raw.
 - `hub/hub/api/v1/agent_trigger.py`: the two stream-recording sites call it, beside
   `sequence += 1`, before building the `_record_observation` write.
 - `hub/hub/copilot_acp.py`: the `session.error` log line scrubs its payload, and logs it without

@@ -174,11 +174,27 @@ visible (16 of 16 characters of `plainproxykey123`, 29 of 29 of an `sk-ant-api03
 4% of random splits; with the skip, at most `m - 1`, always a prefix. Whitespace inside an event is
 not skipped: a value split by a space inside one event is a non-goal, as before.
 
+**The cost of the skip (review).** A registered value that itself **contains** whitespace is not
+joined when an event boundary falls on that whitespace: with `plain proxykey123` registered,
+`use plain ` + `proxykey123 now` is joined as `use plainproxykey123 now`, which does not contain
+the value, and both rows are stored as written (measured, `scratchpad/f488rev/adv.py`). Split
+anywhere else (`plainpr` + `oxy key123`) it is caught. API keys contain no whitespace, and the
+only value registered today is `COPILOT_PROVIDER_API_KEY`, so this is a stated non-goal (proposal,
+spec), not a fix.
+
 Other kinds pass through unchanged and leave `tail` as it is. So the tail spans tool cards (D2),
 errors, diagnostics and status rows. A run with nothing registered returns the event unchanged and
 creates no state. `forget` drops the tail with the values, so the state lives exactly as long as
 the run's task and holds at most `L - 1` characters per running run (the values themselves are
 already held whole in `_by_run`).
+
+**Tail lifetime across runs (review).** The tail is per run and in-process. A conversation's next
+run (a resumed Copilot or Claude session, a queued follow-up) has a new `run_id`, registers again
+and starts with an empty tail, and a Hub restart drops every tail with `_by_run`. So a value split
+between the last text of one run and the first text of the next is not joined, although the
+timeline shows the two rows together. A model turn does not end mid-token and resume it in the next
+turn in any observed transcript; the residual is named, not fixed. A late `scrub_stream` call after
+`forget` finds nothing registered and creates no state (R3).
 
 Prototype (R2, scratch only, re-run independently against HEAD `4c054be`'s `CopilotEventMapper`,
 value `plainproxykey123`, `m = 8`, each event then passed through today's `run_secrets.scrub`).
@@ -275,6 +291,13 @@ whatever follows. R2 measured the false positives through the prototype:
   (`run pytest` → `run py<redacted>`), so a short value garbles the timeline with or without this
   change. A floor (`m = max(4, …)`) would trade that for showing up to 3 characters of a 4- to
   7-character value. Open question 1.
+- **Other over-redaction (review), all cosmetic and toward hiding.** Prose ending on a key's public
+  prefix of `m` or more characters loses it: with an `sk-proj-…` key registered, `OpenAI keys start
+  with sk-proj-` → `OpenAI keys start with <redacted>` (8 characters, `m = 8`). A self-overlapping
+  value can mark characters past its own end: with `abababababababab` registered, a text
+  `x abababababababab` then `ab yes` stores `x <redacted>` and `<redacted> yes`, because an
+  occurrence shifted by two crosses into the next event. Neither shows any of the value; both
+  remove a few characters of ordinary text. Measured, `scratchpad/f488rev/adv.py`.
 
 ### D5 — F278's `_redaction_for` and this change do not interact
 
@@ -309,6 +332,35 @@ one place where a raise must not propagate: on a raise the line is logged **with
 This is a log line, not a record, so the rule below against a broad `except` does not apply to it. One line and one `caplog` test; same guarantee family as D7 of slice 5, and
 the log is where an operator pastes from when reporting a failure. If the operator declines, it
 is filed as its own finding instead.
+
+### D7 — `register` strips each value (review)
+
+`register` keeps each value exactly as resolved (`run_secrets.py:24-29`, VERIFIED-CODE: `{value
+for value in values if value}`, no strip). A key pasted into an agent's `env_vars` or the Hub's
+environment with a trailing newline or space (`plainproxykey123\n`) is registered with it, and the
+model, which writes the key without it, is never matched: `use plainproxykey123 now` passes `scrub`
+unchanged today, and passes D1 too (measured, `scratchpad/f488rev/adv.py`). Whether the child CLI
+strips the value before using it is INFERRED; it does not matter, since the model's text is what
+the scrub reads. So `register` keeps `value.strip()` for each value, and the raw value as well when
+it differs (it can still appear as written, in a lifecycle `stderr_tail` say), and drops a value
+that strips to empty (a whitespace-only value would otherwise replace every run of spaces). The
+longest-first order and `L` are computed over the kept set. One line in `register`; test 1.1's strip
+row.
+
+### Non-goals and residuals (design-side; the proposal's Non-goals list them too)
+
+- **A value containing whitespace, split at that whitespace** (D1, *The cost of the skip*).
+- **A value split across two runs** (D1, *Tail lifetime across runs*).
+- **Inside one event**: Codex app-server joins a reasoning item's summary and content parts with a
+  space (`codex_appserver.py:426-428`, VERIFIED-CODE), so a value split across two parts reads as
+  `plainproxy key123` inside one `thinking` event. That is a fragment inside an event, not at a
+  boundary, and stays out of scope.
+- **Content an agent writes through the Hub's MCP tools.** `send_message`, `ask_user`, task
+  updates, checkpoint notes, evidence and spec documents are stored by their own routes
+  (`api/v1/agent_actions.py`, `tasks.py`, `spec.py`, …), none of which calls `run_secrets`
+  (VERIFIED-CODE: `run_secrets` is imported only by `output_recording.py` and `agent_trigger.py`).
+  An agent that pastes its key into a message or a spec document stores it whole. That is not a
+  split, and not this change; it is filed as its own finding.
 
 ## What each caller does when `scrub_stream` raises
 
@@ -363,6 +415,9 @@ changes the run's outcome as above, never the route's response. `POST /agents/{n
    alternative is filing it as its own finding. **R3 concurs: fold it in**, with D6's guard so a
    raise cannot drop the error card. It is one call on the same registry, the payload is exactly
    the provider error that quotes a key, and the log is what an operator pastes into a report.
+The pre-approval review (round log) left questions 1-3 and their recommendations unchanged; they
+remain open for the operator.
+
 4. **Ordering with slice 5** (for information). This change adds to `agent-stream-events` and does
    not depend on slice 5's `runner-registry` delta archiving first. It does depend on `run_secrets`
    existing, and it does (committed).
@@ -469,3 +524,37 @@ changes the run's outcome as above, never the route's response. `POST /agents/{n
   Recommendations on the open questions: (1) no hold, `m` as written, no floor; (2) join across
   cards, now required for the raw-event cards the mapper itself creates; (3) fold the log line in,
   with the guard.
+- **Pre-approval review (Opus), 2026-10-04:** an adversarial review of the change and D1-D6 with its
+  own measurement script (`scratchpad/f488rev/adv.py`, over R3's `proto.py`); applied by a
+  subagent at `9e9bb83` (`git diff --stat 13f7421 9e9bb83 -- hub/hub` is empty, so every line
+  number above stands). Each finding was re-measured before it was written down
+  (`scratchpad/f488rev/subm.py`, `order.py`). Changes:
+  1. **Test 1.2 could pass with a broken join** (should-fix, confirmed). At every split of *m* or
+     more, the dangling-start rule alone redacts the first half, and with the tail dropped the rows
+     become `I will use <redacted>` / `key123 now.`, whose concatenation no longer spells the key.
+     1.2 now asserts every row's exact `kind` and `content`, and runs each boundary case (tool,
+     error, compaction, subagent, whitespace) also at 7|9 (`plainpr` + `oxykey123`), plus a three-way
+     case at 3|4|9; expected rows listed in the task. The test guide's "drop the tail → every row of
+     1.2 fails" was not quite true even then: the one-event message→finish row cannot fail on it.
+     Corrected to "every multi-event row".
+  2. **`register` does not strip** (should-fix, confirmed at `run_secrets.py:27`). New D7: keep the
+     stripped value and the raw one, drop an empty one. Task 2.1, test 1.1's strip row, a test-guide
+     mutation, a spec scenario.
+  3. **A value containing whitespace is not joined at that whitespace** (should-fix, confirmed:
+     `plain proxykey123` split at its space is stored unredacted). Stated in D1, the design's new
+     Non-goals list, the proposal's Non-goals and the spec requirement.
+  4. **Test 1.8's mutation was vacuous** (should-fix, confirmed, and the suggested replacement
+     corrected). "Move the call after the first `await`" puts it after the write, which every test
+     catches, not 1.8 specifically. The reviewer's alternative, `await asyncio.sleep(0)` before the
+     scrub, is not detectable by any test: asyncio resumes ready tasks FIFO, so the scrubs still run
+     in `sequence` order (`order.py`: sync and `sleep(0)` keep order). The usable mutation is the
+     scrub moved into the write closure, which a test reverses by holding the first call's
+     `_record_observation` before it invokes the closure (`order.py`: reversed). 1.8 rewritten that
+     way, at the 7|9 split so only the tail can redact.
+  5. **Notes recorded** (confirmed): over-redaction by a key's public prefix (`sk-proj-`) and by a
+     self-overlapping value, cosmetic and toward hiding (D4); the Codex app-server reasoning-part
+     join (`codex_appserver.py:426-428`) stays a non-goal; the tail's lifetime across runs and a
+     restart (D1); content written through MCP tools is not covered by `run_secrets` at all
+     (Non-goals; to be filed as its own finding by the coordinator).
+  Open questions 1-3 unchanged and still the operator's: recommended no hold, `m = min(8, len // 2)`
+  with no floor; join across cards; fold the log line in with D6's guard.
