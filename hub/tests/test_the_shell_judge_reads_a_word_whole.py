@@ -558,6 +558,39 @@ def test_a_glob_link_s_dotdot_tail_refuses_before_reading_a_literal_name_after_i
     assert "it resolves to" in decision["reason"]
 
 
+# 1.4f (R8, design D12 Costs, third review's LOW): the Hub's own shared-dependency link
+# (`worktrees.py`, `_symlink_shared_dependencies`) links `work/node_modules` to a sibling
+# checkout's `node_modules`, whose parent (the checkout) is outside the workspace -- the same
+# shape every JavaScript worktree can hold, not only a workspace's own shallower inside link.
+# Its own fixture, kept separate from the shared one so that fixture's root-level globs stay
+# unchanged, built with `_link` (a junction on Windows, the same shape the design's own R8 scratch
+# measured -- this machine has no privilege for a real symlink, see line ~1005 above). Measured
+# directly against `_decide` first (`testbed/scratch/measure_14f_r8_shared_dep.py`, gitignored,
+# not committed): both rows are already correctly refused by D12's existing `_physical` walk,
+# naming the checkout's `src/x` after "it resolves to" -- no production change needed.
+def test_a_dotdot_after_the_shared_dependency_link_resolves_to_the_checkout_1_4f_r8(
+    tmp_path, monkeypatch
+):
+    checkout = tmp_path / "checkout"
+    work = tmp_path / "work"
+    (checkout / "node_modules").mkdir(parents=True)
+    (checkout / "src").mkdir()
+    (checkout / "src" / "x").write_text("x")
+    work.mkdir()
+    _link(work / "node_modules", checkout / "node_modules")
+    monkeypatch.setenv("AW_WORKSPACE_DIR", str(work))
+    monkeypatch.setenv("HUB_URL", _HUB)
+    monkeypatch.delenv("AW_RUN_TOKEN", raising=False)
+
+    bash = _decide("Bash", {"command": "cp n node_modules/../src/x"})
+    assert bash["allow"] is False
+    assert "it resolves to" in bash["reason"]
+
+    write = _decide("Write", {"file_path": str(work / "node_modules" / ".." / "src" / "x")})
+    assert write["allow"] is False
+    assert "it resolves to" in write["reason"]
+
+
 # D8 step 2's bracket relaxation, re-derived from the design text again (not iteration 19's own
 # reading) and sized the same way: a bracket expression the piece's last component holds is kept
 # exact for `fnmatch` when it is one `fnmatch` already reads as the shell does, and relaxed to `?`

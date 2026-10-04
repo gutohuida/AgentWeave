@@ -582,7 +582,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   production change needed this iteration (task 2.2 had already done the wiring). This does not
   close task 1.4c itself, which has its own separate open rows (the Windows-side POSIX-class gap,
   the absolute top-level dot-glob gap, and the bash-dot-rule control gap -- see 1.4c's own notes).
-- [ ] 1.4f (R6, D12, operator `B4-link-dotdot`, link fixture with `sub/l` → `work`) **a `..` after a link**, refused as outside, the reason naming the workspace's parent:
+- [x] 1.4f (R6, D12, operator `B4-link-dotdot`, link fixture with `sub/l` → `work`) **a `..` after a link**, refused as outside, the reason naming the workspace's parent:
   - `cp n sub/l/../y`, `echo hi > sub/l/../x1`, `ls sub/l/../x`. On the `hub-judge-windows` job each FAILS today (allowed: `ntpath.realpath` removes the `..` first, measured). On Linux each PASSES today (`posixpath.realpath` is physical); keep them there as controls.
   - `cp n sub/l*/..` and `ls sub/l*/../x`, both platforms. Each PASSES today only by the tail (`'/l*/..'`, `'/l*/../x'`), so assert that the reason quotes the whole piece (`'sub/l*/..'`, `'sub/l*/../x'`) and names the workspace's parent after "it resolves to", which FAILS today; each FAILS against R5 (allowed: the walk's `..` matched no listing entry). (R7) The "names the parent" half also FAILS against R6 as written, whose `_judge_path` on the real parent gives the bare `_OUTSIDE` (measured); it needs design D8 step 4's `_resolves_elsewhere(<listed>/.., <real parent>)`.
   - (R7) A literal component after a glob that is a junction: `ls i*/l/../x` (with `in` → `work/sub`, so `i*/l` is the junction `sub/l` → `work`) refused, naming the workspace's parent. FAILS against a step-4 link test built on `os.path.islink`, which is False for a junction on Python 3.11 (Windows job); PASSES today only by the tail `'/l/../x'`.
@@ -638,13 +638,33 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   task (2.0b, 2.1c) also did. `ruff check` and `black --check --target-version py311` on the test
   file: clean. `git diff --stat`: only the one test file and this task file changed.
 
-  **Task 1.4f still stays unticked.** What remains is only the R8 shared-dependency-link fixture
-  bullet just above (a *new* fixture -- `checkout/node_modules`, `checkout/src`, and
-  `work/node_modules` a link to `checkout/node_modules`, distinct from the shared fixture so its
-  root-level globs stay unchanged) and its two rows (`cp n node_modules/../src/x`, and
-  `_decide("Write", {"file_path": .../node_modules/../src/x})`). Size that as its own next slice --
-  re-derive `_symlink_shared_dependencies` (`hub/hub/worktrees.py`) first to build the fixture's
-  link the same way the Hub really makes it, not assumed.
+  **Iteration 53.** Built the one remaining piece: the R8 shared-dependency-link fixture, in its
+  own `tmp_path`-based setup (not the shared `workspace` fixture), kept separate so the shared
+  fixture's root-level globs stay unchanged -- `checkout/node_modules`, `checkout/src/x`, and
+  `work/node_modules` a link to `checkout/node_modules`, via the test file's own `_link` helper (a
+  junction on Windows), matching the direction and naming `_symlink_shared_dependencies`
+  (`hub/hub/worktrees.py`) actually uses (`target.symlink_to(source, ...)`, `target` inside the
+  worktree, `source` in the checkout) -- re-derived from that function directly before building,
+  per the prior note's own instruction. Used a junction rather than a real symlink because design
+  D12 Costs's own R8 scratch measurement did too ("Measured in the R8 scratch, with
+  `ws/node_modules` a junction to `checkout/node_modules`") and because this machine cannot build a
+  real symlink without privilege (measured earlier in this file, `OSError: WinError 1314`) -- a
+  junction is sufficient here since `_physical`'s resolution is `os.path.realpath`, which follows a
+  junction's reparse point the same way it follows a symlink. Measured both named rows directly
+  against `_decide` first (`testbed/scratch/measure_14f_r8_shared_dep.py`, gitignored, deleted
+  after use, not committed): both are **already correctly refused** by D12's existing `_physical`
+  walk, naming the checkout's `src/x` after "it resolves to" -- no production change needed, so no
+  mutation check (confirmed by reading `_physical`/`_where` directly, not assumed). Added
+  `test_a_dotdot_after_the_shared_dependency_link_resolves_to_the_checkout_1_4f_r8`. `py -3.11 -m
+  pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 124 passed (was 123, +1).
+  Broader regression set (`test_permission_approver.py`/`test_hub_own_call.py`/
+  `test_copilot_acp_decide.py`/`test_a_write_outside_the_workspace_is_recorded.py`): 626 passed, 2
+  skipped, no regressions. `ruff check` and `black --check --target-version py311`: clean.
+  `openspec validate the-shell-judge-reads-a-word-whole --strict`: valid. `git diff --stat`: only
+  the test file and this task file changed -- no production file touched.
+
+  **Task 1.4f ticks.** Every row this task names is now either tested directly under its own test
+  or already covered, and measured, under another task's test name (documented above).
 - [x] 1.4g (R8, design D2 step 6, the third review's HIGH; the shared fixture's `sub/@s/p`, `a'b/up` and `a@b/l`) **the whole value is judged as the path it spells**. Refused, each naming where it resolves:
 
   **Iteration 25 note.** Built as task 2.2's second slice; see that task's own note for the
