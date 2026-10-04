@@ -20,8 +20,9 @@ The path that is lost most reliably is the one under `.agentweave/worktrees/`, w
 own checkout. That is often the destination an operator reading a transcript wants to find. Every
 Docker deployment is Linux, so its paths use `/`. On Windows, `\` is outside the class and paths
 survive, which is why this has gone unnoticed on the development machine. `redact_secrets` is also
-applied to loop error summaries (`scheduler.py:94`), so a POSIX path in an exception is eaten there
-too.
+applied to loop error summaries (`scheduler.py:97`), so a POSIX path in an exception is eaten there
+too, and to a run's diagnostic summary and facts (`runner_events.py:248`, `:259`; added with the
+Copilot runner after R2), which name paths under the run's home and workspace.
 
 The main spec already sets the bound this breaks. *Structured payload safety*
 (`openspec/specs/agent-stream-events/spec.md:101`) says redaction "SHALL be bounded so that it does
@@ -35,8 +36,10 @@ third. All three come from the same catch-all.
   `/` into **at least three** non-empty segments, and each segment must be an ordinary word: either
   lowercase letters and digits, or capitalised or camel-case letters (`Users`, `AgentWeave`). Every
   other match is redacted exactly as today.
-- **A segment of 32 or more characters is still judged by itself.** A long hex or base64 value used
-  as a URL segment (`…/tokens/<40 hex>`) is redacted even though the rest of the path survives.
+- **A segment of 32 or more characters is still judged by itself.** A long lowercase hex value used
+  as a URL segment (`…/tokens/<40 hex>`) is redacted even though the rest of the path survives. A
+  credential-length segment with capitals in it (mixed-case base64) is not an ordinary word, so the
+  whole run is redacted as it is today, path included (R3; D1's rejected alternative B).
 - The two recognised prefixes (`aw_live_`, `sk-`) and the field-name rule are unchanged.
 - The CLI's own `agentweave.diagnostics.SECRET_VALUE_RE` (`src/agentweave/diagnostics.py:43`) is
   **not** changed. Its class is `[A-Za-z0-9_=-]`, with no `/`, so it never had F278.

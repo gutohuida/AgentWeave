@@ -37,7 +37,7 @@ The serialized payload SHALL be at most 64 KiB, and a retained tool-result excer
 - **THEN** the path SHALL survive redaction intact
 
 #### Scenario: A credential used as a path segment
-- **WHEN** a payload contains a URL or path one of whose segments is a 32-character or longer hex or base64 value
+- **WHEN** a payload contains a URL or path one of whose segments is a 32-character or longer value of lowercase letters and digits, such as a hex token
 - **THEN** that segment SHALL be redacted
 - **AND** the segments around it SHALL survive
 

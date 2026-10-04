@@ -5,8 +5,12 @@
   `openspec/specs/agent-stream-events/spec.md:101-124`. Re-run D2's measurement, including the
   random-base64 residual, and do not trust R1's numbers. Grep `hub/hub` and `hub/ui/src` for
   anything that reads `<redacted>` back.
-- [ ] 0.2 R3: a second independent re-derivation. `openspec validate
+- [x] 0.2 R3: a second independent re-derivation. `openspec validate
   a-file-path-is-not-redacted-as-a-credential --strict` passes.
+  **R3 (2026-10-04, interactive):** recorded in design.md's round log. D2 reproduced on `20bc8c1`
+  (0 of 400,000 residual). Corrected: five call sites; "hex or base64" segment → lowercase hex, with
+  alternative B rejected and measured (698 of 400,000 random keys leak fragments); task 1.3's
+  prefix case, whose expected output was wrong. `openspec validate --strict`: valid.
 - [ ] 0.3 The operator approves the change in `spec-queue/APPROVALS.md`.
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
@@ -24,9 +28,15 @@ In `hub/tests/test_operator_is_told_the_truth.py`, beside the F31 and F118 cases
   `/v1/tokens/<redacted>` and contains no hex digit run longer than 8. Record that it FAILS today:
   the output is `https://api.example.<redacted>`, which drops the path.
 - [ ] 1.3 `test_a_base64_credential_with_slashes_is_still_redacted`: for
-  `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`, and for a value with `sk-` or `aw_live_` followed by
-  `/`-separated lowercase words (the prefix alternatives must never go through the path
-  exemption), the output is `<redacted>`. Control: PASSES today and must keep passing.
+  `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`, the output is `<redacted>`; and for
+  `/workspace/project/` + 32 mixed-case letters and digits + `/app.py`, the output is
+  `<redacted>.py` (D1 keeps no fragment of a run that fails the ordinary-word test; alternative B
+  rejected). Control: both PASS today and must keep passing. (R3) For `sk-abc/def/ghi/jkl/mno/pqr`
+  and the same with `aw_live_`, the output is `<redacted>/def/ghi/jkl/mno/pqr` (the prefix class
+  has no `/`; measured today and under D1). Because a prefix match can never contain `/`, D1 item
+  1's guard is tested on `_redaction_for` directly, with a stub match whose `group(0)` is the
+  path-shaped `sk-abc/def/ghi/jkl` and whose `lastgroup` is not `entropy`: the result is
+  `<redacted>`. Record that it FAILS with item 1 removed (the stub then passes items 2 and 3).
 - [ ] 1.4 Controls: `test_a_credential_is_still_redacted`, `test_the_hubs_own_vocabulary_survives_redaction`,
   `test_a_task_id_is_not_a_credential`, `test_anchoring_the_prefix_does_not_cost_a_real_key` and
   the two loop-error-summary tests keep passing unchanged. Run them before group 2 and record the
