@@ -1127,7 +1127,7 @@ was relied on as evidence). **120 passed**, broader regression set **746 passed,
 and `black` clean. Task 1.4c's Windows-side POSIX-class/colon-split gap is closed; its other two
 named gaps are untouched.
 
-### D14 (R1 draft — awaits R2, R3 independent re-derivations) — `_glob_links` has no bash dot rule
+### D14 (R2 — independent re-derivation; corrects two gaps in R1's draft) — `_glob_links` has no bash dot rule
 
 **The defect (task 1.4c's (R5) control row, carried unconfirmed since iteration 39's finding (1);
 re-measured this round fresh against the running code, not assumed from either iteration 39's or
@@ -1236,6 +1236,83 @@ flag) — not yet re-derived for `dotglob` specifically, only assumed to carry o
 **Fresh measurement only; no production file touched this round.** `git diff --stat` is empty for
 `hub/hub/mcp_server.py`. Adds `testbed/scratch/measure_1_4c_bash_dot_rule.py` (gitignored, not
 committed).
+
+**R2 (independent re-derivation, fresh before re-reading R1's own text a second time).** Re-read
+`_judge_word`, `_judge_piece`, `_judge_pieces_reading`, `_judge_whole_value`, `_judge_pieces`,
+`_glob_links`, `_globstar_walk`, `_rewrite_dotdot_globs` and `_Budget` directly from
+`hub/hub/mcp_server.py` rather than from R1's own paragraph describing them, then checked each of
+(a), (b) and (c) against that fresh reading.
+
+**(a), re-scoped: confirmed no already-passing test's answer moves, but R1's own plumbing
+description is incomplete.** Walked every dot-sensitive, bracket, extglob and POSIX-class fixture
+in `hub/tests/test_the_shell_judge_reads_a_word_whole.py` directly (not re-reading R1's claim that
+none would move): `test_an_absolute_or_piece_relative_glob_is_matched_through_the_link_it_finds_1_4c_r5`'s
+`.l`-via-`?l` row is PowerShell only, outside this change's bash-only scope; `test_a_dot_leading_glob_is_also_matched_against_the_link_it_finds_2_1c`'s
+`sub/.*/y` row matches `.l` through a pattern (`.*`) that itself starts with `.`, so it keeps
+matching under the new guard unchanged; `test_a_globstar_walk_also_matches_a_link_several_levels_down_1_4d`'s
+matched entries (`deep`, `l`) are not dot-leading; every bracket row in
+`test_a_bracket_expression_is_matched_or_kept_exact_as_fnmatch_can_read_it_1_4c_r8` and every
+extglob row in `test_an_extglob_group_is_masked_to_star_through_the_link_it_finds_1_4c` matches `up`,
+not a dot-leading name. **No currently-passing test's answer moves.**
+
+But `grep -n "_judge_piece("` finds **three** call sites, not R1's claimed one:
+`_judge_pieces_reading` (line 2156) and **two** inside `_judge_whole_value` (lines 2200 and 2207) —
+R1's draft named only the first. `_judge_whole_value` itself takes no `dialect` parameter today
+(its signature is `(value, root, argument, continues, budget)`); it is called from `_judge_pieces`
+at two sites (the plain reading and the quote-stripped reading, both around lines 2231-2243), which
+*does* already hold `dialect` in scope. So the plumbing R1 described — add `dialect` to
+`_judge_piece` and fix up "its one call site" — would leave `_judge_whole_value`'s two calls either
+broken (a added required parameter with no caller update) or, if given a default, silently never
+bash-aware for that reading. **Corrected plumbing:** add `dialect` to `_judge_whole_value`'s own
+signature too, threaded from both of `_judge_pieces`'s call sites, in addition to the parameter on
+`_judge_piece` and its three (not one) call sites. This matters in practice, not only in form: the
+whole-value reading is the one D13 just built the drive-letter/bracket-colon split for
+(`cp n t:d/up/x`), and it reaches `_glob_links` exactly like the piece reading does — without this,
+a bash command matched only through the whole-value reading would never get the dot rule at all.
+
+**(b), re-scoped: the over-approximation reasoning holds, but the proposed read point misses an
+extglob case.** Design's own D8 step 2 text (above, R6) already states the principle this reuses:
+"Bash 5.2 does not match a leading dot that way [a bracket-opened component]... but older bash is
+not measured, and a wider match only adds refusals" — so treating *any* `[`-opened pattern as
+dot-matching, not only one provably capable of matching `.`, is the stated design choice, not a
+narrower rule R1's hedge disagrees with. Confirmed against every bracket row named in D8 step 2's
+own worked list (`[0-9]`, `[u]p`, `[t-v]p`, `[[:alpha:]]p`, `[^a]p`, `[!u]p`, `[\u]p`,
+`[[:digit:]]`, `[^a]`): none begins with `.`, all begin with `[`, so the generic "starts with `[`"
+hedge treats every one the same way `_rewrite_dotdot_globs`'s own D11 hedge already does. No
+disagreement found between the two bracket checks.
+
+But re-deriving from `_holds_glob_character`'s own reasoning ("`@(u)p` has none of `* ? [` of its
+own") surfaced a case neither R1 nor the rows above cover: an extglob group whose alternative
+itself begins with `.` — `@(.|..)p` — reads, raw, as starting with `@`, not `.` or `[`, so R1's
+check would **not** exempt it from the dot-skip. Under real bash this group can expand to match a
+dot-leading name (the same reasoning `_rewrite_dotdot_globs` already relies on via
+`_extglob_alternative_begins_with_dot` for its own, different, `..`-rewrite question); skipping a
+dot-leading entry here would be the wrong direction — not a residual over-approximation but a
+possible **under-refusal**, since a real shell's own match the checker fails to examine is exactly
+the gap this whole task exists to close. **Corrected rule:** the dot-skip is also waived when
+`_extglob_group_spans(pattern)` is non-empty and `_extglob_alternative_begins_with_dot(pattern,
+spans)` is true — reusing those two existing helpers directly (not reimplementing the alternative
+scan), the same way `_rewrite_dotdot_globs` already does for its own, adjacent question.
+
+**(c) confirmed, not merely by analogy.** `grep -n "_Budget("` finds exactly one construction site
+(`hub/hub/mcp_server.py:3165`), `budget = _Budget(globstar_named=bool(_GLOBSTAR_RE.search(command)))`
+— a plain regex search over the whole top-level `command` string. A nested shell's own literal
+text (`sh -c 'shopt -s dotglob; ls ?l'`) is itself a substring of that same string, so the search
+finds `dotglob` there exactly as it would find `globstar` in `bash -O globstar -c '...'` — not by
+analogy to how `globstar_named` behaves, but because `dotglob_named` would use the identical
+mechanism (one regex over one string, read once, before any nested `_read_command` call), with no
+nesting-aware logic in it to differ. **Confirmed directly from the single call site, no gap.**
+
+**R2 verdict: (c) confirmed clean; (a) and (b) each had a real, concrete gap in R1's draft, both
+corrected above (the third `_judge_piece`/`_judge_whole_value` call site; the extglob-alternative
+case via `_extglob_group_spans`/`_extglob_alternative_begins_with_dot`). No already-passing test
+moves. R3 must still independently re-derive the corrected proposal fresh — not re-read this
+round's own text — before any `mcp_server.py` line changes, per the round discipline: R2 finding
+real gaps in R1 is exactly why a third, independent pass still runs rather than treating R2's fixes
+as final.**
+
+**Still docs-only; no production file touched this round.** `git diff --stat` is empty for
+`hub/hub/mcp_server.py`.
 
 ## The bounds (R4: per `_decide`)
 
