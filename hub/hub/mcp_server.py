@@ -1501,6 +1501,13 @@ def _mask_extglob_as_star(component: str, spans: List[Tuple[int, int]]) -> str:
     return masked
 
 
+def _holds_glob_character(text: str) -> bool:
+    """Whether `text` is glob-holding for D8's purposes (R4): a bare `_GLOB_CHARS` character, or an
+    extglob group (D3) -- `@(u)p` has none of `* ? [` of its own, so without this check `_glob_links`
+    was never even reached for one, regardless of what it could do once there."""
+    return any(char in text for char in _GLOB_CHARS) or bool(_extglob_group_spans(text))
+
+
 def _rewrite_dotdot_globs(path: str) -> str:
     """Each component of `path` that some real bash could still expand to `..` (D3), rewritten to
     `..` before `_judge_path` resolves it. The refusal this feeds still quotes the word as written,
@@ -1702,8 +1709,15 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
     component is `**` beside other characters (`a**b`), `**` is read as `*` (fnmatch does not
     tell the two apart), one level, as it already was before this was built.
 
-    A piece holding more than one glob-holding component, or an extglob group, is left to a
-    further slice of this same task -- this returns None for those rather than guess. The bash dot
+    A piece holding more than one glob-holding component is left to a further slice of this same
+    task -- this returns None for those rather than guess. An extglob group (D3) in the one
+    glob-holding component is masked to `*` before matching (`_mask_extglob_as_star`, design D8
+    step 2's own words, "each extglob group becomes `*`"): `fnmatch` cannot express the shell's own
+    alternation, so this is wider than the shell's real expansion for `@(...)`/`?(...)` (an
+    enumerable, narrower translation is possible but not what the design asks for) -- an accepted
+    over-approximation (design, "Over-approximation, on purpose", which names extglob groups
+    directly): it can only add a refusal, never miss one that the shell's own expansion would catch.
+    The bash dot
     rule (D8 step 2, "a name beginning with `.` matches only when the component does too") is also
     left unbuilt: skipping it only widens what matches, which the design allows
     ("over-approximation... can only add a refusal"), and nothing in this slice's own test needs
@@ -1722,9 +1736,7 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
     if not components:
         return None
     glob_positions = [
-        index
-        for index, component in enumerate(components)
-        if any(char in component for char in _GLOB_CHARS)
+        index for index, component in enumerate(components) if _holds_glob_character(component)
     ]
     if len(glob_positions) != 1:
         return None
@@ -1742,7 +1754,9 @@ def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optiona
         if refusal:
             return refusal
         return _globstar_walk(base, listed_base, tail, root, shown, budget)
-    normalized_pattern = os.path.normcase(_relax_bracket_pattern(pattern))
+    normalized_pattern = os.path.normcase(
+        _relax_bracket_pattern(_mask_extglob_as_star(pattern, _extglob_group_spans(pattern)))
+    )
     entries = budget.list_directory(base)
     if entries is _LISTING_TOO_MANY:
         return _refuse(shown, _TOO_MANY)
@@ -2022,15 +2036,15 @@ def _judge_word(
         refusal = _judge_path(rewritten, root, word, argument, continues)
         if refusal:
             return refusal
-        # (R5, D8) An absolute word holding a glob character is also matched against the links it
-        # finds, not only judged by its literal text -- `_PLAIN_RELATIVE_RE` already keeps every
-        # relative glob out of this branch (D8, "Where it runs"). Matched on `word`, not
-        # `rewritten`: D3's dot-rewrite only ever touches a component that already holds a glob
-        # character (never a glob-free base or tail component), so handing `_glob_links` the
-        # rewritten text would erase the very glob character it needs to find a real entry
-        # (`.l`) through -- the literal `..` reading that rewrite feeds is `_judge_path`'s job,
-        # just above, not this one's.
-        if os.path.isabs(word) and any(char in word for char in _GLOB_CHARS):
+        # (R5, D8) An absolute word holding a glob character or an extglob group is also matched
+        # against the links it finds, not only judged by its literal text -- `_PLAIN_RELATIVE_RE`
+        # already keeps every relative glob out of this branch (D8, "Where it runs"). Matched on
+        # `word`, not `rewritten`: D3's dot-rewrite only ever touches a component that already
+        # holds a glob character (never a glob-free base or tail component), so handing
+        # `_glob_links` the rewritten text would erase the very glob character it needs to find a
+        # real entry (`.l`) through -- the literal `..` reading that rewrite feeds is
+        # `_judge_path`'s job, just above, not this one's.
+        if os.path.isabs(word) and _holds_glob_character(word):
             return _glob_links(word, word, root, budget)
         return None
     return _judge_pieces(
@@ -2043,10 +2057,11 @@ def _judge_piece(
 ) -> Optional[Dict[str, Any]]:
     """One piece of rule 6's reading, shared by both its readings (D2 step 6, R8): a NUL or a
     leading `~` refuses outright (D2 step 5); else it is judged as the relative or absolute path
-    it spells. (R5, D8) A piece holding a glob character is also matched against the links it
-    finds, not only judged by its literal text -- mirroring rule 5's own `_glob_links` call, but
-    joined to `root` first when relative, since `_glob_links` reads its piece as rooted at a
-    drive (or, with none, at the filesystem root) rather than at the workspace.
+    it spells. (R5, D8) A piece holding a glob character or an extglob group is also matched
+    against the links it finds, not only judged by its literal text -- mirroring rule 5's own
+    `_glob_links` call, but joined to `root` first when relative, since `_glob_links` reads its
+    piece as rooted at a drive (or, with none, at the filesystem root) rather than at the
+    workspace.
 
     `_glob_links` is matched on `piece`, not on D3's `..`-rewrite of it: that rewrite only ever
     touches a component that already holds a glob character (a glob-free component never
@@ -2061,7 +2076,7 @@ def _judge_piece(
     refusal = _judge_path(rewritten, root, piece, argument, continues)
     if refusal:
         return refusal
-    if any(char in piece for char in _GLOB_CHARS):
+    if _holds_glob_character(piece):
         absolute = piece if os.path.isabs(piece) else os.path.join(root, piece)
         return _glob_links(absolute, piece, root, budget)
     return None

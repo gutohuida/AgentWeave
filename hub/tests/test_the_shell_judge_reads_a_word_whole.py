@@ -841,6 +841,51 @@ def test_a_bracket_expression_is_matched_or_kept_exact_as_fnmatch_can_read_it_1_
     assert "it resolves to" in powershell_negated["reason"]
 
 
+# Task 1.4c's extglob row (`bash -O extglob -c 'cp n @(u)p/x'`), re-derived fresh against `_decide`
+# (`testbed/scratch/measure_1_4c_extglob_star.py`, gitignored, not committed), not trusting
+# iteration 42's own conclusion that a per-alternative `@`/`?` translator is needed -- re-reading
+# design.md's D8 step 2 and D3 sections directly (not iteration 42's summary of them) shows both
+# say, unconditionally, "each extglob group becomes `*`" for D8's matching, and the "Over-
+# approximation, on purpose" section names "extglob groups" directly among the over-approximations
+# the design accepts on purpose, alongside the relaxed brackets. `_glob_links` did not reach an
+# extglob group at all before this slice: `_GLOB_CHARS` (`* ? [`) has no extglob trigger of its
+# own, so `@(u)p` was never recognised as a glob-holding component regardless of what `_glob_links`
+# itself could then do with it. Fixed by `_holds_glob_character` (a bare `_GLOB_CHARS` character or
+# a non-empty `_extglob_group_spans`) at `_glob_links`'s own glob-position check and at both its
+# call sites, plus masking the matched component's extglob group to one `*`
+# (`_mask_extglob_as_star`, already built for D3's `..`-rewrite) before `_relax_bracket_pattern`.
+#
+# This also flips `test_an_unquoted_extglob_group_is_kept_as_one_unit_through_the_lexer_and_rule_6`'s
+# own `cp n @(a|b)/x` row (task 2.2) from allowed to refused: `up` sits in the same directory and
+# matches the masked `*`, although the shell can only ever expand `@(a|b)` to the literal `a` or
+# `b`. Confirmed this is the design's own intended over-approximation, not a bug the masking
+# introduces: a per-alternative enumeration (`a`, `b`, tried separately) would stay narrower and
+# keep that row allowed, but the design's own text does not ask for that narrower translation --
+# updated that row's assertion alongside this one, in the same commit, so the suite cannot show one
+# fixed while the other regresses unnoticed.
+def test_an_extglob_group_is_masked_to_star_through_the_link_it_finds_1_4c(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    one_alternative = _decide("Bash", {"command": "cp n @(u)p/x"})
+    assert one_alternative["allow"] is False
+    assert "it resolves to" in one_alternative["reason"]
+
+    zero_or_one = _decide("Bash", {"command": "cp n ?(u)p/x"})
+    assert zero_or_one["allow"] is False
+    assert "it resolves to" in zero_or_one["reason"]
+
+    repetition = _decide("Bash", {"command": "cp n *(u)p/x"})
+    assert repetition["allow"] is False
+    assert "it resolves to" in repetition["reason"]
+
+    # Control: the mask is `*` for the whole group, not just the one alternative named, so the
+    # control must glob a directory with no outside link in it at all (`sub`, not the workspace
+    # root -- `@(sub)/a.py` also refuses, matching the root's own `up`, which this row is not
+    # testing) to show the mask does not refuse by itself.
+    no_match = _decide("Bash", {"command": "cp n sub/@(nomatch)/"})
+    assert no_match["allow"] is True, no_match["reason"]
+
+
 # Task 1.4c's POSIX character class row (`cp n '[[:alpha:]]p'/x`), re-derived fresh against
 # `_decide` (`testbed/scratch/measure_1_4c_posix_extglob.py`, gitignored, not committed), not
 # trusting iteration 38's own note that it is "still wrongly allowed" without saying on which
@@ -939,10 +984,17 @@ def test_an_unquoted_extglob_group_is_kept_as_one_unit_through_the_lexer_and_rul
     assert glued_prefix["allow"] is False
     assert glued_prefix["reason"].startswith("'sub@(..)x/y'")
 
-    # Control: neither alternative is dotdot-capable, so the component is a literal (if odd) name,
-    # lexically inside the workspace -- stays allowed.
+    # Control: neither alternative is dotdot-capable, so the component is not rewritten to `..` by
+    # D3 -- but it is still refused, by 1.4c's own D8 step 2 extglob-masking slice (below), because
+    # the fixture's `up` link sits in the same directory and matches the masked `*`, although the
+    # shell can only ever expand `@(a|b)` to the literal name `a` or `b`, neither of which is a
+    # link. This is the design's own accepted over-approximation ("Over-approximation, on purpose",
+    # which names extglob groups directly), not a regression of this slice: before 1.4c's D8 row was
+    # built, `_glob_links` never saw an extglob group as a glob-holding component at all, so this
+    # row was allowed only because nothing yet matched it against the filesystem.
     no_dot_alternative = _decide("Bash", {"command": "cp n @(a|b)/x"})
-    assert no_dot_alternative["allow"] is True, no_dot_alternative["reason"]
+    assert no_dot_alternative["allow"] is False
+    assert "it resolves to" in no_dot_alternative["reason"]
 
     # Control: the same group one level inside the workspace resolves to the workspace root
     # itself (`sub`'s parent) -- genuinely inside, not merely allowed by accident.

@@ -290,6 +290,68 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   in the same file, so a future attempt cannot regress one while fixing the other without the suite
   catching it. Not sized for a further quick slice without that translator; the other open items
   named two paragraphs up are unaffected by this entry.
+
+  **Iteration 43 (the extglob row, re-derived against design.md's actual text rather than iteration
+  42's own conclusion -- a fresh comparison, not a re-read of the previous round).** Iteration 42's
+  "stays allowed" constraint on `@(a|b)/x` was never itself checked against the design text; it was
+  inferred from the regression alone. Re-reading D8 step 2 and D3 directly: both say, unconditionally,
+  "each extglob group becomes `*`" for D8's matching -- no carve-out for an enumerable trigger, unlike
+  the bracket-relaxation rule right next to it in the same step, which explicitly keeps a bracket
+  exact wherever `fnmatch` can read it and relaxes only where it cannot. The design's own
+  "Over-approximation, on purpose" section then names "extglob groups" directly, beside the relaxed
+  brackets, as an accepted source of over-approximation: "matching more names can only add a
+  refusal." So a per-alternative `@`/`?` translator, though buildable, is not what this task asks
+  for, and `@(a|b)/x` becoming refused once D8 actually reaches extglob groups (this row, not yet
+  built before this iteration) is the design's own intended outcome, not a regression -- task 2.2's
+  test predates D8 reaching extglob at all (its own note says D8/`_glob_links` was still "untouched"
+  for extglob as of iteration 19), so its "stays allowed" assertion was only ever true because
+  nothing yet matched the fixture's `up` link against the mask.
+
+  Built `_holds_glob_character(text)` (`hub/hub/mcp_server.py`): a bare `_GLOB_CHARS` character or a
+  non-empty `_extglob_group_spans`. Wired it into `_glob_links`'s own `glob_positions` check (which
+  decides which component is *the* glob-holding one) and both call sites that gate whether
+  `_glob_links` runs at all (rule 5's absolute-word check, `_judge_piece`'s rule-6 check) -- neither
+  tested for an extglob group before, so `_glob_links` was never even reached for one regardless of
+  what it could do once there, confirming iteration 42's own diagnosis of that part. Inside
+  `_glob_links`, masked the matched component's extglob group to one `*`
+  (`_mask_extglob_as_star`, already built for D3's `..`-rewrite) before `_relax_bracket_pattern`,
+  exactly iteration 42's first attempt, kept this time rather than reverted.
+
+  Measured directly against `_decide` first (`testbed/scratch/measure_1_4c_extglob_star.py` and
+  `measure_1_4c_extglob_control.py`, gitignored, not committed), before touching any test: `cp n
+  @(u)p/x` (the task's own target row) now refuses, naming the resolved target; `cp n @(a|b)/x`
+  (task 2.2's row) now also refuses, for the reason above; `cp n sub/@(..)/x` (task 2.2's
+  "resolves_inside" control) is unaffected -- it never reaches `_glob_links`'s masking at all,
+  because D3's own dotdot-rewrite already turns `@(..)` into the literal `..` first, which resolves
+  inside and short-circuits before `_glob_links` runs. A naive control at the workspace root
+  (`cp n @(sub)/a.py`) also refuses, because the mask is `*` for the *whole* group regardless of
+  which alternative is named, and `*` matches the root's own `up` link too -- confirmed this is not
+  a bug by checking the same shape one directory deeper (`cp n sub/@(nomatch)/`, no link in `sub`
+  itself besides `l`, which resolves inside), which stays allowed; used that row as the new test's
+  own control instead.
+
+  Updated `test_an_unquoted_extglob_group_is_kept_as_one_unit_through_the_lexer_and_rule_6`'s
+  `@(a|b)/x` row from allowed to refused, with a comment explaining why this is the design's own
+  outcome and not a regression of this slice. Added
+  `test_an_extglob_group_is_masked_to_star_through_the_link_it_finds_1_4c` covering `@(u)p/x`
+  (the task's own row), `?(u)p/x` and `*(u)p/x` (confirming the mask is the same for every trigger,
+  not only `@`), and the `sub/@(nomatch)/` control. Mutation-checked: `git stash`ing just
+  `mcp_server.py` and rerunning the file fails exactly the new test and the updated `@(a|b)/x`
+  assertion, leaving the other 115 rows passing unchanged -- confirming both changed assertions
+  depend on the production change and nothing else moved. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **117 passed** (was 116, +1). Broader
+  regression set (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): **743 passed, 2 skipped**, no regressions.
+  `ruff check` and `black --check --target-version py311` on both changed files: clean. `git diff
+  --stat`: exactly `hub/hub/mcp_server.py` and the one test file, plus this task file.
+
+  **Task 1.4c still stays unticked**, but the extglob row is now done. What remains, unchanged from
+  iteration 41's note: the Windows-side POSIX-class gap (needs its own D9 design round); the
+  absolute top-level dot-glob gap (iteration 39's finding (2)); the bash-dot-rule control gap
+  (iteration 39's finding (1), likely out of scope); and the (R6/D11) rows, which need task 2.1d
+  (unticked, not started). Each needs its own fresh measurement before building, same discipline as
+  every iteration so far -- in particular, re-derive from design.md's actual text before trusting
+  any prior iteration's framing of what a fix should look like, this iteration's own lesson.
 - [ ] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
   - `cp n [u]p/` and `cp n ./u[p]` (a trailing `]` the trim removes). Each PASSES today only by the tail (`'/'`, `'/u[p'`), so assert the resolved target, which FAILS today; each FAILS against R5 (allowed).
   - `cp n [.]./x` refused as outside, quoting `'[.]./x'`. PASSES today by the tail `'/x'`, FAILS on the reason assertion and against R5 (the word `.]./x` is inside).
