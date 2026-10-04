@@ -2063,6 +2063,27 @@ def _judge_url(
     return _judge_path(word, root, word, argument, continues)
 
 
+_BACKSLASH_ESCAPE_RE = re.compile(r"\\(.)", re.DOTALL)
+
+
+def _escape_removed_levels(word: str) -> List[str]:
+    """D7: every level besides `word` itself that an inner shell's own unquoted-backslash escaping
+    can reach, each one `_BACKSLASH_ESCAPE_RE` applied to the previous level's text (every `\\c`
+    becomes `c`, scanning left to right, so a run of backslashes at least halves each level --
+    `_BACKSLASH_ESCAPE_RE` is `(?s)` so a literal newline after a backslash is consumed the same
+    way). Stops at the level that changes nothing, rather than at "no backslash is left", so a
+    trailing backslash (`src\\`, `x\\\\`) ends the loop instead of never answering (R5)."""
+    levels: List[str] = []
+    current = word
+    while "\\" in current:
+        rewritten = _BACKSLASH_ESCAPE_RE.sub(r"\1", current)
+        if rewritten == current:
+            break
+        levels.append(rewritten)
+        current = rewritten
+    return levels
+
+
 def _judge_word(
     budget: "_Budget",
     word: str,
@@ -2126,7 +2147,9 @@ def _judge_word(
         return None
     if dialect == "bash" and word in _BASH_DEVICES:  # D4: the null device, stdin/out/err
         return None
-    if os.path.isabs(word) or _PLAIN_RELATIVE_RE.match(word):  # 5: a path, resolved
+    if "::" not in word and (  # D7: a `::` word is not plain in either dialect -- rule 6 reads it
+        os.path.isabs(word) or _PLAIN_RELATIVE_RE.match(word)
+    ):  # 5: a path, resolved
         rewritten = _rewrite_dotdot_globs(word)
         refusal = _judge_path(rewritten, root, word, argument, continues)
         if refusal:
@@ -2623,9 +2646,31 @@ def _memo_judge_word(
     trusted: bool,
     hub_url: Optional[str],
 ) -> Optional[Dict[str, Any]]:
-    """`_judge_word`, memoized per `_decide` call by every per-word input the judgement reads
+    r"""`_judge_word`, memoized per `_decide` call by every per-word input the judgement reads
     (design "The bounds": "the key must carry every per-word input the judgement reads") -- so the
     same word reached twice (another reading, or another brace alternative) is judged once.
+
+    D7: once the word itself stands, it is also judged at each of `_escape_removed_levels`'s
+    levels -- each one *as a word*, through `_judge_word`'s own rules, not through this escape
+    reading again (`_judge_word` is called directly, not `_memo_judge_word`, so a level's own
+    backslashes are never re-leveled). An extra reading only adds a refusal; it never removes one,
+    so the loop stops at the first level that refuses.
+
+    POSIX only (`not _DRIVE_LETTERS`, read fresh so a test can monkeypatch it, D9's own rule).
+    On a drive-letter host `\` is already a separator D2/rule 3/5 read directly, so a backslash
+    there has two live meanings at once -- separator and candidate escape -- and they can
+    disagree: `$'A\x/../../y1'` keeps a literal `\` (`_ansi_c_escape`'s own, final decode of that
+    quote form; no further shell ever re-escapes it), read today as two real components `A`, `x`
+    that exactly cancel the two `..` after them (inside). Escape-reducing that same `\` first
+    merges `A` and `x` into one component, leaving a `..` with nothing left to cancel (outside) --
+    a wrong, new refusal (measured: `test_a_quote_is_judged_by_what_it_decodes_to[P5a/P5b/P5c]`
+    went from green to a false refusal before this guard). The grep cost example design names
+    (`grep -rn '\.\./' src`) is the POSIX case this reading is for; its own "Cost (R5)" labels the
+    new refusal POSIX only, and "already refused today [on Windows]... because `\` opens a root
+    path there" is the other half of that sentence. The literal-backslash/separator conflict above
+    is this task's own finding, not yet resolved for a drive-letter host (would need a sentinel
+    for "this `\` is a quote's own final decode, not raw text" in the style of `_LITERAL_DOLLAR`,
+    threaded through every `_SEPARATORS` site -- left to a follow-up, named in tasks.md).
     """
     key = (word, argument, continues, trailing_colon, dialect, trusted)
     if key in budget.judgements:
@@ -2633,6 +2678,13 @@ def _memo_judge_word(
     refusal = _judge_word(
         budget, word, argument, continues, trailing_colon, root, dialect, trusted, hub_url
     )
+    if refusal is None and not _DRIVE_LETTERS and "\\" in word:
+        for level in _escape_removed_levels(word):
+            refusal = _judge_word(
+                budget, level, argument, continues, trailing_colon, root, dialect, trusted, hub_url
+            )
+            if refusal:
+                break
     budget.judgements[key] = refusal
     return refusal
 

@@ -33947,3 +33947,59 @@ round should know this before it designs a Copilot line.
 **Fix candidate:** the sibling's next round adds a task, a test and a delta sentence for the credit
 sums, and records the token-less Copilot stream. The spec-flow lesson is that an obligation handed to
 an unarchived change has to be written into that change's own files at the time it is handed over.
+
+## F487 (B) — task 1.7c's own test rows ask for a cross-platform fix that regresses an already-shipped guarantee
+
+**Status:** open, found 2026-10-04 by iteration 55 of `the-shell-judge-reads-a-word-whole`'s task
+2.2a (D7's backslash-escape-level reading). Not yet reconciled into `tasks.md`'s 1.7c rows.
+
+Task 1.7c (`tasks.md:950-956`) writes `bash -c 'cp n .\./x'` and `bash -c 'bash -c "cp n .\./x"'`
+as refused **unconditionally** ("from both the Bash and the PowerShell tool", no platform
+qualifier) — only the `grep -rn '\.\./' src` row is marked `(POSIX CI)`. Building the escape-level
+reading literally (`_BACKSLASH_ESCAPE_RE` reducing `\c` to `c` at each level, judged again through
+`_judge_word`, D7's own text) and running it on **both** platforms breaks a different, already-
+shipped, already-green test: `test_a_quote_is_judged_by_what_it_decodes_to[P5a/P5b/P5c]` in
+`test_permission_approver.py` (ANSI-C `$'...'` decoding). Measured directly: `$'A\x/../../y1'`
+decodes (via `_ansi_c_escape`'s own "digitless escape keeps the backslash literal" rule) to the
+literal word `A\x/../../y1`. On a drive-letter host `\` is *already* a separator rule 3/5 read
+directly, so this word's existing, correct reading is two real components `A`, `x` that exactly
+cancel the two `..` after them (inside your workspace) — `os.path.realpath` confirms it lands
+exactly at the workspace root. Escape-reducing the same `\` *first* (as D7 asks) merges `A` and `x`
+into one component (`Ax`), leaving one `..` with nothing left to cancel — outside. `git stash`ing
+just `mcp_server.py` and rerunning both readings confirmed: `allow=True` before the escape-level
+code existed, `allow=False` (wrong) after it ran unconditionally, `allow=True` (correct) again once
+the reading is gated `not _DRIVE_LETTERS`. The conflict is structural, not a one-off: on a
+drive-letter host a backslash in a word has two live, simultaneously-true meanings — "this is a
+path separator" (rule 3/5/D2 read it that way today) and "this might be an escape an inner shell
+would remove" (D7's own proposal) — and nothing in the word's final text says which one a given `\`
+actually is. `_ansi_c_escape`'s own kept-literal backslash and a genuinely-unquoted, not-yet-
+escaped backslash produce **identical decoded text**; only provenance (which quote form, if any,
+already had its final say over this character) tells them apart, and no sentinel for that
+provenance exists yet (the codebase's own precedent, `_LITERAL_DOLLAR`, marks the analogous case
+for `$` — "this looks special but a quote already decided it isn't" — but nothing threads an
+equivalent through every `_SEPARATORS` site for `\`).
+
+**What shipped instead (iteration 55):** the escape-level reading is built and gated `not
+_DRIVE_LETTERS` (POSIX only) in `_memo_judge_word`, with the regression this finding describes
+reasoned through in its own docstring. `hub/tests/test_the_shell_judge_reads_a_word_whole.py`'s
+`2.2a-escape1/escape2/escape-control` rows are marked `posix_only` (skip on a drive-letter host) and
+a white-box test (`test_a_word_is_also_judged_at_each_backslash_escape_removed_level_2_2a`) forces
+`_DRIVE_LETTERS=False` to exercise the POSIX reading on this Windows dev machine, since the table
+rows alone would give zero local coverage. The `::` not-plain rule (D7's second bullet) is
+unaffected by this conflict and ships unconditionally on both platforms, per task 1.7c's own
+`Copy-Item … FileSystem::C:\Windows\x` row (explicitly marked Windows, no POSIX equivalent claimed).
+Task 1.7c and 2.2a stay unticked: 1.7c's Windows-side escape rows (`bash -c 'cp n .\./x'` refused
+from **both** tools, the `\$HOME` spy row, the `…FileSystem::..\x` row) are not built, and the
+`grep foo 'src\a.py'` / `ls lib/Foo::Bar.pm` control rows are not yet added as written.
+
+**Fix candidates, for the operator's or a later round's judgment, not decided here:** (1) a
+`_LITERAL_BACKSLASH` sentinel emitted by `_ansi_c_escape` wherever it currently returns a literal
+`\`, read as a real separator by every `_SEPARATORS`/`os.path` site but skipped by
+`_escape_removed_levels`'s regex — the structurally complete fix, but it touches every separator
+site in the file, larger than one iteration's slice; (2) accept the POSIX-only scope permanently and
+correct task 1.7c's own rows (and design D7's "every path spelled with `\` gains harmless readings"
+claim, which this finding's `A\x/../../y1` case disproves) to say so explicitly; (3) something
+narrower scoped to only the two rows 1.7c names, not builtin for every word. The spec-flow lesson:
+1.7c's rows were written in an R1-R3 round without a drive-letter-host measurement against the
+*other* half of this same change's own tests, and "FAILS today" was true but incomplete — it did
+not ask what the fix would break.

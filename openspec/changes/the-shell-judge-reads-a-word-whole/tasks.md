@@ -1795,6 +1795,78 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   `::` not-plain rule before rule 5 (D7). Task stays unticked. 1.7b and 1.7c still need their own
   fresh re-derivation once those two land -- do not assume they now pass just because both tilde
   clauses do, each names more than that.
+
+  **Iteration 56.** Re-read D7 fresh (not the prior iteration's summary): its two bullets are "the
+  word is judged at each backslash-escape-removed level" (`_BACKSLASH_ESCAPE_RE = r"\\(.)"`
+  applied repeatedly until a level changes nothing, each level re-judged through all of
+  `_judge_word`'s rules via `_judge_word` directly, not `_memo_judge_word`, so a level is never
+  re-leveled) and "a word holding `::` is not plain in either dialect" (added `"::" not in word`
+  to rule 5's condition, routing such a word to rule 6's piece reading, where `:` is already a
+  break). Built both in `hub/hub/mcp_server.py`.
+
+  The `::` rule shipped exactly as D7 states, unconditionally, both platforms: measured
+  `Copy-Item x Microsoft.PowerShell.Core\FileSystem::C:\Windows\x` (task 1.7c's own row) was
+  **allowed** before (confirmed `_PLAIN_RELATIVE_RE.match` is true for it today -- no `:` is
+  excluded from its post-separator character class) and is **refused** after, naming
+  `C:\Windows\x`; `cp lib/Foo::Bar.pm n` (1.7c's own control) stays allowed both ways. `git stash`
+  confirmed both.
+
+  **The escape-level rule could not ship unconditionally -- filed as F487
+  (`scripts/drive/FINDINGS.md`), not worked around silently.** Task 1.7c's own rows ask for
+  `bash -c 'cp n .\./x'` and the nested `bash -c 'bash -c "cp n .\\./x"'` refused on *both*
+  platforms (no POSIX qualifier, unlike the `grep` row). Building it that way and running the
+  **other** half of this change's own test suite (`test_permission_approver.py`) found a real
+  regression: `test_a_quote_is_judged_by_what_it_decodes_to[P5a/P5b/P5c]` went from green to a
+  false refusal. `$'A\x/../../y1'` decodes (via `_ansi_c_escape`'s own digitless-escape rule) to
+  the literal word `A\x/../../y1`; on a drive-letter host `\` is already a separator (rule 3/5
+  read it directly), so its existing reading is two real components `A`, `x` that exactly cancel
+  the two `..` after them (inside, confirmed with `os.path.realpath`). Escape-reducing the same
+  `\` first merges `A` and `x` into one component, leaving one `..` with nothing to cancel
+  (outside) -- a new, wrong refusal, not the "harmless" extra reading D7 claims for every
+  backslash-bearing Windows path (`src\a.py` -> `srca.py`, D7's own example, really is harmless;
+  this one is the counter-example). `git stash`ing just `mcp_server.py` confirmed `allow=True`
+  before any escape-level code existed, `allow=False` (wrong) with it unconditional, `allow=True`
+  (correct) again once gated.
+
+  **What shipped:** the escape-level reading is built and gated `not _DRIVE_LETTERS` (read fresh
+  in `_memo_judge_word`, D9's own rule) -- POSIX only, matching the one platform qualifier D7's own
+  text does carry (the `grep` cost row's "(R5), POSIX only"). `_escape_removed_levels` and the
+  gate are in `hub/hub/mcp_server.py`; the reasoning above is also in `_memo_judge_word`'s own
+  docstring, not only here. New tests in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`:
+  three `_TABLE` rows (`2.2a-escape1`, `2.2a-escape2`, `2.2a-escape-control`) marked `posix_only`
+  (a new `_row` parameter, skip on a drive-letter host) plus a white-box test
+  (`test_a_word_is_also_judged_at_each_backslash_escape_removed_level_2_2a`) that forces
+  `_DRIVE_LETTERS=False` to exercise the POSIX reading through `_decide` on this Windows dev
+  machine, since the skipped table rows alone give zero local coverage; and two more `_TABLE` rows
+  for the `::` rule (`2.2a-doublecolon1`, Windows-only per task 1.7c's own scoping;
+  `2.2a-doublecolon2`, both platforms). `git stash`ing just `mcp_server.py` confirmed all three
+  escape rows and `doublecolon1` fail without the fix (the F190 standard); the two controls pass
+  unchanged both ways.
+
+  `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **130 passed, 3
+  skipped** (was 127 passed; the three new skips are the `posix_only` rows on this host). Broader
+  regression set (`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`, plus this file): **756 passed, 5 skipped, no
+  regressions** (was 753 passed, 2 skipped -- confirming the P5a/b/c regression is gone with the
+  gate in place). `ruff check` and `black --check --target-version py311` (after one reformat by
+  `black` itself) on both changed files: clean. `mypy src/`: clean. `openspec validate
+  the-shell-judge-reads-a-word-whole --strict`: valid. `git diff --stat`: exactly
+  `hub/hub/mcp_server.py` and the one test file, plus this file and `scripts/drive/FINDINGS.md`.
+  The scratch measurement script used throughout (`testbed/scratch/measure_22a_escape_levels.py`,
+  gitignored) was deleted after use.
+
+  **Task 2.2a still stays unticked.** Both of D7's bullets are built, but the escape-level one is
+  POSIX-only, not the unconditional, both-platform rule task 1.7c's own rows ask for -- F487 leaves
+  that gap for the operator's or a later round's judgment (a `_LITERAL_BACKSLASH` provenance
+  sentinel threaded through every `_SEPARATORS` site is the structurally complete fix named there,
+  but it is bigger than one iteration's slice). **FIRST THING next iteration:** read F487 in full,
+  then re-derive 1.7b and 1.7c fresh against the current code (neither has been run this change) --
+  1.7c's own rows will need editing to match whatever the operator/next round decides about the
+  POSIX-only scope (either narrow the rows to match what shipped, or take up F487's sentinel fix).
+  Do not tick 1.7c by running only the rows that already pass; its text names rows that are not
+  built (the Windows-side escape refusals, the `\$HOME` spy, the `…FileSystem::..\x` row, the
+  `grep foo 'src\a.py'` control) and FAILS until those are addressed one way or the other. 1.7b is
+  independent of this iteration's work and still needs its own fresh read.
 - [ ] 2.2b D6: `approve_tool_call` catches an exception from `_decide`, denies with a reason and reports it; no return annotation
 - [ ] 2.2c (R4, D9) Add the `hub-judge-windows` job to `.github/workflows/ci.yml` (`windows-latest`, `working-directory: hub`, the `hub-test` install steps with `-c ../constraints-dev.txt`, `pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread`). Run `py -3.11 -m pytest tests/test_dev_constraints.py -q`. After pushing, confirm the job ran and passed, or do not tick
 - [ ] 2.3 Run the eight files named in design D2 plus the new file; expected moves are exactly task 1.8's rows plus the new rows. Record counts

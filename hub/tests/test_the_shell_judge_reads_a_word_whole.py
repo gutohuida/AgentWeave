@@ -54,14 +54,19 @@ def workspace(tmp_path, monkeypatch):
     return ws
 
 
-def _row(label, command, allow, *, tool="Bash", windows_only=False):
-    marks = (
-        pytest.mark.skipif(
+def _row(label, command, allow, *, tool="Bash", windows_only=False, posix_only=False):
+    if windows_only:
+        marks = pytest.mark.skipif(
             not _WINDOWS, reason="a drive-letter host reads a backslash as a separator"
         )
-        if windows_only
-        else ()
-    )
+    elif posix_only:
+        marks = pytest.mark.skipif(
+            _WINDOWS,
+            reason="D7's escape-removed levels are gated off a drive-letter host (task 2.2a:"
+            " `\\` is already a separator there, which can disagree with escape-reduction)",
+        )
+    else:
+        marks = ()
     return pytest.param(tool, command, allow, id=label, marks=marks)
 
 
@@ -251,6 +256,40 @@ _TABLE = [
     # sibling change's 1.4f refuses them once its drive machinery lands.
     _row("1.4e6", "cp n [u]p", True),
     _row("1.4e7", "cp n u[p]", True),
+    # Task 2.2a, D7's first bullet: the word is judged at each backslash-escape-removed level, not
+    # only as written. One real backslash (inside double quotes, so the lexer's own unquoted-
+    # backslash rule never touches it) is still allowed as written (`.\./x` is a dot-leading name
+    # with no `..` component today), but its one escape-removed level (`../x`) is a traversal.
+    # FAILED before `_escape_removed_levels` existed (measured: allowed). POSIX only: `_memo_judge_
+    # word`'s own docstring works through why a drive-letter host (where `\` is already a
+    # separator) is gated off, found via a real regression this task fixed before shipping it
+    # (`test_a_quote_is_judged_by_what_it_decodes_to[P5a/P5b/P5c]`).
+    _row("2.2a-escape1", r'cp n ".\./x"', False, posix_only=True),
+    # D7's own motivating case: two literal backslashes, surviving two shells deep (the outer
+    # single quotes are literal; the inner double quotes keep a backslash before anything other
+    # than `$`, a backtick, `"`, `\` or a newline, so this change's own nested-command reading
+    # hands `_judge_word` the two-backslash word, not a dequoted one). Two escape-removed levels
+    # reach `../x`. FAILED before this task (measured: allowed).
+    _row("2.2a-escape2", "bash -c 'bash -c \"cp n .\\\\./x\"'", False, posix_only=True),
+    # Control: a trailing backslash's level stops the loop (`_BACKSLASH_ESCAPE_RE` finds no pair to
+    # replace) rather than looping or raising, and the word is still judged -- unaffected, inside.
+    # Single-quoted (literal, no escape of its own) so the backslash cannot be read as escaping the
+    # closing quote itself.
+    _row("2.2a-escape-control", "cp n 'x\\'", True, posix_only=True),
+    # Task 2.2a, D7's second bullet: a word holding `::` is not plain in either dialect, so it
+    # reaches the piece reading (rule 6), where `::` is a break -- not rule 5's whole-word path
+    # judgement, which would resolve this one nonsensical, harmless-looking relative name instead
+    # of the real PowerShell provider-qualified path it names. FAILED before this task (measured:
+    # allowed, judged whole as one relative name under the workspace).
+    _row(
+        "2.2a-doublecolon1",
+        r"Copy-Item x Microsoft.PowerShell.Core\FileSystem::C:\Windows\x",
+        False,
+        tool="PowerShell",
+        windows_only=True,
+    ),
+    # Control (the design's own cost note): both pieces of a `::`-split word can still be inside.
+    _row("2.2a-doublecolon2", "cp lib/Foo::Bar.pm n", True),
 ]
 
 
@@ -1348,6 +1387,35 @@ def test_a_drive_piece_whose_text_after_the_colon_begins_with_a_tilde_2_2a(monke
     monkeypatch.setattr(mcp_server, "_DRIVE_LETTERS", False)
     posix_reading = mcp_server._judge_piece("C:~/y", "/ws", "C:~/y", True, "bash", budget)
     assert posix_reading is None or "contains a variable" not in posix_reading["reason"]
+
+
+# Task 2.2a, D7's first bullet (the level-by-level escape-removed readings), forced to run on this
+# Windows dev machine by monkeypatching `_DRIVE_LETTERS` False -- the `_TABLE` rows above
+# (`2.2a-escape*`) are `posix_only` and so skip here, meaning this is the only place this slice is
+# actually exercised in this environment. `_DRIVE_LETTERS` is gated off deliberately (see `_memo_
+# judge_word`'s own docstring): on a real drive-letter host `\` is already a separator, which
+# disagreed with escape-reduction and broke `test_a_quote_is_judged_by_what_it_decodes_to` before
+# the guard was added (measured, not assumed) -- forcing the flag here answers the question "does
+# the POSIX reading itself work" without that host-specific conflict in the way.
+def test_a_word_is_also_judged_at_each_backslash_escape_removed_level_2_2a(workspace, monkeypatch):
+    from hub import mcp_server
+
+    monkeypatch.setattr(mcp_server, "_DRIVE_LETTERS", False)
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    one_level = mcp_server._decide("Bash", {"command": 'cp n ".\\./x"'})
+    assert one_level["allow"] is False, one_level["reason"]
+
+    two_levels = mcp_server._decide("Bash", {"command": "bash -c 'bash -c \"cp n .\\\\./x\"'"})
+    assert two_levels["allow"] is False, two_levels["reason"]
+
+    # Control: a trailing backslash's level stops the loop rather than looping or raising.
+    trailing = mcp_server._decide("Bash", {"command": "cp n 'x\\'"})
+    assert trailing["allow"] is True, trailing["reason"]
+
+    # Control: a word with no backslash at all is unaffected (the `"\\" in word` guard).
+    plain = mcp_server._decide("Bash", {"command": 'cp n "x"'})
+    assert plain["allow"] is True, plain["reason"]
 
 
 # 2.1c, re-derived against the current code (1.4c's own `ls sub/.*/y` row, "the dot rule"):
