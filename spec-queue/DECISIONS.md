@@ -20,9 +20,9 @@ DECIDED. Absence is not consent.
 
 ## Open
 
-### `the-shell-judge-reads-a-word-whole` task 2.3 names a file list that no longer exists -- 2026-10-04 night
+### `the-shell-judge-reads-a-word-whole` task 2.3 names a file list that no longer exists -- 2026-10-04 night, DECIDED 2026-10-04
 
-- OPEN      shell-judge-2-3-eight-files  Task 2.3 (`tasks.md`) reads "Run the eight files named
+- DECIDED   shell-judge-2-3-eight-files  **(c): rewrite task 2.3 to name its files, chosen by (a)'s measurement** (operator, 2026-10-04, as recommended): run the whole `hub/tests/` suite at the commit before the change and at the tip; every test whose outcome moved must be one of task 1.8's rows or a new row. The dead "eight files" back-reference is dropped, not recovered. The question was: Task 2.3 (`tasks.md`) reads "Run the eight files named
   in design D2 plus the new file; expected moves are exactly task 1.8's rows plus the new rows."
   Re-derived fresh against `design.md`'s own D2 section (lines 239-332) before building, per the
   round discipline: D2 describes rule 6's mechanics in full and never names eight specific files
@@ -46,7 +46,7 @@ DECIDED. Absence is not consent.
   beyond the two greps above. Blocks task 2.3 only; 2.4 and 2.5 have no such ambiguity and can be
   built directly.
 
-### `a-copilot-one-shot-records-its-credits` is ready for approval -- 2026-10-03 night
+### `a-copilot-one-shot-records-its-credits` is ready for approval -- 2026-10-03 night, DECIDED 2026-10-04
 
 R1, R2 and R3 are done (iters 21-23). The adversarial Opus review
 (`spec-queue/tracks/reviews/copilot-oneshot-credits-2026-10-03.md`) confirmed seven problems, and
@@ -57,7 +57,7 @@ checkpoint call, and its probe, would record the AI credits and premium requests
 are NULL for every Copilot worker call. No screen shows them yet, because no route reads them
 (D5). Its code reaches `:8000`'s agents on the operator's next restart.
 
-- OPEN      copilot-oneshot-credits-approve  **Approve the change for implementation, or send it
+- DECIDED   copilot-oneshot-credits-approve  **Approved for `-impl`** (operator, 2026-10-04, as recommended), as R3 plus the Opus review's seven fixes left it, D2's shared `2**53 - 1` helper included. The question was: **Approve the change for implementation, or send it
   back?** The decision that matters most is design D2. One shared helper reads a checkpoint's two
   figures for both the one-shot and the Copilot run ledger. It refuses any figure that is
   negative, boolean, non-numeric, non-finite, or above `2**53 - 1`. That last bound came from the
@@ -70,7 +70,7 @@ are NULL for every Copilot worker call. No screen shows them yet, because no rou
   MODIFIES the run requirement to say so. Credits on a non-zero exit stay unread (D4), as no
   failing one-shot has ever been captured. The drive (task 3.1) spends at most two Copilot
   Free-plan calls on `:8010`.
-- OPEN      copilot-oneshot-credits-oq1  **Should `worker-spend-counts-against-the-budget`'s next
+- DECIDED   copilot-oneshot-credits-oq1  **Yes, a real task** (operator, 2026-10-04, as recommended): `worker-spend-counts-against-the-budget`'s next round gains a task, a test and a spec-delta line for the per-`workers`-line credit sums, carrying D2's sum-overflow hazard. The question was: **Should `worker-spend-counts-against-the-budget`'s next
   round gain a real task, a test and a spec-delta line for the per-`workers`-line credit sums,
   carrying D2's sum-overflow hazard (design Open question 1, F486)?** The archived
   `a-copilot-run-shows-its-credits` assigned those sums to that change (its D12 and task 6.4). The
@@ -78,9 +78,13 @@ are NULL for every Copilot worker call. No screen shows them yet, because no rou
   than a round-log note: a note is not a task, and that gap is how F486 arose. Your D7 answer on
   that change does not affect this, because every D7 branch keeps the `workers` lines.
 
-### `a-copilot-agent-uses-hooks-and-its-own-agents` task 1.1: the explore agent didn't dispatch as a subagent -- 2026-10-03 night
+### `a-copilot-agent-uses-hooks-and-its-own-agents` task 1.1: the explore agent didn't dispatch as a subagent -- 2026-10-03 night, DECIDED 2026-10-04
 
-- OPEN      ghcp-s5-subagent-capture  **Real capture (task 1.1, 2026-10-03) found `subagent.started`/
+- DECIDED   ghcp-s5-subagent-capture  **Group A proceeds in full, subagent scenarios kept** (operator, 2026-10-04: "Do we need to upgrade the copilot version? Try upgrading it and running it again. If it fails again, try A and read the documentation. If it does not work let's go with B."). Driven interactively the same morning, in that order:
+  1. **Upgrade.** Copilot had already auto-updated 1.0.90 -> 1.0.91 (2026-10-03 18:57, after 7.1/7.7 ran on 1.0.90); the Hub spawns with `--no-auto-update`, so its runs use 1.0.91. Re-ran 7.1's exact prompt on `:8010` (`run-0bb0b8f3d0db`): `task` with `agent_type: "Explore"` and no `model` failed `Model 'sonnet' is not available`; no `subagent.*`. **The upgrade alone does not fix it.**
+  2. **(a), with the dispatch spelled correctly.** `agent_type: "explore"` (the built-in's real id) and `model: "claude-haiku-4.5"` (on the Free plan): **succeeded** on `:8010` (`run-d77553067285`, result `README.md`, `is_error: false`, the subagent's own `read`/`shell` calls nested in it). The raw capture (`testbed/copilot-capture/capture.py`'s harness, same prompt) **delivered `subagent.started` and `subagent.completed`**, sharing the `task` call's `toolCallId`, in this wire order: `tool.execution_start`(task) -> `subagent.started` -> the subagent's tool events, each with `parentToolCallId` -> `subagent.completed` -> `tool.execution_complete`(task). It replaces `hub/tests/fixtures/copilot/subagent.jsonl` (redacted; no test read the old one). A second capture isolated the two variables: `"Explore"` + haiku fails cleanly (`Unknown agent_type: Explore. Valid types are: explore, ...`), and **`code-review` + haiku dispatches and emits `subagent.started`/`completed` with `agentName: "code-review"`** -- so D8's review dispatch can work.
+  3. **Documentation.** The `custom_agent_prompt` error 7.1 hit is upstream bug github/copilot-cli#5030 (ACP mode: `task` cannot launch custom agents since 1.0.89; open; workaround `--prefer-version 1.0.88`). In 1.0.90-1.0.92-3 the ACP host-effect bridge calls `runServerHostEffect`, which has no `custom_agent_prompt` case (read in `app.js`). Built-in agents called by exact id with an available model do not take that path. `explore.agent.yaml` lists only GPT models; where `sonnet` came from on `:8010` is **unverified** (inferred: `cp5` runs in this repo's worktree, whose instruction files mention Sonnet, and 1.0.81+ lets subagent launches take a model preference from instruction files; the scratch-cwd captures never hit it).
+  (b) was not needed. **Consequences for the build:** group A's tasks 1.2-1.6 and 2.1-2.8 are unblocked; `subagent.failed` has no real capture yet (synthesize it in 1.2, or capture it from a dispatch that fails after starting). **D8 needs a follow-up:** its review-turn bullet should name the exact agent id and a model the runner can use, or a Free-plan agent's dispatch fails before starting -- and F484 (the false "the code-review agent agreed" claim) stands either way. Side observation: in `run-d77553067285` the subagent's `read` was `Denied by preToolUse hook from "repo settings" (hook errored)`; not investigated. The original question was: **Real capture (task 1.1, 2026-10-03) found `subagent.started`/
   `subagent.completed`/`subagent.failed` not delivered**, the one part of design D1's six-type claim
   this capture could not confirm. `session.compaction_start`, `session.compaction_complete` and
   `session.error` all held, real, over ACP (fixtures: `hub/tests/fixtures/copilot/
@@ -394,9 +398,9 @@ G1–G10 and D1, the same set WSL measured.
   against (`proposal.md:187`, *"the rung-3 half is written against (e) today, and the answer
   re-derives it"*). This closes `F352-free`.
 
-### `the-shell-judge-reads-a-word-whole` task 1.7c's two escape rows conflict with a shipped guarantee -- 2026-10-04 night
+### `the-shell-judge-reads-a-word-whole` task 1.7c's two escape rows conflict with a shipped guarantee -- 2026-10-04 night, DECIDED 2026-10-04
 
-- OPEN      shell-judge-escape-scope-1-7c  **F487 (`scripts/drive/FINDINGS.md`) found, and
+- DECIDED   shell-judge-escape-scope-1-7c  **(b): accept the POSIX-only scope** (operator, 2026-10-04, as recommended): mark task 1.7c's second and third bullets `(POSIX CI)` like its first, and correct design D7's "harmless readings" claim to name F487's drive-letter-host case. (a), the `_LITERAL_BACKSLASH` sentinel, is its own change if ever wanted; (c) is rejected. The question was: **F487 (`scripts/drive/FINDINGS.md`) found, and
   iteration 58's fresh re-derivation of task 1.7c confirmed again, directly against `_decide` on
   this drive-letter dev machine: task 1.7c's second and third bullets ask that
   `bash -c 'cp n .\./x'` (both the Bash and the PowerShell tool) and

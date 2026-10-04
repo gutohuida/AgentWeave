@@ -143,6 +143,13 @@ scratch copy (DEAD-ENDS 2026-09-27).
   `spec-queue/DECISIONS.md` `ghcp-s5-subagent-capture` (OPEN, the operator's call: retry with a
   heavier capture, or drop the three `subagent.*` scenarios and ship compaction+error only). Tasks
   1.2–1.6 and 2.1–2.8 below are **not** started pending that decision.
+
+  **Re-captured 2026-10-04 (interactive, operator decision `ghcp-s5-subagent-capture`, DECIDED).** With
+  `agent_type: "explore"` and `model: "claude-haiku-4.5"`, `subagent.started` and `subagent.completed`
+  **are delivered**. They share the `task` call's `toolCallId`. `subagent.started` arrives after the
+  `task` call's `tool.execution_start` and before the subagent's own tool events, which carry
+  `parentToolCallId`. `subagent.jsonl` is replaced with that capture. `subagent.failed` is still not
+  captured. Group A is unblocked. Full evidence is on the DECISIONS.md row.
 - [ ] 1.2 (A) `hub/tests/test_copilot_lifecycle_events.py`: feed each fixture from 1.1 through the
   Copilot adapter's `map_events` in its recorded order.
   - `compaction.jsonl` gives exactly one `status` event with `phase == "compacted"`, carrying

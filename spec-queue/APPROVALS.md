@@ -16,6 +16,27 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-10-04
+
+No review page. **Written in an interactive session with the operator present**, after the morning
+briefing. The operator answered all five open `DECISIONS.md` rows; each is recorded there as DECIDED
+with its evidence. What tonight needs from them:
+
+- APPROVED  a-copilot-one-shot-records-its-credits   as R3 and the Opus review's seven fixes left it (`copilot-oneshot-credits-approve`). Its drive spends at most two Copilot Free calls on `:8010`.
+- **`worker-spend-counts-against-the-budget`'s next round gains a real task** for the per-`workers`-line
+  credit sums, with a test and a spec-delta line (`copilot-oneshot-credits-oq1`).
+- **Slice 5 group A is unblocked, subagent scenarios included** (`ghcp-s5-subagent-capture`). The 10-04
+  re-capture delivered `subagent.started`/`completed`, and `hub/tests/fixtures/copilot/subagent.jsonl`
+  is now that capture. A real dispatch needs the built-in's exact lowercase id and a model the plan
+  offers (`claude-haiku-4.5` on Free). Group A's own drive (7.1) must prompt that way. The D8 follow-up
+  and F484 are recorded on the row.
+- **`the-shell-judge-reads-a-word-whole`**: task 1.7c's two escape bullets become `(POSIX CI)`, and
+  design D7's "harmless readings" claim is corrected to name F487's drive-letter-host case
+  (`shell-judge-escape-scope-1-7c`, (b)). Task 2.3 is rewritten to compare the whole `hub/tests/`
+  suite before and after the change: every moved outcome must be one of task 1.8's rows or a new row
+  (`shell-judge-2-3-eight-files`, (c)). That unblocks 1.7c, 2.2a, 2.3 and then 4.1.
+- No `ORDER:` today. The operator did not set one, so compose takes the playbook's default.
+
 ## 2026-10-03
 
 No review page today. **Written in an interactive session with the operator present.** The operator
