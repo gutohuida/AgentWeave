@@ -21741,7 +21741,15 @@ walks straight through should enumerate tools at all, or hand this posture to th
 
 ## F278 (C) - a deep POSIX file path in a recorded transcript reads `<redacted>.py`, because `/` is inside the high-entropy class
 
-**Status:** open. Filed 2026-09-04 (night window). Found while *measuring a claim rather than
+**Status:** fixed ee6ba0f (`a-file-path-is-not-redacted-as-a-credential`, archived 2026-10-04): a
+catch-all match of three or more ordinary-word segments is kept as a path, and a segment of 32+
+characters, or 16+ holding a letter and a digit, is still redacted. Tests in
+`hub/tests/test_operator_is_told_the_truth.py`: `test_a_posix_path_is_not_a_credential`,
+`test_a_credential_used_as_a_path_segment_is_still_redacted`,
+`test_a_short_token_in_a_path_is_still_redacted`, `test_a_base64_credential_with_slashes_is_still_redacted`,
+`test_only_the_high_entropy_rule_can_keep_a_path`. Residual, stated in the change: a path with a
+segment that is not an ordinary word (`Claude2`, `README`) is still redacted whole.
+Filed 2026-09-04 (night window). Found while *measuring a claim rather than
 asserting it* - phase 2b of `a-write-outside-the-workspace-is-recorded` wanted a comment saying
 "the structured path may not survive redaction", and checking whether that was true turned up
 this. **Filed, not fixed:** it is `redact_secrets`' scope, not that change's.

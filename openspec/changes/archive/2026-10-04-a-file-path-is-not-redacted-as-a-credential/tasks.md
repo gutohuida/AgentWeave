@@ -113,5 +113,7 @@ In `hub/tests/test_operator_is_told_the_truth.py`, beside the F31 and F118 cases
   stored `payload["input"]` into design.md's round log.
   **Done 2026-10-04.** Table pasted in design.md's round log (IMPL entry), with the residuals
   re-measured on the module itself.
-- [ ] 3.2 Close F278 in `scripts/drive/FINDINGS.md` with the commit and test names, and regenerate
+- [x] 3.2 Close F278 in `scripts/drive/FINDINGS.md` with the commit and test names, and regenerate
   the backlog.
+  **Done 2026-10-04.** F278 → `fixed ee6ba0f` with the five test names and the stated residual;
+  backlog regenerated after archiving.

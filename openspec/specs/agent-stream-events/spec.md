@@ -131,6 +131,15 @@ document slugs it mints from titles agents choose. A rule that matches any suffi
 identifier removes precisely the identifier that tells the operator *which* document an agent read,
 and it does so to catch credentials the recognized-prefix rules have already caught.
 
+Nor SHALL redaction consume a file path. A run of the high-entropy rule that is made of at least
+three non-empty `/`-separated segments, each an ordinary lowercase, capitalised or camel-case word
+(empty segments are ignored), is a path and SHALL survive, except that any single segment of
+credential length, or of 16 or more characters holding both a letter and a digit, SHALL still be
+redacted, because a token inside a path is no less a token. A
+path with `/` separators is the commonest thing a tool input names on a Linux host. The one most
+reliably lost is the agent's own checkout, which is what an operator reading a transcript is most
+often trying to establish.
+
 The serialized payload SHALL be at most 64 KiB, and a retained tool-result excerpt SHALL be at most
 8 KiB. Truncated payloads SHALL preserve readable content and set `truncated=true`.
 
@@ -145,6 +154,24 @@ The serialized payload SHALL be at most 64 KiB, and a retained tool-result excer
 #### Scenario: A credential with no recognized prefix
 - **WHEN** a payload contains a long high-entropy token with no separators
 - **THEN** it SHALL be redacted
+
+#### Scenario: A deep POSIX file path
+- **WHEN** a payload contains a path every segment of which is an ordinary word, such as `/Users/operator/code/agentweave/hub/main.py` or `/workspace/proj/.agentweave/worktrees/beta/src/app.py`
+- **THEN** the path SHALL survive redaction intact
+
+#### Scenario: A credential used as a path segment
+- **WHEN** a payload contains a URL or path one of whose segments is a 32-character or longer value of lowercase letters and digits, such as a hex token, and whose other segments are ordinary words
+- **THEN** that segment SHALL be redacted
+- **AND** the segments around it SHALL survive
+
+#### Scenario: A short token inside a path
+- **WHEN** a payload contains a path whose other segments are ordinary words and one of whose segments is a token of 16 to 31 characters holding both letters and digits, such as `/run/secrets/postgres/password/hunter2hunter2hunter2`
+- **THEN** that segment SHALL be redacted
+- **AND** the segments around it SHALL survive
+
+#### Scenario: A base64 credential that contains a slash
+- **WHEN** a payload contains a base64 value with `/` in it whose segments are not all ordinary words, such as `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+- **THEN** the whole value SHALL be redacted
 
 #### Scenario: Tool output exceeds its bound
 - **WHEN** a tool result is larger than 8 KiB
@@ -679,3 +706,4 @@ turn. Any other failure to load SHALL fail the turn.
 
 - **WHEN** a conversation's bound Copilot session cannot be found by Copilot
 - **THEN** the Hub starts a new session, binds the conversation to it, and the run's timeline says a new session was started
+
