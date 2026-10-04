@@ -4618,3 +4618,85 @@ async def test_every_armed_session_error_is_logged_with_its_structured_fields(mo
     assert "errorCode='quota_exceeded'" in message
     assert "statusCode=402" in message
     assert "You have exceeded your quota" in message
+
+
+# F488 task 1.7 (`a-secret-split-across-two-events-is-still-scrubbed`, design D6): the
+# `session.error` log line is passed through the run's registry before it is serialised and cut.
+
+_LOG_KEY = "plainproxykey123"
+_LOG_RUN = "run-f488-log"
+
+
+@pytest.fixture
+def _registered_log_key():
+    from hub import run_secrets
+
+    run_secrets.register(_LOG_RUN, [_LOG_KEY])
+    yield
+    run_secrets.forget(_LOG_RUN)
+
+
+def _error_lines(caplog):
+    return [r.getMessage() for r in caplog.records if "Copilot session.error" in r.getMessage()]
+
+
+async def test_the_session_error_log_line_does_not_carry_a_registered_key(
+    monkeypatch, caplog, _registered_log_key
+):
+    payload = {"errorType": "authentication", "statusCode": 401, "message": f"bad key {_LOG_KEY}"}
+    with caplog.at_level("WARNING", logger="hub.copilot_acp"):
+        await _drive(
+            monkeypatch,
+            _new_with() + [_raw_event("session.error", payload), _END_TURN],
+            env={"AW_RUN_ID": _LOG_RUN},
+        )
+    [line] = _error_lines(caplog)
+    assert "bad key <redacted>" in line
+    for record in caplog.records:
+        if record.name == "hub.copilot_acp":
+            assert _LOG_KEY not in record.getMessage()
+
+
+async def test_a_key_across_the_log_lines_cut_leaves_no_prefix(
+    monkeypatch, caplog, _registered_log_key
+):
+    """Scrubbed before the 2000-character cut: a cut first would leave a prefix no exact match
+    sees. The padding puts the cut ten characters into the key."""
+    probe = {"errorType": "authentication", "message": ""}
+    start = len(json.dumps(probe)) - 2  # where the message's text begins (before `"}`)
+    message = "x" * (2000 - 10 - start) + _LOG_KEY + " tail"
+    payload = {"errorType": "authentication", "message": message}
+    assert json.dumps(payload)[:2000].endswith(_LOG_KEY[:10])
+    with caplog.at_level("WARNING", logger="hub.copilot_acp"):
+        await _drive(
+            monkeypatch,
+            _new_with() + [_raw_event("session.error", payload), _END_TURN],
+            env={"AW_RUN_ID": _LOG_RUN},
+        )
+    [line] = _error_lines(caplog)
+    assert _LOG_KEY[:8] not in line
+
+
+async def test_a_raising_log_scrub_logs_no_payload_and_keeps_the_error_card(
+    monkeypatch, caplog, _registered_log_key
+):
+    """D6, *If that scrub raised*: the line is logged without its payload, never with the
+    unscrubbed one, and the raw event still reaches the mapper."""
+    from hub import run_secrets
+
+    def _boom(run_id, value):
+        raise RuntimeError("scrub broke")
+
+    monkeypatch.setattr(run_secrets, "scrub", _boom)
+    payload = {"errorType": "authentication", "message": f"bad key {_LOG_KEY}"}
+    with caplog.at_level("WARNING", logger="hub.copilot_acp"):
+        _fake, events, outcome = await _drive(
+            monkeypatch,
+            _new_with() + [_raw_event("session.error", payload), _END_TURN],
+            env={"AW_RUN_ID": _LOG_RUN},
+        )
+    [line] = _error_lines(caplog)
+    assert "payload=<unavailable>" in line
+    assert _LOG_KEY not in line
+    assert [e.kind for e in events if e.kind == "error"] == ["error"]
+    assert outcome.status == "failed"

@@ -40,6 +40,11 @@ async def record_agent_output(
 
     Every kind's `content` and every string in its `payload` are scrubbed of the run's registered
     secrets first (slice 5 D7), so neither the row nor the broadcast ever holds them.
+
+    That scrub is per event, and it is the floor for every kind and every caller. A value split
+    across two of a run's `text`/`thinking` events is joined at the executors instead
+    (`run_secrets.scrub_stream`, F488), not here: `_record_observation` re-invokes this function
+    on a locked database, and a stateful scrub here would take the same text in twice.
     """
     content = run_secrets.scrub(run_id, content)
     payload = run_secrets.scrub(run_id, payload)
