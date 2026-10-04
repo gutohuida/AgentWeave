@@ -614,7 +614,9 @@ def test_drive_exists_is_memoized_per_budget(monkeypatch):
 
     def counting_stat(path, *args, **kwargs):
         calls.append(path)
-        return real_stat(path, *args, **kwargs)
+        # A stat result for the drive root itself, so the test holds on a host with no `C:`
+        # (CI's Linux runner raises `FileNotFoundError` for `C:\`, and `_drive_exists` says False).
+        return real_stat(".", *args, **kwargs)
 
     monkeypatch.setattr(mcp_server.os, "stat", counting_stat)
     budget = mcp_server._Budget()
