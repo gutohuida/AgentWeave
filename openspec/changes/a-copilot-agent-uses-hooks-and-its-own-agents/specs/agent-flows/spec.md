@@ -27,7 +27,10 @@ it is.
 #### Scenario: A reviewer with review agents chosen is told to consult them
 
 - **WHEN** a Copilot agent whose operator chose code review is given a review turn
-- **THEN** its context names the code-review agent and the range of changes to hand it
+- **THEN** its context names the code-review agent by the exact name Copilot dispatches it by,
+  and the range of changes to hand it
+- **AND** says how to recover when the agent's model is not available on the operator's plan
+- **AND** says not to describe a review the agent did not give
 - **AND** says that the verdict is the reviewer's own and is recorded only by updating the task
 
 #### Scenario: Without a choice the review context is unchanged
@@ -74,3 +77,35 @@ it is.
 
 - **WHEN** the operator chooses code review for a Copilot agent and reopens its settings
 - **THEN** code review is shown as chosen
+
+### Requirement: A Copilot review turn records which review agents actually ran
+
+Where a Copilot review turn's context named Copilot review agents, the run's stream SHALL record at the end of the turn which Copilot subagents ran in it, including that none did, as an event that stays visible when diagnostics are hidden.
+
+A reviewer's own words about what its review agents found are not evidence that they ran: a
+reviewer can claim a consultation that never happened. The Hub SHALL NOT judge the reviewer's prose;
+it SHALL state, from the subagent events Copilot reported in that turn, what ran and what was named
+but did not run, so that a claim and the record of what happened are read side by side.
+
+#### Scenario: A review agent that was named but not run is reported
+
+- **WHEN** a Copilot review turn whose context named the code-review agent ends without Copilot
+  reporting any subagent
+- **THEN** the run's stream records that the code-review agent was asked for and that no subagent ran
+
+#### Scenario: A review agent that ran is reported with its outcome
+
+- **WHEN** a Copilot review turn whose context named the code-review agent ends after Copilot
+  reported that agent completing
+- **THEN** the run's stream records that it ran, how it ended and the model it ran on
+
+#### Scenario: The report is made when the turn fails too
+
+- **WHEN** a Copilot review turn whose context named review agents fails or is stopped
+- **THEN** the run's stream still records which subagents ran
+
+#### Scenario: Without named review agents nothing is reported
+
+- **WHEN** a Copilot turn ends whose context named no review agent, including every turn that is not
+  a review
+- **THEN** no report of review agents is recorded

@@ -995,6 +995,57 @@ not guarantee a stored value is well-formed. So:
 - the renderer filters the stored value to the closed vocabulary at render time, and ignores a
   non-list, so a value stored by another writer can only narrow the bullet, never inject into it.
 
+### D8a — Amendment 2026-10-04 (F484): the bullet says how, and the stream says what ran
+
+**Operator decision, 2026-10-04** (F484, option "fix the prompt and record the truth"). Drive 7.7
+showed a Copilot reviewer told to run `code-review` never dispatched it, then wrote into its
+verdict and into `update_task`'s `notes` that "the independent code-review agent" had flagged the
+same defect. Two causes, two fixes.
+
+**1. The bullet names the dispatch exactly.** The 10-04 re-capture (`ghcp-s5-subagent-capture`,
+DECIDED) established that a dispatch works only when the `task` tool gets the built-in's lowercase
+id as `agent_type` and, on a plan that does not offer the built-ins' default model
+(`claude-sonnet-4.6`; Free), a `model` the plan offers. The plan's offer is not known when the
+context is rendered (it arrives as `session.auto_mode_resolved.availableModels` during the turn),
+so the bullet does not name a model; it names the recovery Copilot's own error makes possible
+(that error lists the available models, drive 7.1: `Model 'sonnet' is not available. Available
+models: claude-haiku-4.5, …`). The bullet becomes:
+
+> Before your verdict, run Copilot's `code-review` agent as a subagent on the changes from `<base>`
+> to `<commit>`: call the `task` tool with `agent_type` exactly `"code-review"`. If it fails because
+> a model is not available, call it again with `model` set to one the error lists. Weigh what it
+> reports and check it yourself. It does not see this repository's instructions, and its findings
+> are not your verdict. If it did not run, say so; never describe a review it did not give. The
+> verdict is yours, and it is recorded only by `update_task`.
+
+(With several agents chosen, one `task` call each, every id named exactly.)
+
+**2. The Hub records what actually ran, beside the verdict.** A prompt alone cannot stop a false
+claim, and reading the verdict's prose for claims is the kind of detector this repository retired
+(CLAUDE.md, migration `0082`). So the Hub states the fact instead: at the end of a review turn whose
+context carried the bullet, the run's stream gets one `status` event, phase
+`review_agents_report`, saying which Copilot subagents ran in that turn, from group A's
+`subagent_started`/`subagent_completed`/`subagent_failed` events, including **none**. It is a
+`status`, not a `diagnostic`, so hiding diagnostics does not hide it, and it renders as a card in
+the same timeline as the reviewer's verdict text and its `update_task` call.
+
+- **How the mapper knows.** `_render_hub_agent_context` already computes the filtered list it names
+  in the bullet (`review_agent_names`, `api/v1/agents.py`); the rendered dict gains
+  `copilot_review_agents` (that list, empty when no bullet was rendered). The trigger adds it to
+  `RpcTurnRequest.agent_config` as `review_agents` (only the keys the turn reads, finding 14), and
+  `copilot_acp.run_turn` passes it to `CopilotEventMapper(review_agents=…)`. A non-review turn, a
+  non-Copilot runner, or an empty choice gives an empty list and no event.
+- **What it says.** Facts: `asked` (the list named), `ran` (each subagent the turn reported: `name`,
+  `outcome` `completed`/`failed`, `model`), `missing` (asked but not run). Summary, e.g. *"This
+  review was asked to consult `code-review`; Copilot ran no subagent in this turn."* or *"…; Copilot
+  ran `code-review` (completed, claude-haiku-4.5)."* A subagent that started and never ended is
+  reported as `started`.
+- **When.** In `finish()`, after the flush, so it is the turn's last card. A turn that fails or is
+  interrupted still reports (that is when a claim is least trustworthy).
+- **Not built:** stamping the report onto the task's transition row (a migration and a UI read for
+  a fact the run's timeline already holds, one click from the transition's `run_id`). Recorded as a
+  possible follow-up.
+
 ## D9 — The built-in GitHub MCP server as a per-agent toggle
 
 - **The setting.** Agent `config.copilot_github_mcp` is a boolean, default false. The Copilot argv
@@ -1121,6 +1172,59 @@ not guarantee a stored value is well-formed. So:
     diagnostic cannot fire: it is removed from the change and the spec, and the operator is told
     that a failed GitHub server shows only as tool calls that never happen. **Operator decision,
     2026-09-28: accepted** (Open question 8). No other signal is built in its place.
+
+### D9a — Amendment 2026-10-04 (F485): the toggle gives read-only tools Copilot runs itself
+
+**Operator decision, 2026-10-04** (F485, "reword and block the flags"). Drive 7.8 found that with
+the toggle on, `github-mcp-server-search_code` ran with no `session/request_permission` at all, so
+D9's card could not fire; and that no issue tool existed to list or create from.
+
+**What the installed Copilot does** (1.0.91, read from its bundle without running it; F485's
+investigation, 2026-10-04; most of the logic is native, so most of this is strings and offsets):
+
+- VERIFIED-CODE (strings): the built-in server's default tool lists (`githubMcpDefaultTools`,
+  `runtime.node@87205184`, beside `github_config.rs`) are read tools only: `get_file_contents
+  search_code get_copilot_space list_copilot_spaces web_search search_users` and, unless `gh` is on
+  PATH (changelog 1.0.56), `search_repositories list_branches list_commits get_commit issue_read
+  list_issues search_issues pull_request_read list_pull_requests search_pull_requests actions_list
+  actions_get get_job_logs`. The endpoint strings include `/mcp/readonly` and an
+  `X-MCP-Readonly` header. This machine's `gh` is on PATH, which is why the drive saw no issue tool.
+- VERIFIED-CODE (clap help): write tools are added only by `--enable-all-github-mcp-tools`,
+  `--add-github-mcp-toolset <t>` and `--add-github-mcp-tool <t>`, or the settings keys
+  `enableAllGithubMcpTools`, `githubMcpToolsets`, `githubMcpTools` (changelog 0.0.388:
+  `--enable-all-github-mcp-tools` "enables read-write GitHub MCP tools").
+- VERIFIED-CODE (SDK types): an MCP permission request carries `readOnly: boolean`, and
+  `mcp-read-only` is one of Copilot's own auto-approval reasons. **INFERRED:** a call Copilot knows
+  to be read-only is approved inside Copilot before any prompt, so no `session/request_permission`
+  reaches the Hub. The drive matches it exactly.
+
+**So the toggle as built gives the agent read-only GitHub tools that Copilot runs without asking.**
+D9's rule (`ASK_OPERATOR` for any server not `agentweave`, under Workspace only) is unchanged and
+still right: it is what decides a request Copilot *does* send, which is a non-read-only call (a
+write tool added by a flag, or a server whose tool is not marked read-only). Three changes:
+
+1. **The flags that add write tools are widening flags.** `COPILOT_WIDENING_FLAGS`
+   (`copilot_acp.py`) gains `--enable-all-github-mcp-tools` (no value), `--add-github-mcp-toolset`
+   and `--add-github-mcp-tool` (each `many`, like `--allow-tool`). They are removed from a run
+   without full access and reported as every widening flag is. D9's finding-11 bullet ("flags are
+   operator-set, so this is the operator's authority") is narrowed: under full access they stand;
+   under any other posture a runner flag must not silently give an agent GitHub write access.
+2. **The settings keys are swept from the Hub-owned home.** `_CONFIG_PERMISSION_KEYS`
+   (`copilot_home.py`) gains `enableAllGithubMcpTools`, `githubMcpToolsets` and `githubMcpTools`,
+   so a `config.json` written by anyone but the Hub cannot add them. (The operator's own
+   `~/.copilot/config.json` carries none, VERIFIED.)
+3. **The words say what happens.** The Settings toggle's help text, and the spec, say: *"Gives this
+   agent Copilot's built-in GitHub tools, read-only. Copilot runs them without asking you. A tool
+   that writes to GitHub is put to you first, and only a runner with Full access can add one."*
+
+**Not measured, and why it is acceptable:** that a write tool would arrive as a
+`session/request_permission` (`readOnly: false`). Under Workspace only no write tool can now be
+added, so the card is reachable only under Ask me (every call goes to the operator anyway) or Full
+access (everything is allowed). The operator chose not to spend a throwaway-repo drive on it.
+
+**Drive 7.8's second bullet is rewritten** (it asked for a card that cannot appear): with the toggle
+on, a `search_code` call runs with no card; and a runner flag `--enable-all-github-mcp-tools` is
+absent from the live command line under Workspace only, with a diagnostic naming it.
 
 ## D10 — Independence of the groups
 

@@ -2,7 +2,7 @@
 
 ### Requirement: Copilot's built-in GitHub server is off unless the operator enables it for that agent
 
-A Copilot agent's runs SHALL start with Copilot's built-in GitHub MCP server disabled unless the operator has enabled it for that agent, and while it is enabled, under the Workspace only posture, a call to any MCP server other than the Hub's own SHALL be put to the operator and SHALL NOT be allowed by the Hub's own judgement.
+A Copilot agent's runs SHALL start with Copilot's built-in GitHub MCP server disabled unless the operator has enabled it for that agent, and while it is enabled, under the Workspace only posture, a call Copilot asks the Hub to decide for any MCP server other than the Hub's own SHALL be put to the operator and SHALL NOT be allowed by the Hub's own judgement.
 
 That server acts on GitHub as the person signed in to Copilot. It opens issues, comments and pull
 requests outside the agent's workspace. The Hub's judgement is about the workspace, and a GitHub
@@ -11,6 +11,14 @@ ground to allow such an action on the operator's behalf, and the call SHALL be d
 judgement is consulted. Copilot may bring more than one built-in server, and a GitHub server need not
 carry the name the Hub expects, so the rule SHALL cover every server Copilot reports other than the
 Hub's own, not only one named for GitHub.
+
+Copilot approves on its own, without asking the Hub, a call it knows to be read-only, and with the
+server enabled it offers only its read-only GitHub tools. Such a call is not put to the operator,
+and the setting SHALL be described to the operator as giving the agent read-only GitHub tools that
+Copilot runs without asking. A runner setting that adds GitHub tools beyond the read-only ones
+SHALL be removed from a run that does not have full access, and the run SHALL say it was removed,
+as for every other runner setting that widens what Copilot approves on its own. Settings in the
+agent's Copilot home that would add them SHALL be removed from that home.
 
 A call whose server Copilot did not report SHALL be refused, as it is with the server disabled. The
 Hub cannot say what such a call acts on, and enabling the GitHub server SHALL NOT change how a call
@@ -42,11 +50,30 @@ value stored for that agent.
 - **WHEN** the operator enables the GitHub server for a Copilot agent and a run starts
 - **THEN** the run starts without disabling Copilot's built-in servers
 
-#### Scenario: A call to it is put to the operator
+#### Scenario: A call Copilot asks about is put to the operator
 
-- **WHEN** a Copilot agent under Workspace only calls a tool of the GitHub server
+- **WHEN** Copilot asks the Hub to decide a call to a tool of the GitHub server for an agent under
+  Workspace only
 - **THEN** the call is put to the operator as a card saying it acts on GitHub as them
 - **AND** the Hub does not allow it on its own
+
+#### Scenario: A read-only GitHub call runs without a card
+
+- **WHEN** the GitHub server is enabled and the agent calls one of its read-only tools, which
+  Copilot approves itself
+- **THEN** no card is raised and the call is recorded in the run's stream
+
+#### Scenario: A runner setting that adds GitHub write tools is removed
+
+- **WHEN** a Copilot runner's settings would add GitHub tools beyond the read-only ones and the run
+  does not have full access
+- **THEN** the run starts without that setting
+- **AND** the run's stream says it was removed
+
+#### Scenario: The setting says what it gives
+
+- **WHEN** the operator reads the GitHub server setting of a Copilot agent
+- **THEN** it says the agent gets read-only GitHub tools that Copilot runs without asking
 
 #### Scenario: Any other server's call is put to the operator under its own name
 

@@ -749,6 +749,30 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
   width and crushed the row's label column to one word per line. Gave the control's wrapper
   `max-w-[320px]`; re-driven, confirmed fixed, re-screenshotted, bundle rebuilt again.
 
+- [ ] 4.4 (B; amendment 2026-10-04, F484, design D8a) Tests first, in
+  `hub/tests/test_review_turn_copilot_agents.py` and `hub/tests/test_copilot_lifecycle_events.py`:
+  - the rendered bullet names `agent_type` exactly `"code-review"` (each chosen id, in backticks and
+    quotes), says to retry with a `model` the error lists, and says not to describe a review that did
+    not run; it still ends with the `update_task` sentence; a non-review turn and a non-Copilot runner
+    still get no bullet (1.11's rows, unchanged);
+  - the rendered dict carries `copilot_review_agents` equal to the list the bullet names (empty
+    without a bullet), and the Copilot turn's `agent_config["review_agents"]` is that list, through
+    `POST /agent/trigger` with `review_task_id` (the route, not the renderer alone);
+  - `CopilotEventMapper(review_agents=["code-review"])` fed `subagent.jsonl` with its `agentName`
+    rewritten to `code-review` gives, at `finish()`, exactly one `status` with phase
+    `review_agents_report` whose facts say `ran == [{name: "code-review", outcome: "completed", model:
+    "claude-haiku-4.5"}]` and `missing == []`; fed `error.jsonl` (no subagent) it reports
+    `ran == []`, `missing == ["code-review"]` and a summary saying no subagent ran; with
+    `review_agents` empty it emits no such event; a `subagent.started` with no end reports
+    `outcome: "started"`; the event is a `status`, never a `diagnostic`.
+  Each fails today (no such wording, key, keyword or phase).
+- [ ] 4.5 (B; D8a) Build: the bullet wording; `_render_hub_agent_context` returns
+  `copilot_review_agents`; the trigger's `_CopilotTurn.agent_config` adds `review_agents`;
+  `copilot_acp.run_turn` passes `review_agents` to the mapper; `CopilotEventMapper.finish()` emits
+  the report. Pass 4.4.
+- [ ] 4.6 (B; D8a) Record F484 in `scripts/drive/FINDINGS.md` as fixed by the commit that builds 4.5,
+  naming D8a; its follow-up (stamping the report on the transition row) stays unbuilt.
+
 ## 5. Group D — the GitHub MCP server toggle
 
 - [x] 5.1 `RpcTurnRequest.agent_config: Mapping = {}` (slice 1's D16 name; contract reconciliation,
@@ -825,6 +849,26 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
   gained a second `describe` block, 10 tests (20 total in the file, up from iter 9's 10); two
   mutations caught (see 1.14). `npm run lint` clean. `npx vitest run`: 1863 passed (178 files; +10
   over iter 10's 1853/177). `npm run build`, `py -3.11 scripts/refresh_ui_bundle.py`.
+
+- [ ] 5.3 (D; amendment 2026-10-04, F485, design D9a) Tests first, in
+  `hub/tests/test_copilot_github_mcp_toggle.py`:
+  - `strip_widening_flags(["--enable-all-github-mcp-tools", "--add-github-mcp-toolset", "issues",
+    "--add-github-mcp-tool", "create_issue", "--model", "x"], full_access=False)` keeps only
+    `--model x` and names the three removed; with `full_access=True` all are kept; the `=value`
+    forms too;
+  - through `run_turn`'s harness, a runner flag `--enable-all-github-mcp-tools` is absent from the
+    spawned argv under `workspace` and present under full access, and the removal is reported the
+    way every widening flag's is;
+  - `ensure_copilot_home` over a `config.json` holding `enableAllGithubMcpTools`, `githubMcpToolsets`
+    and `githubMcpTools` removes all three and reports them in `removed`;
+  - (UI, `hub/ui/src/__tests__/`) the GitHub toggle's help text says read-only, run without asking,
+    and that a write tool is put to the operator and needs Full access to add.
+  Each fails today.
+- [ ] 5.4 (D; D9a) Build: the three flags in `COPILOT_WIDENING_FLAGS`; the three keys in
+  `_CONFIG_PERMISSION_KEYS`; the help text (refresh the bundle: `hub/ui/src` and
+  `hub/hub/static/ui` committed together). Pass 5.3.
+- [ ] 5.5 (D; D9a) Record F485 in `scripts/drive/FINDINGS.md` as fixed by the commit that builds 5.4,
+  naming D9a and what stays INFERRED (a write tool arriving as a permission request).
 
 ## 6. Full suite
 
