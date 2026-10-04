@@ -3435,6 +3435,16 @@ async def _prepare_copilot_turn(
                 facts={"removed": list(home.removed)},
             )
         )
+    agent_config: Dict[str, Any] = {
+        # Read as `is True` (D9): a stored "true" or 1 is not the operator's choice.
+        "copilot_github_mcp": config.get("copilot_github_mcp")
+        is True
+    }
+    # D8a: the review agents the rendered bullet named, never the stored setting (a non-review
+    # turn names none). Absent when empty: the turn reads only the keys it uses (finding 14).
+    review_agents = rendered_context.get("copilot_review_agents") or []
+    if review_agents:
+        agent_config["review_agents"] = list(review_agents)
     return _CopilotTurn(
         home=home.path,
         per_turn_context=rendered_context.get("per_turn") or "",
@@ -3446,8 +3456,7 @@ async def _prepare_copilot_turn(
         extra_flags=list(runner_flags),
         cli=str(cli) if cli else None,
         pre_turn_events=events,
-        # Read as `is True` (D9): a stored "true" or 1 is not the operator's choice.
-        agent_config={"copilot_github_mcp": config.get("copilot_github_mcp") is True},
+        agent_config=agent_config,
     )
 
 

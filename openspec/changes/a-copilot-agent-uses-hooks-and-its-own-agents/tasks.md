@@ -764,7 +764,7 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
   width and crushed the row's label column to one word per line. Gave the control's wrapper
   `max-w-[320px]`; re-driven, confirmed fixed, re-screenshotted, bundle rebuilt again.
 
-- [ ] 4.4 (B; amendment 2026-10-04, F484, design D8a) Tests first, in
+- [x] 4.4 (B; amendment 2026-10-04, F484, design D8a) Tests first, in
   `hub/tests/test_review_turn_copilot_agents.py` and `hub/tests/test_copilot_lifecycle_events.py`:
   - the rendered bullet names `agent_type` exactly `"code-review"` (each chosen id, in backticks and
     quotes), says to retry with a named `model` the error lists and not `auto`, and says not to
@@ -805,11 +805,30 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
     `agent_id`.
   Each fails today (no such wording, key, keyword or phase), except the cases asserting that
   nothing is emitted, which pass today and guard the build.
-- [ ] 4.5 (B; D8a) Build: the bullet wording; `_render_hub_agent_context` returns
+- [x] 4.5 (B; D8a) Build: the bullet wording; `_render_hub_agent_context` returns
   `copilot_review_agents` (initialised to `[]` at function scope); the trigger's
   `_CopilotTurn.agent_config` adds `review_agents` only when non-empty;
   `copilot_acp.run_turn` passes `review_agents` to the mapper; `CopilotEventMapper.finish()` emits
   the report, built under `try/except` so a raise loses the report and never the turn. Pass 4.4.
+  **Built 2026-10-04 (interactive, operator "APPROVED" for D8a/D9a).** Tests first, in a new
+  `hub/tests/test_review_agents_report.py` (17 tests): **15 failed before the build** (the two that
+  passed are guards that nothing is emitted / no list on an ordinary turn). The bullet asserted
+  verbatim for one agent and the written-out several-agents sentence (de-duplicated); the rendered
+  dict's `copilot_review_agents`; the mapper's report against the captured `subagent.jsonl` renamed
+  to `code-review` (`ran` with `agent_name`, `agent_type`, `agent_id`, `outcome: completed`, `model:
+  claude-haiku-4.5`; last card; "in this run"), against `error.jsonl` (`missing`), the display name
+  not counting, a same-named agent of another `agentType` not counting, a started-only subagent,
+  nothing without names; through `run_turn` (`_drive`): the report ends a completed turn and an
+  interrupted one, and a raising builder loses the card but not the turn; through the trigger: a
+  review turn by `POST /agent/trigger {review_task_id}` and by `trigger_agent_directly(review_task_id=…)`
+  (the flow's path) carry `agent_config["review_agents"] == ["code-review"]`, and an ordinary turn of
+  the same agent (setting stored) carries none. `run_id` is on the stored row (the `AgentOutput`
+  column), not in the facts. `test_review_turn_copilot_agents.py::test_two_review_agents_are_named_together`
+  updated to the written-out sentence. Mutations, all caught: the trigger reading the stored config
+  (1 fails), matching without `agentType` (1), no `try` around the report (1), `run_turn` not
+  passing the list (2), no de-duplication (2), `completed` never recorded (1). Test-setup note: an
+  agent declared through `session/sync` does not store `copilot_review_agents` and refuses PATCH
+  (409, "reserved for a configured agent"); the route tests use `add_agent`, as 1.11 does.
 - [ ] 4.6 (B; D8a) Record F484 in `scripts/drive/FINDINGS.md` as fixed by the commit that builds 4.5,
   naming D8a; its follow-up (stamping the report on the transition row) stays unbuilt.
 

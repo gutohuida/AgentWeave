@@ -1851,6 +1851,8 @@ async def _render_hub_agent_context(
     function writes, never these routes. If a caller ever does need the run's idiom, it must be
     given the path the trigger resolved, not resolve one of its own.
     """
+    # Named in the review bullet below, when there is one (D8a).
+    review_agent_names: List[str] = []
     registered = agent_row is not None
     missing: List[str] = []
 
@@ -1956,27 +1958,48 @@ async def _render_hub_agent_context(
             # this bullet, never inject into it.
             if runner == "copilot" and agent_row is not None:
                 stored_review_agents = (agent_row.config or {}).get("copilot_review_agents")
+                # De-duplicated in stored order (D8a, finding 8): `/agents/register` can store
+                # `["code-review", "code-review"]`.
                 review_agent_names = (
-                    [name for name in stored_review_agents if name in COPILOT_REVIEW_AGENTS]
+                    list(
+                        dict.fromkeys(
+                            name for name in stored_review_agents if name in COPILOT_REVIEW_AGENTS
+                        )
+                    )
                     if isinstance(stored_review_agents, list)
                     else []
                 )
                 if review_agent_names:
-                    first, *rest = review_agent_names
-                    agent_phrase = f"`{first}`"
-                    if rest:
-                        agent_phrase += f" (and {', '.join(f'`{name}`' for name in rest)})"
                     range_phrase = (
                         f"the changes from `{review.base_sha}` to `{review.commit_sha}`"
                         if review.base_sha
                         else f"`{review.commit_sha}`'s own changes"
                     )
+                    # D8a (F484): the dispatch spelled exactly as Copilot accepts it -- the
+                    # built-in's lowercase id as `agent_type`, and on a plan without the
+                    # built-ins' default model, a model the error lists. Drive 7.7's reviewer
+                    # never dispatched and claimed it had.
+                    if len(review_agent_names) == 1:
+                        name = review_agent_names[0]
+                        dispatch = (
+                            f"run Copilot's `{name}` agent as a subagent on {range_phrase}: call "
+                            f'the `task` tool with `agent_type` exactly `"{name}"`.'
+                        )
+                    else:
+                        named = ", ".join(f"`{name}`" for name in review_agent_names)
+                        ids = ", then ".join(f'`"{name}"`' for name in review_agent_names)
+                        dispatch = (
+                            f"run Copilot's {named} agents as subagents on {range_phrase}: call "
+                            f"the `task` tool once for each, with `agent_type` exactly {ids}."
+                        )
                     lines.append(
-                        f"- Before your verdict, run Copilot's {agent_phrase} agent as a "
-                        f"subagent on {range_phrase}. Weigh what it reports and check it "
-                        "yourself. It does not see this repository's instructions, and its "
-                        "findings are not your verdict. The verdict is yours, and it is "
-                        "recorded only by `update_task`."
+                        f"- Before your verdict, {dispatch} If it fails because a model is not "
+                        "available, call it again with `model` set to the model you are running "
+                        "on if the error lists it, otherwise to the first named model it lists, "
+                        "never `auto`. Weigh what it reports and check it yourself. It does not "
+                        "see this repository's instructions, and its findings are not your "
+                        "verdict. If it did not run, say so; never describe a review it did not "
+                        "give. The verdict is yours, and it is recorded only by `update_task`."
                     )
             # F357: the evidence gate, beside the verdict it can refuse. The loop briefing says the
             # same thing through the same helper.
@@ -2399,6 +2422,9 @@ async def _render_hub_agent_context(
         "stable": parts["stable"],
         "per_turn": parts["per_turn"],
         "tool_surface": parts["tool_surface"],
+        # The review agents the bullet named, empty when none was rendered (D8a): what a
+        # Copilot turn's report is measured against.
+        "copilot_review_agents": review_agent_names,
     }
 
 

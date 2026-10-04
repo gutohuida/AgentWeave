@@ -1008,6 +1008,7 @@ class CopilotEventMapper:
         requested_model: Optional[str] = None,
         calls: Optional[Dict[str, CallFacts]] = None,
         github_mcp: bool = False,
+        review_agents: Sequence[str] = (),
     ) -> None:
         self.told_access_path = told_access_path
         self.requested_model = requested_model
@@ -1027,6 +1028,12 @@ class CopilotEventMapper:
         #: The turn's latest root `session.compaction_start`: the counts a compaction report too
         #: large to relay no longer carries (D4, *Omitted data*).
         self._compaction_start: Optional[Dict[str, Any]] = None
+        #: The review agents this turn's context named (D8a); non-empty makes `finish()` report.
+        self.review_agents: List[str] = [
+            str(name) for name in review_agents if isinstance(name, str) and name
+        ]
+        #: Every subagent the turn reported, by its `task` call id, in first-seen order (D8a).
+        self._subagents: Dict[str, Dict[str, Any]] = {}
         self._tools: Dict[str, str] = {}
         self._changes: Dict[str, List[Dict[str, Any]]] = {}
         self._last_plan: Optional[str] = None
@@ -1172,7 +1179,52 @@ class CopilotEventMapper:
         for notice in self._notices:
             events.append(self._notice_event(notice))
         self._notices = []
+        if self.review_agents:
+            # Last, after the notices. A broken report loses the card, never the turn: a raise
+            # here would escape `run_turn` and record a finished review as a failed run (D8a).
+            try:
+                events.append(self._review_agents_report())
+            except Exception:  # noqa: BLE001
+                logger.warning("Could not build the review agents report", exc_info=True)
+            self.review_agents = []
         return events
+
+    def _review_agents_report(self) -> RunEvent:
+        """Which Copilot subagents this run reported, against the review agents its context named
+        (D8a, F484). A fact beside the reviewer's own words, not a judgement of them: an asked
+        agent counts as run only when its dispatch id matches and, where Copilot reported one,
+        its type does too, so a repository's own agent of the same name does not."""
+        ran = [dict(entry) for entry in self._subagents.values()]
+        missing = [
+            name
+            for name in self.review_agents
+            if not any(
+                entry["agent_name"] == name and entry.get("agent_type") in (None, name)
+                for entry in ran
+            )
+        ]
+        asked = ", ".join(f"`{name}`" for name in self.review_agents)
+        verb = "consult" if len(self.review_agents) == 1 else "consult each of"
+        summary = f"This review was asked to {verb} {asked}; "
+        if ran:
+            summary += "in this run Copilot ran " + ", ".join(
+                f"`{entry['agent_name']}` ({entry['outcome']}"
+                + (f", {entry['model']}" if entry.get("model") else "")
+                + ")"
+                for entry in ran
+            )
+            summary += (
+                "."
+                if not missing
+                else ("; " + ", ".join(f"`{name}`" for name in missing) + " did not run.")
+            )
+        else:
+            summary += "Copilot ran no subagent in this run."
+        return status_event(
+            "review_agents_report",
+            summary=summary,
+            facts={"asked": list(self.review_agents), "ran": ran, "missing": missing},
+        )
 
     def _flush_thought(self) -> List[RunEvent]:
         text = "".join(self._thought)
@@ -1239,7 +1291,7 @@ class CopilotEventMapper:
         if event_type == "session.compaction_complete":
             return self._after_open_blocks(self._compaction(data, params))
         if event_type in _SUBAGENT_PHASES:
-            return self._after_open_blocks(self._subagent(event_type, data))
+            return self._after_open_blocks(self._subagent(event_type, data, params))
         if event_type in ("session.mcp_servers_loaded", "session.mcp_server_status_changed"):
             return self._server_status(event_type, data)
         if event_type in (
@@ -1352,12 +1404,43 @@ class CopilotEventMapper:
             )
         ]
 
-    def _subagent(self, event_type: str, data: Mapping[str, Any]) -> List[RunEvent]:
+    def _remember_subagent(
+        self, event_type: str, call_id: str, data: Mapping[str, Any], params: Mapping[str, Any]
+    ) -> None:
+        """For the review agents report (D8a): the dispatch id (`agentName`), the type Copilot
+        reported (on `subagent.started`), the subagent's own `agentId`, and how it ended."""
+        entry = self._subagents.setdefault(
+            call_id,
+            {
+                "agent_name": None,
+                "agent_type": None,
+                "agent_id": None,
+                "outcome": "started",
+                "model": None,
+            },
+        )
+        for key, value in (
+            ("agent_name", data.get("agentName")),
+            ("agent_type", data.get("agentType")),
+            ("agent_id", params.get("agentId") if isinstance(params, Mapping) else None),
+            ("model", data.get("model")),
+        ):
+            if isinstance(value, str) and value:
+                entry[key] = value
+        if event_type == "subagent.completed":
+            entry["outcome"] = "completed"
+        elif event_type == "subagent.failed":
+            entry["outcome"] = "failed"
+
+    def _subagent(
+        self, event_type: str, data: Mapping[str, Any], params: Optional[Mapping[str, Any]] = None
+    ) -> List[RunEvent]:
         """A subagent's start, completion or failure, paired with its `task` call by `call_id`
         (D6). Never by position: a raw event can overtake the queued `tool_use`."""
         call_id = data.get("toolCallId")
         if not isinstance(call_id, str) or not call_id:
             return []
+        self._remember_subagent(event_type, call_id, data, params)
         name = data.get("agentDisplayName") or data.get("agentName") or "A Copilot subagent"
         error = data.get("error")
         if event_type == "subagent.started":
@@ -2095,6 +2178,11 @@ async def run_turn(
         requested_model=model,
         calls=calls,
         github_mcp=github_mcp,
+        review_agents=[
+            name
+            for name in ((agent_config or {}).get("review_agents") or [])
+            if isinstance(name, str)
+        ],
     )
     # Server reports that arrive before arming (a load can bring one) reach the mapper at arming.
     early_server_events: List[Tuple[str, Dict[str, Any], Dict[str, Any]]] = []

@@ -90,7 +90,8 @@ async def test_a_copilot_reviewer_with_one_review_agent_gets_the_d8_bullet(
 async def test_two_review_agents_are_named_together(app, auth_headers, add_agent):
     await add_agent("critic", config={"copilot_review_agents": ["code-review", "security-review"]})
     context = await _context("critic", runner="copilot", review=_review())
-    assert "`code-review` (and `security-review`)" in context
+    # D8a (F484) writes the several-agents sentence out exactly (`test_review_agents_report.py`).
+    assert "run Copilot's `code-review`, `security-review` agents as subagents" in context
 
 
 @pytest.mark.asyncio
