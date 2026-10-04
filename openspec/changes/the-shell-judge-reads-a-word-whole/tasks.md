@@ -469,6 +469,57 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   iteration 39 finding (1), likely out of scope) remain open and untouched -- task 1.4c itself stays
   unticked until both are resolved on their own fresh measurement, not assumed from this iteration's
   work on a different gap.
+
+  **Iteration 49 (both remaining gaps re-derived fresh; one already closed, one is a real gap,
+  drafted as D14).** Took `next_action`'s named item: re-derive both of task 1.4c's two other
+  named gaps fresh against the current code, not assumed from iteration 39's or 45's notes.
+
+  The absolute top-level dot-glob gap (iteration 39 finding (2)) is **already closed, no change
+  needed**: reran
+  `test_an_absolute_top_level_dot_glob_refuses_by_the_dotdot_rewrite_not_the_link_it_finds_1_4c_r5`
+  directly (`py -3.11 -m pytest ... -k test_an_absolute_top_level_dot_glob_refuses_by_the_dotdot_rewrite_not_the_link_it_finds_1_4c_r5`):
+  **1 passed**. It still documents, and still measures, that this row is refused by
+  `_rewrite_dotdot_globs`'s earlier `..` rewrite, not by `_glob_links` reading a link at all --
+  nothing left to build here. This half of task 1.4c's remaining work is done.
+
+  The bash-dot-rule control gap (iteration 39 finding (1), both iteration 39's and 45's notes called
+  it "likely out of scope") is **not out of scope -- it is a real, unbuilt piece of the design**,
+  confirmed by reading design.md directly rather than trusting either prior note's hedge: the "Over-
+  approximation, on purpose" section names exactly three accepted over-matches by name (folded case,
+  relaxed brackets and extglob groups, PowerShell's literal-path matching), and "Residuals, named"
+  lists every accepted gap this change ships with, also by name -- the bash dot rule is in neither
+  list, while D8 step 2's own text states the rule as something this design builds (revised twice
+  more since, R6 and R5). `_glob_links`'s own docstring cites "the design allows over-approximation"
+  for skipping it, but that citation does not point at anything either list actually contains.
+  Measured fresh against `_decide` (`testbed/scratch/measure_1_4c_bash_dot_rule.py`, gitignored, not
+  committed): `_decide("Bash", {"command": "ls sub/?l/x"})` against a fixture with `sub/.l` linked
+  outside is refused, naming the resolved link -- the task's own control (line 74) says this must be
+  **allowed**, since bash's `?` does not match a leading dot. The already-passing test for this same
+  row's *PowerShell* form stays correct (PowerShell has no dot rule either, so the two dialects
+  coincide by accident there) -- this is a different, Bash-only gap that test does not cover.
+
+  Drafted **D14 (R1)** in `design.md` (new section, after D13): the defect, why it is not covered by
+  either named list, the scope (bash dialect's `_glob_links`/`_globstar_walk` matching only --
+  PowerShell and the D8-step-4 literal-tail walk are both unaffected), and a proposed rule mirroring
+  `_Budget.globstar_named`'s own shape (a new `_DOTGLOB_RE`/`dotglob_named`, `dialect` threaded from
+  `_judge_word` through `_judge_piece` -- which currently takes no `dialect` parameter at all -- into
+  a new `bash: bool` on `_glob_links`/`_globstar_walk`, and a dot-rule guard in each matching loop
+  that exempts a pattern starting with `.` or `[`, reusing `_rewrite_dotdot_globs`'s own R6/D11
+  bracket hedge for consistency). Three open items left for R2/R3 to each independently confirm
+  before any production line changes: (a) the plumbing does not move any already-passing test's
+  answer; (b) the reused `[`-opened hedge is read at the right point (`pattern` before masking, not
+  `_rewrite_dotdot_globs`'s own post-mask `candidate`) and agrees with it on every case design's own
+  bracket-relaxation section names; (c) `dotglob_named`'s read-once-per-`_decide` behaviour carries
+  over correctly to a nested inner shell's own `shopt -s dotglob`, the same way `globstar_named`
+  already does for `globstar`, not yet re-derived for `dotglob` specifically.
+
+  No production file touched. `git diff --stat`: exactly `design.md` and this task file. This is a
+  new, previously-unproposed gap (not one task 1.4c's own text already named a design for), so per
+  `next_action`'s instruction it needs its own three-round discipline -- R1 drafted this iteration,
+  R2 and R3 each a fresh independent re-derivation still to come, same as D13 just went through,
+  before any line of `mcp_server.py` changes. **Task 1.4c stays unticked**: one of its two remaining
+  gaps is now closed (the dot-glob rewrite row), the other (the bash dot rule) has an R1 draft but no
+  implementation yet.
 - [x] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
   - `cp n [u]p/` and `cp n ./u[p]` (a trailing `]` the trim removes). Each PASSES today only by the tail (`'/'`, `'/u[p'`), so assert the resolved target, which FAILS today; each FAILS against R5 (allowed).
   - `cp n [.]./x` refused as outside, quoting `'[.]./x'`. PASSES today by the tail `'/x'`, FAILS on the reason assertion and against R5 (the word `.]./x` is inside).

@@ -1127,6 +1127,116 @@ was relied on as evidence). **120 passed**, broader regression set **746 passed,
 and `black` clean. Task 1.4c's Windows-side POSIX-class/colon-split gap is closed; its other two
 named gaps are untouched.
 
+### D14 (R1 draft — awaits R2, R3 independent re-derivations) — `_glob_links` has no bash dot rule
+
+**The defect (task 1.4c's (R5) control row, carried unconfirmed since iteration 39's finding (1);
+re-measured this round fresh against the running code, not assumed from either iteration 39's or
+45's note that it was "likely out of scope").** The task's own text (line 74, this file's sibling
+`tasks.md`) names a control: "Bash `ls ?l/x` in the same fixture is allowed, because bash's `?`
+does not match a leading dot." Measured directly against `_decide`
+(`testbed/scratch/measure_1_4c_bash_dot_rule.py`, gitignored, not committed), with a fixture
+holding `sub/.l` linked outside the workspace: `_decide("Bash", {"command": "ls sub/?l/x"})` is
+`{'allow': False, 'reason': "... it resolves to '<outside>'"}` — refused, naming the resolved
+link, not allowed as the control names. `_glob_links`'s matching loop
+(`fnmatch.fnmatchcase(os.path.normcase(entry.name), normalized_pattern)`,
+`hub/hub/mcp_server.py:1809`) applies no dot rule at all: `?` reads `.l` the same as any other
+one-character name, for every dialect alike. The already-passing
+`test_an_absolute_or_piece_relative_glob_is_matched_through_the_link_it_finds_1_4c_r5` pins the
+*PowerShell* form of the same row (`Get-ChildItem sub/?l/x`) as correctly refused — PowerShell has
+no dot rule either (design, "In the PowerShell dialect there is no such rule"), so the two
+dialects coincide there by accident, not by a rule either encodes. No test pins the *Bash* form,
+and the Bash form is wrong: this is a different gap from the one that test's own comment describes.
+
+**Why this is not an accepted residual or an accepted over-approximation.** `_glob_links`'s own
+docstring (`hub/hub/mcp_server.py:1763-1766`) says the bash dot rule "is also left unbuilt:
+skipping it only widens what matches, which the design allows ('over-approximation... can only add
+a refusal')". Checked directly against this file rather than trusting that citation: the
+"Over-approximation, on purpose" section (above, "Folding case, the relaxed brackets and extglob
+groups, and matching PowerShell's `-LiteralPath`/`-Destination` values") names exactly three
+accepted over-matches, by name, and the bash dot rule is not one of them. "Residuals, named"
+(below) lists every accepted gap this change ships with by name too, and the bash dot rule is not
+there either. Meanwhile D8 step 2's own text, above ("In the bash dialect, a name beginning with
+`.` matches only when the relaxed component begins with `.`, as bash's default (`dotglob` off)
+does"), states the rule as something **this design builds**, revised twice more since (R6's
+bracket-opened-component hedge, R5's PowerShell carve-out) — not as something deferred. The
+docstring's citation does not match what either named list actually contains: this is a real,
+unbuilt piece of the design, not a documented residual the docstring correctly describes. Unlike
+the extglob-group and bracket-collating-element cases the accepted list does name, there is no
+infeasibility here — `fnmatch` has no dot rule of its own to work around with a wider substitute;
+the rule is simply not implemented. (The security property the docstring's reasoning gestures at
+still holds as a side effect — skipping the rule only ever over-refuses, never under-refuses, so
+no workspace boundary is weakened by this gap — but the design's own text asks for the narrower,
+correctly-behaving rule regardless, and the task's control row expects it.)
+
+**Scope: the bash dialect's `_glob_links` matching only.** PowerShell is unaffected (confirmed,
+measured, "In the PowerShell dialect there is no such rule": `Resolve-Path *` lists `.l`) — the
+existing PowerShell test above must keep passing unchanged. The dot rule governs whether a matched
+*glob* pattern can reach a dot-leading entry; it does not touch D8 step 4's literal-component walk
+(`_glob_tail_walk`), which never matches anything — a literal component either names the real
+entry or it does not.
+
+**Proposed rule**, mirroring the shape `globstar_named` already gives `_Budget` (`_Budget.__init__`,
+read once per `_decide` from the whole top-level `command` text, "so that the memo below cannot
+hold a result from a nested text read under different flags" — the same reason applies here):
+
+- A new `_DOTGLOB_RE = re.compile(r"\bdotglob\b")`, mirroring `_GLOBSTAR_RE` exactly, and a new
+  `_Budget.dotglob_named: bool`, read at the same call site `budget = _Budget(globstar_named=...)`
+  already uses (`hub/hub/mcp_server.py:3165`).
+- `_glob_links` and `_globstar_walk`'s matching loops need to know whether the dialect is bash —
+  currently neither receives a dialect at all (`_glob_links`'s own signature is
+  `(piece, shown, root, budget)`). `dialect` must be threaded from `_judge_word` (which already
+  has it) through to both call sites: the direct absolute-word call
+  (`hub/hub/mcp_server.py:2091`, `_judge_word` already holds `dialect` in scope) and the
+  piece-reading call inside `_judge_piece` (`hub/hub/mcp_server.py:2124`) — but `_judge_piece`
+  itself currently takes no `dialect` parameter, only `_judge_pieces` and `_judge_pieces_reading`
+  (its two callers) do, for an unrelated D4 check. Adding the parameter to `_judge_piece` and its
+  one call site in `_judge_pieces_reading` (line ~2157) is the plumbing this needs; `_glob_links`'s
+  and `_globstar_walk`'s own signatures gain a `bash: bool` (not the raw `dialect` string — the
+  matching loop only ever needs the one bit, and a bare bool keeps `_Budget`'s own
+  `globstar_named`-style flag pattern rather than re-deriving `dialect == "bash"` in two places).
+- In the matching loop (`_glob_links:1808-1810`, and `_globstar_walk`'s equivalent loop over
+  `budget.list_directory(directory)`'s entries), when `bash` is true and `budget.dotglob_named` is
+  false: an entry whose name starts with `.` is skipped unless `pattern` — the *original written*
+  component, `components[glob_index]`, before `_relax_bracket_pattern`/`_mask_extglob_as_star` —
+  itself starts with `.` or with `[`. The `[`-opened hedge mirrors `_rewrite_dotdot_globs`'s own
+  accepted over-approximation for the same shape ("(R6, D11) A component is also accepted when it
+  opens with `[` rather than `.`: Git Bash 5.2.37 measured does not match a leading dot that way
+  ... but an older bash was not available to check, so this over-approximates rather than depend on
+  it") — reusing that same reasoning here, rather than building a narrower "can this specific
+  bracket match a literal `.`" test, keeps the two dot-rule readings (the `..`-rewrite one and this
+  one) consistent with each other and each still only ever adds a refusal, never misses one.
+- `_globstar_walk`'s own component is always `**`, which does not literally start with `.`, so the
+  zero-or-more-levels walk needs no change to its own entry point — but **its** per-entry match
+  against a deeper level's directory listing is the same loop shape and needs the same guard,
+  since `**` under `dotglob` off still should not descend into or match a dot-leading directory
+  unless the command is written to expect it.
+
+**What stays unmeasured, for R2/R3 to each independently confirm before any line changes (not
+built this round, per `next_action`'s instruction that a new gap needing production code gets its
+own three-round discipline like D13's):**
+
+(a) that the proposed plumbing (`dialect` threaded into `_judge_piece`, a `bash: bool` into
+`_glob_links`/`_globstar_walk`) does not change any already-passing test's answer — in particular
+the existing PowerShell row above, and every already-ticked bracket/extglob/POSIX-class row in
+this same task, none of which should move since none of their fixtures' matched names begin with
+`.` (confirm this directly against the fixture, not assumed);
+
+(b) that the `[`-opened hedge, reused from `_rewrite_dotdot_globs`'s own D11 reasoning, is the
+right one here too and not a different shape in disguise — `_rewrite_dotdot_globs`'s own candidate
+test is `candidate.startswith(".") or candidate.startswith("[")` on the *extglob-masked* candidate,
+while this rule's natural reading point is `pattern` before any masking; confirm the two bracket
+checks agree on every case design's own bracket-rule section (D8 step 2's bracket relaxation)
+already names, not only on the one row currently measured;
+
+(c) that `dotglob_named`, read once from the top-level command the same way `globstar_named` is,
+correctly handles a nested inner shell's own separately-written `shopt -s dotglob` the same way
+`globstar_named` already handles `bash -O globstar -c '...'` (R5's own existing text for that
+flag) — not yet re-derived for `dotglob` specifically, only assumed to carry over by analogy.
+
+**Fresh measurement only; no production file touched this round.** `git diff --stat` is empty for
+`hub/hub/mcp_server.py`. Adds `testbed/scratch/measure_1_4c_bash_dot_rule.py` (gitignored, not
+committed).
+
 ## The bounds (R4: per `_decide`)
 
 One `_Budget` is created by `_decide` and passed through every `_read_command` it makes: both
