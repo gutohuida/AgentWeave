@@ -988,6 +988,13 @@ every run id, and paste each surface's text verbatim into the Round log.
   precondition is unmet), and leave this task unchecked for the operator. Then grep the trial
   database (`mode=ro`) for the key's value: no match. If group B is kept, add one turn asking `cp5` to use the `explore`
   agent and record the `model` its `subagent_completed`/`subagent_failed` reports (finding 13).
+
+  **DEFERRED by the operator, 2026-10-04** ("let's defer this for now"). The preconditions on the
+  build side are met (3.2, 3.3, 3.5 built; 1.7–1.9 green), but F488 (a registered secret split
+  across two Copilot events survives the exact-value scrub) is a hole in 3.5 that this drive's "no
+  match" grep depends on, so the drive waits for F488's fix at the least. No key is supplied and
+  none is to be asked for: the operator raises it when they choose. Until then this task stays
+  unchecked, which also holds 8.1 (and so this change's archive) open while group C is kept.
 - [ ] 7.7 (B) Give a task completed by another agent evidence at a real commit. Set
   `cp5.copilot_review_agents = ["code-review"]` and fire a review turn at `cp5` through a flow.
   - The context file contains the D8 bullet with `<base>..<commit>`.
