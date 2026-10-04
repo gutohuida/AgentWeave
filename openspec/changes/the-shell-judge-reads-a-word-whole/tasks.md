@@ -2043,7 +2043,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   both `hub-test` and `hub-judge-windows`. Both conditions this task's own text requires are now
   met on a commit that includes the fix -- ticked.
 - [ ] 2.3 Run the eight files named in design D2 plus the new file; expected moves are exactly task 1.8's rows plus the new rows. Record counts
-- [x] 2.4 `py -3.11 -m pytest hub/tests/ -q` with `claude` stripped from PATH; record the count, or do not tick
+- [x] 2.4 `py -3.11 -m pytest hub/tests/ -q` with `claude` stripped from PATH -- **6565 passed, 92 skipped** at 446e8a0.
 
   **Iteration 63.** Stripped the npm directory holding the `claude` binary
   (`/c/Users/huida/AppData/Roaming/npm`) from `PATH` and confirmed with `which claude` that it no
