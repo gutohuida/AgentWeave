@@ -34141,3 +34141,37 @@ record. F278 kept file paths; a bare SHA is the same class of false positive. **
 decided):** keep a 40- or 64-character lowercase-hex token that is a commit known to the project's
 repository (or matches a SHA in the run's own review context), redact otherwise; a key that is pure
 lowercase hex of exactly 40 characters is the residual to weigh.
+
+## F493 (B) — the Hub test suite, run inside an agent's run, writes fake refusals into the live Hub
+
+**Status:** open, found 2026-10-04 while checking a fourth observation from drive task 7.7 of
+`a-copilot-agent-uses-hooks-and-its-own-agents`.
+**Ready:** yes. Tier 0: no change owns it.
+
+The trial Hub's `event_logs` holds a `permission_denied` event for `cp5`, created 2026-10-04 17:47:28,
+12 s before `run-c8e00634e828` timed out. Its data is `{"tool_name": "PowerShell", "tool_use_id":
+"tu", "reason": "the operator was asked", "run_id": "run-c8e00634e828"}`. Copilot never refused
+anything here, and the agent was under Workspace only. `"tu"` and `"the operator was asked"` are
+the fixture values in `hub/tests/test_hub_own_call.py:45,53`. The reviewer was running this
+repository's test suite inside its run (F491). That run's environment carries the bound
+`AW_RUN_TOKEN` and `HUB_URL`. `mcp_server.approve_tool_call` reports the fake denial through
+`_report_decision` (`hub/hub/mcp_server.py:3342`) to `POST /permission-decisions`, and
+`record_permission_decision` (`hub/hub/api/v1/agent_actions.py:981`) persists it against the real run
+and broadcasts it over SSE.
+
+**Why only some tests leak:** `workspace` deletes `AW_RUN_TOKEN` (`test_hub_own_call.py:34`), but
+`test_a_junctioned_calls_directory_gives_no_standing` (`:215`) and
+`test_a_junctioned_calls_directory_gives_the_write_no_standing` (`:490`) take `asked` without it.
+The second makes exactly one PowerShell call, which matches the single row stored. No
+`hub/tests/conftest.py` fixture clears the run credentials suite-wide, so any test that reaches a
+reporting path does the same. The operator's `:8000` database holds no such row (read `mode=ro`,
+count 0).
+
+**Effect:** an operator watching an agent that runs the tests sees refusals that never happened,
+attributed to a real run. That is the misleading surface `record_permission_decision` exists to
+prevent. Any other reporting path a test exercises could likewise write rows to the live Hub.
+
+**Fix direction:** an autouse fixture in `hub/tests/conftest.py` (and `tests/conftest.py`) that
+deletes `AW_RUN_TOKEN`, `HUB_URL` and any other run credential before every test. Check it with a
+test that sets them, runs the `:490` case, and asserts no request leaves the process. The repro is
+to run that test with `AW_RUN_TOKEN`/`HUB_URL` pointing at a drive Hub, then read `event_logs`.
