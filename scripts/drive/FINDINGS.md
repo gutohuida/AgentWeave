@@ -34026,7 +34026,14 @@ not ask what the fix would break.
 
 ## F488 (B) — a run's registered secret survives the scrub when Copilot's output splits it across two events
 
-**Status:** open, filed 2026-10-04 (interactive, operator: "yes" to filing it on its own and taking it
+**Status:** fixed 2026-10-04 by `1d2f72a`, change `a-secret-split-across-two-events-is-still-scrubbed`
+(`run_secrets.scrub_stream` at both executor sites; `register` strips; the `session.error` log line
+scrubbed). Tests: `hub/tests/test_run_secrets_stream.py`,
+`test_copilot_byok_env.py::test_a_provider_key_split_across_events_is_scrubbed` (+ order, locked-retry
+and interleaving guards), `test_agent_trigger.py::test_a_registered_value_split_across_claude_blocks_is_scrubbed`,
+and three log-line tests in `test_copilot_acp_run_turn.py`. Stated residual: a dangling start shorter
+than *m* = min(8, len//2) is shown (at most 7 characters, always a prefix). The change's drive (task
+3.4) has not run yet. Filed 2026-10-04 (interactive, operator: "yes" to filing it on its own and taking it
 first tonight). Found 2026-10-03 by `cp5` during drive task 7.7 of
 `a-copilot-agent-uses-hooks-and-its-own-agents`, and until now recorded only inside F484.
 **Ready:** yes. It is a defect in slice 5 group C's shipped scrub, and no change owns it.
