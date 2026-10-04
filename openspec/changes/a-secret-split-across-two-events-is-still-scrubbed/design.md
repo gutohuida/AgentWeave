@@ -1,14 +1,11 @@
 # Design — a secret split across two events is still scrubbed
 
-Line numbers are at `HEAD` `4c054be` (re-derived by R2; R1 cited `10df5fc`, before slice 5
-group A landed). `agent_trigger.py`, `run_secrets.py`, `runner_parsing.py`,
-`codex_appserver.py` and the runner adapters did not change between the two commits, so their
-numbers are the same; `copilot_acp.py`, `output_recording.py` and `runner_events.py` moved. The
-uncommitted `_after_open_blocks` edit (Context) adds 7 lines at `copilot_acp.py:1233`, so every
-`copilot_acp.py` citation above `:1233` below is unchanged by it and every one after it moves by
-+7 once it is committed; R3 re-derives them at its own `HEAD`. Each
-claim is tagged **VERIFIED-CODE** (read at the cited line) or **INFERRED** (not read, or read only
-in part).
+Line numbers are at `HEAD` `13f7421` (re-derived by R3, after `d08c2f5` committed
+`_after_open_blocks`). R2 cited `4c054be`; R1 cited `10df5fc`. Between `4c054be` and `13f7421` only
+`copilot_acp.py` moved, by +7 after `:1233`; `agent_trigger.py`, `run_secrets.py`,
+`output_recording.py`, `runner_events.py`, `runner_parsing.py` and `codex_appserver.py` did not, so
+their numbers are R2's. Each claim is tagged **VERIFIED-CODE** (read at the cited line) or
+**INFERRED** (not read, or read only in part).
 
 ## Context
 
@@ -44,13 +41,13 @@ executor site (task 1.4) a reachable production path, not a hypothetical one.
   switches: a message chunk flushes the open thought (`:1031`), a thought chunk flushes the open
   message (`:1035`), and `tool_call`, `tool_call_update` and `plan` flush both (`:1042-1047`,
   `flush()` at `:1144-1146`). `finish()` flushes at prompt completion (`:1148-1155`, called at
-  `:2657`), and `fail_turn` flushes before its own event (`:2106`). Inside one block nothing is
+  `:2664`), and `fail_turn` flushes before its own event (`:2113`). Inside one block nothing is
   split: chunks are joined with `""` (`:1158`, `:1163`). VERIFIED-CODE.
   **Since group A (`4c054be`):** a message chunk equal to a pending `Error: <message>` echo returns
   `[]` before `_flush_thought()` (`:1025-1030`). The echo itself is not a boundary: it flushes
   nothing and adds to neither block. VERIFIED-CODE.
-  **Raw-event cards are boundaries (working tree, being committed after `4c054be`; R2 read the
-  diff).** `on_raw_event` (`:1200-1238` in the tree) now wraps `session.error`,
+  **Raw-event cards are boundaries (committed in `d08c2f5`; R2 read the diff, R3 re-read the
+  committed code).** `on_raw_event` (`:1200-1231`, `_after_open_blocks` at `:1233-1238`) wraps `session.error`,
   `session.compaction_complete` and `subagent.started|completed|failed` in `_after_open_blocks`,
   which returns `flush() + events` when the raw event produced a card and `[]` untouched when it
   produced none. So "text → error card", "thought/text → compacted card" and "text →
@@ -61,7 +58,7 @@ executor site (task 1.4) a reachable production path, not a hypothetical one.
   echo, a subagent's compaction) leave the blocks open. The server-status and model diagnostics
   (`_server_status`, `_model`) are **not** wrapped: they are still emitted before the block open
   at their arrival. None of these cards is `text`/`thinking`, so none moves the tail.
-  VERIFIED-CODE against the working-tree diff; R3 re-checks once it is committed.
+  VERIFIED-CODE at `13f7421` (R3 ran the three card cases through the committed mapper).
 - **Claude** (`runner_parsing.py:282-288`): each `thinking` and `text` content block of an
   assistant message is one event, whole and `.strip()`ed. **Codex `exec`**
   (`runner_parsing.py:480-489`) and **Codex app-server** (`codex_appserver.py:415-429`, emitted
@@ -89,16 +86,27 @@ executor site (task 1.4) a reachable production path, not a hypothetical one.
   (`checkpoint_generation.py:219`), checkpoint citations (`checkpoint_access.py:81`, `:235`), the
   title excerpt (`conversation_titles.py:146`) and the timeline route (`api/v1/agent_chat.py:229`)
   read `AgentOutput.content` from stored rows. If the rows are fixed, the readers are fixed.
-- **Not a recorded run event, but a leak.** `_on_armed_raw_event` (`copilot_acp.py:2113-2123`)
-  logs every armed `session.error` payload as `json.dumps(data)[:2000]` to the Hub log, with no
-  scrub. A provider error that quotes the key puts it there. VERIFIED-CODE. `run_turn` already
-  holds the run's `env` (`:1956`), which carries `AW_RUN_ID`, so `run_secrets.scrub` can reach it
-  without a new parameter. R2 recommends folding it in (D6, open question 3).
+- **Not a recorded run event, but a leak.** `_on_armed_raw_event` (`copilot_acp.py:2116`, the
+  log call at `:2124-2130`) logs every armed `session.error` payload as `json.dumps(data)[:2000]`
+  to the Hub log, with no scrub. A provider error that quotes the key puts it there.
+  VERIFIED-CODE. `run_turn` (`:1960`) already holds the run's `env` (its parameter at `:1963`,
+  passed as `RpcTurnRequest.env`, `agent_trigger.py:3480`), which carries `AW_RUN_ID`, so
+  `run_secrets.scrub` can reach it without a new parameter. R2 recommends folding it in (D6, open
+  question 3).
+- **One-shots** (checkpoint, handover, title). They register nothing (`register` has one caller)
+  and record no run events, so they are not on this change's path. Their input is the stored rows,
+  which this change fixes. VERIFIED-CODE (R3).
+- **Whitespace at an event boundary (R3).** Copilot's `thinking` content is not stripped
+  (`copilot_acp.py:1157-1160`), so a thought block can end or begin with whitespace the reader
+  cannot see. Claude's and Codex's text and thinking, and Copilot's text, are stripped. The two
+  recorded Copilot fixtures (`hub/tests/fixtures/copilot_acp/*.jsonl`, 4 text/thinking rows) had
+  none at a block edge, so it is not observed, but nothing prevents it: their thought chunks carry
+  `\n\n` inside a block. D1 skips it (below). VERIFIED-CODE.
 
 ### The order the mapper emits at each boundary
 
-VERIFIED-CODE (`copilot_acp.py:1019-1260`) and run through HEAD's mapper in R2's scratch
-prototype:
+VERIFIED-CODE (`copilot_acp.py:1019-1267`) and run through HEAD's mapper in R2's and R3's scratch
+prototypes:
 
 | Boundary | What the call that crosses it returns | When the later block appears |
 |---|---|---|
@@ -110,7 +118,7 @@ prototype:
 | any → plan | `flush() + [status(plan)]` (or `+ []` for an unchanged plan) | — |
 | message → finish | `[text(M)]` + unechoed warning/info notices | — |
 | fail_turn | `flush()` + `[event]` | — |
-| text/thought → `session.error` card | `flush() + [error]` (working tree, `_after_open_blocks`) | the next chunk opens a new block |
+| text/thought → `session.error` card | `flush() + [error]` (`_after_open_blocks`, `d08c2f5`) | the next chunk opens a new block |
 | text/thought → `session.compaction_complete` (root) | `flush() + [status(compacted)]` | as above |
 | text/thought → `subagent.started/completed/failed` | `flush() + [status(subagent_…)]` | as above |
 | echo chunk of a pending `session.error` | `[]`; nothing flushed | not a boundary |
@@ -124,9 +132,9 @@ but passes `text`). Claude's and Codex's thinking is stripped (`runner_parsing.p
 `codex_appserver.py:428`). VERIFIED-CODE. The recorded strings, which are also what the reader
 sees, are what the scrub joins.
 
-**Order and concurrency.** `emit` awaits each event in turn (`copilot_acp.py:2081-2083`), and the
-reader task dispatches messages one at a time (`:1615-1635`, `_dispatch` awaited; a server request
-is answered inline, `:1676-1687`). But `emit(mapper.finish())` (`:2657`) runs on the turn's own
+**Order and concurrency.** `emit` awaits each event in turn (`copilot_acp.py:2088-2090`), and the
+reader task dispatches messages one at a time (`_read_loop`, `:1622-1648`, `_dispatch` awaited at
+`:1642`; a server request is answered inline, `:1682-1693`). But `emit(mapper.finish())` (`:2664`) runs on the turn's own
 coroutine, while the reader task can still be dispatching a late notification, so two `_on_event`
 calls can interleave at their `await`. `_on_event` takes its `sequence` synchronously
 (`agent_trigger.py:3764-3765`) before awaiting the write (`:3766-3781`). VERIFIED-CODE. The
@@ -143,15 +151,28 @@ order the writes commit in. `_execute_run`'s loop (`:2836-2856`) is sequential. 
 the run's recorded `text`/`thinking` content, joined in recording order, where `L` is the length
 of the longest registered value. For each new `text` or `thinking` event with content `c`:
 
-1. `joined = tail + c`. Mark every occurrence of every registered value in `joined`, longest
-   first. Inside `c` this also covers the occurrences `record_agent_output` already catches.
+1. `joined = tail + c.lstrip()`: whitespace at the start of `c` is skipped (R3; see step 4 for
+   the end of the previous event). Mark every occurrence of every registered value in `joined`,
+   longest first. Inside `c` this also covers the occurrences `record_agent_output` already
+   catches.
 2. **Dangling start.** For each value `v`, find the longest `k` with `m(v) <= k < len(v)` such that
-   `joined` ends with `v[:k]`. Mark those `k` characters. `m(v) = max(1, min(8, len(v) // 2))`.
-3. Replace each maximal run of marked characters that lies in `c` with one `<redacted>`. Rewrite
+   `joined.rstrip()` ends with `v[:k]`. Mark those `k` characters. `m(v) = max(1, min(8, len(v) // 2))`.
+3. Replace each maximal run of marked characters that lies in `c` with one `<redacted>`, keeping
+   `c`'s skipped leading whitespace and any trailing whitespace as written. Rewrite
    `content` and `payload["text"]` together (they are equal for both kinds:
    `runner_events.py:171-184`, VERIFIED-CODE). Leave `payload["truncated"]` as it is.
-4. `tail = joined[-(L - 1):]`, built from the **unredacted** text, so that a value split three ways
-   is still found.
+4. `tail = joined.rstrip()[-(L - 1):]`, built from the **unredacted** text, so that a value split
+   three ways is still found, and with trailing whitespace removed, so that whitespace at an event
+   boundary never breaks a join.
+
+**Why whitespace at a boundary is skipped (R3).** The reader cannot see it: a thought row ending in
+`plainproxy\n\n` and a reply row starting `key123` read as the key. Copilot does not strip its
+`thinking` content (Context), so without the skip such a pair is not joined and neither the
+completion nor the dangling start is found, and the whole value stays visible. R3 measured it:
+with a newline appended at random event ends, D1 without the skip left up to the whole value
+visible (16 of 16 characters of `plainproxykey123`, 29 of 29 of an `sk-ant-api03-` key) in about
+4% of random splits; with the skip, at most `m - 1`, always a prefix. Whitespace inside an event is
+not skipped: a value split by a space inside one event is a non-goal, as before.
 
 Other kinds pass through unchanged and leave `tail` as it is. So the tail spans tool cards (D2),
 errors, diagnostics and status rows. A run with nothing registered returns the event unchanged and
@@ -161,7 +182,9 @@ already held whole in `_by_run`).
 
 Prototype (R2, scratch only, re-run independently against HEAD `4c054be`'s `CopilotEventMapper`,
 value `plainproxykey123`, `m = 8`, each event then passed through today's `run_secrets.scrub`).
-Each row shows the recorded content today, then with D1. R1's six rows reproduce exactly:
+Each row shows the recorded content today, then with D1. R1's six rows reproduce exactly. R3
+re-implemented D1 from this text (`scratchpad/f488r3/proto.py`) and ran it over `13f7421`'s mapper:
+every R1/R2 row below reproduces, the card rows through the committed `_after_open_blocks`:
 
 | Case | Rows (kind: today → D1) |
 |---|---|
@@ -179,10 +202,17 @@ Each row shows the recorded content today, then with D1. R1's six rows reproduce
 | (R2) 7-character leak | text `starts plainpr` → unchanged; thinking `oxykey123 end` → `<redacted> end` |
 | (R2) two values, 16 and 12 chars | thinking `a plainprox` → `a <redacted>`; text `ykey123 and shortsec` → `<redacted> and <redacted>`; thinking `ret9 z` → `<redacted> z` |
 | (R2) value with a self-overlapping start, `aaaaabzzzzzzzzz` | thinking `x aaaaaaaa` → unchanged; text `aabzzzzzzzzz y` → `<redacted> y` |
+| (R3) thought ending in whitespace → message | thinking `I will use plainproxy\n\n` → `I will use <redacted>\n\n`; text `key123 now.` → `<redacted> now.` (without the skip: both unchanged, the whole key visible) |
+| (R3) message → thought starting with whitespace | text `Key: plainpr` → unchanged; thinking `\n oxykey123 hmm` → `\n <redacted> hmm` (without the skip: unchanged) |
 
 **The leak bound holds.** VERIFIED by prototype: per occurrence, at most `m - 1` (≤ 7) of the
 value's characters stay visible, all at its start, and only when the rest arrives in later
-`text`/`thinking` events. Once the visible prefix, accumulated over any number of events,
+`text`/`thinking` events. R3 re-measured it with its own implementation
+(`scratchpad/f488r3/bound.py`, 40 000 random splits into up to six `text`/`thinking` events with
+tool rows between, per value set): the worst case was exactly `m - 1` for `plainproxykey123` (7), an
+`sk-ant-api03-` key (7), `test` and `abcde` (1), `aaaaabzzzzzzzzz` (6) and a 16+12 pair (7), and
+the visible part was a prefix in every trial; with boundary whitespace inserted, the same only
+with step 1's skip (above). Once the visible prefix, accumulated over any number of events,
 reaches `m`, the current event's part is redacted (three-way row). A remainder that arrives in a
 tool row is not joined (D2) and stays as written there.
 
@@ -263,11 +293,20 @@ error rows, which D1 does not join.
 
 ### D6 — The `session.error` log line is scrubbed too (R2, recommended; open question 3)
 
-`_on_armed_raw_event` logs `json.dumps(data, default=str)[:2000]` (`copilot_acp.py:2117-2123`).
+`_on_armed_raw_event` logs `json.dumps(data, default=str)[:2000]` (`copilot_acp.py:2124-2130`).
 Pass `data` through `run_secrets.scrub(env.get("AW_RUN_ID"), data)` **before** `json.dumps` and
 before the `[:2000]` cut (a cut first would leave a prefix the exact match cannot see). `env` is
-`run_turn`'s own parameter (`:1956`) and the trigger sets `AW_RUN_ID` (`agent_trigger.py:1474`)
-before registering. One line and one `caplog` test; same guarantee family as D7 of slice 5, and
+`run_turn`'s own parameter (`:1963`) and the trigger sets `AW_RUN_ID` (`agent_trigger.py:1474`)
+before registering.
+
+**If that scrub raised (R3).** It cannot on `data`, which is JSON-decoded (`dict`, `list`, `str`,
+numbers, `bool`, `None`; `_scrub` handles each). But the log call sits *before*
+`mapper.on_raw_event` (`:2135`), so a raise there would leave `on_notification` and be swallowed at
+`:1679`, dropping the `session.error` card, the echo registration and `mapper.root_error` with it:
+the turn could then end `completed` though Copilot reported an error. So the scrub-and-log is the
+one place where a raise must not propagate: on a raise the line is logged **without** its payload
+(`payload=<unavailable>`), never with the unscrubbed one, and the raw event goes on to the mapper.
+This is a log line, not a record, so the rule below against a broad `except` does not apply to it. One line and one `caplog` test; same guarantee family as D7 of slice 5, and
 the log is where an operator pastes from when reporting a failure. If the operator declines, it
 is filed as its own finding instead.
 
@@ -280,19 +319,27 @@ event. R2 corrected R1, which said the run always fails; it does not on Copilot'
 (VERIFIED-CODE):
 
 - **Copilot, an event emitted while handling a notification** (every `session/update` and armed
-  raw event, including `fail_turn`): the raise leaves `_on_event`, `emit` and `on_notification` and
-  is caught at `copilot_acp.py:1670-1673`, logged as "handling copilot notification … failed".
-  That event and the rest of that notification's events are dropped; the turn goes on.
-- **Copilot, the hub-server-unverified diagnostic** (`:2236`) inside `answer_permission`: caught at
-  `:2266`, and the permission request is answered with a rejection.
-- **Copilot `finish()`** (`:2657`), **`pre_turn_events`** (`agent_trigger.py:3854-3855`) and
+  raw event, including `fail_turn`, whose two callers are in `_on_armed_raw_event`, `:2150`,
+  `:2158`): the raise leaves `_on_event`, `emit` and `on_notification` and is caught at
+  `copilot_acp.py:1676-1680`, logged as "handling copilot notification … failed". That event and
+  the rest of that notification's events are dropped; the mapper has already flushed the block, so
+  the dropped text is gone, not recorded later. The turn goes on.
+- **Copilot, the hub-server-unverified diagnostic** (`:2243`) inside `answer_permission`: caught at
+  `:2273`, and the permission request is answered with a rejection.
+- **Copilot `finish()`** (`:2664`), **`pre_turn_events`** (`agent_trigger.py:3854-3855`) and
   **Codex app-server** (`codex_appserver.py:1129`): propagate to `_execute_rpc_run`'s
   `except (Exception, asyncio.CancelledError)` (`agent_trigger.py:4093`); the run fails.
 - **`exec` (Claude, Codex `exec`)**: `_flush_line` → `_execute_run`'s except (`:3164`); the run
   fails.
 
 The implementation must not wrap the call in a broad `except` that records the unscrubbed event
-instead.
+instead. A raise leaves `tail` as it was, because it is assigned last (D1 step 4).
+
+**What the HTTP routes return (R3).** No route calls `scrub_stream`. The trigger route
+(`POST .../agent/trigger`) returns once the run's task is created (`agent_trigger.py:1620-1670`);
+`pre_turn_events`, the RPC callbacks and the `exec` loop all run inside that task, so a raise there
+changes the run's outcome as above, never the route's response. `POST /agents/{name}/output`
+(`api/v1/agents.py:3178`) is not changed (Non-goals).
 
 ## Open questions for the operator
 
@@ -302,9 +349,20 @@ instead.
    very short registered values (a proxy's `test`), D1's dangling rule also garbles event ends
    (D4); a floor of 4 avoids that at the cost of showing up to 3 characters of such a value. R2
    recommends `m` as written, because a short value is already garbled everywhere by today's pass.
-2. **Joining across tool cards (D2)**: recommended yes. It costs nothing under D1.
+   **R3 concurs: no hold, `m` as written, no floor.** R3 measured the bound independently (D1:
+   worst case exactly `m - 1`, always a prefix) and found that holding would also have to hold a
+   thought across `_after_open_blocks` cards and permission waits, which D3 already rejects. The
+   floor's only gain is fewer `<redacted>` marks at event ends for a 4- to 7-character key, which is
+   already garbled inside every event; showing 3 of its 4-7 characters is the worse trade.
+2. **Joining across tool cards (D2)**: recommended yes. It costs nothing under D1. **R3 concurs,
+   and adds that it is no longer optional for the raw-event cards:** since `d08c2f5`, an error,
+   compaction or subagent card closes the open block, so a value the model writes across a
+   `session.error` is split by the Hub itself, not by the model; a join that stopped at cards would
+   leave that split, which the mapper creates, unhandled.
 3. **The `session.error` log line**: R2 recommends folding it in (D6, tasks 1.7 and 2.4); the
-   alternative is filing it as its own finding.
+   alternative is filing it as its own finding. **R3 concurs: fold it in**, with D6's guard so a
+   raise cannot drop the error card. It is one call on the same registry, the payload is exactly
+   the provider error that quotes a key, and the log is what an operator pastes into a report.
 4. **Ordering with slice 5** (for information). This change adds to `agent-stream-events` and does
    not depend on slice 5's `runner-registry` delta archiving first. It does depend on `run_secrets`
    existing, and it does (committed).
@@ -356,3 +414,58 @@ instead.
      its retries has still advanced the tail, which errs toward hiding.
   10. The `session.error` log line verified unscrubbed; R2 recommends folding it in as D6 (tasks
       1.7, 2.4), still the operator's call (open question 3).
+- **R3 (2026-10-04, subagent of the interactive session):** a second independent re-derivation at
+  `13f7421` (`d08c2f5`'s `_after_open_blocks` committed). Re-grepped `run_secrets.` (unchanged:
+  the five sites, one `register`, one `forget`), every `record_agent_output(` and
+  `text_event(`/`thinking_event(` caller in `hub/hub`, both executor sites and every Copilot
+  emission path; re-implemented D1 from the text alone (`scratchpad/f488r3/proto.py`) and ran it
+  over the committed mapper; measured the bound by random splits (`bound.py`, `bound_pad.py`); ran
+  the two recorded Copilot fixtures through the mapper (`fixtures_ws.py`). The design survives;
+  one defect in D1 itself. Corrections:
+  1. **D1 could not fire on a Copilot thought that ends or begins with whitespace.**
+     `_flush_thought` does not strip (`copilot_acp.py:1157-1160`); every other text kind is
+     stripped. With a newline at the boundary, `joined` holds `plainproxy\n\nkey123`: neither the
+     completion nor the dangling start matches, and the whole key stays visible. Measured: D1 as
+     R2 left it showed up to 16/16 and 29/29 characters in about 4% of random padded splits.
+     Fixed: D1 steps 1, 2 and 4 skip whitespace at an event boundary (kept as written in the
+     output); with it the worst case is `m - 1`, always a prefix. Not seen in the two recorded
+     fixtures (4 rows), but nothing prevents it. New D1 rows, spec scenario, tests 1.1/1.2, a
+     test-guide mutation and a drive case.
+  2. **Task 1.5 could not fail on the placement it guards.** Raising the lock at session creation,
+     or from a wrapper before the real `record_agent_output` runs (the F359 tests' pattern), never
+     runs the in-function code on the failed attempt, so a stream scrub wrongly placed inside
+     `record_agent_output` would pass. Now the lock is raised at the real function's `commit`.
+     The prototype confirms the wrong placement then stores the retried row as `key123 now.`.
+  3. Task 1.2's fake must return a **completed** outcome: a failed one is retried as new runs
+     (the existing test's own comment, `test_copilot_byok_env.py:969`). Its "two consecutive
+     rows" assertion missed the tool-card case (the text rows are not consecutive); it now joins
+     all `text`/`thinking` rows by `sequence`.
+  4. D6's raise path: the log call sits before `mapper.on_raw_event` (`:2135`), so a raise there
+     would be swallowed at `:1679` with the error card, the echo registration and `root_error`,
+     and the turn could end `completed`. D6, task 2.4 and test 1.7 now log without the payload on
+     a raise and go on; never the unscrubbed payload.
+  5. Task 2.2: the scrubbed event is bound to the write's lambda as a default argument at both
+     sites, so a retry reuses it and nothing scrubs twice (`_on_event` reads `event` from its
+     closure today).
+  6. Added what the routes return: no HTTP route calls `scrub_stream`; the trigger route returns
+     once the task exists, so a raise changes the run's outcome, never a response. Added that a
+     raise leaves `tail` unchanged (assigned last), and that a notification-path drop loses the
+     already-flushed block for good (still fail-closed).
+  7. Re-derived every `copilot_acp.py` citation at `13f7421` (`finish()` call `:2657` → `:2664`;
+     `fail_turn` flush `:2106` → `:2113`; `emit` `:2081-2083` → `:2088-2090`; reader
+     `:1615-1635` → `_read_loop` `:1622-1648`; notification catch `:1670-1673` → `:1676-1680`;
+     server request inline `:1676-1687` → `:1682-1693`; unverified diagnostic `:2236` → `:2243`,
+     caught `:2266` → `:2273`; log line `:2117-2123` → `:2124-2130`; `run_turn`'s `env` `:1956` →
+     `:1963`). Every other file's numbers checked unchanged (`git diff --stat 4c054be 13f7421 --
+     hub/hub` touches only `copilot_acp.py`).
+  8. Concurrency and lifetime re-checked and hold: `_on_event` takes `sequence` synchronously
+     (`agent_trigger.py:3764-3765`); `forget` runs from the done callback (`:1670`) after every
+     in-task write, including both closing status rows; a late call after `forget` creates no
+     state. One-shots register nothing and record no run events (Context).
+  9. Residuals named in Non-goals: Codex app-server joins a reasoning item's parts with a space
+     inside one event (`codex_appserver.py:428`); the 200-character non-JSON stdout quotes
+     (`copilot_acp.py:1639`, `codex_appserver.py:800`) are not scrubbed.
+  10. Spec wording: "half the value's length" now says "rounded down", matching `len(v) // 2`.
+  Recommendations on the open questions: (1) no hold, `m` as written, no floor; (2) join across
+  cards, now required for the raw-event cards the mapper itself creates; (3) fold the log line in,
+  with the guard.

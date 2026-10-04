@@ -10,10 +10,15 @@
    - drop the dangling-start rule: the "message → finish" and three-way rows fail, and so does
      1.2's thought→message row, because the thinking row keeps `plainproxy`;
    - set `m` to 1: the `explai` false-positive row of 1.1 fails;
-   - move the call from the executors into `record_agent_output`: 1.5 fails;
+   - drop the boundary-whitespace skip (`joined = tail + c`, tail not right-stripped): 1.1's two
+     whitespace rows and 1.2's thought-ending-in-a-blank-line row fail;
+   - move the call from the executors into `record_agent_output`: 1.5 fails. Check that 1.5's lock
+     is raised at the real function's `commit`, not before the real function runs; otherwise this
+     mutation passes;
    - call it at only one of the two executor sites: 1.2 (RPC) or 1.4 (`exec`) fails.
    - move the call after `_on_event`'s first `await`: 1.8 fails;
-   - drop the scrub from the `session.error` log line (if folded in): 1.7 fails.
+   - drop the scrub from the `session.error` log line (if folded in): 1.7 fails;
+   - let a raise from that scrub propagate: 1.7's third case fails (the error card is lost).
 3. **Nothing else moved.** The controls in 1.6 pass before and after. The full Hub and CLI suites
    pass with their counts on tasks 3.1 and 3.2, and the lint block is clean.
 4. **Drive 3.4.** Zero occurrences of the key in rows, events, SSE frames, the timeline response and

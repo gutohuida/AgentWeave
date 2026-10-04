@@ -4,12 +4,13 @@
 The Hub SHALL remove a value registered for a run from that run's recorded model text when the value runs across two or more of the run's `text` and `thinking` events, as well as when it lies inside one.
 
 The run's `text` and `thinking` events are joined in the order they are recorded, and other events
-between them, such as tool calls and their results, errors, and status cards, do not break the join. Where a registered value
+between them, such as tool calls and their results, errors, and status cards, do not break the join, and neither does
+whitespace at the end of one event or the start of the next. Where a registered value
 crosses an event boundary, the part of it inside each event recorded after the value began SHALL be
 replaced with `<redacted>`, in the stored row and in its broadcast alike. An event that ends with the
 first characters of a registered value SHALL have them replaced with `<redacted>` when it is
-recorded, without waiting for the next event, once they number at least half the value's length or
-eight, whichever is fewer. A shorter dangling start MAY be recorded as written.
+recorded, without waiting for the next event, once they number at least half the value's length
+(rounded down) or eight, whichever is fewer. A shorter dangling start MAY be recorded as written.
 
 No event SHALL be delayed, held back or reordered to achieve this, and an event of a run with no
 registered value SHALL be recorded exactly as it was emitted. A recording retried after a locked
@@ -29,6 +30,10 @@ database SHALL produce the same row as one that succeeded first time.
 - **WHEN** a run with the registered value `plainproxykey123` records a text event ending in `plainpro`, then an error event its runner reported between the two, then a text event beginning with `xykey123`
 - **THEN** both text rows carry `<redacted>` where their part of the value was
 - **AND** the error row is recorded between them, unchanged
+
+#### Scenario: A value split where one event ends in whitespace
+- **WHEN** a run with the registered value `plainproxykey123` records a thinking event ending in `plainproxy` followed by a blank line, and then a text event beginning with `key123`
+- **THEN** the thinking row carries `<redacted>` in place of `plainproxy` and the text row begins with `<redacted>`
 
 #### Scenario: A short dangling start
 - **WHEN** a run with the registered value `plainproxykey123` records a text event ending in `plain` and then a thinking event beginning with `proxykey123`

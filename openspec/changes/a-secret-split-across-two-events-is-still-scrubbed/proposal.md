@@ -11,11 +11,10 @@ event's `content` and `payload`, and `scrub` replaces whole literal occurrences
 
 Model text is not recorded as one event. It is recorded as a sequence of `thinking` and `text`
 events, with tool events between them. `CopilotEventMapper.on_session_update`
-(`hub/hub/copilot_acp.py:1019-1048`, at `4c054be`) joins streamed chunks into blocks, and emits a
-block as an event whenever the stream switches between thought, message and tool call, and (being
-committed after `4c054be`) whenever a raw event produces an error, compaction or subagent card. So
-when a
-key's characters fall on both sides of a switch, each event holds only part of it. Each part passes
+(`hub/hub/copilot_acp.py:1019-1048`, at `13f7421`) joins streamed chunks into blocks, and emits a
+block as an event whenever the stream switches between thought, message and tool call, and (since
+`d08c2f5`, `_after_open_blocks` at `:1233-1238`) whenever a raw event produces an error, compaction
+or subagent card. So when a key's characters fall on both sides of a switch, each event holds only part of it. Each part passes
 the scrub. The timeline shows the two rows one after the other, and the reader sees the whole key.
 `cp5` reproduced this with `plainproxykey123`, split as `plainproxy` + `key123` (F488, during drive
 task 7.7).
@@ -37,7 +36,9 @@ row and fails for the run.
   remembers the last characters of the model text it has recorded (`text` and `thinking`
   events, in recording order), one character fewer than the longest registered value. Each new
   text or thinking event is checked together with that tail. Where a registered value runs across
-  the boundary, the part inside the new event is replaced with `<redacted>`.
+  the boundary, the part inside the new event is replaced with `<redacted>`. Whitespace at an event
+  boundary is skipped when joining, because the reader cannot see it and Copilot does not strip
+  its thinking text (design D1, R3).
 - **A text event that ends with the start of a value loses that start.** When a text or thinking
   event ends with the first *m* or more characters of a registered value, where *m* is half the
   value's length but never more than 8, those characters are replaced with `<redacted>` when the
@@ -57,10 +58,11 @@ row and fails for the run.
   the same text in twice. `record_agent_output`'s per-event scrub stays as it is, as the floor for
   every kind and every caller.
 - `run_secrets.forget` also drops the run's tail.
-- **The `session.error` log line is scrubbed** (design D6; R2-recommended, subject to the
-  operator's open question 3). `copilot_acp.py:2117-2123` logs a `session.error` payload whole to
+- **The `session.error` log line is scrubbed** (design D6; R2- and R3-recommended, subject to the
+  operator's open question 3). `copilot_acp.py:2124-2130` logs a `session.error` payload whole to
   the Hub log; it is passed through `run_secrets.scrub` with the run's id before it is serialised
-  and cut at 2000 characters.
+  and cut at 2000 characters. If that scrub raised, the line is logged without its payload and the
+  raw event still reaches the mapper.
 
 ## Non-Goals
 
@@ -75,11 +77,15 @@ row and fails for the run.
   prefix, not the whole value. The new rule catches it only when the cut row ends with *m* or more
   characters of the value.
 - **Fragments that are not at an event boundary.** Exact-value matching has never hidden a part of
-  a value that the model writes on its own, and this change does not start.
+  a value that the model writes on its own, and this change does not start. That includes a value
+  split across two parts of one Codex app-server reasoning item, which the Hub joins with a space
+  inside one event (`hub/hub/codex_appserver.py:428`): it is inside an event, so it is not joined.
 - **Holding events back** so that no fragment is ever visible. Rejected in design D3; see the
   operator's open question 1.
 - **The Hub's log beyond the `session.error` line.** No other log line is known to carry model
-  text or a provider error payload; none is swept here.
+  text or a provider error payload; none is swept here. The nearest are the 200-character quotes
+  of a non-JSON stdout line (`copilot_acp.py:1639`, `codex_appserver.py:800`), which carry
+  whatever the CLI printed outside its protocol; not observed to carry a key.
 - **No migration, no UI change, no backfill.** Rows already stored stay as they are.
 
 ## Capabilities
@@ -103,8 +109,8 @@ None.
   `forget` clearing the tail.
 - `hub/hub/api/v1/agent_trigger.py`: the two stream-recording sites call it, beside
   `sequence += 1`, before building the `_record_observation` write.
-- `hub/hub/copilot_acp.py`: the `session.error` log line scrubs its payload (D6, if open question 3
-  is answered "fold in").
+- `hub/hub/copilot_acp.py`: the `session.error` log line scrubs its payload, and logs it without
+  the payload if the scrub raises (D6, if open question 3 is answered "fold in").
 - Tests: `hub/tests/test_run_secrets_stream.py` (new), `hub/tests/test_copilot_byok_env.py`
   (driven through the real `CopilotEventMapper`, including the card boundaries), a Claude-stream
   case, and a `caplog` case for the log line.
