@@ -8,7 +8,20 @@
 - [x] 0.2f R8 (the third Opus pre-approval review's fixes, `spec-queue/tracks/reviews/B4-2026-09-24-third.md`; the operator approves after this round): the review's LOW taken the cleaner way, in the sibling's D8 step 2: a bracket expression is matched exactly unless `fnmatch` cannot read it, and then as `?`; D10's R6 paragraph, Costs and task 1.4f's rows. Measured with real junctions in `testbed/scratch/b4-r8/`; recorded in `B4.md` under "R8"
 - [x] 0.3a The operator answers design Open Questions 2 and 3: answered 2026-09-24 afternoon in `spec-queue/DECISIONS.md` (`B4-dep-links`: build D10 as written, residual filed as F444; `B4-drive-exists`: a drive word is judged only when the drive exists). D5 and `PWD` were answered earlier the same day
 - [x] 0.3 The operator approves in `APPROVALS.md` (after the Opus pre-approval review); told first that `:8000`'s next run uses the edited file -- `DECISIONS.md` `B4-approve` (DECIDED): both B4 changes approved as R8 left them
-- [ ] 0.4 (R4; order decided in `B4-residuals`: both in one night window) `the-shell-judge-reads-a-word-whole` is built first. This change uses its `_glob_links`, budget, level-by-level escape reading, `_DRIVE_LETTERS` and `hub-judge-windows` job
+- [x] 0.4 (R4; order decided in `B4-residuals`: both in one night window) `the-shell-judge-reads-a-word-whole` is built first. This change uses its `_glob_links`, budget, level-by-level escape reading, `_DRIVE_LETTERS` and `hub-judge-windows` job
+
+  **Re-derived fresh against the sibling's current code** (not assuming iter 32's or any later note
+  still holds): `grep -n` for each of this task's five named symbols in `hub/hub/mcp_server.py`
+  confirms all five are present and wired into production code -- `_glob_links` (defined, called
+  from `_judge_path`/`_judge_piece`), `_Budget` (the per-`_decide` memo class, `budget.list_directory`/
+  `budget.expand_braces`), `_escape_removed_levels` (defined and called from `_memo_judge_word`'s
+  level loop), and `_DRIVE_LETTERS` (defined, documented as "D9: the one platform key ... and the
+  sibling change's drive rules"); `.github/workflows/ci.yml` has a `hub-judge-windows` job. The
+  sibling's own tasks 2.2a, 1.7c, 2.3 and 4.1 stay unticked (two parked on operator decisions,
+  `shell-judge-escape-scope-1-7c` and `shell-judge-2-3-eight-files`, both OPEN in
+  `spec-queue/DECISIONS.md`), but this task names code dependencies by symbol, not the sibling's
+  own closure -- all five exist and are exercised by the sibling's passing test suite, so this
+  change's own section 1 and 2 tasks are unblocked to build against them.
 
 ## 1. Tests first (in `hub/tests/test_permission_approver.py`) — each must fail on today's code or on the R3 design as written (each row says which)
 
@@ -169,7 +182,30 @@
 
 ## 2. The fix
 
-- [ ] 2.0 `_drive_exists(letter)`: `os.stat(letter + ":\\")`, `FileNotFoundError` → False, a return → True, any other exception → True; memoized per letter in the sibling change's per-`_decide` memo (design D1)
+- [x] 2.0 `_drive_exists(letter)`: `os.stat(letter + ":\\")`, `FileNotFoundError` → False, a return → True, any other exception → True; memoized per letter in the sibling change's per-`_decide` memo (design D1)
+
+  **Built.** Added `_drive_exists(letter)` to `hub/hub/mcp_server.py` (module level, just before
+  `_Budget`) and a memoized wrapper `_Budget.drive_exists(letter)` with its own `self._drive_exists:
+  Dict[str, bool] = {}`, matching the existing `list_directory`/`expand_braces` memo pattern on the
+  same class. Task 1.5c's second bullet built alongside it (not the whole task -- the real-probe
+  Windows-job bullet and the `_judge_path`-level monkeypatch bullet both need `_PS_DRIVE_RE`/rule 4
+  wiring, tasks 2.1/2.2, still unbuilt): two new tests in `hub/tests/test_permission_approver.py`,
+  `test_drive_exists_reads_stat_outcomes` (all five outcomes from design D1's table, `os.stat`
+  monkeypatched for drive-root arguments only, every other path delegated to the real call) and
+  `test_drive_exists_is_memoized_per_budget` (a second call for the same letter makes no second
+  `os.stat`). **Mutation check:** `git stash -- hub/hub/mcp_server.py`, reran both new tests:
+  both failed (`AttributeError: '_Budget' object has no attribute 'drive_exists'`, since
+  `_drive_exists` does not exist without the fix); popped the stash, both pass. `py -3.11 -m pytest
+  hub/tests/test_permission_approver.py -q`: 346 passed, 1 skipped (up from 344; +2 tests, not
+  `_TABLE` rows -- `_drive_exists` is tested directly, not through `_decide`). The broader
+  regression set (adds `test_the_shell_judge_reads_a_word_whole.py`, `test_hub_own_call.py`,
+  `test_copilot_acp_decide.py`, `test_a_write_outside_the_workspace_is_recorded.py`): 769 passed, 6
+  skipped, nothing broken. `ruff check` and `black --check --target-version py311` on both changed
+  files: clean (one `N806` rename, a local sentinel `object()` from `_RAISE` to `raise_sentinel`,
+  before either check passed). `mypy hub/hub/mcp_server.py`: the same pre-existing
+  `approve_tool_call` no-return-annotation gap `.claude/rules/mcp-server.md` names as deliberate
+  (line number unchanged by this task's own addition, which sits earlier in the file). `git diff
+  --stat`: only the two expected files changed.
 - [ ] 2.1 `_words(arguments, dialect)` and `_PS_DRIVE_RE`, keeping the colon for a bare drive and for a colon-joined option whose value is a drive (design D1, R2); (R6) `Temp:` keeps its colon in the PowerShell reading only. Pass the dialect from `_read_command`. `_DRIVE_LETTERS` is read at call time (the sibling's D9): no regex or default argument built from it at import, or task 1.5c's monkeypatch passes without reaching the code
 - [ ] 2.2 Rule 4, in this order:
   - the drive check (PowerShell on any host; bash where `_DRIVE_LETTERS`, design D4), made on a drive-letter host only when `_drive_exists(letter)` (design D1, `B4-drive-exists`), and returning only a refusal, never ending the rule on an inside or skipped answer;

@@ -475,9 +475,10 @@ _TABLE = [
     # Costs). FAILS today (allowed): `powershell_auto` never carried bare `PWD`.
     _row("1.5a5", "Copy-Item x $PWD.Path", False, _UNCHECKED, tool="PowerShell"),
     _row("1.5a6", "Write-Output $HOME.Length", False, _UNCHECKED, tool="PowerShell"),
-    # task 1.5b (design D4), the two bullets buildable without `_DRIVE_LETTERS`/`_drive_exists`
-    # (task 2.0, the sibling's D9 -- still absent, so this task's own drive bullet stays unbuilt,
-    # tracked on tasks.md's own line). Bash expands a tilde after a `:` in an assignment-shaped
+    # task 1.5b (design D4), the two bullets buildable without `_PS_DRIVE_RE`/rule 4's drive check
+    # (tasks 2.1/2.2, still unbuilt, so this task's own drive bullet stays unbuilt, tracked on
+    # tasks.md's own line; `_drive_exists` itself, task 2.0, is built and unit-tested directly,
+    # above). Bash expands a tilde after a `:` in an assignment-shaped
     # argument (`dd of=c:~` writes through `~`'s expansion, same as `cp x ~`), so the tilde check
     # also applies to the text after a word's last `:`, both dialects. Each FAILS today (allowed).
     _row("1.5b1", "dd if=x of=c:~", False, _UNCHECKED),
@@ -561,6 +562,66 @@ def test_the_decided_table(workspace, monkeypatch, tool, command, allow, reason)
     elif reason is not None:
         assert reason[1] in decision["reason"]
         assert "is outside your workspace" in decision["reason"]
+
+
+# a-drive-or-a-home-variable-names-a-directory-by-itself, task 1.5c's second bullet (design D1,
+# `_drive_exists`): `os.stat` monkeypatched for drive-root arguments only, every other path
+# delegated to the real call so the function under test is isolated without breaking anything
+# else `os.stat` is used for.
+def test_drive_exists_reads_stat_outcomes(monkeypatch):
+    from hub import mcp_server
+
+    real_stat = os.stat
+    outcomes: dict = {}
+    raise_sentinel = object()
+
+    def fake_stat(path, *args, **kwargs):
+        if path in outcomes:
+            outcome = outcomes[path]
+            if outcome is raise_sentinel:
+                raise outcomes[(path, "exc")]
+            return outcome
+        return real_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(mcp_server.os, "stat", fake_stat)
+
+    # A clean "not found" answers False.
+    outcomes["E:\\"] = raise_sentinel
+    outcomes[("E:\\", "exc")] = FileNotFoundError()
+    assert mcp_server._drive_exists("E") is False
+
+    # A return, of any value, answers True.
+    outcomes["C:\\"] = real_stat(".")
+    assert mcp_server._drive_exists("C") is True
+
+    # Any other exception answers True (a raise counts as existing) -- never propagates.
+    for letter, exc in (
+        ("P", PermissionError()),
+        ("N", OSError(22, "not ready", None, 21)),
+        ("V", ValueError()),
+        ("R", RuntimeError()),
+    ):
+        outcomes[letter + ":\\"] = raise_sentinel
+        outcomes[(letter + ":\\", "exc")] = exc
+        assert mcp_server._drive_exists(letter) is True
+
+
+def test_drive_exists_is_memoized_per_budget(monkeypatch):
+    from hub import mcp_server
+
+    calls = []
+    real_stat = os.stat
+
+    def counting_stat(path, *args, **kwargs):
+        calls.append(path)
+        return real_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(mcp_server.os, "stat", counting_stat)
+    budget = mcp_server._Budget()
+    first = budget.drive_exists("C")
+    second = budget.drive_exists("C")
+    assert first is second is True
+    assert calls == ["C:\\"]  # the second call is served from the memo, not a second `os.stat`
 
 
 def test_a_fetch_is_not_governed(workspace, monkeypatch):

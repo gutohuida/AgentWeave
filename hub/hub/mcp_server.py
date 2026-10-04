@@ -2561,6 +2561,23 @@ def _expand_braces(argument: str, budget: int) -> Optional[List[str]]:
     return stack[0]["results"]
 
 
+def _drive_exists(letter: str) -> bool:
+    """D1 (operator, `B4-drive-exists`): `os.stat(letter + ":\\")`, wrapped. A clean
+    `FileNotFoundError` answers False -- measured: `E:\\`, `A:\\` and `Z:\\` on a machine with only
+    `C:` each raise it (errno 2, winerror 3). Any other outcome, a return or any other exception,
+    answers True: counting a raise other than "not found" as absent could allow a word naming a
+    real, reachable drive outside the workspace (a permission error, a not-ready card reader, an
+    unreachable network drive), so the wrapper fails closed rather than delegating to bare
+    `os.path.exists`, which treats every `OSError`/`ValueError` as absent."""
+    try:
+        os.stat(letter + ":\\")
+    except FileNotFoundError:
+        return False
+    except Exception:
+        return True
+    return True
+
+
 class _Budget:
     """One per `_decide` call, shared across both dialects, both readings and every nested
     substitution `_read_command` recurses into (design "The bounds", R4) -- so the same text read
@@ -2585,6 +2602,7 @@ class _Budget:
         self._expansions: Dict[Tuple[str, str], Optional[List[str]]] = {}
         self.judgements: Dict[Tuple[str, str, bool, bool, str, bool], Optional[Dict[str, Any]]] = {}
         self._listings: Dict[str, Optional[List["os.DirEntry[str]"]]] = {}
+        self._drive_exists: Dict[str, bool] = {}
 
     def list_directory(self, directory: str) -> Any:
         """`os.scandir(directory)`, materialized and memoized by `directory` (design "The bounds",
@@ -2633,6 +2651,13 @@ class _Budget:
             self.alternatives_spent += len(result)
         self._expansions[key] = result
         return result
+
+    def drive_exists(self, letter: str) -> bool:
+        """`_drive_exists(letter)`, memoized once per letter for the whole `_decide` call (design
+        D1, `B4-drive-exists`): a drive word repeated in the same command pays for one probe."""
+        if letter not in self._drive_exists:
+            self._drive_exists[letter] = _drive_exists(letter)
+        return self._drive_exists[letter]
 
 
 def _memo_judge_word(
