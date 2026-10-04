@@ -33858,7 +33858,13 @@ review bullet spells the dispatch (`agent_type` exactly the lowercase id, a name
 "never describe a review it did not give"), and every Copilot review turn whose context named
 review agents ends with a `review_agents_report` status saying what ran in that run, "none"
 included, matched on dispatch id and type. Not built: stamping it on the task's transition row.
-Re-driven by 7.7. Originally: open, found 2026-10-03 by drive task 7.7 of `a-copilot-agent-uses-hooks-and-its-own-agents`
+**Re-driven 2026-10-04 (7.7, passes):** `code-review` dispatched on the first try and the report
+card matched every run. **The premise needs a correction:** reading the 10-03 run's full timeline
+again, `run-8d29230e8279` *did* dispatch `code-review` in the background
+(`call_lkMeAofQkdoLuTSSLKiqn4oA`, agent `aac37841`), so that reviewer's claim may have been true;
+the 10-03 reading missed it because the dispatch ran in the background and its events sat outside
+the tools collected. The fix stands on its own terms: the Hub now records what ran beside any
+claim, instead of anyone having to reconstruct it. Originally: open, found 2026-10-03 by drive task 7.7 of `a-copilot-agent-uses-hooks-and-its-own-agents`
 (design.md Round log, "Task 7.7, real drive, 2026-10-03"; real review turn on the trial Hub `:8010`,
 run `run-8d29230e8279` / resumed as `run-c1339b044701`). **Ready:** no change owns it; see
 `spec-queue/DECISIONS.md`'s `ghcp-s5-subagent-capture` row, fourth addendum.
@@ -34106,3 +34112,32 @@ that reads `$MY_ANTHROPIC_KEY` and passes it to one of those tools stores it in 
 outside the run's own stream, and the D7 guarantee ("neither the row nor the broadcast ever holds
 them") does not cover it. **Fix direction (not decided):** scrub with the calling run's registry at
 the tool routes, which already know the run from its credential (`agent_auth.py`).
+
+## F491 (B) — a Copilot review of this repository cannot finish: the review context asks for the test suite and the turn limit is 600 s
+
+**Status:** open, found 2026-10-04 by drive task 7.7 of `a-copilot-agent-uses-hooks-and-its-own-agents`
+(trial Hub `:8010`, `task-645a0a8abbf4`). **Ready:** no change owns it; needs a decision.
+
+Reviewing a two-line `testbed/README.md` change, `cp5` (Copilot, Free/Auto) dispatched `code-review`,
+then ran the repository's whole test suite, as the review context's instructions lead it to. Runs
+`run-126998cf065a`, `run-c8e00634e828` and `run-eb9b38d92c73` each hit the 600 s Copilot turn limit;
+the Hub gave up and the review was handed to `adapterdrive`, which set the task `revision_needed`.
+However small the change, a Copilot review of this repo times out three times and is reassigned, and
+each attempt bills a turn. A second attempt with the operator's message saying "do not run the test
+suites" finished in one run and approved. Also seen in run 2: a `permission_denied` for a PowerShell
+call under Workspace only ("the operator was asked") 12 s before the timeout. **Fix directions (not
+decided):** a review turn's context says to run only the tests the change touches; or a review turn
+gets a longer limit; or the timeout resume continues the same work instead of starting over.
+
+## F492 (C) — a full commit SHA in a tool's input is stored as `<redacted>`
+
+**Status:** open, found 2026-10-04 by drive task 7.7 of `a-copilot-agent-uses-hooks-and-its-own-agents`.
+**Ready:** yes; no change owns it.
+
+`runner_events._SECRET_VALUE_RE`'s catch-all (`[A-Za-z0-9+/=]{32,}`) matches a 40-character hex
+commit SHA, so every tool input naming one (`git diff 77f3204…..521e5d3…`, `git show <sha>`) is
+stored with the SHA redacted, and the commit range a review worked on cannot be read back from the
+record. F278 kept file paths; a bare SHA is the same class of false positive. **Fix direction (not
+decided):** keep a 40- or 64-character lowercase-hex token that is a commit known to the project's
+repository (or matches a SHA in the run's own review context), redact otherwise; a key that is pure
+lowercase hex of exactly 40 characters is the residual to weigh.

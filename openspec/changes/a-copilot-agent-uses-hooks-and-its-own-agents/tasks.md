@@ -419,7 +419,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
   see" is the `add_agent` test fixture, which inserts the `Agent` row directly, exactly what that
   route's replacement note says to use. Both narrowing cases (an unknown vocabulary entry mixed
   with a valid one; a stored string instead of a list) pass against that fixture.
-- [ ] 1.13 (D) `hub/tests/test_copilot_github_mcp_toggle.py`:
+- [x] 1.13 (D) `hub/tests/test_copilot_github_mcp_toggle.py`:
   - slice 2's `copilot_acp.build_acp_argv` contains `--disable-builtin-mcps` when
     `RpcTurnRequest.agent_config["copilot_github_mcp"]` is false or absent, and omits it when true;
     and (R3) the trigger fills `agent_config` from the agent's config (contract reconciliation,
@@ -452,6 +452,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
     2026-09-28), with the two spec scenarios on reporting a failed or starting server;
   - `GET /agents` returns `copilot_github_mcp` in the agent's `config`.
 
+  **Ticked 2026-10-04 after `4a08b81`:** the gap below is closed by `test_copilot_trigger.py::test_the_stored_github_toggle_reaches_the_turn_as_stored` (mutation-checked: a hard-coded `False` fails it).
   **Verification 2026-10-04 (amendment D8a/D9a), not ticked: one gap.** Compared bullet by bullet
   with `hub/tests/test_copilot_github_mcp_toggle.py` (39 pass). Covered there: argv
   (`TestBuildAcpArgv`, and the real spawn through `TestRunTurnThreadsAgentConfig`); the four
@@ -1207,7 +1208,7 @@ every run id, and paste each surface's text verbatim into the Round log.
   match" grep depends on, so the drive waits for F488's fix at the least. No key is supplied and
   none is to be asked for: the operator raises it when they choose. Until then this task stays
   unchecked, which also holds 8.1 (and so this change's archive) open while group C is kept.
-- [ ] 7.7 (B) Give a task completed by another agent evidence at a real commit. Set
+- [x] 7.7 (B) Give a task completed by another agent evidence at a real commit. Set
   `cp5.copilot_review_agents = ["code-review"]` and fire a review turn at `cp5` through a flow.
   - The context file contains the D8 bullet with `<base>..<commit>`.
   - The timeline shows a `code-review` subagent. Record whether it reviewed the named range
@@ -1297,7 +1298,74 @@ every run id, and paste each surface's text verbatim into the Round log.
   Pass when bullets 1 and 3 hold and the report card is present and agrees with the timeline's
   subagent events. Whether Copilot chose to dispatch is the model's behaviour, recorded, not
   gated.
-- [ ] 7.8 (D) With `copilot_github_mcp` false, the live `copilot.exe`'s command line contains
+
+  **Driven 2026-10-04 (interactive, after D8a/D9a): holds, on the second attempt.** Trial Hub
+  `:8010` pid 14360 (started 18:24 local, after `ec2e9ca`/`4a08b81`/`77f3204`). Review target: a
+  commit off master that is not on it, `521e5d3da26abb12e27b7ae90ed0c0bd63e4bfba` (parent
+  `77f3204`, two added lines in `testbed/README.md`; kept alive by `refs/drive/d77-review`, no
+  branch, working tree untouched), so the merge-base differs from the commit and the bullet gets a
+  range (a commit already on master gets `` `<commit>`'s own changes `` instead,
+  `review_turn._merge_base_sha`). Scripts: `testbed/drive1004-ghcp-s5-group-a/task77_setup.py`,
+  `task77b_setup.py`, `read_chat.py` (`GET /agent/cp5/chat?limit=500`).
+
+  *Attempt 1* — task `task-645a0a8abbf4` (assignee `drivehaiku`, operator `pending → in_progress →
+  completed`), evidence `ev-89a8559aa3ed` (operator, accepted, `locator` the commit), trigger with
+  `review_task_id` → `run-126998cf065a`. Bullet 1 holds: `.agentweave/reviews/cp5/.agentweave/
+  context/cp5.md:15` reads verbatim *"- Before your verdict, run Copilot's `code-review` agent as a
+  subagent on the changes from `77f3204514400ac46c657c699041f7b4e3b3defb` to
+  `521e5d3da26abb12e27b7ae90ed0c0bd63e4bfba`: call the `task` tool with `agent_type` exactly
+  `"code-review"`. If it fails because a model is not available, call it again with `model` set to
+  the model you are running on if the error lists it, otherwise to the first named model it lists,
+  never `auto`. Weigh what it reports and check it yourself. It does not see this repository's
+  instructions, and its findings are not your verdict. If it did not run, say so; never describe a
+  review it did not give. The verdict is yours, and it is recorded only by `update_task`."* —
+  D8a's wording exactly. `code-review` **was dispatched** with no model and ran on the first try
+  (`task` call `call_ld3e8nCgqbSFIpJ6e6jgXaC8`, `agent_type: "code-review"`, `mode: "sync"`;
+  `subagent_started`/`subagent_completed` share that `call_id`, `agent_name: "code-review"`, `model:
+  "gpt-6-luna"`, 13 tool calls, 51.6 s) and returned a Medium finding on `testbed/README.md:35`, the
+  changed line. Then the reviewer ran the CLI and Hub suites (the context's "run its test suite")
+  and the run hit the 600 s limit; the Hub resumed it twice (`run-c8e00634e828`, `run-eb9b38d92c73`),
+  both also killed at 600 s (`"Copilot did not finish the turn within 600 s"`), then
+  `queue_entry_abandoned` (*"delivery failed 3 times; the Hub stopped retrying"*) and
+  `run_diverged` `outcome: "restaffed"`, `response_agent: "adapterdrive"` — the Claude agent
+  `adapterdrive` set the task `revision_needed`, so bullet 3 could not be met on this task. Every
+  run carried its own report card, each matching its run: run 1 *"This review was asked to consult
+  `code-review`; in this run Copilot ran `code-review` (completed, gpt-6-luna)."* (`ran[0]`:
+  `agent_type: "code-review"`, `agent_id: "cf241694-…"`); run 2 *"This review was asked to consult
+  `code-review`; Copilot ran no subagent in this run."* (`missing: ["code-review"]`; true: run 2
+  dispatched none); run 3 the "ran … (completed, gpt-6-luna)" text again (`agent_id: "9af720ec-…"`,
+  a second, `mode: "background"` dispatch, 3 tool calls). 3 Copilot turns spent.
+
+  *Attempt 2* — task `task-c9ae4b7e9208`, evidence `ev-9a1d36f4366f` (same commit), the operator
+  message adding *"Do not run the test suites: they take longer than this turn's 600 s limit and
+  nothing in them reads this file."* (the Hub's context unchanged) → `run-6a09a9ed36bf`, completed
+  exit 0 in 2 min. Bullet 1: same bullet, same range. Bullet 2: `task` call
+  `call_79F5j63sP31MIpD2rEIcklg9` (`agent_type: "code-review"`, `mode: "sync"`, no model);
+  `subagent_started` (*"copilot-readme-review started"*) and `subagent_completed` (*"copilot-readme-
+  review finished"*, `model: "gpt-6-luna"`, 8 tool calls, 40.2 s) share it; the subagent answered
+  *"No significant issues found in the reviewed changes."* The last card of the run (before the
+  ordinary `completed` status) is the report, `status`/`review_agents_report` (so not hidden with
+  diagnostics): *"This review was asked to consult `code-review`; in this run Copilot ran
+  `code-review` (completed, gpt-6-luna)."*, facts `asked: ["code-review"]`, `ran: [{agent_name:
+  "code-review", agent_type: "code-review", agent_id: "c399f658-dc49-4b20-8b8b-3beabc9256d7",
+  outcome: "completed", model: "gpt-6-luna"}]`, `missing: []` — agrees with the subagent events.
+  Bullet 3: task `approved`, transition `actor_kind: "run"`, `actor_agent: "cp5"`, `run_id:
+  "run-6a09a9ed36bf"`, from `cp5`'s own `agentweave-update_task` whose notes say *"Copilot's
+  code-review agent ran and reported no significant issues."* — a claim the card corroborates.
+  Open question 7: it reviewed the named range — the dispatch prompt names the two commits
+  ("Review only the change from commit … to … in testbed/README.md"), and attempt 1's finding cites
+  the one changed line. The two SHAs read `<redacted>` in every stored tool input (the 40-hex
+  value trips `runner_events._SECRET_VALUE_RE`'s 32+ entropy alternative), so the range is
+  confirmed by the subagent's output, not read off the record. PASS (D8a). 1 Copilot turn.
+
+  **Also found.** (i) The 2026-10-03 history above is wrong on one fact: the rendered chat now
+  shows `run-8d29230e8279` *did* dispatch `code-review` (`call_lkMeAofQkdoLuTSSLKiqn4oA`,
+  `agent_type: "code-review"`, `mode: "background"`, result *"Agent started in background with
+  agent_id: aac37841-…"*), so that reviewer's claim may have been true, and F484's "never ran"
+  premise should be re-read (group A's subagent events did not exist then). (ii) The review
+  context's "run its test suite" plus the 600 s turn limit makes a Copilot review of this repo
+  time out three times and be restaffed, whatever the size of the change.
+- [x] 7.8 (D) With `copilot_github_mcp` false, the live `copilot.exe`'s command line contains
   `--disable-builtin-mcps` (R2: `Run` records no argv; read it while the run is live with
   `Get-CimInstance Win32_Process -Filter "ProcessId=<Run.pid>"`, or its child's). With it true, run one turn: `List one open issue in this repository
   using the GitHub tools.` An ask-me card appears for the `github-mcp-server` call, labelled
@@ -1349,6 +1417,41 @@ every run id, and paste each surface's text verbatim into the Round log.
     the operator and only addable under Full access).
   A write tool arriving as a card stays unmeasured (D9a, operator decision): no throwaway-repo
   drive.
+
+  **Driven 2026-10-04 (interactive, after D8a/D9a): holds.** Same trial Hub (pid 14360).
+  `testbed/drive1004-ghcp-s5-group-a/task78_turn.py` sends one turn — *"Call the GitHub MCP
+  server's `search_code` tool directly (the github-mcp-server tool, not `gh`, not a shell command)
+  with the query `AGENT_NAME_RE repo:gutohuida/AgentWeave`. Reply with the path of the first result
+  only, then stop."* — and polls `Get-CimInstance Win32_Process -Filter "Name='copilot.exe'"` while
+  it is live. `PATCH .../agents/cp5 {"config": {"copilot_review_agents": ["code-review"],
+  "copilot_github_mcp": true}}` first.
+  - (a) Workspace only (`cp5` at rest `workspace`, no override), `run-f6ed0c50c3fd`: live argv
+    `copilot.exe --acp --stdio --no-auto-update --additional-mcp-config @…\cp5\agentweave-mcp.json`
+    (no `--disable-builtin-mcps`); timeline `tool_use` `github-mcp-server-search_code` →
+    `tool_result` *"github-mcp-server-search_code completed"* 0.9 s later, text *"No result."*; no
+    permission card, and `GET .../logs?agent=cp5` has no permission row for the run. PASS.
+  - (b) Ask me, by `POST /agent/trigger` `overrides: {"permission_mode": "manual"}` (stored on the
+    new conversation `conv-9d7acd4b4852`, `runtime_overrides: {"permission_mode": "manual"}`),
+    `run-86fff65d1121`: the same `tool_use`/`tool_result` pair, 0.5 s apart, *"No results found."*,
+    no card, no permission row. D9a's INFERRED "Copilot runs them without asking you … Ask me
+    included" now measured. PASS.
+  - (c) A copy runner `runner-621a438b8682` (`copilot`, `flags: ["--enable-all-github-mcp-tools"]`),
+    `cp5` pointed at it, `overrides: {"permission_mode": "workspace"}`, `run-4d31af158b01`: live
+    argv identical to (a) — the flag absent; the run's first entry after the input is a
+    `diagnostic`, `code: "copilot.runner_flag_removed"`, `facts: {"flag":
+    "--enable-all-github-mcp-tools"}`, `severity: "warning"`, verbatim *"The runner flag
+    --enable-all-github-mcp-tools was not passed to Copilot: it adds GitHub tools that write, which
+    only a run with Full access may have."* (D9a's sentence; the design's backticks around the flag
+    are not in the stored text). `search_code` then ran as in (a). PASS.
+  - Settings help text: not rendered in a browser; the shipped bundle (`hub/hub/static/ui/assets`)
+    carries *"Gives this agent Copilot's built-in GitHub tools, read-only. Copilot runs them without
+    asking you, in every posture, Ask me included. Tools that write to GitHub can be added only on a
+    runner with Full access, where they run without asking too. This setting does not govern the
+    `gh` command…"*, D9a's text.
+
+  Restored: `cp5` back on `runner-72c07eca7e75`, `copilot_github_mcp: false`
+  (`copilot_review_agents` kept), at rest `workspace`; the flag runner deleted (204). 3 Copilot
+  turns. Section total today: 7 (7.7: 4, of which 3 timed out; 7.8: 3).
 
 ## 8. Archive
 
