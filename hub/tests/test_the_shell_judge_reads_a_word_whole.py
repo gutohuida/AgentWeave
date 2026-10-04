@@ -1740,14 +1740,21 @@ def test_the_1_7b_rows_name_the_claimed_reason(workspace, monkeypatch):
 
 
 def test_the_1_7c_independent_rows_name_the_claimed_reason(workspace, monkeypatch):
-    """1.7c's first and fifth-bullet rows (`1.7c1`, `1.7c5`): the only two of 1.7c's refused rows
-    that do not depend on the escape-removed-level reading (F487), so they run and are asserted
-    unconditionally rather than gated to one platform like the sixth-bullet reason-less rows."""
+    """1.7c's first and fifth-bullet rows (`1.7c1`, `1.7c5`). Both refuse on every platform, but
+    the claimed word differs: on a drive-letter host the word itself already refuses (backslash
+    opens a root path there), while on a POSIX host it does not, so `_memo_judge_word`'s
+    escape-removed-level reading (D7, gated `not _DRIVE_LETTERS`) runs and reports the
+    backslash-reduced level instead -- the exact case its own docstring names."""
     monkeypatch.setenv("HUB_URL", _HUB)
 
     grep_dotdot = _decide("Bash", {"command": r"grep -rn '\.\./' src"})
     assert grep_dotdot["allow"] is False
-    assert grep_dotdot["reason"] == "'\\\\.\\\\./' is outside your workspace"
+    if _WINDOWS:
+        assert grep_dotdot["reason"] == "'\\\\.\\\\./' is outside your workspace"
+    else:
+        # Not a drive-letter host: the word itself does not refuse, so D7's escape-removed-level
+        # reading runs and reports the backslash-reduced level (`\.\./ ` -> `../`) instead.
+        assert grep_dotdot["reason"] == "'../' is outside your workspace"
 
     if _WINDOWS:
         doublecolon_dotdot = _decide(
