@@ -934,41 +934,58 @@ def test_an_extglob_group_is_masked_to_star_through_the_link_it_finds_1_4c(works
 # and `fnmatchcase("up", "?p")` is True -- but that pattern only ever reaches `_glob_links` through
 # `_judge_whole_value`'s *undivided* reading (D9), and D9 takes that reading only `if not
 # _DRIVE_LETTERS` (a drive-letter host instead only judges the value split at each `:`, since a bare
-# `X:` there is read as a drive). Splitting `[[:alpha:]]p/x` at `:` breaks the bracket expression
-# into `[[`, `alpha`, `]]p/x` -- none of which matches `up` -- so a drive-letter host never runs the
+# `X:` there is read as a drive). Splitting `[[:alpha:]]p/x` at `:` broke the bracket expression
+# into `[[`, `alpha`, `]]p/x` -- none of which matches `up` -- so a drive-letter host never ran the
 # one reading that would catch it, even though the colons here are POSIX bracket-class syntax, not
-# drive letters. Confirmed directly: `_judge_piece` on the undivided value, called standalone,
-# refuses correctly; `_judge_whole_value` on the same value, with `_DRIVE_LETTERS` true, returns
-# `None` without ever calling `_judge_piece` on the undivided text, only on the broken segments.
-# This machine cannot build a real symlink (no privilege, measured: `OSError: WinError 1314`), so
-# the refused side below is confirmed by forcing `_is_link_entry`/`_is_link_path` to answer as a
-# real POSIX symlink's `os.lstat` would (`S_ISLNK` true, independent of `_DRIVE_LETTERS` in
-# production -- only a Windows junction's reparse-point fallback reads that flag) rather than by a
-# junction, which does not set `S_ISLNK` and so cannot stand in for a real symlink once
-# `_DRIVE_LETTERS` is forced false; reasoned through for the real-symlink case the same way task
-# 1.4g's own POSIX-only `work/t:d` row was (iteration 25). Confirmed (iteration 44): CI's
+# drive letters. This machine cannot build a real symlink (no privilege, measured: `OSError:
+# WinError 1314`), so the refused side below is confirmed by forcing `_is_link_entry`/`_is_link_path`
+# to answer as a real POSIX symlink's `os.lstat` would (`S_ISLNK` true, independent of
+# `_DRIVE_LETTERS` in production -- only a Windows junction's reparse-point fallback reads that
+# flag) rather than by a junction, which does not set `S_ISLNK` and so cannot stand in for a real
+# symlink once `_DRIVE_LETTERS` is forced false; reasoned through for the real-symlink case the same
+# way task 1.4g's own POSIX-only `work/t:d` row was (iteration 25). Confirmed (iteration 44): CI's
 # `hub-test` job (`ubuntu-latest`, a real symlink, natively `_DRIVE_LETTERS` false) ran commit
 # 84e4474 (the commit that added this test) and its log shows this test PASSED there, so the
 # `not _WINDOWS` branch below is confirmed green on a real symlink, not only reasoned through.
-# The allowed side is measured directly and natively on this Windows machine: no production
-# change made here, so this row stays open (D9 would need a POSIX-class carve-out to fix the
-# Windows side, which risks reopening D9's own drive-letter reasoning -- left for a further
-# round, not attempted here).
+#
+# (D13, task 1.4c's Windows-side gap, closed) `_judge_whole_value` now masks a bracket expression's
+# own `:` (`_mask_bracket_colons`, via `_bracket_expression_end`, the same function D8 step 2 already
+# uses) before the drive-letter split, so `[[:alpha:]]p/x` survives undivided into the segment
+# `_judge_piece` sees even on a drive-letter host. Both platforms now refuse the same way -- the
+# branch below stays split only because the two sides reach the refusal through different code paths
+# (D9's `if not _DRIVE_LETTERS` undivided call vs. the drive-letter branch's now-unbroken single
+# segment), not because the outcomes differ any more.
 def test_a_posix_character_class_is_caught_whole_only_off_a_drive_letter_host_1_4c(
     workspace, monkeypatch
 ):
     monkeypatch.setenv("HUB_URL", _HUB)
 
-    if not _WINDOWS:
-        posix_class = _decide("Bash", {"command": "cp n '[[:alpha:]]p'/x"})
-        assert posix_class["allow"] is False
-        assert "it resolves to" in posix_class["reason"]
-    else:
-        # The named residual on a drive-letter host: D9 never judges the value undivided here,
-        # so `_glob_links` never sees the bracket expression as one pattern. Asserted so a change
-        # of mind (a D9 POSIX-class carve-out) is visible.
-        posix_class = _decide("Bash", {"command": "cp n '[[:alpha:]]p'/x"})
-        assert posix_class["allow"] is True, posix_class["reason"]
+    posix_class = _decide("Bash", {"command": "cp n '[[:alpha:]]p'/x"})
+    assert posix_class["allow"] is False
+    assert "it resolves to" in posix_class["reason"]
+
+
+# (D13) A bracket expression's own `:` must survive the drive-letter split even when it is not a
+# POSIX class -- an ordinary bracket with a literal `:` member (`[a:u]p/x`, matching one of `a`,
+# `:` or `u`, so it matches the fixture's `up` link) -- and a real drive-letter colon just outside
+# a bracket must still split, so `t:d` style paths and `sed`/line-reference text are unaffected
+# (D2 step 6's own measured 44 words). Windows-only: off a drive-letter host the undivided reading
+# already covers this (D9), so this row is only informative there.
+def test_a_bracket_expressions_own_colon_survives_the_drive_letter_split_1_4c_d13(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    literal_colon_member = _decide("Bash", {"command": "cp n '[a:u]p'/x"})
+    assert literal_colon_member["allow"] is False
+    assert "it resolves to" in literal_colon_member["reason"]
+
+    if _WINDOWS:
+        # The same regex-with-colons control task 1.4g's own test already runs (D2 step 6's
+        # measured 44 words): no bracket, so the mask is a no-op, and the drive-letter split must
+        # still happen or `ntpath.realpath` would misread `(:700)` as a drive and wrongly refuse.
+        drive_colon_unaffected = _decide("Bash", {"command": "sed -E 's/(:700)/(:697)/g' f"})
+        assert drive_colon_unaffected["allow"] is True, drive_colon_unaffected["reason"]
 
 
 # 2.2, a first slice (design D2 step 2, D3's extglob units): an unquoted extglob group -- a

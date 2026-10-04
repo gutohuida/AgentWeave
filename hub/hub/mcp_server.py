@@ -1650,6 +1650,49 @@ def _relax_bracket_pattern(pattern: str) -> str:
     return "".join(pieces)
 
 
+# D13: a sentinel for a bracket expression's own `:`, masked before `_judge_whole_value`'s
+# drive-letter colon split so the split does not divide a POSIX class or any other bracket
+# expression holding a literal `:`. Distinct code point from `_EXTGLOB_*` above.
+_BRACKET_COLON_SENTINEL = ""
+
+
+def _bracket_expression_spans(text: str) -> List[Tuple[int, int]]:
+    """D13: every `(start, end)` span (end exclusive) of a bracket expression in `text`, found the
+    same way `_relax_bracket_pattern` finds one (`_bracket_expression_end`), so the two stay in
+    agreement about what counts as a bracket. A `[` with no closing `]` yields no span, left
+    untouched, the same literal reading `_relax_bracket_pattern` and `fnmatch` already give it."""
+    spans = []
+    index = 0
+    length = len(text)
+    while index < length:
+        if text[index] == "[":
+            end = _bracket_expression_end(text, index)
+            if end is not None:
+                spans.append((index, end + 1))
+                index = end + 1
+                continue
+        index += 1
+    return spans
+
+
+def _mask_bracket_colons(value: str) -> str:
+    """D13: within each of `value`'s bracket expressions, `:` is replaced by
+    `_BRACKET_COLON_SENTINEL` so `_judge_whole_value`'s drive-letter colon split does not divide a
+    bracket expression that holds its own `:` (a POSIX class, or an ordinary bracket with a
+    literal `:` member). Outside every span, `value` is untouched. The sentinel is restored back
+    to `:` in each surviving split segment before it reaches `_judge_piece`, so the text any
+    refusal quotes is exactly the substring of `value` as written."""
+    spans = _bracket_expression_spans(value)
+    if not spans:
+        return value
+    chars = list(value)
+    for start, end in spans:
+        for position in range(start, end):
+            if chars[position] == ":":
+                chars[position] = _BRACKET_COLON_SENTINEL
+    return "".join(chars)
+
+
 def _glob_links(piece: str, shown: str, root: str, budget: "_Budget") -> Optional[Dict[str, Any]]:
     """D8, a further slice: a `piece` (already rewritten by `_rewrite_dotdot_globs`) holding
     exactly one glob-holding component, anywhere in the piece, with every other component literal
@@ -2146,16 +2189,23 @@ def _judge_whole_value(
     (`sed 's/::.*//'`). On POSIX `:` is an ordinary name character, so the value is judged whole
     with its colons as well as divided -- `cp n t:d/up/x` reaches a directory literally named
     `t:d`. Each reading goes through the same per-piece checks a piece already does (`_judge_piece`:
-    a NUL, a leading `~`, D3's `..`-rewrite, `_judge_path`)."""
+    a NUL, a leading `~`, D3's `..`-rewrite, `_judge_path`).
+
+    (D13) The split is made on `value` with each bracket expression's own `:` masked
+    (`_mask_bracket_colons`), so a POSIX class or any other bracket expression holding a literal
+    `:` is not torn apart before `_glob_links` ever sees it as a bracket; the sentinel is restored
+    in each surviving segment before it is judged, so the text judged and quoted is exactly the
+    substring of `value` as written."""
     if not _DRIVE_LETTERS:
         refusal = _judge_piece(value, root, argument, continues, budget)
         if refusal:
             return refusal
-    segments = [segment for segment in value.split(":") if segment]
+    segments = [segment for segment in _mask_bracket_colons(value).split(":") if segment]
     if _DRIVE_LETTERS or len(segments) > 1:
         for index, segment in enumerate(segments):
+            restored = segment.replace(_BRACKET_COLON_SENTINEL, ":")
             refusal = _judge_piece(
-                segment, root, argument, continues and index == len(segments) - 1, budget
+                restored, root, argument, continues and index == len(segments) - 1, budget
             )
             if refusal:
                 return refusal

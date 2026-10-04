@@ -411,6 +411,64 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   **119 passed** (unchanged, as expected for a docs-only round). 1.4c stays unticked; R3 (a second,
   independent re-derivation) is still required by `CLAUDE.md`'s round discipline before
   `_judge_whole_value` is touched.
+
+  **Iteration 48 (R3 of this gap's own round -- independent re-derivation, confirmed sound; then
+  implemented).** Re-derived D13 against the actual code a third time, fresh, before reading either
+  R1's or R2's own write-up again (`testbed/scratch/r3_verify_d13.py`, gitignored, not committed, a
+  script written from scratch, not reused from either prior round): called `_judge_whole_value`'s own
+  split and the module's `_bracket_expression_end`/`_relax_bracket_pattern`/`_holds_glob_character`
+  against four cases neither R1 nor R2 had used (`[[:digit:]]9/x`, `[:alpha:]p/x`, a bracket holding
+  two concatenated POSIX classes, and a negated bracket whose only member is a literal `:`) -- every
+  one split into fragments that lost the glob exactly as D13 describes, and the undivided reading
+  relaxed to a pattern that matches `up`. **(a) confirmed**, by cases no prior round had tried. Wrote
+  an independent masking function from scratch and ran it against nine cases (the five already named
+  plus `[[:digit:]]9/x`, the negated-member bracket, a drive letter and a bracket colon in the same
+  value (`C:\x[a:b]\y`), and a POSIX class beside an extra literal colon member in the same bracket)
+  -- every case produced the expected split, with the drive-letter/`sed` rows unaffected. Also tried,
+  and failed to construct, a counterexample to the rule itself: an unterminated bracket with a colon
+  inside (`a[b:c/x`, `[[:alpha:`, `x[:y/z`) splits exactly as it does today, unmasked, because
+  `_bracket_expression_end` finds no span for it -- consistent with `_relax_bracket_pattern`'s own
+  literal reading of the same input (checked directly: it returns these unchanged too). **(b)
+  confirmed**, including a boundary case neither prior round tried. Re-derived (c) independently from
+  the actual D8-step-1 code, not the docstring text either prior round quoted: `_GLOB_CHARS = "*?["`
+  (`hub/hub/mcp_server.py:1390`), and `_glob_links`'s own `base_components = components[:glob_index]`
+  where `glob_index` is the position of the first component for which `_holds_glob_character` is
+  true -- checked directly that a component holding `[` anywhere in it (not only as its first
+  character, e.g. `lit[a:b]`) is `_holds_glob_character` True, so it is always excluded from
+  `base_components` regardless of what precedes the `[` inside it. **(c) confirmed** by reading the
+  code the claim is about, not only the docstring describing it. No counterexample found in any of
+  the three rounds despite each one trying from a different angle.
+
+  **D13 heading updated to "R3 confirmed -- all three required rounds done" in design.md.** Then
+  implemented, per `next_action`: added `_BRACKET_COLON_SENTINEL`, `_bracket_expression_spans` and
+  `_mask_bracket_colons` to `hub/hub/mcp_server.py` (after `_relax_bracket_pattern`, before
+  `_glob_links`, mirroring `_mask_extglob_groups`/`_restore_extglob_sentinels`'s own shape), and wired
+  `_mask_bracket_colons(value)` into `_judge_whole_value`'s drive-letter split, restoring the sentinel
+  in each surviving segment before `_judge_piece` sees it. Updated the existing
+  `test_a_posix_character_class_is_caught_whole_only_off_a_drive_letter_host_1_4c` (its Windows branch
+  now asserts `allow is False`, naming the resolved target, same as the non-Windows branch -- merged
+  to one assertion since both platforms now agree) and added
+  `test_a_bracket_expressions_own_colon_survives_the_drive_letter_split_1_4c_d13` (an ordinary bracket
+  with a literal `:` member, `[a:u]p/x`, matching the fixture's `up` link; plus, Windows-only, the
+  existing `sed -E 's/(:700)/(:697)/g' f` control from 1.4g's own test, confirming a real drive-letter
+  colon with no bracket still splits). Mutation-checked: temporarily reverted the `_judge_whole_value`
+  wiring to the unmasked split and reran -- both the updated test and the new test fail (`assert True
+  is False`), confirming they are load-bearing; restoring the fix afterward took two attempts because
+  `git checkout -- hub/hub/mcp_server.py` discarded the real fix along with the mutation (the file had
+  never been committed in its fixed state) -- caught immediately by grepping for `_mask_bracket_colons`
+  and finding no match, then the two production edits were reapplied directly. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **120 passed** (was 119, +1 test
+  function). Broader regression set (`test_permission_approver.py`, `test_hub_own_call.py`,
+  `test_copilot_acp_decide.py`, `test_a_write_outside_the_workspace_is_recorded.py`): **746 passed, 2
+  skipped**, no regressions. `py -3.11 -m ruff check` and `py -3.11 -m black --check
+  --target-version py311` on both changed files: clean. `git diff --stat`: `hub/hub/mcp_server.py`,
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, `design.md` and this task file.
+
+  **Task 1.4c's Windows-side POSIX-class/colon-split gap is now closed.** The other two named gaps
+  (the absolute top-level dot-glob gap, iteration 39 finding (2); the bash-dot-rule control gap,
+  iteration 39 finding (1), likely out of scope) remain open and untouched -- task 1.4c itself stays
+  unticked until both are resolved on their own fresh measurement, not assumed from this iteration's
+  work on a different gap.
 - [x] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
   - `cp n [u]p/` and `cp n ./u[p]` (a trailing `]` the trim removes). Each PASSES today only by the tail (`'/'`, `'/u[p'`), so assert the resolved target, which FAILS today; each FAILS against R5 (allowed).
   - `cp n [.]./x` refused as outside, quoting `'[.]./x'`. PASSES today by the tail `'/x'`, FAILS on the reason assertion and against R5 (the word `.]./x` is inside).

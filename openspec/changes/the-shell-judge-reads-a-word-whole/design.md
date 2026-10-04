@@ -956,7 +956,7 @@ are string work.
   `classify` and `_decide` "agree about a symlink" (`workspace_writes.py:8-10` and `:172-174`),
   which is only half true after D12. Task 2.0b corrects it.
 
-### D13 (R2 confirmed — one independent re-derivation done, R3 still required) — a bracket expression's own colon is not a drive-letter break
+### D13 (R3 confirmed — all three required rounds done; implemented) — a bracket expression's own colon is not a drive-letter break
 
 **The defect (task 1.4c, carried from iteration 41; re-measured this round against the current
 code, not assumed from the prior round's note).** D2 step 6's whole-value reading is the one D8
@@ -1082,6 +1082,50 @@ correction needed to the proposed rule.** One more independent re-derivation (R3
 by `CLAUDE.md`'s round discipline (two independent rounds beyond R1, not one) before any line of
 `_judge_whole_value` changes — R2 re-deriving the same answer R1 reached is expected agreement, not a
 substitute for R3's own fresh pass.
+
+**R3 (independent re-derivation, fresh before reading R1 or R2's own text again).** Re-measured (a)
+with four cases neither prior round had used — `[[:digit:]]9/x`, `[:alpha:]p/x`, a bracket holding
+two concatenated POSIX classes (`[[:alpha:][:digit:]]x`), and a negated bracket whose only member is
+a literal `:` (`[^:]p/x`) — calling `_judge_whole_value`'s own `str.split(":")` and the module's
+`_bracket_expression_end`/`_relax_bracket_pattern`/`_holds_glob_character` directly. Every one split
+into fragments that lost the glob exactly as D13 describes (e.g. `[^:]p/x` → `['[^', ']p/x']`,
+neither of which relaxes to anything matching `up`), while the undivided value relaxed to a pattern
+that does. **(a) confirmed**, by cases outside either prior round's own set.
+
+Re-coded the masking rule a third time, independently, and ran it against nine cases: the five named
+in the proposed rule, plus the four above, plus a drive letter and a bracket colon together in one
+value (`C:\x[a:b]\y` → `['C', '\\x[a:b]\\y']`, splitting only at the real drive colon) and a POSIX
+class beside an extra literal colon member in the same bracket (`[[:alpha:]:]/x`, stays one
+segment). All nine match the rule's own stated shape. Also tried, deliberately, to break it: an
+unterminated bracket with a colon inside (`a[b:c/x`, `[[:alpha:`, `x[:y/z`) has no closing `]`, so
+`_bracket_expression_end` returns no span and the mask is a no-op — the split is identical to
+today's, which is the correct outcome, since `_relax_bracket_pattern` already reads the same input
+as literal text, unchanged, for the same reason. No counterexample found. **(b) confirmed**,
+including a boundary case neither prior round tried.
+
+Re-derived (c) from the code the claim is actually about, not from either round's own docstring
+quote: `_GLOB_CHARS = "*?["` (`hub/hub/mcp_server.py:1390`) confirms `[` is a glob character, and
+`_glob_links`'s own `base_components = components[:glob_index]`, with `glob_index` the index of the
+first component for which `_holds_glob_character` is true, confirms "base" is exactly "every
+component before the first glob-holding one" in the running code, not only in its docstring.
+Checked directly that a component holding `[` anywhere in it — not only as its first character —
+is `_holds_glob_character` True (`lit[a:b]` → True), so a literal prefix before the bracket changes
+nothing: the component is still excluded from `base_components`. **(c) confirmed**, against the code
+rather than its description of itself.
+
+**R3 verdict: all three required rounds (R1, R2, R3) confirm the same rule, each from a different
+set of cases and, for (c), a different kind of evidence (code read directly, not docstring text).
+No correction surfaced in any round.** Implemented: `_BRACKET_COLON_SENTINEL`,
+`_bracket_expression_spans` and `_mask_bracket_colons` added to `hub/hub/mcp_server.py` after
+`_relax_bracket_pattern`, mirroring `_mask_extglob_groups`/`_restore_extglob_sentinels`'s shape;
+`_judge_whole_value`'s drive-letter split now runs on `_mask_bracket_colons(value)`, restoring the
+sentinel in each surviving segment before `_judge_piece` sees it, so the text judged and quoted is
+always the exact substring of `value` as written. `hub/tests/test_the_shell_judge_reads_a_word_whole.py`
+updated and extended; mutation-checked (see tasks.md's iteration-48 note for the full record,
+including a `git checkout` slip while restoring from the mutation, caught and corrected before this
+was relied on as evidence). **120 passed**, broader regression set **746 passed, 2 skipped**, `ruff`
+and `black` clean. Task 1.4c's Windows-side POSIX-class/colon-split gap is closed; its other two
+named gaps are untouched.
 
 ## The bounds (R4: per `_decide`)
 
