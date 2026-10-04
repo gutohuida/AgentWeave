@@ -829,7 +829,7 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
   passing the list (2), no de-duplication (2), `completed` never recorded (1). Test-setup note: an
   agent declared through `session/sync` does not store `copilot_review_agents` and refuses PATCH
   (409, "reserved for a configured agent"); the route tests use `add_agent`, as 1.11 does.
-- [ ] 4.6 (B; D8a) Record F484 in `scripts/drive/FINDINGS.md` as fixed by the commit that builds 4.5,
+- [x] 4.6 (B; D8a) Record F484 in `scripts/drive/FINDINGS.md` as fixed by the commit that builds 4.5,
   naming D8a; its follow-up (stamping the report on the transition row) stays unbuilt.
 
 ## 5. Group D — the GitHub MCP server toggle
@@ -957,7 +957,7 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
   rewritten (asserts the new sentences, and that neither "is asked" nor "card" appears); it failed
   on the old text, passes on the new; `npm run lint` clean; bundle refreshed
   (`scripts/refresh_ui_bundle.py`), `hub/ui/src` and `hub/hub/static/ui` committed together.
-- [ ] 5.5 (D; D9a) Record F485 in `scripts/drive/FINDINGS.md` as fixed by the commit that builds 5.4,
+- [x] 5.5 (D; D9a) Record F485 in `scripts/drive/FINDINGS.md` as fixed by the commit that builds 5.4,
   naming D9a and what stays INFERRED (a write tool arriving as a permission request).
 
 ## 6. Full suite

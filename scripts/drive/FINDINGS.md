@@ -33853,7 +33853,12 @@ through `gh`; it is not a CLI regression.
 
 ## F484 (B) — a Copilot reviewer's `update_task` claims a subagent review that never ran
 
-**Status:** open, found 2026-10-03 by drive task 7.7 of `a-copilot-agent-uses-hooks-and-its-own-agents`
+**Status:** fixed `ec2e9ca` (2026-10-04, interactive; slice 5 amendment D8a, operator-approved): the
+review bullet spells the dispatch (`agent_type` exactly the lowercase id, a named model on retry,
+"never describe a review it did not give"), and every Copilot review turn whose context named
+review agents ends with a `review_agents_report` status saying what ran in that run, "none"
+included, matched on dispatch id and type. Not built: stamping it on the task's transition row.
+Re-driven by 7.7. Originally: open, found 2026-10-03 by drive task 7.7 of `a-copilot-agent-uses-hooks-and-its-own-agents`
 (design.md Round log, "Task 7.7, real drive, 2026-10-03"; real review turn on the trial Hub `:8010`,
 run `run-8d29230e8279` / resumed as `run-c1339b044701`). **Ready:** no change owns it; see
 `spec-queue/DECISIONS.md`'s `ghcp-s5-subagent-capture` row, fourth addendum.
@@ -33901,7 +33906,13 @@ no-record/no-broadcast guarantee for a provider key and is real and reproduced, 
 
 ## F485 (D) — the GitHub MCP toggle's ask-me card never fires: Copilot's own session never sends `session/request_permission` for a built-in `github-mcp-server` call
 
-**Status:** open, found 2026-10-03 by drive task 7.8 of `a-copilot-agent-uses-hooks-and-its-own-agents`
+**Status:** fixed `4a08b81` (2026-10-04, interactive; slice 5 amendment D9a, operator-approved):
+the toggle is described as read-only GitHub tools Copilot runs without asking (no card is
+promised); `--enable-all-github-mcp-tools`, `--add-github-mcp-toolset`, `--add-github-mcp-tool`
+and `--additional-mcp-config` are removed from runner flags outside Full access; the three
+settings keys are swept from the Hub-owned home. Still INFERRED: that Copilot auto-approves a
+read-only call (`mcp-read-only`) and that a write call would arrive as a permission request.
+Re-driven by 7.8. Originally: open, found 2026-10-03 by drive task 7.8 of `a-copilot-agent-uses-hooks-and-its-own-agents`
 (tasks.md:1056; real drive on the trial Hub `:8010`, agent `cp5`). **Ready:** no change owns it.
 
 Task 7.8's first bullet held exactly as written: with `cp5.config.copilot_github_mcp` false (default,
