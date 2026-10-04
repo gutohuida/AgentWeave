@@ -1712,11 +1712,23 @@ def test_the_1_7b_rows_name_the_claimed_reason(workspace, monkeypatch):
 
     dd_target = _decide("Bash", {"command": r"dd if=x of=c:~/y"})
     assert dd_target["allow"] is False
-    assert dd_target["reason"] == (
-        "'c:~/y' contains a variable, '~' or a command substitution that the shell expands "
-        "when it runs, so where it points cannot be checked against your workspace; write a "
-        "path relative to your workspace instead"
-    )
+    if _WINDOWS:
+        # `_DRIVE_LETTERS`: 2.2a's drive-piece rule catches `c:~/y` whole, as a drive-letter
+        # piece with a tilde after the colon, before any generic colon split runs.
+        assert dd_target["reason"] == (
+            "'c:~/y' contains a variable, '~' or a command substitution that the shell expands "
+            "when it runs, so where it points cannot be checked against your workspace; write a "
+            "path relative to your workspace instead"
+        )
+    else:
+        # Not a drive-letter host: the drive-piece rule never fires, so `_judge_whole_value`'s
+        # generic colon split (D2 step 6) divides `c:~/y` into `c` and `~/y` and only the second
+        # segment, not the drive-qualified whole, reaches the tilde refusal.
+        assert dd_target["reason"] == (
+            "'~/y' contains a variable, '~' or a command substitution that the shell expands "
+            "when it runs, so where it points cannot be checked against your workspace; write a "
+            "path relative to your workspace instead"
+        )
 
     git_revision = _decide("Bash", {"command": r"git show HEAD:~/x"})
     assert git_revision["allow"] is False

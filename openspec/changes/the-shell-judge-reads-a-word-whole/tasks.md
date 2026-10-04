@@ -995,6 +995,34 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   (confirming R2's rewrite did not break what R3 worried about) plus one documented, un-forceable
   POSIX-only gap. Ticked `[x]`: every row this task's own text names is now built and passing (or,
   for the one genuinely un-forceable row, added and explained why it cannot run here).
+
+  **Iteration 59 fix (CI-discovered).** `hub-test (windows-latest)` failed on push (iteration 57's
+  own commit, run `37172873043`), on `ubuntu-latest`/`macos-latest` (the `hub-test` job runs on
+  `ubuntu-latest`): `test_the_1_7b_rows_name_the_claimed_reason` asserted the `dd if=x of=c:~/y`
+  refusal names `'c:~/y'` on every platform, but that assertion was only ever run on this
+  machine's drive-letter host (all three prior CI runs for this task were green only because this
+  was the first push to actually execute the new assertion on a non-Windows runner). Measured
+  directly against `_decide` with `mcp_server._DRIVE_LETTERS` monkeypatched to `False`
+  (`test_zzz_scratch_1_7b_posix`, added, run with `-s` to print the real reason, then removed
+  before committing): on a non-drive-letter host, 2.2a's drive-piece rule (which catches `c:~/y`
+  whole, as a unit, before any colon split) never fires, so `_judge_whole_value`'s generic colon
+  split (D2 step 6, `hub/hub/mcp_server.py:2279-2297`) divides the value into `c` and `~/y`, and
+  only the second segment -- not the drive-qualified whole -- reaches the tilde refusal; the
+  reported reason names `'~/y'`, not `'c:~/y'`. Gated the assertion on `_WINDOWS` (matching the
+  pattern the three fully-Windows-only rows above it already use), each branch holding exactly the
+  reason its own platform's rule set actually produces. This is not a design gap: the two platforms
+  genuinely refuse via different rules (2.2a's dedicated drive-piece rule vs. the generic colon
+  split), each named in D2/D7, so a single cross-platform reason string was never achievable --
+  only the test's assertion was wrong, not the production code. `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **141 passed, 4 skipped**, unchanged.
+  Broader regression set: **767 passed, 6 skipped**, unchanged. `ruff check`/`black --check
+  --target-version py311` on the edited file: clean. `openspec validate --strict`: valid. `git
+  status --short`: only this file and this task's own note changed; the scratch script was deleted
+  before this commit. Did not re-verify on an actual Linux/macOS runner directly (no such host
+  here) -- confidence rests on reproducing CI's exact observed value
+  (`"'~/y' contains a variable..."`, matching the CI failure's "actual" side character-for-character)
+  via the monkeypatched `_DRIVE_LETTERS=False` path, which is what a non-Windows host takes at
+  runtime; the push and CI's own `hub-test` job (ubuntu-latest) will confirm.
 - [ ] 1.7c (R3, R4; design D7) Escapes allowed today:
   - (R5, POSIX CI) `grep -rn '\.\./' src` refused: the named cost, asserted so that a change of mind is visible. FAILS today on POSIX (allowed).
   - `bash -c 'cp n .\./x'` refused, from both the Bash and the PowerShell tool. FAILS today.
@@ -1971,7 +1999,30 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   built (the Windows-side escape refusals, the `\$HOME` spy, the `…FileSystem::..\x` row, the
   `grep foo 'src\a.py'` control) and FAILS until those are addressed one way or the other. 1.7b is
   independent of this iteration's work and still needs its own fresh read.
-- [ ] 2.2b D6: `approve_tool_call` catches an exception from `_decide`, denies with a reason and reports it; no return annotation
+- [x] 2.2b D6: `approve_tool_call` catches an exception from `_decide`, denies with a reason and reports it; no return annotation
+
+  **Iteration 59.** Re-derived fresh against this task's own wording and design D6
+  (`openspec/changes/the-shell-judge-reads-a-word-whole/design.md` lines 510-528), not ticking on
+  the strength of iteration 58's note that a test already passes. Read `hub/hub/mcp_server.py`
+  lines 3447-3476 directly: the `else` branch (non-operator posture) wraps only
+  `decision = _decide(tool_name, tool_input)` in `try/except Exception as exc`, builds
+  `{"allow": False, "reason": f"the workspace check failed on this call ({type(exc).__name__}); ask
+  the operator with ask_user"}` on catch, and `_report_decision(tool_name, decision, tool_use_id)`
+  runs unconditionally afterward for every path (own-call allow, operator-asked, judge-raised) --
+  so the raised case is reported like any other refusal. The operator-posture `if` branch
+  (`_ask_operator`) sits outside the `try`, matching D6's "must not wrap the operator path."
+  `approve_tool_call`'s signature ends `tool_use_id: str = "",):` with no `->` -- no return
+  annotation, confirmed by reading the def line itself, not inferred.
+
+  Did not trust the existing `test_approve_tool_call_denies_and_reports_when_the_judge_raises_1_6`
+  on a green run alone: mutation-checked it by temporarily replacing the try/except with a bare
+  `decision = _decide(tool_name, tool_input)` (via a throwaway Python script, not committed) and
+  re-running just that test -- it failed with the injected `RecursionError` propagating uncaught,
+  confirming the test exercises the catch rather than passing vacuously. Reverted with `git checkout
+  -- hub/hub/mcp_server.py` (clean `git status --short` after). Full file re-run after revert:
+  `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **141 passed, 4
+  skipped** (unchanged from iteration 58 -- no code or test edit this iteration, verification only).
+  No production or test code change was needed; task 2.2b was already fully built and now ticks.
 - [ ] 2.2c (R4, D9) Add the `hub-judge-windows` job to `.github/workflows/ci.yml` (`windows-latest`, `working-directory: hub`, the `hub-test` install steps with `-c ../constraints-dev.txt`, `pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread`). Run `py -3.11 -m pytest tests/test_dev_constraints.py -q`. After pushing, confirm the job ran and passed, or do not tick
 - [ ] 2.3 Run the eight files named in design D2 plus the new file; expected moves are exactly task 1.8's rows plus the new rows. Record counts
 - [ ] 2.4 `py -3.11 -m pytest hub/tests/ -q` with `claude` stripped from PATH; record the count, or do not tick
