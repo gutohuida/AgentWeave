@@ -230,8 +230,10 @@
   only with the count on this line, as `N passed, M skipped, 0 failed at <sha>`.
   **6688 passed, 93 skipped, 0 failed at the implementation commit (worktree on `7caf6a8`)**,
   `-n 8`, `claude` stripped from PATH, 21m31s.
-- [ ] 3.2 Full CLI suite: `py -3.11 -m pytest tests/ -q`. Tick only with the count on this line.
-  Run 2026-10-04: 562 passed, 4 skipped, 2 failed, neither caused by this change:
+- [x] 3.2 Full CLI suite: `py -3.11 -m pytest tests/ -q`. Tick only with the count on this line.
+  **565 passed, 3 skipped at fee17dc** (merged master, `-n 8`, `claude` off PATH), after slice 5's
+  task 2.7 gained its count (`fee17dc`); the skill-mirror case did not recur in this run.
+  Earlier run 2026-10-04 (worktree): 562 passed, 4 skipped, 2 failed, neither caused by this change:
   `test_every_ticked_full_suite_task_in_flight_carries_its_count` flags task 2.7 of
   `a-copilot-agent-uses-hooks-and-its-own-agents`, and `test_mirrored_skill_trees_match_the_source
   [Codex (user-level)]` reports this machine's user-level skill mirror stale (`e2e-loop/e2e.py`).
@@ -244,7 +246,7 @@
   ...` clean; `black --check --target-version py311 hub/hub/ hub/tests/` 635 unchanged, plain
   `black --check` on the 8 touched files clean; `mypy src/` clean. `npm run lint` not run: no UI
   file touched.
-- [ ] 3.4 Drive, on a throwaway Hub port started from `hub/` with its own trial database (never
+- [x] 3.4 Drive, on a throwaway Hub port started from `hub/` with its own trial database (never
   `:8000`; not the `:8010` instance if anything is in flight there), as slice 5 task 3.5 drove:
   a Copilot provider runner against a local fake Anthropic provider that streams a thinking block
   ending in the first ten characters of the run's key and a text block starting with the rest,
@@ -252,5 +254,25 @@
   thinking block ending in a blank line after the ten characters. Count the key's
   occurrences in `agent_output` rows, `event_log`, the run's SSE frames, the timeline route's
   response and the Hub log. All must be 0. Paste the stored rows into design.md's round log.
+  **Driven 2026-10-04 at `fee17dc`:** source Hub on port 8031, fresh database
+  `testbed/drive1004-f488/f488.db` (startup line: existed before False, pid 28776), project
+  `proj-d656702418f1`; the real Copilot CLI on runner `runner-fbf2edd1767b` (`cli: copilot`,
+  Anthropic provider, base URL a local fake on 8099, `api_key_var` `MY_F488_KEY` set only in the
+  Hub's environment, key `plainsplitkey20261004x`, 22 chars, *m* = 8). No GitHub sign-in
+  arrangement was needed beyond what slice 5's 3.5 drive used (the Hub's default Copilot home).
+  The fake (`testbed/drive1004-f488/fake_provider.py`) streamed each block as two deltas: s1 a
+  thinking block `I will use plainsplit` then a text block `key20261004x now.`; s2 a text block
+  `Key: plainsplit` + a `powershell` `tool_use`, then after the tool result `key20261004x done`; s3
+  as s1 with the thinking ending `plainsplit\n\n`. Copilot requested thinking (`budget_tokens`
+  2048) and passed both kinds through, so each split reached the Hub as two rows. All three runs
+  `completed` (`run-ba84a58e3805`, `run-d58b4a5acf3c`, `run-8f9cfac967cd`). Stored rows: s1
+  `thinking` `I will use <redacted>` / `text` `<redacted> now.`; s2 `text` `Key: <redacted>` /
+  `tool_use` / `tool_result` / `text` `<redacted> done`; s3 `thinking` `I will use <redacted>\n\n` /
+  `text` `<redacted> now.`; each ending `Run completed (exit 0).`. Counts (full key / first ten
+  `plainsplit` / remainder `key20261004x`): `agent_outputs` 0/0/0, `event_logs` 0/0/0, `runs.error`
+  0/0/0, `permission_requests` 0/0/0, the project SSE stream captured across all three runs (8238
+  bytes, 11 `agent_output` frames carrying the rows above) 0/0/0, `GET .../agent/s{1,2,3}/chat`
+  0/0/0, Hub log 0/0/0 (0 tracebacks). The remainder is not a prefix of the key, so only the
+  carried tail can redact it: its 0 is the join working in the product, not the dangling rule.
 - [ ] 3.5 Close F488 in `scripts/drive/FINDINGS.md` with the commit and test names and the stated
   residual (a dangling start shorter than *m* is shown). Regenerate the backlog.
