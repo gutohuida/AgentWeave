@@ -2023,7 +2023,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **141 passed, 4
   skipped** (unchanged from iteration 58 -- no code or test edit this iteration, verification only).
   No production or test code change was needed; task 2.2b was already fully built and now ticks.
-- [ ] 2.2c (R4, D9) Add the `hub-judge-windows` job to `.github/workflows/ci.yml` (`windows-latest`, `working-directory: hub`, the `hub-test` install steps with `-c ../constraints-dev.txt`, `pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread`). Run `py -3.11 -m pytest tests/test_dev_constraints.py -q`. After pushing, confirm the job ran and passed, or do not tick
+- [x] 2.2c (R4, D9) Add the `hub-judge-windows` job to `.github/workflows/ci.yml` (`windows-latest`, `working-directory: hub`, the `hub-test` install steps with `-c ../constraints-dev.txt`, `pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread`). Run `py -3.11 -m pytest tests/test_dev_constraints.py -q`. After pushing, confirm the job ran and passed, or do not tick
   Iteration 60: job added, mirroring `hub-test`'s own install steps (CLI installed separately from
   the repo root, same rationale comment not repeated verbatim but the same two-step install order
   kept) but on `windows-latest` and scoped to the two judge test files per the task's own wording.
@@ -2034,6 +2034,14 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   triggered by this push was still in progress when the iteration ended). NEXT iteration: run
   `gh run list --branch autonomous/2026-10-03-daily --limit 3` (or inspect the `hub-judge-windows`
   job by name on the newest run) and tick only if it is green.
+  Iteration 62: run 37174454483 (commit 3a22912, iter 60's push) had failed on ubuntu-latest
+  `hub-test` -- a different job than this task covers, on `test_the_1_7c_independent_rows_name_the_claimed_reason`
+  (POSIX reason expected on a Windows-only assertion). Iteration 61 already fixed and pushed this
+  (02ef809/dda4e96) before this firing started. Confirmed via `gh run list --branch
+  autonomous/2026-10-03-daily --limit 8`: run 37175853141 (commit dda4e96, includes the fix) is
+  `completed success`. `gh run view 37175853141 --json jobs` lists all ten jobs `success`, including
+  both `hub-test` and `hub-judge-windows`. Both conditions this task's own text requires are now
+  met on a commit that includes the fix -- ticked.
 - [ ] 2.3 Run the eight files named in design D2 plus the new file; expected moves are exactly task 1.8's rows plus the new rows. Record counts
 - [ ] 2.4 `py -3.11 -m pytest hub/tests/ -q` with `claude` stripped from PATH; record the count, or do not tick
 - [ ] 2.5 `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`

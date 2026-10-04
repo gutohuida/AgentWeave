@@ -20,6 +20,32 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### `the-shell-judge-reads-a-word-whole` task 2.3 names a file list that no longer exists -- 2026-10-04 night
+
+- OPEN      shell-judge-2-3-eight-files  Task 2.3 (`tasks.md`) reads "Run the eight files named
+  in design D2 plus the new file; expected moves are exactly task 1.8's rows plus the new rows."
+  Re-derived fresh against `design.md`'s own D2 section (lines 239-332) before building, per the
+  round discipline: D2 describes rule 6's mechanics in full and never names eight specific files
+  anywhere in its own text. The only "eight test files" sentence in the whole document (line 352,
+  "R1's prototype measurement (D2-D5, no D1), over eight test files: 9 failed, 445 passed, 1
+  skipped") is a pass/fail count from an early prototype measurement run via a `testbed/scratch/`
+  script, which is gitignored by policy and not present on disk or findable in git history (checked
+  `git log --all --diff-filter=A` for a committed prototype/measure script predating the
+  gitignore; found nothing that names eight files). `hub/tests/` today holds 19 files plausibly in
+  scope for a permission/workspace move-count (`test_permission_approver.py`,
+  `test_the_shell_judge_reads_a_word_whole.py`, and 17 others); nothing in `tasks.md`, `design.md`
+  or `proposal.md` picks exactly eight of them by name.
+
+  **The question: what does "the eight files named in design D2" now refer to?** Candidates: (a)
+  re-run the R1-era measurement script's intent against today's full `hub/tests/` suite and report
+  the move counts for whichever files actually move (the "eight" may simply be stale once D1 was
+  added on top of D2-D5's original prototype); (b) the operator recalls or can find the original
+  eight (if the prototype script or its file list survives somewhere off this repo); (c) rewrite
+  task 2.3 to name its files explicitly rather than by a now-broken back-reference. No
+  recommendation yet -- this surfaced an hour before this row was written and has not been explored
+  beyond the two greps above. Blocks task 2.3 only; 2.4 and 2.5 have no such ambiguity and can be
+  built directly.
+
 ### `a-copilot-one-shot-records-its-credits` is ready for approval -- 2026-10-03 night
 
 R1, R2 and R3 are done (iters 21-23). The adversarial Opus review
