@@ -2065,7 +2065,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
 
 ## 3. Real shells
 
-- [ ] 3.1 In `testbed/scratch/`, in Git Bash, confirm:
+- [x] 3.1 In `testbed/scratch/`, in Git Bash, confirm:
   - `cp notes.md .{,.}/` and `cp notes.md {.,.}.` land in the parent (the refusals are justified), and `mkdir -p src/{a,b}` creates two directories inside;
   - (R4) with a junction `up` pointing outside, `cp n u*/` lands outside;
   - `bash -c 'bash -c "echo .\\./x"'` prints `../x`;
@@ -2096,7 +2096,49 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
     extglob` → `off`. (These are this dev machine's Git Bash defaults; no code depends on them
     changing before the next firing re-measures if needed.)
 
-  **Stays unticked**: R6 and R8's bullets are not yet built.
+  **Iteration 66.** Built the remaining R6 and R8 bullets in a fresh
+  `testbed/scratch/shell_judge_3_1_r6r8/` (workspace `ws`, sibling `outside`; deleted after use),
+  re-derived against `design.md`'s own R6/R8 text rather than reusing iteration 64's framing.
+  - R6, bracket globs: created junction `ws/up` → `outside` (same shape as the R4 junction).
+    Unquoted `cp n [u]p/` and `cp n u[p]` both exit 0 and the file lands physically in `outside/`
+    (confirmed by listing) — both bracket forms resolve to the glob match `up` and the junction
+    is followed, exactly as claimed. (A first attempt that quoted the patterns suppressed bash's
+    own glob expansion and is not a shell-behaviour finding, just a test-setup mistake, corrected
+    before recording this result.)
+  - R6, `sub/l` junction: created directory `ws/sub` and a junction `ws/sub/l` → `ws` itself
+    (the scratch workspace). `cp n sub/l/../y` lands `y` in the workspace's parent (confirmed:
+    present next to `ws/` and `outside/`, not inside either). `cp n sub/l*/..` (glob expands to
+    the one match `sub/l/..`) copies `n` into that same parent directory under its own name `n`.
+    Both land in the workspace's parent exactly as claimed.
+  - R6, PowerShell: `Set-Content sub\l\..\p1 hi` creates `p1` inside `ws/sub` itself — confirmed
+    by `Get-ChildItem sub` showing `p1` there and `Get-ChildItem ws` showing no `p1` at the
+    workspace root. PowerShell resolves the lexical `..` before following the junction, so it
+    does not escape through `sub/l`, exactly as claimed (the asymmetry with bash's physical walk
+    is the point D12 makes).
+  - R8, `sub/@s/p` and `a'b/up`: created directory `ws/sub/@s` with a junction
+    `ws/sub/@s/p` → `outside`, and a directory `ws/a'b` (literal apostrophe in the name) with its
+    own junction `ws/a'b/up` → `outside`. `cp n sub/@s/p/x` and `cp n "a'b/up/x"` (quoted only
+    because of the apostrophe, not the glob) both exit 0 and land `x` physically in `outside/`.
+    Both escape exactly as claimed.
+  - R8, PowerShell `Copy-Item`: `Copy-Item n -Destination:sub/@s/p/x` also lands `x` in
+    `outside/` — the same junction, a second tool, same result.
+  - R8, sibling-write: with the workspace's own basename (`ws`) substituted for
+    `<workspace>`, `cp n "../ws(a"` creates a file literally named `ws(a` next to `ws/` and
+    `outside/` — a sibling of the workspace, exactly as claimed.
+  - R8, `node_modules`: no sibling *AgentWeave* checkout exists on this machine, but the
+    bullet's own shape only needs a sibling checkout with a real `node_modules`, so used
+    `../../../LoopEngine_2/node_modules` (a real, populated `node_modules` in a sibling project
+    checkout under the same `projects/` parent) as the junction target. `cp n node_modules/../y`
+    lands `y` directly inside the `LoopEngine_2` checkout root (confirmed by listing, then
+    removed). Matches the claim's shape with a substituted real-world target, as the task's own
+    text allows.
+  - Recorded at iteration 64, unchanged: `bash --version` → `GNU bash, version
+    5.2.37(1)-release (x86_64-pc-msys)`; `shopt globskipdots` → `on`; `shopt extglob` → `off`.
+  - Cleanup: removed the stray `y` from `LoopEngine_2`, then deleted
+    `testbed/scratch/shell_judge_3_1_r6r8/` entirely (confirmed gone with a directory listing).
+
+  All five bullets (bullet 1, R4, the nested-bash bullet, R6, R8) are now measured exactly as
+  the design claims. **Task 3.1 ticked.**
 
 ## 4. Close
 
