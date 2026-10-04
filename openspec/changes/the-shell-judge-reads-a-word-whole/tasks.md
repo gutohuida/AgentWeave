@@ -1002,6 +1002,62 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   - (R4, POSIX CI) `bash -c 'bash -c "cp n \$HOME"'` refused **once the sibling change is in**. Until then, assert that its level-1 word `$HOME` reaches `_judge_word`: spy on `_judge_word`, which FAILS against R3, where the escape-removed text was judged only as a path.
   - PowerShell `Copy-Item x Microsoft.PowerShell.Core\FileSystem::C:\Windows\x` refused (Windows), and `…\FileSystem::..\x` refused naming `..\x`. FAIL today.
   - Controls that stand: `grep foo 'src\a.py'` (Windows), `ls lib/Foo::Bar.pm`.
+
+  **Iteration 58.** Re-derived fresh against the current code (per `next_action`), reading F487
+  (`scripts/drive/FINDINGS.md`) again first. Measured all six bullets directly against `_decide`
+  first (`testbed/scratch/verify_17c_reasons.py` and `verify_17c_conflict.py`, gitignored, deleted
+  after use), on this Windows dev machine:
+
+  - Bullet 1 (`grep -rn '\.\./' src`) and bullet 5's second half (`…FileSystem::..\x` naming
+    `..\x`) **already refuse unconditionally today** -- on this drive-letter host as-is, and
+    under forced `_DRIVE_LETTERS=False` (the POSIX reading). Neither depends on the
+    escape-removed-level reading D7 built (task 2.2a): bullet 1's literal text already spells `..`
+    through rule 6's own reading of the two backslash-escaped dots, and bullet 5's `::` rule
+    (D7's second bullet) ships unconditionally on both platforms already (F487 confirms this).
+    Bullet 5's first half (`…FileSystem::C:\Windows\x`) is already covered verbatim by the
+    existing `2.2a-doublecolon1` row. Bullet 6's two controls (`grep foo 'src\a.py'`,
+    `ls lib/Foo::Bar.pm`) also already pass as named. Added rows `1.7c1`, `1.7c5`, `1.7c6a`,
+    `1.7c6b` to `_TABLE` (`hub/tests/test_the_shell_judge_reads_a_word_whole.py`) and a dedicated
+    `test_the_1_7c_independent_rows_name_the_claimed_reason` asserting the exact reason text of
+    the two refused rows, per the task's own "assert the reason"/"named cost" instructions.
+  - Bullets 2 and 3 (the unconditional, no-platform-qualifier `bash -c 'cp n .\./x'` and nested
+    `bash -c 'bash -c "cp n .\\./x"'` rows) **still measure `allow=True` on this drive-letter host**
+    -- confirming F487's conflict is unresolved, exactly as that finding describes: making the
+    escape-removed-level reading run unconditionally (not gated `not _DRIVE_LETTERS`) is what
+    these two bullets ask for, and doing so regresses the already-shipped
+    `test_a_quote_is_judged_by_what_it_decodes_to[P5a/P5b/P5c]` guarantee. This is a real scope
+    decision among F487's three candidates (the cross-cutting `_LITERAL_BACKSLASH` provenance
+    sentinel; narrowing these two bullets' own claim to the POSIX-only scope that shipped; or a
+    fix scoped to only these two rows), not something a re-derivation round can resolve by
+    re-reading the code harder -- filed as `spec-queue/DECISIONS.md` `shell-judge-escape-scope-1-7c`
+    (OPEN). Not built; these two bullets stay unticked pending that answer.
+  - Bullet 4 (the `$HOME` row, explicitly gated "once the sibling change is in" -- the
+    not-yet-started `a-drive-or-a-home-variable-names-a-directory-by-itself`) was measured anyway
+    out of curiosity: it already refuses today, unconditionally, as `_UNCHECKED` ("`'\$HOME'`
+    contains a variable..."), without the sibling change and without exercising the
+    escape-removed-level reading's `_judge_word` call the task's own spy instruction names. This
+    is surprising against the task's framing but not investigated further here -- the sibling
+    change's own design is not loaded in this iteration, and the task's own text already names a
+    hard dependency this window should not route around. Left unbuilt, as the task says, until
+    the sibling change lands.
+
+  `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **141 passed, 4
+  skipped** (was 136 passed, 4 skipped; +5: four table rows plus one dedicated reason test, zero
+  new skips since none of the four new rows are platform-gated to a platform this machine isn't).
+  Broader regression set (`test_permission_approver.py`/`test_hub_own_call.py`/
+  `test_copilot_acp_decide.py`/`test_a_write_outside_the_workspace_is_recorded.py`, plus this
+  file): **767 passed, 6 skipped, no regressions** (was 762 passed, 6 skipped). `ruff check` and
+  `black --check --target-version py311` on the one changed file: clean. `mypy src/`: clean (CI
+  never runs mypy on `hub/`). `openspec validate the-shell-judge-reads-a-word-whole --strict`:
+  valid. `git diff --stat`: exactly `hub/tests/test_the_shell_judge_reads_a_word_whole.py` and this
+  file; scratch scripts gitignored and deleted.
+
+  **No production code change was needed or made.** Four of 1.7c's six bullets (1, half of 5, and
+  both of 6) are now built as regression guards. The other half of 5 needed nothing new (already
+  covered). Bullets 2 and 3 are genuinely blocked on an operator/round decision among F487's fix
+  candidates; bullet 4 is genuinely blocked on a sibling change not yet started. **Stays
+  unticked**: not every row this task names is built, and 2.2a's own "Run 1.7b, 1.7c and 1.7d"
+  instruction means 2.2a cannot tick either until 1.7c does.
 - [x] 1.7d (R4, D4 on Windows, Windows job) `python -c "open('/dev/null','w')"` refused as a path. PASSES today (tail), and FAILS against R3's D4. `sh -c "ls 2>/dev/null"` and `python w.py /dev/null` are allowed.
 
   **Iteration 26.** Built as task 2.2's third slice; see that task's own note for the measurement,

@@ -326,6 +326,31 @@ _TABLE = [
         skip_reason="ntpath reads 'Z:' as a drive regardless of _DRIVE_LETTERS; cannot be forced"
         " to a POSIX reading on a real drive-letter host (task 1.7b)",
     ),
+    # Task 1.7c's first bullet (its own text marks it POSIX CI only). Measured fresh against
+    # `_decide` (`testbed/scratch/verify_17c_reasons.py`, gitignored, deleted after use): this one
+    # already refuses on *both* a drive-letter host and under forced `_DRIVE_LETTERS=False` --
+    # unlike 1.7c's second and third bullets (not built; F487), it never depends on the
+    # escape-removed-level reading. Rule 6's own literal-text reading already sees the `..`
+    # the two backslash-escaped dots spell. Not marked `posix_only`/`windows_only`: the measured
+    # behaviour is unconditional, stronger than the task's own platform qualifier claimed.
+    _row("1.7c1", r"grep -rn '\.\./' src", False),
+    # Task 1.7c's fifth bullet, second half (the first half is already `2.2a-doublecolon1` above,
+    # same command verbatim). `::` reaching rule 6 (D7's second bullet, already unconditional on
+    # both platforms, unaffected by F487) refuses the piece after it, naming `..\x`. Measured fresh:
+    # unconditional like 1.7c1, but keeping `windows_only` to match its sibling `2.2a-doublecolon1`
+    # (a PowerShell/backslash-path scenario with no real-world POSIX equivalent).
+    _row(
+        "1.7c5",
+        r"Copy-Item x Microsoft.PowerShell.Core\FileSystem::..\x",
+        False,
+        tool="PowerShell",
+        windows_only=True,
+    ),
+    # Task 1.7c's sixth bullet (controls that stand). The first names a quoted backslash-path
+    # literal on Windows specifically (the task's own qualifier); the second is the exact command
+    # the task names, distinct from (but mechanically the same shape as) `2.2a-doublecolon2` above.
+    _row("1.7c6a", r"grep foo 'src\a.py'", True, windows_only=True),
+    _row("1.7c6b", r"ls lib/Foo::Bar.pm", True),
 ]
 
 
@@ -1700,3 +1725,22 @@ def test_the_1_7b_rows_name_the_claimed_reason(workspace, monkeypatch):
         "when it runs, so where it points cannot be checked against your workspace; write a "
         "path relative to your workspace instead"
     )
+
+
+def test_the_1_7c_independent_rows_name_the_claimed_reason(workspace, monkeypatch):
+    """1.7c's first and fifth-bullet rows (`1.7c1`, `1.7c5`): the only two of 1.7c's refused rows
+    that do not depend on the escape-removed-level reading (F487), so they run and are asserted
+    unconditionally rather than gated to one platform like the sixth-bullet reason-less rows."""
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    grep_dotdot = _decide("Bash", {"command": r"grep -rn '\.\./' src"})
+    assert grep_dotdot["allow"] is False
+    assert grep_dotdot["reason"] == "'\\\\.\\\\./' is outside your workspace"
+
+    if _WINDOWS:
+        doublecolon_dotdot = _decide(
+            "PowerShell",
+            {"command": r"Copy-Item x Microsoft.PowerShell.Core\FileSystem::..\x"},
+        )
+        assert doublecolon_dotdot["allow"] is False
+        assert doublecolon_dotdot["reason"] == "'..\\\\x' is outside your workspace"

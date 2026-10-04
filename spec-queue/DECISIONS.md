@@ -368,9 +368,41 @@ G1–G10 and D1, the same set WSL measured.
   against (`proposal.md:187`, *"the rung-3 half is written against (e) today, and the answer
   re-derives it"*). This closes `F352-free`.
 
----
+### `the-shell-judge-reads-a-word-whole` task 1.7c's two escape rows conflict with a shipped guarantee -- 2026-10-04 night
 
-## Re-triage of 2026-09-01, evening — eight rows to three
+- OPEN      shell-judge-escape-scope-1-7c  **F487 (`scripts/drive/FINDINGS.md`) found, and
+  iteration 58's fresh re-derivation of task 1.7c confirmed again, directly against `_decide` on
+  this drive-letter dev machine: task 1.7c's second and third bullets ask that
+  `bash -c 'cp n .\./x'` (both the Bash and the PowerShell tool) and
+  `bash -c 'bash -c "cp n .\\./x"'` (Bash tool) refuse **unconditionally**, with no platform
+  qualifier -- unlike the task's own first bullet, explicitly marked `(POSIX CI)`. Building that
+  unconditionally (running D7's backslash-escape-removed-level reading on a drive-letter host, not
+  only gated `not _DRIVE_LETTERS` as it shipped in iteration 55) regresses an already-shipped,
+  already-green test: `test_a_quote_is_judged_by_what_it_decodes_to[P5a/P5b/P5c]` in
+  `test_permission_approver.py` (measured both ways via `git stash`: `allow=True`, correct, before
+  the escape-level code existed; `allow=False`, wrong, with it unconditional; `allow=True` again
+  once gated POSIX-only). The conflict is structural: on a drive-letter host a backslash in a word
+  has two simultaneously-true readings -- "this is a path separator" and "this might be an escape
+  an inner shell would remove" -- and nothing in the word's final text says which one a given `\`
+  actually is; `_ansi_c_escape`'s kept-literal backslash and a genuinely unescaped one produce
+  identical decoded text. No sentinel threading that provenance through `_SEPARATORS` exists yet
+  (the codebase's own precedent, `_LITERAL_DOLLAR`, marks the analogous case for `$`, but nothing
+  equivalent exists for `\`).
+
+  **The question: which of F487's three fix candidates, or leave it as shipped?**
+  (a) Build a `_LITERAL_BACKSLASH` sentinel emitted by `_ansi_c_escape` wherever it returns a
+  literal `\`, read as a real separator by every `_SEPARATORS`/`os.path` site but skipped by
+  `_escape_removed_levels`'s regex -- the structurally complete fix, but F487 names it larger than
+  one iteration's slice (touches every separator site in the file);
+  (b) accept the POSIX-only scope permanently: correct task 1.7c's own two bullets (drop the
+  "both tools"/no-qualifier framing, add `(POSIX CI)` matching the first bullet) and design D7's
+  "every path spelled with `\` gains harmless readings" claim (F487's own `A\x/../../y1` case
+  disproves it on a drive-letter host) to say so explicitly;
+  (c) something narrower, scoped to only the two rows 1.7c names, not built in for every word.
+  Recommendation: (b) -- it matches what already shipped and needs no further code, only a spec
+  correction; (a) is real but should be its own change if the operator wants the stronger
+  guarantee, not a one-iteration slice of this one. Blocks task 1.7c and, through its own "Run
+  1.7b, 1.7c and 1.7d" instruction, task 2.2a.
 
 The morning triage folded 32 raw entries into 8 rows. An evening pass compared all eight **against
 the code** rather than against each other, and six of them turned out not to be decisions.
