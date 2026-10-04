@@ -274,5 +274,6 @@
   bytes, 11 `agent_output` frames carrying the rows above) 0/0/0, `GET .../agent/s{1,2,3}/chat`
   0/0/0, Hub log 0/0/0 (0 tracebacks). The remainder is not a prefix of the key, so only the
   carried tail can redact it: its 0 is the join working in the product, not the dangling rule.
-- [ ] 3.5 Close F488 in `scripts/drive/FINDINGS.md` with the commit and test names and the stated
+- [x] 3.5 Close F488 in `scripts/drive/FINDINGS.md` with the commit and test names and the stated
   residual (a dangling start shorter than *m* is shown). Regenerate the backlog.
+  **Done 2026-10-04:** F488's Status reads fixed `1d2f72a` with the tests and the residual (`b73f03e`); backlog regenerated (F484/F485/F488 no longer open).
