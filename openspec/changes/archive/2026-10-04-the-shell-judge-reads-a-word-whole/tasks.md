@@ -1023,7 +1023,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   (`"'~/y' contains a variable..."`, matching the CI failure's "actual" side character-for-character)
   via the monkeypatched `_DRIVE_LETTERS=False` path, which is what a non-Windows host takes at
   runtime; the push and CI's own `hub-test` job (ubuntu-latest) will confirm.
-- [ ] 1.7c (R3, R4; design D7) Escapes allowed today:
+- [x] 1.7c (R3, R4; design D7) Escapes allowed today:
   - (R5, POSIX CI) `grep -rn '\.\./' src` refused: the named cost, asserted so that a change of mind is visible. FAILS today on POSIX (allowed).
   - (POSIX CI; operator, 2026-10-04, `shell-judge-escape-scope-1-7c` (b)) `bash -c 'cp n .\./x'` refused (Bash tool). FAILS today. On a drive-letter host it stays allowed: D7's named cost (F487).
   - (R4, POSIX CI; same decision) `bash -c 'bash -c "cp n .\\./x"'` refused (Bash tool). FAILS today and FAILS against R3's one-level D7. On a drive-letter host it stays allowed (D7's cost).
@@ -1108,6 +1108,10 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   skipped** (was 141 passed, 4 skipped). Regression set (that file, `test_permission_approver.py`,
   `test_hub_own_call.py`, `test_copilot_acp_decide.py`,
   `test_a_write_outside_the_workspace_is_recorded.py`): **772 passed, 7 skipped**.
+  **Linux CI, run 37196005682 on `20bc8c1`:** `hub-test` `test_the_decided_table[1.7c2] PASSED`
+  (`1.7c4` PASSED, the two cost rows skipped as `windows_only`; 6546 passed, 44 skipped), and
+  `hub-judge-windows` green with the cost rows run. Not mutation-checked on POSIX (no POSIX host
+  here); the same gate's rows `2.2a-escape1/2` were `git stash`-checked in iteration 56. **Ticked.**
 - [x] 1.7d (R4, D4 on Windows, Windows job) `python -c "open('/dev/null','w')"` refused as a path. PASSES today (tail), and FAILS against R3's D4. `sh -c "ls 2>/dev/null"` and `python w.py /dev/null` are allowed.
 
   **Iteration 26.** Built as task 2.2's third slice; see that task's own note for the measurement,
@@ -1902,7 +1906,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   rows measured above, but 1.4f's own task also needs the junction/`os.path.islink`-false check and
   the named-cost assertions it lists, not yet re-derived against the current code) and task 2.1d
   (the bracket-kept relative word, same wiring, not yet re-measured).
-- [ ] 2.2a (R3, R4) The platform-keyed drive exception and the tilde-piece refusal in the piece reading; the level-by-level escape-removed readings, each judged by `_judge_word`, and the `::` not-plain rule before rule 5 (design D2 steps 3 and 5, D7). Run 1.7b, 1.7c and 1.7d
+- [x] 2.2a (R3, R4) The platform-keyed drive exception and the tilde-piece refusal in the piece reading; the level-by-level escape-removed readings, each judged by `_judge_word`, and the `::` not-plain rule before rule 5 (design D2 steps 3 and 5, D7). Run 1.7b, 1.7c and 1.7d
 
   **Iteration 54.** Built this task's first part only: the platform-keyed drive exception in the
   piece reading (D2 step 3), as task 1.7's own note above records (`_mask_drive_colons`, wired into
@@ -2028,7 +2032,8 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   the drive exception (iteration 54), the tilde-piece clause (55), the escape levels and the `::`
   rule (56). `_memo_judge_word`'s docstring now names the decision instead of "left to a
   follow-up". Ran 1.7b, 1.7c and 1.7d fresh: `-k "1.7b or 1.7d"` 7 passed, 1 skipped; `-k 1.7c`
-  7 passed, 1 skipped (`1.7c2`, POSIX); the whole file 144 passed, 5 skipped.
+  7 passed, 1 skipped (`1.7c2`, POSIX); the whole file 144 passed, 5 skipped. `1.7c2` passed on
+  Linux CI (run 37196005682). **Ticked.**
 - [x] 2.2b D6: `approve_tool_call` catches an exception from `_decide`, denies with a reason and reports it; no return annotation
 
   **Iteration 59.** Re-derived fresh against this task's own wording and design D6
@@ -2072,7 +2077,27 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   `completed success`. `gh run view 37175853141 --json jobs` lists all ten jobs `success`, including
   both `hub-test` and `hub-judge-windows`. Both conditions this task's own text requires are now
   met on a commit that includes the fix -- ticked.
-- [ ] 2.3 Run the eight files named in design D2 plus the new file; expected moves are exactly task 1.8's rows plus the new rows. Record counts
+- [x] 2.3 (operator, 2026-10-04, `shell-judge-2-3-eight-files` (c)) Compare the whole `hub/tests/` suite before and after the change: run the suite of the commit before the change's first code commit (`511ec36`, the parent of `d9f4843`) against the tip's production code (`hub/hub/` checked out from the tip into a worktree of `511ec36`), with `claude` stripped from PATH. Its `hub-test` job was green at `511ec36` (CI run 37078535204; only the CLI's black step failed), so every test that now fails is an outcome the tip moved. Each must be one of task 1.8's rows (whose expectations this change rewrote), or be attributed to a named commit outside this change; the tip's own suite at the tip is task 2.4. Record counts
+
+  **2026-10-04, interactive.** Worktree of `511ec36` with `hub/hub/` from master `20bc8c1`
+  (`hub.__file__` confirmed to resolve to the worktree), `claude` stripped from PATH, `py -3.11 -m
+  pytest tests/ -q -n 8` from its `hub/`: **34 failed, 6219 passed, 88 skipped** (10:57). Every
+  failure attributed:
+  - **9, this change, task 1.8's rows exactly:** `test_permission_approver.py::test_the_decided_table`
+    `[X4]`, `[X5]`, `[X6]`, `[N5]`, `[N6]`, `[G3]`, `[E11]`, `[Z1]`, `[Z2]`.
+  - **1, this change, not listed by 1.8:** `test_hub_own_call.py::test_the_9_10_form_is_refused_by_the_judge_alone`,
+    refused at the base, allowed at the tip. Changed deliberately in `d9f4843` (task 1.1; its
+    commit message names it): the literal is `Set-Content -Path '.agentweave/calls/r.json' -Value
+    '{"path":"spec/x.html"}'`, JSON content written inside the workspace, which the old rule 6
+    falsely refused by reading `/x.html` as an absolute tail. The move is correct. The test kept its
+    old name while asserting the opposite; renamed today to
+    `test_the_9_10_form_is_allowed_by_the_judge_alone`, with the reference in
+    `test_a_powershell_args_file_write_has_standing_in_every_posture`'s docstring.
+  - **24, outside this change:** 23 in `test_migrations.py` and
+    `test_project_persistence.py::test_migration_0026_preserves_legacy_project_and_bootstrap_secret`,
+    each asserting the head revision `'0117'` against the tip's `'0118'`. Migration 0118 is
+    `7152352` (Copilot slice 5 group C); this change adds no migration.
+  No other test moved.
 - [x] 2.4 `py -3.11 -m pytest hub/tests/ -q` with `claude` stripped from PATH -- **6565 passed, 92 skipped** at 446e8a0.
 
   **Iteration 63.** Stripped the npm directory holding the `claude` binary
@@ -2172,4 +2197,11 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
 
 ## 4. Close
 
-- [ ] 4.1 F362 and F403 Status lines in `scripts/drive/FINDINGS.md` → `fixed <sha>`; F444 (the linked-dependency-directory finding, filed 2026-09-24 under `B4-dep-links`) left open and noted as a prerequisite for registering a JavaScript project; regenerate the backlog; `openspec validate the-shell-judge-reads-a-word-whole --strict`; archive
+- [x] 4.1 F362 and F403 Status lines in `scripts/drive/FINDINGS.md` → `fixed <sha>`; F444 (the linked-dependency-directory finding, filed 2026-09-24 under `B4-dep-links`) left open and noted as a prerequisite for registering a JavaScript project; regenerate the backlog; `openspec validate the-shell-judge-reads-a-word-whole --strict`; archive
+
+  **2026-10-04, interactive.** F362 → `fixed d9f4843`, F403 → `fixed 065bfc9` (with e1fe7c1); F444
+  left open with the JavaScript-project prerequisite noted on its Status line; F487 closed by the
+  operator's decision (accepted cost). `openspec validate the-shell-judge-reads-a-word-whole
+  --strict`: valid. Archived with `openspec archive --yes` (agent-run-sandboxing: 1 added, 3
+  modified; no other open delta touches those requirements); `openspec validate --specs --strict`:
+  43 passed. Backlog regenerated (`py -3.11 scripts/backlog_page.py`).

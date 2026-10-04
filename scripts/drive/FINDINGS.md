@@ -29784,7 +29784,10 @@ why its exhaustion is invisible.
 
 ## F362 (B) — on Windows, the workspace guard reads the tail of any relative word that contains a `/` as an absolute path
 
-**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+**Status:** fixed d9f4843 (`the-shell-judge-reads-a-word-whole` D2, task 1.1: rule 6 judges a word's
+path-shaped pieces instead of reading an embedded `/` as an absolute tail; rows in
+`hub/tests/test_the_shell_judge_reads_a_word_whole.py`; change archived 2026-10-04).
+Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
 This is not F321 or F323, which are fixed (`612b9c9`).
 
 **Measured.** The guard refused 262 tool calls on this project. The causes that this mechanism
@@ -32348,7 +32351,9 @@ a file literally named `C:`, so the fix is PowerShell-only; and it must not refu
 
 ## F403 (B) -- bash brace expansion assembles `..` that no rule sees
 
-**Status:** open. Filed 2026-09-21 by an interactive session, **by operator decision**, from R2 of
+**Status:** fixed 065bfc9 (`the-shell-judge-reads-a-word-whole` D1, tasks 1.2 and 1.3, with the
+inner-shell brace reading in e1fe7c1; change archived 2026-10-04).
+Filed 2026-09-21 by an interactive session, **by operator decision**, from R2 of
 `a-word-without-a-separator-can-still-leave` (F375), design Open Question 1.
 **Source:** review
 **Theme:** Workspace & permissions
@@ -33250,6 +33255,9 @@ refuse those fields at create for run actors.
 ## F444 (B) — a worktree's shared dependency links make ordinary reads through them refused
 
 **Status:** open. Filed 2026-09-24 (operator decision `B4-dep-links`), surfaced by B4's R4 and R5.
+**Prerequisite for registering a JavaScript project** (noted 2026-10-04 when
+`the-shell-judge-reads-a-word-whole` was archived, its task 4.1: that change extends these refusals to
+globs and bare names through the links).
 Task and agent worktrees link `node_modules`, `.venv` and `venv` to the project checkout, which is
 outside the workspace. Paths through those links are refused by the shell judge today; B4's two
 changes extend that to globs and bare names, so in a JavaScript worktree `ls *`, `grep foo *` and
@@ -33950,8 +33958,12 @@ an unarchived change has to be written into that change's own files at the time 
 
 ## F487 (B) — task 1.7c's own test rows ask for a cross-platform fix that regresses an already-shipped guarantee
 
-**Status:** open, found 2026-10-04 by iteration 55 of `the-shell-judge-reads-a-word-whole`'s task
-2.2a (D7's backslash-escape-level reading). Not yet reconciled into `tasks.md`'s 1.7c rows.
+**Status:** closed 2026-10-04 — **accepted as a named cost** (operator, `DECISIONS.md`
+`shell-judge-escape-scope-1-7c` (b)): the escape levels stay POSIX only; tasks 1.7c, design D7 and the
+spec delta say so, and rows `1.7c2-windows-cost`/`1.7c3-windows-cost` assert the Windows cost. The
+`_LITERAL_BACKSLASH` sentinel (candidate (a)) is its own change if ever wanted.
+Found 2026-10-04 by iteration 55 of `the-shell-judge-reads-a-word-whole`'s task
+2.2a (D7's backslash-escape-level reading).
 
 Task 1.7c (`tasks.md:950-956`) writes `bash -c 'cp n .\./x'` and `bash -c 'bash -c "cp n .\./x"'`
 as refused **unconditionally** ("from both the Bash and the PowerShell tool", no platform

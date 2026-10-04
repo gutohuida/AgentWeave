@@ -323,14 +323,15 @@ STANDING = [
 @pytest.mark.parametrize("command", STANDING)
 def test_a_powershell_args_file_write_has_standing_in_every_posture(workspace, asked, command):
     """Task 1.1. Before the fix, `_decide` refused the 9.10 form (`'/x.html' is outside your
-    workspace`): `test_the_9_10_form_is_refused_by_the_judge_alone` keeps that measurable."""
+    workspace`). Since `the-shell-judge-reads-a-word-whole` the judge allows it alone too:
+    `test_the_9_10_form_is_allowed_by_the_judge_alone`."""
     assert _hub_own_call(*_ps(command)) == OWN
     assert _decide(*_ps(command)) == {"allow": True, "reason": OWN}
     assert _approve(*_ps(command))["behavior"] == "allow"
     assert asked == []
 
 
-def test_the_9_10_form_is_refused_by_the_judge_alone(workspace, monkeypatch):
+def test_the_9_10_form_is_allowed_by_the_judge_alone(workspace, monkeypatch):
     """What case 4 overrode, until `the-shell-judge-reads-a-word-whole` (design D2) stopped rule 6
     reading an embedded `/` as an absolute tail. Before that change `_decide` refused the 9.10 form
     ('/x.html' is outside your workspace'); now the literal's `/x.html` fragment is read as the
