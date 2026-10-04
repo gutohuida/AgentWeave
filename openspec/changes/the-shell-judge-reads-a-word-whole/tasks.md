@@ -214,9 +214,11 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   would (`S_ISLNK`, independent of `_DRIVE_LETTERS` in production) rather than by a junction, which
   needs `_DRIVE_LETTERS` true for its own reparse-point check and so cannot stand in once that flag
   is forced false -- reasoned through for the real case the same way task 1.4g's own POSIX-only
-  `work/t:d` row was (iteration 25); a future iteration should confirm CI's `hub-test` job
-  (ubuntu-latest, a real symlink, natively `_DRIVE_LETTERS` false) ran the `not _WINDOWS` branch
-  green. The Windows side is measured directly and natively on this machine: still wrongly allowed.
+  `work/t:d` row was (iteration 25). Confirmed (iteration 44): CI's `hub-test` job
+  (ubuntu-latest, a real symlink, natively `_DRIVE_LETTERS` false) ran commit 84e4474 (the commit
+  that added this test) and its log shows `test_a_posix_character_class_is_caught_whole_only_off_a_drive_letter_host_1_4c
+  PASSED`, confirming the `not _WINDOWS` branch green on a real symlink. The Windows side is
+  measured directly and natively on this machine: still wrongly allowed.
   No production change made -- fixing the Windows side would need a POSIX-class carve-out in D9,
   which risks reopening D9's own drive-letter reasoning, so it is left for a further round rather
   than patched here.

@@ -907,12 +907,14 @@ def test_an_extglob_group_is_masked_to_star_through_the_link_it_finds_1_4c(works
 # production -- only a Windows junction's reparse-point fallback reads that flag) rather than by a
 # junction, which does not set `S_ISLNK` and so cannot stand in for a real symlink once
 # `_DRIVE_LETTERS` is forced false; reasoned through for the real-symlink case the same way task
-# 1.4g's own POSIX-only `work/t:d` row was (iteration 25) -- a future iteration should confirm
-# CI's `hub-test` job (`ubuntu-latest`, a real symlink, natively `_DRIVE_LETTERS` false) ran the
-# `not _WINDOWS` branch below green, and downgrade this note if it did not. The allowed side is
-# measured directly and natively on this Windows machine: no production change made here, so this
-# row stays open (D9 would need a POSIX-class carve-out to fix the Windows side, which risks
-# reopening D9's own drive-letter reasoning -- left for a further round, not attempted here).
+# 1.4g's own POSIX-only `work/t:d` row was (iteration 25). Confirmed (iteration 44): CI's
+# `hub-test` job (`ubuntu-latest`, a real symlink, natively `_DRIVE_LETTERS` false) ran commit
+# 84e4474 (the commit that added this test) and its log shows this test PASSED there, so the
+# `not _WINDOWS` branch below is confirmed green on a real symlink, not only reasoned through.
+# The allowed side is measured directly and natively on this Windows machine: no production
+# change made here, so this row stays open (D9 would need a POSIX-class carve-out to fix the
+# Windows side, which risks reopening D9's own drive-letter reasoning -- left for a further
+# round, not attempted here).
 def test_a_posix_character_class_is_caught_whole_only_off_a_drive_letter_host_1_4c(
     workspace, monkeypatch
 ):
