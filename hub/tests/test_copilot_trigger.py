@@ -211,3 +211,23 @@ async def test_an_env_var_that_would_widen_approvals_is_removed_and_said(
         if (row.payload or {}).get("code") == ("copilot.permission_override_removed")
     ]
     assert removed and "COPILOT_ALLOW_ALL" in removed[0].content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stored, expected", [(True, True), ("true", False), (None, False)])
+async def test_the_stored_github_toggle_reaches_the_turn_as_stored(
+    app, auth_headers, bind_runner, stored, expected
+):
+    """Slice 5 task 1.13's gap (amendment verification, 2026-10-04): nothing drove the trigger
+    with a stored `copilot_github_mcp`, so hard-coding `False` where the turn's `agent_config` is
+    filled passed all 39 toggle tests. Read as `is True` (finding 14): a stored "true" is not the
+    operator's choice."""
+    config = {} if stored is None else {"copilot_github_mcp": stored}
+    await _copilot_agent(app, auth_headers, bind_runner, **config)
+    fake = _fake_turn()
+    with patch("hub.copilot_acp.run_turn", fake):
+        response = await _trigger(app, auth_headers, session_mode="new")
+        assert response.status_code == 200, response.text
+        await await_background_runs()
+
+    assert fake.call_args.kwargs["agent_config"]["copilot_github_mcp"] is expected

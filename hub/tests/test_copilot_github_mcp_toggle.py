@@ -537,3 +537,128 @@ class TestRosterExposure:
         roster = await app.get(f"{P}/agents", headers=auth_headers)
         [cp2] = [row for row in roster.json() if row["name"] == "cp2"]
         assert "copilot_github_mcp" not in cp2["config"]
+
+
+# --- D9a (amendment 2026-10-04, F485): GitHub write tools only under Full access -------------
+
+
+class TestGithubWriteToolFlagsAreWidening:
+    """F485: with the toggle on, Copilot loads only its read-only GitHub tools and runs them
+    without asking (`mcp-read-only`), so no card can come from them. What adds write tools is a
+    runner flag: `--enable-all-github-mcp-tools`, `--add-github-mcp-toolset <t>`,
+    `--add-github-mcp-tool <t>` (clap help: one value each, repeatable, like `--add-dir`), or
+    `--additional-mcp-config`, which adds any server (pre-approval review, finding 2). Each is a
+    widening flag: removed outside Full access. Fails today: none is in the table."""
+
+    FLAGS = [
+        "--enable-all-github-mcp-tools",
+        "--add-github-mcp-toolset",
+        "issues",
+        "--add-github-mcp-tool",
+        "create_issue",
+        "--additional-mcp-config",
+        "@C:/elsewhere/servers.json",
+        "--model",
+        "x",
+    ]
+
+    def test_outside_full_access_only_the_ordinary_flags_are_kept(self):
+        from hub.copilot_acp import strip_widening_flags
+
+        kept, removed = strip_widening_flags(self.FLAGS, full_access=False)
+        assert kept == ["--model", "x"]
+        assert removed == [
+            "--enable-all-github-mcp-tools",
+            "--add-github-mcp-toolset",
+            "--add-github-mcp-tool",
+            "--additional-mcp-config",
+        ]
+
+    def test_under_full_access_all_are_kept(self):
+        from hub.copilot_acp import strip_widening_flags
+
+        kept, removed = strip_widening_flags(self.FLAGS, full_access=True)
+        assert kept == self.FLAGS and removed == []
+
+    def test_the_equals_forms_are_removed_too(self):
+        from hub.copilot_acp import strip_widening_flags
+
+        kept, removed = strip_widening_flags(
+            [
+                "--add-github-mcp-toolset=all",
+                "--add-github-mcp-tool=*",
+                "--additional-mcp-config=@x",
+            ],
+            full_access=False,
+        )
+        assert kept == [] and len(removed) == 3
+
+    def test_each_add_flag_takes_exactly_one_value(self):
+        from hub.copilot_acp import strip_widening_flags
+
+        kept, _removed = strip_widening_flags(
+            ["--add-github-mcp-tool", "a", "b", "--add-github-mcp-toolset", "c", "d"],
+            full_access=False,
+        )
+        assert kept == ["b", "d"]
+
+
+class TestRunTurnRemovesGithubWriteToolFlags:
+    async def test_the_flag_is_absent_from_the_spawn_under_workspace_and_said_plainly(
+        self, monkeypatch
+    ):
+        captured: list = []
+        _fake, events, _outcome = await _drive(
+            monkeypatch,
+            _new_with() + [_END_TURN],
+            captured_cmds=captured,
+            permission_mode=WORKSPACE_PERMISSION_MODE,
+            extra_flags=["--enable-all-github-mcp-tools"],
+            agent_config={"copilot_github_mcp": True},
+        )
+        assert "--enable-all-github-mcp-tools" not in captured[0]
+        removed = [
+            e
+            for e in events
+            if e.kind == "diagnostic" and e.payload.get("code") == "copilot.runner_flag_removed"
+        ]
+        assert [e.payload["facts"]["flag"] for e in removed] == ["--enable-all-github-mcp-tools"]
+        assert "adds GitHub tools that write" in removed[0].content
+        assert "its own account" not in removed[0].content
+
+    async def test_the_flag_stays_under_full_access(self, monkeypatch):
+        captured: list = []
+        await _drive(
+            monkeypatch,
+            _new_with() + [_END_TURN],
+            captured_cmds=captured,
+            permission_mode=FULL_ACCESS_PERMISSION_MODE,
+            extra_flags=["--enable-all-github-mcp-tools"],
+            agent_config={"copilot_github_mcp": True},
+        )
+        assert "--enable-all-github-mcp-tools" in captured[0]
+
+    @pytest.mark.parametrize("posture", [WORKSPACE_PERMISSION_MODE, ACCEPT_EDITS, MANUAL])
+    async def test_a_runners_additional_mcp_config_goes_and_the_hubs_own_stays(
+        self, monkeypatch, tmp_path, posture
+    ):
+        captured: list = []
+        _fake, events, _outcome = await _drive(
+            monkeypatch,
+            _new_with() + [_END_TURN],
+            captured_cmds=captured,
+            permission_mode=posture,
+            env={"COPILOT_HOME": str(tmp_path)},
+            mcp_command=["python", "mcp_server.py"],
+            extra_flags=["--additional-mcp-config", "@C:/elsewhere/servers.json"],
+        )
+        argv = captured[0]
+        assert "@C:/elsewhere/servers.json" not in argv
+        hubs = [argv[i + 1] for i, word in enumerate(argv) if word == "--additional-mcp-config"]
+        assert len(hubs) == 1 and hubs[0].startswith("@") and str(tmp_path) in hubs[0]
+        removed = [
+            e
+            for e in events
+            if e.kind == "diagnostic" and e.payload.get("code") == "copilot.runner_flag_removed"
+        ]
+        assert "adds MCP servers" in removed[0].content

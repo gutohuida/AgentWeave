@@ -67,6 +67,12 @@ _CONFIG_PERMISSION_KEYS = (
     "permissions",
     "defaultPermissionMode",
     "defaultMode",
+    # Slice 5 D9a (F485): settings that add GitHub tools that write. Copilot 1.0.91 keeps them in
+    # `settings.json` (removed whole above); this closes a `config.json` fallback, defence in
+    # depth.
+    "enableAllGithubMcpTools",
+    "githubMcpToolsets",
+    "githubMcpTools",
 )
 
 #: `config.json` keys naming the signed-in account (F483). Copilot keeps the token in the OS

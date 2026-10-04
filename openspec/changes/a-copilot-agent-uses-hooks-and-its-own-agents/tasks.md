@@ -890,7 +890,7 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
   mutations caught (see 1.14). `npm run lint` clean. `npx vitest run`: 1863 passed (178 files; +10
   over iter 10's 1853/177). `npm run build`, `py -3.11 scripts/refresh_ui_bundle.py`.
 
-- [ ] 5.3 (D; amendment 2026-10-04, F485, design D9a) Tests first, in
+- [x] 5.3 (D; amendment 2026-10-04, F485, design D9a) Tests first, in
   `hub/tests/test_copilot_github_mcp_toggle.py`:
   - `strip_widening_flags(["--enable-all-github-mcp-tools", "--add-github-mcp-toolset", "issues",
     "--add-github-mcp-tool", "create_issue", "--model", "x"], full_access=False)` keeps only
@@ -922,10 +922,22 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
     True`, and a stored `"true"` string gives `False` (this one passes today: it is coverage the
     built code lacked, not fail-first evidence).
   Each of the others fails today.
-- [ ] 5.4 (D; D9a) Build: the three flags in `COPILOT_WIDENING_FLAGS` (`none`, `one`, `one`),
+- [x] 5.4 (D; D9a) Build: the three flags in `COPILOT_WIDENING_FLAGS` (`none`, `one`, `one`),
   `--additional-mcp-config` (`one`), and their own removal summaries; the three keys in `_CONFIG_PERMISSION_KEYS`; the help text and
   `CopilotGithubMcpSetting`'s doc comment (`AgentSettingsControls.tsx:360-393`) (refresh the bundle: `hub/ui/src` and
   `hub/hub/static/ui` committed together). Pass 5.3.
+  **Built 2026-10-04 (interactive, operator "APPROVED" for D8a/D9a).** Tests first: 8 new cases in
+  `test_copilot_github_mcp_toggle.py` (`TestGithubWriteToolFlagsAreWidening`,
+  `TestRunTurnRemovesGithubWriteToolFlags`, incl. the Hub's own `--additional-mcp-config`
+  surviving under `workspace`/`acceptEdits`/`manual`) and one in `test_copilot_home.py` failed before
+  the build; the full-access cases passed before (guards). The 1.13 gap: three cases of
+  `test_the_stored_github_toggle_reaches_the_turn_as_stored` in `test_copilot_trigger.py` (true,
+  "true", absent) through `POST /agent/trigger` — coverage, passing before; mutation-checked (the
+  trigger's fill hard-coded `False` fails it). Mutations: dropping `--additional-mcp-config` from
+  the table fails 5; arity `many` for `--add-github-mcp-tool` fails 1. UI: the help-text test
+  rewritten (asserts the new sentences, and that neither "is asked" nor "card" appears); it failed
+  on the old text, passes on the new; `npm run lint` clean; bundle refreshed
+  (`scripts/refresh_ui_bundle.py`), `hub/ui/src` and `hub/hub/static/ui` committed together.
 - [ ] 5.5 (D; D9a) Record F485 in `scripts/drive/FINDINGS.md` as fixed by the commit that builds 5.4,
   naming D9a and what stays INFERRED (a write tool arriving as a permission request).
 

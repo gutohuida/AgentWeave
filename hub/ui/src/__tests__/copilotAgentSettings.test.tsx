@@ -203,12 +203,25 @@ describe('a copilot agent has a GitHub-server setting', () => {
     expect(githubMcpMutate).toHaveBeenCalledWith({ agent: 'cp5', enabled: false })
   })
 
-  it('states that while it is on every call is asked under Workspace only, and that a runner\'s pre-approval flags bypass the card', () => {
+  // Slice 5 D9a (F485): Copilot loads only read-only GitHub tools and runs them without asking,
+  // so no card ever comes from them; the old text promised one. Write tools exist only on a Full
+  // access runner, where every call is allowed.
+  it('says the GitHub tools are read-only and run without asking, and promises no card', () => {
     renderExecution(agent({ runner: 'copilot' }))
     expect(
-      screen.getByText(/every call to it under Workspace only is asked — never allowed outright\./),
+      screen.getByText(/Gives this agent Copilot's built-in GitHub tools, read-only\./),
     ).toBeInTheDocument()
-    expect(screen.getByText(/bypass this card regardless of this setting\./)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Copilot runs them without asking you, in every posture, Ask me included\./),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /Tools that write to GitHub can be added only on a runner with Full access, where they run without asking too\./,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/does not govern the/)).toBeInTheDocument()
+    expect(screen.queryByText(/is asked/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/card/)).not.toBeInTheDocument()
   })
 
   it('lives under Execution, not in any other section', () => {

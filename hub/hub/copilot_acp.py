@@ -180,6 +180,26 @@ COPILOT_WIDENING_FLAGS: Dict[str, str] = {
     "--plan": "none",
     "--assisted-approval": "none",
     "--config-dir": "one",
+    # Slice 5 D9a (F485): Copilot's built-in GitHub server loads read-only tools only, which it
+    # runs without asking; these add tools that write, and `--additional-mcp-config` adds any
+    # server. Only the runner's flags pass through here: the Hub's own `--additional-mcp-config`
+    # is built after this, from `mcp_config`.
+    "--enable-all-github-mcp-tools": "none",
+    "--add-github-mcp-toolset": "one",
+    "--add-github-mcp-tool": "one",
+    "--additional-mcp-config": "one",
+}
+
+#: Why a removed flag was removed, where "it lets Copilot approve on its own account" is untrue:
+#: these add tools rather than approve them (D9a).
+_FLAG_REMOVAL_REASONS: Dict[str, str] = {
+    "--enable-all-github-mcp-tools": "it adds GitHub tools that write, which only a run with Full "
+    "access may have",
+    "--add-github-mcp-toolset": "it adds GitHub tools that write, which only a run with Full "
+    "access may have",
+    "--add-github-mcp-tool": "it adds GitHub tools that write, which only a run with Full access "
+    "may have",
+    "--additional-mcp-config": "it adds MCP servers, which only a run with Full access may have",
 }
 #: Removed under every posture: it moves configuration out of the Hub-owned home (D4).
 _ALWAYS_REMOVED_FLAGS = ("--config-dir",)
@@ -2041,8 +2061,13 @@ async def run_turn(
                 stream="copilot",
                 severity="warning",
                 summary=(
-                    f"The runner flag {flag} was not passed to Copilot: it lets Copilot approve "
-                    "actions on its own account, which this run's posture does not allow."
+                    f"The runner flag {flag} was not passed to Copilot: "
+                    + _FLAG_REMOVAL_REASONS.get(
+                        flag,
+                        "it lets Copilot approve actions on its own account, which this run's "
+                        "posture does not allow",
+                    )
+                    + "."
                 ),
                 code="copilot.runner_flag_removed",
                 facts={"flag": flag},

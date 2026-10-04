@@ -346,3 +346,25 @@ class TestNotSignedInReason:
         reason = not_signed_in_reason()
         assert reason.startswith("Copilot CLI is not signed in. Run `copilot login`")
         assert str(tmp_path / ".copilot" / "config.json") in reason
+
+
+def test_the_github_tool_keys_are_swept_from_config_json():
+    """D9a (F485): settings that add GitHub write tools never stay in the Hub-owned home. Defence
+    in depth: 1.0.91 keeps them in `settings.json` (removed whole), not `config.json`."""
+    home = copilot_home_path("proj-abc123", "cop-1")
+    home.mkdir(parents=True)
+    (home / "config.json").write_text(
+        json.dumps(
+            {
+                "firstLaunchAt": "x",
+                "enableAllGithubMcpTools": True,
+                "githubMcpToolsets": ["issues"],
+                "githubMcpTools": ["create_issue"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert _ensure().removed == (
+        "config.json (enableAllGithubMcpTools, githubMcpToolsets, githubMcpTools)",
+    )
+    assert json.loads((home / "config.json").read_text(encoding="utf-8")) == {"firstLaunchAt": "x"}

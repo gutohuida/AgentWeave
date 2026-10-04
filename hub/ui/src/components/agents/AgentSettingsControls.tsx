@@ -362,10 +362,11 @@ export function CopilotReviewAgentsSetting({ agent }: { agent: AgentSummary }) {
  *  for a `copilot` agent, same rule as the review-agents setting above — a setting with no
  *  backing state is not presented.
  *
- *  The help text states both things review 2026-09-28 finding 11 asked for: turning this on does
- *  not grant GitHub access outright, it only lets a Workspace-only posture ask for it; and a
- *  runner's own pre-approval flags (`--allow-tool`, `--allow-all-tools`) bypass the card
- *  regardless of this setting, since those are the operator's own authority, set on the runner.
+ *  The help text says what happens (slice 5 D9a, F485, 2026-10-04): Copilot loads only its
+ *  read-only GitHub tools and approves them itself (`mcp-read-only`), so no card ever comes from
+ *  them, in any posture. The flags that add write tools are removed from any run without Full
+ *  access, where every call is allowed. The `gh` command in a shell is the Hub's ordinary command
+ *  decision, not this setting's. The earlier text promised a card that could not appear.
  */
 export function CopilotGithubMcpSetting({ agent }: { agent: AgentSummary }) {
   const update = useUpdateAgentGithubMcp()
@@ -387,9 +388,11 @@ export function CopilotGithubMcpSetting({ agent }: { agent: AgentSummary }) {
         </span>
       </label>
       <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-        While this is on, every call to it under Workspace only is asked — never allowed
-        outright. A runner's own pre-approval flags (<code>--allow-tool</code>,{' '}
-        <code>--allow-all-tools</code>) bypass this card regardless of this setting.
+        Gives this agent Copilot's built-in GitHub tools, read-only. Copilot runs them without
+        asking you, in every posture, Ask me included. Tools that write to GitHub can be added
+        only on a runner with Full access, where they run without asking too. This setting does
+        not govern the <code>gh</code> command, which a shell call runs and the Hub decides like
+        any other command.
       </p>
       {update.isError && (
         <p className="text-xs" style={{ color: 'var(--red)' }}>Could not save.</p>
