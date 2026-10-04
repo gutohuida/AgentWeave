@@ -351,6 +351,17 @@ _TABLE = [
     # the task names, distinct from (but mechanically the same shape as) `2.2a-doublecolon2` above.
     _row("1.7c6a", r"grep foo 'src\a.py'", True, windows_only=True),
     _row("1.7c6b", r"ls lib/Foo::Bar.pm", True),
+    # Task 1.7c's second and third bullets, POSIX CI (operator, 2026-10-04,
+    # `shell-judge-escape-scope-1-7c` (b); F487). The third bullet's command is `2.2a-escape2`
+    # verbatim. On a drive-letter host both are D7's named cost: allowed, though Git Bash writes
+    # `../x` for each (task 3.1). Asserted so that a change of mind is visible.
+    _row("1.7c2", r"bash -c 'cp n .\./x'", False, posix_only=True),
+    _row("1.7c2-windows-cost", r"bash -c 'cp n .\./x'", True, windows_only=True),
+    _row("1.7c3-windows-cost", "bash -c 'bash -c \"cp n .\\\\./x\"'", True, windows_only=True),
+    # Task 1.7c's fourth bullet. Refused on both hosts already: as written, `\$HOME` holds a
+    # variable (rule 4), so the escape levels -- which run only when the word as written stands --
+    # are never reached. The sibling change's task 1.4d owns this row's guarantee.
+    _row("1.7c4", "bash -c 'bash -c \"cp n \\$HOME\"'", False),
 ]
 
 

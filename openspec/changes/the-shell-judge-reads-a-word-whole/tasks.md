@@ -1025,8 +1025,8 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   runtime; the push and CI's own `hub-test` job (ubuntu-latest) will confirm.
 - [ ] 1.7c (R3, R4; design D7) Escapes allowed today:
   - (R5, POSIX CI) `grep -rn '\.\./' src` refused: the named cost, asserted so that a change of mind is visible. FAILS today on POSIX (allowed).
-  - `bash -c 'cp n .\./x'` refused, from both the Bash and the PowerShell tool. FAILS today.
-  - (R4) `bash -c 'bash -c "cp n .\\./x"'` refused (Bash tool). FAILS today and FAILS against R3's one-level D7.
+  - (POSIX CI; operator, 2026-10-04, `shell-judge-escape-scope-1-7c` (b)) `bash -c 'cp n .\./x'` refused (Bash tool). FAILS today. On a drive-letter host it stays allowed: D7's named cost (F487).
+  - (R4, POSIX CI; same decision) `bash -c 'bash -c "cp n .\\./x"'` refused (Bash tool). FAILS today and FAILS against R3's one-level D7. On a drive-letter host it stays allowed (D7's cost).
   - (R4, POSIX CI) `bash -c 'bash -c "cp n \$HOME"'` refused **once the sibling change is in**. Until then, assert that its level-1 word `$HOME` reaches `_judge_word`: spy on `_judge_word`, which FAILS against R3, where the escape-removed text was judged only as a path.
   - PowerShell `Copy-Item x Microsoft.PowerShell.Core\FileSystem::C:\Windows\x` refused (Windows), and `…\FileSystem::..\x` refused naming `..\x`. FAIL today.
   - Controls that stand: `grep foo 'src\a.py'` (Windows), `ls lib/Foo::Bar.pm`.
@@ -1086,6 +1086,28 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   candidates; bullet 4 is genuinely blocked on a sibling change not yet started. **Stays
   unticked**: not every row this task names is built, and 2.2a's own "Run 1.7b, 1.7c and 1.7d"
   instruction means 2.2a cannot tick either until 1.7c does.
+
+  **2026-10-04, interactive (operator present).** Decision `shell-judge-escape-scope-1-7c` (b)
+  applied: bullets 2 and 3 now read `(POSIX CI)` above, design D7 names F487's drive-letter case
+  and the Windows cost, and the spec delta's escape-level sentence and its two-shells scenario say
+  "on a platform without drive letters". Rows added to `_TABLE`: `1.7c2` (bullet 2, `posix_only`),
+  `1.7c2-windows-cost` and `1.7c3-windows-cost` (`windows_only`, allowed: the accepted cost,
+  asserted so a change of mind is visible; bullet 3's POSIX row is `2.2a-escape2`, the same
+  command), and `1.7c4` (bullet 4, both hosts). Mutation: with the `not _DRIVE_LETTERS` gate
+  removed from `_memo_judge_word`, both cost rows fail; restored, pass.
+  Bullet 4 re-measured (forced `_DRIVE_LETTERS=False`, spy on `_judge_word`): its spy precondition
+  cannot be met in this design. As written, `\$HOME` is the word `\`+`_LITERAL_DOLLAR`+`HOME`, and
+  rule 4 refuses it as holding a variable. The levels run only when the word as written stands, so
+  `$HOME` never reaches `_judge_word` and does not need to. D7's "only the level-1 word `$HOME` lets
+  the sibling see the variable" is corrected in the design. The refusal the bullet wants holds on
+  both hosts today (`1.7c4`); the sibling's task 1.4d owns that row. Also found: forcing
+  `_DRIVE_LETTERS` False on Windows does not stop `ntpath` reading a leading `\` as a root, so a
+  POSIX backslash row cannot be measured faithfully here; `1.7c2`'s evidence is Linux CI's
+  `hub-test` job.
+  `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **144 passed, 5
+  skipped** (was 141 passed, 4 skipped). Regression set (that file, `test_permission_approver.py`,
+  `test_hub_own_call.py`, `test_copilot_acp_decide.py`,
+  `test_a_write_outside_the_workspace_is_recorded.py`): **772 passed, 7 skipped**.
 - [x] 1.7d (R4, D4 on Windows, Windows job) `python -c "open('/dev/null','w')"` refused as a path. PASSES today (tail), and FAILS against R3's D4. `sh -c "ls 2>/dev/null"` and `python w.py /dev/null` are allowed.
 
   **Iteration 26.** Built as task 2.2's third slice; see that task's own note for the measurement,
@@ -1999,6 +2021,14 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   built (the Windows-side escape refusals, the `\$HOME` spy, the `…FileSystem::..\x` row, the
   `grep foo 'src\a.py'` control) and FAILS until those are addressed one way or the other. 1.7b is
   independent of this iteration's work and still needs its own fresh read.
+
+  **2026-10-04, interactive.** The gap above is closed by decision, not by code: the operator
+  accepted the POSIX-only escape levels (`shell-judge-escape-scope-1-7c` (b)), and the design,
+  spec delta and 1.7c's rows now say so (see 1.7c's note). All four parts of this task are built:
+  the drive exception (iteration 54), the tilde-piece clause (55), the escape levels and the `::`
+  rule (56). `_memo_judge_word`'s docstring now names the decision instead of "left to a
+  follow-up". Ran 1.7b, 1.7c and 1.7d fresh: `-k "1.7b or 1.7d"` 7 passed, 1 skipped; `-k 1.7c`
+  7 passed, 1 skipped (`1.7c2`, POSIX); the whole file 144 passed, 5 skipped.
 - [x] 2.2b D6: `approve_tool_call` catches an exception from `_decide`, denies with a reason and reports it; no return annotation
 
   **Iteration 59.** Re-derived fresh against this task's own wording and design D6

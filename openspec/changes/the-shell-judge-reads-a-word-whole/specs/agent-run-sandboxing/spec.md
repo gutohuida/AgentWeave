@@ -239,8 +239,8 @@ The word's value as a whole SHALL also be judged as the path it spells, with and
 quotes, because a character that divides it into pieces is also a name character to the shell; on
 a platform whose file names cannot hold a colon, the value is judged whole between its colons.
 Because an inner shell also removes a backslash before any character, and a shell between the
-command and that one may remove a level first, every word holding a backslash SHALL also be judged
-with one level of those escapes removed, and again with each further level removed until a level
+command and that one may remove a level first, on a platform without drive letters every word
+holding a backslash SHALL also be judged with one level of those escapes removed, and again with each further level removed until a level
 removes nothing, each as a word in its own right, whether or not it reads as a plain path.
 On a platform with drive letters, a letter and a colon that begin a word or a piece name that drive
 in every dialect, because a program the shell starts reads them so; that colon SHALL NOT divide
@@ -434,8 +434,9 @@ answered. An error in place of an answer is not a decision.
 
 #### Scenario: A backslash removed by two shells in turn is judged as removed
 
-- **WHEN** a command hands one inner shell a word that a second inner shell reads as a traversal
-  only after each has removed a level of backslash escapes, such as `.\\./x`
+- **WHEN** on a platform without drive letters, a command hands one inner shell a word that a
+  second inner shell reads as a traversal only after each has removed a level of backslash
+  escapes, such as `.\\./x`
 - **THEN** the command is refused
 
 #### Scenario: The null device inside a script's text is a path on a platform with drive letters

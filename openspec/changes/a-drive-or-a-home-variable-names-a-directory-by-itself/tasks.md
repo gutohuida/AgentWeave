@@ -75,6 +75,10 @@
   - Bash tool: `bash -c 'cp n $HOME'`, `sh -c "cp n \$HOME"`, `bash -c 'cp n ${HOME}'`, `bash -c 'cp n ..$x'`, `powershell -c 'Copy-Item x $HOME'`.
   - PowerShell tool: `bash -c 'cp n $HOME'`, `powershell -c 'Copy-Item x ${env:TEMP}'`.
   - POSIX CI: `bash -c 'bash -c "cp n \$HOME"'`, which needs the sibling change's level-by-level escape reading.
+    **Re-measured 2026-10-04 (sibling task 1.7c): already refused on both hosts, and it does not
+    need the escape reading.** Rule 4 refuses the word as written (`\`, `_LITERAL_DOLLAR`, `HOME`:
+    it holds a variable). The sibling's row `1.7c4` asserts it; this task should not claim it
+    "FAILS today".
   - (R6) Bash tool: `powershell -c 'Copy-Item x $env:TEMP'` and `powershell -c 'Copy-Item x ${env:USERPROFILE}'`. Each FAILS today (allowed, measured: the words are `␀env:TEMP` and `␀{env:USERPROFILE`) and FAILS against R5, whose bash pattern had no `env:` form.
 - [ ] 1.4e (R4, D3) Refused as uncheckable. Each FAILS today (allowed, measured) and FAILS against R3 (whose D3 read only the text before the first expansion):
   - Bash: `cp n $x..`, `cp n $(true)..`, `cp n .$x.`, `` cp n `true`.. ``;

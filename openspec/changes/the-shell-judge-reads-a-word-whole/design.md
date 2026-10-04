@@ -547,8 +547,24 @@ catches its own verdict failure.
     separator, so `bash -c 'bash -c "cp n \$HOME"'` reaches rule 4 as `\$HOME` (on Windows rule 3
     refuses it, because `\` is a separator there). Only the level-1 word `$HOME` lets
     `a-drive-or-a-home-variable-names-a-directory-by-itself` see the directory variable.
-  - Each level is an extra reading only. It can add a refusal and never remove one. On Windows
-    every path spelled with `\` gains harmless readings (`src\a.py` → `srca.py`).
+    **Measured 2026-10-04 (task 1.7c): not so.** Rule 4 already refuses the word as written: the
+    lexer marks the `$` (`\` followed by `_LITERAL_DOLLAR`, then `HOME`), and a word holding a
+    variable is uncheckable, on either host. The levels run only when the word as written stands,
+    so a `$HOME` level is never reached and is not needed. Row `1.7c4` asserts the refusal; the
+    sibling's task 1.4d owns it.
+  - Each level is an extra reading only. It can add a refusal and never remove one.
+  - **POSIX only (F487; operator, 2026-10-04, `shell-judge-escape-scope-1-7c` (b)).** The levels are
+    read only on a host without drive letters (`not _DRIVE_LETTERS`, read at call time). R3/R4 said
+    that on Windows every path spelled with `\` merely gains harmless readings (`src\a.py` →
+    `srca.py`). That is false: on a drive-letter host `\` is a separator, and removing it can merge
+    two components that the word's own reading cancels against `..`. `$'A\x/../../y1'` decodes to
+    `A\x/../../y1`, which is inside (`A`, `x`, then two `..`); its level-1 reading `Ax/../../y1` has
+    one component for two `..` and is outside, a false refusal
+    (`test_a_quote_is_judged_by_what_it_decodes_to[P5a-P5c]`). Nothing in the decoded text says
+    whether a `\` was a separator or an escape, so the Windows levels cannot be read without a
+    provenance marker for a literal backslash (F487's `_LITERAL_BACKSLASH`, its own change if ever
+    wanted). **Cost, Windows:** `bash -c 'cp n .\./x'` and `bash -c 'bash -c "cp n .\\./x"'` stay
+    allowed on a drive-letter host, though Git Bash writes `../x` for both.
   - **Cost (R5), POSIX only.** A regular expression that escapes dots to spell a traversal is
     refused: `grep -rn '\.\./' src` reads `../` at level 1. It is allowed today on POSIX. On Windows
     it is refused today already (as `'\\.\\./'`, measured), because `\` opens a root path there.

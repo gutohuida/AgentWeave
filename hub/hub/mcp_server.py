@@ -2693,9 +2693,10 @@ def _memo_judge_word(
     (`grep -rn '\.\./' src`) is the POSIX case this reading is for; its own "Cost (R5)" labels the
     new refusal POSIX only, and "already refused today [on Windows]... because `\` opens a root
     path there" is the other half of that sentence. The literal-backslash/separator conflict above
-    is this task's own finding, not yet resolved for a drive-letter host (would need a sentinel
-    for "this `\` is a quote's own final decode, not raw text" in the style of `_LITERAL_DOLLAR`,
-    threaded through every `_SEPARATORS` site -- left to a follow-up, named in tasks.md).
+    is F487, accepted for a drive-letter host (operator, 2026-10-04: the escape levels stay POSIX
+    only). Resolving it would need a sentinel for "this `\` is a quote's own final decode, not raw
+    text" in the style of `_LITERAL_DOLLAR`, threaded through every `_SEPARATORS` site -- its own
+    change if ever wanted.
     """
     key = (word, argument, continues, trailing_colon, dialect, trusted)
     if key in budget.judgements:
