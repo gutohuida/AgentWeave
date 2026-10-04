@@ -2043,8 +2043,25 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   both `hub-test` and `hub-judge-windows`. Both conditions this task's own text requires are now
   met on a commit that includes the fix -- ticked.
 - [ ] 2.3 Run the eight files named in design D2 plus the new file; expected moves are exactly task 1.8's rows plus the new rows. Record counts
-- [ ] 2.4 `py -3.11 -m pytest hub/tests/ -q` with `claude` stripped from PATH; record the count, or do not tick
-- [ ] 2.5 `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`
+- [x] 2.4 `py -3.11 -m pytest hub/tests/ -q` with `claude` stripped from PATH; record the count, or do not tick
+
+  **Iteration 63.** Stripped the npm directory holding the `claude` binary
+  (`/c/Users/huida/AppData/Roaming/npm`) from `PATH` and confirmed with `which claude` that it no
+  longer resolves (matches the committed finding that CI runners have no `claude` on `PATH`; a
+  bare name-grep for "claude" in `PATH` entries does not catch this directory, since the directory
+  name itself does not contain the word). Ran `py -3.11 -m pytest hub/tests/ -q` under that PATH.
+  Result: **6565 passed, 92 skipped, 345 warnings in 2518.50s (0:41:58)**, exit code 0 -- no
+  failures. The warnings are pre-existing noise unrelated to this task: repeated
+  `PytestUnhandledThreadExceptionWarning` ("Event loop is closed") from `aiosqlite`'s worker
+  thread outliving its event loop in a handful of async-DB tests, and one
+  `test_surface_ceilings.py` ratchet notice that the clientless-route count dropped to 27 from a
+  ceiling of 31 (a floor that could be tightened, not a failure). No code was changed to produce
+  this result; this task is pure verification against the existing tree.
+- [x] 2.5 `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`
+
+  **Iteration 63.** Both commands run exactly as written. `ruff check src/ hub/ tests/`: **All
+  checks passed!** `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`: **689
+  files would be left unchanged.** No code changed; both pass clean on the existing tree.
 
 ## 3. Real shells
 
