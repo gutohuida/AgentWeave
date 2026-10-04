@@ -142,6 +142,44 @@ jobs:
       run: |
         pytest tests/ -v --timeout=300 --timeout-method=thread
 
+  hub-judge-windows:
+    # D9: the shell judge's drive-letter branches (`_DRIVE_LETTERS`, the drive-piece rule, the
+    # Windows-only rows in test_the_shell_judge_reads_a_word_whole.py and
+    # test_permission_approver.py) never ran on CI before this job -- only on this machine. Task
+    # 2.2c, filed after iteration 59 found a Windows-only assertion that had never executed on a
+    # non-Windows runner until the main hub-test job happened to catch it going the other way.
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: hub
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install Hub dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -c ../constraints-dev.txt -e ".[dev]"
+
+    - name: Install the CLI package
+      working-directory: .
+      run: |
+        pip install -c constraints-dev.txt -e .
+
+    - name: Verify environment
+      run: |
+        python -c "import agentweave, hub; print('agentweave ->', agentweave.__file__); print('hub ->', hub.__file__)"
+        pip check
+
+    - name: Test the shell judge on Windows
+      run: |
+        pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread
+
   ui-test:
     runs-on: ubuntu-latest
     defaults:

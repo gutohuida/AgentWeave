@@ -2024,6 +2024,16 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   skipped** (unchanged from iteration 58 -- no code or test edit this iteration, verification only).
   No production or test code change was needed; task 2.2b was already fully built and now ticks.
 - [ ] 2.2c (R4, D9) Add the `hub-judge-windows` job to `.github/workflows/ci.yml` (`windows-latest`, `working-directory: hub`, the `hub-test` install steps with `-c ../constraints-dev.txt`, `pytest tests/test_permission_approver.py tests/test_the_shell_judge_reads_a_word_whole.py -v --timeout=300 --timeout-method=thread`). Run `py -3.11 -m pytest tests/test_dev_constraints.py -q`. After pushing, confirm the job ran and passed, or do not tick
+  Iteration 60: job added, mirroring `hub-test`'s own install steps (CLI installed separately from
+  the repo root, same rationale comment not repeated verbatim but the same two-step install order
+  kept) but on `windows-latest` and scoped to the two judge test files per the task's own wording.
+  `py -3.11 -m pytest tests/test_dev_constraints.py -q`: 14 passed, unchanged (this job needs no
+  new constraint; it reuses `../constraints-dev.txt` exactly as `hub-test` does). `yaml.safe_load`
+  confirms the file parses. Not ticked: the task's own text requires confirming the job ran and
+  passed on GitHub's runner before ticking, which this iteration could not yet observe (the run
+  triggered by this push was still in progress when the iteration ended). NEXT iteration: run
+  `gh run list --branch autonomous/2026-10-03-daily --limit 3` (or inspect the `hub-judge-windows`
+  job by name on the newest run) and tick only if it is green.
 - [ ] 2.3 Run the eight files named in design D2 plus the new file; expected moves are exactly task 1.8's rows plus the new rows. Record counts
 - [ ] 2.4 `py -3.11 -m pytest hub/tests/ -q` with `claude` stripped from PATH; record the count, or do not tick
 - [ ] 2.5 `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`
