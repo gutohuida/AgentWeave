@@ -1,7 +1,7 @@
 # Design — a file path is not redacted as a credential
 
 No operator decision is involved. The finding itself says the narrowing "wants its own change with
-its own reproduction" (F278, `scripts/drive/FINDINGS.md:21632`). This is that change.
+its own reproduction" (F278, `scripts/drive/FINDINGS.md:21742`). This is that change.
 
 ## Context
 
@@ -32,13 +32,34 @@ match only when all of these hold:
    `group(1)`; `redact_secrets` is its only user, via `sub`) and name the catch-all
    `(?P<entropy>[A-Za-z0-9+/=]{32,})`, so the test is `m.lastgroup == "entropy"`. It states which
    rule matched instead of re-deriving it from the text. Task 1.3 covers the prefix case either way.
-2. Split on `/`, it has **at least three non-empty segments**.
+2. Split on `/`, it has **at least three non-empty segments**. Empty segments (the one before a
+   leading `/`, or between `//`) are ignored by items 2 and 3 and kept as written (R4).
 3. Every segment fully matches `[a-z0-9]+|[A-Z]?[a-z]+(?:[A-Z][a-z]+)*`. That is a lowercase or
    digit word (`src`, `v1`, `python3`), or a capitalised or camel-case word (`Users`,
    `AgentWeave`).
 
 A kept match still has each segment of **32 or more characters** replaced by `<redacted>`. So
 `…/v1/tokens/<40 hex>` keeps its path and loses the value.
+
+**R4 (operator, 2026-10-04, option (a)): a kept match also has each segment of 16 or more
+characters that holds both a letter and a digit replaced by `<redacted>`.** Today a token of 16–31
+characters inside a path is redacted only because the path around it brings the run to 32. Without
+this rule D1 stores it. Measured with `https://api.example.com/v1/hooks/<token>/send`, 20,000 random
+tokens per row:
+
+| token | today | D1 without R4 | D1 with R4 |
+|---|---|---|---|
+| hex, 16–23 | redacted | 20,000 stored | 6 stored |
+| hex, 24–31 | redacted | 20,000 stored | 0 stored |
+| lowercase and digits, 16–23 | redacted | 20,000 stored | 49 stored |
+| lowercase and digits, 24–31 | redacted | 20,000 stored | 8 stored |
+| mixed case and digits, 16–23 | redacted | 11 stored | 11 stored |
+
+The survivors are tokens that happened to draw no digit (a letter-only segment reads as a word) or,
+for mixed case, happened to be camel case. Cost: over 200,205 real file paths walked on this
+machine, 167,975 are kept intact by D1 and 28 of those lose one segment to R4, all names like
+`contentsecuritypolicy2.js` and `googledisplayandvideo360.svg`. The Opus review measured the same
+shape independently (27 of 161,296 paths).
 
 **Rejected: removing `/` from the class.** That misses a base64 credential containing `/` (the AWS
 secret key shape `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`, redacted today). The value would lose
@@ -90,9 +111,16 @@ redacted whole. Accepted: widening the segment rule to capitals admits more of b
 `write_paths` is read before redaction and does not change. What the operator sees is the recorded
 `payload["input"]` and `payload["output"]`, which will now show the paths. Nothing parses
 `<redacted>` back out. `grep -rn "<redacted>" hub/hub hub/ui/src` finds only the producer and tests.
-R2 ran the grep: the only other `"<redacted>"` in `hub/hub` is `jobs.py:61`, the job-failure
+R2 ran the grep: the only other `"<redacted>"` in `hub/hub` is `api/v1/jobs.py:61`, the job-failure
 summary's own redactor (`_safe_error_summary`). It is a producer, not a reader, and its class
 `[A-Za-z0-9_=-]` has no `/`, so like the CLI twin it never had F278. It is not changed here.
+
+### D4 — The exact-value scrub carries more weight for a key inside a path
+
+A registered run secret (`hub/hub/run_secrets.py`) that sits inside a path segment of fewer than
+16 characters, or of letters only, is no longer caught by this pattern pass and depends entirely on
+`run_secrets.scrub` when the event is recorded. F488 (being fixed separately) shows that scrub can
+be split across events. No change here; noted so that F488's fix is not assumed redundant.
 
 ## What each caller returns when this raises
 
@@ -117,3 +145,12 @@ raise on a `str` input. None of the three callers catches around it today, and n
   For the same reason a prefix match can never be path-shaped, so D1 item 1's guard cannot be
   observed through `redact_secrets`. Task 1.3 now asserts the true output and tests the guard on
   `_redaction_for` directly.
+- **R4 (2026-10-04, interactive, after the operator's pre-approval Opus review):** the review found
+  that all three rounds measured only random keys, never a credential inside a real path, and that
+  D1 stores every 16–31 character hex or lowercase token in a URL path (redacted today). The
+  operator chose (a): the 16-character letter-and-digit segment rule above, measured independently
+  (table in D1). Also: empty segments stated as ignored; the spec's path and segment scenarios made
+  conditional on the other segments being ordinary words, with the `Claude2`/`README` residual in
+  the proposal; task 1.3's guard stub replaced (its `sk-abc` segment failed item 3, so the test
+  could not fail); D4 added; line references corrected (`spec.md:124`, `FINDINGS.md:21742`,
+  `api/v1/jobs.py:61`).

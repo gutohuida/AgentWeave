@@ -11,8 +11,10 @@ identifier removes precisely the identifier that tells the operator *which* docu
 and it does so to catch credentials the recognized-prefix rules have already caught.
 
 Nor SHALL redaction consume a file path. A run of the high-entropy rule that is made of at least
-three `/`-separated segments, each an ordinary lowercase, capitalised or camel-case word, is a path
-and SHALL survive, except that any single segment of credential length SHALL still be redacted. A
+three non-empty `/`-separated segments, each an ordinary lowercase, capitalised or camel-case word
+(empty segments are ignored), is a path and SHALL survive, except that any single segment of
+credential length, or of 16 or more characters holding both a letter and a digit, SHALL still be
+redacted, because a token inside a path is no less a token. A
 path with `/` separators is the commonest thing a tool input names on a Linux host. The one most
 reliably lost is the agent's own checkout, which is what an operator reading a transcript is most
 often trying to establish.
@@ -33,11 +35,16 @@ The serialized payload SHALL be at most 64 KiB, and a retained tool-result excer
 - **THEN** it SHALL be redacted
 
 #### Scenario: A deep POSIX file path
-- **WHEN** a payload contains `/Users/operator/code/agentweave/hub/main.py` or a path under `.agentweave/worktrees/`
+- **WHEN** a payload contains a path every segment of which is an ordinary word, such as `/Users/operator/code/agentweave/hub/main.py` or `/workspace/proj/.agentweave/worktrees/beta/src/app.py`
 - **THEN** the path SHALL survive redaction intact
 
 #### Scenario: A credential used as a path segment
-- **WHEN** a payload contains a URL or path one of whose segments is a 32-character or longer value of lowercase letters and digits, such as a hex token
+- **WHEN** a payload contains a URL or path one of whose segments is a 32-character or longer value of lowercase letters and digits, such as a hex token, and whose other segments are ordinary words
+- **THEN** that segment SHALL be redacted
+- **AND** the segments around it SHALL survive
+
+#### Scenario: A short token inside a path
+- **WHEN** a payload contains a path whose other segments are ordinary words and one of whose segments is a token of 16 to 31 characters holding both letters and digits, such as `/run/secrets/postgres/password/hunter2hunter2hunter2`
 - **THEN** that segment SHALL be redacted
 - **AND** the segments around it SHALL survive
 

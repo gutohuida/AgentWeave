@@ -10,6 +10,9 @@
    it.
 4. **Residual rate.** Re-run D2's random-base64 measurement after the fix. It must show at most one
    survivor per million.
+5. **Tokens inside a path (R4).** Re-run D1's R4 table after the fix (`https://api.example.com/v1/
+   hooks/<token>/send`, 20,000 random tokens per row). Hex 16–31 stays under 10 stored per 20,000
+   and lowercase-and-digit 16–31 under 60. A row near 20,000 means R4's rule is not wired in.
 
 ## Human-only
 

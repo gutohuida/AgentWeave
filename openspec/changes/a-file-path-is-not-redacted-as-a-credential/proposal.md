@@ -25,7 +25,7 @@ too, and to a run's diagnostic summary and facts (`runner_events.py:248`, `:259`
 Copilot runner after R2), which name paths under the run's home and workspace.
 
 The main spec already sets the bound this breaks. *Structured payload safety*
-(`openspec/specs/agent-stream-events/spec.md:101`) says redaction "SHALL be bounded so that it does
+(`openspec/specs/agent-stream-events/spec.md:124`) says redaction "SHALL be bounded so that it does
 not consume identifiers that are not secrets". It names only tool names and document slugs, because
 those were the families found then (F31). F118 (task ids) was the second family, and F278 is the
 third. All three come from the same catch-all.
@@ -33,13 +33,25 @@ third. All three come from the same catch-all.
 ## What Changes
 
 - A match of the high-entropy catch-all that is **shaped like a path** is kept. It must be split by
-  `/` into **at least three** non-empty segments, and each segment must be an ordinary word: either
-  lowercase letters and digits, or capitalised or camel-case letters (`Users`, `AgentWeave`). Every
-  other match is redacted exactly as today.
+  `/` into **at least three** non-empty segments (empty segments, as in `/Users` or `a//b`, are
+  ignored), and each segment must be an ordinary word: either lowercase letters and digits, or
+  capitalised or camel-case letters (`Users`, `AgentWeave`). Every other match is redacted exactly
+  as today.
 - **A segment of 32 or more characters is still judged by itself.** A long lowercase hex value used
   as a URL segment (`…/tokens/<40 hex>`) is redacted even though the rest of the path survives. A
   credential-length segment with capitals in it (mixed-case base64) is not an ordinary word, so the
   whole run is redacted as it is today, path included (R3; D1's rejected alternative B).
+- **A segment that looks like a token is redacted too (R4, operator 2026-10-04).** Inside a kept
+  path, a segment of **16 or more** characters that holds both a letter and a digit is replaced by
+  `<redacted>`. Today a short token inside a path is redacted only because the path around it
+  makes the run reach 32 characters; without this rule the path fix would store every 16–31
+  character hex or lowercase token that sits in a URL (`…/token/a1b2c3d4e5f6…`,
+  `/run/secrets/…/hunter2hunter2hunter2`). Found by the pre-approval Opus review.
+- **Residual, stated.** A letter-only token of 16 or more characters inside a path cannot be told
+  from a word and is stored (measured: 49 of 20,000 random 16–23 character lowercase-and-digit
+  tokens, 6 of 20,000 hex). A path with a segment that is not an ordinary word (`Claude2`,
+  `README`, `V2`, `HTMLParser`) is still redacted as today, so an agent named `Claude2` keeps losing
+  its worktree path; the fix covers agents whose names are ordinary words.
 - The two recognised prefixes (`aw_live_`, `sk-`) and the field-name rule are unchanged.
 - The CLI's own `agentweave.diagnostics.SECRET_VALUE_RE` (`src/agentweave/diagnostics.py:43`) is
   **not** changed. Its class is `[A-Za-z0-9_=-]`, with no `/`, so it never had F278.
@@ -50,7 +62,7 @@ third. All three come from the same catch-all.
 
 - `agent-stream-events`: *Structured payload safety* adds file paths to the identifiers that
   redaction does not consume, with scenarios for a deep POSIX path, a path with a credential-length
-  segment, and a base64 credential that contains `/`.
+  segment, a path with a short token segment, and a base64 credential that contains `/`.
 
 ## Impact
 

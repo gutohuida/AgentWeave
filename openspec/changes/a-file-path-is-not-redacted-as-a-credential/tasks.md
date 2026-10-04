@@ -2,7 +2,7 @@
 
 - [x] 0.1 R2 (2026-09-24, recorded in design.md's round log and `spec-queue/tracks/B12.md`): re-derive the proposal independently against `hub/hub/runner_events.py:28-81`, its
   three callers (`runner_events.py:177`, `:206`, `scheduler.py:94`), and
-  `openspec/specs/agent-stream-events/spec.md:101-124`. Re-run D2's measurement, including the
+  `openspec/specs/agent-stream-events/spec.md:101-124` (R4: the requirement is now at `:124`). Re-run D2's measurement, including the
   random-base64 residual, and do not trust R1's numbers. Grep `hub/hub` and `hub/ui/src` for
   anything that reads `<redacted>` back.
 - [x] 0.2 R3: a second independent re-derivation. `openspec validate
@@ -11,6 +11,10 @@
   (0 of 400,000 residual). Corrected: five call sites; "hex or base64" segment → lowercase hex, with
   alternative B rejected and measured (698 of 400,000 random keys leak fragments); task 1.3's
   prefix case, whose expected output was wrong. `openspec validate --strict`: valid.
+- [x] 0.2b R4 (2026-10-04, after the pre-approval Opus review; operator chose option (a)): the
+  16-character letter-and-digit segment rule, empty segments ignored, conditional scenarios, task
+  1.3's guard stub replaced, task 1.2b added. Recorded in design.md's round log with its
+  measurements. `openspec validate --strict`: valid.
 - [ ] 0.3 The operator approves the change in `spec-queue/APPROVALS.md`.
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
@@ -27,6 +31,15 @@ In `hub/tests/test_operator_is_told_the_truth.py`, beside the F31 and F118 cases
   `https://api.example.com/v1/tokens/` + 40 hex characters, the output ends in
   `/v1/tokens/<redacted>` and contains no hex digit run longer than 8. Record that it FAILS today:
   the output is `https://api.example.<redacted>`, which drops the path.
+- [ ] 1.2b (R4) `test_a_short_token_in_a_path_is_still_redacted`, parametrised over
+  `/api/v1/projects/123/trigger/pipeline/token/a1b2c3d4e5f6a7b8c9d0e1f2a3b4` and
+  `/run/secrets/postgres/password/hunter2hunter2hunter2`: the token segment is replaced by
+  `<redacted>` and every other segment survives (`…/pipeline/token/<redacted>`,
+  `/run/secrets/postgres/password/<redacted>`). Control today (each is `<redacted>` whole, so the
+  token is absent); record that it FAILS with D1 built **without** R4's 16-character rule (the
+  token is stored), which is the case it exists for. And `/srv/data/assets/contentsecuritypolicy2.js`
+  becomes `/srv/data/assets/<redacted>.js` (today `<redacted>.js`): the measured cost, asserted so a
+  change of mind is visible. All three outputs measured 2026-10-04 with R4's rule built in a script.
 - [ ] 1.3 `test_a_base64_credential_with_slashes_is_still_redacted`: for
   `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`, the output is `<redacted>`; and for
   `/workspace/project/` + 32 mixed-case letters and digits + `/app.py`, the output is
@@ -34,9 +47,10 @@ In `hub/tests/test_operator_is_told_the_truth.py`, beside the F31 and F118 cases
   rejected). Control: both PASS today and must keep passing. (R3) For `sk-abc/def/ghi/jkl/mno/pqr`
   and the same with `aw_live_`, the output is `<redacted>/def/ghi/jkl/mno/pqr` (the prefix class
   has no `/`; measured today and under D1). Because a prefix match can never contain `/`, D1 item
-  1's guard is tested on `_redaction_for` directly, with a stub match whose `group(0)` is the
-  path-shaped `sk-abc/def/ghi/jkl` and whose `lastgroup` is not `entropy`: the result is
-  `<redacted>`. Record that it FAILS with item 1 removed (the stub then passes items 2 and 3).
+  1's guard is tested on `_redaction_for` directly, with a stub match whose `group(0)` is
+  `abc/def/ghi/jkl` (genuinely path-shaped: it passes items 2 and 3) and whose `lastgroup` is not
+  `entropy`: the result is `<redacted>`. Record that it FAILS with item 1 removed. (R4: R3's stub
+  used `sk-abc/…`, whose first segment fails item 3, so that test could not fail.)
 - [ ] 1.4 Controls: `test_a_credential_is_still_redacted`, `test_the_hubs_own_vocabulary_survives_redaction`,
   `test_a_task_id_is_not_a_credential`, `test_anchoring_the_prefix_does_not_cost_a_real_key` and
   the two loop-error-summary tests keep passing unchanged. Run them before group 2 and record the
@@ -57,8 +71,10 @@ In `hub/tests/test_operator_is_told_the_truth.py`, beside the F31 and F118 cases
 - [ ] 2.1 In `hub/hub/runner_events.py`, name `_SECRET_VALUE_RE`'s catch-all alternative
   `entropy` and drop the outer group, as D1 item 1 describes. Add `_PATH_SEGMENT_RE` and a replacement function
   `_redaction_for(match)` that implements D1. Call `_SECRET_VALUE_RE.sub(_redaction_for, value)` in
-  `redact_secrets`. Extend the comment block above the pattern with an F278 paragraph, in the style
-  of the F31 and F118 ones, that cites the measurements in D2.
+  `redact_secrets`. Include R4's rule: inside a kept match, a segment of 32 or more characters, or
+  of 16 or more holding both a letter and a digit, becomes `<redacted>`; empty segments are ignored
+  by the checks and kept. Extend the comment block above the pattern with an F278 paragraph, in the
+  style of the F31 and F118 ones, that cites the measurements in D1 (R4) and D2.
 - [ ] 2.2 Update the F278 comment at `runner_events.py:164-167`. The path case is fixed, and
   reading `write_paths` first is still needed for the credential-segment case and for truncation.
 - [ ] 2.3 Run the files from group 1 and `hub/tests/test_write_paths_on_run_events.py` with `claude`
