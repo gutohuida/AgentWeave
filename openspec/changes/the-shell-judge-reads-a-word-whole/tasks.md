@@ -388,6 +388,29 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   own independent re-derivation against the code before any line of `_judge_whole_value` changes.
   1.4c stays unticked; this gap now has a draft design but no implementation, and the other two named
   gaps (absolute top-level dot-glob, bash-dot-rule control) are untouched.
+
+  **Iteration 47 (R2 of this gap's own round — independent re-derivation, confirmed sound).**
+  Re-derived D13 against the actual code from scratch, not from iteration 46's own write-up: read
+  `_judge_whole_value` (`hub/hub/mcp_server.py:2137`) fresh, independently re-ran the
+  `"[[:alpha:]]p/x".split(":")` measurement, and additionally called the module's own
+  `_bracket_expression_end`/`_relax_bracket_pattern`/`_holds_glob_character` directly against each
+  split fragment and the undivided value (`testbed/scratch/r2_verify_d13.py`, gitignored, not
+  committed) — the undivided value relaxes to `'?p/x'` (matches `up`); none of the three fragments
+  (`'[['`, `'alpha'`, `']]p/x'`) does, confirming the defect exactly as R1 stated. Re-coded the
+  masking rule independently (a fresh script, not R1's prototype file) and ran it against the same
+  five cases: all five produce exactly the split D13 claims, including the two no-op cases
+  (`Z:foo\bar`, the `sed` row). Both (a) the defect and (b) the proposed fix confirmed. Also resolved
+  the open item (c) rather than leaving it open: `_glob_links`'s D8 step 1 "base" is defined as the
+  leading components holding *no* glob character, and every masked colon lies inside a bracket span
+  that starts at `[` — itself a glob character — so a masked colon can never fall inside a base, in
+  any arrangement. The base-crossing-a-colon case D8 step 1 already describes is always a literal
+  colon outside any bracket, which the mask leaves untouched. No change needed there; this is now
+  closed, not merely re-confirmed-open. Wrote all of this into design.md's D13 section itself
+  (re-headed "R2 confirmed — one independent re-derivation done, R3 still required"). **No file under
+  `hub/` was touched** — `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`:
+  **119 passed** (unchanged, as expected for a docs-only round). 1.4c stays unticked; R3 (a second,
+  independent re-derivation) is still required by `CLAUDE.md`'s round discipline before
+  `_judge_whole_value` is touched.
 - [x] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
   - `cp n [u]p/` and `cp n ./u[p]` (a trailing `]` the trim removes). Each PASSES today only by the tail (`'/'`, `'/u[p'`), so assert the resolved target, which FAILS today; each FAILS against R5 (allowed).
   - `cp n [.]./x` refused as outside, quoting `'[.]./x'`. PASSES today by the tail `'/x'`, FAILS on the reason assertion and against R5 (the word `.]./x` is inside).

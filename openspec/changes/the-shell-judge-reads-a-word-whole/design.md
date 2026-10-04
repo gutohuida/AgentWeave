@@ -956,7 +956,7 @@ are string work.
   `classify` and `_decide` "agree about a symlink" (`workspace_writes.py:8-10` and `:172-174`),
   which is only half true after D12. Task 2.0b corrects it.
 
-### D13 (R1, draft — not yet reviewed) — a bracket expression's own colon is not a drive-letter break
+### D13 (R2 confirmed — one independent re-derivation done, R3 still required) — a bracket expression's own colon is not a drive-letter break
 
 **The defect (task 1.4c, carried from iteration 41; re-measured this round against the current
 code, not assumed from the prior round's note).** D2 step 6's whole-value reading is the one D8
@@ -1039,13 +1039,49 @@ already says a bracket's own `:` must survive undivided. The non-drive-letter br
 (`if not _DRIVE_LETTERS`) is untouched: POSIX already calls `_judge_piece` on the undivided value
 directly, so it needs no mask.
 
-**What this still leaves open, named rather than assumed closed.** This round has not yet re-checked
-whether `_glob_links`'s own base-resolution reasoning (D8 step 1, "The whole value on a drive-letter
-host is judged between its colons") needs the same mask applied to the base-crossing-a-colon case it
-already describes, since that text was written against the pre-mask behaviour. **This section is a
-first-round draft (R1 of this round's three): it has not yet had its own two independent
-re-derivations against the code (R2, R3), and per `CLAUDE.md`'s round discipline no line of
-`_judge_whole_value` is to change until both have run.** `next_action` names R2 as the next step.
+**R2 (independent re-derivation, not a re-read of R1's own text).** Re-measured the defect straight
+from `hub/hub/mcp_server.py` without opening this section first: `"[[:alpha:]]p/x".split(":")`
+independently confirmed as `['[[', 'alpha', ']]p/x']`; then called the module's own
+`_bracket_expression_end`, `_relax_bracket_pattern` and `_holds_glob_character` directly against each
+of the three fragments and against the undivided value
+(`testbed/scratch/r2_verify_d13.py`, gitignored, not committed). The undivided value relaxes to
+`'?p/x'` (the pattern that matches the `up` link); none of the three split fragments does —
+`'[['` holds a glob character (`_holds_glob_character` True, since `[` qualifies) but
+`_bracket_expression_end('[[', 0)` returns `None` (no closing `]` within the fragment), so
+`_relax_bracket_pattern` leaves it as the two-character literal `'[['`, and the other two fragments
+(`'alpha'`, `']]p/x'`) hold no glob character at all. So the gap is confirmed exactly as D13's R1
+draft states: splitting first means `_glob_links` only ever sees garbage fragments, never the pattern
+that would catch the link crossing. **(a) confirmed.**
+
+Re-coded the masking rule independently (not copying R1's prototype file) and ran it against the same
+five named cases plus the drive-exception and `sed` rows, written from a fresh script rather than
+R1's own: `[[:alpha:]]p/x` → one undivided segment; `Z:foo\bar` → `['Z', 'foo\bar']`, unchanged from
+today; `sed 's/::.*//'` → splits exactly as it does today (two segments, same break points — D2 step
+6's measured 44 words do not move); `[a:b]x` → one undivided segment; `a:[u:p]/x` → splits at the
+outer colon only, keeping the bracket's own colon. All five match D13's stated expectations exactly.
+**(b) confirmed** — the masking rule, scoped to spans found by the same `_bracket_expression_end` D8
+step 2 already trusts, produces exactly the claimed split in every named case, including the two
+cases (`Z:foo\bar`, the `sed` row) where it must be a no-op.
+
+**(c) resolved, not merely re-opened:** the open item — whether `_glob_links`'s D8 step 1
+base-resolution text ("the whole value on a drive-letter host is judged between its colons"; "a base
+that crosses a colon names no directory Windows can hold") needs the same mask — does **not** apply,
+and the reason is structural rather than a fresh measurement: D8 step 1 defines "base" as *the piece's
+leading components that hold no glob character*. D13's mask only ever touches a `:` that lies strictly
+inside a span `_bracket_expression_end` recognises, and every such span starts at a `[`, which is
+itself one of `_GLOB_CHARS`. A component holding that `[` is therefore never part of the base by D8
+step 1's own definition — it is the first glob-holding component, which ends the base and begins the
+part `_glob_links` matches component-by-component instead. So a masked colon can never fall inside a
+base, in any arrangement: the base-crossing-a-colon case D8 step 1 already describes is always a
+*literal* colon outside any bracket, the same case the mask leaves untouched (confirmed above:
+`Z:foo\bar`, no bracket, splits exactly as before). D8 step 1's text needs no change and no
+cross-reference to D13; this is not "still open", it is closed.
+
+**R2 verdict: the R1 draft is sound as written — (a), (b) and (c) above all confirmed or resolved, no
+correction needed to the proposed rule.** One more independent re-derivation (R3) is still required
+by `CLAUDE.md`'s round discipline (two independent rounds beyond R1, not one) before any line of
+`_judge_whole_value` changes — R2 re-deriving the same answer R1 reached is expected agreement, not a
+substitute for R3's own fresh pass.
 
 ## The bounds (R4: per `_decide`)
 
