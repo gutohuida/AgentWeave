@@ -36,13 +36,14 @@ with its evidence. What tonight needs from them:
   (`shell-judge-escape-scope-1-7c`, (b)). Task 2.3 is rewritten to compare the whole `hub/tests/`
   suite before and after the change: every moved outcome must be one of task 1.8's rows or a new row
   (`shell-judge-2-3-eight-files`, (c)). That unblocks 1.7c, 2.2a, 2.3 and then 4.1.
-- **F488 first** (operator, 2026-10-04: file it on its own and take it first tonight). A run's
-  secret survives the scrub when Copilot's output splits it across two events. That is slice 5 group
-  C's security guarantee, so the item runs on Opus. **After F488, take the playbook's default**:
-  unarchived changes, then open findings by severity, then APPROVED rows. The `ORDER:` below names
-  only F488 and does not replace the rest of the queue.
-
-ORDER: F488
+- ~~**F488 first**~~ **Withdrawn from tonight, 2026-10-04 ~15:30** (operator, interactive: "Let's
+  finish it right now", then "Yes, do it now" for F488). The interactive session owns, today, all of
+  the Copilot work: **F488** (its own change, `a-secret-split-across-two-events-is-still-scrubbed`),
+  **slice 5 `a-copilot-agent-uses-hooks-and-its-own-agents` entire** (group A build and drives, the
+  F484 amendment to group B, the F485 investigation for group D), and **F484/F485**. **Tonight does
+  not touch any of them**, whatever their state, and does not compose them from the playbook default
+  either. Tonight takes the playbook default **minus** those: other unarchived changes (the APPROVED
+  `a-copilot-one-shot-records-its-credits` first), then open findings by severity, then APPROVED rows.
 
 ## 2026-10-03
 
