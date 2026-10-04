@@ -528,6 +528,36 @@ def test_an_absolute_glob_word_s_tail_dotdot_moves_the_branch_through_a_link(
     assert "it resolves to" in relative["reason"]
 
 
+# 1.4f (R7): a literal component after a glob can itself be a link that `os.path.islink` does not
+# see -- a Windows junction. The fixture's own `in` -> `sub` link makes `i*` match a link; the
+# literal `l` that follows it is `sub/l`, the junction to `work` itself (D12's own worked example).
+# `_glob_tail_walk`'s literal-component branch tests this with `_is_link_path` (D8 step 4, R7),
+# which reads the reparse-point attribute a junction sets, not `os.path.islink` alone -- so this
+# already passes without further change; measured directly against `_decide` first
+# (`testbed/scratch/measure_14f_remaining.py`, gitignored, not committed) before adding this test.
+def test_a_literal_component_after_a_glob_link_can_itself_be_a_junction(workspace, monkeypatch):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    decision = _decide("Bash", {"command": "ls i*/l/../x"})
+    assert decision["allow"] is False
+    assert "it resolves to" in decision["reason"]
+
+
+# 1.4f (R7), the named cost asserted so a change of mind is visible, both platforms: Git Bash
+# expands `sub/l*/../work/a` to `sub/l/../work/a` and, since `sub/l` is a junction/symlink to the
+# workspace root (named `work` by the shared fixture), that is `work/work/a` -- physically the
+# workspace's own parent joined with its own name, which does not exist, but D12's `_physical`
+# walk never checks existence; it only resolves. The walk judges where the `..` lands (the
+# workspace's real parent) before it ever reads the literal tail that follows, so this refuses
+# even though the path Git Bash would actually open is outside only by name, not by a real escape.
+def test_a_glob_link_s_dotdot_tail_refuses_before_reading_a_literal_name_after_it(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    decision = _decide("Bash", {"command": "ls sub/l*/../work/a"})
+    assert decision["allow"] is False
+    assert "it resolves to" in decision["reason"]
+
+
 # D8 step 2's bracket relaxation, re-derived from the design text again (not iteration 19's own
 # reading) and sized the same way: a bracket expression the piece's last component holds is kept
 # exact for `fnmatch` when it is one `fnmatch` already reads as the shell does, and relaxed to `?`

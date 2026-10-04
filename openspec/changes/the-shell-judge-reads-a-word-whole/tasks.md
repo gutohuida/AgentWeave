@@ -595,6 +595,56 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   (R8, design D12 Costs, the third review's LOW) In its own fixture, so that the shared fixture's root globs are unchanged: a sibling `checkout/node_modules` and `checkout/src`, and `work/node_modules` a link → `checkout/node_modules` (the Hub's shared dependency link, `_symlink_shared_dependencies`), each refused, naming `checkout`'s `src/x` after "it resolves to":
   - Bash `cp n node_modules/../src/x`: the correct refusal (Git Bash's `cp n node_modules/../nm1` wrote into `checkout`, measured). On the Windows job it FAILS today (allowed, measured: it escapes today); on Linux it PASSES today (`posixpath.realpath` is physical).
   - `_decide("Write", {"file_path": <work>/node_modules/../src/x})`: the named false refusal (Node writes `work/src/x`), asserted so a change of mind is visible. On the Windows job it FAILS today (allowed, measured); on Linux it PASSES today.
+
+  **Iteration 52.** Re-derived this task's scope fresh against the current code before building,
+  per the prior note's own instruction (do not assume iter 32's or any older note still applies
+  without checking). Found that most of this task's rows are already correct and already tested
+  under other tasks' names, not 1.4f's own: the literal rows (task 2.0b,
+  `test_a_dotdot_after_a_link_is_refused_though_a_native_program_writes_inside` and
+  `test_the_physical_readings_64_step_bound` cover the two named-costs rows and the 64/65-step
+  bound already), the glob rows `cp n sub/l*/..`/`ls sub/l*/../x` (task 2.1c's own
+  `test_an_absolute_glob_word_s_tail_dotdot_moves_the_branch_through_a_link` and
+  `test_a_dot_leading_glob_is_also_matched_against_the_link_it_finds_2_1c`'s own control), and the
+  three "Controls allowed" rows (`_TABLE` rows `1.4f4`-`1.4f6`). Measured the two rows this task's
+  own text names that had no test anywhere yet, directly against `_decide` first
+  (`testbed/scratch/measure_14f_remaining.py` and `measure_14f_named_cost.py`, gitignored, deleted
+  after use, not committed), before writing either as a test:
+  - the junction row (R7): `ls i*/l/../x`, using the shared fixture's own `in` → `sub` and `sub/l`
+    → `work` links (no new fixture needed -- `i*` matches `in`, the literal `l` that follows it
+    inside `sub` is the junction, exactly as the task's parenthetical describes). Refused, naming
+    the workspace's parent, **already correct**: `_glob_tail_walk`'s literal-component branch
+    tests a followed component with `_is_link_path` (`hub/hub/mcp_server.py:1581`), which reads
+    the Windows reparse-point attribute a junction sets, not `os.path.islink` alone -- the gap the
+    task's own text worried about was already closed by an earlier iteration's D8 step 4 work, not
+    by this one. Added `test_a_literal_component_after_a_glob_link_can_itself_be_a_junction`.
+  - the named-cost row (R7, both platforms): `ls sub/l*/../work/a`. Refused, naming the parent,
+    **already correct**: `_glob_tail_walk` judges where a `..` in the tail lands (the real
+    parent) and returns the refusal immediately, before it ever reads a literal component that
+    follows the `..` (`work`, `a` here) -- so the walk never gets as far as noticing the tail
+    would, in Git Bash, actually land back inside. Added
+    `test_a_glob_link_s_dotdot_tail_refuses_before_reading_a_literal_name_after_it`.
+
+  Mutation check skipped for both: neither needed a production change (both rows were already
+  correct), so stashing `mcp_server.py` would prove nothing about these two tests specifically --
+  confirmed by reading `_glob_tail_walk` and `_is_link_path` directly rather than assumed. `py
+  -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: 123 passed (was 121,
+  +2). Broader regression set (`test_permission_approver.py`/`test_hub_own_call.py`/
+  `test_copilot_acp_decide.py`/`test_a_write_outside_the_workspace_is_recorded.py`): 626 passed, 2
+  skipped, no regressions -- confirms iteration 51's D14 change (bash dot rule) did not regress
+  anything either, closing that iteration's own open question. The full `hub/tests/` suite was
+  started in the background again this iteration and still had not produced output after several
+  minutes (consistent with its historical ~46-minute runtime, `hub-suite-gate`); relied on the
+  targeted file plus the broader regression set instead, as prior iterations addressing this same
+  task (2.0b, 2.1c) also did. `ruff check` and `black --check --target-version py311` on the test
+  file: clean. `git diff --stat`: only the one test file and this task file changed.
+
+  **Task 1.4f still stays unticked.** What remains is only the R8 shared-dependency-link fixture
+  bullet just above (a *new* fixture -- `checkout/node_modules`, `checkout/src`, and
+  `work/node_modules` a link to `checkout/node_modules`, distinct from the shared fixture so its
+  root-level globs stay unchanged) and its two rows (`cp n node_modules/../src/x`, and
+  `_decide("Write", {"file_path": .../node_modules/../src/x})`). Size that as its own next slice --
+  re-derive `_symlink_shared_dependencies` (`hub/hub/worktrees.py`) first to build the fixture's
+  link the same way the Hub really makes it, not assumed.
 - [x] 1.4g (R8, design D2 step 6, the third review's HIGH; the shared fixture's `sub/@s/p`, `a'b/up` and `a@b/l`) **the whole value is judged as the path it spells**. Refused, each naming where it resolves:
 
   **Iteration 25 note.** Built as task 2.2's second slice; see that task's own note for the
