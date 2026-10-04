@@ -1897,3 +1897,22 @@ disappears is indistinguishable from one that was forgotten.
   the commit is normalized and correct. But stripping the CR in the working copy afterwards leaves the
   file "modified" with an empty diff. Write with `newline="\n"` or `write_bytes`, or restore the file
   with `git checkout -- <file>` once it is committed.
+- **2026-10-04 (home) — forcing `_DRIVE_LETTERS = False` on Windows does not give a POSIX reading of a
+  backslash word.** `os.path` is still `ntpath`, which reads a leading `\` as a root, so
+  `cp n '\~/x'` measures "outside" for the wrong reason. A `posix_only` shell-judge row cannot be
+  measured or mutation-checked on this machine (no WSL either); its evidence is the Linux `hub-test` CI
+  job, grepped from `gh run view --job <id> --log`.
+- **2026-10-04 (home) — the full Hub suite runs in 11–15 minutes with `-n 8`.** `pytest-xdist` 3.8 is
+  installed (20 cores). Serial, with other pytest runs alongside, it projected past three hours. CI runs
+  it serially; any failure seen only under `-n` needs a serial re-run before it counts.
+- **2026-10-04 (home) — measuring which tests a change moved: run the base's tests against the tip's
+  code.** `git worktree add --detach <short path> <base>`, then `git checkout master -- hub/hub` inside
+  it, and run `py -3.11 -m pytest tests/` from its `hub/` (`-m` puts the cwd first, so `import hub`
+  resolves to the worktree; confirm with `hub.__file__`). The same `git worktree add` into the long
+  scratchpad path failed with its stderr suppressed; a short path (`C:\Users\huida\awbase`) worked.
+  Remove it with `git worktree remove --force`.
+- **2026-10-04 (home) — `grep -rn` from the repo root times out (>120 s).** The `.agentweave/` worktrees
+  and `node_modules` trees are huge. Use the Grep tool with a `glob` limited to `{hub/tests,openspec,
+  scripts,spec-queue}/**`, or name the directories.
+- **2026-10-04 (home) — `gh run list --commit` needs the full sha.** A short sha returns nothing,
+  silently. Use `$(git rev-parse <sha>)`.
