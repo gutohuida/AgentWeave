@@ -354,12 +354,44 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   (unticked, not started). Each needs its own fresh measurement before building, same discipline as
   every iteration so far -- in particular, re-derive from design.md's actual text before trusting
   any prior iteration's framing of what a fix should look like, this iteration's own lesson.
-- [ ] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
+
+  **Iteration 45 addendum.** Task 2.1d is now ticked (its own note, below) and 1.4c's (R6/D11)
+  bracket rows (`[u]p/x`, `'[[:alpha:]]p'/x`, `./u[p]`) all pass. 1.4c itself stays unticked for the
+  three unrelated gaps named above (D9 round, absolute top-level dot-glob, bash-dot-rule control),
+  none of which this iteration touched.
+- [x] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
   - `cp n [u]p/` and `cp n ./u[p]` (a trailing `]` the trim removes). Each PASSES today only by the tail (`'/'`, `'/u[p'`), so assert the resolved target, which FAILS today; each FAILS against R5 (allowed).
   - `cp n [.]./x` refused as outside, quoting `'[.]./x'`. PASSES today by the tail `'/x'`, FAILS on the reason assertion and against R5 (the word `.]./x` is inside).
   - PowerShell `Copy-Item n [u]p\x` (Windows) or `[u]p/x` (POSIX): same as the first row.
 
   Controls: `ls [../x]` stays **refused** as `'../x'` (PASSES today; FAILS if the bracket-kept word replaced the ordinary one instead of adding to it); `echo arr[0] x[1:]`, `python -c '["a","b"]'` and `ls sub/[ab].py` allowed. The separator-less `cp n [u]p` and `cp n u[p]` stay allowed under this change alone; the sibling change's 1.4f refuses them.
+
+  **Iteration 45.** Re-derived this task's own remaining rows fresh against `_decide`
+  (`testbed/scratch/measure_214d_1_4e_remaining.py`, gitignored, not committed), not trusting the
+  task's own claim that `cp n [u]p/`, `cp n ./u[p]` and the PowerShell form PASS today only by the
+  tail: with task 2.2 now built (iteration 43, which wired `_glob_links` into rule 6's per-piece
+  reading via `_holds_glob_character`), all three are already refused, naming the resolved target,
+  with no further production change needed -- `cp n [.]./x` (1.4e1) and every control row (1.4e2-7)
+  were already covered by earlier iterations. Added
+  `test_a_bracket_at_a_words_edge_is_matched_through_the_link_it_finds_1_4e` (the trailing-slash-only
+  row, the bracket-closes-at-the-end row, and the POSIX-form PowerShell row) and
+  `test_a_bracket_at_a_words_edge_is_matched_through_the_link_it_finds_windows_powershell_1_4e`
+  (the backslash form, Windows-only) to
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`. Mutation-checked: temporarily forcing
+  `_bracket_kept_word` to always return `None` and rerunning just the new tests fails both new test
+  functions (`assert True is False` on the `allow` check) with the expected `AssertionError`s,
+  confirming they are not vacuous; reverted immediately, `git diff --stat` on `mcp_server.py` clean
+  afterward (no production change was needed, confirmed before and after). `py -3.11 -m pytest
+  hub/tests/test_the_shell_judge_reads_a_word_whole.py -q`: **119 passed** (was 117, +2). Broader
+  regression set (+`test_permission_approver.py`/`test_hub_own_call.py`/`test_copilot_acp_decide.py`/
+  `test_a_write_outside_the_workspace_is_recorded.py`): **745 passed, 2 skipped**, no regressions.
+  `ruff check` and `black --check --target-version py311` on the changed test file: clean. `git diff
+  --stat`: exactly `hub/tests/test_the_shell_judge_reads_a_word_whole.py` and this task file.
+
+  **Task 1.4e now ticks.** Every row and control this bullet names is measured and passes, with no
+  production change needed this iteration (task 2.2 had already done the wiring). This does not
+  close task 1.4c itself, which has its own separate open rows (the Windows-side POSIX-class gap,
+  the absolute top-level dot-glob gap, and the bash-dot-rule control gap -- see 1.4c's own notes).
 - [ ] 1.4f (R6, D12, operator `B4-link-dotdot`, link fixture with `sub/l` → `work`) **a `..` after a link**, refused as outside, the reason naming the workspace's parent:
   - `cp n sub/l/../y`, `echo hi > sub/l/../x1`, `ls sub/l/../x`. On the `hub-judge-windows` job each FAILS today (allowed: `ntpath.realpath` removes the `..` first, measured). On Linux each PASSES today (`posixpath.realpath` is physical); keep them there as controls.
   - `cp n sub/l*/..` and `ls sub/l*/../x`, both platforms. Each PASSES today only by the tail (`'/l*/..'`, `'/l*/../x'`), so assert that the reason quotes the whole piece (`'sub/l*/..'`, `'sub/l*/../x'`) and names the workspace's parent after "it resolves to", which FAILS today; each FAILS against R5 (allowed: the walk's `..` matched no listing entry). (R7) The "names the parent" half also FAILS against R6 as written, whose `_judge_path` on the real parent gives the bare `_OUTSIDE` (measured); it needs design D8 step 4's `_resolves_elsewhere(<listed>/.., <real parent>)`.
@@ -1179,7 +1211,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   `..`-moves-to-the-real-parent rule, the globstar rule, and now the listing memo) are built and
   verified. Task 1.6 stays separately unticked: the extglob/backslash-run rows, the memo key's
   colon flag (R6), and `approve_tool_call`'s D6 catch remain, none of which this slice touched.
-- [ ] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
+- [x] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
 
   **Iteration 18 (partial).** Measured today's `_decide` directly first (not from this file's old
   R6/R7 tables, which predate the current rule-6 rewrite): `cp n [u]p/x` and `cp n [.]./x` are both
@@ -1220,6 +1252,18 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   that path (an absolute `cp n <ws>/[u]p/` now resolves and refuses), but 1.4c/1.4e's own rows are
   relative words, which still reach rule 6's unrewritten piece reading, not `_glob_links`. 2.1d
   stays unticked until task 2.2 wires `_glob_links` into rule 6 too.
+
+  **Iteration 45.** Task 2.2 (R5, rule 6's per-piece `_glob_links` call) was built at iteration 20
+  and ticked some time before this window started; re-derived against the current code rather than
+  assuming that closed this task automatically. `_judge_piece` now calls `_glob_links` for any
+  relative piece `_holds_glob_character` accepts, and `[` is one of `_GLOB_CHARS`, so a bracket-kept
+  word from `_words` reaches it the same way an ordinary glob word does. Measured 1.4e's remaining
+  rows directly (this iteration's own 1.4e note, above) and 1.4c's bracket rows (`[u]p/x`,
+  `'[[:alpha:]]p'/x`, `./u[p]`, all tested in earlier iterations or this one): every row task 2.1d's
+  own text names across 1.4c and 1.4e now passes, with no further production change. **Task 2.1d
+  ticks.** This is narrower than 1.4c itself, which has its own still-open rows unrelated to the
+  bracket-kept word (the Windows-side POSIX-class/drive-letter-colon-split interaction, the absolute
+  top-level dot-glob gap, and the bash-dot-rule control gap) -- see 1.4c's own notes for those.
 - [x] 2.2 D2-D5 (R5: D3 and `_glob_links` also run in rule 5 on an absolute glob word, and in rule 6 on the whole value as well as each piece; `_words` reports a trimmed trailing `:` for D5; (R8) D2 step 6, the whole value's literal judgement, after the pieces, with a colon-joined option dropped, divided at its colons where `_DRIVE_LETTERS` is true (read at call time), and on POSIX judged whole as well, each through step 5. Run 1.4g):
   - replace rule 6 of `_judge_word` with the piece reading, including D3's extglob units;
   - add `_PIECE_BREAKS`, `_BASH_DEVICES`, `_SCP_ADDRESS_RE` and `_HOST_PORT_RE` beside `_ABSOLUTE_PATH_RE`, with a comment naming this change;

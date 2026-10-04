@@ -753,6 +753,45 @@ def test_a_relative_glob_is_matched_through_the_link_it_finds_windows_powershell
     assert "it resolves to" in windows_powershell["reason"]
 
 
+# Task 1.4e/2.1d's own remaining rows (R6, D11), re-derived fresh against `_decide`
+# (`testbed/scratch/measure_214d_1_4e_remaining.py`, gitignored, not committed), not trusting the
+# task's own claim that these PASS today only by the tail: with task 2.2 now built (iteration 43),
+# the bracket-kept word `_words` yields for `[u]p/` and `./u[p]` reaches `_judge_piece`'s
+# `_glob_links` call the same way the already-tested `[u]p/x` row does (`_holds_glob_character`
+# sees the `[`), with no further production change needed. `cp n [u]p/` has no tail component after
+# the glob (distinct from `[u]p/x`); `cp n ./u[p]` closes its bracket at the word's very end, which
+# the ordinary trim (`_WORD_TRIM`, which removes `]`) would otherwise erase before any judge saw it.
+# Each is already refused, naming the resolved target. PowerShell's own form is the same row through
+# its own lexing (task 1.4e's own text: "same as the first row").
+def test_a_bracket_at_a_words_edge_is_matched_through_the_link_it_finds_1_4e(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    trailing_slash_only = _decide("Bash", {"command": "cp n [u]p/"})
+    assert trailing_slash_only["allow"] is False
+    assert "it resolves to" in trailing_slash_only["reason"]
+
+    bracket_closes_at_end = _decide("Bash", {"command": "cp n ./u[p]"})
+    assert bracket_closes_at_end["allow"] is False
+    assert "it resolves to" in bracket_closes_at_end["reason"]
+
+    posix_powershell = _decide("PowerShell", {"command": "Copy-Item n [u]p/x"})
+    assert posix_powershell["allow"] is False
+    assert "it resolves to" in posix_powershell["reason"]
+
+
+@pytest.mark.skipif(not _WINDOWS, reason="a drive-letter host reads a backslash as a separator")
+def test_a_bracket_at_a_words_edge_is_matched_through_the_link_it_finds_windows_powershell_1_4e(
+    workspace, monkeypatch
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+
+    windows_powershell = _decide("PowerShell", {"command": "Copy-Item n [u]p\\x"})
+    assert windows_powershell["allow"] is False
+    assert "it resolves to" in windows_powershell["reason"]
+
+
 # Task 1.4c's (R5) sub-group, re-derived fresh against `_decide`
 # (`testbed/scratch/measure_1_4c_r5_r8.py`, gitignored, not committed), not trusting the task's own
 # text, which claims the absolute rows are allowed today -- they are not: an absolute word already
