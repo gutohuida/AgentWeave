@@ -34054,3 +34054,21 @@ before the transition flush, keeping a carry-over. Every other recorder that cal
 `run_secrets.scrub` per event (other runners' streams, tool output) needs the same look; that has not
 been checked. A test must split a registered value across a thought→message flush and across a
 message→tool_call flush, in the order the mapper actually emits them.
+
+## F489 (C) — the Hub retries a Copilot turn three times on an authentication failure that cannot succeed on retry
+
+**Status:** open, found 2026-10-04 by drive task 7.3 of `a-copilot-agent-uses-hooks-and-its-own-agents`
+(interactive; trial Hub `:8010`), and seen identically by the 2026-10-03 drive of the same task.
+**Ready:** no change owns it.
+
+One operator message to `cp5` on a Copilot provider runner whose key variable holds `invalid` made
+three runs (`run-905f58dd3ac9`, `run-6988ccc8d1cb`, `run-aa933d99e455`), each ending with the same
+`copilot.authentication` error (`status_code: 401`) four seconds apart, and the queue entry was then
+abandoned: *"delivery failed 3 times; the Hub stopped retrying"*. An authentication failure is the
+same on every attempt until the operator changes the key, so the two retries cost two spawns (and on
+a subscription-backed runner would cost two more model calls) and triple the error cards. The
+recorded error now carries Copilot's `errorType` (`authentication`) and `remediation` where reported
+(group A, D5), which is what a retry decision could read. **Fix direction (not decided):** a turn
+that failed with a root `session.error` whose `errorType` is `authentication` (or `quota`, which
+slice 4 already holds the queue for) is not retried; the entry waits for the operator, as an
+allowance hold does.

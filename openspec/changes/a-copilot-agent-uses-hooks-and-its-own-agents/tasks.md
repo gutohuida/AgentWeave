@@ -986,7 +986,7 @@ every run id, and paste each surface's text verbatim into the Round log.
   any card a raw event produces (error, compaction, subagent); three ordering tests in
   `test_copilot_lifecycle_events.py` failed before it. The script crashed printing `→` to the
   console after the first POST, so only the `compacted` card (the event under test) was posted.
-- [ ] 7.3 (A) Error once. Give `cp5` an invalid provider key through a group C runner whose key
+- [x] 7.3 (A) Error once. Give `cp5` an invalid provider key through a group C runner whose key
   variable holds `invalid`. Run one turn. (Review 2026-09-28, finding 6: the old "if C was cut,
   ambient `COPILOT_PROVIDER_*`" fallback relied on exactly the hole task 2.8 closes, so it no longer
   works. If C was cut, replay the captured `error.jsonl` as 7.2 does, mapping in the script and
@@ -1038,6 +1038,19 @@ every run id, and paste each surface's text verbatim into the Round log.
   (`runner-4a2a9d634569`) was left (harmless, inert) rather than deleted mid-turn-risk. `:8010`'s
   process still carries `MY_ANTHROPIC_KEY=invalid` in its environment until next restart — relevant
   to 7.5, which tests the var *unset*; note for whichever iteration drives 7.5.
+
+  **Driven 2026-10-04 (interactive), after group A (`4c054be`, `d08c2f5`): holds.** Trial Hub
+  restarted from `hub/` with `MY_ANTHROPIC_KEY=invalid` in its own environment (startup line: the
+  trial database, pid 28372). `testbed/drive1004-ghcp-s5-group-a/task73_drive.py` pointed `cp5` at
+  the 10-03 provider runner `runner-4a2a9d634569`, triggered "Say hello." (`run-905f58dd3ac9`), and
+  put `cp5` back on `runner-72c07eca7e75` afterwards. `GET /agent/cp5/chat` (the rendered timeline):
+  each of the three runs holds **exactly one** `error` entry, `code: "copilot.authentication"`,
+  `status_code: 401`, message *"Authentication failed with provider at https://api.anthropic.com
+  (HTTP 401)…"*, and **zero** `text` entries containing `Error:`. It is an `error`, not a
+  `diagnostic`, so hiding diagnostics does not hide it (the UI filter is by kind). No Copilot
+  allowance spent (Anthropic refused before any model call). The three runs are the Hub retrying the
+  queue entry (`"delivery failed 3 times; the Hub stopped retrying"`), not three error events per
+  run: filed as **F489**, outside this change.
 - [x] 7.4 (A) `dir <cp5's COPILOT_HOME>\hooks` holds no deciding hook, and the home's config names
   no trusted folder. (R2: `Run` records no environment, so the `COPILOT_ALLOW_ALL` half is test
   1.6's.)
