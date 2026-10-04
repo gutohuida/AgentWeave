@@ -77,8 +77,9 @@ value stored for that agent.
 
 #### Scenario: Any other server's call is put to the operator under its own name
 
-- **WHEN** the GitHub server is enabled and a Copilot agent under Workspace only calls a tool of an
-  MCP server Copilot reports under a name other than the GitHub server's or the Hub's own
+- **WHEN** the GitHub server is enabled and Copilot asks the Hub to decide a call, for an agent
+  under Workspace only, to a tool of an MCP server Copilot reports under a name other than the
+  GitHub server's or the Hub's own
 - **THEN** the call is put to the operator as a card naming that server
 - **AND** the card does not say the call acts on GitHub
 

@@ -1013,12 +1013,21 @@ models: claude-haiku-4.5, …`). The bullet becomes:
 
 > Before your verdict, run Copilot's `code-review` agent as a subagent on the changes from `<base>`
 > to `<commit>`: call the `task` tool with `agent_type` exactly `"code-review"`. If it fails because
-> a model is not available, call it again with `model` set to one the error lists. Weigh what it
+> a model is not available, call it again with `model` set to a named model the error lists, not
+> `auto`. Weigh what it
 > reports and check it yourself. It does not see this repository's instructions, and its findings
 > are not your verdict. If it did not run, say so; never describe a review it did not give. The
 > verdict is yours, and it is recorded only by `update_task`.
 
 (With several agents chosen, one `task` call each, every id named exactly.)
+
+**Why "not `auto`" (amendment verification, 2026-10-04; INFERRED).** Copilot's error lists `auto`
+among the available models (drive 7.1, `tasks.md` 7.1), and 7.1's retry with `model: "auto"` failed
+differently: `Unsupported native sessions host effect 'custom_agent_prompt'` (the upstream ACP bug
+recorded in `ghcp-s5-subagent-capture` item 3). That retry also carried the wrong-case `"Explore"`,
+so which of the two sent it down that path is not isolated; the only combination captured to work is
+the exact id plus a named model (`code-review` + `claude-haiku-4.5`, the same row). The bullet names
+the working one.
 
 **2. The Hub records what actually ran, beside the verdict.** A prompt alone cannot stop a false
 claim, and reading the verdict's prose for claims is the kind of detector this repository retired
@@ -1035,6 +1044,28 @@ the same timeline as the reviewer's verdict text and its `update_task` call.
   `RpcTurnRequest.agent_config` as `review_agents` (only the keys the turn reads, finding 14), and
   `copilot_acp.run_turn` passes it to `CopilotEventMapper(review_agents=…)`. A non-review turn, a
   non-Copilot runner, or an empty choice gives an empty list and no event.
+  - *(Amendment verification, 2026-10-04.)* VERIFIED-CODE: `review_agent_names` exists only inside
+    `if review is not None:` → `if runner == "copilot" and agent_row is not None:`
+    (`api/v1/agents.py:1957-1964`), so the renderer initialises it to `[]` at function scope and
+    returns it beside `stable`/`per_turn`/`tool_surface` (return dict `:2385-2402`). Consumers of
+    that dict: the trigger (`agent_trigger.py:1312`, `:1322-1331`, `:1336`, `:3401`, `:3440-3442`),
+    `_refresh_copilot_home` (`agents.py:1755-1772`, reads `stable` only) and
+    `GET /agents/agent-context` (`agents.py:2985-3007`, no `response_model`, so the key appears
+    there, always `[]` since that route passes no `review`). Every consumer reads keys by name and
+    no test asserts the dict's key set, so a new key breaks no caller.
+  - VERIFIED-CODE: `_prepare_copilot_turn` already receives `rendered_context`
+    (`agent_trigger.py:3365-3376`) and fills `agent_config` at `:3450`, so the list is at hand
+    there and no review state has to be re-derived. **Correction:** `review_agents` is added to
+    `agent_config` **only when the list is non-empty**. `test_copilot_byok_env.py:975` asserts the
+    whole `agent_config` equals `{"copilot_github_mcp": False}` (finding 14's "only the keys the
+    turn reads"), and a non-review turn reads no review key.
+  - VERIFIED (fixture, `ghcp-s5-subagent-capture` item 2): the mapper matches `asked` against the
+    subagent's `agentName`, which is the dispatch id (`explore` in
+    `hub/tests/fixtures/copilot/subagent.jsonl`; `code-review` in the second capture), carried as
+    fact `agent_name` on group A's status events (`copilot_acp.py:1336-1349`). It never matches on
+    the card's summary, which prefers `agentDisplayName`, the `task` call's free-text `name`
+    (`file-name-probe` in the fixture). `model` on `subagent.completed` is the model it ran on
+    (`claude-haiku-4.5` in the fixture).
 - **What it says.** Facts: `asked` (the list named), `ran` (each subagent the turn reported: `name`,
   `outcome` `completed`/`failed`, `model`), `missing` (asked but not run). Summary, e.g. *"This
   review was asked to consult `code-review`; Copilot ran no subagent in this turn."* or *"…; Copilot
@@ -1042,6 +1073,30 @@ the same timeline as the reviewer's verdict text and its `update_task` call.
   reported as `started`.
 - **When.** In `finish()`, after the flush, so it is the turn's last card. A turn that fails or is
   interrupted still reports (that is when a claim is least trustworthy).
+  - *(Amendment verification, 2026-10-04: every exit path traced.)* `finish()` is called once, in
+    `_await_prompt` (`copilot_acp.py:2664`), after the wait loop, on every path **once the prompt is
+    written**: a normal end; a prompt that errors (`AppServerError`/`TimeoutError`/`OSError`/other,
+    all turned into `failure`, `:2645-2656`); the turn timeout (`send_cancel`, `:2631-2634`); an
+    interrupt (`check_interrupt` → `session/cancel`, then the 10 s grace, `:2626-2630`;
+    `check_interrupt` and `send_cancel` cannot raise, `:2092-2108`); and a forced failure
+    (`fail_turn`, autopilot or plan-exit, `:2110-2114`, which cancels and lets the loop end). So
+    "a turn that fails or is interrupted still reports" is reachable, for those paths.
+  - It is **not** reached, by design: (a) any raise before the prompt is written (the posture and
+    mode refusals, `:2494-2549`, and every spawn/`session/new` failure; `run_turn`'s docstring
+    contract) and the return when a stop arrives during the MCP-announce wait (`:2458-2469`). In
+    each, Copilot was never given the bullet, so there is nothing to report and the spec's
+    failure scenario is scoped to a turn Copilot was given. (b) An `asyncio.CancelledError` of the
+    run's task, handled by the trigger (`_execute_rpc_run`, `agent_trigger.py:4093-4117`); no event is emitted on that
+    path for any mapper output, and this one is no exception.
+  - `finish()` today appends the swept notices after the flush (`copilot_acp.py:1148-1155`); the
+    report is appended **after the notices**, so it is last.
+  - **What the route returns if the report raises.** A raise from `finish()` escapes `run_turn`
+    after the prompt, breaking its "returns a `TurnOutcome` for everything after" contract; the
+    trigger's `except (Exception, asyncio.CancelledError)` in `_execute_rpc_run`
+    (`agent_trigger.py:4093`) then records the run as failed (`_record_run_failure_tail`), so a review whose verdict was already recorded would read as a failed run and its input
+    would be retried. So the report is built inside `try/except Exception` that logs and emits
+    nothing (the ledger's rule, `:2131-2134`): a broken report loses the card, never the turn.
+    Test 4.4 covers it.
 - **Not built:** stamping the report onto the task's transition row (a migration and a UI read for
   a fact the run's timeline already holds, one click from the transition's `run_id`). Recorded as a
   possible follow-up.
@@ -1205,21 +1260,63 @@ write tool added by a flag, or a server whose tool is not marked read-only). Thr
 
 1. **The flags that add write tools are widening flags.** `COPILOT_WIDENING_FLAGS`
    (`copilot_acp.py`) gains `--enable-all-github-mcp-tools` (no value), `--add-github-mcp-toolset`
-   and `--add-github-mcp-tool` (each `many`, like `--allow-tool`). They are removed from a run
+   and `--add-github-mcp-tool` (each `one`, like `--add-dir`; corrected from `many` by the
+   amendment verification, below). They are removed from a run
    without full access and reported as every widening flag is. D9's finding-11 bullet ("flags are
    operator-set, so this is the operator's authority") is narrowed: under full access they stand;
    under any other posture a runner flag must not silently give an agent GitHub write access.
+   - *(Amendment verification, 2026-10-04.)* **Arity, VERIFIED (clap help dump,
+     `scratchpad/f485/cli_help.txt`):** `ADD_GITHUB_MCP_TOOLSET add-github-mcp-toolset toolset "…
+     (can be used multiple times)"` and `ADD_GITHUB_MCP_TOOL add-github-mcp-tool tool "… (can be
+     used multiple times)"`: one singular value per occurrence, repeated. That is exactly
+     `--add-dir`'s shape (`ADD_DIR add-dir … (can be used multiple times)`, `one` in the table,
+     `copilot_acp.py:177`), not `--allow-url`'s (`urls`, plural, no repeat note, `many`). With
+     `one`, `strip_widening_flags` (`copilot_acp.py:1765-1796`) removes what Copilot itself would
+     read as the flag's value and nothing more. `--enable-all-github-mcp-tools` takes no value
+     (VERIFIED, same dump).
+   - **Report wording, a correction.** Removal is reported by `run_turn` as one
+     `diagnostic_event(code="copilot.runner_flag_removed", facts={"flag": …})` per flag
+     (`copilot_acp.py:2038-2050`), whose summary says the flag "lets Copilot approve actions on its
+     own account". That is untrue of these three: they add tools; whether a write tool is then
+     asked about is the INFERRED point below. So these three keep the same code and facts but get
+     their own summary: *"The runner flag `<flag>` was not passed to Copilot: it adds GitHub tools
+     that write, which only a run with Full access may have."*
 2. **The settings keys are swept from the Hub-owned home.** `_CONFIG_PERMISSION_KEYS`
    (`copilot_home.py`) gains `enableAllGithubMcpTools`, `githubMcpToolsets` and `githubMcpTools`,
    so a `config.json` written by anyone but the Hub cannot add them. (The operator's own
    `~/.copilot/config.json` carries none, VERIFIED.)
+   - *(Amendment verification, 2026-10-04.)* VERIFIED-CODE: `_sweep` pops every
+     `_CONFIG_PERMISSION_KEYS` key present and records them as **one** `removed` entry,
+     `config.json (<k1>, <k2>, …)` (`copilot_home.py:321-331`); the trigger turns a non-empty
+     `home.removed` into one `copilot.home_repaired` diagnostic (`agent_trigger.py:3425-3437`). So
+     no new reporting is needed, and test 5.3 asserts that single entry. `settings.json`, where
+     Copilot 1.0.91 keeps these keys canonically ("User settings belong in settings.json",
+     strings dump), is already removed from the home whole on every ensure
+     (`copilot_home.py:306-309`); item 2 closes the `config.json` fallback.
+   - **Not covered: repository-scope settings.** 1.0.91 has a repository settings scope
+     (`/model --repo` writes `.github/copilot/settings.json`, `--local` a git-ignored
+     `settings.local.json`; "unknown repo settings scope" in the native strings). Whether that
+     scope accepts `enableAllGithubMcpTools`/`githubMcpToolsets`/`githubMcpTools`, and whether an
+     untrusted folder (D3) is read for it, is **unknown** (not visible in the strings). If it does
+     and is, a file in the agent's own worktree could add write tools under Workspace only. What
+     bounds it is D9's rule, if a write tool's call arrives as a permission request (the INFERRED
+     point below). Recorded as an open question; nothing is built for it here.
 3. **The words say what happens.** The Settings toggle's help text, and the spec, say: *"Gives this
    agent Copilot's built-in GitHub tools, read-only. Copilot runs them without asking you. A tool
    that writes to GitHub is put to you first, and only a runner with Full access can add one."*
+   - *(Amendment verification, 2026-10-04.)* VERIFIED-CODE: the text lives in
+     `CopilotGithubMcpSetting` (`hub/ui/src/components/agents/AgentSettingsControls.tsx:389-393`,
+     with a doc comment at `:360-369` restating the old claim), and the existing UI test
+     `hub/ui/src/__tests__/copilotAgentSettings.test.tsx:206-212` asserts the old sentences
+     (*"every call to it under Workspace only is asked — never allowed outright."* and *"bypass this
+     card regardless of this setting."*). That test is **rewritten**, not added beside, and the doc
+     comment is rewritten with it. The old text was already wrong before F485 on its second
+     sentence: `--allow-tool` and `--allow-all-tools` are in `COPILOT_WIDENING_FLAGS`
+     (`copilot_acp.py:171-175`) and are stripped from every run without Full access.
 
 **Not measured, and why it is acceptable:** that a write tool would arrive as a
 `session/request_permission` (`readOnly: false`). Under Workspace only no write tool can now be
-added, so the card is reachable only under Ask me (every call goes to the operator anyway) or Full
+added by a runner flag or the agent's home (repository-scope settings are the open point above), so the card is reachable only under Ask me (every call goes to the operator anyway) or Full
 access (everything is allowed). The operator chose not to spend a throwaway-repo drive on it.
 
 **Drive 7.8's second bullet is rewritten** (it asked for a card that cannot appear): with the toggle
@@ -1923,6 +2020,54 @@ has not), **correction** (sibling text that is wrong about this change), or **no
   was never reached, not overridden by anything this Hub does. Filed as **finding F485**
   (`scripts/drive/FINDINGS.md`). `tasks.md` 7.8 left unchecked, marked blocked: as specified, the
   task cannot be completed in this environment.
+
+- **Amendment verification (D8a/D9a), 2026-10-04.** An independent comparison of the amendment
+  (commit `51cf278`) against the code at HEAD, re-deriving each claim. Corrections, each written
+  into its section:
+  1. **D8a, the bullet:** the retry names "a named model the error lists, not `auto`". 7.1's `auto`
+     retry hit the upstream `custom_agent_prompt` bug; only exact id + named model is captured
+     working (INFERRED which variable caused it).
+  2. **D8a, `agent_config`:** `review_agents` is added only when non-empty.
+     `test_copilot_byok_env.py:975` asserts the whole dict equals `{"copilot_github_mcp": False}`,
+     and would fail otherwise. VERIFIED: the renderer's dict has no exact-key consumer, and
+     `_prepare_copilot_turn` already holds `rendered_context`. `review_agent_names` needs a
+     function-scope default.
+  3. **D8a, matching:** on fact `agent_name` (`agentName`, the dispatch id), never the summary
+     (`agentDisplayName`, the `task` call's free-text `name`). VERIFIED against the fixture and
+     `ghcp-s5-subagent-capture`.
+  4. **D8a, when:** every exit path traced. `finish()` runs on every path once the prompt is
+     written. It does not run on a pre-prompt raise or return, nor on task cancellation. The
+     spec's failure scenario is scoped to a turn Copilot was given. The report goes after the
+     notices.
+  5. **D8a, a raise:** a raise in the report would escape `run_turn` after the prompt, and
+     `_execute_rpc_run` (`agent_trigger.py:4093`) would record a finished review as failed. So
+     the report is built under `try/except` and lost alone. Test added to 4.4.
+  6. **D9a, arity:** the two `--add-github-mcp-*` flags are `one`, not `many` (clap help: one
+     singular value, "can be used multiple times", the `--add-dir` shape).
+  7. **D9a, report wording:** `copilot.runner_flag_removed`'s summary ("lets Copilot approve
+     actions on its own account") is untrue of these three. They get their own summary, with the
+     same code and facts.
+  8. **D9a, sweep:** VERIFIED. The keys are reported as one `removed` entry,
+     `config.json (…)`, and surfaced by the existing `copilot.home_repaired` diagnostic; 5.3 is
+     made exact. `settings.json` is already removed whole. **New open point:** 1.0.91's
+     repository-scope settings (`.github/copilot/settings.json`, `settings.local.json`) are not
+     covered, and whether they accept the GitHub tool keys under an untrusted folder is unknown.
+     The "no write tool can be added under Workspace only" sentence is narrowed to runner flags
+     and the home.
+  9. **D9a, UI:** the help text is in `AgentSettingsControls.tsx:389-393`. The existing test
+     `copilotAgentSettings.test.tsx:206-212` asserts the old sentences, so it is rewritten (5.3,
+     5.4). The old second sentence was already false before F485, because `--allow-tool` and
+     `--allow-all-tools` are stripped outside Full access.
+  10. **Spec deltas:** agent-configuration's "Any other server's call" scenario now reads "Copilot
+      asks the Hub to decide", as the GitHub one does. No scenario still claims a card for a call
+      Copilot approves itself. agent-flows' failure scenario is scoped to a turn Copilot was
+      given. Every requirement's SHALL is on its first line.
+  11. **Task 1.13:** compared bullet by bullet with `test_copilot_github_mcp_toggle.py` (39 pass).
+      One gap, recorded in 1.13: nothing drives the trigger with a stored
+      `copilot_github_mcp: true` to show `agent_config` carries `True`. Only the `False`
+      key-only case is covered (`test_copilot_byok_env.py:975`). Left unticked.
+  12. **Tasks 7.7 and 7.8:** expectations rewritten to D8a and D9a. Their drive histories are kept
+      and the new expectations appended.
 
 ## Open questions for R2/R3
 

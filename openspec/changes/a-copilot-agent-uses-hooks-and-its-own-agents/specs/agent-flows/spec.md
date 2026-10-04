@@ -101,7 +101,8 @@ but did not run, so that a claim and the record of what happened are read side b
 
 #### Scenario: The report is made when the turn fails too
 
-- **WHEN** a Copilot review turn whose context named review agents fails or is stopped
+- **WHEN** a Copilot review turn whose context named review agents fails or is stopped after Copilot
+  was given the turn
 - **THEN** the run's stream still records which subagents ran
 
 #### Scenario: Without named review agents nothing is reported

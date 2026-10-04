@@ -451,6 +451,21 @@ scratch copy (DEAD-ENDS 2026-09-27).
     captured none, this case and the mapping are removed (design D9; operator-accepted
     2026-09-28), with the two spec scenarios on reporting a failed or starting server;
   - `GET /agents` returns `copilot_github_mcp` in the agent's `config`.
+
+  **Verification 2026-10-04 (amendment D8a/D9a), not ticked: one gap.** Compared bullet by bullet
+  with `hub/tests/test_copilot_github_mcp_toggle.py` (39 pass). Covered there: argv
+  (`TestBuildAcpArgv`, and the real spawn through `TestRunTurnThreadsAgentConfig`); the four
+  postures (`TestDecidePermissionGithubRule`); another reported server asked, its label and `None`
+  verdict (`:180`, `TestPermissionLabel`, `TestWorkspaceVerdictNone`); the unidentified server
+  refused whatever the toggle (`:189`); the string `"false"` (`:395`); the GitHub card label and
+  `None` verdict end to end from a raw `tool.execution_start` (`:407`); `agentweave` unchanged
+  (`:201`, `:237`, `:292`); the unavailable diagnostic, `pending` silent, once per turn
+  (`TestGithubMcpUnavailableDiagnostic`); the roster (`TestRosterExposure`); key-only
+  `agent_config` through the trigger (`test_copilot_byok_env.py:975`, the `False` case).
+  **Gap:** nothing drives `POST /agent/trigger` for an agent whose stored config is
+  `copilot_github_mcp: true` and shows the turn's `agent_config` carries `True` (R3's "the trigger
+  fills `agent_config` from the agent's config"). Hard-coding `False` at `agent_trigger.py:3450`
+  would pass every test. The case is added to 5.3; tick 1.13 when it passes.
 - [x] 1.14 (C, B, D) UI tests.
   - `hub/ui/src/__tests__/runnerProviderConfig.test.tsx`: the Runners page shows provider fields only
     when the CLI is `copilot`. It shows the D7 sentence about API keys and Claude Max, and renders a
@@ -752,24 +767,37 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
 - [ ] 4.4 (B; amendment 2026-10-04, F484, design D8a) Tests first, in
   `hub/tests/test_review_turn_copilot_agents.py` and `hub/tests/test_copilot_lifecycle_events.py`:
   - the rendered bullet names `agent_type` exactly `"code-review"` (each chosen id, in backticks and
-    quotes), says to retry with a `model` the error lists, and says not to describe a review that did
-    not run; it still ends with the `update_task` sentence; a non-review turn and a non-Copilot runner
+    quotes), says to retry with a named `model` the error lists and not `auto`, and says not to
+    describe a review that did not run; it still ends with the `update_task` sentence; a non-review turn and a non-Copilot runner
     still get no bullet (1.11's rows, unchanged);
   - the rendered dict carries `copilot_review_agents` equal to the list the bullet names (empty
-    without a bullet), and the Copilot turn's `agent_config["review_agents"]` is that list, through
-    `POST /agent/trigger` with `review_task_id` (the route, not the renderer alone);
+    without a bullet, including from `GET /agents/agent-context`), and the Copilot turn's
+    `agent_config["review_agents"]` is that list, through `POST /agent/trigger` with
+    `review_task_id` (the route, not the renderer alone); a non-review turn's `agent_config` has
+    **no** `review_agents` key (verification 2026-10-04: `test_copilot_byok_env.py:975` asserts
+    the whole dict and must stay green unchanged);
   - `CopilotEventMapper(review_agents=["code-review"])` fed `subagent.jsonl` with its `agentName`
     rewritten to `code-review` gives, at `finish()`, exactly one `status` with phase
     `review_agents_report` whose facts say `ran == [{name: "code-review", outcome: "completed", model:
     "claude-haiku-4.5"}]` and `missing == []`; fed `error.jsonl` (no subagent) it reports
     `ran == []`, `missing == ["code-review"]` and a summary saying no subagent ran; with
     `review_agents` empty it emits no such event; a `subagent.started` with no end reports
-    `outcome: "started"`; the event is a `status`, never a `diagnostic`.
-  Each fails today (no such wording, key, keyword or phase).
+    `outcome: "started"`; the event is a `status`, never a `diagnostic`; matching is on the
+    `agentName` fact, so the fixture's `agentDisplayName` (`file-name-probe`) does not count as
+    `code-review`; the report is after any swept notice, last of `finish()`'s events;
+  - (verification 2026-10-04) through `run_turn`'s harness (`test_copilot_acp_run_turn.py`'s
+    `_drive`), with `agent_config={"review_agents": ["code-review"]}`: a turn that times out and
+    a turn interrupted through `should_interrupt` each still end with the report; a turn refused
+    before its prompt (e.g. allow-all kept on) emits none; and with the report's builder patched
+    to raise, `run_turn` still returns its `TurnOutcome` (status unchanged) and no report event
+    is emitted.
+  Each fails today (no such wording, key, keyword or phase), except the cases asserting that
+  nothing is emitted, which pass today and guard the build.
 - [ ] 4.5 (B; D8a) Build: the bullet wording; `_render_hub_agent_context` returns
-  `copilot_review_agents`; the trigger's `_CopilotTurn.agent_config` adds `review_agents`;
+  `copilot_review_agents` (initialised to `[]` at function scope); the trigger's
+  `_CopilotTurn.agent_config` adds `review_agents` only when non-empty;
   `copilot_acp.run_turn` passes `review_agents` to the mapper; `CopilotEventMapper.finish()` emits
-  the report. Pass 4.4.
+  the report, built under `try/except` so a raise loses the report and never the turn. Pass 4.4.
 - [ ] 4.6 (B; D8a) Record F484 in `scripts/drive/FINDINGS.md` as fixed by the commit that builds 4.5,
   naming D8a; its follow-up (stamping the report on the transition row) stays unbuilt.
 
@@ -855,17 +883,30 @@ hub/ tests/` clean; `black --check` clean with and without `--target-version py3
   - `strip_widening_flags(["--enable-all-github-mcp-tools", "--add-github-mcp-toolset", "issues",
     "--add-github-mcp-tool", "create_issue", "--model", "x"], full_access=False)` keeps only
     `--model x` and names the three removed; with `full_access=True` all are kept; the `=value`
-    forms too;
+    forms too; each `--add-github-mcp-*` flag takes exactly one value (verification 2026-10-04,
+    clap help: arity `one`, like `--add-dir`), so in `["--add-github-mcp-tool", "a", "b"]` only
+    `a` goes with it;
   - through `run_turn`'s harness, a runner flag `--enable-all-github-mcp-tools` is absent from the
     spawned argv under `workspace` and present under full access, and the removal is reported the
-    way every widening flag's is;
+    way every widening flag's is (`copilot.runner_flag_removed`, `facts.flag`), with these three's
+    own summary saying the flag adds GitHub tools that write, not that it lets Copilot approve on
+    its own account;
   - `ensure_copilot_home` over a `config.json` holding `enableAllGithubMcpTools`, `githubMcpToolsets`
-    and `githubMcpTools` removes all three and reports them in `removed`;
-  - (UI, `hub/ui/src/__tests__/`) the GitHub toggle's help text says read-only, run without asking,
-    and that a write tool is put to the operator and needs Full access to add.
-  Each fails today.
-- [ ] 5.4 (D; D9a) Build: the three flags in `COPILOT_WIDENING_FLAGS`; the three keys in
-  `_CONFIG_PERMISSION_KEYS`; the help text (refresh the bundle: `hub/ui/src` and
+    and `githubMcpTools` removes all three and reports them as one `removed` entry,
+    `config.json (enableAllGithubMcpTools, githubMcpToolsets, githubMcpTools)`, in
+    `_CONFIG_PERMISSION_KEYS` order;
+  - (UI) the GitHub toggle's help text says read-only, run without asking, and that a write tool
+    is put to the operator and needs Full access to add. The existing case
+    `hub/ui/src/__tests__/copilotAgentSettings.test.tsx:206-212` asserts the old sentences and is
+    rewritten, not kept beside the new one;
+  - (verification 2026-10-04, 1.13's gap) through `POST /agent/trigger`, an agent whose stored
+    config is `copilot_github_mcp: true` gives the turn `agent_config["copilot_github_mcp"] is
+    True`, and a stored `"true"` string gives `False` (this one passes today: it is coverage the
+    built code lacked, not fail-first evidence).
+  Each of the others fails today.
+- [ ] 5.4 (D; D9a) Build: the three flags in `COPILOT_WIDENING_FLAGS` (`none`, `one`, `one`) and
+  their own removal summary; the three keys in `_CONFIG_PERMISSION_KEYS`; the help text and
+  `CopilotGithubMcpSetting`'s doc comment (`AgentSettingsControls.tsx:360-393`) (refresh the bundle: `hub/ui/src` and
   `hub/hub/static/ui` committed together). Pass 5.3.
 - [ ] 5.5 (D; D9a) Record F485 in `scripts/drive/FINDINGS.md` as fixed by the commit that builds 5.4,
   naming D9a and what stays INFERRED (a write tool arriving as a permission request).
@@ -1187,6 +1228,24 @@ every run id, and paste each surface's text verbatim into the Round log.
   internally (two underlying Copilot CLI sessions total, no second operator call). Left in place as
   evidence: task `task-ceea0a23940f` (`revision_needed`), evidence `ev-9ce973c8c18e`, agent `cp5`
   still carrying `copilot_review_agents: ["code-review"]`.
+
+  **Expectations rewritten 2026-10-04 (amendment D8a, F484; the history above is kept as it was
+  driven).** Re-drive after 4.5 is built, same setup (`cp5`, `copilot_review_agents =
+  ["code-review"]`, a review turn through a flow or `review_task_id`):
+  - The context file contains D8a's bullet: `<base>..<commit>`, `agent_type` exactly
+    `"code-review"`, the retry with a named model the error lists (not `auto`), and "If it did
+    not run, say so".
+  - The run's timeline ends with one `review_agents_report` status card, visible with diagnostics
+    hidden, whose `asked` is `["code-review"]`. Either it shows `code-review` ran (`outcome`, and
+    `model` from `subagent_completed`, matched by `agent_name`), and a `subagent_started` /
+    `subagent_completed` pair shares the `task` call's id, in which case record whether it
+    reviewed the named range (open question 7); or it reports `missing: ["code-review"]`, and
+    then the reviewer's verdict text and `update_task` notes are read beside it and their claim
+    recorded, as evidence for F484's fix (not a pass or fail of the Hub).
+  - The task ends `approved` or `revision_needed`, set by `cp5`'s `update_task`.
+  Pass when bullets 1 and 3 hold and the report card is present and agrees with the timeline's
+  subagent events. Whether Copilot chose to dispatch is the model's behaviour, recorded, not
+  gated.
 - [ ] 7.8 (D) With `copilot_github_mcp` false, the live `copilot.exe`'s command line contains
   `--disable-builtin-mcps` (R2: `Run` records no argv; read it while the run is live with
   `Get-CimInstance Win32_Process -Filter "ProcessId=<Run.pid>"`, or its child's). With it true, run one turn: `List one open issue in this repository
@@ -1222,6 +1281,23 @@ every run id, and paste each surface's text verbatim into the Round log.
   specified cannot be completed as written in this environment — there is no issue tool to list
   from, and no card was ever observed to deny. Left unchecked (blocked). **Allowance:** four real
   turns on `cp5` (Free-model Auto), no review dispatch.
+
+  **Expectations rewritten 2026-10-04 (amendment D9a, F485; the history above is kept as it was
+  driven).** The first bullet stands and has held. The second is replaced, because the card it
+  asked for cannot appear for a read-only tool Copilot approves itself. Re-drive after 5.4 is
+  built:
+  - With `copilot_github_mcp` true and `cp5` under Workspace only, one turn naming
+    `github-mcp-server`'s `search_code` runs it with **no** card: a `tool_use`/`tool_result` pair in
+    the timeline and no permission row in `GET .../logs` for that run (`run-09913f71b09a` above
+    already showed this on the pre-amendment build).
+  - Give `cp5`'s runner the flag `--enable-all-github-mcp-tools` and run one turn under Workspace
+    only. The live `copilot.exe` command line (`Get-CimInstance Win32_Process`) does **not**
+    carry it, and the run's stream has a `copilot.runner_flag_removed` diagnostic naming it with
+    D9a's wording ("adds GitHub tools that write"). Remove the flag from the runner afterwards.
+  - The agent's Settings show D9a's help text (read-only, run without asking, a write tool put to
+    the operator and only addable under Full access).
+  A write tool arriving as a card stays unmeasured (D9a, operator decision): no throwaway-repo
+  drive.
 
 ## 8. Archive
 
