@@ -1916,3 +1916,27 @@ disappears is indistinguishable from one that was forgotten.
   scripts,spec-queue}/**`, or name the directories.
 - **2026-10-04 (home) — `gh run list --commit` needs the full sha.** A short sha returns nothing,
   silently. Use `$(git rev-parse <sha>)`.
+- **2026-10-04 (home) — `sleep` does not wait in a Bash-tool command, even backgrounded.** A
+  `for … sleep 60` CI poll ran all 40 iterations in about a minute. A Monitor whose loop waited with
+  `ping -n 61 127.0.0.1` delivered no event in 30 minutes. What worked: a `run_in_background` Bash
+  call with `until <condition>; do timeout 30 tail -f /dev/null; done`, or simply
+  `gh run list` once the runs are known to be done.
+- **2026-10-04 (home) — `tests/test_openspec_task_evidence.py` turns all six CLI CI jobs red when a
+  suite task is ticked without its count.** It fired twice this session: slice 5 task 2.7 (count only
+  in a separate evidence block) and F488 task 3.2 (whose block also quoted an earlier run with
+  "2 failed"; it went green once the change was archived). After ticking any "full suite" task,
+  run `py -3.11 -m pytest tests/test_openspec_task_evidence.py -q` before pushing, and write
+  "<N> passed, <M> skipped at <sha>" on the task itself.
+- **2026-10-04 (home) — an agent declared through `session/sync` does not store
+  `copilot_review_agents`**, and `PATCH /agents/<name>` then answers 409 "Agent name '<x>' is reserved
+  for a configured agent". Route tests that need a stored agent config use the `add_agent` fixture
+  (as `test_review_turn_copilot_agents.py` does), then `bind_runner`.
+- **2026-10-04 (home) — `testbed/` is gitignored**, so drive scripts there cannot be committed;
+  record their names and outcomes in the task's evidence instead.
+- **2026-10-04 (home) — printing a non-cp1252 character (`→`) from a Python script to this console
+  raises `UnicodeEncodeError`** mid-run (a drive script died after its first POST). Start any
+  script that prints product text with `sys.stdout.reconfigure(encoding="utf-8")`.
+- **2026-10-04 (home) — several hub sources are CRLF on disk** (`hub/hub/copilot_home.py`,
+  `agent_trigger.py`, `agents.py`): a `str.replace` anchor written with `\n` silently misses. In
+  patch and mutation scripts, normalise `\r\n` → `\n`, edit, and write back in the file's own
+  convention.
