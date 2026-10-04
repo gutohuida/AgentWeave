@@ -35,7 +35,13 @@ with its evidence. What tonight needs from them:
   (`shell-judge-escape-scope-1-7c`, (b)). Task 2.3 is rewritten to compare the whole `hub/tests/`
   suite before and after the change: every moved outcome must be one of task 1.8's rows or a new row
   (`shell-judge-2-3-eight-files`, (c)). That unblocks 1.7c, 2.2a, 2.3 and then 4.1.
-- No `ORDER:` today. The operator did not set one, so compose takes the playbook's default.
+- **F488 first** (operator, 2026-10-04: file it on its own and take it first tonight). A run's
+  secret survives the scrub when Copilot's output splits it across two events. That is slice 5 group
+  C's security guarantee, so the item runs on Opus. **After F488, take the playbook's default**:
+  unarchived changes, then open findings by severity, then APPROVED rows. The `ORDER:` below names
+  only F488 and does not replace the rest of the queue.
+
+ORDER: F488
 
 ## 2026-10-03
 

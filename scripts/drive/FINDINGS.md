@@ -34003,3 +34003,34 @@ narrower scoped to only the two rows 1.7c names, not builtin for every word. The
 1.7c's rows were written in an R1-R3 round without a drive-letter-host measurement against the
 *other* half of this same change's own tests, and "FAILS today" was true but incomplete — it did
 not ask what the fix would break.
+
+## F488 (B) — a run's registered secret survives the scrub when Copilot's output splits it across two events
+
+**Status:** open, filed 2026-10-04 (interactive, operator: "yes" to filing it on its own and taking it
+first tonight). Found 2026-10-03 by `cp5` during drive task 7.7 of
+`a-copilot-agent-uses-hooks-and-its-own-agents`, and until now recorded only inside F484.
+**Ready:** yes. It is a defect in slice 5 group C's shipped scrub, and no change owns it.
+
+`record_agent_output` (`hub/hub/output_recording.py:41-42`) scrubs each event's `content` and
+`payload` separately, with `run_secrets.scrub`, which replaces whole literal occurrences of each
+registered value (`hub/hub/run_secrets.py:50-56`). `CopilotEventMapper.on_session_update`
+(`hub/hub/copilot_acp.py`) buffers `agent_message_chunk` and `agent_thought_chunk` text and emits it
+as a separate event whenever the stream switches between thought, message and tool call. So a
+registered value whose characters fall on both sides of one of those boundaries is stored and
+broadcast as two events, neither of which contains the whole value. Each passes the scrub, and the
+secret reads whole once the two events sit next to each other in the timeline. `cp5` reproduced
+this with `plainproxykey123`, split as `plainproxy` + `key123` (read from its review record and
+transcript; not re-driven here).
+
+**Not established:** how often a real provider key falls on a flush boundary in normal output. The
+model would have to be echoing the key at that moment. The repro forced the split. The severity is
+B, not A, because it needs a key in the run's output in the first place. But the guarantee group C's
+D7 states, that "neither the row nor the broadcast ever holds them", does not hold.
+
+**Fix direction (for the change that takes it, not decided here):** scrub across event boundaries.
+For example, hold back a tail as long as the longest registered secret minus one when a block is
+flushed, and scrub it together with the next block of the same run. Or scrub the buffered text
+before the transition flush, keeping a carry-over. Every other recorder that calls
+`run_secrets.scrub` per event (other runners' streams, tool output) needs the same look; that has not
+been checked. A test must split a registered value across a thought→message flush and across a
+message→tool_call flush, in the order the mapper actually emits them.
