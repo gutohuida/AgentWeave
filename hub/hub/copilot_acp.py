@@ -49,6 +49,7 @@ from typing import (
     Tuple,
 )
 
+from . import run_secrets
 from .codex_appserver import (
     DEFAULT_REQUEST_TIMEOUT_SECONDS,
     DEFAULT_TURN_TIMEOUT_SECONDS,
@@ -2145,13 +2146,21 @@ async def run_turn(
         if event_type == "session.error":
             # Until a real quota refusal is captured, every payload is logged whole: D8's
             # recognition is confirmed or corrected from it (`a-copilot-run-shows-its-credits`
-            # task 5.2; task 8.2 asks for the first one).
+            # task 5.2; task 8.2 asks for the first one). Scrubbed of the run's registered values
+            # before the cut (F488, D6); a scrub that raised logs no payload, never the raw one,
+            # and must not stop the event reaching the mapper below.
+            try:
+                logged = json.dumps(
+                    run_secrets.scrub((env or {}).get("AW_RUN_ID"), data), default=str
+                )[:2000]
+            except Exception:  # noqa: BLE001 - a log line never drops the error card
+                logged = "<unavailable>"
             logger.warning(
                 "Copilot session.error errorType=%r errorCode=%r statusCode=%r payload=%s",
                 data.get("errorType"),
                 data.get("errorCode"),
                 data.get("statusCode"),
-                json.dumps(data, default=str)[:2000],
+                logged,
             )
         try:
             ledger.observe_event(event_type, data)

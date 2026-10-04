@@ -1056,3 +1056,339 @@ def test_the_registry_scrubs_only_its_own_runs_values():
     assert run_secrets.registered("run-a") == ()
     run_secrets.register("run-c", ["", None])
     assert run_secrets.registered("run-c") == ()
+
+
+# F488 (`a-secret-split-across-two-events-is-still-scrubbed`, tasks 1.2, 1.3, 1.5, 1.8): a value
+# whose characters fall on both sides of a block boundary. The fake `run_turn` builds a real
+# `CopilotEventMapper`, feeds it wire-shaped updates and raw events, and passes every event each
+# call returns to `on_event` in the order returned -- the fixture's order is the mapper's (F190).
+
+SPLIT_KEY = "plainproxykey123"
+
+
+def _chunks(update_kind: str, text: str) -> list:
+    """*text* streamed as two chunks, as the wire sends a block."""
+    half = len(text) // 2
+    parts = [part for part in (text[:half], text[half:]) if part]
+    return [
+        ("update", {"sessionUpdate": update_kind, "content": {"type": "text", "text": part}})
+        for part in parts
+    ]
+
+
+def _msg(text: str) -> list:
+    return _chunks("agent_message_chunk", text)
+
+
+def _thought(text: str) -> list:
+    return _chunks("agent_thought_chunk", text)
+
+
+def _echo(text: str) -> list:
+    """One whole chunk: Copilot's echo of a `session.error`, which the mapper drops."""
+    return [
+        (
+            "update",
+            {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": text}},
+        )
+    ]
+
+
+def _raw(event_type: str, data: dict) -> list:
+    return [("raw", event_type, data)]
+
+
+_TOOL = [
+    (
+        "update",
+        {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call-1",
+            "title": "ls",
+            "kind": "execute",
+            "status": "pending",
+            "rawInput": {"command": "ls"},
+        },
+    ),
+    (
+        "update",
+        {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call-1",
+            "status": "completed",
+            "content": [{"type": "content", "content": {"type": "text", "text": "a.txt"}}],
+        },
+    ),
+]
+_TOOL_ROWS = [("tool_use", "ls"), ("tool_result", "shell completed")]
+_ERROR = _raw("session.error", {"message": "boom", "errorType": "model_call"}) + _echo(
+    "Error: boom"
+)
+_COMPACTED = _raw("session.compaction_complete", {"success": True})
+_COMPACTED_ROW = ("status", "Copilot compacted this conversation automatically.")
+_SUBAGENT = _raw("subagent.completed", {"toolCallId": "call-t", "agentName": "explore"})
+#: The run's own closing row, written by the executor after the turn.
+_CLOSING = ("status", "Run completed (exit 0).")
+
+# (steps, expected rows). Each boundary runs at a split of *m* or more and at 7|9, below *m*,
+# where the dangling-start rule cannot fire and only the carried tail can redact anything.
+SPLIT_CASES = {
+    "thought-message-10|6": (
+        _thought("I will use plainproxy") + _msg("key123 now."),
+        [("thinking", "I will use <redacted>"), ("text", "<redacted> now.")],
+    ),
+    "thought-message-7|9": (
+        _thought("I will use plainpr") + _msg("oxykey123 now."),
+        [("thinking", "I will use plainpr"), ("text", "<redacted> now.")],
+    ),
+    "message-tool-message-10|6": (
+        _msg("Key: plainproxy") + _TOOL + _msg("key123 done"),
+        [("text", "Key: <redacted>"), *_TOOL_ROWS, ("text", "<redacted> done")],
+    ),
+    "message-tool-message-7|9": (
+        _msg("Key: plainpr") + _TOOL + _msg("oxykey123 done"),
+        [("text", "Key: plainpr"), *_TOOL_ROWS, ("text", "<redacted> done")],
+    ),
+    "message-thought-5|11": (
+        _msg("plain") + _thought("proxykey123 hmm"),
+        [("text", "plain"), ("thinking", "<redacted> hmm")],
+    ),
+    "message-finish-dangling": (
+        _msg("the key starts plainproxyk"),
+        [("text", "the key starts <redacted>")],
+    ),
+    "error-card-8|8": (
+        _msg("a plainpro") + _ERROR + _msg("xykey123 b"),
+        [("text", "a <redacted>"), ("error", "boom"), ("text", "<redacted> b")],
+    ),
+    "error-card-7|9": (
+        _msg("a plainpr") + _ERROR + _msg("oxykey123 b"),
+        [("text", "a plainpr"), ("error", "boom"), ("text", "<redacted> b")],
+    ),
+    "compaction-10|6": (
+        _thought("use plainproxy") + _COMPACTED + _msg("key123 now"),
+        [("thinking", "use <redacted>"), _COMPACTED_ROW, ("text", "<redacted> now")],
+    ),
+    "compaction-7|9": (
+        _thought("use plainpr") + _COMPACTED + _msg("oxykey123 now"),
+        [("thinking", "use plainpr"), _COMPACTED_ROW, ("text", "<redacted> now")],
+    ),
+    "subagent-10|6": (
+        _msg("k plainproxy") + _SUBAGENT + _msg("key123 z"),
+        [("text", "k <redacted>"), ("status", "explore finished"), ("text", "<redacted> z")],
+    ),
+    "subagent-7|9": (
+        _msg("k plainpr") + _SUBAGENT + _msg("oxykey123 z"),
+        [("text", "k plainpr"), ("status", "explore finished"), ("text", "<redacted> z")],
+    ),
+    "thought-ending-in-a-blank-line-10|6": (
+        _thought("I will use plainproxy") + _thought("\n\n") + _msg("key123 now."),
+        [("thinking", "I will use <redacted>\n\n"), ("text", "<redacted> now.")],
+    ),
+    "thought-ending-in-a-blank-line-7|9": (
+        _thought("I will use plainpr") + _thought("\n\n") + _msg("oxykey123 now."),
+        [("thinking", "I will use plainpr\n\n"), ("text", "<redacted> now.")],
+    ),
+    "three-way-3|4|9": (
+        _thought("x pla") + _msg("inpr") + _thought("oxykey123 y"),
+        [("thinking", "x pla"), ("text", "inpr"), ("thinking", "<redacted> y")],
+    ),
+}
+
+
+def _mapper_turn(steps, *, around=None):
+    """A fake `copilot_acp.run_turn` driving a real mapper over *steps*; returns completed (a
+    failed outcome is retried as a new run). *around*, if given, takes over delivery of the
+    mapper's whole event list."""
+    from hub.copilot_acp import CopilotEventMapper
+
+    async def _run(**kwargs):
+        mapper = CopilotEventMapper()
+        await kwargs["on_session"]("sess-1")
+        emitted = []
+        for step in steps:
+            if step[0] == "update":
+                emitted += mapper.on_session_update(step[1])
+            else:
+                emitted += mapper.on_raw_event(step[1], step[2], {})
+            if around is None:
+                for event in emitted:
+                    await kwargs["on_event"](event)
+                emitted = []
+        emitted += mapper.finish()
+        if around is not None:
+            await around(kwargs["on_event"], emitted)
+        else:
+            for event in emitted:
+                await kwargs["on_event"](event)
+        return TurnOutcome(session_id="sess-1", status="completed")
+
+    return AsyncMock(side_effect=_run)
+
+
+async def _split_run(app, auth_headers, monkeypatch, agent, fake, *patches):
+    """Trigger *agent* on a provider runner whose key is `SPLIT_KEY`; returns its stored rows (by
+    `sequence`) and every `agent_output` broadcast."""
+    from contextlib import ExitStack
+
+    from hub.api.v1 import agent_trigger
+    from hub.db.models import AgentOutput
+
+    monkeypatch.setenv("MY_ANTHROPIC_KEY", SPLIT_KEY)
+    await _provider_agent(app, auth_headers, agent)
+    broadcasts: list = []
+    real_broadcast = agent_trigger.sse_manager.broadcast
+
+    async def _record(project_id, event_type, payload):
+        if event_type == "agent_output":
+            broadcasts.append(json.dumps(payload, default=str))
+        return await real_broadcast(project_id, event_type, payload)
+
+    with ExitStack() as stack:
+        stack.enter_context(patch("hub.copilot_acp.run_turn", fake))
+        stack.enter_context(
+            patch.object(agent_trigger.sse_manager, "broadcast", AsyncMock(side_effect=_record))
+        )
+        for each in patches:
+            stack.enter_context(each)
+        response = await _trigger(app, auth_headers, agent, session_mode="new")
+        assert response.status_code == 200, response.text
+        await await_background_runs()
+    run_id = response.json()["run_id"]
+    async with async_session_factory() as db:
+        rows = (
+            (
+                await db.execute(
+                    select(AgentOutput)
+                    .where(AgentOutput.run_id == run_id)
+                    .order_by(AgentOutput.sequence)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    return rows, broadcasts
+
+
+def _assert_no_key(rows, broadcasts) -> None:
+    for row in rows:
+        assert SPLIT_KEY not in row.content
+        assert SPLIT_KEY not in json.dumps(row.payload)
+    for payload in broadcasts:
+        assert SPLIT_KEY not in payload
+    # Read together, as the timeline shows them, the model's text does not spell it either.
+    joined = "".join(row.content.strip() for row in rows if row.kind in ("text", "thinking"))
+    assert SPLIT_KEY not in joined
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", list(SPLIT_CASES))
+async def test_a_provider_key_split_across_events_is_scrubbed(app, auth_headers, monkeypatch, case):
+    steps, expected = SPLIT_CASES[case]
+    rows, broadcasts = await _split_run(
+        app, auth_headers, monkeypatch, "split-1", _mapper_turn(steps)
+    )
+    _assert_no_key(rows, broadcasts)
+    assert [(row.kind, row.content) for row in rows] == [*expected, _CLOSING]
+    for row in rows:
+        if row.kind in ("text", "thinking"):
+            assert row.payload["text"] == row.content
+
+
+@pytest.mark.asyncio
+async def test_the_split_rows_follow_the_order_the_mapper_emits(app, auth_headers, monkeypatch):
+    """1.3: the thinking row is recorded before the text row that completes the value (the
+    reversed order's rows differ: `test_run_secrets_stream.py`)."""
+    steps, expected = SPLIT_CASES["thought-message-10|6"]
+    rows, _broadcasts = await _split_run(
+        app, auth_headers, monkeypatch, "split-order", _mapper_turn(steps)
+    )
+    assert [(row.kind, row.content) for row in rows] == [*expected, _CLOSING]
+    thinking = next(row for row in rows if row.kind == "thinking")
+    text = next(row for row in rows if row.kind == "text")
+    assert thinking.sequence < text.sequence
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["thought-message-10|6", "thought-message-7|9"])
+async def test_a_retried_locked_write_stores_the_same_split_rows(
+    app, auth_headers, monkeypatch, case
+):
+    """1.5, a placement guard: the text row's first write meets `database is locked` at the real
+    `record_agent_output`'s own commit, after everything before it in that function has run."""
+    from sqlalchemy.exc import OperationalError
+
+    from hub.api.v1 import agent_trigger
+
+    real = agent_trigger.record_agent_output
+    locked: list = []
+
+    class _LockedAtCommit:
+        def __init__(self, db):
+            self._db = db
+
+        def __getattr__(self, name):
+            return getattr(self._db, name)
+
+        async def commit(self):
+            raise OperationalError("INSERT INTO agent_outputs", {}, Exception("database is locked"))
+
+    async def _record(db, project_id, agent, **kwargs):
+        if kwargs.get("kind") == "text" and not locked:
+            locked.append(kwargs["sequence"])
+            return await real(_LockedAtCommit(db), project_id, agent, **kwargs)
+        return await real(db, project_id, agent, **kwargs)
+
+    steps, expected = SPLIT_CASES[case]
+    rows, broadcasts = await _split_run(
+        app,
+        auth_headers,
+        monkeypatch,
+        "split-retry",
+        _mapper_turn(steps),
+        patch.object(agent_trigger, "record_agent_output", _record),
+        patch.object(agent_trigger, "OBSERVATION_RETRY_DELAYS", (0.0, 0.0)),
+    )
+    assert locked, "the text row's write never met the lock"
+    assert [(row.kind, row.content) for row in rows] == [*expected, _CLOSING]
+    _assert_no_key(rows, broadcasts)
+
+
+@pytest.mark.asyncio
+async def test_interleaved_writes_are_scrubbed_in_sequence_order(app, auth_headers, monkeypatch):
+    """1.8: `finish()`'s emit and a late notification can interleave in `_on_event`. The first
+    event's write is held before its write closure runs, and the second completes first; the rows
+    read by `sequence` are the sequential case's exactly (7|9, so only the tail can redact)."""
+    from hub.api.v1 import agent_trigger
+
+    gate = asyncio.Event()
+    state: dict = {}
+    real_observation = agent_trigger._record_observation
+
+    async def _held(write, *, run_id, what, drop=True):
+        if state.get("armed") and what.startswith("output ") and "held" not in state:
+            state["held"] = what
+            await gate.wait()
+        return await real_observation(write, run_id=run_id, what=what, drop=drop)
+
+    async def _interleaved(on_event, emitted):
+        assert [event.kind for event in emitted] == ["thinking", "text"]
+        state["armed"] = True
+        first = asyncio.create_task(on_event(emitted[0]))
+        second = asyncio.create_task(on_event(emitted[1]))
+        await second
+        assert "held" in state and not first.done()
+        gate.set()
+        await first
+
+    steps, expected = SPLIT_CASES["thought-message-7|9"]
+    rows, broadcasts = await _split_run(
+        app,
+        auth_headers,
+        monkeypatch,
+        "split-race",
+        _mapper_turn(steps, around=_interleaved),
+        patch.object(agent_trigger, "_record_observation", _held),
+    )
+    assert [(row.kind, row.content) for row in rows] == [*expected, _CLOSING]
+    _assert_no_key(rows, broadcasts)

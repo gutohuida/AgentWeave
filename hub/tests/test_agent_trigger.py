@@ -3220,6 +3220,83 @@ async def test_a_lock_that_clears_on_retry_still_records_the_row(app, auth_heade
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "thought, reply, expected",
+    [
+        (
+            "I will use plainproxy",
+            "key123 now.",
+            [("thinking", "I will use <redacted>"), ("text", "<redacted> now.")],
+        ),
+        (
+            "I will use plainpr",
+            "oxykey123 now.",
+            [("thinking", "I will use plainpr"), ("text", "<redacted> now.")],
+        ),
+    ],
+    ids=["10|6", "7|9"],
+)
+async def test_a_registered_value_split_across_claude_blocks_is_scrubbed(
+    app, auth_headers, bind_runner, monkeypatch, thought, reply, expected
+):
+    """F488 task 1.4: the `exec` executor joins a run's text across events too. A Claude run
+    registers a value when the Hub's environment or the agent's `env_vars` carry
+    `COPILOT_PROVIDER_API_KEY`; here registration is patched to that value. The stream is two
+    `assistant` lines of one block each, the shape `_F359_LINES` uses."""
+    import json as _json
+
+    from sqlalchemy import select
+
+    from hub import run_secrets
+    from hub.db.engine import async_session_factory
+    from hub.db.models import AgentOutput
+
+    key = "plainproxykey123"
+    real_register = run_secrets.register
+    monkeypatch.setattr(
+        run_secrets, "register", lambda run_id, values: real_register(run_id, [key])
+    )
+
+    def _line(block):
+        return (
+            _json.dumps({"type": "assistant", "session_id": "s", "message": {"content": [block]}})
+            + "\n"
+        )
+
+    lines = [
+        _line({"type": "thinking", "thinking": thought}),
+        _line({"type": "text", "text": reply}),
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n',
+    ]
+    run = await _f359_trigger(
+        app,
+        auth_headers,
+        bind_runner,
+        "f488-claude",
+        _fake_pty(lines),
+        agent_trigger.record_agent_output,
+    )
+    assert run.status == "completed", run.error
+    async with async_session_factory() as db:
+        rows = (
+            (
+                await db.execute(
+                    select(AgentOutput)
+                    .where(AgentOutput.run_id == run.id)
+                    .order_by(AgentOutput.sequence)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    model_rows = [(row.kind, row.content) for row in rows if row.kind in ("text", "thinking")]
+    assert model_rows == expected
+    assert key not in "".join(content for _kind, content in model_rows)
+    for row in rows:
+        assert key not in row.content and key not in _json.dumps(row.payload)
+
+
+@pytest.mark.asyncio
 async def test_a_run_failed_by_its_read_loop_does_not_leave_its_process_running(
     app, auth_headers, bind_runner
 ):

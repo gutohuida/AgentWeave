@@ -2835,8 +2835,11 @@ async def _execute_run(
                     )
             for event in events:
                 sequence += 1
+                # F488: joined across the run's text, beside `sequence` and outside the retried
+                # write, so the carried text follows the timeline's order and takes each event once.
+                recorded = run_secrets.scrub_stream(run_id, event)
                 await _record_observation(
-                    lambda db, event=event, sequence=sequence: record_agent_output(
+                    lambda db, event=recorded, sequence=sequence: record_agent_output(
                         db,
                         project_id,
                         agent,
@@ -3763,8 +3766,11 @@ async def _execute_rpc_run(
         async def _on_event(event) -> None:
             nonlocal sequence
             sequence += 1
+            # F488: in the same synchronous step as `sequence`, so two interleaved calls scrub in
+            # the timeline's order; bound to the write, so a retry never scrubs again.
+            recorded = run_secrets.scrub_stream(run_id, event)
             await _record_observation(
-                lambda db, sequence=sequence: record_agent_output(
+                lambda db, event=recorded, sequence=sequence: record_agent_output(
                     db,
                     project_id,
                     agent,

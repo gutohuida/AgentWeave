@@ -314,7 +314,7 @@ to miss. Only a key with a separator outside `[A-Za-z0-9+/=_-]` (a dotted JWT, s
 into pieces the exact pass no longer sees as one value, and then only in tool, diagnostic and
 error rows, which D1 does not join.
 
-### D6 — The `session.error` log line is scrubbed too (R2, recommended; open question 3)
+### D6 — The `session.error` log line is scrubbed too (R2; open question 3, DECIDED: folded in)
 
 `_on_armed_raw_event` logs `json.dumps(data, default=str)[:2000]` (`copilot_acp.py:2124-2130`).
 Pass `data` through `run_secrets.scrub(env.get("AW_RUN_ID"), data)` **before** `json.dumps` and
@@ -395,7 +395,11 @@ changes the run's outcome as above, never the route's response. `POST /agents/{n
 
 ## Open questions for the operator
 
-1. **No hold (D1, recommended), or hold; and *m*?** D1 can show up to 7 characters of a key at a
+All three were **DECIDED by the operator on 2026-10-04** (`spec-queue/APPROVALS.md`, "APPROVED,
+fold the log in"): (1) no hold, `m = min(8, len // 2)` with no floor; (2) join across tool and
+other cards; (3) D6 folded in, with its guard. The questions are kept below as they were asked.
+
+1. **DECIDED 2026-10-04: no hold; `m = min(8, len // 2)`, no floor.** **No hold (D1, recommended), or hold; and *m*?** D1 can show up to 7 characters of a key at a
    boundary (less than half of a short one), and never delays anything. Holding shows no
    fragment, but can hide a thought and the tool cards after it until the next text closes. For
    very short registered values (a proxy's `test`), D1's dangling rule also garbles event ends
@@ -406,17 +410,17 @@ changes the run's outcome as above, never the route's response. `POST /agents/{n
    thought across `_after_open_blocks` cards and permission waits, which D3 already rejects. The
    floor's only gain is fewer `<redacted>` marks at event ends for a 4- to 7-character key, which is
    already garbled inside every event; showing 3 of its 4-7 characters is the worse trade.
-2. **Joining across tool cards (D2)**: recommended yes. It costs nothing under D1. **R3 concurs,
+2. **DECIDED 2026-10-04: yes, join across tool and other cards.** **Joining across tool cards (D2)**: recommended yes. It costs nothing under D1. **R3 concurs,
    and adds that it is no longer optional for the raw-event cards:** since `d08c2f5`, an error,
    compaction or subagent card closes the open block, so a value the model writes across a
    `session.error` is split by the Hub itself, not by the model; a join that stopped at cards would
    leave that split, which the mapper creates, unhandled.
-3. **The `session.error` log line**: R2 recommends folding it in (D6, tasks 1.7 and 2.4); the
+3. **DECIDED 2026-10-04: fold it in (D6, with the guard).** **The `session.error` log line**: R2 recommends folding it in (D6, tasks 1.7 and 2.4); the
    alternative is filing it as its own finding. **R3 concurs: fold it in**, with D6's guard so a
    raise cannot drop the error card. It is one call on the same registry, the payload is exactly
    the provider error that quotes a key, and the log is what an operator pastes into a report.
-The pre-approval review (round log) left questions 1-3 and their recommendations unchanged; they
-remain open for the operator.
+The pre-approval review (round log) left questions 1-3 and their recommendations unchanged; the
+operator then decided all three as recommended (above).
 
 4. **Ordering with slice 5** (for information). This change adds to `agent-stream-events` and does
    not depend on slice 5's `runner-registry` delta archiving first. It does depend on `run_secrets`
