@@ -956,6 +956,97 @@ are string work.
   `classify` and `_decide` "agree about a symlink" (`workspace_writes.py:8-10` and `:172-174`),
   which is only half true after D12. Task 2.0b corrects it.
 
+### D13 (R1, draft — not yet reviewed) — a bracket expression's own colon is not a drive-letter break
+
+**The defect (task 1.4c, carried from iteration 41; re-measured this round against the current
+code, not assumed from the prior round's note).** D2 step 6's whole-value reading is the one D8
+depends on to see a bracket expression as one pattern rather than as however rule 6's piece split
+(step 3) happened to cut it (D2 step 3's own text: "a bracket expression can hold a `:`
+... so dividing it would lose the glob"). `_judge_whole_value` (`hub/hub/mcp_server.py:2137`) reads:
+
+```python
+if not _DRIVE_LETTERS:
+    refusal = _judge_piece(value, root, argument, continues, budget)
+    ...
+segments = [segment for segment in value.split(":") if segment]
+if _DRIVE_LETTERS or len(segments) > 1:
+    for index, segment in enumerate(segments): ...
+```
+
+On a drive-letter host the undivided call is skipped outright — not narrowed, **skipped** — and the
+value is only ever judged as `value.split(":")`'s segments. Measured directly
+(`testbed/scratch/measure_1_4c_bracket_colon_gap.py`, gitignored, not committed), on this Windows
+machine, with `_DRIVE_LETTERS` true: `"[[:alpha:]]p/x".split(":")` is `['[[', 'alpha', ']]p/x']`.
+None of the three holds a usable bracket expression (`_bracket_expression_end` finds no closing `]`
+for the lone `[[` fragment, so `_relax_bracket_pattern` keeps it a literal `[[`, matching nothing),
+so `_glob_links` is never reached with the pattern `_relax_bracket_pattern` would otherwise turn
+into `?p` (which does match `up`, confirmed directly: `_holds_glob_character` is already True on
+the undivided value, and the existing `not _WINDOWS` branch of
+`test_a_posix_character_class_is_caught_whole_only_off_a_drive_letter_host_1_4c` already proves the
+undivided reading refuses correctly once it runs). This is not limited to `[[:alpha:]]`-style POSIX
+classes: any bracket expression whose contents include a literal `:` (`[a:b]p`, matching one of `a`,
+`:` or `b`) is split the same way, losing the same glob. The gap is in **which colons are breaks**,
+not in anything downstream of the split.
+
+**Why D9's existing carve-outs don't already cover this.** D9 fixes *where the Windows rules are
+tested* (a real Windows CI job, not a monkeypatched constant) and *when `_DRIVE_LETTERS` is read*
+(at call time, not baked into a regex at import). Neither changes *what counts as a break*. The
+step-3 drive exception (a `:` directly after a single ASCII letter that begins the value or a piece)
+is also a different carve-out, for a different reason (`Z:foo\bar` must stay one piece so `_where`
+can resolve it on drive Z) — it does not touch step 6's reasoning for skipping the undivided call
+(`ntpath.realpath` misreads a bare `X:` as a drive, which would wrongly refuse a line reference or a
+regular expression; D2 step 6 measured 44 such words over this repository's own transcripts, all
+regex or line references, none a bracket expression). So a genuinely new rule is needed, not a reuse
+of either existing carve-out's text — matching what `next_action` asked this round to confirm before
+writing anything.
+
+**Proposed rule.** Before the drive-letter host's colon split in `_judge_whole_value`, mask (not
+strip) the `:` characters that fall **inside a bracket expression** (found the same way D8 step 2
+already finds one for `_relax_bracket_pattern`: `_bracket_expression_end`, so the two stay in
+agreement about what counts as a bracket), so the split does not break there; restore them in each
+surviving segment before it is judged. Concretely (prototyped and measured in
+`testbed/scratch/measure_1_4c_bracket_mask_prototype.py`, gitignored, not committed, mirroring the
+existing `_mask_extglob_groups`/`_restore_extglob_sentinels` pair D2 step 2 already uses for the same
+kind of problem with `(`, `@` and `|`):
+
+- `_bracket_expression_spans(text)`: every `(start, end)` span of a bracket expression in `text`,
+  found by scanning for `[` and calling `_bracket_expression_end` exactly as `_relax_bracket_pattern`
+  does (a `[` with no closing `]` yields no span, left untouched, same literal-character reading
+  `_relax_bracket_pattern` and `fnmatch` already give it).
+- `_mask_bracket_colons(value)`: within each span, each `:` is replaced by one sentinel code point
+  (a new one, distinct from `_EXTGLOB_*`'s); outside every span, `value` is untouched.
+- `_judge_whole_value`'s drive-letter branch splits the **masked** value at `:` instead of `value`
+  itself, and restores the sentinel back to `:` in each resulting segment before it reaches
+  `_judge_piece` (the same shape `_restore_extglob_sentinels` already gives `_judge_pieces_reading`'s
+  pieces) — the segment `_judge_piece` sees, and the text any refusal quotes, is exactly the
+  substring of the original value, colons included, never the masked or restored-but-reordered text.
+
+Measured against the prototype (five cases, including every shape D2 step 6's existing cost table
+already named): `"[[:alpha:]]p/x"` now yields one segment, the whole undivided value, unchanged by
+masking since the span covers both colons; `"Z:foo\\bar"` (no bracket) is untouched, still splitting
+to `["Z", "foo\\bar"]` exactly as today, so the drive exception's own behaviour does not move;
+`sed`'s `'s/::.*//'`-shaped text (no bracket) is untouched, still splitting the same way it does
+today, so none of D2 step 6's measured 44 words changes side; `"[a:b]x"` (an ordinary bracket, not a
+POSIX class) now stays one segment too, matching D2 step 6's own stated reason for judging the whole
+value undivided ("a bracket expression can hold a `:`") rather than only the narrower POSIX-class
+case; `"a:[u:p]/x"` splits at the outer colon (`a`, `[u:p]/x`) but keeps the bracket's own colon,
+showing the mask is scoped to spans, not applied past them.
+
+**What this does not change.** The step-3 piece split (`_judge_pieces_reading`,
+`_PIECE_BREAKS_SPLIT_RE`) is untouched — it exists to separate genuinely distinct references
+(`sub/@s/p/w1`'s pieces), and the whole-value reading this change narrows is the one place D2 step 6
+already says a bracket's own `:` must survive undivided. The non-drive-letter branch
+(`if not _DRIVE_LETTERS`) is untouched: POSIX already calls `_judge_piece` on the undivided value
+directly, so it needs no mask.
+
+**What this still leaves open, named rather than assumed closed.** This round has not yet re-checked
+whether `_glob_links`'s own base-resolution reasoning (D8 step 1, "The whole value on a drive-letter
+host is judged between its colons") needs the same mask applied to the base-crossing-a-colon case it
+already describes, since that text was written against the pre-mask behaviour. **This section is a
+first-round draft (R1 of this round's three): it has not yet had its own two independent
+re-derivations against the code (R2, R3), and per `CLAUDE.md`'s round discipline no line of
+`_judge_whole_value` is to change until both have run.** `next_action` names R2 as the next step.
+
 ## The bounds (R4: per `_decide`)
 
 One `_Budget` is created by `_decide` and passed through every `_read_command` it makes: both

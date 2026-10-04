@@ -359,6 +359,35 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   bracket rows (`[u]p/x`, `'[[:alpha:]]p'/x`, `./u[p]`) all pass. 1.4c itself stays unticked for the
   three unrelated gaps named above (D9 round, absolute top-level dot-glob, bash-dot-rule control),
   none of which this iteration touched.
+
+  **Iteration 46 (R1 of this gap's own round, draft only — no production change).** Took the
+  Windows-side POSIX-class gap, the most tractable of the three remaining named gaps, and wrote its
+  design round's first of three required rounds (`CLAUDE.md`'s round discipline: a change needing a
+  spec goes through three independent rounds before a line is implemented). Re-derived against
+  design.md's actual D9 text first, per the standing lesson (iteration 43): confirmed D9 as written
+  covers only the CI-job and call-time-read rules, not this colon-split interaction, so patching D9
+  inline would not have been a genuine design round. Measured the defect directly against the
+  current code (`testbed/scratch/measure_1_4c_bracket_colon_gap.py`, gitignored, not committed, this
+  machine's `_DRIVE_LETTERS` is natively true so no monkeypatching was needed): `_judge_whole_value`
+  skips its undivided `_judge_piece` call outright on a drive-letter host, splitting
+  `"[[:alpha:]]p/x"` into `['[[', 'alpha', ']]p/x']`, none of which carries a usable bracket
+  expression, so `_glob_links` is never reached with the pattern that would match `up`. Prototyped a
+  fix (`testbed/scratch/measure_1_4c_bracket_mask_prototype.py`, gitignored, not committed): mask a
+  bracket expression's own `:` before the drive-letter colon split (found by the same
+  `_bracket_expression_end` D8 step 2 already uses, mirroring the existing
+  `_mask_extglob_groups`/`_restore_extglob_sentinels` pair D2 step 2 uses for the same kind of
+  problem with `(`, `@` and `|`), restoring it in each segment before `_judge_piece` sees it.
+  Measured the prototype against five cases, including the drive-letter row (`Z:foo\bar`, unaffected)
+  and a non-bracket regex-shaped row (unaffected, so D2 step 6's own measured 44 words do not move):
+  masking is a no-op whenever there is no bracket expression, and keeps a bracket's own colons intact
+  when there is one. Wrote this up as design.md's new **D13** section, explicitly marked "R1, draft —
+  not yet reviewed", naming what it does and does not change and what it leaves open
+  (`_glob_links`'s own base-resolution text for a base crossing a colon, D8 step 1, not yet
+  re-checked against the proposed mask). **No file under `hub/` was touched this iteration** --
+  `mcp_server.py` and the test file are unchanged, per round discipline: R2 and R3 each need their
+  own independent re-derivation against the code before any line of `_judge_whole_value` changes.
+  1.4c stays unticked; this gap now has a draft design but no implementation, and the other two named
+  gaps (absolute top-level dot-glob, bash-dot-rule control) are untouched.
 - [x] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
   - `cp n [u]p/` and `cp n ./u[p]` (a trailing `]` the trim removes). Each PASSES today only by the tail (`'/'`, `'/u[p'`), so assert the resolved target, which FAILS today; each FAILS against R5 (allowed).
   - `cp n [.]./x` refused as outside, quoting `'[.]./x'`. PASSES today by the tail `'/x'`, FAILS on the reason assertion and against R5 (the word `.]./x` is inside).
