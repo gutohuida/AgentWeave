@@ -2074,6 +2074,30 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
 
   Record `bash --version`, `shopt globskipdots` and `shopt extglob`. Delete the scratch.
 
+  **Iteration 64.** Built the first three bullets plus the R4 bullet, in a fresh
+  `testbed/scratch/shell_judge_3_1_drive/` (deleted after use; not the whole `testbed/scratch/`,
+  which holds unrelated prior drives). R6 and R8 need their own junction/bracket/apostrophe
+  setups and are left for the next firing, re-derived fresh against `design.md`'s own R6/R8 text
+  rather than reusing this note's framing, per `next_action`'s split instruction.
+  - Bullet 1, in Git Bash: `cp notes.md .{,.}/` → `cp: -r not specified; omitting directory
+    './'` (exit 1) but `notes.md` lands in the parent (confirmed by listing). `cp notes.md
+    {.,.}.` → same warning for `'..'` (exit 1), `notes.md` lands in the parent again. `mkdir -p
+    src/{a,b}` creates both `src/a` and `src/b`. All three exactly as claimed.
+  - R4 bullet: created a real NTFS junction `up` → `../outside` with PowerShell's `New-Item
+    -ItemType Junction` (confirmed `Get-Item up` reports `LinkType: Junction`, target resolves).
+    In Git Bash, `cp n u*/` (glob expands to the one match `up/`) exits 0, and the file lands
+    physically in `../outside/`, not in the junction's own directory entry — a real escape
+    through a glob-matched junction, exactly as D8/R4 describes and as the design's own `up` →
+    `out` measurement found.
+  - Third bullet: `bash -c 'bash -c "echo .\\./x"'` printed `../x` exactly as claimed (nested
+    bash each remove one level of backslash: `.\\./x` → `.\./x` → `../x`).
+  - Recorded now since they do not depend on the remaining R6/R8 setup: `bash --version` →
+    `GNU bash, version 5.2.37(1)-release (x86_64-pc-msys)`; `shopt globskipdots` → `on`; `shopt
+    extglob` → `off`. (These are this dev machine's Git Bash defaults; no code depends on them
+    changing before the next firing re-measures if needed.)
+
+  **Stays unticked**: R6 and R8's bullets are not yet built.
+
 ## 4. Close
 
 - [ ] 4.1 F362 and F403 Status lines in `scripts/drive/FINDINGS.md` → `fixed <sha>`; F444 (the linked-dependency-directory finding, filed 2026-09-24 under `B4-dep-links`) left open and noted as a prerequisite for registering a JavaScript project; regenerate the backlog; `openspec validate the-shell-judge-reads-a-word-whole --strict`; archive
