@@ -150,7 +150,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
   `task` call's `tool.execution_start` and before the subagent's own tool events, which carry
   `parentToolCallId`. `subagent.jsonl` is replaced with that capture. `subagent.failed` is still not
   captured. Group A is unblocked. Full evidence is on the DECISIONS.md row.
-- [ ] 1.2 (A) `hub/tests/test_copilot_lifecycle_events.py`: feed each fixture from 1.1 through the
+- [x] 1.2 (A) `hub/tests/test_copilot_lifecycle_events.py`: feed each fixture from 1.1 through the
   Copilot adapter's `map_events` in its recorded order.
   - `compaction.jsonl` gives exactly one `status` event with `phase == "compacted"`, carrying
     `pre_tokens`, `post_tokens`, `token_limit`, `trigger`, and `percent` computed as design D4 says.
@@ -173,7 +173,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
   stream-transport member; design, *Required of slices 1–4*).
 
   Run `py -3.11 -m pytest hub/tests/test_copilot_lifecycle_events.py -v`.
-- [ ] 1.3 (A) Same file, errors.
+- [x] 1.3 (A) Same file, errors.
   - `error.jsonl` in its **recorded** order (R3 predicts raw event first) gives exactly one `error`
     event (code `copilot.<errorType>`, with `status_code` and `remediation` in its facts), no
     `diagnostic` for it, and no `text` event containing `Error: <message>` (design D5:
@@ -198,7 +198,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
     state unchanged: read it before and after (slice 4's reader if built, else
     `provider_allowance`). This tests the recorder, not the run: slice 4 may hold the queue from the
     same raw event through the allowance reading, and that is not this change's.
-- [ ] 1.4 (A) `hub/tests/test_checkpoint_from_compaction.py`: one test per row of design D4's table,
+- [x] 1.4 (A) `hub/tests/test_checkpoint_from_compaction.py`: one test per row of design D4's table,
   driving `checkpoint_trigger.consider(..., compacted=True)` against real DB rows (pattern:
   `hub/tests/test_checkpoint_cutover.py`). Patch `generate_checkpoint` and `cut_over` only as
   existing checkpoint tests do. For each row, assert:
@@ -215,7 +215,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
     `consider_from_compaction` is not dropped: once the in-flight task finishes, `consider` is
     called with `compacted=True`, and never while the first is still running. This fails on a
     plain copy of `consider_from_reading`'s early return.
-- [ ] 1.5 (A) Same file: `record_agent_output(kind="status", payload={"phase": "compacted", …},
+- [x] 1.5 (A) Same file: `record_agent_output(kind="status", payload={"phase": "compacted", …},
   run_id=…)` dispatches `consider_from_compaction` with the conversation resolved from the run.
   Assert it through a patched `consider`. A `status` with any other phase does not dispatch. With
   `consider` patched to raise, `POST /agents/{name}/output` still answers 201 and stores exactly
@@ -224,7 +224,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
   reached through a route (an ASGI app always runs in one), so it is a direct synchronous call of
   `consider_from_compaction`, which returns `None` and leaves `_in_flight` and
   `_compaction_pending` without that conversation.
-- [ ] 1.6 (A) `hub/tests/test_copilot_home_has_no_deciding_hook.py`: create a Copilot agent through
+- [x] 1.6 (A) `hub/tests/test_copilot_home_has_no_deciding_hook.py`: create a Copilot agent through
   `POST /agents` (slice 2 writes its `COPILOT_HOME`), then:
   - every `*.json` under `<COPILOT_HOME>/hooks/` and the `hooks` key of `<COPILOT_HOME>/settings.json`
     contains none of `permissionRequest`, `PermissionRequest`, `preToolUse`, `PreToolUse`,
@@ -483,16 +483,61 @@ scratch copy (DEAD-ENDS 2026-09-27).
 
 ## 2. Group A — Copilot's lifecycle reaches the Hub
 
-- [ ] 2.1 `hub/hub/runner_events.py` (design D4, D5):
+**Built 2026-10-04 (interactive session, operator: "Let's finish it right now").** Tests first,
+each run against the unchanged code before the build:
+
+- `hub/tests/test_copilot_lifecycle_events.py` (1.2, 1.3): 24 tests; **17 failed before**, the 7
+  that passed are guards today's mapper already met (a subagent's compaction maps to nothing because
+  nothing mapped; prose before an echo; no raw event; a root error fails the turn; one echo per raw
+  error). Every fixture is fed in the captured order. **Fixture fact the design did not have:** the
+  captured `subagent.started` arrives *after* the `task` call's `tool_call` update (line 11 then 12
+  of `subagent.jsonl`), and the subagent's own `agent_message_chunk`s arrive on the root's ACP
+  stream, so they record as the root's text; that is slice 2's mapping, unchanged here.
+- `hub/tests/test_checkpoint_from_compaction.py` (1.4, 1.5): 18 tests, one per row of D4's table
+  plus a reading-path control for the two rows that differ, the in-flight case, the no-loop case,
+  the funnel, and the two route-answer cases (the dispatched task raising, and the dispatch itself
+  raising). All failed before (`consider` took no `compacted`; `consider_from_compaction` did not
+  exist).
+- `hub/tests/test_copilot_home_has_no_deciding_hook.py` (1.6, ungrouped half for 2.8): 7 tests, a
+  guard. Passed before (slice 2's `copilot_guard_env` already strips `COPILOT_ALLOW_ALL` from both
+  sources for the turn and both one-shots, and writes no hook); mutation-checked: dropping
+  `COPILOT_ALLOW_ALL` from `COPILOT_TRUST_ENV_NAMES` fails 6 of 7.
+- **Slice 2's tests rewritten to slice 5's rule**, as slice 2's own docstring said they would be:
+  `test_copilot_acp_mapper.py`'s three `TestSessionErrorRootVsSubagent` tests and
+  `TestUnmatchedRootErrorIsReportedAtFinish` now collect events from `on_raw_event` and assert
+  `copilot.<errorType>` and `subagent_id`, not `copilot_session_error`/`copilot.subagent_error`.
+
+Build: `runner_events.status_event`/`error_event` gain `facts` (merged into the payload through
+`_fact_values`: strings by the value rule, numbers kept; reserved keys win), and `error_event`
+redacts its `message` by value. `COPILOT_RAW_EVENTS` gains `session.compaction_start` and the three
+`subagent.*` types. `CopilotEventMapper` records a `session.error` as one error event when it
+arrives (root sets `root_error`; a subagent's carries `subagent_id`), drops its `Error:` echo chunk
+on arrival, maps compaction (root only; `too-large` from the turn's last root
+`compaction_start`; `unserializable` and `success: false` as diagnostics) and the subagent
+lifecycle. Slice 2's `Error:` → `copilot_session_error` branch and `copilot.subagent_error`
+diagnostic are deleted. `checkpoint_trigger.consider(compacted=True)` skips the threshold, the notes
+band and a dismissed conversation's final warning; `consider_from_compaction` parks a compaction in
+`_compaction_pending` while the conversation is in flight, and every dispatched `_run`'s `finally`
+(the shared `_dispatch`, so a reading's too) hands it on. `record_agent_output` dispatches it for a
+`compacted` status, inside a `try` so a raise cannot turn a stored row into a 500.
+
+Mutation check (scratch copies, restored from the copy): 13 mutations, 12 caught. The miss is
+equivalent: `_fact_values` applying `redact_secrets` to non-string values too changes nothing for
+the integer and string facts this change emits.
+
+2.7: full Hub suite with `claude` off PATH (`-n 8`): **6632 passed, 93 skipped**. `ruff check src/
+hub/ tests/` clean; `black --check` clean with and without `--target-version py311`.
+
+- [x] 2.1 `hub/hub/runner_events.py` (design D4, D5):
   - `status_event` gains `facts`; `error_event` gains `facts` and redacts its `message` by value;
   - `diagnostic_event`: use slice 2's `diagnostic_event(*, stream, severity, summary, code=None,
     facts=None)` (its R3; contract reconciliation, 2026-09-28), with `summary=` and
     `stream="copilot"`. Nothing to add to it (design D5; *Required of slices 1–4*, 2.1);
   - facts: string values through the value rule only, numbers kept. Never `redact_secrets(facts)`
     whole.
-- [ ] 2.2 Ensure the six types are in slice 2's raw-event subscription constant, as a set union
+- [x] 2.2 Ensure the six types are in slice 2's raw-event subscription constant, as a set union
   (design D1: `session.error` is slice 2's and `session.compaction_complete` slice 4's already).
-- [ ] 2.3 In slice 2's `copilot_acp.CopilotEventMapper`:
+- [x] 2.3 In slice 2's `copilot_acp.CopilotEventMapper`:
   - a root `session.compaction_complete` becomes `compacted` or a diagnostic; one with `agentId`
     becomes nothing; one with `dataOmitted: "too-large"` becomes `compacted` with counts from the
     turn's last root `session.compaction_start` (D4);
@@ -509,7 +554,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
   (*Required of slices 1–4*, 2.3).
 
   Pass tests 1.2 and 1.3.
-- [ ] 2.4 `hub/hub/checkpoint_trigger.py`:
+- [x] 2.4 `hub/hub/checkpoint_trigger.py`:
   - add `compacted: bool = False` to `consider`, with the branches of design D4's table;
   - add `consider_from_compaction(project_id, agent, conversation_id, payload)` with the
     `_in_flight` / `_dispatched` discipline, plus `_compaction_pending`: a compaction arriving
@@ -519,17 +564,17 @@ scratch copy (DEAD-ENDS 2026-09-27).
   - it never raises into its caller.
 
   Pass test 1.4.
-- [ ] 2.5 `hub/hub/output_recording.py::record_agent_output`: after persisting, dispatch
+- [x] 2.5 `hub/hub/output_recording.py::record_agent_output`: after persisting, dispatch
   `consider_from_compaction` for `kind == "status"` with `isinstance(payload, dict) and
   payload.get("phase") == "compacted"` (R3: `payload` may be `None`; local import, as at `:233`).
   Pass test 1.5.
-- [ ] 2.6 Confirm slice 2's `COPILOT_HOME` writer and run environment
+- [x] 2.6 Confirm slice 2's `COPILOT_HOME` writer and run environment
   (`resolve_agent_env`/`guard_env`) meet design D3. Change them only
   if test 1.6 fails. Pass test 1.6. (Review 2026-09-28, finding 6: the `COPILOT_ALLOW_ALL` strip is
   slice 2's, *Required* 2.9. If slice 2 landed without it, task 2.8 adds it.)
-- [ ] 2.7 Run `py -3.11 -m pytest hub/tests/ -q -x` and `ruff check hub/` and
+- [x] 2.7 Run `py -3.11 -m pytest hub/tests/ -q -x` and `ruff check hub/` and
   `black --check --target-version py311 hub/hub/ hub/tests/`.
-- [ ] 2.8 (**no group; never cut**; review 2026-09-28, finding 6) Confirm slice 2's Copilot
+- [x] 2.8 (**no group; never cut**; review 2026-09-28, finding 6) Confirm slice 2's Copilot
   `guard_env` and `one_shot_env` strip `COPILOT_ALLOW_ALL`, every `COPILOT_PROVIDER_*` name,
   `COPILOT_MODEL` and `COPILOT_OFFLINE` from both the ambient environment and `env_vars` for a spawn
   that names no provider (*Required* 2.9, 2.10). Add whatever is missing there: as the no-provider

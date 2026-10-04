@@ -253,9 +253,28 @@ def tool_result_event(
     return RunEvent(kind="tool_result", content=readable_summary, payload=payload, call_id=call_id)
 
 
-def status_event(phase: str, *, summary: Optional[str] = None) -> RunEvent:
+def _fact_values(facts: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """*facts* fit to merge into a payload: strings through the value rule, numbers kept.
+
+    Never `redact_secrets(facts)` whole: its key rule matches any key containing `token`, so
+    `pre_tokens`, `token_limit` and `total_tokens` would each be stored as `"<redacted>"` (slice 5
+    D4). A count is not a secret because of its field's name. Absent facts are left out.
+    """
+    if not facts:
+        return {}
+    return {
+        key: redact_secrets(value) if isinstance(value, str) else value
+        for key, value in facts.items()
+        if value is not None
+    }
+
+
+def status_event(
+    phase: str, *, summary: Optional[str] = None, facts: Optional[Dict[str, Any]] = None
+) -> RunEvent:
     readable_summary = summary or phase.replace("_", " ").capitalize()
     payload: Dict[str, Any] = {
+        **_fact_values(facts),
         "version": PAYLOAD_VERSION,
         "phase": phase,
         "summary": readable_summary,
@@ -298,10 +317,18 @@ def diagnostic_event(
 
 
 def error_event(
-    *, code: str, message: str, exit_code: Optional[int] = None, retryable: bool = False
+    *,
+    code: str,
+    message: str,
+    exit_code: Optional[int] = None,
+    retryable: bool = False,
+    facts: Optional[Dict[str, Any]] = None,
 ) -> RunEvent:
-    bounded_message, _truncated = _truncate_utf8(message, MAX_TOOL_RESULT_BYTES)
+    """An error, kept visible when diagnostics are hidden. Its `message` passes the value rule: an
+    authentication error can quote the credential it refused (slice 5 D5)."""
+    bounded_message, _truncated = _truncate_utf8(redact_secrets(message), MAX_TOOL_RESULT_BYTES)
     payload: Dict[str, Any] = {
+        **_fact_values(facts),
         "version": PAYLOAD_VERSION,
         "code": code,
         "message": bounded_message,

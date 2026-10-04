@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional, Tuple
 
 from sqlalchemy import select
 
@@ -58,6 +58,12 @@ _in_flight: set = set()
 # that: readings crossed the threshold, nothing spawned, and because the collected task never ran
 # its `finally`, the conversation stayed in `_in_flight` forever and could never fire again.
 _dispatched: set = set()
+
+# A compaction that arrived while its conversation was already being considered (slice 5 D4).
+# A reading arriving then is dropped harmlessly, because another follows within the turn; a
+# compaction is a one-off, and it lands exactly when readings are dense. So it waits here, keyed
+# by conversation, and the `finally` of whichever consideration is running dispatches it.
+_compaction_pending: Dict[str, Tuple[str, str, Dict[str, Any]]] = {}
 
 _NOTES_REQUEST = """\
 This conversation is approaching the point where the Hub will checkpoint it and continue in a \
@@ -178,8 +184,14 @@ async def consider(
     *,
     context_tokens: Optional[int],
     percent: Optional[float],
+    compacted: bool = False,
 ) -> Optional[str]:
     """Act on one context reading. Returns the checkpoint id if one was taken.
+
+    `compacted` is a runner's report that it compacted the conversation (slice 5 D4). It counts
+    as the threshold being crossed: every other gate still applies, but the threshold is not
+    consulted, notes are not requested (they would be written from the runner's summary), and a
+    dismissed conversation is not warned again (the stream's compaction card is the notice).
 
     Runs in its own session; never raises into a caller.
     """
@@ -229,6 +241,11 @@ async def consider(
             if conversation.checkpoint_warning == "final":
                 _declined(conversation_id, "the final warning is already showing")
                 return None
+            if compacted:
+                # The final warning exists to come before the loss; after it, the run's
+                # `compacted` card is the notice.
+                _declined(conversation_id, "the runner compacted a dismissed conversation")
+                return None
             if not needs_final_warning(policy, percent=percent):
                 _declined(
                     conversation_id,
@@ -271,7 +288,9 @@ async def consider(
             )
             return None
 
-        if should_request_notes(policy, context_tokens=context_tokens, percent=percent):
+        if not compacted and should_request_notes(
+            policy, context_tokens=context_tokens, percent=percent
+        ):
             if not await _notes_already_in_hand(db, conversation_id):
                 db.add(
                     new_entry(
@@ -287,7 +306,9 @@ async def consider(
                 logger.info("requested checkpoint notes for %s", conversation_id)
             return None
 
-        if not should_checkpoint(policy, context_tokens=context_tokens, percent=percent):
+        if not compacted and not should_checkpoint(
+            policy, context_tokens=context_tokens, percent=percent
+        ):
             _declined(
                 conversation_id,
                 f"below the {policy.threshold_mode} threshold of {policy.threshold_value} "
@@ -402,7 +423,55 @@ def consider_from_reading(
         return
     if conversation_id in _in_flight:
         return
+    _dispatch(
+        project_id,
+        agent_name,
+        conversation_id,
+        context_tokens=context_tokens if isinstance(context_tokens, int) else None,
+        percent=percent if isinstance(percent, (int, float)) else None,
+        compacted=False,
+    )
 
+
+def consider_from_compaction(
+    project_id: str,
+    agent_name: str,
+    conversation_id: Optional[str],
+    payload: Optional[Dict[str, Any]],
+) -> None:
+    """Fire-and-forget entry point for a runner's `compacted` status (slice 5 D4).
+
+    Never dropped for being in flight: it waits in `_compaction_pending` and is dispatched from the
+    running consideration's `finally`, so the two never run at the same time. Never raises.
+    """
+    if not conversation_id:
+        return
+    facts = payload if isinstance(payload, dict) else {}
+    if conversation_id in _in_flight:
+        _compaction_pending[conversation_id] = (project_id, agent_name, facts)
+        return
+    percent = facts.get("percent")
+    _dispatch(
+        project_id,
+        agent_name,
+        conversation_id,
+        context_tokens=None,
+        percent=(
+            percent if isinstance(percent, (int, float)) and not isinstance(percent, bool) else None
+        ),
+        compacted=True,
+    )
+
+
+def _dispatch(
+    project_id: str,
+    agent_name: str,
+    conversation_id: str,
+    *,
+    context_tokens: Optional[int],
+    percent: Optional[float],
+    compacted: bool,
+) -> None:
     _in_flight.add(conversation_id)
 
     async def _run() -> None:
@@ -411,19 +480,26 @@ def consider_from_reading(
                 project_id,
                 agent_name,
                 conversation_id,
-                context_tokens=context_tokens if isinstance(context_tokens, int) else None,
-                percent=percent if isinstance(percent, (int, float)) else None,
+                context_tokens=context_tokens,
+                percent=percent,
+                compacted=compacted,
             )
         except Exception:  # noqa: BLE001 — a checkpoint is never worth failing a live turn over
             logger.warning("checkpoint consideration failed", exc_info=True)
         finally:
             _in_flight.discard(conversation_id)
+            # Whatever was running -- a reading's consideration as often as a compaction's --
+            # hands over a compaction that arrived meanwhile.
+            pending = _compaction_pending.pop(conversation_id, None)
+            if pending is not None:
+                consider_from_compaction(pending[0], pending[1], conversation_id, pending[2])
 
     try:
         task = asyncio.get_running_loop().create_task(_run())
     except RuntimeError:
-        # No loop (a synchronous caller, or a test). Nothing to dispatch onto; drop the reading
-        # rather than block, since another will arrive within the turn.
+        # No loop (a synchronous caller, or a test). Nothing to dispatch onto; drop it rather
+        # than block. For a reading another arrives within the turn; a compaction reaches here
+        # only from a caller that is not a running Hub.
         _in_flight.discard(conversation_id)
         return
     # Held until it finishes, or asyncio's weak reference lets it be collected mid-flight.

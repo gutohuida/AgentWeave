@@ -7,6 +7,7 @@ agent already produces — one path, not two that can drift.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, Optional
 
 from sqlalchemy import select
@@ -18,6 +19,8 @@ from .db.models import AgentOutput, Conversation, EventLog, Run
 from .model_catalog import context_window_for_model
 from .sse import sse_manager
 from .utils import persist_event, short_id
+
+logger = logging.getLogger(__name__)
 
 
 async def record_agent_output(
@@ -128,6 +131,19 @@ async def record_agent_output(
         await sse_manager.broadcast(
             project_id, "agent_session_changed", {"agent": agent, "session_id": session_id}
         )
+    if kind == "status" and isinstance(payload, dict) and payload.get("phase") == "compacted":
+        # A runner compacted this conversation (slice 5 D4): that counts as its checkpoint
+        # threshold being crossed. Dispatched, never awaited, and never raising: the row is
+        # already committed, so a raise here would answer 500 for a stored row. `payload` may be
+        # None on the self-report route. Imported locally, as `record_context_usage` does.
+        from .checkpoint_trigger import consider_from_compaction
+
+        try:
+            consider_from_compaction(project_id, agent, conversation_id, payload)
+        except Exception:  # noqa: BLE001 -- a consideration never fails the recording
+            logger.warning(
+                "dispatching a compaction's checkpoint consideration failed", exc_info=True
+            )
     return row
 
 

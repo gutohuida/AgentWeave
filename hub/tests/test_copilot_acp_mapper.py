@@ -731,54 +731,61 @@ class TestSessionErrorRootVsSubagent:
             "content": {"type": "text", "text": f"Error: {message}"},
         }
 
+    # Slice 5 group A (`a-copilot-agent-uses-hooks-and-its-own-agents` D5) replaced this slice's
+    # rule, as the paragraph above says it would: the raw `session.error` is the error event,
+    # emitted when it arrives and coded `copilot.<errorType>`, and its echo chunk is dropped on
+    # arrival. A subagent's error is an error event naming the subagent, no longer a diagnostic.
+    # So the events below are collected from `on_raw_event` as well.
+
     def test_root_session_error_becomes_an_error_event_not_text(self):
         mapper = CopilotEventMapper()
         type_, data, params = self._root_session_error("model call failed")
-        mapper.on_raw_event(type_, data, params)
+        events = mapper.on_raw_event(type_, data, params)
 
-        events = mapper.on_session_update(self._error_echo_chunk("model call failed"))
+        events += mapper.on_session_update(self._error_echo_chunk("model call failed"))
         events += mapper.flush()
 
         assert not any(e.kind == "text" for e in events)
         assert not any(e.kind == "diagnostic" for e in events)
         errors = [e for e in events if e.kind == "error"]
         assert len(errors) == 1
-        assert errors[0].payload["code"] == "copilot_session_error"
+        assert errors[0].payload["code"] == "copilot.internal"
         assert "model call failed" in errors[0].payload["message"]
+        assert mapper.root_error == "model call failed"
 
-    def test_subagent_session_error_via_envelope_agent_id_becomes_diagnostic_not_error(self):
+    def test_subagent_session_error_via_envelope_agent_id_is_an_error_naming_it(self):
         mapper = CopilotEventMapper()
         type_, data, params = self._subagent_session_error_via_envelope(
             "subagent tool crashed", "agent-explore-1"
         )
-        mapper.on_raw_event(type_, data, params)
+        events = mapper.on_raw_event(type_, data, params)
 
-        events = mapper.on_session_update(self._error_echo_chunk("subagent tool crashed"))
+        events += mapper.on_session_update(self._error_echo_chunk("subagent tool crashed"))
         events += mapper.flush()
 
         assert not any(e.kind == "text" for e in events)
-        assert not any(e.kind == "error" for e in events)
-        diagnostics = [e for e in events if e.kind == "diagnostic"]
-        assert len(diagnostics) == 1
-        assert diagnostics[0].payload["code"] == "copilot.subagent_error"
+        assert not any(e.kind == "diagnostic" for e in events)
+        errors = [e for e in events if e.kind == "error"]
+        assert len(errors) == 1
+        assert errors[0].payload["subagent_id"] == "agent-explore-1"
+        assert mapper.root_error is None, "a subagent's error does not fail the turn"
 
-    def test_subagent_session_error_via_data_parent_tool_call_id_becomes_diagnostic_not_error(
-        self,
-    ):
+    def test_subagent_session_error_via_data_parent_tool_call_id_is_an_error_naming_it(self):
         mapper = CopilotEventMapper()
         type_, data, params = self._subagent_session_error_via_parent_tool_call(
             "code-review subagent crashed", "call_parent_1"
         )
-        mapper.on_raw_event(type_, data, params)
+        events = mapper.on_raw_event(type_, data, params)
 
-        events = mapper.on_session_update(self._error_echo_chunk("code-review subagent crashed"))
+        events += mapper.on_session_update(self._error_echo_chunk("code-review subagent crashed"))
         events += mapper.flush()
 
         assert not any(e.kind == "text" for e in events)
-        assert not any(e.kind == "error" for e in events)
-        diagnostics = [e for e in events if e.kind == "diagnostic"]
-        assert len(diagnostics) == 1
-        assert diagnostics[0].payload["code"] == "copilot.subagent_error"
+        assert not any(e.kind == "diagnostic" for e in events)
+        errors = [e for e in events if e.kind == "error"]
+        assert len(errors) == 1
+        assert errors[0].payload["subagent_id"] == "call_parent_1"
+        assert mapper.root_error is None, "a subagent's error does not fail the turn"
 
 
 class TestModelSubstitutionDiagnostic:
@@ -989,17 +996,18 @@ class TestCapturedTurnReplay:
 
 class TestUnmatchedRootErrorIsReportedAtFinish:
     """A root `session.error` that Copilot never echoes as `Error:` text still reaches the
-    timeline when the prompt completes: it fails the turn (D10, R3), so it must not be silent."""
+    timeline: it fails the turn (D10, R3), so it must not be silent. Since slice 5 (D5) it is
+    recorded when the raw event arrives, so `finish()` has nothing left to report for it."""
 
-    def test_finish_reports_an_unechoed_root_error(self):
+    def test_an_unechoed_root_error_is_reported_once(self):
         mapper = CopilotEventMapper()
         data = {"errorType": "model_error", "message": "upstream rate limited"}
         params = {"sessionId": "s", "type": "session.error", "data": data}
-        assert mapper.on_raw_event("session.error", data, params) == []
+        events = mapper.on_raw_event("session.error", data, params)
         assert mapper.root_error == "upstream rate limited"
 
-        events = mapper.finish()
+        events += mapper.finish()
         errors = [e for e in events if e.kind == "error"]
         assert len(errors) == 1
-        assert errors[0].payload["code"] == "copilot_session_error"
+        assert errors[0].payload["code"] == "copilot.model_error"
         assert mapper.finish() == [], "reported once"

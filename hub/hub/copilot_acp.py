@@ -33,6 +33,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 from collections import deque
 from dataclasses import dataclass
 from typing import (
@@ -75,6 +76,7 @@ from .runner_events import (
     _truncate_utf8,
     diagnostic_event,
     error_event,
+    redact_secrets,
     status_event,
     text_event,
     thinking_event,
@@ -108,6 +110,12 @@ COPILOT_RAW_EVENTS: Tuple[str, ...] = (
     "assistant.usage",
     "session.usage_checkpoint",
     "session.compaction_complete",
+    # Slice 5 group A (D1): the counts when a compaction's report was too large to relay, and
+    # the subagent lifecycle (D6).
+    "session.compaction_start",
+    "subagent.started",
+    "subagent.completed",
+    "subagent.failed",
 )
 
 #: Opens the first prompt block of every turn (D5, review note 15). A resumed session holds
@@ -879,8 +887,8 @@ _GITHUB_MCP_UNAVAILABLE_STATUSES = frozenset(
 
 @dataclass
 class _Notice:
-    """A raw `session.error|warning|info` waiting for the `Error:`/`Warning:`/`Info:` message block
-    Copilot echoes it into."""
+    """A raw `session.warning|info` waiting for the `Warning:`/`Info:` message block Copilot
+    echoes it into. A `session.error` is not one: it is recorded when it arrives (slice 5 D5)."""
 
     event_type: str
     message: str
@@ -896,6 +904,46 @@ def _is_subagent(params: Mapping[str, Any], data: Mapping[str, Any]) -> bool:
         or data.get("agentId")
         or data.get("parentToolCallId")
     )
+
+
+def _subagent_id(params: Mapping[str, Any], data: Mapping[str, Any]) -> Optional[str]:
+    """Which subagent an event is from, by the same three signals as `_is_subagent`."""
+    for value in (
+        params.get("agentId") if isinstance(params, Mapping) else None,
+        data.get("agentId"),
+        data.get("parentToolCallId"),
+    ):
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+#: A Copilot `errorType` that may name an error code (D5); anything else is `copilot.unknown`.
+_ERROR_TYPE_RE = re.compile(r"^[a-z_]{1,32}$")
+_SUBAGENT_PHASES = {
+    "subagent.started": "subagent_started",
+    "subagent.completed": "subagent_completed",
+    "subagent.failed": "subagent_failed",
+}
+
+
+def _count(value: Any) -> Optional[int]:
+    """A reported count, or None: never a bool, never a string."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _compaction_facts(
+    pre: Optional[int], post: Optional[int], limit: Optional[int], trigger: Any
+) -> Dict[str, Any]:
+    facts: Dict[str, Any] = {
+        "pre_tokens": pre,
+        "post_tokens": post,
+        "token_limit": limit,
+        "trigger": trigger if isinstance(trigger, str) and trigger else None,
+    }
+    if pre is not None and limit:
+        facts["percent"] = round(pre / limit * 100, 2)
+    return facts
 
 
 def _content_text(content: Any) -> str:
@@ -929,7 +977,7 @@ class CopilotEventMapper:
 
     `on_session_update(update)` and `on_raw_event(type, data, params)` each return the events to
     emit; `flush()` closes the open text/thought block; `finish()` flushes at prompt completion and
-    reports any raw error Copilot never echoed. Arming is the caller's: this class maps whatever it
+    reports any raw warning or info Copilot never echoed. Arming is the caller's: this class maps whatever it
     is handed. `calls` may be the turn's shared map; feeding it here as well is idempotent.
     """
 
@@ -953,6 +1001,12 @@ class CopilotEventMapper:
         self._message: List[str] = []
         self._thought: List[str] = []
         self._notices: List[_Notice] = []
+        #: `"Error: " + message` of each `session.error` of this turn, root or subagent, whose
+        #: echo chunk has not arrived yet (D5). Each one swallows at most one chunk.
+        self._error_echoes: List[str] = []
+        #: The turn's latest root `session.compaction_start`: the counts a compaction report too
+        #: large to relay no longer carries (D4, *Omitted data*).
+        self._compaction_start: Optional[Dict[str, Any]] = None
         self._tools: Dict[str, str] = {}
         self._changes: Dict[str, List[Dict[str, Any]]] = {}
         self._last_plan: Optional[str] = None
@@ -967,8 +1021,15 @@ class CopilotEventMapper:
             return []
         kind = update.get("sessionUpdate")
         if kind == "agent_message_chunk":
+            text = self._chunk_text(update)
+            if text in self._error_echoes:
+                # Copilot's echo of a `session.error` already recorded as an error event when the
+                # raw event arrived (D5): one fact, one record. Nothing is held, so the prose
+                # around it is recorded as it is.
+                self._error_echoes.remove(text)
+                return []
             events = self._flush_thought()
-            self._message.append(self._chunk_text(update))
+            self._message.append(text)
             return events
         if kind == "agent_thought_chunk":
             events = self._flush_message()
@@ -1085,8 +1146,8 @@ class CopilotEventMapper:
         return self._flush_thought() + self._flush_message()
 
     def finish(self) -> List[RunEvent]:
-        """At prompt completion: flush, then report every raw notice no block echoed, so a root
-        error that fails the turn is never silent in the timeline."""
+        """At prompt completion: flush, then report every raw warning or info no block echoed.
+        An error needs no such sweep: it was recorded when its raw event arrived (slice 5 D5)."""
         events = self.flush()
         for notice in self._notices:
             events.append(self._notice_event(notice))
@@ -1104,8 +1165,8 @@ class CopilotEventMapper:
         return self._classify(text)
 
     def _classify(self, text: str) -> List[RunEvent]:
-        """A message block is a Copilot notice only when a raw `session.error|warning|info` of
-        this turn carries the text it holds: a model can write "Error:" too (D10)."""
+        """A message block is a Copilot notice only when a raw `session.warning|info` of this
+        turn carries the text it holds: a model can write "Warning:" too (D10)."""
         if not text.strip():
             return []
         for notice in self._notices:
@@ -1122,16 +1183,6 @@ class CopilotEventMapper:
         return [text_event(text.strip())]
 
     def _notice_event(self, notice: _Notice) -> RunEvent:
-        if notice.event_type == "session.error":
-            if notice.subagent:
-                return diagnostic_event(
-                    stream="copilot",
-                    severity="warning",
-                    summary=f"A Copilot subagent failed: {notice.message}",
-                    code="copilot.subagent_error",
-                    facts={"errorType": notice.data.get("errorType")},
-                )
-            return error_event(code="copilot_session_error", message=notice.message)
         if notice.event_type == "session.warning":
             kind = notice.data.get("warningType")
             severity = "warning"
@@ -1152,15 +1203,23 @@ class CopilotEventMapper:
         data = data if isinstance(data, dict) else {}
         params = params if isinstance(params, Mapping) else {}
         track_call(self.calls, event_type, data)
+        if event_type == "session.error":
+            return self._session_error(data, params)
         if event_type in _NOTICE_PREFIXES:
             message = data.get("message")
             if not isinstance(message, str) or not message:
                 return []
             subagent = _is_subagent(params, data)
-            if event_type == "session.error" and not subagent and self.root_error is None:
-                self.root_error = message
             self._notices.append(_Notice(event_type, message, dict(data), subagent))
             return []
+        if event_type == "session.compaction_start":
+            if not _is_subagent(params, data):
+                self._compaction_start = dict(data)
+            return []
+        if event_type == "session.compaction_complete":
+            return self._compaction(data, params)
+        if event_type in _SUBAGENT_PHASES:
+            return self._subagent(event_type, data)
         if event_type in ("session.mcp_servers_loaded", "session.mcp_server_status_changed"):
             return self._server_status(event_type, data)
         if event_type in (
@@ -1170,6 +1229,138 @@ class CopilotEventMapper:
         ):
             return self._model(event_type, data)
         return []
+
+    def _session_error(self, data: Mapping[str, Any], params: Mapping[str, Any]) -> List[RunEvent]:
+        """A `session.error` is one error event, recorded when it arrives (D5). Only the root
+        agent's fails the turn; a subagent's names the subagent and the turn goes on."""
+        message = data.get("message")
+        if not isinstance(message, str) or not message:
+            return []
+        subagent_id = _subagent_id(params, data)
+        if subagent_id is None and self.root_error is None:
+            self.root_error = message
+        self._error_echoes.append(f"Error: {message}")
+        error_type = data.get("errorType")
+        kind = (
+            error_type
+            if isinstance(error_type, str) and _ERROR_TYPE_RE.match(error_type)
+            else "unknown"
+        )
+        return [
+            error_event(
+                code=f"copilot.{kind}",
+                message=message,
+                facts={
+                    "status_code": _count(data.get("statusCode")),
+                    "error_code": data.get("errorCode"),
+                    "remediation": data.get("remediation"),
+                    "subagent_id": subagent_id,
+                },
+            )
+        ]
+
+    def _compaction(self, data: Mapping[str, Any], params: Mapping[str, Any]) -> List[RunEvent]:
+        """Only the root agent's compaction is the conversation's (D4, R3)."""
+        if _is_subagent(params, data):
+            return []
+        omitted = params.get("dataOmitted")
+        if omitted == "too-large":
+            # An oversized report carried a summary, which only a successful compaction has; its
+            # counts come from the turn's latest root `compaction_start` (D4, *Omitted data*).
+            start = self._compaction_start or {}
+            facts = _compaction_facts(
+                _count(start.get("currentTokens")),
+                None,
+                _count(start.get("tokenLimit")),
+                start.get("trigger"),
+            )
+            return [
+                status_event(
+                    "compacted",
+                    summary=(
+                        "Copilot compacted this conversation; its report was too large to relay."
+                    ),
+                    facts=facts,
+                )
+            ]
+        if omitted:
+            return [
+                diagnostic_event(
+                    stream="copilot",
+                    severity="warning",
+                    summary="Copilot reported a compaction this Hub could not read.",
+                    code="copilot.compaction_unreadable",
+                    facts={"data_omitted": str(omitted)},
+                )
+            ]
+        if data.get("success") is not True:
+            error = data.get("error")
+            return [
+                diagnostic_event(
+                    stream="copilot",
+                    severity="warning",
+                    summary=(
+                        f"Copilot's compaction failed: {error}"
+                        if isinstance(error, str) and error
+                        else "Copilot's compaction failed; the conversation was not compacted."
+                    ),
+                    code="copilot.compaction_failed",
+                    facts={"status_code": _count(data.get("statusCode"))},
+                )
+            ]
+        pre = _count(data.get("preCompactionTokens"))
+        post = _count(data.get("postCompactionTokens"))
+        limit = _count(data.get("tokenLimit"))
+        trigger = data.get("trigger")
+        how = "as requested" if trigger == "manual" else "automatically"
+        sizes = " → ".join(f"{n:,}" for n in (pre, post) if n is not None)
+        if sizes and limit is not None:
+            sizes += f" tokens of {limit:,}"
+        elif sizes:
+            sizes += " tokens"
+        summary = f"Copilot compacted this conversation {how}" + (f" ({sizes})." if sizes else ".")
+        return [
+            status_event(
+                "compacted", summary=summary, facts=_compaction_facts(pre, post, limit, trigger)
+            )
+        ]
+
+    def _subagent(self, event_type: str, data: Mapping[str, Any]) -> List[RunEvent]:
+        """A subagent's start, completion or failure, paired with its `task` call by `call_id`
+        (D6). Never by position: a raw event can overtake the queued `tool_use`."""
+        call_id = data.get("toolCallId")
+        if not isinstance(call_id, str) or not call_id:
+            return []
+        name = data.get("agentDisplayName") or data.get("agentName") or "A Copilot subagent"
+        error = data.get("error")
+        if event_type == "subagent.started":
+            summary = f"{name} started"
+        elif event_type == "subagent.completed":
+            summary = f"{name} finished"
+        else:
+            summary = (
+                f"{name} failed: {redact_secrets(error)}"
+                if isinstance(error, str) and error
+                else f"{name} failed"
+            )
+        return [
+            status_event(
+                _SUBAGENT_PHASES[event_type],
+                summary=summary,
+                facts={
+                    "call_id": call_id,
+                    "agent_name": data.get("agentName"),
+                    "model": data.get("model"),
+                    "total_tokens": _count(data.get("totalTokens")),
+                    "duration_ms": _count(data.get("durationMs")),
+                    "total_tool_calls": _count(data.get("totalToolCalls")),
+                    "cancelled": (
+                        data.get("cancelled") if isinstance(data.get("cancelled"), bool) else None
+                    ),
+                    "error": error if isinstance(error, str) and error else None,
+                },
+            )
+        ]
 
     def _server_status(self, event_type: str, data: Mapping[str, Any]) -> List[RunEvent]:
         if event_type == "session.mcp_servers_loaded":
