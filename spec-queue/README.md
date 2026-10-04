@@ -25,6 +25,7 @@ Design: `openspec/explorations/2026-09-01-a-daily-research-spec-and-build-loop.m
 | `review/review-YYYY-MM-DD.html` | the FILL window | the operator, via an Artifact published in the DECIDE session |
 | `REQUESTS.md` | the operator | `scripts/backlog_page.py`, and any window reading the backlog |
 | `BACKLOG.html` | **nobody — `scripts/backlog_page.py` generates it** | the operator, and any agent orienting itself |
+| `METRICS.md` | whoever closes a change or Tier-0 fix (trial from 2026-10-04) | the operator, at the ~2026-10-18 review |
 | `ROUNDS.md` | an interactive session, at the operator's request (2026-09-22) | the operator and interactive sessions choosing the next repair; a plan, not an authority |
 
 `REQUESTS.md` is the operator's own channel into the backlog. `FINDINGS.md` is a defect ledger —
@@ -73,12 +74,17 @@ nobody awake to resolve it.
 **The FIX window builds `APPROVED` rows and nothing else.** `REVISING` means the FILL window should
 take another round at it tomorrow. `REJECTED` means archive the proposal unbuilt.
 
-Two optional directives, each on its own line under the day's heading:
+Three optional directives, each on its own line under the day's heading:
 
 ```
 ORDER: <change-name>, <change-name>, F156
+APPROVED-FIXES: F489, F492
 NOTHING TONIGHT
 ```
+
+`APPROVED-FIXES` (2026-10-04) approves **Tier-0** findings in a batch: findings with a reproduction
+whose fix needs no spec (`CLAUDE.md`, *Spec weight follows risk*). The review page proposes the list,
+and the night builds each one test-first and drives it.
 
 `ORDER` overrides the default queue for that night only. `NOTHING TONIGHT` stops the FIX window
 before it spends a model invocation — use it when the tree is in a state you would rather nobody

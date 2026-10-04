@@ -213,8 +213,10 @@ Only the first firing of the window does this. It ends by writing a full `queue`
    `arm-cycle.ps1` at 08:55: your `stop_at` in `STATE-day.json` is the moved one. Size the queue
    against `stop_at`, never against this file's title.
 
-6. **Write the queue.** Sized so each item finishes inside one firing. The round discipline is
-   expensive by design and must not be collapsed to fit more in.
+6. **Write the queue.** Sized so each item finishes inside one firing. **Drive-first since
+   2026-10-04** (operator: spec stays integral but must not become waterfall; time moves to driving
+   the product and finding errors). Spec weight follows the tiers in `CLAUDE.md` (*Spec weight
+   follows risk*). Most findings are Tier 0 and get no spec at all.
 
    **First count the drain — this decides the day's shape.** FILL writes one change a day; FIX
    builds one per one-to-two nights. Left alone those two rates diverge and the backlog grows
@@ -245,22 +247,16 @@ Only the first firing of the window does this. It ends by writing a full `queue`
    there a change here that still needs a word from the operator?"*, and a human-read answer is
    worth more than a clever pipeline.
 
-   - **2 or more → there is no spec loop today.** No D-2/D-3/D-4, no new proposal. The day's slots
+   - **2 or more → there is no spec loop today.** No spec items, no new proposal. The day's slots
      go to the draining column below. Under the 2026-09-19 counting this means **two proposals are
      sitting on the operator's desk unanswered** — a real backlog on their side, where writing a
      third helps nobody. It should now be rare; under the old counting it was the normal case.
-   - **1 → one spec loop runs**, exactly as it always has.
-   - **0 → two spec loops run**, one after the other (decided by the operator 2026-09-12). The
-     nights are no longer the slow half: the 2026-09-11 night built a 43-task change in about 2.5
-     hours of an 8-hour window, and with only one proposal a day it went idle. The second loop is a
-     full three rounds of its own. It is queued as `D-2b/D-3b/D-4b` **after** the first loop's R3, so
-     a window that stops anywhere leaves complete changes and never two half-written proposals.
-     It takes the next item in `DIRECTION.md`'s order, **only if its blast radius shares no file
-     with the first change's.** Two proposals that edit the same lines collide. That is why F300 and
-     F312 became one change. If the next item collides, take the one after it, or run one loop and
-     say why in the log. The review page gets one section 4 per change, and `APPROVALS.md` gets one
-     row per change. The drain count throttles this automatically: a night that leaves one change
-     unbuilt drops the next day back to one loop.
+   - **0 or 1 → one spec change is proposed**, sized by its tier: two items (`D-2` propose,
+     `D-3` grounded review). Tier 2 adds the acceptance drive to `D-3`.
+   - **No second spec loop** (the 2026-09-12 two-loop rule is retired, 2026-10-04). The nights stay
+     fed by **Tier-0 fixes**: `D-5` lists the repro'd findings that qualify, and the operator
+     approves them as a batch with one `APPROVED-FIXES:` line (see `night-window.md`). A night with
+     no approved change builds those instead of going idle.
 
    **The gate releases itself.** Nobody has to remember to turn proposing back on when the nights
    catch up, and nobody has to remember to turn it off when they fall behind — which is the whole
@@ -270,23 +266,22 @@ Only the first firing of the window does this. It ends by writing a full `queue`
    ```
                           draining (2+)                        clear (0-1)
    D-1  drive     e2e, scoped to what the night built    drive    same
-   D-2  drive     full-surface sweep, if 7 days stale    spec R1  explore and propose
-   D-3  repairs   the no-spec carve-out below            spec R2  re-derive against the code
-   D-4  repairs   another, or a FINDINGS status sweep    spec R3  re-derive again, independently
+   D-2  drive     full-surface sweep, if 7 days stale    spec     propose (tier-sized, with acceptance drive)
+   D-3  repairs   Tier-0 fix (D-6 rules)                 spec     one grounded review (+ acceptance drive, Tier 2)
+   D-4  repairs   another, or a FINDINGS status sweep    repairs  Tier-0 fix (D-6 rules)
    D-5  review    write the review page                  review   same
-   D-6  repairs   if the day has room                    repairs  same
+   D-6  repairs   if the day has room                    drive    sweep or re-drive an open finding
    D-7  gate      the merge gate, LAST                   gate     same
    ```
+
+   Either shape gives at most **two** slots to spec work; at least four go to driving and fixing.
 
    **`D-7` is always the final item, on every shape of day** (decided 2026-09-19). Give it the
    `-gate` suffix so the driver routes it to Sonnet/medium. Nothing may be queued after it: its
    whole purpose is that no firing commits behind it while it waits for CI. If the day runs out of
    iterations before reaching it, the next morning's step 1 picks it up — see `## The merge gate`.
 
-   At a drain count of **0** the clear column gains `D-2b/D-3b/D-4b` (the second loop's R1/R2/R3),
-   queued between `D-4` and `D-5`, so the review page covers both changes.
-
-   **The draining column is not filler.** A drive finds in one request what three rounds of reading
+   **Neither column's drive and repair slots are filler.** A drive finds in one request what three rounds of reading
    miss, the full-surface sweep is the only thing that ever covers a feature nobody touched, and
    `FINDINGS.md` carries 145 entries with no status at all — so the ledger's own summary of what is
    open has twice been measurably wrong. None of that work needs a spec, and all of it is what the
@@ -302,20 +297,20 @@ Only the first firing of the window does this. It ends by writing a full `queue`
 
 ---
 
-## D-6 — repairs that need no spec
+## D-6 — repairs that need no spec (Tier 0)
 
-**The round discipline governs changes that need a spec. Not every change does.** A C-severity
+**Most findings need no spec: they are Tier 0 in `CLAUDE.md`'s tiers.** A C-severity
 one-liner found at 09:30 used to wait thirteen hours for the night window and then consume a queue
 slot there, which is why so many of them simply accumulated in the ledger instead.
 
-Take one only when the day's real queue is done, and only if **all** of these hold:
+These are queued work (`D-3`/`D-4` above), not leftovers. Take one only if **all** of these hold:
 
 - It touches no requirement in `openspec/specs/` — grep the capability before believing this.
 - No migration, no API request/response shape change, no change to a Pydantic schema the UI reads.
 - It is fully described by an existing finding with a reproduction, and the fix is smaller than the
   argument for it would be.
 
-Then it is ordinary work and the ordinary rules apply, in full: **drive it before closing the item**
+Start from a test that fails at the seam the finding names. Then the ordinary rules apply in full: **drive it before closing the item**
 (a repair that only passes tests is exactly the failure mode this repository is worst at), run the
 lint set CI runs, mutation-check any test you add, and set the finding's `**Status:**` line to
 `fixed <sha>`. If while doing it you discover the change wants a spec after all, **stop and queue it
@@ -337,16 +332,18 @@ For each change the row covers, the queue carries one item per step. Finish a ch
 starting the next change's R1, so stopping anywhere leaves at most one change part-way:
 
 ```
-<id>-R1    explore and propose          as D-2
-<id>-R2    re-derive against the code   as D-3
-<id>-R3    re-derive again              as D-4
-<id>-REV   adversarial review           the operator's standing pre-approval step
+<id>-R1    propose, tier-sized          as D-2
+<id>-R2    one grounded review          as D-3 (Tier 2 also writes the failing acceptance drive)
+<id>-REV   adversarial review           Tier 2 only: the operator's pre-approval step
 <id>-IMPL  implement (may span firings) night-window.md "Implementing", in full
 <id>-DRIVE drive it and archive it      night-window.md "Driving", in full
 ```
 
-- **`REV` stands in for the operator's Opus review.** It reads the change and every decision it
-  rests on, looking for a reason not to build, and it may stop the change. Record what it found. If
+A Tier-0 item on a build day is one `<id>-impl` plus its drive, with no spec items.
+
+- **`REV` stands in for the operator's Opus review (Tier 2 only).** It reads the change and every decision it
+  rests on, looking for a correctness or requirement reason not to build, and it may stop the change.
+  Rank its findings; anything outside the change goes to the backlog, not into the change. Record what it found. If
   it finds nothing, say so. A review that stops a change is a good outcome: add an `OPEN` row to
   `spec-queue/DECISIONS.md` recording why, put only that row's id in `decisions_for_user`, leave the
   change specced, and go to the next one.
@@ -494,27 +491,29 @@ reading missed.
 
 ---
 
-## D-2 / D-3 / D-4 — the spec loop
+## D-2 / D-3 — the spec change (tier-sized)
 
-**These items exist only when step 6's drain count is 0 or 1.** At 2 or more there is no spec loop
-and this whole section is dormant for the day — read the draining column instead. Standing default
-since 2026-09-08, operator's decision; it replaced a hand-dated `DIRECTION.md` section per day,
-which reverts to proposing on any day nobody remembers to write one.
+**These items exist only when step 6's drain count is 0 or 1.** At 2 or more there is no spec work
+and this whole section is dormant for the day; read the draining column instead.
 
-**Three rounds before a line is implemented. Do not collapse them.** This is the operator's term:
-"do a spec loop" means exactly this and nothing needs clarifying.
+**Since 2026-10-04 spec weight follows the tier** (`CLAUDE.md`, *Spec weight follows risk*). Pick
+the tier first and say it in `D-2`'s commit. A candidate that turns out to be Tier 0 is not
+specced at all: it becomes a `D-6`-rules fix and goes on the review page's fix list.
 
-- **R1** explores the codebase and writes the proposal into `openspec/changes/<name>/` —
-  `proposal.md`, `design.md`, `tasks.md`, and the `specs/<capability>/spec.md` deltas.
-- **R2** and **R3** each *independently* re-derive the argument against the actual code. Not a
-  re-read of the previous round's reasoning — a fresh comparison against what the code does. Fix the
-  proposal where the code disagrees.
-- A change that is **already** proposed gets one verification round instead of three.
+- **`D-2` (`-r1`) proposes.** Tier 1 writes `proposal.md`, `tasks.md` and the spec deltas. Write
+  `design.md` only if there is a real decision to record, as short decision records (aim ≤ ~10 KB).
+  Every proposal names its **acceptance drive**: the drive step or e2e test that fails while the
+  behaviour cannot fire end to end. If the approach is unclear, the honest proposal is a spike task.
+- **`D-3` (`-r2`) is one grounded review** against the actual code. It is a fresh comparison, not a
+  re-read of `D-2`'s reasoning. Every claim cites `file:line` or comes from something it ran.
+  Ungrounded "might" findings are dropped. Fix the proposal in place, and put the round's reasoning
+  in the commit message, not appended to `design.md`. **Tier 2** also writes the acceptance drive or
+  test here, commits it, and shows it failing on the current code. That replaces the old R3.
+- *"Do a spec loop"* in `DIRECTION.md` still means the full R1/R2/R3. Honour it as written.
 
-Why the cost is the point: this repository's dominant failure mode is a fix that passes its tests and
-cannot fire in production, and a proposal that reads plausibly but does not match the code is how you
-get one. The sharper variant, learned 2026-08-28: **an argument can be wrong while everything it
-argues about is right.** Only a round that re-derives the argument finds that.
+Why execution, not more reading: this repository's dominant failure mode is a fix that passes its
+tests and cannot fire in production. An acceptance drive that fails before the build catches that
+directly. Same-model re-reading of prose barely improves the result (see `CLAUDE.md`).
 
 Rules that bite:
 - `openspec new change` refuses a name starting with a digit.
@@ -550,10 +549,12 @@ It must answer, in this order and without the reader opening anything else:
    form that cannot be skimmed past.
 2. **What the night window built**, and which of it was *driven* rather than only tested.
 3. **What today's drive found.** Severity, one sentence each, `file:line`.
-4. **What was specced**, one section per change: the problem, the argument in about a paragraph,
-   what R2 and R3 each changed about R1's version, and the cost. **If a round changed nothing, say
-   so** — a round that finds nothing is a real outcome and hiding it makes the next one look
-   cheaper than it is.
+4. **What was specced**, one section per change: its tier, the problem, the argument in about a
+   paragraph, the acceptance drive, and what the review round changed (**if it changed nothing, say
+   so**), plus the cost.
+   **Then the Tier-0 fix list:** the findings that meet `D-6`'s rules and could go to tonight. Give
+   each one sentence and its repro, and end the list with a ready-to-paste
+   `APPROVED-FIXES: F<n>, F<n>` line.
 5. **What the night window will do if the operator approves nothing.** The default queue, in order,
    named.
 6. **The research**, last and briefly: the ranked candidates, each ending in what it would mean for

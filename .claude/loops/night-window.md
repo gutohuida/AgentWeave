@@ -116,6 +116,11 @@ Only the first firing of the window does this.
      operator has explicitly paused.
    - **`ORDER:`** → that is the queue for tonight, verbatim, and the default below is ignored.
    - Otherwise collect the `APPROVED` rows. `REVISING` and `REJECTED` are not yours to act on.
+   - **`APPROVED-FIXES: F<n>, F<n>`** (since 2026-10-04): the operator's batch approval of
+     **Tier-0** findings (`CLAUDE.md`, *Spec weight follows risk*). Each one is built with no
+     openspec change, under `day-window.md`'s `D-6` rules: a test that fails at the finding's seam,
+     the fix, CI's lint set, a mutation check, a drive, and then `**Status:** fixed <sha>`. If one
+     turns out to need a spec, stop it and leave it for the day window. Do not stretch it to fit.
    - **No section for today, or an empty one** → the operator did not sit down. This is normal and
      needs no special case: the whole window goes to the backlog.
 
@@ -174,13 +179,15 @@ Only the first firing of the window does this.
       **Archiving a change retires the findings it fixes, in the same commit.** For every `F<n>` the
       change's `proposal.md` names, set that section's `**Status:**` line in
       `scripts/drive/FINDINGS.md` to `fixed <sha>`, and correct the index paragraph's open
-      severity-A list. This is not optional tidying — it is the step whose absence makes source 2
+      severity-A list. Append the change's row to `spec-queue/METRICS.md` in the same commit. This is not optional tidying — it is the step whose absence makes source 2
       below unusable. Measured 2026-09-03: 145 of the ledger's 280 entries carry no status at all,
       and the summary has twice been provably wrong about what is open (it read "one" for a week
       while F188 sat in it, and carried F12 as open years after `5237ec5` fixed it). A backlog that
       cannot say what is done is read as a backlog of everything.
-   2. **Open findings from `scripts/drive/FINDINGS.md`,** severity A before B before C. A finding
-      with no proposal needs the day window first — queue it as a note to tomorrow, not as work.
+   2. **Open findings from `scripts/drive/FINDINGS.md`,** severity A before B before C. The ones
+      tonight's `APPROVED-FIXES:` line names are work: one item each, suffix `-impl`, built as Tier 0.
+      Any other finding with no proposal needs the day window first: queue it as a note to
+      tomorrow, not as work.
    3. **`APPROVED` rows**, via `openspec-apply-change`.
 
    Size each item to finish inside one firing. If an item ends without a commit, it was too big;

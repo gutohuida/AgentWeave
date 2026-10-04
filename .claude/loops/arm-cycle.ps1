@@ -70,7 +70,7 @@ $windows = @{
     StateFile = ".claude\autonomous\STATE-day.json"
     LogFile   = ".claude\autonomous\driver-day.log"
     Playbook  = ".claude/loops/day-window.md"
-    Purpose   = "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today's DIRECTION.md section names one under an operator's DECISIONS.md row (day-window.md, 'A day that builds')."
+    Purpose   = "FILL. Drive the product first; spec findings and research candidates by tier (CLAUDE.md, Spec weight follows risk) into openspec/changes/, list Tier-0 fixes for APPROVED-FIXES, and write the review page the operator approves from. This window does NOT implement, except on a build day: today's DIRECTION.md section names one under an operator's DECISIONS.md row (day-window.md, 'A day that builds')."
   }
   night = @{
     StartAt   = "23:00"
@@ -79,7 +79,7 @@ $windows = @{
     StateFile = ".claude\autonomous\STATE-night.json"
     LogFile   = ".claude\autonomous\driver-night.log"
     Playbook  = ".claude/loops/night-window.md"
-    Purpose   = "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals."
+    Purpose   = "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals."
   }
 }
 $w = $windows[$Window]

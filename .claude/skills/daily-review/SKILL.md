@@ -53,7 +53,7 @@ day if they would rather have the history. Ask once, then stop asking.
 This is the part that cannot be automated, so do not rush it into a checklist.
 
 For each proposed change, the operator needs enough to decide and no more: **what breaks today,
-what the change does about it, what it touches, and what R2 and R3 changed about R1's version.**
+what the change does about it, what it touches, and its tier, its acceptance drive, and what the review round changed.**
 That last one is the tell. A change where two independent re-derivations found nothing is either
 genuinely clean or was not really re-derived, and the operator is entitled to know which the page
 claims.
@@ -84,7 +84,8 @@ Append today's section to `spec-queue/APPROVALS.md`, newest day first, using the
 - REJECTED  <change-name>   why
 ```
 
-Add `ORDER:` only if the operator asked for a different order tonight. Add `NOTHING TONIGHT` if they
+Offer the review page's Tier-0 fix list and write the operator's picks as one
+`APPROVED-FIXES: F<n>, F<n>` line. Add `ORDER:` only if the operator asked for a different order tonight. Add `NOTHING TONIGHT` if they
 want the window to stand down — it stops before spending a model invocation.
 
 **Leave undecided changes out.** Absence is not rejection: a row-less change stays in

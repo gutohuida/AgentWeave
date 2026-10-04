@@ -64,20 +64,38 @@ operator decides to migrate them.
 - The spec flow is both the thing you use and the thing you build: **when it frustrates you, record
   a finding** rather than working around it.
 
-### The round discipline — a "spec loop"
+### Spec weight follows risk — drive harder, spec lighter (2026-10-04)
 
-When the operator says *"do a spec loop"*, this is the whole instruction. Any change that needs a
-spec goes through **three rounds before a line is implemented**: **R1** explores the codebase and
-writes the proposal; **R2 and R3** each *independently* compare the proposal against the actual code
-and fix it — a fresh comparison, not a re-read of the previous round. A change already proposed gets
-one verification round.
+The operator reset this on 2026-10-04: spec stays integral but must not become waterfall; time moves
+from authoring and re-reading specs to **driving the product and finding errors**. Why: this repo's
+dominant failure mode is a fix that passes its tests and cannot fire in production. **Execution finds
+that; re-reading prose mostly doesn't**: same-model review without running anything barely improves
+the result, and our drives have repeatedly found in one request what three reading rounds missed.
 
-**Do not collapse the rounds to save time.** This repo's dominant failure mode is a fix that passes
-its tests and cannot fire in production, and an argument can be wrong while everything it argues
-about is right — only a round that re-derives the argument finds that. When queueing, expand each
-unproposed change into R1, R2, R3, IMPL, ordered so stopping anywhere leaves complete changes.
-**Rounds check the argument; a drive checks the product** — also ask what each route *returns* when
-the function it calls raises.
+Pick the tier **before** writing anything, and state it in the first commit:
+
+| Tier | When | What it gets |
+|---|---|---|
+| **0 — fix** | A finding with a repro, or a diff you can say in one sentence | No openspec change. A test that fails before the fix at the seam the finding names → fix → drive → set the finding's `**Status:**` line in `scripts/drive/FINDINGS.md`. |
+| **1 — change** | Normal feature or multi-file behaviour | A short proposal (requirements + scenarios + **acceptance drive**), **one grounded review round**, build, drive. |
+| **2 — hazard** | Migrations, Hub-restart or live-data hazard, secrets/auth/security, cross-cutting contracts | Full spec loop: R1 propose, R2 grounded review, **R3 = acceptance drive written and failing before build**, then the Opus review. |
+
+- **Acceptance drive first.** Every Tier 1/2 change names, before the build, the drive step or e2e
+  test that fails while the behaviour cannot fire end to end, and passes only when it can. It is the
+  "it really fires" check, and it replaces a third reading round. Also ask what each route *returns*
+  when the function it calls raises.
+- **A review round is grounded or it doesn't count:** every claim cites `file:line` or comes from
+  something it ran (a test, a query, a route call). Ungrounded "this might…" findings are dropped.
+- **Spike when the approach is unclear.** Build a throwaway tracer in a worktree or `testbed/`, drive
+  it, then write the spec from what happened, not from guesses.
+- **Keep the documents small.** `design.md` holds short decision records (aim ≤ ~10 KB); round-by-round
+  re-derivations go in commit messages, not appended to the design; evidence lives in tests and
+  commits, while `tasks.md` carries a one-line pointer. A change whose spec outgrows its code is a smell:
+  stop and split, or build.
+- **New problems found during review go to the backlog, not into the change.**
+- *"Do a spec loop"* still means R1/R2/R3 as above. Use it for Tier 2, or when the operator asks.
+- **Trial until ~2026-10-18:** when a change or fix closes, append a row to `spec-queue/METRICS.md`
+  (tier, spec/build/drive time, and which stage caught each real defect).
 
 ## Project context
 
