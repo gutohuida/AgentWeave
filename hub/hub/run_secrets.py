@@ -9,7 +9,8 @@ localhost proxy can have any format at all, which no `sk-`/`aw_live_` rule match
 In-process and never persisted: the trigger registers a run's values just before its task starts
 and forgets them when the task ends, however it ends. Every writer of a run's recorded text scrubs
 through `scrub` before it stores or broadcasts: `record_agent_output`, the permission card, the
-run's stored failure text and its lifecycle events.
+run's stored failure text and its lifecycle events. What the agent itself sends through its Hub
+tools is scrubbed on the way in, before any route reads it (`agent_action_scrub`, F490).
 
 That pass sees one event at a time, and a model's text is not one event: a runner records it as a
 sequence of `text` and `thinking` events, with tool calls, errors and status cards between them,
@@ -23,6 +24,7 @@ a locked database would feed the same text in twice; the per-event `scrub` stays
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
 
@@ -89,6 +91,32 @@ def _scrub(value: Any, secrets: Tuple[str, ...]) -> Any:
     if isinstance(value, tuple):
         return tuple(_scrub(item, secrets) for item in value)
     return value
+
+
+def any_registered() -> bool:
+    """Whether any run has a value to hide: the cheap check that lets every other request pass."""
+    return bool(_by_run)
+
+
+def scrub_body(run_id: Optional[str], body: bytes) -> bytes:
+    """A request body *run_id*'s agent sent through its Hub tools, with its registered values
+    replaced (F490). Parsed as JSON and scrubbed value by value, so a value the agent spelled with
+    JSON escapes is found too; a body that is not JSON is scrubbed as bytes. Returned as it came,
+    the same object, when nothing in it matched."""
+    secrets = registered(run_id)
+    if not secrets or not body:
+        return body
+    try:
+        data = json.loads(body)
+    except ValueError:
+        scrubbed_bytes = body
+        for secret in secrets:
+            scrubbed_bytes = scrubbed_bytes.replace(secret.encode("utf-8"), REDACTED.encode())
+        return scrubbed_bytes
+    scrubbed = _scrub(data, secrets)
+    if scrubbed == data:
+        return body
+    return json.dumps(scrubbed, ensure_ascii=False).encode("utf-8")
 
 
 def dangling_minimum(value: str) -> int:

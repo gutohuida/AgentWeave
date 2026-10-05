@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, bound_address, instance_identity, run_reconciliation, tool_server
+from .agent_action_scrub import AgentActionScrubMiddleware
 from .api.v1 import agent_trigger, v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
@@ -513,6 +514,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Added before the size limit, so it runs after it: a body is read whole only once the limit
+    # has passed it.
+    app.add_middleware(AgentActionScrubMiddleware)
 
     app.add_middleware(
         ContentSizeLimitMiddleware,
