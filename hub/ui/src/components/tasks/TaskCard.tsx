@@ -321,8 +321,12 @@ export function TaskCard({
                   // The border is `--border-hi`, not `--border`: a requirement chip is a link into
                   // the specification, and at rest it used to be indistinguishable from the purely
                   // informational badges beside it. The heavier edge plus a hover that reaches for
-                  // `--ring` says "this goes somewhere" without a second colour.
-                  className={['task-chip-req', chip.rejected ? 'rejected' : ''].filter(Boolean).join(' ')}
+                  // `--ring` says "this goes somewhere" without a second colour. The tone class
+                  // (design D5) says which of verified/pending/rejected/neutral the requirement's
+                  // own coverage is in today — `neutral` adds nothing, matching the chip's old look.
+                  className={['task-chip-req', chip.tone !== 'neutral' ? chip.tone : '']
+                    .filter(Boolean)
+                    .join(' ')}
                   style={{ cursor: clickable ? 'pointer' : 'default' }}
                 >
                   {chip.identifier}
@@ -330,6 +334,22 @@ export function TaskCard({
               )
             })}
           </div>
+        )}
+
+        {/* D5: with more than four chips the row itself stops being scannable, so a one-line
+            count by coverage state sits above it — "open" bundles every tone but verified/rejected
+            (awaiting review, not started, unserved, retired, …), matching the chips' own fallback
+            to neutral below `pending`'s single named state. */}
+        {chips.length > 4 && (
+          <p
+            data-testid={`task-requirement-summary-${task.id}`}
+            className="text-[11px] mt-1.5"
+            style={{ color: 'var(--text-3)' }}
+          >
+            {chips.filter((chip) => chip.tone === 'verified').length} verified ·{' '}
+            {chips.filter((chip) => chip.tone === 'rejected').length} rejected ·{' '}
+            {chips.filter((chip) => chip.tone !== 'verified' && chip.tone !== 'rejected').length} open
+          </p>
         )}
 
         {/* What this task is waiting for, and who it is waiting on. Said in words rather than left

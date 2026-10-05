@@ -106,12 +106,30 @@
 
 ## 5. The card (D5)
 
-- [ ] 5.1 Tests first (vitest): each chip carries its **coverage** state, from the document's
-  coverage response, not `requirement_links[].state`; five requirements show the count; four show
-  none.
-- [ ] 5.2 `useRequirementChips` (reads `useSpecCoverage` per linked document) and `TaskCard.tsx`;
-  `npm run lint`; refresh the bundle; commit
-  `hub/ui/src` and `hub/hub/static/ui` together.
+- [x] 5.1 Tests first (vitest), in `taskRequirementLinks.test.tsx`: rewrote "gives a chip whose
+  requirement has rejected evidence the rejected tone" to set coverage per document (`setCoverage`,
+  a module-level `coverageByPath` map a new `useSpecCoverageMany` mock reads) and give both links
+  the *same* `requirement_links[].state` (`active`) — so the old implementation's premise (reading
+  that field) could not pass; added a pending/neutral-tone test (a retired link with no coverage
+  row) and the five-vs-four summary tests (`task-requirement-summary-<id>`). Confirmed red: 3 new
+  tests failed, 9 pre-existing passed, before 5.2. Done 2026-10-06.
+- [x] 5.2 Added `useSpecCoverageMany(paths)` to `api/spec.ts` (`useQueries`, one query per path,
+  the exact `['project', projectId, 'specCoverage', path]` key `useSpecCoverage` already uses, so
+  it reads the same cache and the same invalidations). `useRequirementChips` now resolves each
+  linked document's coverage through it and maps `CoverageEntry.state` to a `tone`
+  (`verified`/`pending`/`rejected`/`neutral`); `rejected` stays as a boolean (`tone === 'rejected'`)
+  for the existing CSS class. `TaskCard.tsx` applies the tone as a class modifier (`neutral` adds
+  none, matching the old look) and renders a `task-requirement-summary-<id>` line above the chips
+  once there are more than four, counting verified/rejected/open (everything else). `latestRejectionReason`
+  (unused anywhere outside the hook — grepped) was dropped rather than kept dead.
+  Two other test files mocking `@/api/spec` without the new export broke
+  (`taskCountIsTheLedgersOwn.test.tsx`, `tasksBoardFilter.test.tsx`, both empty-document fixtures —
+  just needed the export added) and one relied on the old `has_rejected_evidence`-driven tone
+  (`taskBoardConsideredStates.test.tsx`) — updated to a coverage fixture. `npx vitest run`: 1871
+  passed (179 files). `npx eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0`
+  and `npx tsc --noEmit`: clean. `npm run build` then `py -3.11 scripts/refresh_ui_bundle.py`:
+  bundle refreshed, stamp recorded. No drive: the design's acceptance table (Drive D) does not cover
+  D5, and no backend route changed. Done 2026-10-06.
 
 ## 6. Close
 

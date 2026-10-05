@@ -45,6 +45,7 @@ vi.mock('@/components/overview/OverviewBudgetSummary', () => ({
 }))
 vi.mock('@/api/spec', () => ({
   useSpecDocuments: () => ({ data: { documents: [] } }),
+  useSpecCoverageMany: (paths: string[]) => paths.map(() => ({ data: undefined })),
 }))
 vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()

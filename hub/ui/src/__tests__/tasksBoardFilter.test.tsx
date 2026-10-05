@@ -18,6 +18,7 @@ vi.mock('@/api/agents', () => ({
 
 vi.mock('@/api/spec', () => ({
   useSpecDocuments: () => ({ data: { documents: [] } }),
+  useSpecCoverageMany: (paths: string[]) => paths.map(() => ({ data: undefined })),
 }))
 
 vi.mock('@/api/tasks', async (importOriginal) => {

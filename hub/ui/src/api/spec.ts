@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
@@ -306,6 +306,24 @@ export function useSpecCoverage(path: string | null) {
         }`,
       ),
     enabled: isConfigured && !!projectId,
+  })
+}
+
+/** Coverage for several documents at once, one query per path, sharing `useSpecCoverage`'s own
+ *  query key — so a card reading several documents' coverage can never disagree with the cache
+ *  the document view itself reads, and both invalidate on the same `spec_updated`/evidence-decision
+ *  events (`useSpecEvents`, `useDecideEvidence`). Order matches `paths`. */
+export function useSpecCoverageMany(paths: string[]) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQueries({
+    queries: paths.map((path) => ({
+      queryKey: ['project', projectId, 'specCoverage', path],
+      queryFn: () =>
+        getJson<CoverageResponse>(
+          `/api/v1/projects/${projectId}/project/spec/coverage?document=${encodeURIComponent(path)}`,
+        ),
+      enabled: isConfigured && !!projectId,
+    })),
   })
 }
 

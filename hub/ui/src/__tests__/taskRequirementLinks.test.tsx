@@ -36,6 +36,10 @@ vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: [{ name: 'worker' }] }),
 }))
 
+// A path's coverage, settable per test — mutated directly rather than reassigned, since the
+// `vi.mock` factory below closes over this same object identity.
+const coverageByPath: Record<string, unknown> = {}
+
 vi.mock('@/api/spec', () => ({
   useSpecDocuments: () => ({
     data: {
@@ -54,7 +58,26 @@ vi.mock('@/api/spec', () => ({
       ],
     },
   }),
+  useSpecCoverageMany: (paths: string[]) => paths.map((path) => ({ data: coverageByPath[path] })),
 }))
+
+function coverageEntry(overrides: Record<string, unknown> = {}) {
+  return {
+    identifier: 'FR-1',
+    requirement_id: 'spreq-a',
+    document_id: 'spdoc-1',
+    state: 'verified',
+    integration: 'integrated',
+    evidence_count: 1,
+    accepted_count: 1,
+    linked_task_ids: [],
+    ...overrides,
+  }
+}
+
+function setCoverage(path: string, requirements: Record<string, unknown>[]) {
+  coverageByPath[path] = { requirements, diagnostics: [], totals: {}, integration: {}, unserved: [] }
+}
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -84,7 +107,10 @@ async function renderExpanded(task: Task) {
   await userEvent.click(screen.getByTestId(`task-open-${task.id}`))
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  for (const key of Object.keys(coverageByPath)) delete coverageByPath[key]
+})
 
 describe('a card shows what it is checked against', () => {
   it('lists the checked links alongside the free-text requirements', async () => {
@@ -199,7 +225,13 @@ describe('the requirement chip row (F4)', () => {
     expect(screen.queryByTestId(/task-requirement-chip/)).toBeNull()
   })
 
-  it('gives a chip whose requirement has rejected evidence the rejected tone', () => {
+  it('gives a chip the rejected tone from its document coverage state, not requirement_links[].state', () => {
+    // Both links carry the same lifecycle state (`active`) — if the chip read `state`, as the
+    // design's first draft wrongly did (R1), the two chips below could not be told apart.
+    setCoverage('spec/example.html', [
+      coverageEntry({ identifier: 'FR-1', state: 'rejected' }),
+      coverageEntry({ identifier: 'FR-2', state: 'verified' }),
+    ])
     renderCollapsed(
       makeTask({
         requirement_ids: ['FR-1', 'FR-2'],
@@ -210,7 +242,6 @@ describe('the requirement chip row (F4)', () => {
             document_id: 'spdoc-1',
             state: 'active',
             statement: 'Settle to the cent',
-            has_rejected_evidence: true,
           },
           {
             identifier: 'FR-2',
@@ -218,19 +249,99 @@ describe('the requirement chip row (F4)', () => {
             document_id: 'spdoc-1',
             state: 'active',
             statement: 'Round consistently',
-            has_rejected_evidence: false,
           },
         ],
       }),
     )
 
     const rejectedChip = screen.getByTestId('task-requirement-chip-task-1-FR-1')
-    const okChip = screen.getByTestId('task-requirement-chip-task-1-FR-2')
+    const verifiedChip = screen.getByTestId('task-requirement-chip-task-1-FR-2')
     // The rejected tone is a modifier on the shared chip class now, not an inline colour — the
     // chip gained a resting border and a hover state that only a stylesheet can carry.
     expect(rejectedChip).toHaveClass('task-chip-req', 'rejected')
-    expect(okChip).toHaveClass('task-chip-req')
-    expect(okChip).not.toHaveClass('rejected')
+    expect(verifiedChip).toHaveClass('task-chip-req', 'verified')
+    expect(verifiedChip).not.toHaveClass('rejected')
+  })
+
+  it('gives a chip awaiting review the pending tone, and one with no coverage row the neutral tone', () => {
+    setCoverage('spec/example.html', [coverageEntry({ identifier: 'FR-1', state: 'evidence_awaiting_review' })])
+    renderCollapsed(
+      makeTask({
+        requirement_ids: ['FR-1', 'FR-2'],
+        requirement_links: [
+          {
+            identifier: 'FR-1',
+            requirement_id: 'spreq-a',
+            document_id: 'spdoc-1',
+            state: 'active',
+            statement: 'Settle to the cent',
+          },
+          // FR-2 is retired: a retired requirement has no document-coverage row at all.
+          {
+            identifier: 'FR-2',
+            requirement_id: 'spreq-b',
+            document_id: 'spdoc-1',
+            state: 'retired',
+            statement: null,
+          },
+        ],
+      }),
+    )
+
+    expect(screen.getByTestId('task-requirement-chip-task-1-FR-1')).toHaveClass('pending')
+    const neutralChip = screen.getByTestId('task-requirement-chip-task-1-FR-2')
+    expect(neutralChip).not.toHaveClass('rejected')
+    expect(neutralChip).not.toHaveClass('verified')
+    expect(neutralChip).not.toHaveClass('pending')
+  })
+
+  it('shows a one-line summary by coverage state once there are more than four chips', () => {
+    setCoverage('spec/example.html', [
+      coverageEntry({ identifier: 'FR-1', state: 'verified' }),
+      coverageEntry({ identifier: 'FR-2', state: 'verified' }),
+      coverageEntry({ identifier: 'FR-3', state: 'rejected' }),
+      coverageEntry({ identifier: 'FR-4', state: 'evidence_awaiting_review' }),
+      coverageEntry({ identifier: 'FR-5', state: 'not_started' }),
+    ])
+    renderCollapsed(
+      makeTask({
+        requirement_ids: ['FR-1', 'FR-2', 'FR-3', 'FR-4', 'FR-5'],
+        requirement_links: ['FR-1', 'FR-2', 'FR-3', 'FR-4', 'FR-5'].map((identifier) => ({
+          identifier,
+          requirement_id: `spreq-${identifier}`,
+          document_id: 'spdoc-1',
+          state: 'active',
+          statement: null,
+        })),
+      }),
+    )
+
+    expect(screen.getByTestId('task-requirement-summary-task-1')).toHaveTextContent(
+      '2 verified · 1 rejected · 2 open',
+    )
+  })
+
+  it('shows no summary for a task with four or fewer linked requirements', () => {
+    setCoverage('spec/example.html', [
+      coverageEntry({ identifier: 'FR-1', state: 'verified' }),
+      coverageEntry({ identifier: 'FR-2', state: 'verified' }),
+      coverageEntry({ identifier: 'FR-3', state: 'rejected' }),
+      coverageEntry({ identifier: 'FR-4', state: 'evidence_awaiting_review' }),
+    ])
+    renderCollapsed(
+      makeTask({
+        requirement_ids: ['FR-1', 'FR-2', 'FR-3', 'FR-4'],
+        requirement_links: ['FR-1', 'FR-2', 'FR-3', 'FR-4'].map((identifier) => ({
+          identifier,
+          requirement_id: `spreq-${identifier}`,
+          document_id: 'spdoc-1',
+          state: 'active',
+          statement: null,
+        })),
+      }),
+    )
+
+    expect(screen.queryByTestId('task-requirement-summary-task-1')).toBeNull()
   })
 
   it('clicking a chip resolves the document from document_id and navigates with the anchor', async () => {

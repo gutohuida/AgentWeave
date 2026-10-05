@@ -20,8 +20,20 @@ vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: [{ name: 'worker' }] }),
 }))
 
+const COVERAGE_RESPONSE = {
+  requirements: [
+    { identifier: 'REQ-118', requirement_id: 'spreq-118', document_id: 'doc-1', state: 'verified' },
+    { identifier: 'REQ-090', requirement_id: 'spreq-090', document_id: 'doc-1', state: 'rejected' },
+  ],
+  diagnostics: [],
+  totals: {},
+  integration: {},
+  unserved: [],
+}
+
 vi.mock('@/api/spec', () => ({
   useSpecDocuments: () => ({ data: { documents: [{ id: 'doc-1', path: 'spec/thing.html' }] } }),
+  useSpecCoverageMany: (paths: string[]) => paths.map(() => ({ data: COVERAGE_RESPONSE })),
 }))
 
 vi.mock('@/api/tasks', async (importOriginal) => {
