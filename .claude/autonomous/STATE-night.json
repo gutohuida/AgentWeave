@@ -8,33 +8,99 @@
     "parent_branch":  "master",
     "parent_sha":  "9ea4cdb",
     "stop_at":  "2026-10-06T07:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-10-05-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "current":  "c1b-r1",
+    "next_action":  "C1b (a-task-may-serve-a-whole-slice) task 0.1: one grounded review round over proposal.md, design.md and the three spec deltas -- every claim re-read at its cited file:line or checked by something run. Record findings folded in or rejected with a reason in a short 'Review round' section of design.md.",
     "queue":  [
                   {
-                      "id":  "compose",
+                      "id":  "c1b-r1",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "C1b task 0.1: grounded review round",
+                      "detail":  "openspec/changes/a-task-may-serve-a-whole-slice/tasks.md. Every claim at file:line or run. Record in design.md. Pre-authorised: a defect not already settled by a design decision, fix in-spec if one sentence; else OPEN DECISIONS.md row, stop C1b, move on."
+                  },
+                  {
+                      "id":  "c1b-drive",
+                      "status":  "open",
+                      "title":  "C1b tasks 1.1-1.2: acceptance drive D, failing before build",
+                      "detail":  "1.1 mode=ro count on :8000 of tasks not yet approved serving a requirement whose current-digest evidence is all rejected. 1.2 write testbed/drive-slices/drive_d.py from drive_c.py + stub_provider.py; run on :8010, must fail at (a) with task_too_coarse."
+                  },
+                  {
+                      "id":  "c1b-2-impl",
+                      "status":  "open",
+                      "title":  "C1b group 2: remove the requirement-count ceiling (D1)",
+                      "detail":  "Tests first (2.1): rewrite test_spec_completeness.py:133,:146 -- five-requirement task proposable, zero-requirement task still refused. Then 2.2: remove MAX_REQUIREMENTS_PER_TASK and task_too_coarse; reword data/charters/spec.md:101."
+                  },
+                  {
+                      "id":  "c1b-3-impl",
+                      "status":  "open",
+                      "title":  "C1b group 3: rejected block at every rigor (D2, D4)",
+                      "detail":  "3.1 tests first per scenario of Approval is refused while a gated requirement is unverified (operator route + agent/tool path); ask what each route returns when the gate refuses. 3.2 rewrite test_approval_refuses_unaccepted_evidence.py:625, test_task_integration.py:510. 3.3 the rejected step in requirement_gate.evaluate above the early return."
+                  },
+                  {
+                      "id":  "c1b-4-impl",
+                      "status":  "open",
+                      "title":  "C1b group 4: sketch-approval digest policy (D3)",
+                      "detail":  "4.1 tests first: sketch task serving requirements records a digest, serving none records null -- rewrite test_requirement_gate.py:905. 4.2 digest covers every served requirement at every rigor."
+                  },
+                  {
+                      "id":  "c1b-5-impl",
+                      "status":  "open",
+                      "title":  "C1b group 5: requirement chips on the task card (D5)",
+                      "detail":  "5.1 vitest tests first: each chip carries its state, five requirements show the count, four show none. 5.2 useRequirementChips + TaskCard.tsx; npm run lint; refresh bundle; commit hub/ui/src and hub/hub/static/ui together."
+                  },
+                  {
+                      "id":  "c1b-gate",
+                      "status":  "open",
+                      "title":  "C1b group 6: close -- full suites, drive D passing, METRICS row",
+                      "detail":  "6.1 pytest hub/tests/ -q and pytest tests/ -q with counts+sha inline in tasks.md. 6.2 drive D passes (a)-(e) on :8010. 6.3 spec-queue/METRICS.md row: tier, times, which stage caught each defect."
+                  },
+                  {
+                      "id":  "c1b-archive",
+                      "status":  "open",
+                      "title":  "Archive a-task-may-serve-a-whole-slice and sync specs",
+                      "detail":  "openspec-sync-specs then openspec-archive-change. Set Status: fixed <sha> for any F<n> the proposal names and correct FINDINGS.md's open-severity index. Append the METRICS.md row if not already done in c1b-gate."
+                  },
+                  {
+                      "id":  "copilot-credits-impl",
+                      "status":  "open",
+                      "title":  "a-copilot-one-shot-records-its-credits tasks 0.5, 1.1-2.3",
+                      "detail":  "openspec/changes/a-copilot-one-shot-records-its-credits/tasks.md. 0.5: record tonight's APPROVALS.md 2026-10-05 line as the operator approval. 1.1-1.4 tests first against fixtures/copilot_acp/oneshot_ok.jsonl. 2.1 copilot_usage.py checkpoint_totals; 2.2 runner_adapters/copilot.py parse_copilot_envelope keeps last checkpoint on all three exits. 2.3 run the named test files, then full hub/tests/ with claude stripped from PATH, then lint."
+                  },
+                  {
+                      "id":  "copilot-credits-drive",
+                      "status":  "open",
+                      "title":  "a-copilot-one-shot-records-its-credits task 3: drive on :8010",
+                      "detail":  "At most 2 Copilot Free calls (Auto). 3.1 checkpoint + probe via the operator's Checkpoint button; read worker_invocations mode=ro: ai_nano_aiu and premium_requests non-NULL for both rows, cli='copilot'; GET /accounting shows neither. 3.2 compare with Copilot CLI's own report if readable without an interactive session; else record not compared."
+                  },
+                  {
+                      "id":  "copilot-credits-archive",
+                      "status":  "open",
+                      "title":  "Archive a-copilot-one-shot-records-its-credits and sync specs",
+                      "detail":  "openspec-sync-specs then openspec-archive-change; set Status: fixed <sha> for any F<n> it names; append spec-queue/METRICS.md row."
+                  },
+                  {
+                      "id":  "f489-impl",
+                      "status":  "open",
+                      "title":  "Tier-0 fix F489: stop retrying a Copilot auth failure that cannot succeed on retry",
+                      "detail":  "scripts/drive/FINDINGS.md F489 (C, APPROVED-FIXES tonight). Fix direction named, not yet decided in DECISIONS.md: a turn failing with a root session.error whose errorType is authentication (or quota, D5's pattern) is not retried -- the entry waits for the operator. Test fails at the retry seam first, then the fix, then CI's lint set, a mutation check, a drive on a fresh port, then Status: fixed <sha>. If this needs more than a one-sentence spec choice, stop and leave an OPEN DECISIONS.md row for the day window instead of stretching it."
                   }
               ],
     "decisions_for_user":  [
 
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }
