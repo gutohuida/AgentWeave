@@ -1,0 +1,183 @@
+# spec-roadmaps Specification
+
+## Purpose
+A request too large for one change document is written as a roadmap of ordered slices plus one
+small change document per slice. This capability defines the roadmap and its slices, the link from a
+slice's change document to its roadmap, drafting the next slice once the approved slice is built,
+and the authoring guidance that prefers a roadmap and a small slice over one large document.
+Created by `2026-10-05-a-spec-is-written-one-slice-at-a-time` (C1a, amended for F496).
+## Requirements
+### Requirement: A roadmap carries ordered slices and no requirements or tasks
+
+A roadmap document SHALL carry an ordered list of slices, each with a key, a title, an intent, a done criterion, and the keys of the slices it builds after. It SHALL carry no requirements and no tasks.
+
+A roadmap is the plan for a request too large for one change document. It says what the slices
+are and in what order they are built. Each slice's requirements live in the change document that
+specifies it, which is written when that slice is next. Slices are accepted only on a roadmap.
+Completeness for a roadmap asks for at least one slice, not for requirements. Approving a roadmap
+creates no tasks.
+
+#### Scenario: A roadmap with slices is proposable
+
+- **WHEN** a roadmap is moved to proposed, and its payload has non-goals and two slices, each with
+  a key, title, intent and done criterion
+- **THEN** the move succeeds, and no finding names missing requirements
+
+#### Scenario: A roadmap without slices is incomplete
+
+- **WHEN** a roadmap with no slices is moved to proposed
+- **THEN** it is refused, and the finding names the missing slices
+
+#### Scenario: A roadmap that carries tasks or requirements is refused
+
+- **WHEN** a roadmap payload carrying a requirement or a task is submitted
+- **THEN** it is refused, and the refusal says those belong in the slice's change document
+
+#### Scenario: Slices are refused on any other kind
+
+- **WHEN** a change-spec payload carrying slices is submitted
+- **THEN** it is refused
+
+#### Scenario: A slice builds after a slice that exists
+
+- **WHEN** a slice names in builds-after a key that is not a slice of the same roadmap, or names
+  itself
+- **THEN** the submission is refused, naming the key
+
+#### Scenario: Approving a roadmap creates no tasks
+
+- **WHEN** the operator approves a roadmap
+- **THEN** no task is created
+
+#### Scenario: The roadmap's slices are rendered and readable
+
+- **WHEN** a roadmap is rendered, or read by an agent through the document read tool
+- **THEN** each slice's key, title, intent, done criterion and builds-after appear, in roadmap order
+
+### Requirement: A change document may name the roadmap slice it specifies
+
+A change document SHALL be able to name the roadmap and the slice key it specifies, and moving it to proposed or approved SHALL be refused unless that roadmap exists, is approved, and holds that slice.
+
+The link is held in the slice's own payload, not in the corpus index. Only the operator may set a
+document's place in the index, and a rename does not update it. A roadmap is approved before its
+first slice is proposed, and an approved document cannot be renamed. So a path that resolves at
+proposal still resolves later.
+
+#### Scenario: A slice of an approved roadmap is proposable
+
+- **WHEN** a change document naming an approved roadmap and one of its slice keys is moved to
+  proposed
+- **THEN** no roadmap finding blocks it
+
+#### Scenario: A slice of an unapproved roadmap is not proposable
+
+- **WHEN** a change document names a roadmap that is still exploring
+- **THEN** the move to proposed is refused, and the finding names the roadmap and its phase
+
+#### Scenario: A slice key the roadmap does not hold
+
+- **WHEN** a change document names a slice key that the roadmap does not hold
+- **THEN** the move to proposed is refused, and the finding names the key and the roadmap
+
+#### Scenario: The slice says whose slice it is
+
+- **WHEN** a change document naming a roadmap slice is rendered
+- **THEN** it shows the slice's key and title and the roadmap's title
+
+### Requirement: The next slice is drafted once the approved slice is built
+
+Approving a change document that names a roadmap slice SHALL, when the approval request asks for it, record that request, and once every task linked to that document has reached approved or rejected the Hub SHALL queue one turn as the operator to the agent that created the document, in the conversation where it created it, asking it to draft the slice that follows in the roadmap's order and naming each of the built slice's tasks with its final status; the approval response SHALL say whether the turn is waiting for tasks, was queued, or cannot be queued and why.
+
+The operator approves each slice. The agent drafts the next one with what building the last one
+taught it, so the turn waits for the slice's tasks to close (F496, decided 2026-10-05). A rejected
+task closes too: nothing more happens to it unless the operator reopens it, and the drafting turn is
+told it was rejected. A task linked to the document after approval is waited for as well. The turn
+is the operator's because the operator asked for it in the approval request, so no new kind of
+queue origin is introduced. "The next slice" is the one after the approved slice in the roadmap's
+list. Builds-after constrains that order but does not choose it. The turn is queued at most once
+per request, even if a task is later reopened and closed again.
+
+#### Scenario: Approval waits for the slice's tasks
+
+- **WHEN** the operator approves, asking for the next slice, slice S1 of a roadmap whose slices are
+  S1 and S2, the slice document was created by agent planner, and the approval creates two tasks
+- **THEN** no turn is queued yet
+- **AND** the approval response reports it as waiting, naming S2, planner and two open tasks
+
+#### Scenario: The last task closing queues the drafting turn
+
+- **WHEN** the first of those two tasks is approved
+- **THEN** no turn is queued
+- **AND WHEN** the second is approved or rejected, by any surface
+- **THEN** one turn is queued from the operator to planner, in the conversation that created the
+  document, naming the roadmap, slice S2 with its title, and each task with its final status
+- **AND** planner is scheduled once that transition commits
+
+#### Scenario: The turn is queued once
+
+- **WHEN** a task of a slice whose drafting turn was already queued is reopened and approved again
+- **THEN** no second turn is queued
+
+#### Scenario: A slice with no open task queues at once
+
+- **WHEN** the operator re-approves, asking for the next slice, a reopened slice document whose
+  linked tasks are all approved or rejected
+- **THEN** the turn is queued in the approval request, and the response reports it as queued
+
+#### Scenario: The drafting turn is a specification turn on the roadmap
+
+- **WHEN** the turn queued to draft the next slice starts
+- **THEN** it has the roadmap open as its specification document, so it has no file-write tool
+- **AND** it is told that the roadmap's slices are specified as change documents, not implemented
+  from the roadmap
+
+#### Scenario: The last slice queues nothing
+
+- **WHEN** the approved document specifies the roadmap's last slice
+- **THEN** nothing is recorded or queued, and the response says the roadmap has no further slice
+
+#### Scenario: A document the operator created has no author to ask
+
+- **WHEN** the approved slice document was created by the operator
+- **THEN** nothing is recorded or queued, and the response says no agent created the document
+
+#### Scenario: Not asking queues nothing
+
+- **WHEN** the operator approves a slice document without asking for the next slice, and its tasks
+  are later all approved
+- **THEN** no turn is queued
+
+#### Scenario: A document that is not a slice is unaffected
+
+- **WHEN** the operator approves, asking for the next slice, a change document that names no roadmap
+- **THEN** nothing is recorded or queued, and the approval is otherwise unchanged
+
+#### Scenario: A failure to queue never fails the task's transition
+
+- **WHEN** queuing the drafting turn raises while the last task is being approved
+- **THEN** the task is still approved, and the failure is logged
+
+### Requirement: Authoring guidance prefers a roadmap and a small slice
+
+The guidance an agent receives for creating and submitting a specification SHALL tell it to write a request larger than one slice as a roadmap plus the first slice's change document, to keep a slice to about a dozen requirements or fewer as a few tasks, and to record later slices in the roadmap instead of specifying them.
+
+The guidance is in the creation and submission tool descriptions and in the specification-turn
+duties, so every authoring agent receives it whether or not a charter is bound. It is not enforced.
+The size is measured on real runs instead.
+
+#### Scenario: The tools say it
+
+- **WHEN** the creation and submission tool descriptions are read
+- **THEN** both name the roadmap-plus-slice shape and the size of a slice
+
+#### Scenario: A specification turn is told it
+
+- **WHEN** an agent's turn context carries the specification duties
+- **THEN** they name the roadmap-plus-slice shape and the size of a slice
+
+#### Scenario: An approved roadmap is not implemented
+
+- **WHEN** an agent's turn has an approved roadmap open
+- **THEN** its duties say that slices are specified one at a time as change documents naming the
+  roadmap, and that the roadmap itself is not implemented
+
