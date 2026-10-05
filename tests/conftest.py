@@ -26,9 +26,31 @@ after this fixture and undoes in reverse, so an explicit fake always wins.
 
 from __future__ import annotations
 
+import os
 import sys
 
 import pytest
+
+# An agent's run carries its bound credential and the Hub's address, and an agent may run this
+# suite inside its run. Handed to every test, they sent `POST /session/sync` to the Hub that
+# started the run and failed ten transport tests (F493, measured 2026-10-05). Removed before any
+# test runs; `hub/tests/conftest.py` holds the same list, and its
+# `test_suite_carries_no_run_credentials.py` keeps the two in step.
+RUN_ENVIRONMENT_NAMES = (
+    "AW_RUN_TOKEN",
+    "AW_RUN_ID",
+    "AW_AGENT_IDENTITY",
+    "AW_WORKSPACE_DIR",
+    "AW_PERMISSION_POSTURE",
+    "AW_DECISION_TIMEOUT",
+    "AW_QUESTION_TIMEOUT",
+    "AW_TURN_DEPTH",
+    "HUB_URL",
+    "HUB_API_KEY",
+    "HUB_PROJECT_ID",
+)
+for _name in RUN_ENVIRONMENT_NAMES:
+    os.environ.pop(_name, None)
 
 
 @pytest.fixture(autouse=True)

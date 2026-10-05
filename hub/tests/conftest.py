@@ -65,6 +65,29 @@ if _inherited_database_url and _inherited_database_url != TEST_DATABASE_URL:
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["AW_BOOTSTRAP_API_KEY"] = TEST_API_KEY = "aw_live_testkey_abcdefgh"
 
+# The same environment carries the run's own authority, and that one is not overwritten but removed
+# (F493). `trigger_agent` gives every run its bound credential and the Hub's address, and an agent
+# running this suite inside its run handed both to every test: a test reaching a reporting path
+# (`mcp_server._report_decision` under a fake operator answer) posted a decision that never happened
+# to the live Hub, against the real run. The operator credentials are here for the same reason: no
+# test acts on a real Hub. `test_suite_carries_no_run_credentials.py` keeps this list in step with
+# what `trigger_agent` writes.
+RUN_ENVIRONMENT_NAMES = (
+    "AW_RUN_TOKEN",
+    "AW_RUN_ID",
+    "AW_AGENT_IDENTITY",
+    "AW_WORKSPACE_DIR",
+    "AW_PERMISSION_POSTURE",
+    "AW_DECISION_TIMEOUT",
+    "AW_QUESTION_TIMEOUT",
+    "AW_TURN_DEPTH",
+    "HUB_URL",
+    "HUB_API_KEY",
+    "HUB_PROJECT_ID",
+)
+for _name in RUN_ENVIRONMENT_NAMES:
+    os.environ.pop(_name, None)
+
 # The project nearly every test addresses. It used to arrive as a side effect of
 # `init_db`, which created a project when AW_BOOTSTRAP_PROJECT_ID was set — the same
 # mechanism that put a "Default Project" in front of operators who had an older .env.
