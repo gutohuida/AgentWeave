@@ -1,62 +1,40 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-03-daily",
-    "parent_branch": "master",
-    "parent_sha": "72b95db",
-    "stop_at": "2026-10-04T07:00:00+01:00",
-    "iteration": 66,
-    "log_file": ".claude/autonomous/2026-10-03-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "the-shell-judge-reads-a-word-whole-impl",
-    "next_action": "Iteration 66: branch tip adacef6 already fixed the CI failure (confirmed: tests/test_openspec_task_evidence.py 4 passed locally), so this firing did its real next_action -- built task 3.1's remaining R6 and R8 bullets in testbed/scratch/shell_judge_3_1_r6r8/ (junctions ws/up, ws/sub/l->ws, ws/sub/@s/p, ws/a'b/up, ws/node_modules->sibling LoopEngine_2/node_modules), all nine checks matched design.md exactly, scratch deleted after use. Task 3.1 ticked. Full tests/ 565 passed, 3 skipped. The only unticked tasks left in this change are 2.2a, 1.7c, 2.3 and 4.1, all blocked on spec-queue/DECISIONS.md rows 'shell-judge-escape-scope-1-7c' and 'shell-judge-2-3-eight-files' (both re-confirmed OPEN this iteration) or on each other. NEXT: re-check both rows; if still OPEN, move to the next queue item (a-drive-or-a-home-variable-names-a-directory-by-itself-impl) and re-derive from its own tasks.md/design.md before building rather than waiting idle. Do not touch 2.3, 1.7c, 2.2a or 4.1 until their rows resolve.",
-    "queue": [
-        {
-            "id": "ghcp-s5-a-impl",
-            "status": "blocked",
-            "title": "Slice 5 group A: Copilot's lifecycle reaches the Hub",
-            "detail": "STOPPED 2026-10-03: task 1.1's real capture found subagent.started/completed/failed not delivered, confirmed three more ways (7.1, 7.2, 7.3 addenda). Blocked on spec-queue/DECISIONS.md 'ghcp-s5-subagent-capture' (OPEN). Rebase sites and task 1.1 are done; 1.2-1.6, 2.1-2.8 and its part of 1.14 are not started. Do not resume until that row is no longer OPEN."
-        },
-        {
-            "id": "a-copilot-one-shot-records-its-credits-approve",
-            "status": "blocked",
-            "title": "Follow-up change, R1-R3 and Opus review done -- waiting on operator approval",
-            "detail": "R1/R2/R3 and the Opus review are all done (2026-10-03 afternoon, iters 21-24). Blocked on spec-queue/DECISIONS.md 'copilot-oneshot-credits-approve' (OPEN) -- approve for -impl, or send back. 'copilot-oneshot-credits-oq1' (OPEN) is a secondary question about worker-spend-counts-against-the-budget's next round. No -impl until approved; this window writes no new proposal rounds for it either."
-        },
-        {
-            "id": "the-shell-judge-reads-a-word-whole-impl",
-            "status": "open",
-            "title": "B4 continues: tasks 1.4f, 1.7, 1.7b, 2.2b, 2.2c, 2.4, 2.5 and 3.1 closed. 2.2a's code fully built (one part POSIX-gated per F487). 1.7c partly built, two bullets blocked on an operator decision. 2.3 blocked on a second operator decision (its own file list is unresolvable from the record). Remaining unticked: 2.2a itself, 1.7c, 2.3, 4.1",
-            "detail": "Iters 36-66: see prior log entries for full history. Task 2.2a has all four parts built in code (iters 54-56, one part POSIX-gated per F487, scripts/drive/FINDINGS.md). Task 1.7b (iter 57) ticked; fixed at iter 59 (c19b17a) after a Windows-only assertion failed ubuntu-latest, confirmed at iter 60. Task 1.7c (iter 58): 4 of 6 bullets built; bullets 2/3 hit F487's conflict, filed as DECISIONS.md `shell-judge-escape-scope-1-7c` (OPEN); bullet 4 blocked on the not-yet-started sibling change. Task 2.2b (iter 59) ticked. Task 2.2c (iter 60) added the hub-judge-windows CI job; iter 60's push (3a22912) then failed ubuntu-latest hub-test, fixed and pushed by iter 61 (02ef809/dda4e96); iter 62 confirmed both hub-test and hub-judge-windows green on run 37175853141 and ticked 2.2c. Iter 62 then re-derived task 2.3 fresh against design.md and found its 'eight files named in design D2' has no file list anywhere in D2's own text (the only lead, line 352's 'eight test files', is a count from a gitignored, no-longer-present prototype script) -- filed DECISIONS.md `shell-judge-2-3-eight-files` (OPEN) rather than guessing. Iter 63 ticked 2.4 (full hub/tests/ suite, claude stripped from PATH: 6565 passed, 92 skipped, 345 warnings) and 2.5 (ruff + black both clean). Iter 64 built task 3.1's bullet 1 (brace-expansion claims), the R4 junction-glob bullet, and the unlabeled nested-bash-escape bullet, plus recorded bash --version/shopt globskipdots/shopt extglob -- all measured in a fresh testbed/scratch/shell_judge_3_1_drive/ (deleted after use). Iter 65 was a CI fix (task 2.4's count had landed outside the detector's block; moved onto the checkbox line, no re-run). Iter 66 built task 3.1's remaining R6 and R8 bullets in a fresh testbed/scratch/shell_judge_3_1_r6r8/ (junctions ws/up, ws/sub/l->ws, ws/sub/@s/p, ws/a'b/up, and ws/node_modules->sibling LoopEngine_2/node_modules since no sibling AgentWeave checkout exists), all nine checks matched design.md exactly, scratch deleted after use -- **3.1 ticked**, the whole task now closed. 1.7c, 2.2a and 2.3 stay unticked pending their respective operator decisions (both still OPEN as of iter 66). next_action: re-check both DECISIONS.md rows; if still OPEN, move to the next queue item rather than waiting idle. 4.1 (close/archive) waits on 2.2a, 1.7c and 2.3 all finishing."
-        },
-        {
-            "id": "a-drive-or-a-home-variable-names-a-directory-by-itself-impl",
-            "status": "open",
-            "title": "B4 sibling (12/31), drive-gated tasks only once the sibling's pieces land",
-            "detail": "Untouched this window so far (not regressed, simply not reached -- the-shell-judge is ahead of it in ORDER and ahead of it in completion). Re-derive from its own tasks.md and design.md before building; do not assume iter 32's note about it still applies without checking."
-        }
-    ],
-    "decisions_for_user": [
-        "ghcp-s5-subagent-capture",
-        "copilot-oneshot-credits-approve",
-        "copilot-oneshot-credits-oq1",
-        "shell-judge-escape-scope-1-7c",
-        "shell-judge-2-3-eight-files"
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-10-05-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "9ea4cdb",
+    "stop_at":  "2026-10-06T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-10-05-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
