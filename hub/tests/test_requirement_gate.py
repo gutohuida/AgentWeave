@@ -362,6 +362,172 @@ async def test_rejected_evidence_blocks_with_its_own_remedy(app, auth_headers, b
     assert "rejected" in blocking["remedy"]
 
 
+# ---------------------------------------------------------------------------
+# The rejected block at every rigor (`a-task-may-serve-a-whole-slice`, D2) — the test above already
+# covers `gate`, which blocked a rejected requirement before this change too. What is new is that
+# `sketch` and `contract` now do the same, through one step in `evaluate` above the `sketch` early
+# return, rather than only `gate`'s own unmet-requirement loop.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_sketch_refuses_a_rejected_requirement(app, auth_headers, builder, tmp_path):
+    """Before D2, `test_a_sketch_reports_nothing_on_approval` shows `sketch` stays silent about
+    everything. A rejected requirement is the one exception now: the same remedy `gate` names."""
+    await _document(app, auth_headers, builder)
+    task_id = await _linked_task(app, auth_headers)
+    recorded = await app.post(AGENT_EVIDENCE, json={"identifier": "FR-1"}, headers=builder)
+    await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "rejected", "reason": "not what it says"},
+        headers=auth_headers,
+    )
+
+    response = await _task_to(
+        app,
+        auth_headers,
+        task_id,
+        "assigned",
+        "in_progress",
+        "completed",
+        "under_review",
+        "approved",
+    )
+
+    assert response.status_code == 409, response.text
+    blocking = response.json()["detail"]["blocking"][0]
+    assert blocking["identifier"] == "FR-1"
+    assert blocking["state"] == "rejected"
+    assert "rejected" in blocking["remedy"]
+
+
+@pytest.mark.asyncio
+async def test_the_sketch_rejection_refuses_on_the_agent_plane_too(
+    app, auth_headers, builder, tmp_path
+):
+    """`test_the_gate_holds_over_the_agent_plane` establishes both routes call one service. The new
+    sketch-level refusal has to hold on the agent plane too, not only through the operator route —
+    asked for directly rather than assumed from that other test's rigor."""
+    await _document(app, auth_headers, builder)
+    task_id = await _linked_task(app, auth_headers)
+    recorded = await app.post(AGENT_EVIDENCE, json={"identifier": "FR-1"}, headers=builder)
+    await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "rejected", "reason": "not what it says"},
+        headers=auth_headers,
+    )
+    await _task_to(
+        app, auth_headers, task_id, "assigned", "in_progress", "completed", "under_review"
+    )
+
+    response = await app.patch(
+        f"/api/v1/agent-actions/tasks/{task_id}",
+        json={"status": "approved"},
+        headers=builder,
+    )
+
+    assert response.status_code == 409, response.text
+    assert "FR-1" in response.text
+
+
+@pytest.mark.asyncio
+async def test_a_contract_rejection_blocks_and_is_not_reported(
+    app, auth_headers, builder, tmp_path
+):
+    """Before D2, `test_a_contract_reports_and_blocks_nothing` shows an ordinary unmet `contract`
+    requirement never refuses. A rejected one is no longer that case: D2 moves it to `blocking`
+    before the `contract`/`gate` loop runs, so it is never reported as `contract`'s advisory copy.
+    """
+    await _document(app, auth_headers, builder)
+    await _set_rigor(app, auth_headers, "contract")
+    task_id = await _linked_task(app, auth_headers)
+    recorded = await app.post(AGENT_EVIDENCE, json={"identifier": "FR-1"}, headers=builder)
+    await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "rejected", "reason": "not what it says"},
+        headers=auth_headers,
+    )
+
+    response = await _task_to(
+        app,
+        auth_headers,
+        task_id,
+        "assigned",
+        "in_progress",
+        "completed",
+        "under_review",
+        "approved",
+    )
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert detail["blocking"][0]["identifier"] == "FR-1"
+    assert detail["blocking"][0]["state"] == "rejected"
+    assert detail["reported"] == []
+
+
+@pytest.mark.asyncio
+async def test_new_accepted_evidence_lifts_a_rejected_block(app, auth_headers, builder, tmp_path):
+    """The rejected remedy's own way out (`requirement_coverage._state`: an accepted row at the
+    current digest wins over a rejected one) — recording evidence that satisfies the current
+    wording is what the remedy names, and it has to actually clear the refusal D2 added."""
+    await _document(app, auth_headers, builder)
+    task_id = await _linked_task(app, auth_headers)
+    first = await app.post(AGENT_EVIDENCE, json={"identifier": "FR-1"}, headers=builder)
+    await app.post(
+        f"{BASE}/spec/evidence/{first.json()['id']}/decision",
+        json={"decision": "rejected", "reason": "not what it says"},
+        headers=auth_headers,
+    )
+    refused = await _task_to(
+        app,
+        auth_headers,
+        task_id,
+        "assigned",
+        "in_progress",
+        "completed",
+        "under_review",
+        "approved",
+    )
+    assert refused.status_code == 409, refused.text
+
+    second = await app.post(AGENT_EVIDENCE, json={"identifier": "FR-1"}, headers=builder)
+    await app.post(
+        f"{BASE}/spec/evidence/{second.json()['id']}/decision",
+        json={"decision": "accepted"},
+        headers=auth_headers,
+    )
+
+    approved = await app.patch(
+        f"{TASKS}/{task_id}", json={"status": "approved"}, headers=auth_headers
+    )
+    assert approved.status_code == 200, approved.text
+
+
+@pytest.mark.asyncio
+async def test_a_sketch_with_unverified_non_rejected_requirements_still_approves(
+    app, auth_headers, builder, tmp_path
+):
+    """D2 blocks only `rejected` — an unstarted requirement at `sketch` keeps approving exactly as
+    `test_an_ungated_approval_records_no_policy` shows, or the ceiling's removal (group 2) would
+    have traded one barrier for another D2 was never meant to add."""
+    await _document(app, auth_headers, builder)
+    task_id = await _linked_task(app, auth_headers)
+
+    response = await _task_to(
+        app,
+        auth_headers,
+        task_id,
+        "assigned",
+        "in_progress",
+        "completed",
+        "under_review",
+        "approved",
+    )
+
+    assert response.status_code == 200, response.text
+
+
 @pytest.mark.asyncio
 async def test_stale_evidence_does_not_open_the_gate(app, auth_headers, builder, tmp_path):
     await _document(app, auth_headers, builder)

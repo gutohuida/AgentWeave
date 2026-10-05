@@ -341,13 +341,11 @@ class GateRefusal:
         }
 
 
-async def _enforced_requirements(
-    session: AsyncSession, task: Task
-) -> tuple[List[SpecRequirement], Dict[str, str]]:
-    """The task's linked requirements whose document is `gate` or `contract` — everything but
-    `sketch`, which stays silent apart from the rejected-evidence signal it already carries on the
-    task response regardless of rigor."""
-    rows = (
+async def _linked_requirements(session: AsyncSession, task: Task) -> List[Any]:
+    """Every `(requirement, document)` pair the task links, at every rigor including `sketch` — the
+    population D2's rejected check reads, before `_enforced_requirements` below filters `sketch` out
+    for the unmet/diagnostic loop that follows it."""
+    return (
         await session.execute(
             select(SpecRequirement, SpecDocument)
             .join(TaskRequirementLink, TaskRequirementLink.requirement_id == SpecRequirement.id)
@@ -355,6 +353,21 @@ async def _enforced_requirements(
             .where(TaskRequirementLink.task_id == task.id)
         )
     ).all()
+
+
+async def _enforced_requirements(
+    session: AsyncSession, task: Task, *, rows: Optional[List[Any]] = None
+) -> tuple[List[SpecRequirement], Dict[str, str]]:
+    """The task's linked requirements whose document is `gate` or `contract` — everything but
+    `sketch`, which stays silent apart from the rejected-evidence signal it already carries on the
+    task response regardless of rigor (and, since D2, apart from a rejected requirement, which now
+    blocks at `sketch` too — through the separate step in `evaluate`, not through this filter).
+
+    *rows* lets `evaluate` pass the join it already ran for D2's step, so a task linking several
+    requirements does not run the same query twice in one call.
+    """
+    if rows is None:
+        rows = await _linked_requirements(session, task)
     enforced = [
         requirement
         for requirement, document in rows
@@ -638,7 +651,39 @@ async def evaluate(
     # which argues the departure rather than leaving it to be re-derived.
     await _check_live_turn(session, task, refusal, acting_run_id=acting_run_id)
 
-    enforced, rigors = await _enforced_requirements(session, task)
+    # D2: a rejected requirement blocks approval at every rigor, `sketch` included — above the
+    # early return two statements down for the same reason the repository checks are (`:628-630`
+    # above): that return fires on every default project, and a check placed after it would be dead
+    # exactly where the defect it fixes lives. Reads every linked document, not only the enforced
+    # ones, and caches each document's report so the enforced loop below does not ask twice.
+    rows = await _linked_requirements(session, task)
+    by_all_document: Dict[str, List[SpecRequirement]] = {}
+    for requirement, document in rows:
+        by_all_document.setdefault(document.id, []).append(requirement)
+
+    reports_by_document: Dict[str, requirement_coverage.CoverageReport] = {}
+    rejected_requirement_ids: set = set()
+    for document_id, requirements in by_all_document.items():
+        report = await requirement_coverage.requirement_coverage(
+            session, task.project_id, document_id=document_id, include_retired=True
+        )
+        reports_by_document[document_id] = report
+        wanted_ids = {requirement.id for requirement in requirements}
+        for entry in report.requirements:
+            if entry.requirement_id not in wanted_ids:
+                continue
+            if entry.state == requirement_coverage.REJECTED:
+                refusal.blocking.append(
+                    {
+                        "identifier": entry.identifier,
+                        "requirement_id": entry.requirement_id,
+                        "state": entry.state,
+                        "remedy": REMEDY[requirement_coverage.REJECTED],
+                    }
+                )
+                rejected_requirement_ids.add(entry.requirement_id)
+
+    enforced, rigors = await _enforced_requirements(session, task, rows=rows)
     if not enforced:
         return refusal, ""
 
@@ -652,9 +697,7 @@ async def evaluate(
     for document_id in by_document:
         rigor = rigors.get(document_id, spec_rigor.SKETCH)
         gates = rigor == spec_rigor.GATE
-        report = await requirement_coverage.requirement_coverage(
-            session, task.project_id, document_id=document_id, include_retired=True
-        )
+        report = reports_by_document[document_id]
         for entry in report.requirements:
             if entry.requirement_id not in wanted:
                 continue
@@ -666,6 +709,11 @@ async def evaluate(
                     "rigor": rigor,
                 }
             )
+            if entry.requirement_id in rejected_requirement_ids:
+                # Already in `blocking` from the step above — the loop's own job is `contract` and
+                # `gate`'s unmet-but-not-rejected states, so it must not add a second `blocking`
+                # entry here, or a `reported` copy of one `contract` no longer gets to report.
+                continue
             if entry.state != SATISFIED:
                 unmet = {
                     "identifier": entry.identifier,

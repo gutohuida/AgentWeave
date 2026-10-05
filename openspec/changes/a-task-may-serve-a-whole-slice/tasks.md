@@ -42,15 +42,37 @@
 
 ## 3. The rejected block at every rigor (D2, D4)
 
-- [ ] 3.1 Tests first, against the transition (operator route and the agent/tool path), one per
+- [x] 3.1 Tests first, against the transition (operator route and the agent/tool path), one per
   scenario of *Approval is refused while a gated requirement is unverified* that this change adds:
   sketch, contract and gate each refuse a rejected requirement; new accepted evidence lifts it; a
   rejected contract requirement is blocking and not reported; a sketch task with unverified,
-  non-rejected requirements still approves. Ask what each route returns when the gate refuses.
-- [ ] 3.2 Rewrite `test_approval_refuses_unaccepted_evidence.py:625` and `test_task_integration.py:510`
-  as D4 states.
-- [ ] 3.3 The rejected step in `requirement_gate.evaluate`, above the early return, with the loop
-  skipping what it already blocked.
+  non-rejected requirements still approves. Added to `test_requirement_gate.py` (six tests, both
+  routes covered by `test_the_sketch_rejection_refuses_on_the_agent_plane_too`). Done 2026-10-06.
+- [x] 3.2 Rewrote `test_approval_refuses_unaccepted_evidence.py:625` (rejected evidence now refuses
+  via `blocking`, not an approve-and-skip) and `test_task_integration.py:510` (the rejected commit
+  needs a second, accepted, no-op piece of evidence before approval can be asked for at all) as D4
+  states. Done 2026-10-06.
+- [x] 3.3 The rejected step in `requirement_gate.evaluate`, above the early return, with the loop
+  skipping what it already blocked (`_linked_requirements` added so the step and the enforced loop
+  share one query). `pytest hub/tests/test_requirement_gate.py
+  hub/tests/test_approval_refuses_unaccepted_evidence.py hub/tests/test_task_integration.py -q`:
+  92 passed. `ruff check` and `black --check --target-version py311` clean on all four touched
+  files. Done 2026-10-06.
+  **Note:** this code and its tests were already written, uncommitted, when this iteration started
+  -- a prior firing did 3.1-3.3 but was cut off before verifying or committing. This iteration
+  verified the suite, then drove it.
+  **Stub fixes, not product code** (both found this iteration, re-running drive D against the
+  reused trial project): `stub_provider.py`'s `DRIVE-D-EVIDENCE` handler now caches the project
+  identifier and document path `submit_spec_document`'s response carried (`LAST_IDENTIFIERS`,
+  `LAST_PATH` -- a later run is a fresh conversation that never sees that response itself, and a
+  repeatedly-reused project leaves more than one approved document naming `FR-1`, so `record_evidence`
+  needs both the real identifier and `document` to disambiguate). `drive_d.py`'s own two evidence-decision
+  calls were missing the route's `/project` segment and sent `"reject"`/`"accept"` where the API
+  wants `"rejected"`/`"accepted"` -- fixed both. Reran on `:8010` (Hub restarted with
+  `MY_F490_KEY` so it ran group 3's new code, stub restarted after each fix): **(a)-(d) now PASS**
+  end to end -- the sketch-rigor rejected block fires for real, not only in the unit tests. **(e)
+  FAILs** (`policy digest is (None,), expected non-null`) exactly as expected: D3, which (e) is
+  about, is group 4's job, not yet built.
 
 ## 4. The policy a sketch approval records (D3)
 

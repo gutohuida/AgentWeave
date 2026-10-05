@@ -509,7 +509,15 @@ async def test_work_on_two_branches_is_merged_from_both(app, auth_headers, build
 @pytest.mark.asyncio
 async def test_rejected_evidence_merges_nothing(app, auth_headers, builder, tmp_path):
     """Rejected evidence has been judged, and judged the other way. Merging on it would ship work
-    a reviewer explicitly turned down."""
+    a reviewer explicitly turned down.
+
+    Since `a-task-may-serve-a-whole-slice` (D2), a rejected requirement blocks approval outright,
+    at every rigor — so FR-1 needs a second, accepted piece of evidence naming nothing new (the
+    checkout is on `main` when it is recorded, the same shape
+    `test_a_commit_already_on_main_is_skipped_not_merged` uses) before approval can even be asked
+    for. "Merges nothing from rejected evidence" is still the claim this test pins: the rejected
+    commit stays off `main` and the one thing left to merge is the no-op.
+    """
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
@@ -526,6 +534,8 @@ async def test_rejected_evidence_merges_nothing(app, auth_headers, builder, tmp_
     )
     assert rejected.status_code == 200, rejected.text
     git(tmp_path, "checkout", "-q", "main")
+
+    await accept_evidence(app, auth_headers, builder, summary="nothing new to merge")
 
     task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200

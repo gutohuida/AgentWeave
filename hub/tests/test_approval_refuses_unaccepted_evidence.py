@@ -622,9 +622,16 @@ async def test_the_refusal_fires_at_sketch_rigor(app, auth_headers, builder, tmp
 
 
 @pytest.mark.asyncio
-async def test_rejected_evidence_approves_and_records_a_skip(app, auth_headers, builder, tmp_path):
-    """It has been judged, the other way. Refusing here would wedge the task behind a decision its
-    holder cannot reverse."""
+async def test_rejected_evidence_refuses_by_the_rejected_rule_not_the_unaccepted_one(
+    app, auth_headers, builder, tmp_path
+):
+    """It has been judged, the other way — and, since `a-task-may-serve-a-whole-slice` (D2), a
+    rejected requirement now blocks approval outright, at every rigor. This used to approve and
+    record a skip, back when nothing read rejected evidence at all; D4 scopes this file's own
+    sentence ("rejected evidence SHALL NOT cause the refusal *this file is about*") so the two
+    rules do not read as contradictory — the refusal here is attributed to the rejected rule
+    (`blocking`), never to the unaccepted one (`unaccepted`), which is what this whole file is
+    otherwise testing."""
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
@@ -632,12 +639,12 @@ async def test_rejected_evidence_approves_and_records_a_skip(app, auth_headers, 
     task, evidence, work = await a_task_with_awaiting_evidence(app, auth_headers, builder, tmp_path)
     await reject(app, auth_headers, evidence)
 
-    approved = await approve(app, auth_headers, task)
-    assert approved.status_code == 200, approved.text
-
-    recorded = await integrations(app, auth_headers, task)
-    assert [row["outcome"] for row in recorded] == ["skipped"]
-    assert recorded[0]["reason"] == task_integration.NOTHING_TO_MERGE
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["blocking"][0]["identifier"] == "FR-1"
+    assert detail["blocking"][0]["state"] == "rejected"
+    assert detail["unaccepted"] == []
     assert work not in commits_on(tmp_path, "main")
 
 
