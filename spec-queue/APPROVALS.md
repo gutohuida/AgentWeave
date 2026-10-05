@@ -17,6 +17,15 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-10-05
+
+There is no review page. This was written in an interactive session with the operator present (operator: "Credits change +
+F489"). F492 stays out: its fix weakens secret redaction (a 40-character lowercase-hex key would
+survive), so it is the operator's call, awake.
+
+- APPROVED  a-copilot-one-shot-records-its-credits   carried from 10-04, as R3 and the Opus review's seven fixes left it; its drive spends at most two Copilot Free calls on `:8010`
+APPROVED-FIXES: F489
+
 ## 2026-10-04
 
 No review page. **Written in an interactive session with the operator present**, after the morning
