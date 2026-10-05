@@ -1985,3 +1985,21 @@ disappears is indistinguishable from one that was forgotten.
     in name order (`scheduler.py:1166`).
   - A job with cron `0 0 1 1 *`, fired with `POST /projects/{pid}/jobs/{id}/run`, steps it one firing
     at a time.
+
+- **2026-10-05 (home) — any Bash heredoc carrying Python with mixed quotes can fail to parse**, not
+  only spec prose: `py -3.11 - <<'EOF'` patches failed twice ("unexpected EOF while looking for
+  matching"), and nothing was written. What works: write the patch script with the Write tool into
+  the scratchpad, then `py -3.11 <script>`. Normalise CRLF inside the script (see the 10-04 entry).
+- **2026-10-05 (home) — `POST /project/documents/propose` answers 200 even when it refuses**: the
+  phase stays `exploring` and the response carries `blocking`. Only `/documents/phase?to=approved`
+  answers 409 with `detail.blocking`. Test and drive on `phase`, not the status code.
+- **2026-10-05 (home) — the agent document read is `GET /agent-actions/spec/documents?path=`**
+  (there is no `/read`), and Hub document paths are `spec/changes/<name>/spec.html`, not `.md`. A
+  drive stub that regexes for `.md` paths finds nothing and silently ends its turn.
+- **2026-10-05 (home) — `hub/tests/test_copilot_context_split.py` snapshots the whole Claude turn
+  context, tool surface included**, so any change to an `_Operation`'s `args`/`text` in
+  `api/v1/agents.py` fails it. Regenerate with `AW_UPDATE_CONTEXT_SNAPSHOT=1` on that one test, then
+  read the fixture's diff before committing.
+- **2026-10-05 (home) — drive documents land in this repo's `spec/changes/`** (the trial project is
+  this checkout) as untracked files. Remove only the drive's own directories after the drive; never
+  `git add -A`.
