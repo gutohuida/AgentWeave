@@ -1,8 +1,9 @@
 ## 0. Review
 
-- [ ] 0.1 One grounded review round over proposal, design and the three spec deltas: every claim
+- [x] 0.1 One grounded review round over proposal, design and the three spec deltas: every claim
   re-read at its cited `file:line` or checked by something run. Findings are folded in or rejected
-  with a reason, in a short "Review round" section of `design.md`.
+  with a reason, in a short "Review round" section of `design.md`. Done 2026-10-05 night: R1-R5
+  folded in (R1: D5 read lifecycle state, not coverage), one rejected, F497 filed.
 
 ## 1. Acceptance drive first (design: Acceptance drive)
 
@@ -39,9 +40,11 @@
 
 ## 5. The card (D5)
 
-- [ ] 5.1 Tests first (vitest): each chip carries its state; five requirements show the count; four
-  show none.
-- [ ] 5.2 `useRequirementChips` and `TaskCard.tsx`; `npm run lint`; refresh the bundle; commit
+- [ ] 5.1 Tests first (vitest): each chip carries its **coverage** state, from the document's
+  coverage response, not `requirement_links[].state`; five requirements show the count; four show
+  none.
+- [ ] 5.2 `useRequirementChips` (reads `useSpecCoverage` per linked document) and `TaskCard.tsx`;
+  `npm run lint`; refresh the bundle; commit
   `hub/ui/src` and `hub/hub/static/ui` together.
 
 ## 6. Close

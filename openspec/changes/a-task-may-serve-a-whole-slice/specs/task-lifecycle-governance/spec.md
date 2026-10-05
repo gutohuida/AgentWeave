@@ -23,8 +23,8 @@ A requirement that is structurally invalid or carries no identifier SHALL preven
 passing, and SHALL be reported as the diagnostic it is rather than as an unverified requirement.
 
 The refusal SHALL be typed, and SHALL name each requirement that caused it together with what would
-satisfy it — no linked evidence, evidence awaiting review, or evidence that no longer applies to the
-current wording. A refusal that does not say what to do about it cannot be acted on, and an
+satisfy it — no linked evidence, evidence awaiting review, evidence that was reviewed and rejected,
+or evidence that no longer applies to the current wording. A refusal that does not say what to do about it cannot be acted on, and an
 unactionable gate is turned off.
 
 The refusal SHALL hold identically across every access path: the operator's interface, an agent's

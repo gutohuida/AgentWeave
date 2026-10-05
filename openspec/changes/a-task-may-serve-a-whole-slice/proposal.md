@@ -9,7 +9,7 @@ A slice of about a dozen requirements cannot be a few tasks today:
 - **A task may name at most three requirements.** Proposing a document is refused when any task
   names more (`MAX_REQUIREMENTS_PER_TASK = 3`, `hub/hub/spec_completeness.py:39`, `:249-258`). So 12
   requirements need at least 4 tasks, and in the two real LoopEngine runs (`:8000`, read `mode=ro`)
-  77 requirements became 32 tasks, each reviewed on its own.
+  77 requirements became 48 tasks in one and 33 in the other, each reviewed on its own.
 - **The ceiling's safeguard does not hold on any real document.** The ceiling kept a task small so
   that one rejected requirement could not be approved over. But rejected evidence blocks approval
   only at `gate` rigor. `contract` reports it and lets approval through

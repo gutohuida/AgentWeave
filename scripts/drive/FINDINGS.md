@@ -34273,3 +34273,24 @@ when slice N is approved"). If so, the message's "how the tasks went" wording is
 **Options:** (a) keep the approval trigger, and reword the message to "draft it while slice N
 builds"; (b) trigger when slice N's tasks are all approved (a task-board event, not a phase event);
 (c) both: queue at approval, and append slice N's outcomes to the draft when its tasks close.
+
+## F497 (C) — a reviewer is not told that a rejected requirement will refuse its `approved`
+
+**Status:** open
+Found 2026-10-05 night by C1b's grounded review round (`a-task-may-serve-a-whole-slice`, design
+"Review round" R2), by reading code; not driven.
+**Ready:** needs the day window (no proposal).
+
+`review_turn.verdict_evidence_sentence` is the one sentence both review channels use to warn a
+reviewer that `approved` can be refused. It speaks only of evidence awaiting a decision and returns
+`None` when nothing is waiting (`hub/hub/review_turn.py:186-245`). A task serving a requirement
+whose current-digest evidence is all `rejected` is refused at `gate` today
+(`requirement_gate.py:676-683`, `REMEDY[REJECTED]`), and at every rigor once C1b lands. The reviewer
+learns that only from the `update_task` refusal, whose remedy ("record evidence that satisfies the
+current wording") is the author's move, not the reviewer's. Nothing routes the refusal to
+`revision_needed` (only `apply_transition` raises `GateUnsatisfiedError`,
+`task_transition_service.py:678`). F357 measured reviewers telling peers a task was approved after
+a refusal they had not been briefed on.
+
+**Direction (not decided):** the same sentence also names each served requirement in `rejected` and
+says `revision_needed` is the verdict that returns it to its author (F495).

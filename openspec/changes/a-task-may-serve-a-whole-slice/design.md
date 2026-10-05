@@ -43,7 +43,9 @@
 **D1. Remove the ceiling outright.** The constant, the `task_too_coarse` finding and its tests are
 deleted. Nothing else reads the constant (grep: `spec_completeness.py` only). The seeded charter's
 line "a single task may name at most 3 requirements" (`data/charters/spec.md:101`) is reworded to
-"a task may serve several requirements; every requirement needs a task".
+"a task may serve several requirements; every requirement needs a task". The file seeds only
+projects not yet seeded (`db/engine.py` `_seed_default_charters`, `charters_seeded`), so existing
+projects keep the old line until the operator edits their charter. Nothing enforces it any more.
 - *Rejected: raise it to about 6.* The operator chose removal (Q15). Any number would need its own
   measurement, and C1a's guidance already steers size.
 - *Kept:* `requirement_without_task` (a requirement served by no task), unchanged.
@@ -89,15 +91,19 @@ the rejected-requirement refusal, so the two do not read as contradictory.
     nothing from rejected evidence" still holds.
 
 **D5. The card shows coverage per requirement.**
-- `useRequirementChips` already reads `requirement_links` (each has `state` and
-  `has_rejected_evidence`). Each chip gets a tone class by state:
+- `requirement_links[].state` is the requirement's lifecycle (`active`/`retired`,
+  `api/v1/tasks.py:209`), not coverage, so the chip does not read it. `useRequirementChips` reads
+  each linked document's coverage through `useSpecCoverage(path)` (`ui/src/api/spec.ts:298`), the
+  query the document view uses: same cache, so the card cannot disagree with it, and it is already
+  invalidated on evidence decisions and `spec_updated` (`spec.ts:287`, `:324`). No backend change.
+  Each chip gets a tone class by coverage state:
   - `verified`: positive;
-  - `awaiting_review`: pending;
+  - `evidence_awaiting_review`: pending;
   - `rejected`: the existing rejected tone;
-  - any other state: neutral.
+  - any other state, or none (a retired requirement has no document-coverage row): neutral.
 - With more than four chips, one line above them counts by state ("3 verified · 1 rejected · 4
   open"), with `data-testid="task-requirement-summary-<id>"`.
-- The drawer is unchanged: it already lists every link with its state.
+- The drawer is unchanged. It shows lifecycle state and the rejection reason, not coverage.
 - *Rejected: collapsing the chips.* Hiding requirements on a whole-slice task is what the card must
   not do.
 
@@ -110,9 +116,12 @@ the rejected-requirement refusal, so the two do not read as contradictory.
 - **[A requirement shared by two tasks.]** One task's rejected evidence blocks the other task too,
   because coverage is per requirement. That is correct: the requirement is not met. The remedy
   ("record evidence…") is open to either task's author.
-- **[A flow stalls on a refused review.]** The reviewer is refused with the remedy, and refusals
-  already route to send-back (F495 made that return the task to its author). Drive step (d)
-  shows the refusal through the operator path, and a unit test covers the tool path.
+- **[A flow stalls on a refused review.]** The reviewer's `update_task` is refused with the
+  remedy. Nothing routes that refusal to send-back automatically: the reviewer has to choose
+  `revision_needed`, which F495 returns to the author (`task_transition_service.py:690`). The
+  review briefing does not warn it either (`review_turn.verdict_evidence_sentence` speaks only of
+  awaiting evidence). That gap already exists at `gate` and is filed as F497, not built here.
+  Drive step (d) shows the refusal through the operator path, and a unit test covers the tool path.
 
 ## Migration Plan
 
@@ -129,6 +138,37 @@ Drive D, `testbed/drive-slices/drive_d.py` on `:8010`, stub provider, no spend:
 | (c) | `planner` records evidence for requirement `r1` on that task, and the operator rejects it | The evidence is rejected |
 | (d) | The operator moves the task to `under_review` and approves it | **409, naming `r1`, `rejected`, and the remedy.** The task stays `under_review` |
 | (e) | `planner` records new evidence for `r1`, the operator accepts it, and the operator approves again | 200, `approved`, and a non-null policy digest |
+
+## Review round (task 0.1, 2026-10-05 night, at `a89d093`)
+
+Every cited `file:line` re-read; one `mode=ro` query on `:8000`.
+
+Folded in:
+- **R1 (would not fire).** D5 said the chips read `requirement_links[].state`. That field is
+  `SpecRequirement.state` (`active`/`retired`, `api/v1/tasks.py:209`), and the drawer treats it
+  so (`TaskDetailDrawer.tsx:721`). Built as written, no chip could ever show `verified`. D5 now
+  reads `useSpecCoverage`, and the awaiting tone uses the real key `evidence_awaiting_review`
+  (`requirement_coverage.py:51`). Tasks 5.1-5.2 say so.
+- **R2 (overclaim).** "Refusals already route to send-back" has no code behind it: only
+  `apply_transition` raises `GateUnsatisfiedError` (`task_transition_service.py:678`), and nothing
+  catches it into `revision_needed`. Risks reworded. The reviewer briefing's silence on a
+  rejected requirement already exists at `gate`, so it is F497 (backlog), not this change.
+- **R3 (measurement).** On `:8000` the two 77-requirement documents have 48 and 33 linked tasks
+  (max 3 requirements per task), not 32. Proposal corrected.
+- **R4.** The refusal's list of reasons in *Approval is refused while a gated requirement is
+  unverified* now includes "evidence that was reviewed and rejected".
+- **R5.** The charter rewording reaches only newly seeded projects. D1 says so.
+
+Confirmed as cited: `spec_completeness.py:39`, `:249-258`. The constant is read nowhere else
+(`git grep`, tests reference only the code). `requirement_gate.py` `:344-364`, `:613`, `:628-630`,
+`:642-643`, `:676-683`, `REMEDY[REJECTED]` `:53`. `requirement_coverage._state` `:184-214`.
+`evaluate` has two callers, `apply_transition` and the land route (`api/v1/tasks.py:1679`), so the
+land route inherits D2. `approval_held_for_operator`'s early return (`:791`) is correct for a
+rejected-only refusal (not operator-only). Test anchors `:133`, `:146`, `:625`, `:510`, `:905`,
+`:190`, `:242`, `:334` exist. The policy requirement's delta keeps every main-spec scenario.
+
+Rejected: retired requirements carrying rejected evidence would also block at `sketch`. `gate`
+does the same today, and no claim of this change depends on it.
 
 ## Open Questions
 
