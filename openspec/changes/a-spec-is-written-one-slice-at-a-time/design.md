@@ -79,7 +79,16 @@ operator's.**
   1. Resolve the next slice: the entry after the approved key in the roadmap's list.
   2. Resolve the author: the `created` event with `actor_kind == "agent"`.
   3. Resolve the conversation: `Run.conversation_id` of that event's run.
-  4. Queue one entry with `origin_type="operator"` and `hop_depth=0`, then call `schedule_agent`.
+  4. Queue one entry with `origin_type="operator"`, `hop_depth=0` and `spec_document=<roadmap
+     path>`, then call `schedule_agent`.
+- *Why the roadmap is the turn's spec document (review round):*
+  - An operator entry's `spec_document` becomes the turn's (`turn_scheduler.py:370`).
+  - That makes it a specification turn: no file-write tools (`api/v1/agent_trigger.py:1430`,
+    `:1450`), and the spec notice (`launchability.py:334`).
+  - A drafting turn must not be able to implement, so the binding is needed. The slice document
+    would be the wrong one, because the next slice does not exist yet.
+  - The roadmap is approved, so `SPEC_PHASE_DUTIES["approved"]` ("Implement against it",
+    `api/v1/agents.py:1726-1729`) is wrong for it. D6 adds a roadmap duty.
 - The message is fixed Hub text. It names:
   - the roadmap path;
   - the approved slice and its tasks;
@@ -110,6 +119,9 @@ operator's.**
   - later slices are recorded in the roadmap.
 - *Alternative:* an enforced cap. Rejected: METRICS measures whether the guidance holds first.
 - The seeded charter's bullet (`data/charters/spec.md:91-92`) is reworded to match.
+- An approved **roadmap** gets its own duty in place of `approved`'s, where the context names the
+  open document's phase (`api/v1/agents.py:2172`): "its slices are specified one at a time as
+  change documents that name it; do not implement from the roadmap".
 
 **D7. Rendering.**
 - `spec_render.py` gains a Slices section for roadmaps, and a "Slice S2 of *Roadmap title*" line
@@ -130,7 +142,25 @@ operator's.**
   approval.
 - **[Real agent drives on `:8010`.]** DEAD-ENDS (2026-10-05) records that Claude agents there carry
   no MCP config. Drive A uses stub-provider agents, as F490 and F495 did. Drive B needs a real model
-  holding the spec tools: R1 checks which runner gives one.
+  holding the spec tools (see the review round below).
+
+## Review round (task 0.1, 2026-10-05, at `a10b32d`)
+
+Every Context fact was re-read at its cited lines and holds, with two path corrections: the queue
+precedent is `api/v1/agent_trigger.py:2507-2523` and the CHECK is `db/models.py:655`.
+- **D3:** `check()` is a pure function (`spec_completeness.py:105-125`). Its two callers
+  (`spec_service.py:266-275` on save, `:910-914` at the transition) resolve the roadmap
+  (phase and slice keys) and pass it in, as they already pass `approved_document_paths`.
+- **D4:** the drafting entry carries the roadmap as `spec_document`, and D6 adds a roadmap duty
+  (both recorded above).
+- **The drives:** a roadmap is proposed only after the operator closes its exploration
+  (`explore_not_closed`, `spec_service.py:945-953`), so drive A's step (c) closes it first.
+- **R1, the runner for drive B:** Copilot `cp5` (`runner-72c07eca7e75`) with a Haiku model
+  override.
+  - Copilot runs hold the MCP tools; the stub-provider drives used them.
+  - A Claude run on `:8010` gets `--permission-prompt-tool` only with `mcp_args`
+    (`runner_commands.py:241-248`). Without an approver its `aw-tool` Bash calls need approval
+    (DEAD-ENDS 2026-10-05), so it cannot reach the spec tools.
 
 ## Migration Plan
 
@@ -139,5 +169,4 @@ or `roadmap`, so existing behaviour is unchanged.
 
 ## Open Questions
 
-- (R1) Which real runner on `:8010` holds the spec tools for drive B: Copilot `cp5` on Haiku (Free
-  quota), or a Claude runner once its MCP config is confirmed?
+- None open. R1 is answered in the review round.

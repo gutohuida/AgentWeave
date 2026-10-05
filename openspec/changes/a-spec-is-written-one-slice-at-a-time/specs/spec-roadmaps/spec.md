@@ -94,6 +94,13 @@ list. Builds-after constrains that order but does not choose it.
   document, naming the roadmap and slice S2 with its title
 - **AND** the approval response reports it as queued, naming S2 and planner
 
+#### Scenario: The drafting turn is a specification turn on the roadmap
+
+- **WHEN** the turn queued to draft the next slice starts
+- **THEN** it has the roadmap open as its specification document, so it has no file-write tool
+- **AND** it is told that the roadmap's slices are specified as change documents, not implemented
+  from the roadmap
+
 #### Scenario: The last slice queues nothing
 
 - **WHEN** the approved document specifies the roadmap's last slice
@@ -131,3 +138,9 @@ The size is measured on real runs instead.
 
 - **WHEN** an agent's turn context carries the specification duties
 - **THEN** they name the roadmap-plus-slice shape and the size of a slice
+
+#### Scenario: An approved roadmap is not implemented
+
+- **WHEN** an agent's turn has an approved roadmap open
+- **THEN** its duties say that slices are specified one at a time as change documents naming the
+  roadmap, and that the roadmap itself is not implemented

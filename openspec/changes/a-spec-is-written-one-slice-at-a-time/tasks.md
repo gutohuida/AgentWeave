@@ -9,9 +9,11 @@ Run tests with `py -3.11`. Drives go on `:8010` only, never `:8000`. Real agent 
 
 ## 0. Review
 
-- [ ] 0.1 One grounded review round. Every claim in `design.md` gets a `file:line` or a command run;
+- [x] 0.1 One grounded review round. Every claim in `design.md` gets a `file:line` or a command run;
   ungrounded findings are dropped. Answer the open question (which real runner on `:8010` holds the
   spec tools for drive B). Side findings go to `scripts/drive/FINDINGS.md`, not into this change.
+  Done at `a10b32d`: design.md "Review round" (D4 binds the roadmap as the drafting turn's spec
+  document, D6 adds an approved-roadmap duty, R1 = Copilot `cp5` on a Haiku override).
 
 ## 1. Acceptance drive (written first, fails before the build)
 
@@ -63,7 +65,8 @@ Run tests with `py -3.11`. Drives go on `:8010` only, never `:8000`. Real agent 
   - a capability is refused, and the refusal names both kinds;
   - the tool docstrings and `SPEC_PHASE_DUTIES` name the roadmap-plus-slice shape and the slice
     size;
-  - `test_mcp_tool_schemas.py` agrees.
+  - `test_mcp_tool_schemas.py` agrees;
+  - an approved roadmap's turn context carries the roadmap duty, not "Implement against it".
 - [ ] 4.2 `kind` on `create_spec_document` (MCP and `agent_actions.py`), `slices` and `roadmap` on
   `submit_spec_document`, both returned by the agent read view; the docstrings, `SPEC_PHASE_DUTIES`,
   and the charter bullet reworded.
@@ -77,6 +80,7 @@ Run tests with `py -3.11`. Drives go on `:8010` only, never `:8000`. Real agent 
   - no author (operator-created);
   - not asked;
   - not a slice.
+  - the queued entry's `spec_document` is the roadmap path.
   Also ask what the route returns when queueing raises. The approval must already be committed and
   must stand; the response reports the failure.
 - [ ] 5.2 `draft_next_slice` on the phase request; next-slice and author resolution; the entry and
