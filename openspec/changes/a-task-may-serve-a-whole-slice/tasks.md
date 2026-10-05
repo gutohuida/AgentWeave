@@ -20,13 +20,25 @@
   `{"code": "task_too_coarse", "where": "tasks[0]", "message": "'t1' names 5 requirements, over
   the ceiling of 3 ..."}`. (b)-(e) are written against the design's table but not yet run to
   completion -- the run stops at the first `fail()`, by design, and the ceiling still blocks (a).
+  Rerun after 2.1/2.2 (below): (a) and (b) now PASS. (c) FAILs, but on a drive-script bug, not a
+  product gap -- `stub_provider.py`'s `DRIVE-D-EVIDENCE` handler passes the document-local key
+  (`r1`) straight to `record_evidence`'s `identifier`, which needs the project-level identifier
+  `submit_spec_document` actually minted (`FR-1`, from its response's `identifiers` map); the Hub
+  correctly 404s "this project has no requirement r1" (`agent_actions.py:1205`). Group 3 (3.1)
+  must fix the stub to use the `identifiers` map, or (c)-(e) can never run.
 
 ## 2. The ceiling (D1)
 
-- [ ] 2.1 Tests first: a task naming five requirements is proposable; a requirement served by no
-  task is still refused. Rewrite `test_spec_completeness.py:133`, `:146`.
-- [ ] 2.2 Remove `MAX_REQUIREMENTS_PER_TASK` and the `task_too_coarse` finding; reword
-  `data/charters/spec.md:101`.
+- [x] 2.1 Tests first: a task naming five requirements is proposable; a requirement served by no
+  task is still refused. Rewrote `test_spec_completeness.py:133` (now
+  `test_a_task_naming_five_requirements_is_proposable`), `:146` (now
+  `test_a_requirement_served_by_no_task_is_still_refused`). Done 2026-10-05 night, confirmed red
+  (five-requirements test failed on `task_too_coarse`) before 2.2.
+- [x] 2.2 Removed `MAX_REQUIREMENTS_PER_TASK` and the `task_too_coarse` finding from
+  `spec_completeness.py`; reworded the charter line -- actual path is
+  `hub/hub/data/charters/spec.md:101` (`tasks.md`/`design.md`'s `data/charters/spec.md` has no such
+  file; confirmed by search), not `data/charters/spec.md`. Done 2026-10-05 night.
+  `pytest hub/tests/test_spec_completeness.py -q`: 24 passed.
 
 ## 3. The rejected block at every rigor (D2, D4)
 

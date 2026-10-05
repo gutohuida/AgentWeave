@@ -130,27 +130,24 @@ def _criteria(*keys):
     ]
 
 
-def test_a_task_naming_four_requirements_is_too_coarse():
-    keys = ["a", "b", "c", "d"]
+def test_a_task_naming_five_requirements_is_proposable():
+    keys = ["a", "b", "c", "d", "e"]
     payload = _complete(
         requirements=_requirements(*keys),
         acceptance_criteria=_criteria(*keys),
         tasks=[{"key": "t1", "description": "Build it", "requirements": keys}],
     )
-    finding = next(f for f in check(payload) if f.code == "task_too_coarse")
-    assert "t1" in finding.message
-    assert "4" in finding.message
-    assert "3" in finding.message
+    assert check(payload) == []
 
 
-def test_a_task_naming_exactly_three_requirements_is_not_refused():
-    keys = ["a", "b", "c"]
+def test_a_requirement_served_by_no_task_is_still_refused():
+    keys = ["a", "b", "c", "d", "e"]
     payload = _complete(
         requirements=_requirements(*keys),
         acceptance_criteria=_criteria(*keys),
-        tasks=[{"key": "t1", "description": "Build it", "requirements": keys}],
+        tasks=[{"key": "t1", "description": "Build it", "requirements": keys[:-1]}],
     )
-    assert "task_too_coarse" not in _codes(payload)
+    assert "requirement_without_task" in _codes(payload)
 
 
 def test_the_same_document_split_into_two_and_two_proposes_cleanly():

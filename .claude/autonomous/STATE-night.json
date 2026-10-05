@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9ea4cdb",
     "stop_at": "2026-10-06T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-10-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "c1b-2-impl",
-    "next_action": "C1b group 2 (the ceiling, D1): 2.1 tests first -- rewrite test_spec_completeness.py:133 (a task naming five requirements is proposable, not too-coarse) and :146 (a requirement served by no task is still refused); 2.2 remove MAX_REQUIREMENTS_PER_TASK and the task_too_coarse finding from spec_completeness.py, reword data/charters/spec.md:101. Then rerun testbed/drive-slices/drive_d.py on :8010 (stub_provider.py already started once this iteration, needs restarting) and confirm it now clears (a) and reaches (b).",
+    "current": "c1b-3-impl",
+    "next_action": "C1b group 3 (D2, D4, the rejected block at every rigor): 3.1 tests first per scenario of 'Approval is refused while a gated requirement is unverified' (operator route + agent/tool path); ask what each route returns when the gate refuses. 3.2 rewrite test_approval_refuses_unaccepted_evidence.py:625, test_task_integration.py:510. 3.3 add the rejected step in requirement_gate.evaluate above the early return (:628-630), reusing the gate's REMEDY[REJECTED] entry shape, skipping identifiers already blocked under gate/reported under contract. First: fix testbed/drive-slices/stub_provider.py's DRIVE-D-EVIDENCE handler to pass submit_spec_document's returned identifiers map value (e.g. FR-1) as record_evidence's identifier, not the document-local key (r1) -- the document-local key 404s ('this project has no requirement r1', agent_actions.py:1205); drive_d.py step (c) found this live on :8010 this iteration. Then rerun drive_d.py (restart stub_provider.py on 18496; trial Hub is already running on :8010 with MY_F490_KEY set in its environment -- restart it too, with that var, only if the Hub itself changes) to reach as far as the new behaviour allows.",
     "queue": [
         {
             "id": "c1b-r1",
@@ -29,15 +29,15 @@
         },
         {
             "id": "c1b-2-impl",
-            "status": "open",
+            "status": "done",
             "title": "C1b group 2: remove the requirement-count ceiling (D1)",
-            "detail": "Tests first (2.1): rewrite test_spec_completeness.py:133,:146 -- five-requirement task proposable, zero-requirement task still refused. Then 2.2: remove MAX_REQUIREMENTS_PER_TASK and task_too_coarse; reword data/charters/spec.md:101."
+            "detail": "Done iter 4: 2.1 rewrote test_spec_completeness.py:133,:146 (red first). 2.2 removed MAX_REQUIREMENTS_PER_TASK/task_too_coarse from spec_completeness.py; reworded the charter line (real path hub/hub/data/charters/spec.md:101, not tasks.md's data/charters/spec.md). 24 tests pass, black+ruff clean. Restarted the stale trial Hub (no --reload; it had 5+ hour old code) with DATABASE_URL and MY_F490_KEY set; reran drive_d.py: (a) and (b) now PASS. (c) FAILs on an unrelated drive-script identifier bug, logged for c1b-3-impl."
         },
         {
             "id": "c1b-3-impl",
             "status": "open",
             "title": "C1b group 3: rejected block at every rigor (D2, D4)",
-            "detail": "3.1 tests first per scenario of Approval is refused while a gated requirement is unverified (operator route + agent/tool path); ask what each route returns when the gate refuses. 3.2 rewrite test_approval_refuses_unaccepted_evidence.py:625, test_task_integration.py:510. 3.3 the rejected step in requirement_gate.evaluate above the early return."
+            "detail": "3.1 tests first per scenario of Approval is refused while a gated requirement is unverified (operator route + agent/tool path); ask what each route returns when the gate refuses. 3.2 rewrite test_approval_refuses_unaccepted_evidence.py:625, test_task_integration.py:510. 3.3 the rejected step in requirement_gate.evaluate above the early return. Also fix stub_provider.py's DRIVE-D-EVIDENCE identifier bug found this iteration (see c1b-2-impl's detail) before trusting drive_d.py past (b)."
         },
         {
             "id": "c1b-4-impl",
