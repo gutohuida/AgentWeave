@@ -3512,6 +3512,9 @@ def approve_tool_call(
 # asserts these agree with `hub.spec_payload`, so drift fails in CI rather than at an agent's
 # first call.
 SpecKind = Literal["baseline", "system-map", "roadmap", "change-spec", "capability"]
+# The kinds an agent may begin. Restated from `api/v1/agent_actions.py` `AGENT_CREATABLE_KINDS`
+# (this module imports nothing from the Hub); `test_mcp_tool_schemas.py` asserts the two agree.
+CreatableSpecKind = Literal["change-spec", "roadmap"]
 SPEC_SCHEMA_VERSION = 1
 
 # The one closed vocabulary in the evidence surface, restated for the same reason as the rest.
@@ -3524,7 +3527,9 @@ EvidenceDecision = Literal["accepted", "rejected"]
 
 
 @_tool()
-def create_spec_document(title: Optional[str] = None) -> Dict[str, Any]:
+def create_spec_document(
+    title: Optional[str] = None, kind: Optional[CreatableSpecKind] = None
+) -> Dict[str, Any]:
     """Start a specification document when you need one — you do not need the operator to start it.
 
     Use this the moment you have something worth writing up: a finding, a proposal, a design
@@ -3537,17 +3542,29 @@ def create_spec_document(title: Optional[str] = None) -> Dict[str, Any]:
     `rename_spec_document` as soon as you know what the document is about, and use the path it
     returns for everything after, including `submit_spec_document`.
 
-    There is no `path` and no `kind` argument: the Hub always mints the path and the document is
-    always a `change-spec` — the one kind whose lifecycle (exploring, proposed, approved,
-    archived) is meant to be filled in and then gated by the operator. `title` is optional and
-    only cosmetic — it shows in the operator's list before the rename lands, and does not affect
-    the path.
+    There is no `path` argument: the Hub always mints the path. `kind` is `change-spec` (the
+    default) or `roadmap` — the two kinds whose lifecycle (exploring, proposed, approved,
+    archived) is meant to be filled in by you and then gated by the operator. `title` is optional
+    and only cosmetic — it shows in the operator's list before the rename lands, and does not
+    affect the path.
+
+    **Size it as a slice.** A request larger than one demonstrable outcome is written as a
+    `roadmap` plus the first slice's change document, not as one large document. A slice is
+    about a dozen requirements or fewer, as a few tasks; later slices are recorded in the
+    roadmap as `slices`, not specified, and each is drafted once the one before it is
+    approved.
+
+    A roadmap carries `slices` and no requirements or tasks. Each slice's change document names it
+    with `roadmap: {"document": <roadmap path>, "slice": <key>}`, and can be proposed only once
+    the operator has approved the roadmap.
 
     Returns the minted `path` and the `phase` it starts in (`exploring`).
     """
     body: Dict[str, Any] = {}
     if title is not None:
         body["title"] = title
+    if kind is not None:
+        body["kind"] = kind
     return _hub_request("POST", "/spec/documents/create", body)
 
 
@@ -3584,11 +3601,19 @@ def submit_spec_document(
     evidence: Optional[Dict[str, Any]] = None,
     open_questions: Optional[List[Dict[str, Any]]] = None,
     delivery: Optional[Dict[str, Any]] = None,
+    slices: Optional[List[Dict[str, Any]]] = None,
+    roadmap: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Write a specification document. You supply structure; the Hub renders the document.
 
     Never write specification HTML yourself — it will not be treated as a document. Submit the
     structure here and the Hub produces the markup, the anchors, and the identifiers.
+
+    **Size it as a slice.** A request larger than one demonstrable outcome is written as a
+    `roadmap` plus the first slice's change document, not as one large document. A slice is
+    about a dozen requirements or fewer, as a few tasks; later slices are recorded in the
+    roadmap as `slices`, not specified, and each is drafted once the one before it is
+    approved.
 
     The document must already exist — call `create_spec_document` first if you don't have one yet.
     Submitting repeatedly is normal and expected — a document under discussion is incomplete, and
@@ -3654,6 +3679,16 @@ def submit_spec_document(
       only the first one that answers it: a submission replaces the whole document, so one without
       it drops the answer and proposing is refused again.
 
+    `slices` — a `roadmap` document's slices, in the order they are built: objects with `key`
+      (lowercase, hyphenated, unique), `title`, `intent` (the outcome the operator could see
+      working), `done` (how anyone can tell it is finished) and `builds_after` (keys of earlier
+      slices). Only on a roadmap, which carries no `requirements`, `acceptance_criteria` or
+      `tasks` — those go in each slice's change document.
+
+    `roadmap` — on a change document that specifies a roadmap slice:
+      `{"document": "<roadmap path>", "slice": "<slice key>"}`. Proposing it is refused until that
+      roadmap is approved and holds that slice. Include it in every later submission.
+
     Returns the path, the phase, the identifier assigned to each requirement key, and `blocking` —
     what would refuse a proposal right now.
     """
@@ -3677,6 +3712,8 @@ def submit_spec_document(
         "evidence": evidence,
         "open_questions": open_questions,
         "delivery": delivery,
+        "slices": slices,
+        "roadmap": roadmap,
     }
     # Before anything is sent. These are annotated `Any` so that a wrong shape reaches this check
     # rather than being refused by the framework's own validator, whose message was the finding

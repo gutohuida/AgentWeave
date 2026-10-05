@@ -17,7 +17,7 @@ Run tests with `py -3.11`. Drives go on `:8010` only, never `:8000`. Real agent 
 
 ## 1. Acceptance drive (written first, fails before the build)
 
-- [ ] 1.1 Drive A, the mechanics, deterministic: `testbed/drive-slices/` with a stub-provider
+- [x] 1.1 Drive A, the mechanics, deterministic: `testbed/drive-slices/` with a stub-provider
   Copilot agent `planner` (pattern: `testbed/drive1005-f495/stub_provider.py`) scripted across tool
   results. On `:8010`, the drive does the following, and must fail at step (a) on today's code
   (record the failure):
@@ -28,6 +28,9 @@ Run tests with `py -3.11`. Drives go on `:8010` only, never `:8000`. Real agent 
   - (e) the operator approves it with `draft_next_slice: true`. The response reports `queued`,
     S2 and `planner`, and exactly one `operator`-origin queue entry to `planner` exists, in the
     conversation from step (a)'s run, naming S2.
+  Written: `testbed/drive-slices/drive_a.py` + `stub_provider.py` (port 18496, runner
+  `slices-stub-provider`). Seen failing at `9fb9de9`: FAIL (a), run `run-0db7e65ddfa5` got
+  `create_spec_document` "kind: Unexpected keyword argument" and created nothing.
 - [ ] 1.2 Drive B, a real model and the guidance (needs 0.1's runner): one real authoring turn on
   Haiku, given a LoopEngine-sized request, ends with a roadmap and a slice-1 change document of
   ≤ ~12 requirements and ≤ 4 tasks. Record the counts. A miss is a finding about the guidance, not a
@@ -35,31 +38,31 @@ Run tests with `py -3.11`. Drives go on `:8010` only, never `:8000`. Real agent 
 
 ## 2. Payload and validation (D1, D2)
 
-- [ ] 2.1 Tests first (`hub/tests/test_spec_roadmaps.py`), one per scenario of *A roadmap carries
+- [x] 2.1 Tests first (`hub/tests/test_spec_roadmaps.py`), one per scenario of *A roadmap carries
   ordered slices…*:
   - slices refused off a roadmap;
   - requirements or tasks refused on a roadmap;
   - duplicate slice keys;
   - an unresolved or self builds-after;
   - the `roadmap` link shape on a change-spec.
-- [ ] 2.2 `Slice` model, `slices`, and the `roadmap` link on `SpecPayload`; per-kind rules in
+- [x] 2.2 `Slice` model, `slices`, and the `roadmap` link on `SpecPayload`; per-kind rules in
   `validate_payload`.
 
 ## 3. Completeness (D3)
 
-- [ ] 3.1 Tests first:
+- [x] 3.1 Tests first:
   - `roadmap_without_slices`;
   - no `no_requirements` on a roadmap that has slices;
   - `roadmap_not_approved` (missing and exploring);
   - `roadmap_slice_unknown`;
   - both link findings block at proposed and at approved;
   - approving a roadmap materialises nothing.
-- [ ] 3.2 The roadmap branch and the link findings in `spec_completeness.check`, plus the lookup of
+- [x] 3.2 The roadmap branch and the link findings in `spec_completeness.check`, plus the lookup of
   the named roadmap.
 
 ## 4. Agent creation and guidance (D5, D6)
 
-- [ ] 4.1 Tests first:
+- [x] 4.1 Tests first:
   - an agent creates a roadmap;
   - with no kind, the agent gets a change-spec;
   - a capability is refused, and the refusal names both kinds;
@@ -67,13 +70,13 @@ Run tests with `py -3.11`. Drives go on `:8010` only, never `:8000`. Real agent 
     size;
   - `test_mcp_tool_schemas.py` agrees;
   - an approved roadmap's turn context carries the roadmap duty, not "Implement against it".
-- [ ] 4.2 `kind` on `create_spec_document` (MCP and `agent_actions.py`), `slices` and `roadmap` on
+- [x] 4.2 `kind` on `create_spec_document` (MCP and `agent_actions.py`), `slices` and `roadmap` on
   `submit_spec_document`, both returned by the agent read view; the docstrings, `SPEC_PHASE_DUTIES`,
   and the charter bullet reworded.
 
 ## 5. Drafting the next slice on approval (D4)
 
-- [ ] 5.1 Tests first, against the route (`set_phase`), one per scenario of *Approving a slice can
+- [x] 5.1 Tests first, against the route (`set_phase`), one per scenario of *Approving a slice can
   start the drafting…*:
   - queued, in the creating conversation, origin `operator`;
   - last slice;
@@ -83,7 +86,7 @@ Run tests with `py -3.11`. Drives go on `:8010` only, never `:8000`. Real agent 
   - the queued entry's `spec_document` is the roadmap path.
   Also ask what the route returns when queueing raises. The approval must already be committed and
   must stand; the response reports the failure.
-- [ ] 5.2 `draft_next_slice` on the phase request; next-slice and author resolution; the entry and
+- [x] 5.2 `draft_next_slice` on the phase request; next-slice and author resolution; the entry and
   `schedule_agent` after the commit; `next_slice` on the response.
 
 ## 6. Rendering and UI (D7)

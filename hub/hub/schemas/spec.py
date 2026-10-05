@@ -1,8 +1,9 @@
 """Schemas for the agent-facing document-creation route.
 
-`create_spec_document` takes no `path` and no `kind` — deriving both from a
-caller is exactly what the route must not offer (design D2, D3 of
-`agent-created-documents`). What is left to accept is a plain optional title.
+`create_spec_document` takes no `path` — deriving it from a caller is exactly
+what the route must not offer (design D2 of `agent-created-documents`). What is
+left to accept is a plain optional title and, since C1a, a `kind` limited to the
+two an agent may begin.
 """
 
 from typing import Optional
@@ -11,9 +12,13 @@ from pydantic import BaseModel, Field
 
 
 class SpecDocumentCreate(BaseModel):
-    """What an agent may say when starting an exploration: nothing but a title.
+    """What an agent may say when starting an exploration: a title, and which of its two kinds.
 
-    No `path`, `kind`, `actor`, `agent` or `run_id` field exists to declare —
+    `kind` is `change-spec` (the default) or `roadmap` (C1a D5); the route refuses
+    any other, naming both — a capability document is created directly in its
+    current phase and could then never be filled in by an agent.
+
+    No `path`, `actor`, `agent` or `run_id` field exists to declare —
     the route never reads the body for any of them, so a caller that sends one
     anyway is not rejected, it is simply not listened to (design D2, D3:
     unexpressible, not merely refused). `extra` is left at its pydantic
@@ -30,6 +35,7 @@ class SpecDocumentCreate(BaseModel):
     """
 
     title: Optional[str] = Field(default=None, max_length=256)
+    kind: Optional[str] = Field(default=None, max_length=32)
 
 
 class SpecDocumentCreateResponse(BaseModel):

@@ -88,8 +88,10 @@ sketch well. An architecture diagram does not belong in a requirement — that i
 
 ### How to slice the work
 
-- Decide first whether the request is one demonstrable outcome or several. Several is a set of
-  independent slices, specified one at a time — not one document trying to cover them all.
+- Decide first whether the request is one demonstrable outcome or several. Several is a
+  `roadmap` of slices plus the first slice's change document — not one document trying to cover
+  them all. Keep a slice to about a dozen requirements or fewer, as a few tasks; the next slice is
+  drafted once the one before it is approved, with what building it taught you.
 - Slice vertically by capability, so one specification covers one demonstrable outcome the operator
   could actually see working
 - Do not slice by technical layer — frontend, then API, then database. Three layers each half-built

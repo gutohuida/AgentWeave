@@ -206,6 +206,30 @@ class OpenQuestion(_Part):
     )
 
 
+class Slice(_Part):
+    """One slice of a roadmap: an outcome specified later, in a change document of its own."""
+
+    key: str = Field(
+        description="Stable handle for this slice, unique within the roadmap: lowercase letters, digits and hyphens. A slice's change document names it."
+    )
+    title: str = Field(description="What the slice delivers, in a few words.")
+    intent: str = Field(
+        default="", description="The outcome the operator could see working once it is built."
+    )
+    done: str = Field(default="", description="How anyone can tell the slice is finished.")
+    builds_after: List[str] = Field(
+        default_factory=list,
+        description="Keys of the slices of this roadmap it builds on.",
+    )
+
+
+class RoadmapLink(_Part):
+    """The roadmap slice a change document specifies."""
+
+    document: str = Field(description="The roadmap's path.")
+    slice: str = Field(description="The key of the roadmap slice this document specifies.")
+
+
 class SpecPayload(_Part):
     """What `submit_spec_document` accepts."""
 
@@ -235,6 +259,14 @@ class SpecPayload(_Part):
         default=None,
         description="How this document's tasks get worked once approved. Only meaningful on a change-spec document; asked for in the interview, not required by this schema.",
     )
+    slices: List[Slice] = Field(
+        default_factory=list,
+        description="A roadmap's slices, in the order they are built. Only on a roadmap document.",
+    )
+    roadmap: Optional[RoadmapLink] = Field(
+        default=None,
+        description="The roadmap slice this change document specifies, when it is one.",
+    )
 
 
 def _field_path(location: tuple) -> str:
@@ -251,6 +283,60 @@ def _duplicate(values: List[str]) -> Optional[str]:
             return value
         seen.add(value)
     return None
+
+
+def _check_kind_shape(payload: SpecPayload) -> None:
+    """The per-kind rules (C1a D1): what a roadmap may carry, and where slices and the link go.
+
+    Refusals rather than completeness findings, because the shape is wrong whatever the phase. A
+    roadmap's requirements and tasks live in its slices' change documents, written one at a time.
+    """
+    if payload.kind != "roadmap":
+        if payload.slices:
+            raise PayloadError(
+                "slices belong on a roadmap document; a change document names the roadmap slice "
+                "it specifies with `roadmap` instead",
+                field="slices",
+            )
+    else:
+        for field, items in (
+            ("requirements", payload.requirements),
+            ("acceptance_criteria", payload.acceptance_criteria),
+            ("tasks", payload.tasks),
+        ):
+            if items:
+                raise PayloadError(
+                    f"a roadmap carries no {field}: they belong in the slice's change document, "
+                    "written when that slice is next",
+                    field=field,
+                )
+        if payload.roadmap is not None:
+            raise PayloadError(
+                "a roadmap does not name a roadmap slice; only a change document does",
+                field="roadmap",
+            )
+    if payload.roadmap is not None and payload.kind != "change-spec":
+        raise PayloadError(
+            "only a change document names the roadmap slice it specifies", field="roadmap"
+        )
+
+    keys = [s.key for s in payload.slices]
+    for index, key in enumerate(keys):
+        if not KEY_RE.match(key):
+            raise PayloadError(
+                "key must be lowercase letters, digits and hyphens, up to 64 characters",
+                field=f"slices[{index}].key",
+            )
+    duplicate = _duplicate(keys)
+    if duplicate is not None:
+        raise PayloadError(f"duplicate slice key {duplicate!r}", field="slices")
+    for index, item in enumerate(payload.slices):
+        for position, after in enumerate(item.builds_after):
+            if after == item.key or after not in keys:
+                raise PayloadError(
+                    f"builds after {after!r}, which is not another slice of this roadmap",
+                    field=f"slices[{index}].builds_after[{position}]",
+                )
 
 
 def validate_payload(raw: Any) -> SpecPayload:
@@ -288,6 +374,8 @@ def validate_payload(raw: Any) -> SpecPayload:
         raise PayloadError(f"kind must be one of {', '.join(KINDS)}", field="kind")
     if not payload.title.strip():
         raise PayloadError("title must not be empty", field="title")
+
+    _check_kind_shape(payload)
 
     for index, requirement in enumerate(payload.requirements):
         where = f"requirements[{index}]"
@@ -374,11 +462,17 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
     unchanged `contract`/`gate` resubmission into a spurious metadata proposal
     (`_metadata_bundle`, `spec_service.py`). `exclude_none` globally would also
     drop every stored `reviewer: null` and `from: null`, which are meaningful
-    absences elsewhere — only this one key gets the treatment.
+    absences elsewhere — only these keys get the treatment.
+
+    `slices` (empty) and `roadmap` (`None`) are dropped for the same reason (C1a): only a roadmap
+    and a slice document carry them.
     """
     data = payload.model_dump(mode="json", by_alias=True)
-    if data.get("delivery") is None:
-        data.pop("delivery", None)
+    for key in ("delivery", "roadmap"):
+        if data.get(key) is None:
+            data.pop(key, None)
+    if not data.get("slices"):
+        data.pop("slices", None)
     return data
 
 

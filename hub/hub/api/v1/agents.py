@@ -1214,24 +1214,27 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="create_spec_document",
-            args="title=None",
+            args="title=None, kind=None",
             method="POST",
             path="/spec/documents/create",
-            fields=("title",),
+            fields=("title", "kind"),
             required=(),
             text=(
                 "start a specification document yourself; you do not need the operator to start "
                 "it. Returns a placeholder `path` (meaningless — a colour and a mythic animal) "
-                "and `phase`. Always a `change-spec`, always `exploring`; there is no `kind` or "
-                "`path` argument to set either. Call `rename_spec_document` once you know the "
-                "subject, then `submit_spec_document` with the renamed path."
+                "and `phase`, always `exploring`. `kind` is `change-spec` (the default) or "
+                "`roadmap`; there is no `path` argument. A request larger than one demonstrable "
+                "outcome is a `roadmap` plus the first slice's change document; a slice is about "
+                "a dozen requirements or fewer, as a few tasks. Call `rename_spec_document` once "
+                "you know the subject, then `submit_spec_document` with the renamed path."
             ),
         ),
         _Operation(
             tool="submit_spec_document",
             args=(
                 "path, title, kind, summary, problem, design, lifecycle, scope, requirements, "
-                "acceptance_criteria, tasks, algorithms, evidence, open_questions, delivery"
+                "acceptance_criteria, tasks, algorithms, evidence, open_questions, delivery, "
+                "slices, roadmap"
             ),
             method="POST",
             path="/spec/documents",
@@ -1250,13 +1253,18 @@ def _operations() -> List[_Operation]:
                 '`delivery` is how a change-spec document will be built: `{"mode": "flow", '
                 '"agent": ..., "stop_when_queue_empties": ..., "stop_at": ..., "cron": '
                 '...}` or `{"mode": "none"}`. Include it in every later submission — a '
-                "submission replaces the whole document, so one without it drops the answer."
+                "submission replaces the whole document, so one without it drops the answer. "
+                "`slices` are a `roadmap`'s slices in build order (`key`, `title`, `intent`, "
+                "`done`, `builds_after`); a roadmap carries no requirements or tasks. `roadmap` "
+                '(`{"document": <roadmap path>, "slice": <key>}`) names the roadmap slice a '
+                "change document specifies; it is proposable once that roadmap is approved."
             ),
             http_note=(
                 "This is the one operation whose request is not flat: everything after `path` — "
                 "`title`, `kind`, `summary`, `problem`, `design`, `lifecycle`, `scope`, "
                 "`requirements`, `acceptance_criteria`, `tasks`, `algorithms`, `evidence`, "
-                "`open_questions`, `delivery` — goes inside the `document` object, and a key you "
+                "`open_questions`, `delivery`, `slices`, `roadmap` — goes inside the `document` "
+                "object, and a key you "
                 "have nothing for is left out rather than sent as null."
             ),
         ),
@@ -1716,7 +1724,11 @@ SPEC_PHASE_DUTIES = {
         "continue until you know. It blocks your turn, so spend it on a decision rather than on "
         "a question you could have asked in a sentence.\n"
         "- Sketch when it makes something easier to see than a paragraph — a workflow, a boundary, "
-        "a before and after. A few lines of plain text beat a wall of prose."
+        "a before and after. A few lines of plain text beat a wall of prose.\n"
+        "- **Size it as a slice.** A request larger than one demonstrable outcome is written as a "
+        "`roadmap` plus the first slice's change document, not one large document. A slice is "
+        "about a dozen requirements or fewer, as a few tasks; later slices are recorded in the "
+        "roadmap, not specified, and each is drafted once the one before it is approved."
     ),
     "proposed": (
         "- This document is proposed and awaiting the operator's decision. Do not implement it, "
@@ -1727,6 +1739,22 @@ SPEC_PHASE_DUTIES = {
         "needs the operator to reopen it, not a rewrite."
     ),
 }
+
+
+# An approved roadmap is a plan, not something to build (C1a D6): `SPEC_PHASE_DUTIES["approved"]`
+# says "Implement against it", which is right for a change document and wrong here. The turn that
+# drafts a roadmap's next slice has the roadmap open, so this is what it reads.
+ROADMAP_APPROVED_DUTY = (
+    "- This roadmap is approved. Its slices are specified one at a time, each as a change document "
+    "that names the roadmap slice it specifies (`roadmap: {document, slice}`). Do not implement "
+    "from the roadmap; a change to its slices needs the operator to reopen it."
+)
+
+
+def _phase_duty(phase: str, kind: Optional[str]) -> str:
+    if kind == "roadmap" and phase == "approved":
+        return ROADMAP_APPROVED_DUTY
+    return SPEC_PHASE_DUTIES.get(phase, "")
 
 
 async def write_copilot_home_after_commit(
@@ -2169,7 +2197,7 @@ async def _render_hub_agent_context(
             # a charter makes the work better and must never be what makes it valid.
             if phase:
                 lines.append(f"- Phase: **{phase}**.")
-                lines.append(SPEC_PHASE_DUTIES.get(phase, ""))
+                lines.append(_phase_duty(phase, row.kind if row is not None else None))
                 is_change_spec = row is not None and row.kind == "change-spec"
                 if is_change_spec and phase in ("exploring", "proposed"):
                     open_names = ", ".join(peer.name for peer in roster)

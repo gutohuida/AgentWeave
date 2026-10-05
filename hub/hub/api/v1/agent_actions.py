@@ -1515,6 +1515,11 @@ async def read_spec_document(
         "open_questions": (payload or {}).get("open_questions"),
         "diagnostics": diagnostics,
     }
+    # A roadmap's slices, and the roadmap slice a change document specifies (C1a D7). Only when
+    # present, so a document that is neither reads exactly as before.
+    for planned in ("slices", "roadmap"):
+        if (payload or {}).get(planned):
+            view[planned] = payload[planned]
     # F29. This route's own docstring, four paragraphs up, ends on "with no way for anyone to
     # detect divergence from what was approved" — and until now that was still true of the content
     # it serves. `spec_lifecycle.divergence` had one caller, on the save path, so a document edited
@@ -1545,6 +1550,12 @@ async def read_spec_document(
     return view
 
 
+# The kinds an agent may begin (C1a D5, `agent-document-creation`). A capability document is created
+# directly in its current phase and is refused to agents at write, so creating one would succeed and
+# then never be fillable; the corpus kinds describe the project rather than contribute to it.
+AGENT_CREATABLE_KINDS = ("change-spec", "roadmap")
+
+
 @router.post("/spec/documents/create", status_code=status.HTTP_201_CREATED)
 async def create_spec_document(
     body: SpecDocumentCreate,
@@ -1555,15 +1566,29 @@ async def create_spec_document(
 
     Reuses `POST /project/documents`' own creation path rather than branching it: the route mints
     a placeholder path that nothing occupies (design D1, `agent-created-documents`), so there is
-    nothing for this write to render over. Always `change-spec`, at `exploring` — the one kind an
-    agent may originate (design D3) and the one phase an empty document can start in.
+    nothing for this write to render over. A `change-spec` unless the agent asks for a `roadmap`
+    (C1a D5), always at `exploring`, the one phase an empty document can start in. Any other kind
+    is refused, naming the two an agent may begin.
 
-    No `path` and no `kind` are accepted, deliberately: deriving both here would let the least
-    trusted caller in the system name where a write lands (design D2). The path arrives second,
-    once `rename_spec_document` gives the document a name that means something.
+    No `path` is accepted, deliberately: deriving it here would let the least trusted caller in
+    the system name where a write lands (design D2). The path arrives second, once
+    `rename_spec_document` gives the document a name that means something.
     """
     from ... import project_workspace, spec_lifecycle, spec_naming, spec_service
     from .spec import SCHEMA_VERSION, UNTITLED
+
+    kind = body.kind or "change-spec"
+    if kind not in AGENT_CREATABLE_KINDS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": (
+                    f"an agent may create a change-spec or a roadmap document, not {kind!r}; a "
+                    "capability document is the operator's to start"
+                ),
+                "code": "kind_not_creatable",
+            },
+        )
 
     try:
         workspace = await project_workspace.resolve_project_workspace(session, actor.project_id)
@@ -1585,7 +1610,7 @@ async def create_spec_document(
             path,
             actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
             title=body.title or "",
-            kind="change-spec",
+            kind=kind,
         )
     except spec_lifecycle.PhaseError as exc:
         raise HTTPException(

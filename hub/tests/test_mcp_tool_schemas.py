@@ -316,3 +316,22 @@ def test_the_structured_fields_advertise_their_shape():
         types = {branch.get("type") for branch in branches}
         assert want in types, f"{field} advertises {types}, not {want!r}"
         assert {} not in branches, f"{field} carries an untyped branch, so it advertises nothing"
+
+
+# create_spec_document / submit_spec_document (C1a, `a-spec-is-written-one-slice-at-a-time`)
+
+
+def test_create_spec_document_offers_the_two_kinds_an_agent_may_begin():
+    from hub.api.v1.agent_actions import AGENT_CREATABLE_KINDS
+
+    schema = _schemas()["create_spec_document"]
+    assert (
+        set(_enum_for(schema, "kind")) == set(AGENT_CREATABLE_KINDS) == {"change-spec", "roadmap"}
+    )
+    assert "kind" not in schema.get("required", [])
+
+
+def test_submit_spec_document_takes_slices_and_the_roadmap_link():
+    properties = _schemas()["submit_spec_document"]["properties"]
+    assert "slices" in properties
+    assert "roadmap" in properties

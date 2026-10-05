@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import AbstractSet, Dict, List, Optional
+from typing import AbstractSet, Dict, List, Mapping, Optional, Tuple
 
 from .spec_payload import SpecPayload
 
@@ -53,6 +53,19 @@ class Finding:
 
     def to_dict(self) -> dict:
         return {"code": self.code, "where": self.where, "message": self.message}
+
+
+@dataclass(frozen=True)
+class RoadmapState:
+    """What a slice document's link needs to know about the roadmap it names (C1a D3).
+
+    Resolved by the caller from the database and the roadmap's file, as `approved_document_paths`
+    is, so this module stays a pure function of its inputs.
+    """
+
+    phase: str
+    title: str
+    slice_keys: Tuple[str, ...]
 
 
 def _text_fields(payload: SpecPayload) -> List[tuple]:
@@ -108,6 +121,7 @@ def check(
     *,
     board_served: Optional[AbstractSet[str]] = None,
     approved_document_paths: Optional[AbstractSet[str]] = None,
+    roadmaps: Optional[Mapping[str, RoadmapState]] = None,
 ) -> List[Finding]:
     """Everything wrong with this document, not just the first thing.
 
@@ -124,6 +138,9 @@ def check(
     supplied the same way `board_served` is — this module stays a pure function of its inputs,
     never touching the database itself. Used to check an import (`Task.from_`) names a document
     that has actually materialised the task it claims to reference.
+
+    `roadmaps` maps a roadmap path to its state, for the roadmap a slice document names. A path
+    absent from it is a roadmap that does not exist.
     """
     findings: List[Finding] = []
     served = board_served or frozenset()
@@ -165,7 +182,19 @@ def check(
             )
         )
 
-    if not payload.requirements:
+    if payload.kind == "roadmap":
+        # A roadmap asserts its slices, not requirements: those are written in each slice's change
+        # document when that slice is next (C1a D3).
+        if not payload.slices:
+            findings.append(
+                Finding(
+                    "roadmap_without_slices",
+                    "slices",
+                    "a roadmap with no slices plans nothing; list the slices in the order they "
+                    "are built",
+                )
+            )
+    elif not payload.requirements:
         findings.append(
             Finding(
                 "no_requirements",
@@ -248,6 +277,9 @@ def check(
                 )
             )
 
+    if payload.roadmap is not None:
+        findings.extend(_roadmap_link_findings(payload, roadmaps or {}))
+
     # D4: only a change-spec document declares delivery — no other kind is asked.
     if payload.kind == "change-spec":
         if payload.delivery is None:
@@ -273,3 +305,36 @@ def check(
             )
 
     return findings
+
+
+def _roadmap_link_findings(
+    payload: SpecPayload, roadmaps: Mapping[str, RoadmapState]
+) -> List[Finding]:
+    """A slice document is proposable only once its roadmap is approved and holds its slice.
+
+    Both block at proposed **and** at approved, unlike `import_not_approved`: a slice of a roadmap
+    that has been reopened waits for it to be approved again.
+    """
+    assert payload.roadmap is not None
+    path, key = payload.roadmap.document, payload.roadmap.slice
+    state = roadmaps.get(path)
+    if state is None or state.phase != "approved":
+        where_it_is = "is not a roadmap of this project" if state is None else f"is {state.phase}"
+        return [
+            Finding(
+                "roadmap_not_approved",
+                "roadmap",
+                f"names roadmap {path!r}, which {where_it_is}; a slice is proposed only once "
+                "its roadmap is approved",
+            )
+        ]
+    if key not in state.slice_keys:
+        return [
+            Finding(
+                "roadmap_slice_unknown",
+                "roadmap.slice",
+                f"names slice {key!r}, which roadmap {path!r} does not hold (its slices: "
+                f"{', '.join(state.slice_keys) or 'none'})",
+            )
+        ]
+    return []

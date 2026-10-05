@@ -149,6 +149,16 @@ async def save_document(
     to accept it is the document's own property, read from `document.rigor`, never the caller's
     choice.
     """
+    # The kind first, from the raw submission: since validation became kind-aware (C1a D1), a
+    # payload of the wrong kind would otherwise be refused for that kind's shape rules, sending the
+    # author to fix fields when the document itself is the wrong one.
+    raw_kind = raw_payload.get("kind") if isinstance(raw_payload, dict) else None
+    if isinstance(raw_kind, str) and raw_kind != document.kind:
+        raise SaveRefusedError(
+            f"this document is {document.kind!r}; a submission cannot change what a document is",
+            code="kind_is_fixed",
+        )
+
     try:
         payload = validate_payload(raw_payload)
     except PayloadError as exc:
@@ -264,6 +274,7 @@ async def _apply_and_write(
 
     board_served = await requirement_links.served_keys(session, document.id)
     approved_paths = await spec_lifecycle.approved_document_paths(session, document.project_id)
+    roadmaps = await roadmap_states(session, workspace, document.project_id, payload)
     return SaveResult(
         path=document.path,
         phase=document.phase,
@@ -271,7 +282,10 @@ async def _apply_and_write(
         blocking=[
             finding.to_dict()
             for finding in spec_completeness.check(
-                payload, board_served=board_served, approved_document_paths=approved_paths
+                payload,
+                board_served=board_served,
+                approved_document_paths=approved_paths,
+                roadmaps=roadmaps,
             )
         ],
         divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
@@ -872,6 +886,37 @@ async def _repoint_pending_input(
     )
 
 
+def roadmap_slices(workspace: ProjectWorkspace, path: str) -> List[Dict[str, Any]]:
+    """A roadmap's stored slices, in order, or [] when its file has none to read."""
+    try:
+        content = spec_documents.read_document(workspace, path)
+    except Exception:  # noqa: BLE001 -- an unreadable roadmap holds no slice, which is the finding
+        return []
+    stored = extract_payload(content) if content else None
+    slices = (stored or {}).get("slices") or []
+    return [item for item in slices if isinstance(item, dict) and item.get("key")]
+
+
+async def roadmap_states(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    project_id: str,
+    payload: SpecPayload,
+) -> Dict[str, spec_completeness.RoadmapState]:
+    """The state of the roadmap a slice document names, for `spec_completeness.check` (C1a D3).
+
+    Empty when the payload names none, or names a path that is not a roadmap of this project — the
+    check then reports it as missing.
+    """
+    if payload.roadmap is None:
+        return {}
+    row = await spec_lifecycle.get_document(session, project_id, payload.roadmap.document)
+    if row is None or row.kind != "roadmap":
+        return {}
+    keys = tuple(str(item["key"]) for item in roadmap_slices(workspace, row.path))
+    return {row.path: spec_completeness.RoadmapState(row.phase, row.title, keys)}
+
+
 EXPLORE_NOT_CLOSED_MESSAGE = (
     "exploration has not been closed; the operator decides when it is complete"
 )
@@ -909,8 +954,12 @@ async def phase_blockers(
 
     board_served = await requirement_links.served_keys(session, document.id)
     approved_paths = await spec_lifecycle.approved_document_paths(session, document.project_id)
+    roadmaps = await roadmap_states(session, workspace, document.project_id, payload)
     findings = spec_completeness.check(
-        payload, board_served=board_served, approved_document_paths=approved_paths
+        payload,
+        board_served=board_served,
+        approved_document_paths=approved_paths,
+        roadmaps=roadmaps,
     )
     if to_phase == spec_lifecycle.APPROVED:
         # A document whose import source was reopened after it was proposed is approved anyway and

@@ -141,15 +141,17 @@ async def test_the_document_appears_in_the_operators_list(app, auth_headers, run
 async def test_a_body_carrying_identity_or_placement_fields_has_them_ignored(
     app, run_headers, tmp_path
 ):
-    """The route never reads `path`, `kind`, `actor`, `agent` or `run_id` from the
-    body — sending them is not a validation error, it is simply not listened to
-    (design D2/D3: unexpressible rather than merely refused)."""
+    """The route never reads `path`, `actor`, `agent` or `run_id` from the body — sending
+    them is not a validation error, it is simply not listened to (design D2/D3:
+    unexpressible rather than merely refused).
+
+    `kind` left this list with C1a: an agent may ask for a roadmap, so the field is read, and
+    a kind it may not begin is refused naming the two it may (`test_spec_roadmaps.py`)."""
     response = await app.post(
         CREATE,
         json={
             "title": "Legit title",
             "path": "spec/capabilities/agent-charter/spec.html",
-            "kind": "capability",
             "actor": "operator",
             "agent": "someone-else",
             "run_id": "not-this-run",

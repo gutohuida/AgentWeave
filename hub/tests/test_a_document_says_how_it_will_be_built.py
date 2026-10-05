@@ -292,7 +292,8 @@ def test_a_roadmap_with_no_delivery_gets_neither_code():
             "schema_version": SCHEMA_VERSION,
             "kind": "roadmap",
             "title": "Plan",
-            "requirements": [{"key": "alpha", "statement": "It is planned", "modal": "MUST"}],
+            # A roadmap carries slices, not requirements (C1a, `spec-roadmaps`).
+            "slices": [{"key": "s1", "title": "First slice"}],
         }
     )
     codes = {finding.code for finding in spec_completeness.check(payload)}
@@ -918,11 +919,8 @@ async def test_1_8_a_roadmap_approval_writes_a_report_too(app, auth_headers, run
         "kind": "roadmap",
         "title": "Plan",
         "scope": {"in_scope": ["the plan"], "non_goals": ["the rest"]},
-        "requirements": [{"key": "alpha", "statement": "It is planned", "modal": "MUST"}],
-        "acceptance_criteria": [
-            {"key": "c1", "requirement": "alpha", "given": "g", "when": "w", "then": "t"}
-        ],
-        "tasks": [{"key": "t1", "description": "Plan it", "requirements": ["alpha"]}],
+        # A roadmap carries slices, not requirements or tasks (C1a, `spec-roadmaps`).
+        "slices": [{"key": "s1", "title": "First slice", "intent": "i", "done": "d"}],
     }
     written = await _submit_document(app, run_headers, roadmap, path=path)
     assert written.status_code == 200, written.text
