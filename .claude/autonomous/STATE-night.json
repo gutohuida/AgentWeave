@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9ea4cdb",
     "stop_at": "2026-10-06T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "c1b-4-impl",
-    "next_action": "C1b group 4 (D3, the policy a sketch approval records): 4.1 tests first -- a sketch task serving requirements records a digest, one serving none records null; rewrite test_requirement_gate.py:905 (line number has since shifted by +166 from group 3's new tests -- search for the test by name, not the old line). 4.2 the digest covers every served requirement at every rigor. Drive D's step (e) is the acceptance check: rerun testbed/drive-slices/drive_d.py (stub_provider.py on 18496, trial Hub on :8010 restarted with MY_F490_KEY=fake-c1b-drive-not-a-key in its environment so it picks up group 4's code) and confirm (e) now passes with a non-null policy_digest, not just (a)-(d). Both drive scripts already have their bugs fixed from this iteration (stub's identifier/document mapping, drive_d.py's /project path segment and rejected/accepted decision values) -- no further drive-script changes expected unless group 4 surfaces a new one.",
+    "current": "c1b-5-impl",
+    "next_action": "C1b group 5 (D5, requirement chips on the task card): 5.1 vitest tests first -- each chip carries its coverage state read from useSpecCoverage(path) per linked document (not requirement_links[].state, which is lifecycle, per the design's R1 fix), tone classes verified/evidence_awaiting_review/rejected/neutral; a task with five linked requirements shows a one-line summary ('N verified . N rejected . N open', data-testid=\"task-requirement-summary-<id>\"), one with four shows none. 5.2 write useRequirementChips (reads useSpecCoverage per linked document, same cache the document view uses, already invalidated on evidence decisions and spec_updated) and wire it into TaskCard.tsx; npm run lint; refresh the UI bundle (make ui or scripts/refresh_ui_bundle.py); commit hub/ui/src and hub/hub/static/ui together, per CLAUDE.md's UI-bundle rule. No backend change -- design D5 is explicit that this is UI-only.",
     "queue": [
         {
             "id": "c1b-r1",
@@ -41,9 +41,9 @@
         },
         {
             "id": "c1b-4-impl",
-            "status": "open",
+            "status": "done",
             "title": "C1b group 4: sketch-approval digest policy (D3)",
-            "detail": "4.1 tests first: sketch task serving requirements records a digest, serving none records null -- rewrite test_requirement_gate.py:905. 4.2 digest covers every served requirement at every rigor."
+            "detail": "Done iter 6: 4.1 split test_an_ungated_approval_records_no_policy (shifted to :1072, found by name) into the null case (task linking nothing) and a new digest case (sketch task serving a requirement); confirmed red via git stash before 4.2. 4.2 evaluate's early return moved from 'not enforced' to 'not rows'; policy built from by_all_document (every linked document, D2's step already computed it) with an enforces=rigor!=SKETCH flag gating only the blocking/reported/diagnostics entries, not the policy append. 130 tests pass across the five related suites; ruff+black clean. Drive D (a)-(e) all PASS on :8010 after a Hub restart, (e) with a non-null policy digest -- no drive-script changes needed this time."
         },
         {
             "id": "c1b-5-impl",
