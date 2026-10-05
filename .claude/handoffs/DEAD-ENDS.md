@@ -2003,3 +2003,19 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-10-05 (home) — drive documents land in this repo's `spec/changes/`** (the trial project is
   this checkout) as untracked files. Remove only the drive's own directories after the drive; never
   `git add -A`.
+- **2026-10-05 (home) — `Path.write_text` in a patch script turns a whole file CRLF on Windows**
+  (text mode translates `\n`). `.gitattributes` (`eol=lf`) normalises it on commit, so the diff
+  stays small, but git prints "CRLF will be replaced" warnings and black/ruff see a CRLF file.
+  Write with `write_bytes(s.encode("utf-8"))`, or `sed -i 's/\r$//'` afterwards.
+- **2026-10-05 (home) — a change-spec carrying requirements cannot be proposed with `tasks: []`**:
+  a requirement served by no task blocks proposal. The only way an approval meets "no open linked
+  task" is a **re-approval** after reopen (`/documents/phase?to=exploring`, then propose and
+  approve again). Do not write a test or scenario for "a slice with no tasks".
+- **2026-10-05 (home) — `testbed/drive-slices/stub-requests.jsonl` keeps only the last 1500 chars of
+  the turn**, so the system context (duties, open-document notes) is never in it. The stub now
+  writes the full request body of a drafting turn to `drafting-full.json`; do the same for any
+  other context assertion.
+- **2026-10-05 (home) — CI "failures" with no failing test: "The job was not acquired by Runner of
+  type hosted even after multiple attempts"** (GitHub capacity, three runs in a row on
+  `f17c8e0..0fcdce7`). Read `gh run view <id>` before debugging. Every job that ran passed;
+  `gh run rerun <id> --failed` retries only the unacquired ones.
