@@ -707,4 +707,7 @@ async def test_a_review_run_ending_after_its_task_left_review_restaffs_nobody(
     async with async_session_factory() as db:
         task = await db.get(Task, "task-rev-moved-off")
         assert task.status == "revision_needed"
-        assert task.assignee == "critic", "the operator's move, not a restaff, owns the assignee"
+        # The operator's move, not a restaff, owns the assignee -- and since F495 that move returns
+        # the task to the agent that completed it, so the rework is its author's rather than the
+        # reviewer's. Still fails if the run boundary restaffs `free-agent` onto it.
+        assert task.assignee == AUTHOR, "the operator's move, not a restaff, owns the assignee"

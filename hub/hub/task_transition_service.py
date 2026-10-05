@@ -687,6 +687,17 @@ async def apply_transition(
         # different things, and the second is not a statement about rigor at all.
         reported = list(refusal.reported) + list(refusal.advisory)
 
+    # Work sent back goes back to its author (F495). A flow writes its reviewer into `assignee`
+    # before entering the review (`scheduler.enter_selected_task`, F70's ordering), and the firing
+    # resumes a staffed task with whoever `assignee` names — so without this the reviewer reworked
+    # what it had reviewed, became the completer, and the author was staffed to review the
+    # reviewer's fix. Read before the status write, so the lookup's autoflush cannot matter. An
+    # operator completion names no agent, and the assignee is then left as it is, not guessed at.
+    if to_status == "revision_needed":
+        author = await agent_that_completed(session, task.id)
+        if author is not None:
+            task.assignee = author
+
     task.status = to_status
     transition = TaskTransition(
         id=f"ttr-{short_id()}",

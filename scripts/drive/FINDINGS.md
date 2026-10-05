@@ -34219,9 +34219,15 @@ slice 5 code (`hub/hub/runner_provider.py`, `hub/hub/run_secrets.py`).
 
 ## F495 (B) — a task sent back for revision is reworked by its reviewer, not its author
 
-**Status:** open, found 2026-10-05 by an interactive session's read of the review layer while deepening
-`openspec/explorations/2026-09-29-specs-that-evolve-by-slice.md`, then confirmed on `:8000`'s data
-(`mode=ro`). **Ready:** yes; Tier 0, operator: "File finding, fix Tier 0 now".
+**Status:** fixed 2026-10-05 (Tier 0). `apply_transition` returns a task moved to `revision_needed` to
+its most recent agent completer (`hub/hub/task_transition_service.py`); an operator completion leaves
+the assignee alone. Tests: `hub/tests/test_revision_returns_to_the_author.py` (two failed before the
+fix); `test_review_divergence.py:710`'s pin now names the author. Driven on `:8010` with two
+stub-provider Copilot agents in a real flow: before (`1014961`, `task-7dda1110d84c`) the reviewer
+`a0-f495-rev` was fired for the rework and completed it (transitions 37-38); after
+(`task-20a182289f85`) the author `a1-f495-author` was (47-48). Found 2026-10-05 by an interactive
+session's read of the review layer, confirmed on `:8000`'s data (`mode=ro`).
+**Ready:** closed.
 
 A flow that staffs a review writes the reviewer into `task.assignee` before moving the task to
 `under_review` (`hub/hub/scheduler.py:918`, F70's ordering). When the reviewer sets `revision_needed`,
