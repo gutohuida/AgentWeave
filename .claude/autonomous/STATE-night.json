@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9ea4cdb",
     "stop_at": "2026-10-06T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "c1b-drive",
-    "next_action": "C1b tasks 1.1-1.2: 1.1 mode=ro count on :8000 of tasks not yet approved serving a requirement whose current-digest evidence is all rejected, recorded in tasks.md; 1.2 write testbed/drive-slices/drive_d.py from drive_c.py + stub_provider.py and run it on :8010 before the build -- it must fail at (a) with task_too_coarse.",
+    "current": "c1b-2-impl",
+    "next_action": "C1b group 2 (the ceiling, D1): 2.1 tests first -- rewrite test_spec_completeness.py:133 (a task naming five requirements is proposable, not too-coarse) and :146 (a requirement served by no task is still refused); 2.2 remove MAX_REQUIREMENTS_PER_TASK and the task_too_coarse finding from spec_completeness.py, reword data/charters/spec.md:101. Then rerun testbed/drive-slices/drive_d.py on :8010 (stub_provider.py already started once this iteration, needs restarting) and confirm it now clears (a) and reaches (b).",
     "queue": [
         {
             "id": "c1b-r1",
@@ -23,9 +23,9 @@
         },
         {
             "id": "c1b-drive",
-            "status": "open",
+            "status": "done",
             "title": "C1b tasks 1.1-1.2: acceptance drive D, failing before build",
-            "detail": "1.1 mode=ro count on :8000 of tasks not yet approved serving a requirement whose current-digest evidence is all rejected. 1.2 write testbed/drive-slices/drive_d.py from drive_c.py + stub_provider.py; run on :8010, must fail at (a) with task_too_coarse."
+            "detail": "Done iter 3: 1.1 measured 6 tasks (proj-03b9c6a6c37a, live's real DB) against 7 all-rejected-evidence requirements. 1.2 drive_d.py written (a)-(e), stub_provider.py extended with DRIVE-D-TASK/DRIVE-D-EVIDENCE; run on :8010, fails at (a) with task_too_coarse exactly as expected."
         },
         {
             "id": "c1b-2-impl",

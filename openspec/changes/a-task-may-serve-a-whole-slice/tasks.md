@@ -7,11 +7,19 @@
 
 ## 1. Acceptance drive first (design: Acceptance drive)
 
-- [ ] 1.1 Read-only count on `:8000` (`mode=ro`): tasks not yet approved that serve a requirement
-  whose current-digest evidence is all rejected. Record the number here; it is who the
-  behaviour change reaches.
-- [ ] 1.2 Drive D (`testbed/drive-slices/drive_d.py`, stub provider on `:8010`) written, and run
-  before the build: it fails at (a) with `task_too_coarse`.
+- [x] 1.1 Read-only count on `:8000` (`mode=ro`, `~/.agentweave/hub/data/agentweave.db` --
+  `.claude/reference/hubs.md` names this as the database `:8000` actually opens, not the `live`
+  profile): **6 tasks**, all in project `proj-03b9c6a6c37a` (LoopEngine) -- statuses `pending` x2,
+  `completed` x2, `under_review` x1, `revision_needed` x1 -- serve one of **7 requirements** whose
+  current-digest evidence (`digest` match, `review_state` grouping per `requirement_coverage._state`;
+  no open `requirement_drift` rows exist in this database, so drifting never applies) is every row
+  `rejected`. Measured 2026-10-05 night.
+- [x] 1.2 Drive D (`testbed/drive-slices/drive_d.py`, stub provider on `:8010`, `stub_provider.py`
+  extended with `DRIVE-D-TASK` and `DRIVE-D-EVIDENCE <id> <task>` markers) written and run
+  2026-10-05 night: fails at (a) exactly as expected --
+  `{"code": "task_too_coarse", "where": "tasks[0]", "message": "'t1' names 5 requirements, over
+  the ceiling of 3 ..."}`. (b)-(e) are written against the design's table but not yet run to
+  completion -- the run stops at the first `fail()`, by design, and the ceiling still blocks (a).
 
 ## 2. The ceiling (D1)
 
