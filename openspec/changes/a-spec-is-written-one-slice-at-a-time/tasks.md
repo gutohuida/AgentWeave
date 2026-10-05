@@ -91,10 +91,10 @@ Run tests with `py -3.11`. Drives go on `:8010` only, never `:8000`. Real agent 
 
 ## 6. Rendering and UI (D7)
 
-- [ ] 6.1 Tests first: a roadmap renders its slices in order; a linked change document renders
+- [x] 6.1 Tests first: a roadmap renders its slices in order; a linked change document renders
   "Slice S1 of <roadmap title>".
-- [ ] 6.2 `spec_render.py` sections.
-- [ ] 6.3 The approval control shows "Draft the next slice", on by default, only for a document that
+- [x] 6.2 `spec_render.py` sections.
+- [x] 6.3 The approval control shows "Draft the next slice", on by default, only for a document that
   names a roadmap slice, and sends `draft_next_slice`. `npm run lint`; refresh the bundle
   (`scripts/refresh_ui_bundle.py`); commit `hub/ui/src` and `hub/hub/static/ui` together.
 

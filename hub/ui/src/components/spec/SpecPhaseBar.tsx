@@ -18,6 +18,7 @@ import {
   useSpecRigorHistory,
   type SpecBlockingFinding,
   type SpecDocumentRecord,
+  type SpecNextSliceOutcome,
 } from '@/api/spec'
 
 type Rigor = SpecDocumentRecord['rigor']
@@ -29,6 +30,24 @@ const RIGOR_LABEL: Record<Rigor, string> = { sketch: 'Sketch', contract: 'Contra
 
 /** No choice made yet — distinct from `''`, which is a real choice ("No flow", design D5b). */
 const NO_CHOICE = '__unset__'
+
+/** What an approval asked to draft the next slice did (`a-spec-is-written-one-slice-at-a-time` D4). */
+function nextSliceMessage(outcome: SpecNextSliceOutcome): string {
+  switch (outcome.state) {
+    case 'queued':
+      return `Asked @${outcome.agent} to draft slice ${outcome.slice}.`
+    case 'last_slice':
+      return 'This was the roadmap’s last slice; there is no next one to draft.'
+    case 'no_author':
+      return 'No agent created this document, so nobody was asked to draft the next slice.'
+    case 'no_conversation':
+      return `@${outcome.agent} created this document outside a conversation, so the next slice was not queued.`
+    case 'not_queued':
+      return `The approval stands, but the Hub could not queue slice ${outcome.slice} to @${outcome.agent}.`
+    default:
+      return 'This document names no roadmap slice, so nothing was queued.'
+  }
+}
 
 /**
  * What a refused phase move says, as findings. The Hub answers an incomplete document with
@@ -80,6 +99,9 @@ export function SpecPhaseBar({
   const [archiveRefusal, setArchiveRefusal] = useState<string | null>(null)
   const [startingFlow, setStartingFlow] = useState(false)
   const [deliveryAgentChoice, setDeliveryAgentChoice] = useState(NO_CHOICE)
+  // On by default (C1a D4): approving a slice usually means "and now the next one".
+  const [draftNextSlice, setDraftNextSlice] = useState(true)
+  const [nextSliceOutcome, setNextSliceOutcome] = useState<SpecNextSliceOutcome | null>(null)
   // A rigor chosen in the select and not yet confirmed. The select no longer posts on change: the
   // change waits here for its reason (design D2).
   const [pendingRigor, setPendingRigor] = useState<Rigor | null>(null)
@@ -95,6 +117,7 @@ export function SpecPhaseBar({
   // the strip simply does not appear, the same "say nothing false" rule the rest of the bar
   // follows for a document the Hub does not track.
   const deliveryStatus = specDocError ? undefined : specDoc?.delivery_status
+  const roadmapSlice = specDocError ? undefined : specDoc?.roadmap_slice
   const openAgents = agentsError ? [] : (openAgentsData ?? [])
 
   const busy = closeExploration.isPending || propose.isPending || setPhase.isPending
@@ -115,6 +138,7 @@ export function SpecPhaseBar({
 
   function onApprove() {
     setBlocking([])
+    setNextSliceOutcome(null)
     setPhase.mutate(
       {
         path,
@@ -123,8 +147,11 @@ export function SpecPhaseBar({
         // otherwise omitted, so an un-restarted `:8000` (which has no `delivery_status` to show a
         // strip from in the first place) never receives a field it would 422.
         ...(deliveryAgentChoice !== NO_CHOICE ? { delivery_agent: deliveryAgentChoice } : {}),
+        // Only for a slice document: the Hub that named `roadmap_slice` is the one that accepts it.
+        ...(roadmapSlice ? { draft_next_slice: draftNextSlice } : {}),
       },
       {
+        onSuccess: (result) => setNextSliceOutcome(result.next_slice ?? null),
         // F207: approval runs the completeness checks again and answers 409 with the findings.
         onError: (error: unknown) =>
           setBlocking(findingsFromRefusal(error, 'The Hub refused to approve this document.')),
@@ -203,6 +230,12 @@ export function SpecPhaseBar({
 
   return (
     <div className="flex shrink-0 flex-col gap-1.5 px-3 py-2 text-xs">
+      {nextSliceOutcome && (
+        <p data-testid="next-slice-outcome" style={{ color: 'var(--text-2)' }}>
+          {nextSliceMessage(nextSliceOutcome)}
+        </p>
+      )}
+
       {/* A stale delivery, above Approve (design D5/D5b): the declared agent is archived or
           unknown, so approving as written would not start a flow. The choice made here — another
           open agent, or "No flow" — travels with Approve; it is used for this flow only and never
@@ -293,6 +326,22 @@ export function SpecPhaseBar({
           >
             Approve
           </button>
+        )}
+
+        {document.phase === 'proposed' && roadmapSlice && (
+          <label
+            className="flex items-center gap-1"
+            style={{ color: 'var(--text-2)' }}
+            title={`This document specifies slice ${roadmapSlice.slice} of a roadmap. Approving it asks the agent that wrote it to draft the next slice.`}
+          >
+            <input
+              type="checkbox"
+              checked={draftNextSlice}
+              disabled={busy}
+              onChange={(event) => setDraftNextSlice(event.target.checked)}
+            />
+            Draft the next slice
+          </label>
         )}
 
         {/* F205: `spec_lifecycle` has archive edges from `exploring` and `proposed` too, added for

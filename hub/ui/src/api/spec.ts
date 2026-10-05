@@ -88,12 +88,28 @@ export interface SpecApprovalOutcome {
   delivery_agent?: string | null
 }
 
+/** The roadmap slice a change document specifies (`a-spec-is-written-one-slice-at-a-time`, D7).
+ *  Present on `GET /spec` only for a document that names one; an older Hub never returns it. */
+export interface SpecRoadmapSlice {
+  document: string
+  slice: string
+}
+
+/** What an approval asked with `draft_next_slice` did about the next slice (D4). `queued` names the
+ *  slice and the agent asked to draft it; the other states say why nothing was queued. */
+export interface SpecNextSliceOutcome {
+  state: 'queued' | 'last_slice' | 'no_author' | 'no_conversation' | 'not_a_slice' | 'not_queued'
+  slice: string | null
+  agent: string | null
+}
+
 export interface SpecDocument {
   path: string
   content: string
   updated_at?: string
   delivery_status?: SpecDeliveryStatus
   approval_outcome?: SpecApprovalOutcome
+  roadmap_slice?: SpecRoadmapSlice
 }
 
 // `source_id` and `updated_at` are gone with the push model: a source was a
@@ -564,21 +580,31 @@ export function useSetSpecPhase() {
       to,
       reason,
       delivery_agent,
+      draft_next_slice,
     }: {
       path: string
       to: string
       reason?: string
+      /** Sent only for a document whose `GET /spec` named a `roadmap_slice`: a Hub that returns
+       *  that field also accepts this one, and no other Hub is ever sent it (it would 422). */
+      draft_next_slice?: boolean
       /** Sent only when the operator chose one from the stale-delivery strip (design D5b): an
        *  agent name, or `''` for "No flow". Omitted otherwise — a bundle with no `delivery_status`
        *  (the strip never appears without it) must never send this to a Hub that predates it,
        *  which would 422 an unknown field. */
       delivery_agent?: string
     }) =>
-      postJson<SpecDocumentRecord & { approval_outcome?: SpecApprovalOutcome }>(
+      postJson<
+        SpecDocumentRecord & {
+          approval_outcome?: SpecApprovalOutcome
+          next_slice?: SpecNextSliceOutcome
+        }
+      >(
         `/api/v1/projects/${projectId}/project/documents/phase?path=${encodeURIComponent(path)}&to=${encodeURIComponent(to)}`,
         {
           reason: reason ?? '',
           ...(delivery_agent !== undefined ? { delivery_agent } : {}),
+          ...(draft_next_slice !== undefined ? { draft_next_slice } : {}),
         },
       ),
     onSuccess: () => {

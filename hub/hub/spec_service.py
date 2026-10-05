@@ -36,7 +36,7 @@ from .spec_payload import (
     payload_to_dict,
     validate_payload,
 )
-from .spec_render import render_document
+from .spec_render import SliceOf, render_document
 from .utils import short_id
 
 
@@ -245,6 +245,7 @@ async def _apply_and_write(
         # From the row, never from the submission. An agent that could state a rigor in a payload
         # could lower a gate that is blocking it, which is the one thing this must not permit.
         rigor=document.rigor,
+        slice_of=slice_of(workspace, payload),
     )
 
     divergence = spec_lifecycle.divergence(document, existing_content)
@@ -897,6 +898,36 @@ def roadmap_slices(workspace: ProjectWorkspace, path: str) -> List[Dict[str, Any
     return [item for item in slices if isinstance(item, dict) and item.get("key")]
 
 
+def slice_of(workspace: ProjectWorkspace, payload: SpecPayload) -> Optional[SliceOf]:
+    """The line a slice document renders under its title, from the roadmap's own file (C1a D7).
+
+    From the file and not the database, so every render path (save, phase, corpus) can supply it
+    and all of them agree. A roadmap that cannot be read still names the key and the path.
+    """
+    if payload.roadmap is None:
+        return None
+    path, key = payload.roadmap.document, payload.roadmap.slice
+    try:
+        content = spec_documents.read_document(workspace, path)
+    except Exception:  # noqa: BLE001 -- the line degrades to the key and the path
+        content = None
+    stored = (extract_payload(content) if content else None) or {}
+    named = next(
+        (
+            item
+            for item in stored.get("slices") or []
+            if isinstance(item, dict) and item.get("key") == key
+        ),
+        {},
+    )
+    return SliceOf(
+        key=key,
+        title=str(named.get("title") or ""),
+        roadmap_path=path,
+        roadmap_title=str(stored.get("title") or path),
+    )
+
+
 async def roadmap_states(
     session: AsyncSession,
     workspace: ProjectWorkspace,
@@ -1038,7 +1069,12 @@ async def rerender_phase(
         return
     identifiers, _ = spec_identity.read_identity(stored)
     rewritten = render_document(
-        payload, identifiers, phase=document.phase, stored_payload=stored, rigor=document.rigor
+        payload,
+        identifiers,
+        phase=document.phase,
+        stored_payload=stored,
+        rigor=document.rigor,
+        slice_of=slice_of(workspace, payload),
     )
     spec_documents.write_document(workspace, document.path, rewritten)
     document.content_digest = spec_lifecycle.digest(rewritten)
@@ -1105,6 +1141,7 @@ async def rerender_corpus(
             stored_payload=stored,
             rigor=rigor,
             corpus=context,
+            slice_of=slice_of(workspace, payload),
         )
         if rendered == current:
             continue

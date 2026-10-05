@@ -417,6 +417,49 @@ def _delivery(payload: SpecPayload) -> str:
     return _paragraphs(" ".join(sentences))
 
 
+@dataclass(frozen=True)
+class SliceOf:
+    """The roadmap slice a change document specifies, as its line under the title shows it (C1a D7).
+
+    Resolved by the caller from the roadmap's own file, so every render of the same document --
+    on save, on a phase change, on a corpus re-render -- produces the same bytes.
+    """
+
+    key: str
+    title: str
+    roadmap_path: str
+    roadmap_title: str
+
+
+def _slice_of(slice_of: Optional[SliceOf]) -> str:
+    if slice_of is None:
+        return ""
+    named = f" ({_e(slice_of.title)})" if slice_of.title else ""
+    return (
+        f'<p class="aw-slice-of">Slice <code>{_e(slice_of.key)}</code>{named} of the roadmap '
+        f"<em>{_e(slice_of.roadmap_title)}</em> (<code>{_e(slice_of.roadmap_path)}</code>)</p>\n"
+    )
+
+
+def _slices(payload: SpecPayload) -> str:
+    """A roadmap's slices, in the order they are built. Empty for any other document."""
+    if not payload.slices:
+        return ""
+    items = []
+    for item in payload.slices:
+        parts = [f"<strong>{_e(item.key)}</strong> — {_e(item.title)}"]
+        if item.intent:
+            parts.append(f"<br>{_e(item.intent)}")
+        if item.done:
+            parts.append(f'<br><span class="aw-note">Done when: {_e(item.done)}</span>')
+        if item.builds_after:
+            parts.append(
+                f'<br><span class="aw-note">Builds after: {_e(", ".join(item.builds_after))}</span>'
+            )
+        items.append(f'<li id="slice-{_e(item.key)}">{"".join(parts)}</li>')
+    return "<ol>" + "".join(items) + "</ol>"
+
+
 def _open_questions(payload: SpecPayload) -> str:
     # An absent section left a reader unable to tell a document whose questions
     # were asked and answered from one where none were ever asked — which is the
@@ -568,6 +611,7 @@ def render_document(
     stored_payload: Dict[str, Any],
     rigor: str = "sketch",
     corpus: Optional[CorpusContext] = None,
+    slice_of: Optional[SliceOf] = None,
 ) -> str:
     """A self-contained document: inline style only, no external resource.
 
@@ -587,6 +631,9 @@ def render_document(
     the home document itself) and a parent link (present only where the manifest records one),
     §2 — and, below the authored content, a generated map of the document's own children where it
     has any (§3), labelled as generated since a reindex overwrites it.
+
+    `slice_of`, for a change document that names a roadmap slice, adds the line saying whose slice
+    it is (C1a D7). A roadmap's own slices render from the payload.
     """
     scope_body = ""
     if payload.scope.in_scope:
@@ -603,6 +650,7 @@ def render_document(
             _section("Summary", "summary", _paragraphs(payload.summary)),
             _section("Problem", "problem", _paragraphs(payload.problem)),
             _section("Scope", "scope", scope_body),
+            _section("Slices", "slices", _slices(payload)),
             _section("Requirements", "requirements", _requirements(payload, identifiers)),
             _section("Acceptance criteria", "acceptance", _acceptance(payload, identifiers)),
             _section("Behaviour", "behaviour", _algorithms(payload)),
@@ -637,6 +685,7 @@ def render_document(
         f'<span class="{phase_chip_class}">{_e(phase)}</span>'
         f'<span class="{rigor_chip_class}">{_e(rigor)}</span></p>\n'
         f"{_navigation(corpus)}"
+        f"{_slice_of(slice_of)}"
         f"{_summary(payload)}\n"
         f"{sections}\n"
         f"{_map(corpus)}"

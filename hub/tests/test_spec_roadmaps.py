@@ -665,3 +665,49 @@ async def test_an_approved_change_document_keeps_its_duty(app, auth_headers, pla
     assert (await _approve(app, auth_headers, path)).status_code == 200
 
     assert SPEC_PHASE_DUTIES["approved"] in await _context_with_open(path)
+
+
+# 6.1 -- rendering -------------------------------------------------------------------------------
+
+
+def test_a_roadmap_renders_its_slices_in_order():
+    from hub.spec_render import render_document
+
+    payload = validate_payload(_roadmap())
+    html = render_document(payload, {}, phase="exploring", stored_payload=payload_to_dict(payload))
+
+    assert '<section id="slices">' in html
+    first, second = html.index("Slice one"), html.index("Slice two")
+    assert first < second
+    assert "First outcome" in html and "S2 is built" in html
+    assert "Builds after: s1" in html
+
+
+def test_a_document_without_slices_or_link_renders_as_before():
+    from hub.spec_render import render_document
+
+    payload = validate_payload(_slice_doc(roadmap=None))
+    html = render_document(payload, {}, phase="exploring", stored_payload=payload_to_dict(payload))
+    assert 'id="slices"' not in html
+    assert "aw-slice-of" not in html
+
+
+@pytest.mark.asyncio
+async def test_a_slice_document_says_whose_slice_it_is(app, auth_headers, planner, tmp_path):
+    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
+    slice_path = await _proposed_slice(app, auth_headers, planner, roadmap_path)
+
+    html = (tmp_path / slice_path).read_text(encoding="utf-8")
+    line = html[html.index("aw-slice-of") :].split("</p>", 1)[0]
+    assert "s1" in line and "Slice one" in line and "The plan" in line
+
+
+@pytest.mark.asyncio
+async def test_the_spec_read_names_the_roadmap_slice_for_the_app(app, auth_headers, planner):
+    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
+    slice_path = await _proposed_slice(app, auth_headers, planner, roadmap_path)
+
+    got = await app.get(f"{BASE}/spec", params={"path": slice_path}, headers=auth_headers)
+    assert got.json()["roadmap_slice"] == {"document": roadmap_path, "slice": "s1"}
+    got = await app.get(f"{BASE}/spec", params={"path": roadmap_path}, headers=auth_headers)
+    assert "roadmap_slice" not in got.json()

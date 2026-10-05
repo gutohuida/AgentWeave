@@ -320,6 +320,14 @@ async def get_spec(
         )
         if status_now is not None:
             payload["delivery_status"] = status_now
+        # The roadmap slice this document specifies, so the app can offer "Draft the next slice"
+        # beside Approve (C1a D7). Absent on every other document.
+        link = (spec_payload_module.extract_payload(content) or {}).get("roadmap")
+        if document.kind == "change-spec" and isinstance(link, dict):
+            payload["roadmap_slice"] = {
+                "document": link.get("document"),
+                "slice": link.get("slice"),
+            }
         if document.phase == "approved":
             outcome = await _approval_outcome(session, document)
             if outcome is not None:
