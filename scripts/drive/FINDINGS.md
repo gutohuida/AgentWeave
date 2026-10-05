@@ -34216,3 +34216,26 @@ the single word ok.` It completes, and its usage is in tokens. Then grep the tri
 agent and record the `model` its `subagent_completed`/`subagent_failed` report (slice 5 finding 13).
 Revoke the key afterwards and record that it was. A failure here is a fix against the archived
 slice 5 code (`hub/hub/runner_provider.py`, `hub/hub/run_secrets.py`).
+
+## F495 (B) — a task sent back for revision is reworked by its reviewer, not its author
+
+**Status:** open, found 2026-10-05 by an interactive session's read of the review layer while deepening
+`openspec/explorations/2026-09-29-specs-that-evolve-by-slice.md`, then confirmed on `:8000`'s data
+(`mode=ro`). **Ready:** yes; Tier 0, operator: "File finding, fix Tier 0 now".
+
+A flow that staffs a review writes the reviewer into `task.assignee` before moving the task to
+`under_review` (`hub/hub/scheduler.py:918`, F70's ordering). When the reviewer sets `revision_needed`,
+nothing writes the assignee back, so the next firing's ordinary-work arm *resumes* the task with
+`agent = task.assignee` (`scheduler.py:1902-1906`): the reviewer. The reviewer then authors the fix,
+which the review context itself forbids in spirit (`hub/hub/api/v1/agents.py:1946`, "a reviewer that
+edits the work has reviewed its own work"), becomes the recorded completer, and the original author
+is staffed to review the reviewer's fix. Author and reviewer swap roles on every revision cycle.
+
+**Measured on `:8000` (read-only):** 7 revision cycles whose rework was done by an agent run; in 3 the
+reviewer reworked, in 3 the author did (where the author's run picked it up some other way), 1 other.
+`task-0ff93faef4ba`: `dev` completed, `dev_2` reviewed and reworked; `dev` then reviewed and reworked
+`dev_2`'s rework. `task-d8d4b03d722b`: `dev` completed, `dev_2` reviewed and reworked.
+
+**Fix direction:** moving a task `under_review -> revision_needed` returns it to the agent recorded as
+its most recent completer (`completion_attribution`), so the rework runs, in a fresh session as it
+already does, with its author; an operator completion (no agent) leaves the assignee untouched.
