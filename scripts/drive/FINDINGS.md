@@ -34099,9 +34099,15 @@ allowance hold does.
 
 ## F490 (B) — a run's registered secret is not scrubbed from what the agent writes through its Hub tools
 
-**Status:** open, found 2026-10-04 by the pre-approval Opus review of
-`a-secret-split-across-two-events-is-still-scrubbed` (F488's change; recorded in its Non-goals).
-**Ready:** yes; no change owns it.
+**Status:** fixed 2026-10-05 by `26b0102` (Tier 0 by the operator's direction, interactive): an ASGI
+middleware scrubs the body of every run-authenticated write to `/api/v1/agent-actions` by the run's
+registry. Driven on `:8010`: a Copilot agent `f490drive` on a provider runner aimed at a local stub
+Anthropic server (`testbed/drive1005-f493-f490-f491/stub_provider.py`, no spend), the stub's turn calling
+`agentweave-send_message` with the run's own key in subject and content. Stored: `key <redacted>` / `the
+provider key in my environment is <redacted>`; the key in **no** column of any table (two runs). A
+before-drive with the middleware disabled was not run (the session's permission classifier refused
+disabling it on a live Hub); `test_agent_writes_are_scrubbed.py` fails with the middleware removed.
+**Ready:** closed.
 
 `run_secrets.scrub` is applied only where a run's output is recorded: `output_recording.py` and
 `api/v1/agent_trigger.py` are the only importers of `run_secrets` (VERIFIED by the review). Content
@@ -34115,8 +34121,14 @@ the tool routes, which already know the run from its credential (`agent_auth.py`
 
 ## F491 (B) — a Copilot review of this repository cannot finish: the review context asks for the test suite and the turn limit is 600 s
 
-**Status:** open, found 2026-10-04 by drive task 7.7 of `a-copilot-agent-uses-hooks-and-its-own-agents`
-(trial Hub `:8010`, `task-645a0a8abbf4`). **Ready:** no change owns it; needs a decision.
+**Status:** fixed 2026-10-05 by `1014961` (Tier 0, interactive; operator: "fix it and drive it", taking the
+first fix direction): a review turn's context now asks for the tests that cover what changed, and the
+whole suite only for a change that reaches across the project. Driven on `:8010`, the 7.7 scenario again
+(`cp5`, Copilot Free, commit `521e5d3`, two lines of `testbed/README.md`) with the neutral message *"Review
+the work on this task and record your verdict."*: **one** run (`run-7892b664fdcc`, 122 s), `code-review`
+dispatched, `git diff --check`, no suite run, task `approved` by `cp5`'s own `update_task`. Before: three
+runs at the 600 s limit and a reassignment. The timeout-resume direction was not taken.
+**Ready:** closed.
 
 Reviewing a two-line `testbed/README.md` change, `cp5` (Copilot, Free/Auto) dispatched `code-review`,
 then ran the repository's whole test suite, as the review context's instructions lead it to. Runs
@@ -34144,9 +34156,15 @@ lowercase hex of exactly 40 characters is the residual to weigh.
 
 ## F493 (B) — the Hub test suite, run inside an agent's run, writes fake refusals into the live Hub
 
-**Status:** open, found 2026-10-04 while checking a fourth observation from drive task 7.7 of
-`a-copilot-agent-uses-hooks-and-its-own-agents`.
-**Ready:** yes. Tier 0: no change owns it.
+**Status:** fixed 2026-10-05 by `ae0914a` (Tier 0, interactive): both suites' conftests pop the run
+variables at import. Driven on `:8010`: a real `running` run's credential and `HUB_URL` in the environment of
+`pytest hub/tests/test_hub_own_call.py`; with the pre-fix conftest the Hub recorded **5** fake
+`permission_denied` rows against that run (Write ×2, Bash, PowerShell ×2, reason "the operator was
+asked"), with the fix **0**. The CLI suite had the same leak (4 `POST /session/sync`, 10 failures under a
+run environment; 0 and 567 passed after). Not driven through an agent turn: no Claude agent on `:8010`
+gets the Hub's approver (its runs carry no MCP config, `runner_commands.py:241`), so a pytest call is
+refused short of Full access.
+**Ready:** closed.
 
 The trial Hub's `event_logs` holds a `permission_denied` event for `cp5`, created 2026-10-04 17:47:28,
 12 s before `run-c8e00634e828` timed out. Its data is `{"tool_name": "PowerShell", "tool_use_id":
