@@ -31,10 +31,13 @@ Run tests with `py -3.11`. Drives go on `:8010` only, never `:8000`. Real agent 
   Written: `testbed/drive-slices/drive_a.py` + `stub_provider.py` (port 18496, runner
   `slices-stub-provider`). Seen failing at `9fb9de9`: FAIL (a), run `run-0db7e65ddfa5` got
   `create_spec_document` "kind: Unexpected keyword argument" and created nothing.
-- [ ] 1.2 Drive B, a real model and the guidance (needs 0.1's runner): one real authoring turn on
+- [x] 1.2 Drive B, a real model and the guidance (needs 0.1's runner): one real authoring turn on
   Haiku, given a LoopEngine-sized request, ends with a roadmap and a slice-1 change document of
   ≤ ~12 requirements and ≤ 4 tasks. Record the counts. A miss is a finding about the guidance, not a
   failed build (design, Risks).
+  Recorded 2026-10-05 at `875abe6` (`testbed/drive-slices/drive_b.py`, cp5 + `claude-haiku-4.5`,
+  `run-44c7a7855ddc`, 1m42s): a roadmap of 4 slices plus a slice-1 change document of 6 requirements
+  and 3 tasks, linked to the roadmap. Within target.
 
 ## 2. Payload and validation (D1, D2)
 
@@ -100,7 +103,9 @@ Run tests with `py -3.11`. Drives go on `:8010` only, never `:8000`. Real agent 
 
 ## 7. Close
 
-- [ ] 7.1 Full suites: `pytest hub/tests/ -q` and `pytest tests/ -q`, with counts and a sha on this
-  line.
-- [ ] 7.2 Drive A passes; drive B is recorded (counts) on `:8010`.
-- [ ] 7.3 A `spec-queue/METRICS.md` row: tier, times, and which stage caught each defect.
+- [x] 7.1 Full suites: `pytest hub/tests/ -q` and `pytest tests/ -q`, with counts and a sha on this
+  line. Hub: 6768 passed, 93 skipped at `875abe6` (one failure in that run was the
+  context snapshot, regenerated as an intended change). CLI: 567 passed, 3 skipped at `875abe6`.
+- [x] 7.2 Drive A passes; drive B is recorded (counts) on `:8010`. Drive A: PASSED (a)-(e) at `875abe6`
+  (`testbed/drive-slices/after.log`, entry `entry-6ae9c2d4c8b5`); its drafting turn ran as a spec turn.
+- [x] 7.3 A `spec-queue/METRICS.md` row: tier, times, and which stage caught each defect.

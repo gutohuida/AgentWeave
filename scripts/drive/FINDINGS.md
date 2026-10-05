@@ -34245,3 +34245,28 @@ reviewer reworked, in 3 the author did (where the author's run picked it up some
 **Fix direction:** moving a task `under_review -> revision_needed` returns it to the agent recorded as
 its most recent completer (`completion_attribution`), so the rework runs, in a fresh session as it
 already does, with its author; an operator completion (no agent) leaves the assignee untouched.
+
+
+## F496 (C) — "draft the next slice" fires at the slice's approval, before anything was built from it
+
+**Status:** open — a design question for the operator, not a defect in the build. Found 2026-10-05
+by C1a's acceptance drive A (`testbed/drive-slices/drive_a.py`, `:8010`, entry
+`entry-6ae9c2d4c8b5`).
+**Ready:** needs an operator decision.
+
+`a-spec-is-written-one-slice-at-a-time` (C1a) queues the drafting turn for slice N+1 when the
+operator **approves slice N's document** (`hub/hub/api/v1/spec.py` `_draft_next_slice`, design D4,
+exploration decision Q13). Approval is the moment slice N's tasks are created, so nothing in slice N
+has been built yet. The drafting message (`_next_slice_message`) tells the agent to read "how the
+approved slice's tasks are going (their notes and evidence): what building it taught you belongs in
+this slice". In the drive that turn ran seconds after approval, and the only task
+(`task-8b956365d756`) was `pending`.
+
+So the stated reason for slicing late ("what was learned building slice N shapes slice N+1",
+`proposal.md` Why) does not hold for the trigger as built. What it gives is overlap: slice N+1 is
+specified while slice N is being built. That may be what Q13 meant ("the agent drafts slice N+1
+when slice N is approved"). If so, the message's "how the tasks went" wording is wrong.
+
+**Options:** (a) keep the approval trigger, and reword the message to "draft it while slice N
+builds"; (b) trigger when slice N's tasks are all approved (a task-board event, not a phase event);
+(c) both: queue at approval, and append slice N's outcomes to the draft when its tasks close.
