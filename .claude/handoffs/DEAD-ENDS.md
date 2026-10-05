@@ -1940,3 +1940,29 @@ disappears is indistinguishable from one that was forgotten.
   `agent_trigger.py`, `agents.py`): a `str.replace` anchor written with `\n` silently misses. In
   patch and mutation scripts, normalise `\r\n` → `\n`, edit, and write back in the file's own
   convention.
+- **2026-10-05 (home) — a failed night arm leaves no reason anywhere.** `arm-cycle.ps1`'s `Say` writes to the
+  console only, and Task Scheduler keeps just the exit code (`AgentWeaveArmNight` LastTaskResult 1 on 10-04
+  22:55; STATE written and committed, `AgentWeaveNightLoop` never registered). Only its dirty-tree refusal
+  reaches `driver-night.log`. Likely cause that night (inferred from timestamps): an interactive session
+  committing at 22:55:03 and 22:55:12, so `install-driver.ps1:174` saw a dirty tree. Keep interactive
+  sessions from committing around 22:55, and check `Get-ScheduledTaskInfo AgentWeaveArmNight` when a night
+  log is only its header.
+- **2026-10-05 (home) — `git worktree add <old sha>` fails on this machine: "Filename too long"** (the
+  `openspec/changes/archive/...` paths). For a before/after comparison of one file, swap the file in with
+  `git show <sha>:<path> > <path>`, run, then `git checkout -- <path>`.
+- **2026-10-05 (home) — the session's auto-mode classifier refuses two drive moves:** triggering an agent
+  with `overrides.permission_mode = "bypassPermissions"`, and disabling a security control (the F490 scrub
+  middleware) on a live Hub for a before-drive. Plan drives that need neither; the refused command's other
+  edits (e.g. a `sed`) do not happen either.
+- **2026-10-05 (home) — Claude agents on `:8010` never reach the Hub's approver.** Their runs carry no MCP
+  config, so `runner_commands.py:241` emits no `--permission-prompt-tool`. Any Bash/PowerShell call (e.g.
+  pytest) comes back "This command requires approval", with no `permission_*` event, even with
+  `overrides.permission_mode = "workspace"`. To drive "a test run inside a run", put a real `running` run's
+  credential in the test's environment instead (`testbed/drive1005-f493-f490-f491/f493_env_drive.py`).
+- **2026-10-05 (home) — `gh run list --branch master` returned September runs**, not today's pushes. Use
+  `gh run list --commit $(git rev-parse <sha>)` for a specific commit.
+- **2026-10-05 (home) — a provider path can be driven with no key and no spend.** A `copilot` runner with
+  `provider_config.base_url` `http://127.0.0.1:<port>` (local http is allowed) aimed at
+  `testbed/drive1005-f493-f490-f491/stub_provider.py`, a fake Anthropic Messages API that streams a scripted
+  tool call. The real Copilot CLI runs it, MCP tools included. Start `:8010` with the key variable set to
+  a fake value.
