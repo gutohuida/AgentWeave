@@ -683,23 +683,28 @@ async def evaluate(
                 )
                 rejected_requirement_ids.add(entry.requirement_id)
 
-    enforced, rigors = await _enforced_requirements(session, task, rows=rows)
-    if not enforced:
+    if not rows:
+        # Nothing governed this transition at all — a null digest is the honest answer, not a gap
+        # (D3). A task linking only `sketch` documents still falls through to the loop below: the
+        # rejected step above already read their coverage, so recording it here costs nothing.
         return refusal, ""
 
-    by_document: Dict[str, List[SpecRequirement]] = {}
-    for requirement in enforced:
-        by_document.setdefault(requirement.document_id, []).append(requirement)
+    _, rigors = await _enforced_requirements(session, task, rows=rows)
 
-    wanted = {requirement.id for requirement in enforced}
     policy: List[Dict[str, Any]] = []
 
-    for document_id in by_document:
+    for document_id, requirements in by_all_document.items():
         rigor = rigors.get(document_id, spec_rigor.SKETCH)
         gates = rigor == spec_rigor.GATE
+        # D3: a `sketch` document still contributes to the digest — every requirement the task
+        # serves governed the transition, `sketch` included — but it stays silent the way
+        # `_enforced_requirements` always has: no `blocking`/`reported`/`diagnostics` entry below
+        # the rejected step two blocks up, which already covers `sketch`'s one way of refusing.
+        enforces = rigor != spec_rigor.SKETCH
         report = reports_by_document[document_id]
+        wanted_ids = {requirement.id for requirement in requirements}
         for entry in report.requirements:
-            if entry.requirement_id not in wanted:
+            if entry.requirement_id not in wanted_ids:
                 continue
             policy.append(
                 {
@@ -709,10 +714,11 @@ async def evaluate(
                     "rigor": rigor,
                 }
             )
-            if entry.requirement_id in rejected_requirement_ids:
-                # Already in `blocking` from the step above — the loop's own job is `contract` and
-                # `gate`'s unmet-but-not-rejected states, so it must not add a second `blocking`
-                # entry here, or a `reported` copy of one `contract` no longer gets to report.
+            if not enforces or entry.requirement_id in rejected_requirement_ids:
+                # Already in `blocking` from the step above, or `sketch`'s refusal stops there —
+                # the loop's own job is `contract` and `gate`'s unmet-but-not-rejected states, so it
+                # must not add a second `blocking` entry here, or a `reported` copy of one
+                # `contract` no longer gets to report.
                 continue
             if entry.state != SATISFIED:
                 unmet = {
@@ -730,7 +736,17 @@ async def evaluate(
                     # of the transition on one attribute, so an entry has to say which kind it is.
                     refusal.reported.append({**unmet, "kind": REPORT_REQUIREMENT})
         for entry in report.diagnostics:
-            if entry.requirement_id not in wanted:
+            if entry.requirement_id not in wanted_ids:
+                continue
+            policy.append(
+                {
+                    "identifier": entry.identifier,
+                    "state": "invalid",
+                    "integration": "not_applicable",
+                    "rigor": rigor,
+                }
+            )
+            if not enforces:
                 continue
             diagnostic = {
                 "identifier": entry.identifier,
@@ -752,14 +768,6 @@ async def evaluate(
                         "remedy": entry.problem,
                     }
                 )
-            policy.append(
-                {
-                    "identifier": entry.identifier,
-                    "state": "invalid",
-                    "integration": "not_applicable",
-                    "rigor": rigor,
-                }
-            )
 
     return refusal, spec_rigor.policy_digest(policy)
 

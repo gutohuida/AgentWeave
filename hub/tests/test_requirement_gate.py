@@ -508,9 +508,10 @@ async def test_new_accepted_evidence_lifts_a_rejected_block(app, auth_headers, b
 async def test_a_sketch_with_unverified_non_rejected_requirements_still_approves(
     app, auth_headers, builder, tmp_path
 ):
-    """D2 blocks only `rejected` — an unstarted requirement at `sketch` keeps approving exactly as
-    `test_an_ungated_approval_records_no_policy` shows, or the ceiling's removal (group 2) would
-    have traded one barrier for another D2 was never meant to add."""
+    """D2 blocks only `rejected` — an unstarted requirement at `sketch` keeps approving, or the
+    ceiling's removal (group 2) would have traded one barrier for another D2 was never meant to
+    add. (It still records a policy digest, per D3 —
+    `test_a_sketch_task_serving_requirements_records_a_digest`.)"""
     await _document(app, auth_headers, builder)
     task_id = await _linked_task(app, auth_headers)
 
@@ -1069,8 +1070,48 @@ async def test_a_transitions_policy_survives_a_later_rigor_change(
 
 
 @pytest.mark.asyncio
-async def test_an_ungated_approval_records_no_policy(app, auth_headers, builder, tmp_path):
-    """Null because no policy governed it — a fact about the transition, not a gap in it."""
+async def test_a_task_linking_nothing_records_no_policy(app, auth_headers, builder, tmp_path):
+    """Null because no policy governed it — a fact about the transition, not a gap in it.
+
+    No document is submitted at all, so the task links no requirement. D3 is a claim about tasks
+    that serve requirements; a task that serves none is the case it leaves alone.
+    """
+    created = await app.post(TASKS, json={"title": "Build it"}, headers=auth_headers)
+    assert created.status_code == 201, created.text
+    task_id = created.json()["id"]
+
+    await _task_to(
+        app,
+        auth_headers,
+        task_id,
+        "assigned",
+        "in_progress",
+        "completed",
+        "under_review",
+        "approved",
+    )
+
+    async with async_session_factory() as session:
+        transition = (
+            (
+                await session.execute(
+                    select(TaskTransition).where(
+                        TaskTransition.task_id == task_id, TaskTransition.to_status == "approved"
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+    assert transition.policy_digest is None
+
+
+@pytest.mark.asyncio
+async def test_a_sketch_task_serving_requirements_records_a_digest(
+    app, auth_headers, builder, tmp_path
+):
+    """D3: the rejected rule now governs `sketch` approvals too, so a digest covering nothing
+    would claim nothing did. A `sketch` task that serves a requirement records one."""
     await _document(app, auth_headers, builder)
     task_id = await _linked_task(app, auth_headers)
     await _task_to(
@@ -1096,7 +1137,7 @@ async def test_an_ungated_approval_records_no_policy(app, auth_headers, builder,
             .scalars()
             .first()
         )
-    assert transition.policy_digest is None
+    assert transition.policy_digest is not None
 
 
 # ---------------------------------------------------------------------------

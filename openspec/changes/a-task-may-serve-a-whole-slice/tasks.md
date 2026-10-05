@@ -76,9 +76,33 @@
 
 ## 4. The policy a sketch approval records (D3)
 
-- [ ] 4.1 Tests first: a sketch task serving requirements records a digest; a task serving none
-  records null. Rewrite `test_requirement_gate.py:905`.
-- [ ] 4.2 The digest covers every served requirement at every rigor.
+- [x] 4.1 Tests first: a sketch task serving requirements records a digest; a task serving none
+  records null. `test_requirement_gate.py:905` (`test_an_ungated_approval_records_no_policy`) split
+  into `test_a_task_linking_nothing_records_no_policy` (a task created with no `requirement_ids` at
+  all, no document submitted — the null case D3 leaves alone) and
+  `test_a_sketch_task_serving_requirements_records_a_digest` (the existing `_document`/`_linked_task`
+  shape, asserting a non-null digest). Also reworded
+  `test_a_sketch_with_unverified_non_rejected_requirements_still_approves`'s docstring, which cited
+  the old test name for a point D3 changes. Confirmed red before 4.2: stashed the implementation
+  change and reran just the new digest test — failed `assert None is not None`; unstashed, reran
+  green. Done 2026-10-06.
+- [x] 4.2 `requirement_gate.evaluate` now builds the policy list from every linked document
+  (`by_all_document`, already computed for D2's rejected step), not only the enforced ones — a
+  `sketch` document contributes its requirements' `(identifier, state, integration, rigor)` to the
+  digest the same way `contract`/`gate` do, but adds no `blocking`/`reported`/`diagnostics` entry
+  (gated by a new `enforces = rigor != spec_rigor.SKETCH` flag the loop already had the rigor to
+  compute). The early return moved from `if not enforced` to `if not rows`, so a task linking only
+  `sketch` documents no longer short-circuits to a null digest, while a task linking nothing still
+  does. `pytest hub/tests/test_requirement_gate.py hub/tests/test_approval_refuses_unaccepted_evidence.py
+  hub/tests/test_task_integration.py hub/tests/test_approval_waits_for_the_turn.py
+  hub/tests/test_spec_completeness.py -q`: 130 passed. `ruff check` and `black --check
+  --target-version py311` clean on both touched files. Done 2026-10-06.
+  **Drive.** Restarted the trial Hub on `:8010` (stale process from iter 5, predating this group's
+  code; `DATABASE_URL` + `MY_F490_KEY=fake-c1b-drive-not-a-key`, no `--reload`) and the stub on
+  `18496`. Reran `testbed/drive-slices/drive_d.py`: **(a)-(e) all PASS**, (e) reporting a non-null
+  policy digest (`b6ac17363effa635...`) — D3 fires end to end, not only in the unit tests. Stopped
+  the stub afterward; left the trial Hub running. Removed one untracked `spec/changes/umber-yeti/`
+  directory the drive's project wrote into the working tree (same precedent as groups 2-3).
 
 ## 5. The card (D5)
 
