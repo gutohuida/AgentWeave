@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9ea4cdb",
     "stop_at": "2026-10-06T07:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-10-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "c1b-5-impl",
-    "next_action": "C1b group 5 (D5, requirement chips on the task card): 5.1 vitest tests first -- each chip carries its coverage state read from useSpecCoverage(path) per linked document (not requirement_links[].state, which is lifecycle, per the design's R1 fix), tone classes verified/evidence_awaiting_review/rejected/neutral; a task with five linked requirements shows a one-line summary ('N verified . N rejected . N open', data-testid=\"task-requirement-summary-<id>\"), one with four shows none. 5.2 write useRequirementChips (reads useSpecCoverage per linked document, same cache the document view uses, already invalidated on evidence decisions and spec_updated) and wire it into TaskCard.tsx; npm run lint; refresh the UI bundle (make ui or scripts/refresh_ui_bundle.py); commit hub/ui/src and hub/hub/static/ui together, per CLAUDE.md's UI-bundle rule. No backend change -- design D5 is explicit that this is UI-only.",
+    "current": "c1b-gate",
+    "next_action": "C1b group 6, close: 6.1 run `pytest hub/tests/ -q` and `pytest tests/ -q`, record both counts and the commit sha in tasks.md. 6.2 restart the trial Hub on :8010 (DATABASE_URL + MY_F490_KEY=fake-c1b-drive-not-a-key, no --reload, per .claude/reference/hubs.md) and the stub provider on 18496, then rerun testbed/drive-slices/drive_d.py end to end; confirm (a)-(e) all still PASS now that every group's code (1-5) is in, not just group 4's; stop the stub afterward, clean up any untracked spec/changes/<adjective>-<animal>/ directories the drive's project writes (established precedent, groups 2-4). 6.3 append a spec-queue/METRICS.md row for this change: tier (2 -- hazard, per CLAUDE.md's table: cross-cutting contract), spec/build/drive time, and which stage caught each real defect (R1's design.md review round caught the D5 has_rejected_evidence/lifecycle-state bug before any code was written; iter 4's drive caught the stub's identifier-mapping bug; iter 5's drive caught two drive-script bugs, not product bugs). Tick 6.1-6.3 in tasks.md.",
     "queue": [
         {
             "id": "c1b-r1",
@@ -47,9 +47,9 @@
         },
         {
             "id": "c1b-5-impl",
-            "status": "open",
+            "status": "done",
             "title": "C1b group 5: requirement chips on the task card (D5)",
-            "detail": "5.1 vitest tests first: each chip carries its state, five requirements show the count, four show none. 5.2 useRequirementChips + TaskCard.tsx; npm run lint; refresh bundle; commit hub/ui/src and hub/hub/static/ui together."
+            "detail": "Done iter 7: 5.1 rewrote the existing has_rejected_evidence-driven rejected-tone test onto per-document coverage (new setCoverage/coverageByPath fixture, useSpecCoverageMany mock), added a pending/neutral test and the five-vs-four summary tests; confirmed red (3 failed, 9 passed) before 5.2. 5.2 added useSpecCoverageMany (api/spec.ts, useQueries sharing useSpecCoverage's cache key); useRequirementChips now maps CoverageEntry.state to a tone, dropped unused latestRejectionReason; TaskCard.tsx applies the tone class and a task-requirement-summary-<id> line above 4 chips. Two more test files needed the new mock export (taskCountIsTheLedgersOwn, tasksBoardFilter) and one needed a coverage fixture instead of has_rejected_evidence (taskBoardConsideredStates). npx vitest run: 1871 passed (179 files); eslint and tsc clean; npm run build + refresh_ui_bundle.py done. No drive -- Drive D's table does not name D5 and no backend route changed. Committed (ae8662d)."
         },
         {
             "id": "c1b-gate",
