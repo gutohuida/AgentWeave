@@ -245,7 +245,11 @@ async def test_the_turn_context_says_this_is_a_review_and_names_the_task_and_com
     assert "HEAD detached" in context
     # It must also say what NOT to do, or a reviewer helpfully fixes the bug and calls it verified.
     assert "Do not fix what you find" in context
-    assert "run its test suite" in context.lower()
+    # F491: asked for the whole suite, a Copilot reviewer of this repository ran it, hit the 600 s
+    # turn limit three times in a row and was reassigned, on a two-line change. The change's own
+    # tests are the evidence; the reviewer is still free to run more.
+    assert "run the tests that cover what changed" in context.lower()
+    assert "run its test suite" not in context.lower()
 
 
 @pytest.mark.asyncio

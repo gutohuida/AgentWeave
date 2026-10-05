@@ -1930,9 +1930,16 @@ async def _render_hub_agent_context(
                 "- This directory is a detached checkout of that commit. `git status` will say "
                 "`HEAD detached` — that is correct and expected, not a problem to fix."
             )
+            # F491: "run its test suite" sent a Copilot reviewer of this repository through the whole
+            # suite, past its runner's 600 s turn limit, three times on a two-line change; each
+            # attempt was billed and the review was reassigned. The change's own tests are the
+            # evidence. Nothing stops a reviewer running more when the change reaches further.
             lines.append(
-                "- Read it, search it, and **run its test suite**. Verifying the evidence yourself "
-                "is the reason you were given a checkout rather than a diff."
+                "- Read it, search it, and **run the tests that cover what changed**. Verifying the "
+                "evidence yourself is the reason you were given a checkout rather than a diff. Run "
+                "the whole suite only if the change reaches across the project: on some runners a "
+                "turn ends after ten minutes, and a review that runs out of time has reviewed "
+                "nothing."
             )
             lines.append(
                 "- Do not fix what you find. Report it. The author makes the change, through "
