@@ -1183,31 +1183,14 @@ every run id, and paste each surface's text verbatim into the Round log.
   every table/column in the trial database file for the literal string `sk-ant-not-a-name` found
   **0 matches**. The runner created above (`runner-a73c0fe80508`) was left in place as evidence,
   same as prior drive tasks' artifacts.
-- [ ] 7.6 (C, **operator key only**) **Preconditions (operator decision 2026-09-28, design D7 and
-  Open question 8), all required before the key is set:**
-  - the fixes for review findings 2 (the exact-value scrub, task 3.5), 3 (the whole-prefix strip,
-    task 3.3) and 10 (the `urlsplit` address check, task 3.2, and the `os.environ.get` key read,
-    task 3.3) are built, and tests 1.7, 1.8 and 1.9 are green;
-  - the key is a **dedicated Anthropic workspace key** with a **hard monthly spend limit of a few
-    dollars**;
-  - it is set **only in the trial Hub's launch environment** (the shell that starts `:8010`), not in
-    the user-wide environment, so the `:8000` Hub cannot see it;
-  - it is **revoked after this task**; record that it was.
-
-  The key is readable by the agent's shell commands and the Hub's tool server (accepted by the
-  operator, design D7). With the preconditions met and the operator's key in place, run one turn on
-  `claude-haiku-4-5-20251001` through the provider runner: `Reply with the single word ok.` It
-  completes, and its usage is in tokens. Otherwise record "not driven: no key" (or which
-  precondition is unmet), and leave this task unchecked for the operator. Then grep the trial
-  database (`mode=ro`) for the key's value: no match. If group B is kept, add one turn asking `cp5` to use the `explore`
-  agent and record the `model` its `subagent_completed`/`subagent_failed` reports (finding 13).
-
-  **DEFERRED by the operator, 2026-10-04** ("let's defer this for now"). The preconditions on the
-  build side are met (3.2, 3.3, 3.5 built; 1.7–1.9 green), but F488 (a registered secret split
-  across two Copilot events survives the exact-value scrub) is a hole in 3.5 that this drive's "no
-  match" grep depends on, so the drive waits for F488's fix at the least. No key is supplied and
-  none is to be asked for: the operator raises it when they choose. Until then this task stays
-  unchecked, which also holds 8.1 (and so this change's archive) open while group C is kept.
+- 7.6 (C, **operator key only**) **Moved out of this change, 2026-10-05** (operator: "it can be that"),
+  so that the change can archive. It is now finding **F494** in `scripts/drive/FINDINGS.md`, which
+  carries the drive and its preconditions unchanged. It was deferred by the operator on 2026-10-04 and
+  spends real money on the operator's own key; no key is asked for. Group C stays **kept**: every one of
+  its scenarios is tested (1.7-1.9), and the provider path is driven to the provider itself (7.3: a real
+  run reached `https://api.anthropic.com` with the runner's key variable and got its 401; 7.5: the
+  refusals). What F494 still measures is a turn that **completes** on a valid key, and the key-absent
+  grep after it.
 - [x] 7.7 (B) Give a task completed by another agent evidence at a real commit. Set
   `cp5.copilot_review_agents = ["code-review"]` and fire a review turn at `cp5` through a flow.
   - The context file contains the D8 bullet with `<base>..<commit>`.
@@ -1455,8 +1438,8 @@ every run id, and paste each surface's text verbatim into the Round log.
 
 ## 8. Archive
 
-- [ ] 8.1 Every kept group's tasks are checked, and every cut group's spec delta is deleted.
+- [x] 8.1 Every kept group's tasks are checked, and every cut group's spec delta is deleted.
   `openspec validate a-copilot-agent-uses-hooks-and-its-own-agents --strict` passes.
-- [ ] 8.2 Sync the kept deltas into `openspec/specs/` (`openspec-sync-specs`) and archive the change
+- [x] 8.2 Sync the kept deltas into `openspec/specs/` (`openspec-sync-specs`) and archive the change
   (`openspec-archive-change`). Commit the specs, the change and the code with explicit paths, and
   push. Do not open a PR.

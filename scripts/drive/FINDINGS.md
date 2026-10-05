@@ -34175,3 +34175,26 @@ prevent. Any other reporting path a test exercises could likewise write rows to 
 deletes `AW_RUN_TOKEN`, `HUB_URL` and any other run credential before every test. Check it with a
 test that sets them, runs the `:490` case, and asserts no request leaves the process. The repro is
 to run that test with `AW_RUN_TOKEN`/`HUB_URL` pointing at a drive Hub, then read `event_logs`.
+
+## F494 (C) — a Copilot provider runner has never completed a turn with a valid key
+
+**Status:** open, filed 2026-10-05 when task 7.6 of `a-copilot-agent-uses-hooks-and-its-own-agents`
+(slice 5, group C) was moved out so that the change could archive (operator, 2026-10-05).
+**Ready:** waits on the operator: it spends real money, and the operator supplies the key when they
+choose. No key is asked for until then.
+
+Group C is built and tested (tasks 1.7–1.9, 3.1–3.5), and driven up to the provider: task 7.3 sent a
+real run to `https://api.anthropic.com` with the runner's key variable and got Anthropic's 401, and
+task 7.5 drove the refusals. No turn has yet **completed** on a valid key, so two things are not
+measured: that a provider turn finishes and reports its usage in tokens, and that the key's value
+appears nowhere in the trial database afterwards (the scrub's end-to-end check; F488's hole in it is
+fixed by `1d2f72a`).
+
+**The drive (task 7.6 verbatim in intent):** with a dedicated Anthropic workspace key carrying a hard
+monthly limit of a few dollars, set only in the trial Hub's launch shell (never user-wide, so `:8000`
+cannot see it), run one turn on `claude-haiku-4-5-20251001` through a provider runner: `Reply with
+the single word ok.` It completes, and its usage is in tokens. Then grep the trial database
+(`mode=ro`) for the key's value: no match. Add one turn asking a Copilot agent to use the `explore`
+agent and record the `model` its `subagent_completed`/`subagent_failed` report (slice 5 finding 13).
+Revoke the key afterwards and record that it was. A failure here is a fix against the archived
+slice 5 code (`hub/hub/runner_provider.py`, `hub/hub/run_secrets.py`).
