@@ -1966,3 +1966,22 @@ disappears is indistinguishable from one that was forgotten.
   `testbed/drive1005-f493-f490-f491/stub_provider.py`, a fake Anthropic Messages API that streams a scripted
   tool call. The real Copilot CLI runs it, MCP tools included. Start `:8010` with the key variable set to
   a fake value.
+- **2026-10-05 (home) — `task_transitions.actor_kind` for an agent's move is `run`, not `agent`.** A
+  read-only query filtering `actor_kind = 'agent'` counts zero agent transitions. Filter on
+  `actor_kind IN ('agent','run')`, or on `actor_agent IS NOT NULL`.
+- **2026-10-05 (home) — a new flow on `:8010` adopts its document's open materialised tasks.** A drive
+  flow created on an approved fixture document (`maroon-sphinx`, `scarlet-kraken`) pulled that
+  document's pending fixture task into its queue, and a stub agent completed it
+  (`task-f08fecf7d087`, `task-a49a5798822f`). Either expect this, or use a document with no open
+  tasks.
+- **2026-10-05 (home) — a long Bash heredoc of spec prose failed to parse** ("unexpected EOF while
+  looking for matching `''") although it was quoted `'EOF'`, and no file was written. Write
+  multi-paragraph markdown with the Write tool instead.
+- **2026-10-05 (home) — stub-provider agents drive a real flow end to end with no model spend.**
+  `testbed/drive1005-f495/stub_provider.py` answers a turn containing "End the review with a
+  verdict" with `update_task(revision_needed)`, and any other turn naming a task with
+  `update_task(completed)`.
+  - Name the stub agents to sort first (`a0-…`), because rung 2 of the reviewer ladder walks agents
+    in name order (`scheduler.py:1166`).
+  - A job with cron `0 0 1 1 *`, fired with `POST /projects/{pid}/jobs/{id}/run`, steps it one firing
+    at a time.
