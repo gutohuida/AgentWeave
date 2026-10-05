@@ -77,22 +77,45 @@ proposal still resolves later.
 - **WHEN** a change document naming a roadmap slice is rendered
 - **THEN** it shows the slice's key and title and the roadmap's title
 
-### Requirement: Approving a slice can start the drafting of the next one
+### Requirement: The next slice is drafted once the approved slice is built
 
-Approving a change document that names a roadmap slice SHALL, when the approval request asks for it, queue one turn as the operator to the agent that created that document, in the conversation where it created it, asking it to draft the slice that follows in the roadmap's order; the approval response SHALL say whether a turn was queued and, if not, why.
+Approving a change document that names a roadmap slice SHALL, when the approval request asks for it, record that request, and once every task linked to that document has reached approved or rejected the Hub SHALL queue one turn as the operator to the agent that created the document, in the conversation where it created it, asking it to draft the slice that follows in the roadmap's order and naming each of the built slice's tasks with its final status; the approval response SHALL say whether the turn is waiting for tasks, was queued, or cannot be queued and why.
 
-The operator approves each slice. The agent drafts the next one with what the last one taught it.
-The turn is the operator's because the operator asked for it in the approval request, so no new kind
-of queue origin is introduced. "The next slice" is the one after the approved slice in the roadmap's
-list. Builds-after constrains that order but does not choose it.
+The operator approves each slice. The agent drafts the next one with what building the last one
+taught it, so the turn waits for the slice's tasks to close (F496, decided 2026-10-05). A rejected
+task closes too: nothing more happens to it unless the operator reopens it, and the drafting turn is
+told it was rejected. A task linked to the document after approval is waited for as well. The turn
+is the operator's because the operator asked for it in the approval request, so no new kind of
+queue origin is introduced. "The next slice" is the one after the approved slice in the roadmap's
+list. Builds-after constrains that order but does not choose it. The turn is queued at most once
+per request, even if a task is later reopened and closed again.
 
-#### Scenario: The next slice is drafted by the slice's author
+#### Scenario: Approval waits for the slice's tasks
 
 - **WHEN** the operator approves, asking for the next slice, slice S1 of a roadmap whose slices are
-  S1 and S2, and the slice document was created by agent planner
+  S1 and S2, the slice document was created by agent planner, and the approval creates two tasks
+- **THEN** no turn is queued yet
+- **AND** the approval response reports it as waiting, naming S2, planner and two open tasks
+
+#### Scenario: The last task closing queues the drafting turn
+
+- **WHEN** the first of those two tasks is approved
+- **THEN** no turn is queued
+- **AND WHEN** the second is approved or rejected, by any surface
 - **THEN** one turn is queued from the operator to planner, in the conversation that created the
-  document, naming the roadmap and slice S2 with its title
-- **AND** the approval response reports it as queued, naming S2 and planner
+  document, naming the roadmap, slice S2 with its title, and each task with its final status
+- **AND** planner is scheduled once that transition commits
+
+#### Scenario: The turn is queued once
+
+- **WHEN** a task of a slice whose drafting turn was already queued is reopened and approved again
+- **THEN** no second turn is queued
+
+#### Scenario: A slice with no open task queues at once
+
+- **WHEN** the operator re-approves, asking for the next slice, a reopened slice document whose
+  linked tasks are all approved or rejected
+- **THEN** the turn is queued in the approval request, and the response reports it as queued
 
 #### Scenario: The drafting turn is a specification turn on the roadmap
 
@@ -104,22 +127,28 @@ list. Builds-after constrains that order but does not choose it.
 #### Scenario: The last slice queues nothing
 
 - **WHEN** the approved document specifies the roadmap's last slice
-- **THEN** no turn is queued, and the response says the roadmap has no further slice
+- **THEN** nothing is recorded or queued, and the response says the roadmap has no further slice
 
 #### Scenario: A document the operator created has no author to ask
 
 - **WHEN** the approved slice document was created by the operator
-- **THEN** no turn is queued, and the response says no agent created the document
+- **THEN** nothing is recorded or queued, and the response says no agent created the document
 
 #### Scenario: Not asking queues nothing
 
-- **WHEN** the operator approves a slice document without asking for the next slice
+- **WHEN** the operator approves a slice document without asking for the next slice, and its tasks
+  are later all approved
 - **THEN** no turn is queued
 
 #### Scenario: A document that is not a slice is unaffected
 
 - **WHEN** the operator approves, asking for the next slice, a change document that names no roadmap
-- **THEN** no turn is queued, and the approval is otherwise unchanged
+- **THEN** nothing is recorded or queued, and the approval is otherwise unchanged
+
+#### Scenario: A failure to queue never fails the task's transition
+
+- **WHEN** queuing the drafting turn raises while the last task is being approved
+- **THEN** the task is still approved, and the failure is logged
 
 ### Requirement: Authoring guidance prefers a roadmap and a small slice
 

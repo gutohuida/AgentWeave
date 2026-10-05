@@ -31,9 +31,13 @@ const RIGOR_LABEL: Record<Rigor, string> = { sketch: 'Sketch', contract: 'Contra
 /** No choice made yet — distinct from `''`, which is a real choice ("No flow", design D5b). */
 const NO_CHOICE = '__unset__'
 
-/** What an approval asked to draft the next slice did (`a-spec-is-written-one-slice-at-a-time` D4). */
+/** What an approval asked to draft the next slice did (`a-spec-is-written-one-slice-at-a-time` D4, D4a). */
 function nextSliceMessage(outcome: SpecNextSliceOutcome): string {
   switch (outcome.state) {
+    case 'waiting': {
+      const open = outcome.open_tasks ?? 0
+      return `@${outcome.agent} will be asked to draft slice ${outcome.slice} once this slice's ${open} open task${open === 1 ? '' : 's'} ${open === 1 ? 'is' : 'are'} approved or rejected.`
+    }
     case 'queued':
       return `Asked @${outcome.agent} to draft slice ${outcome.slice}.`
     case 'last_slice':
@@ -332,7 +336,7 @@ export function SpecPhaseBar({
           <label
             className="flex items-center gap-1"
             style={{ color: 'var(--text-2)' }}
-            title={`This document specifies slice ${roadmapSlice.slice} of a roadmap. Approving it asks the agent that wrote it to draft the next slice.`}
+            title={`This document specifies slice ${roadmapSlice.slice} of a roadmap. Approving it asks the agent that wrote it to draft the next slice once this one's tasks are approved or rejected.`}
           >
             <input
               type="checkbox"

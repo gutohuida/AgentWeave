@@ -126,4 +126,18 @@ describe('Draft the next slice', () => {
       'Asked @planner to draft slice s2.',
     )
   })
+
+  it('says the next slice waits for the open tasks', async () => {
+    roadmapSlice = { document: 'spec/changes/the-plan/spec.html', slice: 's1' }
+    approveResponse = {
+      next_slice: { state: 'waiting', slice: 's2', agent: 'planner', open_tasks: 2 },
+    }
+    renderPhaseBar()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+
+    expect(await screen.findByTestId('next-slice-outcome')).toHaveTextContent(
+      "@planner will be asked to draft slice s2 once this slice's 2 open tasks are approved or rejected.",
+    )
+  })
 })

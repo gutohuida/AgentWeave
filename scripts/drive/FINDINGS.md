@@ -34249,10 +34249,13 @@ already does, with its author; an operator completion (no agent) leaves the assi
 
 ## F496 (C) — "draft the next slice" fires at the slice's approval, before anything was built from it
 
-**Status:** open — a design question for the operator, not a defect in the build. Found 2026-10-05
-by C1a's acceptance drive A (`testbed/drive-slices/drive_a.py`, `:8010`, entry
+**Status:** fixed 2026-10-05 (Tier 1, amending C1a before its archive). The operator chose (b):
+approval records the request, and `apply_transition` queues the drafting turn when the slice's last
+linked task is approved or rejected, naming each task's outcome (`hub/hub/slice_drafting.py`, design
+D4a). Drive C (`testbed/drive-slices/drive_c.py`) failed at (e) before and passed after on `:8010`.
+Found 2026-10-05 by C1a's acceptance drive A (`testbed/drive-slices/drive_a.py`, `:8010`, entry
 `entry-6ae9c2d4c8b5`).
-**Ready:** needs an operator decision.
+**Ready:** done.
 
 `a-spec-is-written-one-slice-at-a-time` (C1a) queues the drafting turn for slice N+1 when the
 operator **approves slice N's document** (`hub/hub/api/v1/spec.py` `_draft_next_slice`, design D4,

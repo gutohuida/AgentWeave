@@ -95,12 +95,21 @@ export interface SpecRoadmapSlice {
   slice: string
 }
 
-/** What an approval asked with `draft_next_slice` did about the next slice (D4). `queued` names the
- *  slice and the agent asked to draft it; the other states say why nothing was queued. */
+/** What an approval asked with `draft_next_slice` did about the next slice (D4, D4a). `waiting` means
+ *  the turn is queued once the slice's `open_tasks` close; `queued` means it was queued now (no
+ *  linked task was open); the other states say why nothing will be queued. */
 export interface SpecNextSliceOutcome {
-  state: 'queued' | 'last_slice' | 'no_author' | 'no_conversation' | 'not_a_slice' | 'not_queued'
+  state:
+    | 'waiting'
+    | 'queued'
+    | 'last_slice'
+    | 'no_author'
+    | 'no_conversation'
+    | 'not_a_slice'
+    | 'not_queued'
   slice: string | null
   agent: string | null
+  open_tasks?: number
 }
 
 export interface SpecDocument {

@@ -32,6 +32,7 @@ from ... import (
     requirement_evidence,
     requirement_links,
     run_liveness,
+    slice_drafting,
     spec_adoption,
     spec_documents,
     spec_index,
@@ -58,14 +59,12 @@ from ...db.models import (
     Project,
     RequirementDrift,
     RequirementEvidence,
-    Run,
     SpecDocument,
     SpecDocumentEvent,
     SpecEditProposal,
     SpecRequirement,
     Task,
 )
-from ...inbound_queue import new_entry
 from ...schemas.common import RequestModel
 from ...schemas.jobs import JobCreate
 from ...spec_manifest import (
@@ -1906,131 +1905,10 @@ async def set_phase(
         response["approval_outcome"] = report
     if body.draft_next_slice and document.phase == "approved":
         # After the commit: the approval stands whatever happens here, and the response says it.
-        response["next_slice"] = await _draft_next_slice(
-            session, project_id, workspace, document, payload, response["tasks_created"]
+        response["next_slice"] = await slice_drafting.request_next_slice(
+            session, project_id, workspace, document, payload, _operator()
         )
     return response
-
-
-def _next_slice_outcome(
-    state: str, slice_key: Optional[str] = None, agent: Optional[str] = None
-) -> Dict[str, Any]:
-    return {"state": state, "slice": slice_key, "agent": agent}
-
-
-async def _draft_next_slice(
-    session: AsyncSession,
-    project_id: str,
-    workspace,
-    document: SpecDocument,
-    payload: Optional[Dict[str, Any]],
-    tasks_created: List[str],
-) -> Dict[str, Any]:
-    """Queue one operator turn asking the approved slice's author to draft the next slice (C1a D4).
-
-    The author is the agent recorded on the document's `created` event, in the conversation of the
-    run that created it. The entry carries the roadmap as its spec document, so the turn is a
-    specification turn: it loses file-write tools (`agent_trigger.py`, F4) and is told the roadmap
-    is planned, not implemented. Origin `operator`, because the operator asked in this request.
-
-    Never raises. A failure to queue is reported in the outcome; a failure to schedule leaves the
-    committed entry for the next drain, so it still reports `queued`.
-    """
-    link = (payload or {}).get("roadmap")
-    if document.kind != "change-spec" or not isinstance(link, dict):
-        return _next_slice_outcome("not_a_slice")
-    roadmap_path, approved_key = str(link.get("document")), str(link.get("slice"))
-    slices = spec_service.roadmap_slices(workspace, roadmap_path)
-    keys = [str(item["key"]) for item in slices]
-    position = keys.index(approved_key) if approved_key in keys else len(keys)
-    if position + 1 >= len(keys):
-        return _next_slice_outcome("last_slice")
-    approved_slice, following = slices[position], slices[position + 1]
-    next_key = str(following["key"])
-
-    created = (
-        await session.execute(
-            select(SpecDocumentEvent)
-            .where(
-                SpecDocumentEvent.document_id == document.id, SpecDocumentEvent.kind == "created"
-            )
-            .order_by(SpecDocumentEvent.created_at)
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    if created is None or created.actor_kind != "agent" or not created.actor:
-        return _next_slice_outcome("no_author", next_key)
-    agent = created.actor
-    run = await session.get(Run, created.run_id) if created.run_id else None
-    if run is None or not run.conversation_id:
-        return _next_slice_outcome("no_conversation", next_key, agent)
-
-    roadmap_row = await spec_lifecycle.get_document(session, project_id, roadmap_path)
-    content = _next_slice_message(
-        roadmap_path=roadmap_path,
-        roadmap_title=roadmap_row.title if roadmap_row is not None else roadmap_path,
-        approved_path=document.path,
-        approved_slice=approved_slice,
-        tasks_created=tasks_created,
-        following=following,
-    )
-    try:
-        session.add(
-            new_entry(
-                project_id=project_id,
-                agent=agent,
-                origin_type="operator",
-                content=content,
-                hop_depth=0,
-                conversation_id=run.conversation_id,
-                spec_document=roadmap_path,
-            )
-        )
-        await session.commit()
-    except Exception:  # noqa: BLE001 -- the approval is committed; say the turn was not queued
-        await session.rollback()
-        logger.warning(
-            "could not queue the next slice of %s to %s", roadmap_path, agent, exc_info=True
-        )
-        return _next_slice_outcome("not_queued", next_key, agent)
-
-    from ... import turn_scheduler
-
-    try:
-        await turn_scheduler.schedule_agent(project_id, agent)
-    except Exception:  # noqa: BLE001 -- the entry is durable; the next drain delivers it
-        logger.warning("could not schedule %s for the next slice", agent, exc_info=True)
-    return _next_slice_outcome("queued", next_key, agent)
-
-
-def _next_slice_message(
-    *,
-    roadmap_path: str,
-    roadmap_title: str,
-    approved_path: str,
-    approved_slice: Dict[str, Any],
-    tasks_created: List[str],
-    following: Dict[str, Any],
-) -> str:
-    """The fixed Hub text of the drafting turn (C1a D4)."""
-    tasks = ", ".join(tasks_created) if tasks_created else "none were created by this approval"
-    link = f'{{"document": "{roadmap_path}", "slice": "{following["key"]}"}}'
-    lines = [
-        f"The operator approved `{approved_path}`, slice `{approved_slice['key']}` "
-        f"({approved_slice.get('title', '')}) of the roadmap {roadmap_title!r} "
-        f"(`{roadmap_path}`), and asked you to draft the next slice.",
-        f"The approved slice's tasks: {tasks}.",
-        f"The next slice is `{following['key']}`: {following.get('title', '')}.",
-        f"- Intent: {following.get('intent') or '(not stated)'}",
-        f"- Done when: {following.get('done') or '(not stated)'}",
-        "Before drafting, read the roadmap with `read_spec_document`, and how the approved "
-        "slice's tasks are going (their notes and evidence): what building it taught you belongs "
-        "in this slice.",
-        "Then create a change document with `create_spec_document` and submit it with "
-        f"`roadmap: {link}`. Keep it to about a dozen requirements or fewer, as a few tasks. Do "
-        "not implement anything.",
-    ]
-    return "\n".join(lines)
 
 
 class _FlowWouldBeEmptyError(Exception):

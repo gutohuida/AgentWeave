@@ -104,6 +104,28 @@ operator's.**
 - The operator answered on 2026-10-05: an option on approval. The attribution is honest because
   the operator asked for it in the same request.
 
+**D4a. The drafting turn waits for the slice to be built (F496, operator, 2026-10-05).**
+- Drive A showed the D4 turn ran seconds after approval, with the slice's only task `pending`, so
+  "read how the tasks went" had nothing to read. The operator chose option (b): fire when built.
+- At approval the request is resolved as in D4 (next slice, author, conversation; same refusal
+  states). If it resolves, a `next_slice_requested` event is written on the slice document, with
+  `{roadmap, slice, agent, conversation_id}`. Event kinds have no CHECK, so there is no migration.
+- If no linked task is open, the turn is queued in the approval request (state `queued`). That is a
+  re-approval after a reopen: a change document cannot be proposed without tasks. Otherwise the
+  response says `waiting`, with `open_tasks`.
+- `apply_transition` (`task_transition_service.py`), the one function every status write passes
+  through, calls `slice_drafting.on_task_closed` when a task with a `spec_document_id` reaches
+  `approved` or `rejected`. Once no linked task is open and the request has no `next_slice_queued`
+  event yet, it queues the entry (as D4, plus each task's id, title and final status), writes
+  `next_slice_queued`, and schedules the agent from an `after_commit` listener, the
+  `defer_broadcast` pattern (`sse.py:130-164`). It runs in a savepoint, and a failure is logged and
+  never fails the transition.
+- *Why rejected counts as closed:* nothing more happens to a rejected task unless the operator
+  reopens it; the turn is told it was rejected. *Why once:* a reopen-and-approve must not draft
+  the same slice twice.
+- *Rejected:* (a) keep the approval trigger and reword (no learning); (c) both (needs an amend path
+  for an already-proposed N+1).
+
 **D5. Agents may create a roadmap.**
 - `create_spec_document` (MCP and `agent_actions.py:1548-1612`) gains
   `kind: "change-spec" | "roadmap" = "change-spec"`.

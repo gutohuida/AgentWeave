@@ -109,3 +109,20 @@ Run tests with `py -3.11`. Drives go on `:8010` only, never `:8000`. Real agent 
 - [x] 7.2 Drive A passes; drive B is recorded (counts) on `:8010`. Drive A: PASSED (a)-(e) at `875abe6`
   (`testbed/drive-slices/after.log`, entry `entry-6ae9c2d4c8b5`); its drafting turn ran as a spec turn.
 - [x] 7.3 A `spec-queue/METRICS.md` row: tier, times, and which stage caught each defect.
+
+## 8. F496 amendment: draft once the slice is built (D4a)
+
+- [x] 8.1 Acceptance drive C (`testbed/drive-slices/drive_c.py`) written and failing before the
+  build: approve a slice with two tasks asking for the next slice; no entry is queued; approve both
+  tasks; exactly one drafting entry is queued, naming both tasks and their final status. Before the
+  build: FAIL (e), `queued` at approval (`before_c.log`). After: PASSED (a)-(g) twice
+  (`after_c.log`, `after_c2.log`); the second run's full drafting request carries the
+  approved-roadmap duty and no "Implement against it".
+- [x] 8.2 Tests first (route and transition service), one per scenario of *The next slice is drafted
+  once the approved slice is built*, including what the transition returns when queueing raises.
+  `hub/tests/test_spec_roadmaps.py` 5.1/8.2 block; 3 of them fail with the hook removed.
+- [x] 8.3 `slice_drafting.py`; `set_phase` records the request; `apply_transition` hook; after-commit
+  schedule; `waiting` state on the response; UI outcome line for `waiting`.
+- [x] 8.4 Suites, drive C passes, METRICS row, F496 status. Hub: 6773 passed, 93 skipped on the
+  amendment's tree (parent `e6e7e15`); vitest `specDraftNextSlice` 5 passed; lint, tsc, ruff,
+  black clean. F496 set to fixed; METRICS row appended.

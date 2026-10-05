@@ -746,6 +746,12 @@ async def apply_transition(
     # rather than through the merged sha, which cannot discriminate it.
     if to_status in TERMINAL_STATUSES:
         await release_task_workspace(session, task)
+        # The last open task of a slice whose approval asked for the next slice queues its drafting
+        # (C1a D4a, F496). In a savepoint, and it never raises. Imported locally: it reads the spec
+        # lifecycle, which is built on the models this module already holds.
+        from .slice_drafting import on_task_closed
+
+        await on_task_closed(session, task)
 
     return transition
 
