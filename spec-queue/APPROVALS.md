@@ -26,6 +26,39 @@ survive), so it is the operator's call, awake.
 - APPROVED  a-copilot-one-shot-records-its-credits   carried from 10-04, as R3 and the Opus review's seven fixes left it; its drive spends at most two Copilot Free calls on `:8010`
 APPROVED-FIXES: F489
 
+**Added ~22:10 in an interactive session (`/autonomous-prep`, operator present).** The 10-04 night
+never ran: its arm cut `autonomous/2026-10-04-daily` and exited 1. That branch was deleted with
+the operator's OK ("Delete it"), so tonight cuts a fresh branch from master. Operator: "C1b first".
+
+- APPROVED  a-task-may-serve-a-whole-slice   (C1b, Tier 1) as committed in `0fcdce7`. D1–D5 are the
+  operator's choices from handoffs 0166–0168: "Block at every rigor", "Remove the cap", no override.
+  Build order is its `tasks.md`:
+  - 0.1: one **grounded** review round, every claim cited at `file:line`, recorded as a short
+    "Review round" section in `design.md`.
+  - 1.1: a `mode=ro` count on `:8000`'s DB only.
+  - 1.2: drive D (`testbed/drive-slices/drive_d.py`, built from `drive_c.py` and
+    `stub_provider.py`), run and FAILING on `:8010` before the build.
+  - 2–5: the build, test-first.
+  - 6.1–6.3: suites, drive D passing, the METRICS row.
+  - Then archive and sync.
+
+  Pre-authorised: if the review round finds a defect a design decision does not already settle,
+  fix the spec when the fix is one sentence. Otherwise file an OPEN `DECISIONS.md` row, stop C1b,
+  and move to the next ORDER item.
+
+  Environment for C1b:
+  - `:8010` is still up from the interactive session: PID 13972, on `f17c8e0`-equivalent code,
+    using the trial-profile DB and a fake `MY_F490_KEY`.
+  - Restart it from `hub/` on tonight's branch before drive D; `.claude/reference/hubs.md` has the
+    runbook.
+  - The drive's stub is `py -3.11 testbed/drive-slices/stub_provider.py`. It is gitignored but
+    present in this working tree.
+
+ORDER: a-task-may-serve-a-whole-slice, a-copilot-one-shot-records-its-credits, F489
+
+When the ORDER is exhausted, the window does **not** stop. It continues with the playbook default:
+other unarchived changes, then open findings by severity.
+
 ## 2026-10-04
 
 No review page. **Written in an interactive session with the operator present**, after the morning
