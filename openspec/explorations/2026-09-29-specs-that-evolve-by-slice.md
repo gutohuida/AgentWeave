@@ -253,3 +253,93 @@ Chosen so that stopping after any step leaves something complete and useful:
 
 Approving this means a spec loop for **amendments on approved documents** (order item 1), with R1
 answering open questions 1–3 first. Order items 3–4 follow only after 09-16's items 1–2 have landed.
+
+**Superseded on 2026-10-05: see the next section.** The order is reversed, slices come first.
+
+---
+
+## 2026-10-05: re-grounded at `9dd11cc`, and the order reversed
+
+This section was written by an interactive `openspec-explore` session with the operator present, and
+the operator asked for "shorter spec runs". It was checked against the code at `9dd11cc`, 414 commits
+after the file above. None of the spec-to-task files had changed except `spec_service.py` (`2f120b4`,
+which lets a pending proposal be withdrawn). So the "What already exists" and "What would have to
+change" tables above still hold.
+
+### What the code and the data say now
+
+- **Measured, read-only, from both Hub databases (`mode=ro`).** There have been only two real spec
+  runs, both on `:8000` for LoopEngine. Each produced 77 requirements and 32 tasks.
+  - The first took 19 h from creation to approval, of which 146 minutes were agent time. Authoring
+    cost $39.65 against about $270 for delivery, and 12 of 47 tasks were approved.
+  - In both documents, `proposed` lasted 3–5 seconds of operator clicks; the real review happened
+    in chat. The document grew 5 → 9 → 19 → 77 requirements in one night, over 19 whole-document
+    resubmissions.
+  - 0 of the 15 tasks added after approval reached `approved`.
+  - No `roadmap` document exists anywhere, and no rigor other than `sketch` has ever been set.
+- **`roadmap` is vocabulary only.** It passes through the full completeness check, and approving one
+  would materialise its `tasks[]` (`api/v1/spec.py:1829-1832`). Only the operator can create one
+  (`api/v1/spec.py:1595-1621`); an agent can create only a `change-spec` (`agent_actions.py:1588`).
+  Only the operator can set `parent` (`api/v1/spec.py:1473-1500`).
+- **Slicing guidance reaches agents only through an optional charter** (`data/charters/spec.md:91-92`).
+  The tool docs every authoring agent reads (`mcp_server.py` `create_spec_document`,
+  `submit_spec_document`) and `SPEC_PHASE_DUTIES` (`api/v1/agents.py:1704-1729`) say nothing about
+  size.
+- **The guard behind the 3-requirement ceiling exists only at `gate`.** Rejected evidence blocks
+  approval only under `gate` (`requirement_gate.py:654`, `:678-683`). `_enforced_requirements` drops
+  `sketch` documents (`:344-364`). So the FR-11 incident (approval over a rejected requirement) is
+  still possible on every real document.
+- **Review is per task and ignores rigor** (`scheduler.py` `decide_firing`, `:2103-2111`). Criteria
+  are never run, and there is no per-iteration budget (09-16 §12 items 1–2: neither has been built).
+- **A task sent back for revision was reworked by its reviewer.** This is F495, fixed on
+  2026-10-05 as a Tier-0 fix.
+
+### The reversed order, and why
+
+Problem ① (the spec is too long and too big) and problem ② (too many tiny tasks, each reviewed) share
+one cause: **one document per change, written in full up front.** Rolling slices address both, and
+small slices remove most of the pressure for amendments (③), because learning goes into the next
+slice's draft. Bigger tasks also give most of "one review per slice" for free: a slice of about 8
+requirements as 2–3 tasks means 2–3 per-task reviews, without building slice batching. Slice-end
+review (order item 4) and amendments (order item 1) are deferred until C1's drives show they are
+still needed.
+
+### The operator's decisions (2026-10-05)
+
+| # | Question | Decision | Not chosen |
+|---|---|---|---|
+| Q13 | Who drafts the next slice (open question 1) | **The agent drafts slice N+1 when slice N is approved; the operator approves each slice.** The roadmap and slice 1 are written in one sitting | The agent drafts and the slice starts building at `sketch` without the operator; all slices drafted up front |
+| Q14 | Rejected evidence and approval | **Rejected evidence blocks task approval at every rigor** | Block at `contract` and `gate` only; leave as is |
+| Q15 | `MAX_REQUIREMENTS_PER_TASK = 3` | **Removed.** A requirement with no task is still refused | Raise it to about 6; keep 3 |
+| Q16 | The rework defect | **Filed as F495 and fixed as Tier 0 now** | Finding only; fold it into C1 |
+
+### C1 (Tier 1): a spec is written one slice at a time
+
+The next change, to propose with an acceptance drive written before the build:
+
+- **Authoring guidance where every agent reads it.** Add it to `create_spec_document` and
+  `submit_spec_document` docs and to `SPEC_PHASE_DUTIES`, not only in the charter:
+  - a large request becomes a roadmap plus slice 1;
+  - a slice is small (a size target to be set in R1);
+  - later slices are recorded in the roadmap, not specified.
+- **`roadmap` gets behaviour.**
+  - An agent may create one.
+  - It carries ordered slice entries (intent, done criteria, builds-after) and no tasks; it is
+    never materialised.
+  - Its slices are its children, and an agent may set that placement.
+  - Approving slice N prompts the drafting of slice N+1 (Q13).
+- **The rejected-evidence block at every rigor** (Q14). This is a behaviour change for `:8000`'s
+  `sketch` documents on its next restart; the proposal must say so.
+- **The ceiling removed** (Q15), with each task's requirement status visible on the card.
+- **Acceptance drive.** On `:8010`, run a LoopEngine-sized request through explore. It must yield a
+  roadmap plus a slice 1 within the size target, with a few tasks, and approving slice 1 must start
+  the drafting of slice 2. A task whose requirement's evidence was rejected cannot be approved on a
+  `sketch` document.
+- **Open for R1.**
+  - Q11's timing is now decided (Q13). Open question 2 is moot under Q13. Open question 3 is
+    answered by Q13 plus the bullet above: a roadmap is approved by the operator like any document.
+  - Still open:
+    - the size target;
+    - whether re-ordering slices needs re-approval;
+    - how the drafting of slice N+1 is triggered (a turn queued to the authoring agent on approval,
+      or a flow step).
