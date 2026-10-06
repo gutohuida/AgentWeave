@@ -32322,7 +32322,7 @@ asserting what `jobs.py:355` replaces on the board (5.4). **Needs its own propos
 
 ## F401 (B) -- a bare variable or command substitution names a directory the shell judge never checks
 
-**Status:** open. Filed 2026-09-21 by an interactive session, **by operator decision**
+**Status:** fixed f73ae13..de74c2a (change `a-drive-or-a-home-variable-names-a-directory-by-itself`, 2026-10-07; driven in real PowerShell 5.1 and Git Bash, tasks 3.1). Was: open. Filed 2026-09-21 by an interactive session, **by operator decision**
 (`DECISIONS.md` `### 2026-09-21 late evening`), as non-goal D5 of
 `a-word-without-a-separator-can-still-leave` (F375).
 **Source:** review
@@ -32342,7 +32342,7 @@ reads as a destination, or accept the disclaimer and close this as documented.
 
 ## F402 (B) -- a PowerShell drive-qualified word (`Z:`) reaches the judge with its colon trimmed
 
-**Status:** open. Filed 2026-09-21 by an interactive session, **by operator decision**, as non-goal
+**Status:** fixed f73ae13..de74c2a (change `a-drive-or-a-home-variable-names-a-directory-by-itself`, 2026-10-07; driven in real PowerShell 5.1 and Git Bash, tasks 3.1). Was: open. Filed 2026-09-21 by an interactive session, **by operator decision**, as non-goal
 D6 of `a-word-without-a-separator-can-still-leave` (F375).
 **Source:** review
 **Theme:** Workspace & permissions

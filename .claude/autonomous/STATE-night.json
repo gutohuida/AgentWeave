@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4f2face",
     "stop_at": "2026-10-07T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-06-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-drive-or-a-home-variable-archive",
-    "next_action": "Item a-drive-or-a-home-variable-archive: first `gh run view 37545991226` (or `gh run list --branch autonomous/2026-10-06-daily`); if finished and its hub-judge-windows log shows test_bash_reads_another_existing_drive_as_outside[1.5b8/1.5b9] and test_an_existing_drive_is_judged_by_the_real_probe[1.5c7/1.5c8] PASSED (not SKIPPED), tick task 2.4 in openspec/changes/a-drive-or-a-home-variable-names-a-directory-by-itself/tasks.md naming the run id; if it failed, fix that first; if still running, do nothing else but log and leave it. Task 3.1 is done (iter 5). Then 4.1: read the sibling the-shell-judge-reads-a-word-whole first, then F401/F402 -> fixed <sha>, METRICS row, openspec validate --strict, archive if ordering allows. Commit and push.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "a-drive-or-a-home-variable-impl-1",
@@ -41,9 +41,9 @@
         },
         {
             "id": "a-drive-or-a-home-variable-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive it; F401/F402 -> fixed <sha>; METRICS row (4.1)",
-            "detail": "Only if the sibling the-shell-judge-reads-a-word-whole is archived or the ordering allows; read it first."
+            "detail": "Done iter 6: 2.4 ticked (run 37545991226), F401/F402 fixed, METRICS row, archived. BACKLOG.html regeneration left to the day window."
         }
     ],
     "decisions_for_user": [],

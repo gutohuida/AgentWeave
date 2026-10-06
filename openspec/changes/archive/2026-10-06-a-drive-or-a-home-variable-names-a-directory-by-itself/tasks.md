@@ -278,7 +278,9 @@
 - [x] 2.3 Extend `_decide`'s docstring: a bare reference to any other variable, and a substitution, are not judged
 
   A paragraph naming what is judged (D1, D2) and what is not; its two examples measured allowed with the runtime-value reason.
-- [ ] 2.4 Run the judge's test files and the full `hub/tests/` with `claude` off PATH, and record the counts. Expected moves: exactly group 1's new rows. Confirm that the `hub-judge-windows` job ran the Windows rows and passed, or do not tick
+- [x] 2.4 Run the judge's test files and the full `hub/tests/` with `claude` off PATH, and record the counts. Expected moves: exactly group 1's new rows. Confirm that the `hub-judge-windows` job ran the Windows rows and passed, or do not tick
+
+  **CI (night iteration 6):** run 37545991226, job `hub-judge-windows` (windows-latest) success; 1.5b8, 1.5b9, 1.5c7, 1.5c8 PASSED, not skipped (job log read through `gh api .../actions/jobs/112550016725/logs`).
 
   **Counts (night iteration 4, `claude` off PATH, 4 chunks, xdist):** full `hub/tests/` 6997
   passed, 21 skipped, 1 failed: `test_scheduler.py::test_loop_queue_exhausted_event_prefers_the_question_when_both_are_outstanding`,
@@ -311,4 +313,4 @@
 
 ## 4. Close
 
-- [ ] 4.1 F401 and F402 → `fixed <sha>`; F444 (the linked-dependency-directory finding, filed 2026-09-24 under `B4-dep-links`) left open and noted as a prerequisite for registering a JavaScript project; backlog regenerated; `openspec validate a-drive-or-a-home-variable-names-a-directory-by-itself --strict`; archive
+- [x] 4.1 F401 and F402 → `fixed <sha>`; F444 (the linked-dependency-directory finding, filed 2026-09-24 under `B4-dep-links`) left open and noted as a prerequisite for registering a JavaScript project; backlog regenerated; `openspec validate a-drive-or-a-home-variable-names-a-directory-by-itself --strict`; archive
