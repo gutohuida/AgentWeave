@@ -34537,3 +34537,30 @@ agents gets reviews from them silently. The operator learns who reviews only fro
 
 **Direction (not decided):** a document-level default reviewer the flow form and the planner both set, shown at
 approval ("reviewed by: X" or "reviewed by: any free agent"), so the operator approves the staffing they were told.
+
+## F509 (A) — slice 1 of "same-file tasks build in order" cannot fire for an `aw-tool` agent: it never sees the text that teaches it
+
+**Status:** open
+Found 2026-10-06 by the acceptance drive of trial slice 1 (merged `ce665d1`, `f25ebb3`), run by the operator
+after merge as the design said, on a fresh Hub `:8034` (profile `sliceaccept1006`, project `aw-accept-1006`)
+with a real Haiku planner. Driven, not read. Area: **Spec documents** / **Agent environment**.
+
+Two requests for a three-feature change to one file (`notes/cli.py`). Run 1: three tasks, no `depends_on`,
+no `files`. Run 2 (neutral wording, no "worked separately"): `depends_on` used only for a data-model
+prerequisite; the three feature tasks on the same file still parallel, no `files`. The submit response
+carried `"warnings": []` both times -- the plumbing works, and nothing could trigger it.
+
+Cause: the planner reached the Hub through the `aw-tool` shim (`aw-tool submit_spec_document
+.agentweave/calls/submit.json`), and `aw-tool --list` prints only the first line of each tool's description
+(`mcp_server._call_listing`, `summary = ...split("
+", 1)[0]`). The full `submit_spec_document` text -- where
+slice 1 put the `depends_on` rule and the only documentation of `files` -- never reaches a shim agent. The
+exploring duty's new "Order the tasks" sentence did reach it (present in the transcript) and was not
+followed. So FR-3's warning can fire only for a planner that declares `files`, and no shim planner is told
+`files` exists. Every test passed (171 in the task's suites); the behaviour cannot fire in production --
+this repo's named dominant failure mode, caught only by driving.
+
+**Direction (not decided):** make the full description reachable from the shim (`aw-tool --help <tool>`, or
+the listing carrying each tool's whole description), and put the `files` field and the same-file rule where
+every planner reads it (the exploring duty), stated as a step ("for each task, list `files`; chain any two
+that share one"), not a principle. Then re-drive.
