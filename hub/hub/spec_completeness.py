@@ -365,6 +365,29 @@ def overlap_warnings(payload: SpecPayload) -> List[Finding]:
     return warnings
 
 
+def undeclared_files_warnings(payload: SpecPayload) -> List[Finding]:
+    """One warning naming every local task that declares no `files`, when there are two or more.
+
+    Advisory only, like `overlap_warnings`, and for the same reason: it never enters `check`. It
+    covers the planner that skips `files` entirely, which `overlap_warnings` cannot see (F509).
+    Imported entries neither count toward the two nor are named.
+    """
+    local = [t for t in payload.tasks if t.from_ is None]
+    unfiled = [t.key for t in local if not t.files]
+    if len(local) < 2 or not unfiled:
+        return []
+    names = ", ".join(repr(key) for key in unfiled)
+    return [
+        Finding(
+            "undeclared_task_files",
+            "tasks",
+            f"tasks {names} declare no `files`, so the Hub cannot tell whether they edit the same "
+            "path; list the paths each will edit in `files`, and chain tasks that share a path "
+            "with depends_on, or they would be built in parallel",
+        )
+    ]
+
+
 #: The fewest words a slice's `done` can state an outcome in. Real agents read the field as a status
 #: and wrote "false", then "no" (F502); a list of such words is never complete, a sentence is the test.
 _OUTCOME_WORDS = 3
