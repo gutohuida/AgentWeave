@@ -20,6 +20,65 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### F489-fix: how should the Hub learn a Copilot turn's failure cannot succeed on retry? -- 2026-10-06 night
+
+- OPEN      f489-retry-signal  how the no-retry signal reaches `return_run_entries`, and what
+  "waits for the operator" means when there is no reset time to wait for.
+
+F489 (`scripts/drive/FINDINGS.md`) names the direction but not the design: a turn that failed with
+a root `session.error` whose `errorType` is `authentication` (or `quota`) should not be retried.
+Traced the retry seam before touching code, per tonight's `next_action` instruction to stop rather
+than guess if it needed more than a one-sentence choice. It does:
+
+- The one caller of `return_run_entries` (`hub/hub/inbound_queue.py:297`) that has a `TurnOutcome`
+  for Copilot's ACP path is the app-server executor's finalize block
+  (`hub/hub/api/v1/agent_trigger.py:4029`) — the PTY/exec path's own call (`:3029`, Claude's
+  `_execute_run`) never sees a Copilot `errorType` at all, so only one call site is in scope.
+- `TurnOutcome.error` (`hub/hub/copilot_acp.py:1953`) carries only the rendered message string.
+  The normalized `kind` Copilot's `_session_error` derives from `errorType`
+  (`hub/hub/copilot_acp.py:1323-1328`, e.g. `copilot.authentication`) exists only inside the
+  `error_event(code=f"copilot.{kind}", ...)` it builds, which becomes a `RunEvent`
+  (`hub/hub/runner_events.py:319`) persisted as agent output — never threaded onto `TurnOutcome`,
+  `Run`, or anywhere `return_run_entries` or its caller reads today.
+- `error_event` already takes a `retryable: bool = False` parameter
+  (`hub/hub/runner_events.py:324`) that no call site anywhere sets `True` on, and nothing reads —
+  it is decorative today. Wiring the retry decision through it would make every existing error
+  non-retryable by default unless every other call site is also audited and given `retryable=True`
+  explicitly — a much bigger blast radius than F489 asks for.
+- There are two structurally-identical but unrelated `TurnOutcome` dataclasses
+  (`hub/hub/codex_appserver.py:905` and `hub/hub/copilot_acp.py:1947`, duck-typed, no shared base).
+  Adding a field means deciding whether it lives on both (generalizing to Codex, which has its own
+  failure shapes and no `errorType`) or only Copilot's.
+- "The entry waits for the operator, as an allowance hold does" is ambiguous between (a) the
+  existing `DELIVERY_ATTEMPT_LIMIT` withdrawal (`hub/hub/inbound_queue.py:354-362`), just triggered
+  on the first failure instead of the third, with no resumption path except a fresh operator
+  message, and (b) a real hold like `provider_allowance.py`'s `ProviderHold`/`arm_allowance_wake`,
+  which needs a `resets_at` an authentication failure never has.
+
+**Candidate options**, no recommendation forced:
+
+(a) Add `retryable: Optional[bool] = None` to `copilot_acp.TurnOutcome` only (`None` = today's
+behaviour, unchanged for every other failure); set `False` when `_session_error`'s `kind` is
+`authentication` or Copilot's own `quota` (captured alongside `root_error`, not derived from its
+message text); thread it through the one app-server call site as
+`return_run_entries(db, run_id, refusal=refusal, retryable=outcome.retryable)`; when `retryable is
+False`, withdraw the entry immediately — skip `RESUME_RETRY_LIMIT`/`DELIVERY_ATTEMPT_LIMIT` — with
+its own `abandoned_reason` naming the failure.
+
+(b) Same signal, but instead of immediate withdrawal, hold the agent's queue the way `ProviderHold`
+does, with no `resets_at` (held until the operator sends a new message or rebinds) — a new,
+narrower hold variant alongside the existing one; more code, more surface, and a second kind of
+"held" for the status route and UI to describe correctly.
+
+(c) Skip `TurnOutcome` entirely: after the commit, have `return_run_entries`'s caller read the
+run's own persisted `error` `RunEvent` by `run_id` and check its `code`/`retryable` there, instead
+of carrying a new field through the dataclass. Avoids touching `TurnOutcome` but adds a DB read on
+every failed-run finalize and a new dependency from the queue module on the agent-output storage
+format.
+
+Blocks `f489-impl` only; the night queue tonight was otherwise finished before this item, so
+nothing else is held up by it.
+
 ### `the-shell-judge-reads-a-word-whole` task 2.3 names a file list that no longer exists -- 2026-10-04 night, DECIDED 2026-10-04
 
 - DECIDED   shell-judge-2-3-eight-files  **(c): rewrite task 2.3 to name its files, chosen by (a)'s measurement** (operator, 2026-10-04, as recommended): run the whole `hub/tests/` suite at the commit before the change and at the tip; every test whose outcome moved must be one of task 1.8's rows or a new row. The dead "eight files" back-reference is dropped, not recovered. The question was: Task 2.3 (`tasks.md`) reads "Run the eight files named

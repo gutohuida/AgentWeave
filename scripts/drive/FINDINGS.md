@@ -34097,6 +34097,13 @@ that failed with a root `session.error` whose `errorType` is `authentication` (o
 slice 4 already holds the queue for) is not retried; the entry waits for the operator, as an
 allowance hold does.
 
+**2026-10-06 night:** traced the retry seam (`return_run_entries`, `hub/hub/inbound_queue.py:297`)
+and its one Copilot-reaching caller (`hub/hub/api/v1/agent_trigger.py:4029`) before building — the
+signal does not exist yet on `TurnOutcome`, there are two unrelated `TurnOutcome` dataclasses, and
+`error_event`'s own `retryable` field (`runner_events.py:324`) is set nowhere and read nowhere.
+More than a one-sentence spec choice; three candidate designs and the full trace are in
+`spec-queue/DECISIONS.md`'s `f489-retry-signal` row (OPEN), not built tonight.
+
 ## F490 (B) — a run's registered secret is not scrubbed from what the agent writes through its Hub tools
 
 **Status:** fixed 2026-10-05 by `26b0102` (Tier 0 by the operator's direction, interactive): an ASGI

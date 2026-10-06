@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9ea4cdb",
     "stop_at": "2026-10-06T07:00:00+01:00",
-    "iteration": 21,
+    "iteration": 22,
     "log_file": ".claude/autonomous/2026-10-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f489-impl",
-    "next_action": "Tier-0 fix F489 (scripts/drive/FINDINGS.md, C, APPROVED-FIXES tonight): a turn failing with a root session.error whose errorType is authentication (or quota, D5's pattern) is retried today even though retrying cannot succeed -- stop retrying that class of failure; the entry should wait for the operator instead. Write a test that fails at the retry seam first (find the retry-decision code -- likely near the turn-failure handling in hub/hub/runner.py or the worker/turn-retry path; grep for errorType/authentication/quota first, F489's text names the direction but not the exact file). If the right fix needs more than a one-sentence spec choice once you're in the code, stop and leave an OPEN spec-queue/DECISIONS.md row for the day window instead of stretching it -- do not guess a design. Then: fix, full relevant pytest file green, lint (ruff/black/mypy per CLAUDE.md's exact CI invocations), a quick mutation check (revert the fix, confirm the new test fails), drive it for real (a run that fails on auth/quota on a live Hub does not get auto-retried, the operator still gets the turn to answer), then set F489's Status: fixed <sha> in FINDINGS.md and append a spec-queue/METRICS.md row (tier 0).",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "c1b-r1",
@@ -83,12 +83,12 @@
         },
         {
             "id": "f489-impl",
-            "status": "open",
+            "status": "blocked",
             "title": "Tier-0 fix F489: stop retrying a Copilot auth failure that cannot succeed on retry",
-            "detail": "scripts/drive/FINDINGS.md F489 (C, APPROVED-FIXES tonight). Fix direction named, not yet decided in DECISIONS.md: a turn failing with a root session.error whose errorType is authentication (or quota, D5's pattern) is not retried -- the entry waits for the operator. Test fails at the retry seam first, then the fix, then CI's lint set, a mutation check, a drive on a fresh port, then Status: fixed <sha>. If this needs more than a one-sentence spec choice, stop and leave an OPEN DECISIONS.md row for the day window instead of stretching it."
+            "detail": "Done iter 22: traced the retry seam before building (return_run_entries, hub/hub/inbound_queue.py:297; its one Copilot-reaching caller, hub/hub/api/v1/agent_trigger.py:4029) and found it needs more than a one-sentence spec choice -- TurnOutcome carries no errorType today, two unrelated TurnOutcome dataclasses exist (codex_appserver.py/copilot_acp.py), and error_event's own unused retryable field would touch every error path if read naively. Left an OPEN spec-queue/DECISIONS.md row (f489-retry-signal) with three candidate designs and the full trace, per the playbook's stop-rather-than-guess instruction. Not fixed; FINDINGS.md F489 stays Status: open with a pointer to the decision row."
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": ["f489-retry-signal"],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
