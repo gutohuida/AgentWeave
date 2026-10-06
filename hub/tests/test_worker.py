@@ -12,6 +12,7 @@ imagined shape passes its own tests and fails on contact.
 """
 
 import dataclasses
+import json
 import subprocess
 
 import pytest
@@ -494,7 +495,7 @@ def test_the_copilot_worker_command_offers_no_tool(copilot_exe):
 def test_the_captured_copilot_envelope_yields_its_answer():
     answer, usage, error = parse_copilot_envelope(ONESHOT_FIXTURE.read_text(encoding="utf-8"))
     assert (answer, error) == ("ok", None)
-    assert usage.input_tokens is None, "usage and credits are slice 4's"
+    assert usage.input_tokens is None, "the one-shot stream reports no usage tokens (design D3)"
 
 
 def test_a_copilot_session_error_is_an_error():
@@ -502,6 +503,97 @@ def test_a_copilot_session_error_is_an_error():
     answer, _usage, error = parse_copilot_envelope(stdout)
     assert answer is None
     assert "No quota left" in error
+
+
+def test_the_captured_copilot_checkpoint_is_credited():
+    """Design test 1: the capture's one `session.usage_checkpoint` is the whole charge (D1)."""
+    text = ONESHOT_FIXTURE.read_text(encoding="utf-8")
+    assert '"session.shutdown"' not in text, "the checkpoint, not a shutdown, is the source (D1)"
+    answer, usage, error = parse_copilot_envelope(text)
+    assert (answer, error) == ("ok", None)
+    assert (usage.ai_nano_aiu, usage.premium_requests) == (32_840_000, 1.0)
+
+
+def _checkpoint_line(nano, premium):
+    return json.dumps(
+        {
+            "type": "session.usage_checkpoint",
+            "data": {"totalNanoAiu": nano, "totalPremiumRequests": premium},
+        }
+    )
+
+
+def test_a_later_copilot_checkpoint_replaces_the_earlier_one():
+    """Design test 3: the last checkpoint wins, and a later unusable figure becomes unknown
+    rather than keeping the earlier good one (D1)."""
+    stdout = "\n".join([_checkpoint_line(10, 1), _checkpoint_line(25, 2)])
+    _answer, usage, _error = parse_copilot_envelope(stdout)
+    assert (usage.ai_nano_aiu, usage.premium_requests) == (25, 2.0)
+
+    stdout = "\n".join([_checkpoint_line(10, 1), _checkpoint_line(-1, 2)])
+    _answer, usage, _error = parse_copilot_envelope(stdout)
+    assert (usage.ai_nano_aiu, usage.premium_requests) == (None, 2.0)
+
+
+def test_copilot_credits_survive_an_error_exit():
+    """Design test 4: the checkpoint is credited on every exit the parser reaches, not only a
+    clean answer (D4)."""
+    text = ONESHOT_FIXTURE.read_text(encoding="utf-8")
+    lines = [
+        line for line in text.splitlines() if json.loads(line).get("type") != "assistant.message"
+    ]
+    error_line = json.dumps(
+        {"type": "session.error", "data": {"errorType": "other", "message": "boom"}}
+    )
+    answer, usage, error = parse_copilot_envelope("\n".join(lines + [error_line]))
+    assert answer is None
+    assert "boom" in error
+    assert (usage.ai_nano_aiu, usage.premium_requests) == (32_840_000, 1.0)
+
+    answer, usage, error = parse_copilot_envelope("\n".join(lines))
+    assert answer is None
+    assert error == "copilot produced no assistant message"
+    assert (usage.ai_nano_aiu, usage.premium_requests) == (32_840_000, 1.0)
+
+
+def test_a_bad_copilot_checkpoint_figure_is_unknown_field_by_field():
+    """Design test 5: a malformed figure drops only its own field (D1)."""
+    stdout = _checkpoint_line(-1, 1)
+    _answer, usage, _error = parse_copilot_envelope(stdout)
+    assert (usage.ai_nano_aiu, usage.premium_requests) == (None, 1.0)
+
+    stdout = json.dumps(
+        {
+            "type": "session.usage_checkpoint",
+            "data": {"totalNanoAiu": True, "totalPremiumRequests": "one"},
+        }
+    )
+    _answer, usage, _error = parse_copilot_envelope(stdout)
+    assert (usage.ai_nano_aiu, usage.premium_requests) == (None, None)
+
+
+def test_a_non_finite_or_oversized_copilot_checkpoint_is_refused():
+    """Design test 6 (parser half): `Infinity`, `NaN`, a 400-digit literal and anything above
+    `2**53 - 1` are refused, field by field, and the parser never raises (D2)."""
+    for bad in (
+        '{"totalNanoAiu":Infinity,"totalPremiumRequests":1}',
+        '{"totalNanoAiu":NaN,"totalPremiumRequests":1}',
+        '{"totalNanoAiu":1' + "0" * 400 + ',"totalPremiumRequests":1}',
+        f'{{"totalNanoAiu":{2**53},"totalPremiumRequests":1}}',
+    ):
+        stdout = json.dumps({"type": "session.usage_checkpoint", "data": json.loads(bad)})
+        _answer, usage, _error = parse_copilot_envelope(stdout)
+        assert usage.ai_nano_aiu is None, bad
+        assert usage.premium_requests == 1.0, bad
+
+    stdout = json.dumps(
+        {
+            "type": "session.usage_checkpoint",
+            "data": {"totalNanoAiu": 2**53 - 1, "totalPremiumRequests": 1},
+        }
+    )
+    _answer, usage, _error = parse_copilot_envelope(stdout)
+    assert usage.ai_nano_aiu == 2**53 - 1
 
 
 @pytest.mark.asyncio
@@ -591,10 +683,58 @@ async def test_a_workers_copilot_credits_reach_its_invocation_row(app, monkeypat
     assert (row.ai_nano_aiu, row.premium_requests) == (7_500_000, 1.0)
 
 
-def test_the_captured_copilot_one_shot_has_no_session_shutdown():
-    """Task 5.4's condition, recorded: the `-p --output-format json` capture holds no
-    `session.shutdown`, so `parse_copilot_envelope` leaves both credit fields None."""
-    text = ONESHOT_FIXTURE.read_text(encoding="utf-8")
-    assert '"session.shutdown"' not in text
-    _answer, usage, _error = parse_copilot_envelope(text)
-    assert (usage.ai_nano_aiu, usage.premium_requests) == (None, None)
+@pytest.mark.asyncio
+async def test_a_copilot_one_shots_credits_reach_its_invocation_row_unpatched(
+    app, monkeypatch, copilot_exe, tmp_path
+):
+    """Design test 2: through `run_worker` to the `worker_invocations` row, with the real
+    (unpatched) parser -- the evidence that test_a_workers_copilot_credits_reach_its_invocation_row
+    above, which patches the parser, is not."""
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    answer_line = json.dumps(
+        {
+            "type": "assistant.message",
+            "data": {"content": '{"objective": "o", "state": "acknowledged", "confidence": 1.0}'},
+        }
+    )
+    lines = []
+    for raw in ONESHOT_FIXTURE.read_text(encoding="utf-8").splitlines():
+        event = json.loads(raw)
+        lines.append(answer_line if event.get("type") == "assistant.message" else raw)
+    _patch_spawn(monkeypatch, stdout="\n".join(lines))
+    result = await _run(cli="copilot", model="auto")
+    assert result.outcome == "ok"
+    [row] = await _invocations()
+    assert row.outcome == "ok"
+    assert (row.ai_nano_aiu, row.premium_requests) == (32_840_000, 1.0)
+
+
+@pytest.mark.asyncio
+async def test_an_oversized_copilot_checkpoint_still_records_one_row(
+    app, monkeypatch, copilot_exe, tmp_path
+):
+    """Design test 6 (run side): a checkpoint whose `totalNanoAiu` is `2**63` would overflow
+    SQLite's `BigInteger` column if stored (D2's 64-bit hazard) -- the ceiling refuses it before
+    the row is built, so exactly one row is still written, not zero."""
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    answer_line = json.dumps(
+        {
+            "type": "assistant.message",
+            "data": {"content": '{"objective": "o", "state": "acknowledged", "confidence": 1.0}'},
+        }
+    )
+    lines = []
+    for raw in ONESHOT_FIXTURE.read_text(encoding="utf-8").splitlines():
+        event = json.loads(raw)
+        if event.get("type") == "assistant.message":
+            lines.append(answer_line)
+        elif event.get("type") == "session.usage_checkpoint":
+            event["data"]["totalNanoAiu"] = 2**63
+            lines.append(json.dumps(event))
+        else:
+            lines.append(raw)
+    _patch_spawn(monkeypatch, stdout="\n".join(lines))
+    result = await _run(cli="copilot", model="auto")
+    assert result.outcome == "ok"
+    [row] = await _invocations()
+    assert (row.ai_nano_aiu, row.premium_requests, row.outcome) == (None, 1.0, "ok")

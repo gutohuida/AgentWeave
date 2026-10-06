@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9ea4cdb",
     "stop_at": "2026-10-06T07:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-10-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "copilot-credits-impl",
-    "next_action": "a-copilot-one-shot-records-its-credits tasks 0.5, 1.1-2.3 (openspec/changes/a-copilot-one-shot-records-its-credits/tasks.md). 0.5: record tonight's APPROVALS.md 2026-10-05 line as the operator approval. 1.1-1.4 tests first against fixtures/copilot_acp/oneshot_ok.jsonl. 2.1 copilot_usage.py checkpoint_totals; 2.2 runner_adapters/copilot.py parse_copilot_envelope keeps last checkpoint on all three exits. 2.3 run the named test files, then full hub/tests/ with claude stripped from PATH, then lint.",
+    "next_action": "Task 2.3's remaining half only: the full hub/tests/ run was launched detached (night iter 10) at 03:18:04 with claude stripped from PATH -- PID in .claude/autonomous/tmp/copilot-credits-full-suite.pid, live output in .claude/autonomous/tmp/copilot-credits-full-suite.log (stderr in the .err.log sibling). Do NOT relaunch it: first check `Get-Process -Id (Get-Content <pidfile>) -ErrorAction SilentlyContinue` -- if it is still running, just read the log's current tail, note elapsed time and progress (%) in this iteration's log entry, leave this next_action unchanged, and end the iteration (nothing else to do until it finishes; nothing to commit if tasks.md/STATE are already as this iteration leaves them). If the process has exited, read the log's final summary line (passed/failed/skipped/duration), write that into tasks.md task 2.3 verbatim (F392 rule 1) and tick it, run the lint block (ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/), then commit and advance current/next_action to copilot-credits-drive (queue item already describes it).",
     "queue": [
         {
             "id": "c1b-r1",

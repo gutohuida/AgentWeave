@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 from .. import runner_commands
 from ..codex_appserver import TurnOutcome
 from ..copilot_env import copilot_guard_env
+from ..copilot_usage import checkpoint_totals
 from ..file_mentions import neutralise_file_mentions
 from ..runner_provider import copilot_provider_env, has_provider, provider_launch_verdict
 from ..workspace_writes import COPILOT_WRITE_TOOLS
@@ -98,10 +99,16 @@ def parse_copilot_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Opt
 
     JSONL, one session event per line (task 1.2's capture): the answer is the last
     `assistant.message`'s `content`, a failure is a `session.error`, and the closing `result` line
-    carries the session id. Usage stays empty: premium requests and credits are slice 4's.
+    carries the session id. Credits come from the last `session.usage_checkpoint` -- a one-shot is
+    a fresh session (`COPILOT_ONE_SHOT_FLAGS` cannot resume one), so its final checkpoint is the
+    whole charge (`a-copilot-one-shot-records-its-credits` D1). The usage is computed once and
+    returned on every exit this parser reaches -- an error or a missing answer still cost credits
+    (D4) -- but stays empty with no checkpoint at all, as it always has.
     """
     answer: Optional[str] = None
     failure: Optional[str] = None
+    nano_aiu: Optional[float] = None
+    premium_requests: Optional[float] = None
     for line in stdout.splitlines():
         line = line.strip()
         if not line:
@@ -123,11 +130,19 @@ def parse_copilot_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Opt
             failure = (
                 f"copilot reported an error: {message or data.get('errorType') or 'no detail'}"
             )
+        elif kind == "session.usage_checkpoint":
+            # The last checkpoint wins in full (D1): both figures are replaced together, even
+            # when one of this checkpoint's own figures is unusable and becomes unknown.
+            nano_aiu, premium_requests = checkpoint_totals(data)
+    usage = WorkerUsage(
+        ai_nano_aiu=int(nano_aiu) if nano_aiu is not None else None,
+        premium_requests=float(premium_requests) if premium_requests is not None else None,
+    )
     if failure is not None:
-        return None, WorkerUsage(), failure
+        return None, usage, failure
     if answer is None:
-        return None, WorkerUsage(), "copilot produced no assistant message"
-    return answer, WorkerUsage(), None
+        return None, usage, "copilot produced no assistant message"
+    return answer, usage, None
 
 
 def _request_label(subject: Mapping[str, Any]) -> str:

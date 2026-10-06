@@ -60,6 +60,28 @@ def _nonneg_number(value: Any) -> Optional[float]:
     return value
 
 
+#: The plausibility ceiling `checkpoint_totals` applies to both figures
+#: (`a-copilot-one-shot-records-its-credits` D2). A row's own `BigInteger` columns hold `2**63 - 1`,
+#: but `func.sum` over many rows overflows SQLite past `2**53 - 1`'s margin on only 1025 rows at
+#: the ceiling -- the plausibility bound, not the column's own size, is what a single malformed
+#: checkpoint must be held to.
+_CHECKPOINT_CEILING = 2**53 - 1
+
+
+def checkpoint_totals(data: Dict[str, Any]) -> Tuple[Optional[float], Optional[float]]:
+    """(totalNanoAiu, totalPremiumRequests) of one `session.usage_checkpoint`, each through
+    `_nonneg_number`, then refused (None) unless `value <= 2**53 - 1` (the review's plausibility
+    ceiling, one constant for both figures). The comparison is the whole check: it is False
+    for NaN and both infinities, and it never raises."""
+    nano = _nonneg_number(data.get("totalNanoAiu"))
+    if nano is not None and not nano <= _CHECKPOINT_CEILING:
+        nano = None
+    premium = _nonneg_number(data.get("totalPremiumRequests"))
+    if premium is not None and not premium <= _CHECKPOINT_CEILING:
+        premium = None
+    return nano, premium
+
+
 @dataclass
 class _Call:
     dimensions: Dict[str, Any]
@@ -179,10 +201,8 @@ class CopilotUsageLedger:
         if event_type == "assistant.usage":
             self._observe_call(data)
         elif event_type == "session.usage_checkpoint":
-            self._checkpoint = _Checkpoint(
-                nano_aiu=_nonneg_number(data.get("totalNanoAiu")),
-                premium_requests=_nonneg_number(data.get("totalPremiumRequests")),
-            )
+            nano_aiu, premium_requests = checkpoint_totals(data)
+            self._checkpoint = _Checkpoint(nano_aiu=nano_aiu, premium_requests=premium_requests)
         elif event_type == "session.compaction_complete":
             self._observe_compaction(data)
         elif event_type == "session.error":
