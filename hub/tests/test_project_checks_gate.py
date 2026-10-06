@@ -242,3 +242,32 @@ async def test_nothing_is_said_without_checks(app, tmp_path):
     task_id, _ = await _task_with_work(tmp_path)
     sentence = await _sentence(task_id)
     assert sentence is None or "checks" not in sentence
+
+
+@pytest.mark.asyncio
+async def test_approving_over_an_errored_result_runs_the_checks_again(
+    app, auth_headers, tmp_path, monkeypatch
+):
+    """F516: on `:8010` a check run's `git worktree add` timed out and recorded `error`, and approval
+    refused on it as if it were a verdict. An error is retried by the approval that meets it."""
+    task_id, _ = await _task_with_work(tmp_path)
+    real = project_checks._checkout
+    calls = []
+
+    def flaky(root, task, commit):
+        calls.append(commit)
+        if len(calls) == 1:
+            raise RuntimeError("git worktree add timed out")
+        return real(root, task, commit)
+
+    monkeypatch.setattr(project_checks, "_checkout", flaky)
+    await _checked(task_id, [PASS])
+    assert [r.state for r in await _runs(task_id)] == ["error"]
+
+    refused = await _approve(app, auth_headers, task_id)
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"]["checks"][0]["state"] == "running"
+    await project_checks.drain()
+    assert [r.state for r in await _runs(task_id)] == ["error", "passed"]
+    approved = await _approve(app, auth_headers, task_id)
+    assert approved.status_code == 200, approved.text

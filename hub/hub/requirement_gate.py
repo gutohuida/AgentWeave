@@ -791,7 +791,11 @@ async def _check_checks(
         refusal.checks_overridden = True
         return
     state = view.state
-    if state in ("missing", "stale", "interrupted"):
+    if state == "error" and start_checks:
+        # F516: an error is the Hub failing to produce a result, not a verdict; approving retries.
+        project_checks.schedule(task.project_id, task.id)
+        state = "running"
+    elif state in ("missing", "stale", "interrupted"):
         if start_checks:
             project_checks.schedule(task.project_id, task.id)
             state = "running"

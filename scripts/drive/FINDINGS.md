@@ -34615,7 +34615,7 @@ processes (they finish on their own).
 
 ## F512 (B) — a test-first task can never pass a whole-suite check: red-by-design work is refused at approval
 
-**Status:** open
+**Status:** fixed (Tier 0, operator chose "test and fix in one task"), see commit on fix/f512-f515 -- the exploring duty and `submit_spec_document` say a test and its fix are one task; a task editing only tests that another task `depends_on` draws a `test_only_task` warning (`spec_completeness.test_only_task_warnings`). The gate is unchanged. Test: `test_spec_test_only_task_warning.py`
 Found 2026-10-06 on the trial Hub `:8010`, F510 trial slice, task 1 (`task-f5698f83dfc3`). Driven, not read.
 Area: **Checks & flows**.
 
@@ -34633,7 +34633,7 @@ slices put test and fix in one task.
 
 ## F513 (C) — `record_evidence` refuses FR-N as ambiguous although the call names the task that fixes the document
 
-**Status:** open
+**Status:** fixed (Tier 0, `ae1e447`) -- an ambiguous bare identifier with `task_id` resolves within `Task.spec_document_id`; consulted only when ambiguous. Test: `test_agent_evidence_plane.py::test_a_task_from_one_document_disambiguates_a_bare_identifier`
 Found 2026-10-06 on `:8010`, F510 trial slice (`run-6efcf5534b92`). Driven, not read. Area: **Evidence**.
 
 Requirement ids are per-document (`FR-1`...), so any project with two or more documents makes every
@@ -34648,7 +34648,7 @@ within that document.
 
 ## F514 (D) — `ask_user` refuses `multiSelect`; agents trained on Claude Code's own tool send it
 
-**Status:** open
+**Status:** fixed (Tier 0, `ae1e447`) -- `AgentQuestionCreate.multi_select` accepts `multiSelect`; `ask_user` reads either spelling. Tests: `test_question_batches.py`, `test_blocking_questions.py`
 Found 2026-10-06 on `:8010` (`run-492afbb2e8cc`, aw-reviewer). The first `ask_user` call was refused 422
 "questions.0.multi_select: Field required; questions.0.multiSelect: Extra inputs are not permitted"
 (`hub/hub/schemas/questions.py:35`). Claude Code's built-in AskUserQuestion spells it `multiSelect`.
@@ -34656,7 +34656,7 @@ The agent recovered on retry. **Direction:** accept `multiSelect` as an alias.
 
 ## F515 (B) — approving a document writes its phase into the tracked file, and that write then blocks the document's own task merges
 
-**Status:** open
+**Status:** fixed (Tier 0, `8d5740f`) -- a tracked document whose file still hashes to its `content_digest` is the Hub's write and no longer counts as a dirty checkout; an operator edit to it still does. Test: `test_hub_phase_write_does_not_block_merge.py`. Not changed: the approval response still answers 200 when the merge is skipped (the integration row and the drawer's note carry it)
 Found 2026-10-06 on `:8010`, F510 trial slice. Driven, not read. Area: **Spec documents & integration**.
 
 Approving `spdoc-eeaf6a633f2d` rewrote `spec.html` in the project checkout (`aw-spec-status`
@@ -34670,3 +34670,45 @@ landed.
 
 **Direction (not decided):** the Hub commits its own phase write, or integration ignores (or commits)
 changes confined to the approved document's own file.
+
+## F516 (B) — a check run's checkout is held to the 60s plumbing timeout, and its `error` is never retried
+
+**Status:** fixed (Tier 0) -- `CHECKOUT_TIMEOUT_SECONDS` (900) for the scratch worktree's add/remove; an
+`error` result is not current (`request_run` re-runs it) and approving over one starts a run instead of
+refusing. Tests: `test_project_checks_run.py` (errored re-run, checkout timeout), `test_project_checks_gate.py`
+(`test_approving_over_an_errored_result_runs_the_checks_again`).
+Found 2026-10-06 on `:8010`, F510 trial slice task 2 (`task-acc4664bee5a`). Driven, not read.
+The check run recorded `error`: "TimeoutExpired: ... git worktree add --detach --force ... timed out after
+60 seconds" (`project_checks._checkout` used `GIT_TIMEOUT_SECONDS`; this repo has 3,308 files and a full
+Hub suite was running beside it). It left a `locked` worktree registration behind. `error` counted as a
+current result, so approval would refuse on it until an operator override or a manual re-run, although
+nothing had judged the work.
+
+## F517 (C) — a reviewer run failed at spawn with `database is locked`
+
+**Status:** noted (not diagnosed)
+Found 2026-10-06 on `:8010` (`run-09cdbc599c3f`, aw-reviewer, 19:55:21-19:55:35Z): `(sqlite3.OperationalError)
+database is locked [SQL: UPDATE runs SET pid=?]`. The flow staffed a second reviewer run at once
+(`run-6e866403a514`), which completed. Coincided with a check run's 60s `git worktree add` (F516), but
+`project_checks._execute` holds no session across git calls, so that is not the holder. Watch for recurrence.
+
+## F518 (B) — a check run checks work already on the main branch, and blames its failures on the task
+
+**Status:** fixed (Tier 0) -- `project_checks.unmerged` drops targets already reachable from the main tip,
+in both `view` and `request_run`; nothing unmerged means no check applies. Test:
+`test_project_checks_run.py::test_work_already_on_main_is_not_checked`.
+Found 2026-10-06 on `:8010`, F510 slice task 2. Its check run's `target_shas` were `[252076c]`: task 1's
+accepted evidence, already merged (`fb651cd`), because both tasks serve FR-1..3. `merge_targets` names
+accepted evidence for the task's requirements; before task 2's own evidence is accepted, that is only work
+on main, so the run checked main itself (red by design at that moment) and the review briefing would have
+stated those failures against task 2.
+
+## F519 (B) — a reviewer judges a dependent task's diff without its dependency's work, and sends correct work back
+
+**Status:** open
+Found 2026-10-06 on `:8010` (`run-6e866403a514`). Task 2 (the fix) `depends_on` task 1 (the F510 acceptance
+tests, merged as `fb651cd`). The reviewer sent task 2 to `revision_needed`: "the diff adds no tests for any
+of the six acceptance criteria". The 7 tests are task 1's, on main, and pass on task 2's branch (run by hand:
+`7 passed`). The review briefing does not name the tasks this one depends on or where their work is.
+F512's one-task rule removes this shape for new documents; documents that legitimately chain tasks still
+meet it. **Direction:** the review briefing names each `depends_on` task, its status, and its merged commit.

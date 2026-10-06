@@ -4,6 +4,7 @@ Real git repositories and real subprocesses throughout: the commit is built with
 runner uses, and each check is a real command, because "the runner says it ran" is not evidence.
 """
 
+import subprocess
 import sys
 import time
 
@@ -298,3 +299,64 @@ async def test_the_drawer_reads_runs_newest_first_and_the_operator_re_runs(
     assert [r["state"] for r in runs] == ["passed", "passed"], "a forced re-run is a new run"
     assert runs[0]["id"] == rerun.json()["run_id"], "newest first"
     assert runs[0]["results"][0]["name"] == "ok"
+
+
+# --- F516 / F518: found by the F510 trial slice on `:8010`, 2026-10-06 ---------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_errored_result_is_run_again(app, tmp_path, monkeypatch):
+    """F516: `error` is the Hub failing to produce a result (there, `git worktree add` timing out on
+    a 3,300-file repository under load), not a verdict on the work. It was treated as current, so
+    approval never retried it and only an override or a manual re-run could move the task."""
+    task_id, _ = await _task_with_work(tmp_path)
+    await _project([PASS])
+    real = project_checks._checkout
+    calls = []
+
+    def flaky(root, task, commit):
+        calls.append(commit)
+        if len(calls) == 1:
+            raise subprocess.TimeoutExpired(["git", "worktree", "add"], 60)
+        return real(root, task, commit)
+
+    monkeypatch.setattr(project_checks, "_checkout", flaky)
+    first = await project_checks.request_run("proj-test", task_id)
+    await project_checks.drain()
+    again = await project_checks.request_run("proj-test", task_id)
+    await project_checks.drain()
+
+    assert again and again != first
+    assert [r.state for r in await _runs(task_id)] == ["error", "passed"]
+
+
+def test_the_checkout_is_not_held_to_the_short_git_timeout(tmp_path, monkeypatch):
+    """F516: materialising a large repository's worktree is not a quick plumbing call."""
+    seen = {}
+    real = subprocess.run
+
+    def spy(args, *a, **k):
+        if "worktree" in args and "add" in args:
+            seen["timeout"] = k.get("timeout")
+        return real(args, *a, **k)
+
+    make_repo(tmp_path)
+    head = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    monkeypatch.setattr(project_checks.subprocess, "run", spy)
+    path = project_checks._checkout(tmp_path, "task-timeout", head)
+    project_checks._remove_checkout(tmp_path, path)
+    assert seen["timeout"] >= 600, seen
+
+
+@pytest.mark.asyncio
+async def test_work_already_on_main_is_not_checked(app, tmp_path):
+    """F518: a task serving requirements another task already landed has that task's accepted
+    evidence among its merge targets. Checking it re-checks the main branch, whose failures are not
+    this task's, and the review briefing cited them against it. Only unmerged work is checked."""
+    task_id, work = await _task_with_work(tmp_path)
+    await _project([PASS])
+    git(tmp_path, "merge", "-q", "--no-ff", "-m", "landed", work)
+
+    assert await project_checks.request_run("proj-test", task_id) is None
+    await project_checks.drain()
+    assert await _runs(task_id) == []

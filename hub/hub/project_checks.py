@@ -41,6 +41,9 @@ MAX_CONCURRENT_RUNS = 2
 OUTPUT_TAIL_CHARS = 4000
 DEFAULT_TIMEOUT_SECONDS = 900
 GIT_TIMEOUT_SECONDS = 60
+#: Materialising and removing the scratch worktree writes the whole tree, which on a large repository
+#: under load ran past `GIT_TIMEOUT_SECONDS` (F516: 3,300 files, 60s, the run recorded `error`).
+CHECKOUT_TIMEOUT_SECONDS = 900
 
 #: Terminal states a gate may judge on, as opposed to `running` and `interrupted`.
 DECIDED = ("passed", "failed", "error")
@@ -77,7 +80,7 @@ def configured_checks(project: Optional[Project]) -> List[Dict[str, Any]]:
 # --- git -----------------------------------------------------------------------------------------
 
 
-def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
+def _git(root: Path, *args: str, timeout: int = GIT_TIMEOUT_SECONDS) -> subprocess.CompletedProcess:
     from .worktrees import COMMIT_IDENTITY
 
     return subprocess.run(
@@ -92,7 +95,7 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
         cwd=str(root),
         capture_output=True,
         text=True,
-        timeout=GIT_TIMEOUT_SECONDS,
+        timeout=timeout,
         check=False,
         **no_console_kwargs(),
     )
@@ -149,7 +152,7 @@ def _checkout_path(root: Path, task_id: str) -> Path:
 
 
 def _remove_checkout(root: Path, path: Path) -> None:
-    _git(root, "worktree", "remove", "--force", str(path))
+    _git(root, "worktree", "remove", "--force", str(path), timeout=CHECKOUT_TIMEOUT_SECONDS)
     if path.exists():
         shutil.rmtree(path, ignore_errors=True)
     _git(root, "worktree", "prune")
@@ -162,7 +165,16 @@ def _checkout(root: Path, task_id: str, commit: str) -> Path:
     path = _checkout_path(root, task_id)
     _remove_checkout(root, path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    added = _git(root, "worktree", "add", "--detach", "--force", str(path), commit)
+    added = _git(
+        root,
+        "worktree",
+        "add",
+        "--detach",
+        "--force",
+        str(path),
+        commit,
+        timeout=CHECKOUT_TIMEOUT_SECONDS,
+    )
     if added.returncode != 0:
         raise RuntimeError(f"git worktree add failed: {added.stderr.strip()[:300]}")
     _symlink_shared_dependencies(root, path)
@@ -266,6 +278,15 @@ class CheckView:
     run: Optional[TaskCheckRun] = None
 
 
+def unmerged(root: Path, tip: str, target_shas: Sequence[str]) -> List[str]:
+    """The targets not already in the main tip (F518). A task serving requirements another task
+    already landed carries that task's accepted evidence among its merge targets; checking it would
+    re-check the main branch and blame its failures on this task. Unknown reachability is kept."""
+    from .requirement_evidence import is_reachable_from
+
+    return [sha for sha in target_shas if is_reachable_from(root, sha, tip) is not True]
+
+
 async def view(
     session: AsyncSession, task: Task, root: Path, main_branch: str, target_shas: List[str]
 ) -> Optional[CheckView]:
@@ -276,6 +297,9 @@ async def view(
         return None
     tip = await asyncio.to_thread(main_tip, root, main_branch)
     if tip is None:
+        return None
+    target_shas = await asyncio.to_thread(unmerged, root, tip, target_shas)
+    if not target_shas:
         return None
     run = await latest_run(session, task.id)
     if run is None:
@@ -348,13 +372,15 @@ async def request_run(project_id: str, task_id: str, *, force: bool = False) -> 
             targets = [
                 t.commit_sha for t in await task_integration.merge_targets(session, task, root)
             ]
+            targets = await asyncio.to_thread(unmerged, root, tip, targets)
             if not targets:
                 return None
             latest = await latest_run(session, task_id)
             if (
                 not force
                 and latest is not None
-                and latest.state in DECIDED
+                # `error` is the Hub failing to produce a result, not a verdict: retried (F516).
+                and latest.state in ("passed", "failed")
                 and latest.main_sha == tip
                 and list(latest.target_shas or []) == targets
             ):
