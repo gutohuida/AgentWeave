@@ -3654,7 +3654,10 @@ def submit_spec_document(
       thing"), `requirements` (keys this task satisfies; at least one, or it is work nobody
       asked for), and optionally `title`. Approving the document creates these as real tasks, and
       `title` is the name the board shows — a few words, not the sentence. Without one a name is
-      derived from the description, which reads as prose because that is what it is.
+      derived from the description, which reads as prose because that is what it is. A task may
+      also name sibling task keys in `depends_on`; it is not started until they are done. Tasks
+      expected to edit the same file are chained with `depends_on`, so same-file tasks are built
+      in order rather than in parallel.
 
     `algorithms` — objects with `name` and `steps`. Ordered or conditional behaviour goes here
       rather than in a paragraph, where the order has to be guessed at.
