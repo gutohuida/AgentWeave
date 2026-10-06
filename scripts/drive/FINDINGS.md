@@ -34290,7 +34290,16 @@ builds"; (b) trigger when slice N's tasks are all approved (a task-board event, 
 
 ## F497 (C) — a reviewer is not told that a rejected requirement will refuse its `approved`
 
-**Status:** open
+**Status:** fixed (this commit) -- Tier 0: `review_turn.verdict_evidence_sentence` now names each
+served requirement whose evidence is all rejected (`requirement_gate.rejected_identifiers`, the same
+check `evaluate` refuses on) and says `revision_needed` returns the task to its author; the
+rejected refusal ends with `REVIEWER_SENDS_BACK_REJECTED`. Tests in
+`test_review_briefing_names_the_evidence_gate.py` fail before. Driven 2026-10-06 on `:8031`
+(`slices1006b`, slice-2 task `task-cc8f85f29e9b`, every FR-3/FR-4 piece rejected by the operator):
+the real Haiku reviewer's context carried the sentence, it made one `update_task` call --
+`revision_needed`, notes quoting both rejection reasons and the tests to add -- and never tried
+`approved`. Side note: rejecting only the newest evidence leaves a requirement `verified` while an
+older piece stays accepted, so the shape needs every piece rejected
 Found 2026-10-05 night by C1b's grounded review round (`a-task-may-serve-a-whole-slice`, design
 "Review round" R2), by reading code; not driven.
 **Ready:** needs the day window (no proposal).

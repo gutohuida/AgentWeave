@@ -90,6 +90,12 @@ REVIEWER_SENDS_BACK = (
     "the task to revision_needed with notes naming the conflict."
 )
 
+#: The rejected refusal's remedy is the author's; a reviewer who meets it has its own move (F497).
+REVIEWER_SENDS_BACK_REJECTED = (
+    "If you are reviewing this task, replacing rejected evidence is its author's work, not yours: "
+    "move the task to revision_needed with notes naming the rejected requirement."
+)
+
 
 @dataclass
 class GateRefusal:
@@ -168,11 +174,14 @@ class GateRefusal:
             )
         if not parts:
             return ""
-        return (
+        sentence = (
             "This task serves requirements a gate is enforcing, and they are not verified: "
             + "; ".join(parts)
             + ". Satisfy them, or lower the document's rigor — which is recorded."
         )
+        if any(entry["state"] == requirement_coverage.REJECTED for entry in self.blocking):
+            sentence += " " + REVIEWER_SENDS_BACK_REJECTED
+        return sentence
 
     def _merge_detail(self) -> str:
         """The conflict, and a remedy that depends on where the judged commit came from (F155).
@@ -655,6 +664,48 @@ async def _identifiers_for(session: AsyncSession, requirement_ids: List[Any]) ->
     return {row.id: row.identifier for row in rows}
 
 
+async def _coverage_by_document(
+    session: AsyncSession, task: Task, rows: List[Any]
+) -> tuple[Dict[str, List[SpecRequirement]], Dict[str, requirement_coverage.CoverageReport]]:
+    """The task's linked requirements grouped by document, and each document's coverage report."""
+    by_document: Dict[str, List[SpecRequirement]] = {}
+    for requirement, document in rows:
+        by_document.setdefault(document.id, []).append(requirement)
+    reports: Dict[str, requirement_coverage.CoverageReport] = {}
+    for document_id in by_document:
+        reports[document_id] = await requirement_coverage.requirement_coverage(
+            session, task.project_id, document_id=document_id, include_retired=True
+        )
+    return by_document, reports
+
+
+def _rejected_entries(
+    by_document: Dict[str, List[SpecRequirement]],
+    reports: Dict[str, requirement_coverage.CoverageReport],
+) -> List[Any]:
+    """The coverage entries of the task's requirements that are `rejected` -- D2's refusal."""
+    rejected: List[Any] = []
+    for document_id, requirements in by_document.items():
+        wanted_ids = {requirement.id for requirement in requirements}
+        rejected.extend(
+            entry
+            for entry in reports[document_id].requirements
+            if entry.requirement_id in wanted_ids and entry.state == requirement_coverage.REJECTED
+        )
+    return rejected
+
+
+async def rejected_identifiers(session: AsyncSession, task: Task) -> List[str]:
+    """The requirements this task serves whose evidence is all rejected: each refuses `approved`
+    at every rigor (D2). The review briefing reads this (F497), so it says exactly what
+    `evaluate` will refuse."""
+    rows = await _linked_requirements(session, task)
+    if not rows:
+        return []
+    entries = _rejected_entries(*await _coverage_by_document(session, task, rows))
+    return [entry.identifier or "a requirement" for entry in entries]
+
+
 async def evaluate(
     session: AsyncSession, task: Task, *, acting_run_id: Optional[str] = None
 ) -> tuple[GateRefusal, str]:
@@ -689,31 +740,18 @@ async def evaluate(
     # exactly where the defect it fixes lives. Reads every linked document, not only the enforced
     # ones, and caches each document's report so the enforced loop below does not ask twice.
     rows = await _linked_requirements(session, task)
-    by_all_document: Dict[str, List[SpecRequirement]] = {}
-    for requirement, document in rows:
-        by_all_document.setdefault(document.id, []).append(requirement)
-
-    reports_by_document: Dict[str, requirement_coverage.CoverageReport] = {}
+    by_all_document, reports_by_document = await _coverage_by_document(session, task, rows)
     rejected_requirement_ids: set = set()
-    for document_id, requirements in by_all_document.items():
-        report = await requirement_coverage.requirement_coverage(
-            session, task.project_id, document_id=document_id, include_retired=True
+    for entry in _rejected_entries(by_all_document, reports_by_document):
+        refusal.blocking.append(
+            {
+                "identifier": entry.identifier,
+                "requirement_id": entry.requirement_id,
+                "state": entry.state,
+                "remedy": REMEDY[requirement_coverage.REJECTED],
+            }
         )
-        reports_by_document[document_id] = report
-        wanted_ids = {requirement.id for requirement in requirements}
-        for entry in report.requirements:
-            if entry.requirement_id not in wanted_ids:
-                continue
-            if entry.state == requirement_coverage.REJECTED:
-                refusal.blocking.append(
-                    {
-                        "identifier": entry.identifier,
-                        "requirement_id": entry.requirement_id,
-                        "state": entry.state,
-                        "remedy": REMEDY[requirement_coverage.REJECTED],
-                    }
-                )
-                rejected_requirement_ids.add(entry.requirement_id)
+        rejected_requirement_ids.add(entry.requirement_id)
 
     if not rows:
         # Nothing governed this transition at all — a null digest is the honest answer, not a gap

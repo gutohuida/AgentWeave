@@ -213,11 +213,12 @@ async def verdict_evidence_sentence(
     *may_decide* is the reviewer's `can_accept_evidence` grant.
     """
     from . import task_integration
-    from .requirement_gate import _identifiers_for
+    from .requirement_gate import _identifiers_for, rejected_identifiers
 
+    rejected = _rejected_sentence(await rejected_identifiers(session, task))
     awaiting = await task_integration.awaiting_targets(session, task)
     if not awaiting or not await task_integration.evidence_governs(session, task):
-        return None
+        return rejected
     identifiers = await _identifiers_for(session, [row.requirement_id for row in awaiting])
     pieces = []
     for row in awaiting:
@@ -232,6 +233,8 @@ async def verdict_evidence_sentence(
         "it is accepted, `approved` can be refused: approving would merge none of it. "
         "`revision_needed` is not affected."
     )
+    if rejected:
+        sentence = rejected + " " + sentence
     if may_decide:
         return sentence + (
             " You can decide evidence: if the work is right, accept what it demonstrates with "
@@ -242,6 +245,21 @@ async def verdict_evidence_sentence(
         "refused, your verdict was not recorded: ask the operator with `ask_user` to decide the "
         "evidence named above, and approve once they say it is accepted. Do not tell anyone the "
         "task is approved until `update_task` has succeeded."
+    )
+
+
+def _rejected_sentence(identifiers: List[str]) -> Optional[str]:
+    """F497: a served requirement whose evidence is all rejected refuses `approved` at every rigor
+    (`requirement_gate.evaluate`, D2), whatever else is waiting. Its remedy is the author's, so the
+    reviewer is told the verdict that returns the task to them."""
+    if not identifiers:
+        return None
+    named = ", ".join(f"`{identifier}`" for identifier in identifiers)
+    return (
+        f"**{named} has only rejected evidence**, so `approved` will be refused until its author "
+        "records evidence that satisfies it. Replacing it is not your work: if that is still true "
+        "when you decide, end with `revision_needed` and notes naming what was rejected and why "
+        "-- that returns the task to its author."
     )
 
 

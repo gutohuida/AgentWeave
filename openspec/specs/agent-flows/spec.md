@@ -62,6 +62,11 @@ This SHALL use the same determination of who completed a task that author/review
 for reaching a review outcome, so that a task the Hub offers to an agent is never one that agent
 would then be refused for approving.
 
+**Where an agent is recorded as completing the task, the Hub SHALL NOT allow it to be claimed by an
+agent recorded as having produced evidence for it either** (F505). Author/reviewer separation
+refuses an evidence author's verdict whoever completed the task, and an offer the guard would then
+refuse is a review that cannot end.
+
 **Where the recorded completion names no agent, the Hub SHALL distinguish a completion made by the
 operator from no recorded completion at all.** These are different facts about a task and only one of
 them is an absence. A task the operator moved to `completed` has provenance — a person did it — and
@@ -126,6 +131,12 @@ agent out, so nothing rules the author out either.
 - **WHEN** the only available agent is the one that completed the task
 - **THEN** it is not fired for that task
 - **AND** the firing reports that it could not staff the review
+
+#### Scenario: An agent that recorded evidence may not take a task another agent completed
+
+- **WHEN** a flow fires and a queued task is `completed` by agent A, and agent B recorded evidence
+  for it
+- **THEN** B is not fired for that task
 
 #### Scenario: Claimability and the approval guard agree
 
@@ -275,8 +286,10 @@ SHALL NOT come to different accounts of one task.
 **Where approval of the task is refused for a reason only the operator can remove, a review that gave no verdict SHALL NOT be answered by resolving a second reviewer**, whether the reviewer that failed was declared or selected by availability. The Hub SHALL surface the review instead, as *A review no reviewer can approve is handed to the operator* states. A reason only the operator can remove is one whose remedy is a decision on evidence, where the agent the resolution would select has not been granted that decision; a drift candidate, which only the operator resolves whatever an agent is granted; a requirement that cannot be satisfied as written; or the Hub being unable to ask the project's repository whether the work would merge, which a second reviewer's approval would meet in the same repository. A second reviewer meets the identical refusal, so resolving one spends a review turn on a conclusion that has nowhere to go and tells the operator about staffing instead of about the decision waiting for them. Where the agent the resolution selects has been granted the decision on evidence, it can remove the reason itself, and the resolution SHALL proceed as above.
 
 **The Hub SHALL NOT resolve, as a task's reviewer, an agent that could not record a verdict on it.**
-An agent is barred from judging work it completed, so naming it would produce a review refused on
-arrival; the resolution SHALL exclude it rather than discover the refusal afterwards.
+An agent is barred from judging work it completed, and from judging work it recorded evidence for
+whoever completed it (F505), so naming either would produce a review refused on arrival; the
+resolution SHALL exclude both rather than discover the refusal afterwards. This SHALL hold for the
+first resolution and for the one that answers a failed review alike.
 
 #### Scenario: The author is not offered the work by the second resolution either
 
@@ -284,6 +297,12 @@ arrival; the resolution SHALL exclude it rather than discover the refusal afterw
   recording a verdict, and the Hub resolves a replacement
 - **THEN** an agent that any record associates with that task is not selected
 - **AND** the agent that gave no verdict is not selected
+
+#### Scenario: An evidence author is excluded where another agent completed the task
+
+- **WHEN** a flow resolves a reviewer for a task agent A completed, first or after a review that gave
+  no verdict, and agent B recorded evidence for it
+- **THEN** neither A nor B is selected
 
 #### Scenario: The second resolution's surfaced reason does not claim an agent completed the work
 
@@ -521,12 +540,24 @@ legal from the status the task is in when the reviewer receives it.
 
 A review turn's context SHALL NOT name a transition that the task's status does not offer.
 
+Where a requirement the task serves has only rejected evidence, both review channels SHALL say that
+`approved` will be refused for it, naming the requirement, and that `revision_needed` is the
+verdict that returns the task to its author (F497). The rejected requirement refuses approval at
+every rigor and its remedy is the author's, so a reviewer not told this approves into a refusal it
+cannot clear. The approval refusal itself SHALL end with the same reviewer move.
+
 #### Scenario: Both verdicts are stated and both are legal
 
 - **WHEN** an agent is given a review turn
 - **THEN** the context names how to record that the work is correct
 - **AND** names how to record that it needs revision
 - **AND** both are transitions the task can actually make
+
+#### Scenario: A reviewer is told a rejected requirement refuses approval
+
+- **WHEN** a review turn is given for a task serving a requirement whose evidence is all rejected
+- **THEN** its briefing names that requirement and says `approved` will be refused
+- **AND** says `revision_needed` returns the task to its author
 
 ### Requirement: A flow generates the author's handover briefing
 
@@ -732,6 +763,24 @@ A briefing that asks an agent to record something for a later reader SHALL name 
 record reach one. Notes recorded for a reviewer are consumed at the boundary of a run that moved its
 task to the finished status; a briefing that asks for the notes and not for the transition asks for a
 record nobody will ever read.
+
+**A work briefing for a task returned for revision SHALL say why it came back** (F504): the agent
+that moved it to `revision_needed` and the notes it left, and whether the task's own branch still
+merges into the main branch, measured when the briefing is composed, naming the conflicting paths
+and the remedy (merge the main branch into the task's branch, keep both sides, run the tests, and
+record evidence again on the resolved commit) where it does not. Where no notes were left and
+nothing conflicts, it SHALL say so and name the task's history as where to look. Failing to measure
+SHALL NOT withhold the briefing. A brief that carried only the original description sent an author
+whose task came back over a merge conflict to re-run its green tests, complete the same commit, and
+meet the same refusal.
+
+#### Scenario: A task sent back for revision is told why
+
+- **WHEN** a firing claims for work a task a reviewer moved to `revision_needed` with notes, and the
+  task's branch no longer merges into the main branch
+- **THEN** the briefing names that reviewer and quotes its notes
+- **AND** it names the conflicting paths and the remedy of merging the main branch into the task's
+  branch and recording evidence again on the resolved commit
 
 #### Scenario: The briefing names the transition that finishes the work
 
@@ -1139,6 +1188,7 @@ The reason SHALL name an action that exists for the task in its present status:
 
 Where an agent is excluded for more than one reason, the reason SHALL state the most specific:
 - having been recorded as completing the task outranks having reviewed it without a verdict;
+- having reviewed it without a verdict outranks having recorded evidence for it (F505);
 - having reviewed it without a verdict outranks having merely worked on it.
 
 The broader set of agents that may have authored a task includes whoever holds it and whoever ran

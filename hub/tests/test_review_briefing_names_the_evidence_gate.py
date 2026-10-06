@@ -19,7 +19,11 @@ from hub.db.models import Agent, AIJob, Loop, Run, Task
 from hub.review_turn import ReviewContext, verdict_evidence_sentence
 from hub.scheduler import _compose_loop_briefing
 
-from .test_approval_refuses_unaccepted_evidence import a_task_with_awaiting_evidence, accept
+from .test_approval_refuses_unaccepted_evidence import (
+    a_task_with_awaiting_evidence,
+    accept,
+    reject,
+)
 from .test_task_integration import make_document, make_repo, set_main_branch
 
 PROJECT = "proj-test"
@@ -214,3 +218,43 @@ async def test_nothing_is_said_once_the_evidence_is_decided(app, auth_headers, b
 
     assert GATE not in await _review_briefing(task, "checker")
     assert GATE not in await _review_context(task, "checker", tmp_path)
+
+
+REJECTED_GATE = "has only rejected evidence"
+
+
+@pytest.mark.asyncio
+async def test_a_reviewer_is_told_a_rejected_requirement_refuses_approved(
+    app, auth_headers, builder, tmp_path
+):
+    """F497: a served requirement whose evidence is all rejected refuses `approved` at every
+    rigor; the reviewer is told so, and that `revision_needed` is the verdict that returns it."""
+    task, evidence = await _gated_task(app, auth_headers, builder, tmp_path)
+    await _reviewer("checker", granted=False)
+    await reject(app, auth_headers, evidence)
+
+    for rendered in (
+        await _review_briefing(task, "checker"),
+        await _review_context(task, "checker", tmp_path),
+    ):
+        assert REJECTED_GATE in rendered
+        assert "`FR-1`" in rendered
+        assert "`approved` will be refused" in rendered
+        assert "`revision_needed`" in rendered
+        assert GATE not in rendered, "nothing is waiting: the evidence was decided"
+
+
+@pytest.mark.asyncio
+async def test_the_rejected_refusal_names_the_reviewers_move(app, auth_headers, builder, tmp_path):
+    """F497: the refusal's remedy ("record evidence...") is the author's; a reviewer who meets it
+    is told its own move, as the conflict refusal already does (F504)."""
+    from hub.requirement_gate import REVIEWER_SENDS_BACK_REJECTED
+
+    from .test_approval_refuses_unaccepted_evidence import approve
+
+    task, evidence = await _gated_task(app, auth_headers, builder, tmp_path)
+    await reject(app, auth_headers, evidence)
+
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    assert REVIEWER_SENDS_BACK_REJECTED in refused.text
