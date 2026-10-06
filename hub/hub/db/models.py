@@ -124,6 +124,10 @@ class Project(Base):
     evidence_retention: Mapped[str] = mapped_column(
         String(16), default="never", server_default="never", nullable=False
     )
+    # The project's checks (`approval-runs-the-projects-checks`): an ordered list of
+    # `{"name", "command", "timeout_seconds"}` the Hub runs on the work a task's approval would
+    # merge. Set only by the operator. Null or empty means no checks, and approval is unchanged.
+    checks: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
     # --- Checkpointing ---
     # "off" | "offered" | "automatic".
@@ -858,6 +862,9 @@ class TaskTransition(Base):
     # document now says something else, and nothing records what it said then. Null on a transition
     # that no policy governed.
     policy_digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Why the operator approved over failing checks (`approval-runs-the-projects-checks` D7). Null
+    # on every transition that overrode nothing; only the operator can set it.
+    override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     # No CHECK on `origin`, matching `actor_kind` beside it, which has none either. Two reasons,
@@ -2696,6 +2703,8 @@ class RequirementDrift(Base):
 #: something going wrong.
 INTEGRATION_OUTCOMES = ("merged", "skipped", "failed")
 
+CHECK_RUN_STATES = ("running", "passed", "failed", "error", "interrupted")
+
 #: How the merge was performed. Only one mechanism exists today; the column exists so that a later
 #: mode integrating by a different route is distinguishable in the history rather than conflated
 #: with this one after the fact.
@@ -2745,4 +2754,42 @@ class TaskIntegration(Base):
         ),
         Index("ix_task_integrations_task", "task_id", "created_at"),
         Index("ix_task_integrations_project", "project_id", "created_at"),
+    )
+
+
+class TaskCheckRun(Base):
+    """One run of a project's checks on the work a task's approval would merge.
+
+    A new run is a new row, and a row is written only while it is `running` (its results and
+    final state); after that it never changes, so the history of what was checked, on which main
+    tip, is the audit trail (`approval-runs-the-projects-checks` D3). A row
+    is *current* for the gate when `main_sha` is main's tip now and `target_shas` equals the task's
+    merge targets now; anything else is stale.
+    """
+
+    __tablename__ = "task_check_runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    task_id: Mapped[str] = mapped_column(String(64), ForeignKey("tasks.id"), nullable=False)
+    main_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    # The merge targets, in `merge_targets` order, that were applied on top of `main_sha`.
+    target_shas: Mapped[Any] = mapped_column(JSON, nullable=False)
+    # The unreferenced commit whose tree the checks ran on. Null when it could not be built.
+    merged_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    # One entry per check run so far: `{"name", "exit_code", "duration_seconds", "timed_out",
+    # "output_tail"}`, the tail scrubbed of the Hub's secrets before it is stored.
+    results: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    # Why the run could not run its checks (state `error`), in words an operator can act on.
+    error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('" + "', '".join(CHECK_RUN_STATES) + "')",
+            name="ck_task_check_runs_state",
+        ),
+        Index("ix_task_check_runs_task", "task_id", "started_at"),
     )

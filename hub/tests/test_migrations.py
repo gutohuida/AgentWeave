@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0118"
+HEAD_REVISION = "0119"
 
 
 # ---------------------------------------------------------------------------
@@ -1296,6 +1296,8 @@ def test_task_transitions_lands_on_the_real_startup_path(tmp_path) -> None:
             "job_id",
             # What governed the move, added by 0069. Null except on an approval a gate evaluated.
             "policy_digest",
+            # Why the operator approved over failing checks, added by 0119.
+            "override_reason",
             "created_at",
         }
 
@@ -1739,6 +1741,16 @@ def _upgrade_to(db_url: str, revision: str) -> None:
     cfg.set_main_option("sqlalchemy.url", db_url)
     with patch.object(settings, "database_url", db_url):
         command.upgrade(cfg, revision)
+
+
+def _downgrade_to(db_url: str, revision: str) -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, revision)
 
 
 def test_migration_0063_makes_the_agent_name_unique_per_project(tmp_path) -> None:
@@ -4694,7 +4706,9 @@ def test_migration_adds_runner_provider_config_and_keeps_an_existing_runner(tmp_
     assert "provider_config" in columns
     assert columns["provider_config"][3] == 0, "provider_config must be nullable"
     with sqlite3.connect(db_file) as conn:
-        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0118"
+        assert (
+            conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == HEAD_REVISION
+        )
         row = conn.execute(
             "SELECT cli, model, provider_config FROM runners WHERE id = 'runner-old'"
         ).fetchone()
@@ -4715,3 +4729,57 @@ def test_migration_downgrade_drops_runner_provider_config(tmp_path) -> None:
         command.downgrade(cfg, "0117")
 
     assert "provider_config" not in _runner_columns(db_file)
+
+
+# ---------------------------------------------------------------------------------------------
+# 0119 -- approval runs the project's checks (approval-runs-the-projects-checks): projects.checks,
+# task_check_runs, task_transitions.override_reason. Additive only. Task 1.1.
+# ---------------------------------------------------------------------------------------------
+
+
+def _database_at_0118(tmp_path, name: str) -> tuple:
+    """Every table from the models, minus what 0119 adds, stamped at 0118."""
+    db_file = tmp_path / name
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("DROP TABLE task_check_runs")
+        conn.execute("ALTER TABLE projects DROP COLUMN checks")
+        conn.execute("ALTER TABLE task_transitions DROP COLUMN override_reason")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0118')")
+        conn.commit()
+    return db_file, db_url
+
+
+def test_migration_0119_adds_checks_and_keeps_an_existing_project(tmp_path) -> None:
+    """A project stored before 0119 has no checks (NULL), so approval is unchanged for it."""
+    db_file, db_url = _database_at_0118(tmp_path, "up_checks.db")
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('proj-1', 'p', "
+            "'2026-01-01T00:00:00Z')"
+        )
+        conn.commit()
+
+    _upgrade_to(db_url, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT checks FROM projects WHERE id='proj-1'").fetchone()[0] is None
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "task_check_runs" in tables
+        columns = {r[1]: r for r in conn.execute("PRAGMA table_info(task_transitions)")}
+        assert columns["override_reason"][3] == 0, "override_reason must be nullable"
+
+
+def test_migration_0119_downgrades_cleanly(tmp_path) -> None:
+    db_file, db_url = _database_at_0118(tmp_path, "down_checks.db")
+    _upgrade_to(db_url, "head")
+    _downgrade_to(db_url, "0118")
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "task_check_runs" not in tables
+        assert "checks" not in {r[1] for r in conn.execute("PRAGMA table_info(projects)")}
+        assert "override_reason" not in {
+            r[1] for r in conn.execute("PRAGMA table_info(task_transitions)")
+        }

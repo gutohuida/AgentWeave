@@ -4,8 +4,8 @@
 
 ## 1. Model and migration
 
-- [ ] 1.1 Tests first: migration `0119` upgrades from `0118` and from an early revision, and the head assertions in `test_migrations.py` and `test_project_persistence.py` are bumped.
-- [ ] 1.2 `Project.checks` (JSON, default `[]`), `TaskCheckRun`, and `TaskTransition.override_reason` in `models.py`, plus migration `0119` per `.claude/rules/db-migrations.md`.
+- [x] 1.1 Tests first: migration `0119` upgrades from `0118` and from an early revision, and the head assertions in `test_migrations.py` and `test_project_persistence.py` are bumped.
+- [x] 1.2 `Project.checks` (JSON, nullable: null means none), `TaskCheckRun`, and `TaskTransition.override_reason` in `models.py`, plus migration `0119` per `.claude/rules/db-migrations.md`.
 
 ## 2. Configuring checks
 
