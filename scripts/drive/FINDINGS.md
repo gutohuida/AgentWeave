@@ -34612,3 +34612,61 @@ approval without a reason was refused, with "drive: intentional override" it mer
 `/transitions`; (5) a Hub killed mid-run reads the run `interrupted` after restart. Limits seen: a
 killed Hub leaves the run's scratch worktree (removed by the next run on that task) and its check
 processes (they finish on their own).
+
+## F512 (B) — a test-first task can never pass a whole-suite check: red-by-design work is refused at approval
+
+**Status:** open
+Found 2026-10-06 on the trial Hub `:8010`, F510 trial slice, task 1 (`task-f5698f83dfc3`). Driven, not read.
+Area: **Checks & flows**.
+
+The trial project's checks run the full Hub suite. The slice's task 1 writes the acceptance tests that
+MUST fail until task 2 lands (the spec flow's own "acceptance drive first" shape). Its check run
+(`task_check_runs`, 19:09–19:18Z) was `failed`: ruff 0, black 0, hub-tests 1 with exactly the 4 new tests
+failing, 6887 passed. Approval was refused, and only the operator override
+(`override_checks_reason`) let it land. Every test-first task on a gated project will hit this, and an
+agent following `REVIEWER_SENDS_BACK_CHECKS` sends correct work back -- the only "fix" open to the
+builder is weakening the test.
+
+**Direction (not decided):** a task that another task of the same slice `depends_on` is checked at the
+end of its chain, or the failure is compared against the task's declared red tests; or test-first
+slices put test and fix in one task.
+
+## F513 (C) — `record_evidence` refuses FR-N as ambiguous although the call names the task that fixes the document
+
+**Status:** open
+Found 2026-10-06 on `:8010`, F510 trial slice (`run-6efcf5534b92`). Driven, not read. Area: **Evidence**.
+
+Requirement ids are per-document (`FR-1`...), so any project with two or more documents makes every
+bare identifier ambiguous. The builder's three `record_evidence` calls carried `task_id` (a task
+materialised from exactly one document) and were all refused 422 "FR-1 is declared by more than one
+document in this project. Name the document it belongs to." `_resolve_requirement`
+(`hub/hub/api/v1/agent_actions.py:1180`) resolves from `document` only and never reads `task_id`.
+Recovered on the second try; costs a round of failed calls on every first evidence of every task.
+
+**Direction:** when `document` is absent and `task_id` names a task linked to one document, resolve
+within that document.
+
+## F514 (D) — `ask_user` refuses `multiSelect`; agents trained on Claude Code's own tool send it
+
+**Status:** open
+Found 2026-10-06 on `:8010` (`run-492afbb2e8cc`, aw-reviewer). The first `ask_user` call was refused 422
+"questions.0.multi_select: Field required; questions.0.multiSelect: Extra inputs are not permitted"
+(`hub/hub/schemas/questions.py:35`). Claude Code's built-in AskUserQuestion spells it `multiSelect`.
+The agent recovered on retry. **Direction:** accept `multiSelect` as an alias.
+
+## F515 (B) — approving a document writes its phase into the tracked file, and that write then blocks the document's own task merges
+
+**Status:** open
+Found 2026-10-06 on `:8010`, F510 trial slice. Driven, not read. Area: **Spec documents & integration**.
+
+Approving `spdoc-eeaf6a633f2d` rewrote `spec.html` in the project checkout (`aw-spec-status`
+exploring→approved, and the phase chip) and left it uncommitted. When task 1 was approved, its
+integration (`tint-262b0f3bf2cf`) was `skipped`: "the project's checkout has uncommitted changes to
+tracked files". The only dirty file was the Hub's own write. Committing it by hand and calling
+`POST /tasks/{id}/integrations/retry` merged (`fb651cd`). An operator who commits the draft (as the
+trial practice does) and then approves will hit this on every slice. Also: the approval answers 200 and
+the skip is visible only in `task_integrations`, so a reviewer/operator sees "approved" with nothing
+landed.
+
+**Direction (not decided):** the Hub commits its own phase write, or integration ignores (or commits)
+changes confined to the approved document's own file.
