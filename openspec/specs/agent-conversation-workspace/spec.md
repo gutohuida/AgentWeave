@@ -1817,6 +1817,40 @@ the only one.
 - **THEN** no review checkout is created
 - **AND** the reason states that there is no evidence naming a commit to review
 
+### Requirement: Where evidence does not govern the merge, a review turn reviews the branch tip
+
+Where evidence does not govern a task's merge, the Hub SHALL hand a review turn for that task the
+commit that approving the task would merge, the tip of the task's branch, and SHALL NOT require
+recorded evidence. Where evidence governs the merge, the evidence rule above SHALL hold unchanged.
+Where evidence does not govern and the task has no branch, a review request SHALL be refused with a
+reason saying the task has no branch to review, and SHALL NOT report missing evidence. Every caller
+(the by-hand review trigger, review-turn preparation, the turn scheduler's gate and flow review
+staffing) SHALL resolve the target through one shared resolution (`task_integration.review_target`).
+
+Reconciled by hand from the AgentWeave trial change
+`spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/` (F510).
+
+#### Scenario: A task on a loop that does not need evidence
+
+- **GIVEN** a loop created with `work_needs_evidence=false` and a completed task on it with a
+  committed task branch and no evidence
+- **WHEN** a review is requested for it by an agent other than its author
+- **THEN** the request is accepted
+- **AND** the review checkout is at the task branch's tip, the commit approval would merge
+
+#### Scenario: A task that evidence governs is unchanged
+
+- **GIVEN** a task whose merge evidence governs, with no evidence naming a commit
+- **WHEN** a review is requested
+- **THEN** it is refused with the no-recorded-evidence reason, as before
+
+#### Scenario: No branch to review
+
+- **GIVEN** a task on a `work_needs_evidence=false` loop with no task branch
+- **WHEN** a review is requested
+- **THEN** it is refused with a reason saying the task has no branch to review
+- **AND** the reason does not mention recorded evidence
+
 ### Requirement: A review checkout is bounded and reused
 
 The Hub SHALL place a review checkout at a path it determines, keyed by the reviewing agent, and
