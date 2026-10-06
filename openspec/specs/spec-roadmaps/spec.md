@@ -17,11 +17,31 @@ specifies it, which is written when that slice is next. Slices are accepted only
 Completeness for a roadmap asks for at least one slice, not for requirements. Approving a roadmap
 creates no tasks.
 
+**A slice's done criterion SHALL be the outcome that shows it is finished, written as a sentence, and
+not whether it is finished yet** (F502). Real agents read the field as a status and wrote `false`,
+then `"no"`, and the drafting turn printed "Done when: false". A boolean `done` SHALL be refused at
+validation, naming what the field means; a `done` of fewer than three words SHALL be a completeness
+finding (`slice_done_empty`) naming the slice, so the roadmap cannot be proposed until it states an
+outcome.
+
 #### Scenario: A roadmap with slices is proposable
 
 - **WHEN** a roadmap is moved to proposed, and its payload has non-goals and two slices, each with
   a key, title, intent and done criterion
 - **THEN** the move succeeds, and no finding names missing requirements
+
+#### Scenario: A slice whose done states no outcome is incomplete
+
+- **WHEN** a roadmap is submitted with a slice whose done criterion is `"false"` or `"no"`
+- **THEN** a `slice_done_empty` finding names that slice's done criterion, and the roadmap cannot be
+  proposed
+- **AND** a slice whose done criterion is an outcome sentence draws no such finding
+
+#### Scenario: A boolean done is refused
+
+- **WHEN** a roadmap is submitted with a slice whose done criterion is a boolean
+- **THEN** the submission is refused, saying the field is the outcome that shows the slice is
+  finished and not whether it is finished yet
 
 #### Scenario: A roadmap without slices is incomplete
 
@@ -97,6 +117,12 @@ queue origin is introduced. "The next slice" is the one after the approved slice
 list. Builds-after constrains that order but does not choose it. The turn is queued at most once
 per request, even if a task is later reopened and closed again.
 
+**Under each task the turn SHALL state whether its work merged into the main branch, and each of its
+evidence the operator rejected, with the rejection's reason** (F501). It SHALL say that work which
+did not reach the main branch is not done whatever its status says. A status alone hides both facts:
+the real drafting run read only the statuses, saw `approved` three times, and called work "solid"
+whose evidence the operator had rejected twice and which never reached the main branch.
+
 #### Scenario: Approval waits for the slice's tasks
 
 - **WHEN** the operator approves, asking for the next slice, slice S1 of a roadmap whose slices are
@@ -112,6 +138,13 @@ per request, even if a task is later reopened and closed again.
 - **THEN** one turn is queued from the operator to planner, in the conversation that created the
   document, naming the roadmap, slice S2 with its title, and each task with its final status
 - **AND** planner is scheduled once that transition commits
+
+#### Scenario: The drafting turn says what merged and what was rejected
+
+- **WHEN** the drafting turn is queued for a slice one of whose tasks never merged and had evidence
+  the operator rejected with a reason
+- **THEN** that task's line states that no merge into the main branch is recorded
+- **AND** it names the rejected evidence's requirement with the operator's reason
 
 #### Scenario: The turn is queued once
 

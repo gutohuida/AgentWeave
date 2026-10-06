@@ -1237,7 +1237,7 @@ rather than as an outline alone.
 
 ### Requirement: Repeated delivery failure does not wedge an agent
 
-The system SHALL return a failed run's input to the queue however that run failed, SHALL count how many times a queued input has failed to be delivered, and SHALL stop retrying it before it can block an agent indefinitely, except that a turn the provider's usage allowance refused SHALL NOT be counted as a failed delivery.
+The system SHALL return a failed run's input to the queue however that run failed, SHALL count how many times a queued input has failed to be delivered, and SHALL stop retrying it before it can block an agent indefinitely, except that a turn the provider's usage allowance refused SHALL NOT be counted as a failed delivery, and an input whose turn failed in a way the provider names as one retrying cannot fix SHALL be given up on after that first attempt.
 
 When a run fails before it completes, the input it was carrying returns to the queue so nothing is
 lost. This SHALL hold for every abnormal ending, not only for those where the runtime never started.
@@ -1280,6 +1280,15 @@ refusal SHALL still be recorded on the input, as a count distinct from failed de
 A refusal whose stated reset time is not later than the refusal itself states no wait with an end.
 It SHALL be counted as a failed delivery, so the limits above still bound it, and a provider that
 keeps reporting a reset already past is given up on as any other repeated failure is.
+
+**A failure the provider names as one the same input cannot get past SHALL NOT be retried** (F489).
+Where a Copilot turn fails on a root `session.error` whose `errorType` is `authentication` or
+`quota`, the attempt SHALL be counted and the input given up on at once, with a reason naming that
+failure and stating that the Hub did not retry; the conversation's provider session SHALL be kept,
+because it was not what failed. A refused credential stays refused until the operator changes it,
+and a spent quota until it resets, so each retry would spend a run and an error card to fail the same
+way. An allowance refusal with a reset ahead SHALL still hold the input as above rather than give it
+up. A provider that names no such failure keeps the ordinary retry.
 
 An input the system has given up on SHALL still name the run that was carrying it, so the operator
 can find what happened to their message.
@@ -1362,6 +1371,14 @@ failed attempts.
 - **WHEN** a run fails and the provider's reading says the allowance is refused with a reset time no later than the refusal
 - **THEN** the input records that a delivery attempt failed
 - **AND** repeated such refusals give up the input as any repeated failure does
+
+#### Scenario: An authentication or quota failure is given up on at the first attempt
+
+- **WHEN** a Copilot run fails because its root `session.error` names `authentication` or `quota`,
+  and the provider's reading does not refuse the turn with a reset ahead
+- **THEN** the input is not returned to the queue
+- **AND** the reason recorded names that failure and states that the Hub did not retry
+- **AND** the conversation's provider session is still bound
 
 #### Scenario: Giving up unblocks the agent
 

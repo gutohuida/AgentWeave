@@ -155,6 +155,14 @@ not authority.
 **An agent SHALL NOT accept evidence it produced.** Distinctness is on agent identity, not run
 identity — the same rule, for the same reason, that already governs task approval.
 
+**A run reviewing a task SHALL NOT record evidence for that task** (F500). A reviewer judges the
+evidence the task's author recorded; evidence it records itself is evidence it then approves.
+Measured on a real slice drive: one fresh awaiting row from the reviewer made a rejected
+requirement's evidence no longer all rejected, which lifted the block on it, and the same reviewer
+approved over the operator's rejection. The refusal SHALL carry a code of its own and SHALL tell the
+reviewer to move the task to `revision_needed` saying what is missing. Only a run delivered the
+task for review is refused; a run working the task records evidence as before.
+
 Where a project has granted no agent that capability, acceptance SHALL fall to the operator. That is
 a supported way to work, not a degraded one.
 
@@ -183,6 +191,14 @@ a supported way to work, not a degraded one.
 
 - **WHEN** an agent attempts to accept evidence it produced
 - **THEN** it is refused
+
+#### Scenario: A reviewer cannot record evidence for the task it reviews
+
+- **WHEN** a run that was delivered a task for review records evidence for that task, naming it or
+  not
+- **THEN** the evidence is refused with the code `reviewer_records_evidence`
+- **AND** the refusal names the task and `revision_needed`
+- **AND** a run delivered the same task to work records evidence for it as before
 
 #### Scenario: An ungranted agent cannot accept evidence
 

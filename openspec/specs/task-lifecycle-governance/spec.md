@@ -226,14 +226,20 @@ rule requiring only "a different run" is satisfied by an agent continuing its ow
 nothing — observed in live use on 2026-08-10, when an agent completed a task on one run and
 approved it on the next.
 
-**Where no agent is recorded as completing the task, the system SHALL refuse the transition when the
-requesting agent is recorded as having produced evidence for that task.** An operator completion
-records no agent, and a task written straight into `completed` records nothing at all; in both the
-comparison this rule is built on has nothing to compare, and permitting on that basis let an agent
-approve work it had itself recorded as its own — measured on a live Hub on 2026-09-09, where an
+**The system SHALL also refuse the transition when the requesting agent is recorded as having
+produced evidence for that task, whether or not an agent is recorded as completing it.** An operator
+completion records no agent, and a task written straight into `completed` records nothing at all; in
+both the comparison this rule is built on has nothing to compare, and permitting on that basis let an
+agent approve work it had itself recorded as its own — measured on a live Hub on 2026-09-09, where an
 agent recorded implementation evidence for a task, the operator marked the task finished, and the
 same agent's approval was accepted with nothing refusing it and nothing recording that it had
 happened.
+
+Where a different agent completed the task, the evidence author is still refused (F505, the
+operator's decision of 2026-10-06). An agent that resolved a task's conflict in a work run and
+recorded evidence for it is a co-author, and approving its own resolution is a self-approval. The
+refusal SHALL name the evidence as its reason and, where an agent is recorded as completing the
+task, SHALL name that agent as the completer rather than the requester.
 
 This does not weaken the permission that an unattributable move receives. Refusing every move the
 system cannot attribute would stop legitimate work over a missing history row; this refuses on the
@@ -325,6 +331,14 @@ history states that an operator did so.
   `revision_needed` on it
 - **THEN** the request is refused on the same grounds as its refused approval
 
+#### Scenario: An evidence author is refused where another agent completed the task
+
+- **WHEN** agent A completed a task, agent B recorded evidence for it, and B requests `approved`,
+  `rejected` or `revision_needed`
+- **THEN** the request is refused with a typed error naming the evidence as the reason
+- **AND** the refusal names A as the agent that completed the task
+- **AND** the task remains in its pre-request status
+
 ### Requirement: A task entering review must not still name its author as its holder
 
 The system SHALL refuse a transition to `under_review` when the task's assignee is the **agent**
@@ -371,8 +385,11 @@ same operation**, and SHALL NOT state that the task is assigned to that agent. A
 reviewer before it transitions. A refused dispatch then discards that write, so a sentence saying
 the task *is assigned to* the agent describes an assignment nobody can see.
 
-**Where no completer is recorded, the system SHALL refuse the transition when the assignee is
-recorded as having produced evidence for that task, and SHALL permit it otherwise.** The
+**The system SHALL refuse the transition when the assignee is recorded as having produced evidence
+for that task, whether or not a completer is recorded (F505), and where no completer is recorded
+SHALL permit it otherwise.** Where an agent is recorded as completing the task, an evidence author
+holding it is refused for the reason its verdict is: author/reviewer separation refuses that verdict
+whoever completed the task, so the entry would strand the task exactly as below. The
 unattributable case was previously permitted outright, on the asymmetry the offer rule uses — refuse
 to *offer* finished work whose author cannot be ruled out, but permit an actor to *act* on it. That
 asymmetry is sound only while acting remains possible. Once author/reviewer separation refuses an
@@ -474,6 +491,13 @@ reviewer and sending the task to review is accepted rather than refused on the a
 - **AND** the refusal does not state that any agent completed the task
 - **AND** the task remains in its pre-request status
 
+#### Scenario: A task another agent completed is refused when its holder recorded evidence
+
+- **WHEN** a task completed by agent A is moved to `under_review` while assigned to agent B, which
+  recorded evidence for it
+- **THEN** the request is refused with a typed error naming the evidence as the reason
+- **AND** the task remains in its pre-request status
+
 #### Scenario: The reviewer a flow staffs still enters review
 
 - **WHEN** a flow staffs a reviewer for an operator-completed task and assigns the task to it before
@@ -497,7 +521,13 @@ which is the false statement this requirement exists to prevent, reached one cas
 live: an operator who moved a stuck task to `under_review` by hand, following the only route the
 lifecycle offers them, produced exactly that.
 
-**This determination SHALL be drawn from the task's recorded transitions alone, and SHALL NOT
+**In either case an assignee that recorded evidence for the task SHALL also count as having produced
+the work** (F505). Author/reviewer separation refuses that agent's verdict whoever completed the
+task, so an evidence author holding the review cannot finish it, and reporting it as the reviewer
+holding the task strands the task. Evidence is the one record of authorship that reviewing does not
+create, so counting it does not catch a reviewer legitimately staffed onto the task.
+
+**This determination SHALL be drawn from the task's recorded transitions and its evidence alone, and SHALL NOT
 include the agent the task is assigned to or the agents whose runs were bound to it**, and that is
 the one place it differs from the determination used to exclude an agent from reviewing. The
 question here is whether the assignee is one of the agents that produced the work; an assignee
@@ -530,6 +560,14 @@ in review, and only who holds it was wrong.
 
 - **WHEN** a reviewer is resolved for such a task
 - **THEN** the agent that completed the work is not among the candidates
+- **AND** no agent that recorded evidence for the task is among them
+
+#### Scenario: A task in review held by an evidence author is recognised although another agent completed it
+
+- **WHEN** a task completed by agent A is in `under_review` assigned to agent B, which recorded
+  evidence for it, and no turn is running or queued on the task
+- **THEN** it is not reported as held by a reviewer
+- **AND** a reviewer is resolved for it through the ordinary ladder
 
 #### Scenario: An operator-completed task held by its worker is recognised
 
@@ -1020,8 +1058,19 @@ determine whether the commit is on that branch, it SHALL say nothing rather than
 This refusal SHALL apply regardless of rigor. It is not an assertion about whether the work is
 verified; it is an assertion that the work cannot go where approval says it goes.
 
+**The refusal SHALL end by telling a reviewer that resolving the conflict is the author's work, and
+that a reviewer moves the task to `revision_needed` with notes naming the conflict** (F504). Measured
+live: two reviewers in a row met this refusal, retried, and ended with the task still under review,
+so its author was never briefed to resolve anything.
+
 The check SHALL live inside the single transition service, and SHALL NOT introduce a second
 enforcement point.
+
+#### Scenario: The refusal tells a reviewer to send the task back
+
+- **WHEN** a reviewer's approval is refused because the work would not merge cleanly
+- **THEN** the refusal's last sentence tells it to move the task to `revision_needed` with notes
+  naming the conflict, rather than resolve the conflict itself
 
 #### Scenario: A conflicting branch refuses approval
 
@@ -1950,12 +1999,12 @@ reviewed takes that work from whoever holds it while moving it nowhere. The refu
 status the task is actually in.
 
 **A review SHALL be refused where the named reviewer is recorded as having produced evidence for
-the named task and no agent is recorded as completing it.** Such a reviewer's verdict is refused by
-the rule separating author from reviewer, so dispatching it pays for a turn whose conclusion has
-nowhere to go — and leaves the task held by an agent that no transition on it names, which this
-capability specifies SHALL be reported as a review genuinely in progress and SHALL NOT be restaffed.
-The refusal SHALL name the evidence as its reason and SHALL NOT state that any agent completed the
-task. This refusal SHALL be the same rule as the one that refuses the verdict, and SHALL NOT be a
+the named task, whether or not an agent is recorded as completing it (F505).** Such a reviewer's
+verdict is refused by the rule separating author from reviewer, so dispatching it pays for a turn
+whose conclusion has nowhere to go — and, where no agent completed the task, leaves it held by an
+agent that no transition on it names, which this capability specifies SHALL be reported as a review
+genuinely in progress and SHALL NOT be restaffed. The refusal SHALL name the evidence as its reason
+and SHALL NOT state that any agent completed the task. This refusal SHALL be the same rule as the one that refuses the verdict, and SHALL NOT be a
 second statement of it that can drift.
 
 A review SHALL be refused where the named task is already under review and held by a different
@@ -2026,6 +2075,13 @@ that never ran.
 - **AND** the refusal does not state that any agent completed the task
 - **AND** the task's status and holder are unchanged
 - **AND** no reviewing turn has been started and no checkout has been created
+
+#### Scenario: A reviewer that recorded evidence is refused although another agent completed the task
+
+- **WHEN** the operator dispatches a review of a task agent A completed, naming agent B, which
+  recorded evidence for that task
+- **THEN** the request is refused, naming the evidence as the reason
+- **AND** no reviewing turn has been started
 
 #### Scenario: A reviewer that recorded nothing for the task is still dispatched by hand
 
@@ -2358,7 +2414,7 @@ It SHALL likewise be independent of whether the project's work could be integrat
 
 ### Requirement: Approval is refused while evidence that would merge sits unaccepted
 
-The system SHALL refuse the transition into `approved` where the task has evidence awaiting review that names a commit and no accepted evidence naming a commit.
+The system SHALL refuse the transition into `approved` where the task has evidence awaiting review that names a commit and approval would merge no commit that is not already in the main branch.
 
 Approval is what places work in the product. Where a commit has been produced and recorded but never
 judged, approving records that the work is good and merges nothing, and the account of what happened
@@ -2404,6 +2460,14 @@ evidence recorded by another one — and would be, since that evidence's commit 
 task's approval merges. Naming only the requirement and the commit would show the reader a fact with
 no route back to its cause. Where the recording task is not the task being approved, the refusal
 SHALL say so.
+
+**Something approval would merge SHALL lift the refusal only where it is not already in the main
+branch** (F499). The refusal yields to work that is genuinely ready — accepted evidence naming a
+commit, or the task's own branch tip where that governs its merge — and the waiting evidence is then
+reported on the approval instead. But a shared requirement reaches another task's accepted commit,
+and once that task's approval has merged it, counting it here let this approval merge nothing while
+this task's own work waited unjudged. Where the repository cannot say whether a commit is in the
+main branch, it SHALL count as not already there, so an unknown does not refuse.
 
 **The refusal SHALL name both remedies: accepting the evidence, and granting an agent the capability
 to accept it.** Accepting evidence is the operator's unless an agent has been granted it, and no
@@ -2490,6 +2554,14 @@ enforcement point.
 - **THEN** the approval succeeds
 - **AND** the accepted work is merged
 - **AND** the evidence still awaiting review is reported on the approval
+
+#### Scenario: Another task's already-merged commit does not stand in for this task's work
+
+- **WHEN** approval is requested for a task whose own evidence naming a commit is awaiting review,
+  and the only accepted commit its approval would merge was recorded by another task serving the
+  same requirement and is already in the main branch
+- **THEN** the transition is refused, naming the waiting evidence
+- **AND** nothing is merged
 
 ### Requirement: Accepting evidence attempts the integrations that wanted it
 

@@ -73,6 +73,10 @@ MUST NOT write a partial document.
 Every payload SHALL declare a schema version. The Hub MUST preserve fields it does not recognise
 across a read and re-write of the same document, and MUST re-emit them unchanged.
 
+Preserving a field is not reading it. An unknown field on a requirement, acceptance criterion, task
+or slice is kept and raises no validation error, but it is reported as a completeness finding that
+blocks a proposal (F502, *Document validity is checked by the Hub*).
+
 The contract MUST NOT be declared final while gate and traceability behaviour has not stated its
 requirements on it.
 
@@ -207,6 +211,28 @@ refused on another makes a round trip the answer could have spared it.
 
 A move the phase map forbids, or one the caller may not make, SHALL be refused as such and not
 reported as incompleteness.
+
+**A field a requirement, acceptance criterion, task or slice does not define SHALL be reported as a
+finding (`unknown_field`) naming the field and saying nothing reads it, and, for a misplacement
+authors actually make, where it belongs** (F502). The payload keeps unknown fields so a rewrite
+loses nothing, so a field written in the wrong place is stored and never read: a real agent nested
+its criteria under each requirement and was then told there were none. A later schema version is
+refused at validation, so anything unknown here was written for this one.
+
+**The answer to a submission SHALL state whether the document is ready to propose, false while any
+finding blocks** (F502). A real agent read a successful save beside eight blocking findings as
+"ready" and told the operator so; a saved document is not a ready one.
+
+#### Scenario: A field written where nothing reads it is named
+
+- **WHEN** a document is submitted whose requirement carries its own `acceptance_criteria`
+- **THEN** an `unknown_field` finding names that field on that requirement
+- **AND** it says acceptance criteria go in the top-level list, each naming the requirement's key
+
+#### Scenario: A submission says whether it is ready to propose
+
+- **WHEN** an agent submits a document that is saved with blocking findings
+- **THEN** the answer reports it as not ready to propose
 
 #### Scenario: An orphan requirement blocks the transition
 
