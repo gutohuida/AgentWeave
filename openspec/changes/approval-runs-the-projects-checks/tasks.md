@@ -9,8 +9,8 @@
 
 ## 2. Configuring checks
 
-- [ ] 2.1 Tests first: the operator saves and reads checks; duplicate names, empty commands and timeouts out of range are refused naming the field; every agent route that touches project settings refuses to change checks.
-- [ ] 2.2 `ProjectSettings` gains `checks`, validated (`api/v1/projects.py`).
+- [x] 2.1 Tests first: the operator saves and reads checks; duplicate names, empty commands and timeouts out of range are refused naming the field; every agent route that touches project settings refuses to change checks.
+- [x] 2.2 `ProjectSettings` gains `checks`, validated (`api/v1/projects.py`).
 
 ## 3. Building and running a check run
 

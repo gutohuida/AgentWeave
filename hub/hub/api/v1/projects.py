@@ -73,6 +73,24 @@ class ProjectRelocateRequest(RequestModel):
     path: str = Field(min_length=1, max_length=4096)
 
 
+class ProjectCheck(BaseModel):
+    """One of a project's checks (`approval-runs-the-projects-checks`): a shell command the Hub runs
+    on the work a task's approval would merge. The operator's, and only the operator's."""
+
+    name: str = Field(min_length=1, max_length=64)
+    command: str = Field(min_length=1, max_length=2000)
+    timeout_seconds: int = Field(default=900, ge=10, le=3600)
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("name", "command")
+    @classmethod
+    def not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be blank")
+        return value.strip()
+
+
 class ProjectSettings(BaseModel):
     name: str = Field(min_length=1, max_length=256)
     hop_budget: int = Field(ge=1, le=1000)
@@ -111,7 +129,21 @@ class ProjectSettings(BaseModel):
     # a detected branch is offered as a suggestion and takes effect only once it is submitted here.
     main_branch: Optional[str] = Field(default=None, max_length=255)
 
+    # --- Checks ---
+    # Run on main plus a task's would-merge commit when the task completes; approval reads the
+    # result. Null means no checks, and approval is unchanged.
+    checks: Optional[List[ProjectCheck]] = Field(default=None, max_length=20)
+
     model_config = {"extra": "forbid"}
+
+    @field_validator("checks")
+    @classmethod
+    def unique_check_names(cls, value: Optional[List[ProjectCheck]]):
+        if value:
+            names = [check.name for check in value]
+            if len(set(names)) != len(names):
+                raise ValueError("check names must be unique within a project")
+        return value
 
     @field_validator("name")
     @classmethod
