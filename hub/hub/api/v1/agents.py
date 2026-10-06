@@ -1728,7 +1728,10 @@ SPEC_PHASE_DUTIES = {
         "- **Size it as a slice.** A request larger than one demonstrable outcome is written as a "
         "`roadmap` plus the first slice's change document, not one large document. A slice is "
         "about a dozen requirements or fewer, as a few tasks; later slices are recorded in the "
-        "roadmap, not specified, and each is drafted once the one before it is approved."
+        "roadmap, not specified, and each is drafted once the one before it is approved.\n"
+        "- **Order the tasks.** A task may name sibling task keys in `depends_on`. Tasks expected "
+        "to edit the same file are chained with `depends_on`, so same-file tasks are built in "
+        "order rather than in parallel."
     ),
     "proposed": (
         "- This document is proposed and awaiting the operator's decision. Do not implement it, "
