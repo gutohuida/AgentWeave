@@ -930,7 +930,12 @@ async def test_a_submission_warns_of_unordered_overlap_without_blocking_it(
     """The warning rides the submit response; `ready_to_propose` is decided by `blocking` alone."""
     path = await _agent_create(app, planner, title="Slice one")
     tasks = [
-        {"key": key, "description": "Build it", "requirements": ["alpha"], "files": ["hub/hub/x.py"]}
+        {
+            "key": key,
+            "description": "Build it",
+            "requirements": ["alpha"],
+            "files": ["hub/hub/x.py"],
+        }
         for key in ("t1", "t2")
     ]
     saved = await _agent_submit(app, planner, path, _slice_doc(roadmap=None, tasks=tasks))
