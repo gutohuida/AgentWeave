@@ -2045,3 +2045,17 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-10-06 (home) — a flow with no declared reviewer staffs ANY free agent in the roster** (rung 2), stale
   drive agents on stub runners included (F508). Before a real trial flow, archive leftovers (a queued entry
   blocks archiving: `DELETE /projects/<p>/queue/entries/<id>`) or have the planner set `reviewer` per task.
+- **2026-10-06 (home) — Git Bash rewrites a leading-slash argument into a Windows path**: `py aw.py POST /jobs`
+  sent `/api/v1/projects/<p>C:/Program Files/Git/jobs`. Prefix the command with `MSYS_NO_PATHCONV=1`.
+- **2026-10-06 (home) — the night arm (`AgentWeaveArmNight`, 22:55) checks out `autonomous/<date>-daily` IN the
+  repo root.** From then until the cycle merges, the trial Hub's merges into master skip ("checkout is on ...")
+  and any interactive edit in the root lands in the night's tree. Do interactive work in a separate worktree
+  (`git worktree add -b <branch> C:/Users/huida/Documents/<short> <sha>`, short path for "Filename too long").
+- **2026-10-06 (home) — `cd` into an agent's `.agentweave/tasks/<task>` worktree moves the session's primary
+  directory there.** Use `git -C <path>` / absolute paths to read another worktree; never `cd`.
+- **2026-10-06 (home) — evidence an agent records mid-turn names the pre-snapshot commit at record time, and the
+  Hub restamps it onto the turn's snapshot when the turn ends** (`evidence_footprints.commit_sha`). An agent
+  that reports "my evidence is pinned to the older commit" is reading the record-time value; check the
+  footprint row before believing it.
+- **2026-10-06 (home) — `ruff check ... && pytest ...` in one background command**: a lint failure silently
+  skips the suite and the notification still says "completed (exit 0)" from the tail. Run them separately.
