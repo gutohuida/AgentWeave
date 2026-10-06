@@ -22,9 +22,13 @@ from hub.db.models import (
     SpecRequirement,
     Task,
 )
+from hub.inbound_queue import new_entry
 from hub.review_turn import ReviewTurnRefused, prepare_review_turn
+from hub.scheduler import decide_firing
+from hub.turn_scheduler import other_input_would_have_run_elsewhere
 
 from .test_a_flow_names_what_it_cannot_staff import _roster
+from .test_a_loop_does_not_staff_its_own_review import _completed_by
 from .test_task_integration import commit_on_branch, git, make_repo, set_main_branch
 
 pytestmark = pytest.mark.asyncio
@@ -79,7 +83,7 @@ async def _loop(*, work_needs_evidence, document=False, suffix="a"):
     return f"loop-f510-{suffix}"
 
 
-async def _task(task_id, *, loop_id):
+async def _task(task_id, *, loop_id, status="completed"):
     async with async_session_factory() as db:
         db.add(
             Task(
@@ -87,7 +91,7 @@ async def _task(task_id, *, loop_id):
                 project_id="proj-test",
                 loop_id=loop_id,
                 title=f"t {task_id}",
-                status="completed",
+                status=status,
                 assignee=WORKER,
             )
         )
@@ -294,3 +298,71 @@ async def test_never_committed(
         await _prepare(repo, task_id)
     assert "no branch" in str(refused.value)
     assert NO_EVIDENCE_WORDS not in str(refused.value)
+
+
+async def test_flow_staffing_gate_reads_the_branch_tip(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """`decide_firing`'s "is there a commit to review" gate shares the resolver: a task whose merge
+    is not governed by evidence is selected for review on its branch tip, not reported unstaffed
+    for missing evidence."""
+    repo = await _repo(tmp_path, bind_project_workspace, monkeypatch)
+    await _roster(app, auth_headers, bind_runner, WORKER, REVIEWER)
+    loop_id = await _loop(work_needs_evidence=False, document=True, suffix="gate")
+    task_id = await _task("task-f510000000a8", loop_id=loop_id, status="pending")
+    _branch_work(repo, task_id)
+    async with async_session_factory() as db:
+        await _completed_by(db, await db.get(Task, task_id), agent=WORKER)
+
+    async with async_session_factory() as db:
+        decision = await decide_firing(db, await db.get(Loop, loop_id), default_agent=WORKER)
+
+    assert not decision.unstaffed
+    assert [(s.task.id, s.agent, s.is_review) for s in decision.selections] == [
+        (task_id, REVIEWER, True)
+    ]
+
+
+async def test_queued_review_counts_where_the_branch_tip_resolves(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """`other_input_would_have_run_elsewhere` asks the same resolver whether a queued review could
+    have started: an evidence-free task with a branch can, one with no branch cannot."""
+    from hub.db.models import Conversation
+
+    repo = await _repo(tmp_path, bind_project_workspace, monkeypatch)
+    loop_id = await _loop(work_needs_evidence=False)
+    with_branch = await _task("task-f510000000a9", loop_id=loop_id)
+    without_branch = await _task("task-f510000000b0", loop_id=loop_id)
+    _branch_work(repo, with_branch)
+
+    async def _asks(task_id, conversation_id):
+        async with async_session_factory() as db:
+            db.add(
+                Conversation(
+                    id=conversation_id, project_id="proj-test", agent=REVIEWER, lifecycle="open"
+                )
+            )
+            entry = new_entry(
+                project_id="proj-test",
+                agent=REVIEWER,
+                origin_type="operator",
+                content="review",
+                hop_depth=0,
+                conversation_id=conversation_id,
+                review_task_id=task_id,
+            )
+            db.add(entry)
+            await db.commit()
+            return await other_input_would_have_run_elsewhere(
+                db,
+                project_id="proj-test",
+                agent=REVIEWER,
+                entries=[entry],
+                selected=[],
+                controlling_conversation_id="conv-f510-controlling",
+                hop_budget=6,
+            )
+
+    assert await _asks(with_branch, "conv-f510-a") is True
+    assert await _asks(without_branch, "conv-f510-b") is False
