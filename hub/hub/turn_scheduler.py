@@ -11,7 +11,6 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
-from . import requirement_evidence
 from .conversations import get_conversation_by_id
 from .db.engine import async_session_factory
 from .db.models import Conversation, InboundQueueEntry, Run, Task
@@ -196,7 +195,9 @@ async def other_input_would_have_run_elsewhere(
             # Design D3b: a review whose task carries no evidence naming a commit is refused by
             # `prepare_review_turn` before it reaches a checkout, so counting on its behalf would
             # destroy the head of the queue for a turn that was never going to happen.
-            target = await requirement_evidence.commit_for_task_review(db, review_task_id)
+            from . import task_integration
+
+            target = await task_integration.review_target(db, tasks[review_task_id])
             if target.resolved:
                 return True
             continue

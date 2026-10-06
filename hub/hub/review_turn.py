@@ -378,7 +378,9 @@ async def prepare_review_turn(
     if task is None or task.project_id != project_id:
         raise ReviewTurnRefused(f"task {task_id} is not a task in this project")
 
-    target = await requirement_evidence.commit_for_task_review(session, task_id)
+    from . import task_integration
+
+    target = await task_integration.review_target(session, task, repo_root)
     if not target.resolved:
         raise ReviewTurnRefused(target.refusal or f"task {task_id} has no commit to review")
 

@@ -53,7 +53,7 @@ REVIEWER = "f161-reviewer"
 NOW = datetime.now(timezone.utc)
 
 
-async def _queue(db, *, suffix, declares_document=False):
+async def _queue(db, *, suffix, declares_document=False, work_needs_evidence=True):
     """A job and its loop. `declares_document` is the whole distinction under test.
 
     A flow is a loop that declares a specification document (`agent-flows:13`), and after this
@@ -89,6 +89,9 @@ async def _queue(db, *, suffix, declares_document=False):
         project_id="proj-test",
         job_id=job.id,
         purpose=f"f161 {suffix}",
+        # F510: where evidence does not govern, a review targets the branch tip. The tests that
+        # record evidence as their review target declare that it governs.
+        work_needs_evidence=work_needs_evidence,
         spec_document_id=f"doc-f161-{suffix}" if declares_document else None,
     )
     db.add(loop)

@@ -2073,7 +2073,9 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         # `unstaffed`, so the walk continues and the operator is told (D4's "surface the step, not
         # stop the flow", and F64's "say why, not merely that"). The remedy is the author's, and
         # the sentence has to name it: nothing here can conjure a commit.
-        review_target = await requirement_evidence.commit_for_task_review(session, task.id)
+        from . import task_integration
+
+        review_target = await task_integration.review_target(session, task)
         if not review_target.resolved:
             unstaffed.append(
                 (
