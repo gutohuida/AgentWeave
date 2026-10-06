@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A review turn reviews the branch tip where evidence does not govern the merge</title>
+<meta name="aw-spec-kind" content="change-spec">
+<meta name="aw-spec-status" content="exploring">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>A review turn reviews the branch tip where evidence does not govern the merge</h1>
+<p class="aw-meta"><span class="aw-chip">change-spec</span><span class="aw-chip aw-chip-phase-quiet">exploring</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">3</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">3</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">6</span> criteria<span class="aw-summary-sep">·</span><span class="aw-count">2</span> tasks</p>
+<section id="summary"><h2>Summary</h2><p>Fix for finding F510. A task whose approval merges its branch tip (evidence does not govern) can today never be given a review turn, because a review is only handed a commit through evidence. Make the review turn review that same branch tip.</p></section><section id="problem"><h2>Problem</h2><p>A loop created with work_needs_evidence=false merges its task&#x27;s branch tip at approval (task_integration.evidence_governs is false), so its tasks need no evidence and usually have none: evidence is recorded against a requirement and such a task serves none. But requirement_evidence.commit_for_task_review (requirement_evidence.py:985) finds a commit only through evidence rows, so POST /agent/trigger with review_task_id answers 409 &quot;task ... has no recorded evidence, so there is no commit to review&quot; (agent_trigger.py:1835), for every task of that loop, forever. prepare_review_turn (review_turn.py:321) and the turn scheduler&#x27;s head-of-queue gate (turn_scheduler.py:199) ask the same function and refuse the same way. Found by driving the acceptance drive of approval-runs-the-projects-checks on 2026-10-06; the drive worked around it with a turn bound to the task. The commit approval would merge and the commit a reviewer is shown are two different answers to one question, and for these tasks the second does not exist.</p></section><section id="scope"><h2>Scope</h2><h3>Non-goals</h3><ul><li>Making the scheduler staff reviews for documentless loops (F161 stands: a one-agent loop has no second party)</li><li>Changing which tasks evidence governs (evidence_governs is unchanged)</li><li>Any change to the rule for evidence-governed tasks</li><li>Letting a loop&#x27;s author review its own work (the author-exclusion guards stay)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 3</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where evidence does not govern a task&#x27;s merge, a review turn for that task SHALL be handed the commit that approving the task would merge, the tip of the task&#x27;s branch, and SHALL NOT require recorded evidence.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Approval and review must be about the same commit; requiring evidence that such a task structurally never has makes review impossible while approval is allowed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 3</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where evidence governs a task&#x27;s merge, a review turn SHALL still be handed the commit named by the task&#x27;s most recent evidence, and a task with no evidence naming a commit SHALL still be refused with the existing sentence.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The fix must not weaken the review gate for tasks on the evidence chain.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 3</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where evidence does not govern a task&#x27;s merge and the task has no branch, a review turn request SHALL be refused with a message saying the task has no branch to review, and SHALL NOT report missing evidence.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The operator can act on a missing branch, not on a missing evidence row that was never going to exist.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a loop created with work_needs_evidence=false, a completed task on it with a committed task branch and no evidence rows, and an agent other than the task&#x27;s author</td><td>POST /agent/trigger is called with that agent and review_task_id set to the task</td><td>the response is not 409, the entry is queued, and the review turn is handed the commit equal to the task branch tip, the same sha task_integration.merge_targets returns for the task</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>the same evidence-free task</td><td>prepare_review_turn runs for it</td><td>the review context&#x27;s commit_sha equals the branch tip and the provisioned checkout is at that commit</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a documentless loop with undeclared work_needs_evidence and a task with no requirement link, so evidence_governs is false by its last arm</td><td>a review is requested</td><td>the branch tip is the target, identical to the declared-false case</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a task with no loop and evidence naming commit C</td><td>a review is requested</td><td>the review target is C, and with no evidence the request is refused 409 with today&#x27;s no-recorded-evidence sentence</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a task on a flow whose document makes evidence govern, with no evidence</td><td>its review is requested</td><td>it is refused exactly as today</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a work_needs_evidence=false loop task with no task branch</td><td>a review is requested</td><td>409 whose detail says the task has no branch to review and does not contain &#x27;no recorded evidence&#x27;</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>Operator-decided direction: where evidence does not govern the merge, the review turn reviews the task&#x27;s branch tip, the same commit approval would merge (task_integration.merge_targets, which already returns exactly one branch-tip Target in that case and an empty list when the task has no branch).</p><p>Decision records:
+- D1 One source of truth. The review target for an evidence-ungoverned task is derived from task_integration.evidence_governs plus task_branch_tip, not from a second reimplementation, so the commit reviewed and the commit merged cannot diverge.
+- D2 Evidence-governed tasks are untouched: commit_for_task_review keeps today&#x27;s rule (most recent evidence naming a commit wins, earlier commits reported).
+- D3 commit_for_task_review takes only a session today and branch-tip resolution needs a repository root (git rev-parse). The builder chooses how to supply the root; the three consumers (POST /agent/trigger precheck, prepare_review_turn, turn_scheduler&#x27;s gate) and the flow review staffing at scheduler.py:2076 must all agree, so they share one resolution rather than each learning about branch tips separately.
+- D4 A branch-tip target carries no evidence row: ReviewContext.evidence_id is already tolerated as empty (review_turn.py:358).
+- D5 Loops stay unstaffed by the scheduler. test_a_loop_does_not_staff_its_own_review.py (F161) removed the review arm for documentless loops because a loop has one agent and no second party; that stays. This change makes the operator&#x27;s by-hand dispatch (POST /agent/trigger with review_task_id) work for these tasks; it does not make the scheduler staff reviews for loops. Flows cannot set work_needs_evidence (create_flow refuses it), so flow review staffing keeps today&#x27;s behaviour except where evidence_governs is false, in which case it uses the same shared resolution.
+- D6 The refusal for a branch-tip task with no branch stays a refusal and says so in its own words, mirroring NO_TASK_BRANCH, not the evidence sentence.
+Reviewer for the build: aw-reviewer.
+Acceptance seam: a real git repo with a task branch, a loop with work_needs_evidence=false and a task with no evidence; POST /agent/trigger review_task_id must be accepted and the review checkout must be at the branch tip.</p></section><section id="lifecycle"><h2>Lifecycle</h2><p>Acceptance test written first and failing (409 today), then the build, then a drive. No migrations, no Hub-restart hazard.</p></section><section id="tasks"><h2>Tasks</h2><ul class="aw-task-list"><li class="aw-task"><strong>Write the failing acceptance test for F510</strong> — Test that fails today with 409: a work_needs_evidence=false loop task with a branch tip and no evidence, POST /agent/trigger review_task_id is accepted and the review context carries the branch-tip sha; plus the evidence-governed and no-branch scenarios. Use a real git repo.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-2">FR-2</a><a class="aw-chip-ref" href="#FR-3">FR-3</a></span></li><li class="aw-task"><strong>Resolve the review target from the merge source</strong> — Where task_integration.evidence_governs is false, resolve the review target from the task branch tip (the commit merge_targets returns) in the one shared resolution used by POST /agent/trigger&#x27;s precheck, prepare_review_turn, the turn scheduler&#x27;s gate and flow review staffing. Keep the evidence path unchanged and add the no-branch refusal.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-2">FR-2</a><a class="aw-chip-ref" href="#FR-3">FR-3</a></span></li></ul></section><section id="delivery"><h2>Delivery</h2><p>No flow. The tasks go on the board and are started by hand.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "change-spec",
+  "title": "A review turn reviews the branch tip where evidence does not govern the merge",
+  "summary": "Fix for finding F510. A task whose approval merges its branch tip (evidence does not govern) can today never be given a review turn, because a review is only handed a commit through evidence. Make the review turn review that same branch tip.",
+  "problem": "A loop created with work_needs_evidence=false merges its task's branch tip at approval (task_integration.evidence_governs is false), so its tasks need no evidence and usually have none: evidence is recorded against a requirement and such a task serves none. But requirement_evidence.commit_for_task_review (requirement_evidence.py:985) finds a commit only through evidence rows, so POST /agent/trigger with review_task_id answers 409 \"task ... has no recorded evidence, so there is no commit to review\" (agent_trigger.py:1835), for every task of that loop, forever. prepare_review_turn (review_turn.py:321) and the turn scheduler's head-of-queue gate (turn_scheduler.py:199) ask the same function and refuse the same way. Found by driving the acceptance drive of approval-runs-the-projects-checks on 2026-10-06; the drive worked around it with a turn bound to the task. The commit approval would merge and the commit a reviewer is shown are two different answers to one question, and for these tasks the second does not exist.",
+  "scope": {
+    "in_scope": [],
+    "non_goals": [
+      "Making the scheduler staff reviews for documentless loops (F161 stands: a one-agent loop has no second party)",
+      "Changing which tasks evidence governs (evidence_governs is unchanged)",
+      "Any change to the rule for evidence-governed tasks",
+      "Letting a loop's author review its own work (the author-exclusion guards stay)"
+    ],
+    "goals": [
+      "The review target for a task whose approval merges its branch tip",
+      "POST /agent/trigger review_task_id precheck, prepare_review_turn, turn_scheduler head-of-queue gate, and flow review staffing agreeing on one answer"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "review-target-is-the-merge-tip",
+      "statement": "Where evidence does not govern a task's merge, a review turn for that task SHALL be handed the commit that approving the task would merge, the tip of the task's branch, and SHALL NOT require recorded evidence.",
+      "modal": "SHALL",
+      "rationale": "Approval and review must be about the same commit; requiring evidence that such a task structurally never has makes review impossible while approval is allowed.",
+      "party": null
+    },
+    {
+      "key": "evidence-governed-review-unchanged",
+      "statement": "Where evidence governs a task's merge, a review turn SHALL still be handed the commit named by the task's most recent evidence, and a task with no evidence naming a commit SHALL still be refused with the existing sentence.",
+      "modal": "SHALL",
+      "rationale": "The fix must not weaken the review gate for tasks on the evidence chain.",
+      "party": null
+    },
+    {
+      "key": "no-branch-is-an-honest-refusal",
+      "statement": "Where evidence does not govern a task's merge and the task has no branch, a review turn request SHALL be refused with a message saying the task has no branch to review, and SHALL NOT report missing evidence.",
+      "modal": "SHALL",
+      "rationale": "The operator can act on a missing branch, not on a missing evidence row that was never going to exist.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "dispatch-evidence-free-loop-task",
+      "requirement": "review-target-is-the-merge-tip",
+      "given": "a loop created with work_needs_evidence=false, a completed task on it with a committed task branch and no evidence rows, and an agent other than the task's author",
+      "when": "POST /agent/trigger is called with that agent and review_task_id set to the task",
+      "then": "the response is not 409, the entry is queued, and the review turn is handed the commit equal to the task branch tip, the same sha task_integration.merge_targets returns for the task"
+    },
+    {
+      "key": "checkout-at-branch-tip",
+      "requirement": "review-target-is-the-merge-tip",
+      "given": "the same evidence-free task",
+      "when": "prepare_review_turn runs for it",
+      "then": "the review context's commit_sha equals the branch tip and the provisioned checkout is at that commit"
+    },
+    {
+      "key": "undeclared-loop-no-link",
+      "requirement": "review-target-is-the-merge-tip",
+      "given": "a documentless loop with undeclared work_needs_evidence and a task with no requirement link, so evidence_governs is false by its last arm",
+      "when": "a review is requested",
+      "then": "the branch tip is the target, identical to the declared-false case"
+    },
+    {
+      "key": "ordinary-task-with-evidence",
+      "requirement": "evidence-governed-review-unchanged",
+      "given": "a task with no loop and evidence naming commit C",
+      "when": "a review is requested",
+      "then": "the review target is C, and with no evidence the request is refused 409 with today's no-recorded-evidence sentence"
+    },
+    {
+      "key": "flow-task-unchanged",
+      "requirement": "evidence-governed-review-unchanged",
+      "given": "a task on a flow whose document makes evidence govern, with no evidence",
+      "when": "its review is requested",
+      "then": "it is refused exactly as today"
+    },
+    {
+      "key": "never-committed",
+      "requirement": "no-branch-is-an-honest-refusal",
+      "given": "a work_needs_evidence=false loop task with no task branch",
+      "when": "a review is requested",
+      "then": "409 whose detail says the task has no branch to review and does not contain 'no recorded evidence'"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "acceptance-test",
+      "title": "Write the failing acceptance test for F510",
+      "description": "Test that fails today with 409: a work_needs_evidence=false loop task with a branch tip and no evidence, POST /agent/trigger review_task_id is accepted and the review context carries the branch-tip sha; plus the evidence-governed and no-branch scenarios. Use a real git repo.",
+      "requirements": [
+        "review-target-is-the-merge-tip",
+        "evidence-governed-review-unchanged",
+        "no-branch-is-an-honest-refusal"
+      ],
+      "depends_on": [],
+      "files": [
+        "hub/tests/test_a_review_turn_reviews_the_branch_tip.py"
+      ],
+      "from": null,
+      "reviewer": "aw-reviewer"
+    },
+    {
+      "key": "branch-tip-review-target",
+      "title": "Resolve the review target from the merge source",
+      "description": "Where task_integration.evidence_governs is false, resolve the review target from the task branch tip (the commit merge_targets returns) in the one shared resolution used by POST /agent/trigger's precheck, prepare_review_turn, the turn scheduler's gate and flow review staffing. Keep the evidence path unchanged and add the no-branch refusal.",
+      "requirements": [
+        "review-target-is-the-merge-tip",
+        "evidence-governed-review-unchanged",
+        "no-branch-is-an-honest-refusal"
+      ],
+      "depends_on": [
+        "acceptance-test"
+      ],
+      "files": [
+        "hub/hub/requirement_evidence.py",
+        "hub/hub/task_integration.py",
+        "hub/hub/api/v1/agent_trigger.py",
+        "hub/hub/review_turn.py",
+        "hub/hub/turn_scheduler.py",
+        "hub/hub/scheduler.py"
+      ],
+      "from": null,
+      "reviewer": "aw-reviewer"
+    }
+  ],
+  "algorithms": [],
+  "design": "Operator-decided direction: where evidence does not govern the merge, the review turn reviews the task's branch tip, the same commit approval would merge (task_integration.merge_targets, which already returns exactly one branch-tip Target in that case and an empty list when the task has no branch).\n\nDecision records:\n- D1 One source of truth. The review target for an evidence-ungoverned task is derived from task_integration.evidence_governs plus task_branch_tip, not from a second reimplementation, so the commit reviewed and the commit merged cannot diverge.\n- D2 Evidence-governed tasks are untouched: commit_for_task_review keeps today's rule (most recent evidence naming a commit wins, earlier commits reported).\n- D3 commit_for_task_review takes only a session today and branch-tip resolution needs a repository root (git rev-parse). The builder chooses how to supply the root; the three consumers (POST /agent/trigger precheck, prepare_review_turn, turn_scheduler's gate) and the flow review staffing at scheduler.py:2076 must all agree, so they share one resolution rather than each learning about branch tips separately.\n- D4 A branch-tip target carries no evidence row: ReviewContext.evidence_id is already tolerated as empty (review_turn.py:358).\n- D5 Loops stay unstaffed by the scheduler. test_a_loop_does_not_staff_its_own_review.py (F161) removed the review arm for documentless loops because a loop has one agent and no second party; that stays. This change makes the operator's by-hand dispatch (POST /agent/trigger with review_task_id) work for these tasks; it does not make the scheduler staff reviews for loops. Flows cannot set work_needs_evidence (create_flow refuses it), so flow review staffing keeps today's behaviour except where evidence_governs is false, in which case it uses the same shared resolution.\n- D6 The refusal for a branch-tip task with no branch stays a refusal and says so in its own words, mirroring NO_TASK_BRANCH, not the evidence sentence.\nReviewer for the build: aw-reviewer.\nAcceptance seam: a real git repo with a task branch, a loop with work_needs_evidence=false and a task with no evidence; POST /agent/trigger review_task_id must be accepted and the review checkout must be at the branch tip.",
+  "evidence": {
+    "checked": [],
+    "limits": [],
+    "proposed_tests": [
+      "hub/tests/test_a_review_turn_reviews_the_branch_tip.py (proposed coverage derived from the acceptance criteria, not yet written or run)"
+    ],
+    "gaps": [
+      "No existing test covers a review turn for a work_needs_evidence=false task; hub/tests/test_review_target.py covers evidence-governed targets only."
+    ]
+  },
+  "lifecycle": "Acceptance test written first and failing (409 today), then the build, then a drive. No migrations, no Hub-restart hazard.",
+  "open_questions": [],
+  "delivery": {
+    "mode": "none",
+    "agent": null,
+    "stop_when_queue_empties": false,
+    "stop_at": null,
+    "cron": "*/5 * * * *"
+  },
+  "aw_identity": {
+    "requirements": {
+      "review-target-is-the-merge-tip": "FR-1",
+      "evidence-governed-review-unchanged": "FR-2",
+      "no-branch-is-an-honest-refusal": "FR-3"
+    },
+    "high_water": 3,
+    "retired": {},
+    "digests": {
+      "FR-1": "eb7bc937f7f731b8b0e2446133c65b8697ba5c546729c51e36a0de286317cc5e",
+      "FR-2": "5061ab226c372cb9cb24229b3c1ec7fec6a418e566f227853dc84ac61840880c",
+      "FR-3": "726df6bbde71e5d8ca789653799261318e3cb667ee4966388d8a06b9c412349d"
+    }
+  }
+}
+</script>
+</body>
+</html>
