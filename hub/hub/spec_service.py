@@ -291,7 +291,13 @@ async def _apply_and_write(
             )
         ],
         divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
-        warnings=[f.to_dict() for f in spec_completeness.overlap_warnings(payload)],
+        warnings=[
+            f.to_dict()
+            for f in (
+                *spec_completeness.overlap_warnings(payload),
+                *spec_completeness.undeclared_files_warnings(payload),
+            )
+        ],
     )
 
 
