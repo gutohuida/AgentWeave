@@ -473,6 +473,43 @@ async def merge_targets(session: AsyncSession, task: Task, root: Path) -> List[T
     return [Target(commit_sha=tip, branch=worktrees.task_branch_name(task.id), task_id=task.id)]
 
 
+async def review_target(
+    session: AsyncSession, task: Task, root: Optional[Path] = None
+) -> requirement_evidence.ReviewTarget:
+    """The commit a review turn for *task* is handed — the one answer every caller shares (F510).
+
+    Where evidence governs the merge, unchanged: `commit_for_task_review`, the most recent evidence
+    naming a commit, refused with its own sentence when there is none. Where it does not, the commit
+    approval would merge: the tip of the task's branch, the same sha `merge_targets` returns. A task
+    with no branch is refused as having no branch to review — never as missing evidence, which such a
+    task structurally never has.
+
+    *root* is the repository; omitted, it is resolved from the project, and only on the branch-tip
+    arm, so an evidence-governed task never pays for it.
+    """
+    if await evidence_governs(session, task):
+        return await requirement_evidence.commit_for_task_review(session, task.id)
+    if root is None:
+        from .project_workspace import resolve_project_workspace
+
+        try:
+            root = (await resolve_project_workspace(session, task.project_id)).root
+        except Exception as exc:  # noqa: BLE001 -- a refusal, not a fault
+            return requirement_evidence.ReviewTarget(
+                refusal=f"task {task.id} has no branch to review: the project's repository "
+                f"could not be located ({getattr(exc, 'detail', None) or exc})"
+            )
+    tip = await asyncio.to_thread(task_branch_tip, root, task.id)
+    if tip is None:
+        return requirement_evidence.ReviewTarget(
+            refusal=f"task {task.id} has no branch to review. Its work was never committed to a "
+            "task branch, so there is no commit for a reviewer to be given."
+        )
+    return requirement_evidence.ReviewTarget(
+        commit_sha=tip, branch=worktrees.task_branch_name(task.id)
+    )
+
+
 def commits_riding_along(root: Path, main_branch: str, commit_sha: str) -> List[str]:
     """Every commit `merge --no-ff <commit_sha>` would bring into *main_branch* besides the commit
     itself (F58).

@@ -1833,7 +1833,9 @@ async def trigger_agent(
         # reviewed at all, and the operator should learn that here rather than by watching a run
         # start and immediately fail.
         review_target = await resolve_task_for_project(session, body.review_task_id, project_id)
-        target = await requirement_evidence.commit_for_task_review(session, body.review_task_id)
+        from ...task_integration import review_target as resolve_review_target
+
+        target = await resolve_review_target(session, review_target)
         if not target.resolved:
             raise HTTPException(status_code=409, detail=target.refusal)
         # The same three questions `trigger_agent_directly` asks before it staffs the review,
