@@ -2036,3 +2036,12 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-10-06 (home) — parallel tasks of one slice that all edit the same files conflict after the
   first merges, every time** (two real slice drives). That is the product working: the gate
   refuses, the reviewer sends it back, the author merges main. Expect 1-3 extra rounds per slice.
+- **2026-10-06 (home) — a trial flow on `:8010` merges approved work into THIS checkout's `master`, and an
+  uncommitted tracked file makes the integration `skipped`** ("the project's checkout has uncommitted changes
+  to tracked files"). Commit every ledger edit before a review can land; recover with
+  `POST /projects/<p>/tasks/<id>/integrations/retry`. The Hub also writes `spec/changes/*` there: commit them.
+- **2026-10-06 (home) — Hub DB timestamps (`created_at`, `started_at`, `produced_at`) are UTC**; this machine is
+  UTC+1, so a `> '<local time>'` filter silently misses the last hour.
+- **2026-10-06 (home) — a flow with no declared reviewer staffs ANY free agent in the roster** (rung 2), stale
+  drive agents on stub runners included (F508). Before a real trial flow, archive leftovers (a queued entry
+  blocks archiving: `DELETE /projects/<p>/queue/entries/<id>`) or have the planner set `reviewer` per task.

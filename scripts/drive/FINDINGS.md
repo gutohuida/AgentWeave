@@ -34540,7 +34540,14 @@ approval ("reviewed by: X" or "reviewed by: any free agent"), so the operator ap
 
 ## F509 (A) — slice 1 of "same-file tasks build in order" cannot fire for an `aw-tool` agent: it never sees the text that teaches it
 
-**Status:** open
+**Status:** partly fixed by trial slice 1b (merged `b36c084`, `95922ba`, built through the `:8010` flow) --
+the exploring duty now states a per-task step (list `files`; chain tasks sharing a path), the tool section
+names `depends_on` and `files` on every access path, and `aw-tool --help <tool>` prints a whole description
+(recognised as the Hub's own call). Re-driven 2026-10-06 on a fresh Hub `:8035`, the same two requests, Haiku:
+run 1 declared `files: ["notes/cli.py"]` on all three tasks and chained them (pass, on the wording that
+failed before); run 2 saw the same step in its context and still left three parallel tasks with no
+`files` (fail). The text now reaches the planner; Haiku follows it one time in two. Open: whether that is
+enough, or a planner that declares no `files` on a multi-task slice should itself be warned
 Found 2026-10-06 by the acceptance drive of trial slice 1 (merged `ce665d1`, `f25ebb3`), run by the operator
 after merge as the design said, on a fresh Hub `:8034` (profile `sliceaccept1006`, project `aw-accept-1006`)
 with a real Haiku planner. Driven, not read. Area: **Spec documents** / **Agent environment**.
