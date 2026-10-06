@@ -163,3 +163,15 @@ async def test_batched_questions_are_bound_to_the_asking_run(app):
     rows = await _rows()
     assert all(row.created_by_run_id for row in rows)
     assert len({row.created_by_run_id for row in rows}) == 1
+
+
+@pytest.mark.asyncio
+async def test_claude_codes_multiselect_spelling_is_accepted(app):
+    """F514: Claude Code's own AskUserQuestion spells the field `multiSelect`, and an agent trained
+    on it sends that spelling. Refusing it cost a failed call on the first question of a run."""
+    entry = q("Which checks?", multi_select=True)
+    entry["multiSelect"] = entry.pop("multi_select")
+    resp = await app.post(BATCH_URL, headers=await active_run(), json={"questions": [entry]})
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["questions"][0]["multi_select"] is True
+    assert [row.multi_select for row in await _rows()] == [True]

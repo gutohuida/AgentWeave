@@ -479,3 +479,45 @@ async def test_agents_drive_a_requirement_from_recorded_to_accepted(
     alpha = next(row for row in coverage.json()["requirements"] if row["identifier"] == "FR-1")
     assert alpha["state"] == "verified"
     assert alpha["accepted_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_a_task_from_one_document_disambiguates_a_bare_identifier(app, auth_headers, builder):
+    """F513: requirement ids are minted per document, so with two documents a bare `FR-1` is
+    ambiguous. A call that names a task materialised from one of them has already said which
+    document it means, and is no longer refused for it (three failed calls on a real trial run)."""
+    from hub.db.models import RequirementEvidence, SpecDocument, SpecRequirement, Task
+
+    await _document(app, auth_headers, builder)
+    await _second_document(app, auth_headers, builder)
+    async with async_session_factory() as session:
+        second = (
+            await session.execute(select(SpecDocument).where(SpecDocument.path == SECOND_PATH))
+        ).scalar_one()
+        session.add(
+            Task(
+                id="task-f513",
+                project_id="proj-test",
+                title="Remind",
+                status="in_progress",
+                assignee="builder",
+                spec_document_id=second.id,
+            )
+        )
+        await session.commit()
+        second_id = second.id
+
+    response = await app.post(
+        EVIDENCE,
+        json={"identifier": "FR-1", "summary": "reminder sent", "task_id": "task-f513"},
+        headers=builder,
+    )
+    assert response.status_code == 201, response.text
+    async with async_session_factory() as session:
+        evidence = await session.get(RequirementEvidence, response.json()["id"])
+        requirement = await session.get(SpecRequirement, evidence.requirement_id)
+    assert requirement.document_id == second_id
+
+    # Without the task the identifier is still ambiguous, and still refused rather than guessed.
+    bare = await app.post(EVIDENCE, json={"identifier": "FR-1", "summary": "x"}, headers=builder)
+    assert bare.status_code == 422, bare.text

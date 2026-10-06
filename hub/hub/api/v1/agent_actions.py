@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, ValidationInfo, field_validator
+from pydantic import AliasChoices, BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -149,7 +149,9 @@ class AgentQuestionCreate(RequestModel):
     # stores anything, and retries with the structure rather than silently degrading.
     options: List[QuestionOption] = Field(min_length=2, max_length=8)
     header: str = Field(min_length=1, max_length=64)
-    multi_select: bool
+    # F514: `multiSelect` is Claude Code's own AskUserQuestion spelling, and agents trained on it
+    # send it. Accepted as an alias rather than refused, which cost a failed first call.
+    multi_select: bool = Field(validation_alias=AliasChoices("multi_select", "multiSelect"))
 
 
 class AgentQuestionBatchCreate(RequestModel):
@@ -1177,7 +1179,9 @@ class EvidenceDecision(RequestModel):
     reason: str = Field(default="", max_length=10000)
 
 
-async def _resolve_requirement(session, project_id: str, identifier: str, document: str):
+async def _resolve_requirement(
+    session, project_id: str, identifier: str, document: str, task_id: Optional[str] = None
+):
     from ... import spec_index, spec_lifecycle
 
     document_row = None
@@ -1191,6 +1195,15 @@ async def _resolve_requirement(session, project_id: str, identifier: str, docume
     row, why = await spec_index.resolve(
         session, project_id, identifier, document_id=document_row.id if document_row else None
     )
+    if why == "ambiguous" and not document and task_id:
+        # F513: identifiers are minted per document, so a bare `FR-1` is ambiguous in any project
+        # with two documents. A task materialised from one document has already named it. Only
+        # consulted when ambiguous, so an identifier that resolves today still resolves the same.
+        task = await session.get(Task, task_id)
+        if task is not None and task.project_id == project_id and task.spec_document_id:
+            row, why = await spec_index.resolve(
+                session, project_id, identifier, document_id=task.spec_document_id
+            )
     if why == "ambiguous":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -1222,7 +1235,7 @@ async def record_evidence(
     from ... import project_workspace, requirement_evidence, spec_lifecycle
 
     requirement = await _resolve_requirement(
-        session, actor.project_id, body.identifier, body.document or ""
+        session, actor.project_id, body.identifier, body.document or "", body.task_id
     )
     try:
         workspace = await project_workspace.resolve_project_workspace(session, actor.project_id)

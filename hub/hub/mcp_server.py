@@ -476,7 +476,8 @@ def ask_user(
     rows = result.get("questions") or []
     question_ids = [row.get("id") for row in rows]
     pending = {
-        row.get("id"): bool(asked[index].get("multi_select"))
+        # Either spelling: the Hub also accepts Claude Code's `multiSelect` (F514).
+        row.get("id"): bool(asked[index].get("multi_select", asked[index].get("multiSelect")))
         for index, row in enumerate(rows)
         if index < len(asked)
     }

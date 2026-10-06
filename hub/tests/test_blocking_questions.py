@@ -384,3 +384,20 @@ def test_get_answer_reports_a_decline_as_settled_rather_than_pending(monkeypatch
     assert result["declined"] is True
     assert result["pending"] is False
     assert result["answered"] is False
+
+
+def test_claude_codes_multiselect_spelling_shapes_the_answer_too(monkeypatch):
+    """F514: the Hub accepts `multiSelect`, so the tool reads it too, or a multi-select answer
+    asked with that spelling comes back as a joined string instead of a list."""
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+
+    def hub(method, path, body=None, *_a, **_k):
+        if method == "POST":
+            return batch_post(["q-1"])
+        return {"answered": True, "answer": "a, c", "answer_labels": ["a", "c"]}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    entry = one(multi_select=True, labels=("a", "c"))
+    entry["multiSelect"] = entry.pop("multi_select")
+    result = mcp_server.ask_user([entry])
+    assert result["answers"][0]["answer"] == ["a", "c"]
