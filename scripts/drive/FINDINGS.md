@@ -34517,3 +34517,23 @@ operator who types the current model id is refused with a list that does not con
 
 **Direction (not decided):** add `claude-sonnet-5-5` to the Claude catalog (and decide whether it
 becomes the default and owns the `sonnet` alias).
+
+## F508 (B) — the planner promised a reviewer the document never declared; the flow staffed a leftover stub agent
+
+**Status:** open
+Found 2026-10-06 in the first real slice-flow run on the trial Hub `:8010` (change "same-file tasks of a slice
+build in order", flow `job-4182c24930d5`). Driven, not read. Area: **Flows & review** / **Spec documents**.
+
+`aw-planner` asked the operator how slice 1 should be built and offered "Flow, aw-builder, stop on empty queue:
+... has aw-reviewer review finished work". The operator chose it. The document it wrote declared `delivery` with
+`aw-builder` and left every task's `reviewer` null, so nothing named `aw-reviewer`. When task 1 completed, the
+flow's rung 2 (`scheduler.resolve_reviewer`, any free agent) staffed `a0-f495-rev`, a leftover drive agent on a
+stub-provider runner, and queued it the review briefing (`entry-7e0b2f8e0935`). Caught before it ran: the
+operator reassigned the task to `aw-reviewer`, withdrew the entry and archived 14 leftover agents.
+
+Two seams: (1) what the planner tells the operator about staffing is not what the document declares, and nothing
+checks one against the other; (2) rung 2 picks any free agent in the roster, so a project with old or broken
+agents gets reviews from them silently. The operator learns who reviews only from the task's assignee.
+
+**Direction (not decided):** a document-level default reviewer the flow form and the planner both set, shown at
+approval ("reviewed by: X" or "reviewed by: any free agent"), so the operator approves the staffing they were told.
