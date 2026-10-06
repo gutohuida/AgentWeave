@@ -81,6 +81,8 @@ ALLOWED = [
     ("Bash", {"command": "aw-tool list_tasks"}),
     ("Bash", {"command": "aw-tool --list"}),
     ("PowerShell", {"command": "aw-tool --help"}),
+    ("Bash", {"command": "aw-tool --help submit_spec_document"}),
+    ("PowerShell", {"command": "aw-tool.cmd --help submit_spec_document"}),
     ("mcp__agentweave__send_message", {"to_agent": "x"}),
 ]
 
@@ -159,6 +161,10 @@ FALL_THROUGH = [
     ("Bash", "aw-tool create_task /tmp/.agentweave/calls/1.json"),
     ("Bash", "aw-tool create_task .agentweave/calls/1.json .agentweave/calls/2.json"),
     ("Bash", "aw-tool --list .agentweave/calls/1.json"),
+    ("Bash", "aw-tool --list submit_spec_document"),
+    ("Bash", "aw-tool --help not_a_tool"),
+    ("Bash", "aw-tool --help submit_spec_document x"),
+    ("PowerShell", "aw-tool.cmd --help approve_tool_call"),
     ("PowerShell", "& aw-tool list_tasks"),
     # bash names are exact
     ("Bash", "aw-tool.cmd list_tasks"),

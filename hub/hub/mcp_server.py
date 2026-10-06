@@ -3080,6 +3080,8 @@ def _hub_own_command(tool_name: str, command: str, workspace: str) -> bool:
     names = ("aw-tool", "aw-tool.cmd") if powershell else ("aw-tool",)
     if (words[0].lower() if powershell else words[0]) not in names:
         return False
+    if words[1] == "--help" and len(words) == 3:
+        return words[2] in _CALLABLE_TOOLS
     if words[1] in _CALL_COMMAND_FLAGS:
         return len(words) == 2
     if words[1] not in _CALLABLE_TOOLS:
