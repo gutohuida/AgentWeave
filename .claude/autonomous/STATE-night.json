@@ -1,104 +1,40 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-05-daily",
-    "parent_branch": "master",
-    "parent_sha": "9ea4cdb",
-    "stop_at": "2026-10-06T07:00:00+01:00",
-    "iteration": 22,
-    "log_file": ".claude/autonomous/2026-10-05-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "c1b-r1",
-            "status": "done",
-            "title": "C1b task 0.1: grounded review round",
-            "detail": "Done iter 2: R1-R5 folded into design.md Review round; F497 filed."
-        },
-        {
-            "id": "c1b-drive",
-            "status": "done",
-            "title": "C1b tasks 1.1-1.2: acceptance drive D, failing before build",
-            "detail": "Done iter 3: 1.1 measured 6 tasks (proj-03b9c6a6c37a, live's real DB) against 7 all-rejected-evidence requirements. 1.2 drive_d.py written (a)-(e), stub_provider.py extended with DRIVE-D-TASK/DRIVE-D-EVIDENCE; run on :8010, fails at (a) with task_too_coarse exactly as expected."
-        },
-        {
-            "id": "c1b-2-impl",
-            "status": "done",
-            "title": "C1b group 2: remove the requirement-count ceiling (D1)",
-            "detail": "Done iter 4: 2.1 rewrote test_spec_completeness.py:133,:146 (red first). 2.2 removed MAX_REQUIREMENTS_PER_TASK/task_too_coarse from spec_completeness.py; reworded the charter line (real path hub/hub/data/charters/spec.md:101, not tasks.md's data/charters/spec.md). 24 tests pass, black+ruff clean. Restarted the stale trial Hub (no --reload; it had 5+ hour old code) with DATABASE_URL and MY_F490_KEY set; reran drive_d.py: (a) and (b) now PASS. (c) FAILs on an unrelated drive-script identifier bug, logged for c1b-3-impl."
-        },
-        {
-            "id": "c1b-3-impl",
-            "status": "done",
-            "title": "C1b group 3: rejected block at every rigor (D2, D4)",
-            "detail": "Done iter 5 (code and tests found already written, uncommitted, from a prior cut-off firing; this iteration verified and drove it): 3.1-3.3 ticked in tasks.md. 92 tests pass across test_requirement_gate.py/test_approval_refuses_unaccepted_evidence.py/test_task_integration.py; ruff+black clean. Fixed two drive-script bugs (not product code): stub_provider.py's DRIVE-D-EVIDENCE identifier/document mapping, drive_d.py's missing /project path segment and reject/accept->rejected/accepted. Drive D (a)-(d) PASS on :8010; (e) FAILs as expected -- D3/policy digest is group 4's job."
-        },
-        {
-            "id": "c1b-4-impl",
-            "status": "done",
-            "title": "C1b group 4: sketch-approval digest policy (D3)",
-            "detail": "Done iter 6: 4.1 split test_an_ungated_approval_records_no_policy (shifted to :1072, found by name) into the null case (task linking nothing) and a new digest case (sketch task serving a requirement); confirmed red via git stash before 4.2. 4.2 evaluate's early return moved from 'not enforced' to 'not rows'; policy built from by_all_document (every linked document, D2's step already computed it) with an enforces=rigor!=SKETCH flag gating only the blocking/reported/diagnostics entries, not the policy append. 130 tests pass across the five related suites; ruff+black clean. Drive D (a)-(e) all PASS on :8010 after a Hub restart, (e) with a non-null policy digest -- no drive-script changes needed this time."
-        },
-        {
-            "id": "c1b-5-impl",
-            "status": "done",
-            "title": "C1b group 5: requirement chips on the task card (D5)",
-            "detail": "Done iter 7: 5.1 rewrote the existing has_rejected_evidence-driven rejected-tone test onto per-document coverage (new setCoverage/coverageByPath fixture, useSpecCoverageMany mock), added a pending/neutral test and the five-vs-four summary tests; confirmed red (3 failed, 9 passed) before 5.2. 5.2 added useSpecCoverageMany (api/spec.ts, useQueries sharing useSpecCoverage's cache key); useRequirementChips now maps CoverageEntry.state to a tone, dropped unused latestRejectionReason; TaskCard.tsx applies the tone class and a task-requirement-summary-<id> line above 4 chips. Two more test files needed the new mock export (taskCountIsTheLedgersOwn, tasksBoardFilter) and one needed a coverage fixture instead of has_rejected_evidence (taskBoardConsideredStates). npx vitest run: 1871 passed (179 files); eslint and tsc clean; npm run build + refresh_ui_bundle.py done. No drive -- Drive D's table does not name D5 and no backend route changed. Committed (ae8662d)."
-        },
-        {
-            "id": "c1b-gate",
-            "status": "done",
-            "title": "C1b group 6: close -- full suites, drive D passing, METRICS row",
-            "detail": "Done iter 8: 6.1 hub/tests 6779 passed/93 skipped, tests/ 567 passed/3 skipped, both at b30e7dc. 6.2 restarted trial Hub fresh + stub on 18496, drive_d.py (a)-(e) all PASS with every group's code in; removed untracked spec/changes/onyx-hydra/. 6.3 METRICS.md row appended: tier 2, spec 2h55/build 1h15/drive 0h20, R1 caught the D5 has_rejected_evidence/lifecycle-state bug before code; two drive-script (not product) bugs named separately."
-        },
-        {
-            "id": "c1b-archive",
-            "status": "done",
-            "title": "Archive a-task-may-serve-a-whole-slice and sync specs",
-            "detail": "Done iter 9: no F<n> is fixed by this change (only F495/F497 referenced, both pre-existing/backlog, neither closed here) -- confirmed by grepping the change dir, so no FINDINGS.md status lines to set. Synced all three deltas by hand (requirement-traceability, spec-document-authority, task-lifecycle-governance spec.md files are 100-150 KB, over the large-read-guard hook's threshold, so edited by targeted Grep+Read+Edit instead of a whole read): added D5's task-card requirement-traceability requirement verbatim; merged D2/D3/D4's rejected-at-every-rigor wording and scenarios into the three task-lifecycle-governance requirements (the gate requirement, the policy-digest requirement, and the unaccepted-evidence requirement's rescoped 'rejected evidence' sentence); removed the capped-span requirement from spec-document-authority per its REMOVED delta. openspec validate --specs --strict: 44 passed, 0 failed. Archived the change to openspec/changes/archive/2026-10-06-a-task-may-serve-a-whole-slice (15/15 tasks ticked). Backlog regenerated (unbuilt changes 20->19). METRICS.md row already appended in c1b-gate -- not duplicated."
-        },
-        {
-            "id": "copilot-credits-impl",
-            "status": "done",
-            "title": "a-copilot-one-shot-records-its-credits tasks 0.5, 1.1-2.3",
-            "detail": "Done iter 19 (tasks 0.5-2.2 were iter 10; this iteration closed 2.3): the detached full hub/tests/ run (launched iter 10, 03:18:04, claude stripped from PATH) finished -- 6785 passed, 93 skipped, 342 warnings in 2704.70s (0:45:04), no failures, .err.log empty. Wrote that line into tasks.md 2.3 verbatim and ticked it. ruff check src/ hub/ tests/, black --check --target-version py311 (src/ hub/hub/ hub/tests/ tests/), mypy src/ all clean."
-        },
-        {
-            "id": "copilot-credits-drive",
-            "status": "done",
-            "title": "a-copilot-one-shot-records-its-credits task 3: drive on :8010",
-            "detail": "Done iter 20: set proj-d85a82bf4216's checkpoint_runner_id to runner-72c07eca7e75 (real Copilot CLI, Free-plan Auto), POST .../conversations/conv-15d28aac6465/checkpoint for agent cp5 -- 201, probe_status passed (both of the 2-call budget spent). mode=ro read: wrk-02f48c6671b4 (checkpoint) and wrk-bdea16321100 (checkpoint_probe), both cli='copilot'/outcome='ok'/error=None, but ai_nano_aiu and premium_requests NULL on both -- not the expected non-NULL. Hub process confirmed started 02:49:44, after the 2.1/2.2 fix, so not stale code: parse_copilot_envelope ran clean and found no session.usage_checkpoint line in this real stdout (D4's 'no checkpoint' row, not a bug). GET /accounting confirmed showing neither figure (D5). Reverted checkpoint_runner_id back to null afterward (avoid future automatic-mode Copilot spend outside this budget). Filed F498 in scripts/drive/FINDINGS.md. tasks.md 3.1/3.2 ticked with the real numbers; 3.2 recorded 'not compared: no independent reading'."
-        },
-        {
-            "id": "copilot-credits-archive",
-            "status": "done",
-            "title": "Archive a-copilot-one-shot-records-its-credits and sync specs",
-            "detail": "Done iter 21: grepped the change dir -- only F486 and F498 named, both cited as pre-existing/open context (F486 for the sibling change that never carries credits; F498 is this change's own just-filed open question), neither closed here, so no FINDINGS.md Status lines set. Synced the one delta spec (usage-accounting) by hand: the MODIFIED Copilot-run requirement gained the malformed-session-total sentence and its new scenario (inserted after 'A clock that steps backwards' and before the pre-existing 'Credits do not gate scheduling' scenario, which stayed put -- an early edit briefly mis-promoted that scenario's heading to a requirement heading, caught by rereading the file and fixed before staging); the new ADDED requirement (one-shot calls record their last checkpoint) appended verbatim after it with its six scenarios. openspec validate --specs --strict: 44 passed, 0 failed. Archived to openspec/changes/archive/2026-10-06-a-copilot-one-shot-records-its-credits (14/14 tasks ticked). Backlog regenerated (unbuilt changes 19->18, F498 newly counted). METRICS.md row appended: tier 2, spec 0h20 (2026-10-03 R1-R3+Opus), build 0h20 (iter10's actual coding, not the unattended wait), drive 0h10 (iter20's real checkpoint+probe) -- F498 caught only by the live drive, not by review or tests."
-        },
-        {
-            "id": "f489-impl",
-            "status": "blocked",
-            "title": "Tier-0 fix F489: stop retrying a Copilot auth failure that cannot succeed on retry",
-            "detail": "Done iter 22: traced the retry seam before building (return_run_entries, hub/hub/inbound_queue.py:297; its one Copilot-reaching caller, hub/hub/api/v1/agent_trigger.py:4029) and found it needs more than a one-sentence spec choice -- TurnOutcome carries no errorType today, two unrelated TurnOutcome dataclasses exist (codex_appserver.py/copilot_acp.py), and error_event's own unused retryable field would touch every error path if read naively. Left an OPEN spec-queue/DECISIONS.md row (f489-retry-signal) with three candidate designs and the full trace, per the playbook's stop-rather-than-guess instruction. Not fixed; FINDINGS.md F489 stays Status: open with a pointer to the decision row."
-        }
-    ],
-    "decisions_for_user": ["f489-retry-signal"],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-10-06-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "4f2face",
+    "stop_at":  "2026-10-07T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-10-06-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
