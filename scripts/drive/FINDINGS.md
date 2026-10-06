@@ -34445,7 +34445,7 @@ of 3 — but F499/F500 make every approval in this slice suspect.
 
 ## F504 (B) — a task sent back as `revision_needed` reaches its author with no reason, so a merge conflict loops
 
-**Status:** open
+**Status:** fixed (this commit) -- Tier 0: the rework brief of a `revision_needed` task carries a "Why it came back" section: the reviewer and its verdict notes, and a measured check of whether the task branch still merges into main, with the remedy (`scheduler._briefing_revision_lines`); the conflict refusal now tells a reviewer its move is `revision_needed` (`requirement_gate.REVIEWER_SENDS_BACK`). Driven 2026-10-06 on `:8031` (slice 2): two tasks came back over conflicts, each brief carried the notes and the conflicting files, and both authors merged master and re-recorded evidence with no operator message (`dcbe59b`, `b01cf41`). The refusal sentence itself is test-only: no live reviewer retried `approved` after the restart
 Found 2026-10-06 by the acceptance drive for F499–F502 (drive Hub `:8031`, profile `slices1006b`,
 project `proj-abe05d2040fb`, real Haiku turns). Driven. Area: **Flows & review**.
 
@@ -34462,7 +34462,7 @@ carries the latest refusal and the reviewer's verdict notes.
 
 ## F505 (C) — an agent that co-authored a task's fix and recorded evidence for it can approve it
 
-**Status:** open — a design question for the operator
+**Status:** fixed (this commit) -- operator decided 2026-10-06 ("fix those new errors"): an agent that recorded evidence for a task is barred from its verdict, its review entry and its dispatch whether or not another agent completed it, and the flow, `task_is_claimable_by`, the failed-review restaffing and the wedged-review check exclude it alike. Tests in `test_the_evidence_names_the_author.py`. Not reproduced live: no co-authoring reviewer arose in the slice-2 drive
 Same drive. Area: **Flows & review**.
 
 `builder`, staffed to review `task-80001982159f` (authored by `reviewer`), was messaged by another

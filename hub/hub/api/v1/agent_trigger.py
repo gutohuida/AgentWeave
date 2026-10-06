@@ -682,14 +682,12 @@ async def review_dispatch_refusal(
             f"completing it, so the review would claim its own author is reviewing it. "
             f"{own_review_remedy(task)}",
         )
-    if completing_agent is None and reviewer in await agents_that_recorded_evidence_for(
-        session, task.id
-    ):
+    if reviewer in await agents_that_recorded_evidence_for(session, task.id):
+        # F505: whether or not another agent completed it -- the verdict guard's rule, read alike.
         return (
             status.HTTP_403_FORBIDDEN,
             f"Cannot review task {task.id} as {reviewer!r}: that agent recorded evidence for this "
-            f"task, which claims the work as its own, and no agent is recorded as completing it, "
-            f"so the evidence is the record of who wrote it. Its verdict would be refused, so the "
+            f"task, which claims the work as its own. Its verdict would be refused, so the "
             f"review could never end. {own_review_remedy(task)}",
         )
     return None

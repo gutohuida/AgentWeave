@@ -39,7 +39,7 @@ from hub.db.models import (
     Run,
     Task,
 )
-from hub.requirement_gate import ACCEPT_OR_GRANT, GateRefusal
+from hub.requirement_gate import ACCEPT_OR_GRANT, REVIEWER_SENDS_BACK, GateRefusal
 from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -709,7 +709,7 @@ def test_the_evidence_sentence_says_what_clears_it():
     assert BRANCH_REMEDY not in said
     assert "a" * 12 in said
     assert "record" in said.lower()
-    assert said.endswith(ACCEPT_OR_GRANT + ".")
+    assert said.endswith(f"{ACCEPT_OR_GRANT}. {REVIEWER_SENDS_BACK}")
     # The remedy is a condition on a state, never an instruction to supply a field (design D2a).
     assert "is not a value anyone supplies" in said
     assert "does not take care of itself" in said
@@ -722,7 +722,8 @@ def test_the_branch_tip_sentence_is_unchanged():
     said = refusal(evidence_entry(named_by_evidence=False, evidence_id=None))
     assert said == (
         "This task's work does not merge cleanly into main: shared.txt. "
-        "Resolve the conflict on the branch, then approve — approving is what merges it."
+        "Resolve the conflict on the branch, then approve — approving is what merges it. "
+        + REVIEWER_SENDS_BACK
     )
 
 
@@ -759,7 +760,7 @@ def test_a_missing_commit_degrades_rather_than_printing_an_empty_one():
     assert "a.txt" in said
     assert "The commit judged is" not in said
     assert "  " not in said
-    assert said.endswith(ACCEPT_OR_GRANT + ".")
+    assert said.endswith(f"{ACCEPT_OR_GRANT}. {REVIEWER_SENDS_BACK}")
 
 
 def test_an_empty_list_says_nothing():

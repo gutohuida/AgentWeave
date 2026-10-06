@@ -83,6 +83,14 @@ ACCEPT_OR_GRANT = (
 )
 
 
+#: The conflict refusal's last sentence (F504). Two reviewers in a row met the refusal, retried, and
+#: ended with the task still under review, so its author was never briefed to resolve anything.
+REVIEWER_SENDS_BACK = (
+    "If you are reviewing this task, resolving the conflict is its author's work, not yours: move "
+    "the task to revision_needed with notes naming the conflict."
+)
+
+
 @dataclass
 class GateRefusal:
     """Why the gate refused, in a shape a surface can render without parsing prose."""
@@ -188,7 +196,11 @@ class GateRefusal:
         tips = [entry for entry in self.unmergeable if not entry.get("named_by_evidence")]
         return " ".join(
             sentence
-            for sentence in (self._evidence_merge_detail(named), self._tip_merge_detail(tips))
+            for sentence in (
+                self._evidence_merge_detail(named),
+                self._tip_merge_detail(tips),
+                REVIEWER_SENDS_BACK,
+            )
             if sentence
         )
 

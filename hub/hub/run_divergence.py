@@ -425,7 +425,11 @@ async def _answer_failed_review(
     # the deciding half free of the spawning half is what these keep true.
     from .requirement_gate import approval_held_for_operator
     from .scheduler import resolve_reviewer
-    from .task_transition_service import agents_that_may_have_authored, completion_attribution
+    from .task_transition_service import (
+        agents_that_may_have_authored,
+        agents_that_recorded_evidence_for,
+        completion_attribution,
+    )
 
     # A refused approval is not "no verdict" (`F374-fix`): where the gate refuses for a reason only
     # the operator can remove, a second reviewer would meet the same refusal, so nobody is asked.
@@ -470,6 +474,9 @@ async def _answer_failed_review(
     )
     exclude[run.agent] = "reviewed this task and recorded no verdict"
     if attribution.agent is not None:
+        # F505: the evidence authors as well -- the verdict guard refuses them either way.
+        for author in await agents_that_recorded_evidence_for(session, task.id):
+            exclude.setdefault(author, "recorded evidence for this task")
         exclude[attribution.agent] = "is the one that completed this task"
 
     choice = await resolve_reviewer(

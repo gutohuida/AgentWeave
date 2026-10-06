@@ -373,17 +373,21 @@ async def _guard_author_is_not_reviewer(
             f"requires a different actor. Another agent or the operator must review it. Starting a "
             f"new run does not make you a different actor."
         )
-    if (
-        completing_agent is None
-        and actor.agent
-        and actor.agent in await agents_that_recorded_evidence_for(session, task.id)
-    ):
+    # F505 (operator, 2026-10-06): an evidence author is barred whether or not another agent
+    # completed the task. An agent that resolved a task's conflict in a work run and recorded
+    # evidence for it is a co-author, and approving its own resolution is a self-approval.
+    if actor.agent and actor.agent in await agents_that_recorded_evidence_for(session, task.id):
+        whose = (
+            "No agent is recorded as completing it, so the evidence is the record of who wrote it."
+            if completing_agent is None
+            else f"{completing_agent!r} completed it, and an agent that recorded evidence for it "
+            f"wrote part of what is being judged."
+        )
         raise ActorNotPermittedError(
             f"Cannot move task {task.id} to {to_status!r}: agent {actor.agent!r} recorded "
             f"evidence for this task, which claims the work as its own, and approving, rejecting "
-            f"or requesting revision of work requires a different actor. No agent is recorded as "
-            f"completing it, so the evidence is the record of who wrote it. Another agent or the "
-            f"operator must review it. Starting a new run does not make you a different actor."
+            f"or requesting revision of work requires a different actor. {whose} Another agent or "
+            f"the operator must review it. Starting a new run does not make you a different actor."
         )
 
 
@@ -461,14 +465,17 @@ async def _guard_reviewer_is_not_the_author(
             f"holder: it is the agent recorded as completing this task, so the move would "
             f"claim its own author is reviewing it. {remedy}"
         )
-    if completing_agent is None and task.assignee in await agents_that_recorded_evidence_for(
-        session, task.id
-    ):
+    if task.assignee in await agents_that_recorded_evidence_for(session, task.id):
+        # F505: whether or not another agent completed it -- `_guard_author_is_not_reviewer`.
+        whose = (
+            "with no completer recorded, the evidence is the record of who wrote it, and "
+            if completing_agent is None
+            else ""
+        )
         raise ActorNotPermittedError(
             f"Cannot move task {task.id} to 'under_review' with {task.assignee!r} as its "
             f"holder: it recorded evidence for this task and claims the work as its own; "
-            f"with no completer recorded, the evidence is the record of who wrote it, and "
-            f"an author may not review its own work. {remedy}"
+            f"{whose}an author may not review its own work. {remedy}"
         )
 
 

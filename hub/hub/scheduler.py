@@ -35,6 +35,7 @@ from .db.models import (
     Question,
     Run,
     Task,
+    TaskTransition,
     fit_error_summary,
 )
 from .loop_ending import QUEUE_DRAINED_REASON, end_loop
@@ -708,11 +709,19 @@ async def task_is_claimable_by(session: AsyncSession, task: Task, agent: str) ->
         return True
     if task.status not in REVIEWABLE_LOOP_TASK_STATUSES:
         return False
-    from .task_transition_service import agents_that_may_have_authored, completion_attribution
+    from .task_transition_service import (
+        agents_that_may_have_authored,
+        agents_that_recorded_evidence_for,
+        completion_attribution,
+    )
 
     attribution = await completion_attribution(session, task.id)
     if attribution.agent is not None:
-        return attribution.agent != agent
+        # F505: an agent that recorded evidence for it is barred as well as its completer -- the
+        # verdict guard refuses both, and an offer it would refuse is a review that cannot end.
+        return attribution.agent != agent and agent not in await agents_that_recorded_evidence_for(
+            session, task.id
+        )
     if not attribution.recorded:
         return False
     # The operator completed it. **The same set the review arm excludes, called rather than
@@ -1815,7 +1824,10 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             if task.assignee:
                 wedged_author = (await completion_attribution(session, task.id)).agent
                 if wedged_author is not None:
-                    wedged_review = wedged_author == task.assignee
+                    # F505: an evidence author holding the review cannot finish it either.
+                    wedged_review = wedged_author == task.assignee or (
+                        task.assignee in await agents_that_recorded_evidence_for(session, task.id)
+                    )
                 else:
                     wedged_review = task.assignee in (
                         await agents_that_worked(session, task.id)
@@ -2078,6 +2090,10 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             # (design D6): where the product has a *decided* answer to who the author is, the whole
             # corpus is keyed on it and this change does not widen it.
             exclude = {attribution.agent: "is the one that completed this task"}
+            # F505: plus every agent that recorded evidence for it, which the verdict guard refuses
+            # whether or not another agent completed the task.
+            for author in await agents_that_recorded_evidence_for(session, task.id):
+                exclude.setdefault(author, "recorded evidence for this task")
         else:
             # **The operator completed it**, which is provenance -- a person did it -- and not an
             # absence. Withholding review here removes the flow's own second half at exactly the
@@ -2796,6 +2812,72 @@ def _briefing_completion_lines(task: Task, *, is_flow: bool) -> list[str]:
     return [sentence, ""]
 
 
+async def _briefing_revision_lines(session: AsyncSession, task: Task) -> list[str]:
+    """Why a task sent back for revision came back (F504).
+
+    The rework brief used to carry only the task's original description, so an author whose task
+    came back over a merge conflict re-ran its green tests, completed the same commit again, and
+    met the same refusal. Two sources, both read at briefing time: the reviewer's verdict notes,
+    which `task.notes` still holds because the author has not written over them yet, and whether
+    the task's own branch merges into the main branch now — measured, because main moves while a
+    task waits. Never raises: a brief that cannot say why still says what to do.
+    """
+    if task.status != "revision_needed":
+        return []
+    import asyncio
+    import json
+
+    from . import requirement_gate, task_integration
+
+    by = await session.scalar(
+        select(TaskTransition.actor_agent)
+        .where(TaskTransition.task_id == task.id, TaskTransition.to_status == "revision_needed")
+        .order_by(TaskTransition.sequence.desc())
+        .limit(1)
+    )
+    lines = ["## Why it came back", ""]
+    notes = task.notes if isinstance(task.notes, str) else json.dumps(task.notes)
+    if task.notes and notes.strip():
+        lines.append(f"{by or 'The reviewer'} sent it back with these notes:")
+        lines.append("")
+        lines.extend(f"> {line}" for line in notes.strip().splitlines())
+        lines.append("")
+    try:
+        situation = await requirement_gate.merge_situation(session, task)
+        tip = (
+            await asyncio.to_thread(task_integration.task_branch_tip, situation.root, task.id)
+            if situation is not None
+            else None
+        )
+        conflicts = (
+            await asyncio.to_thread(
+                task_integration.would_conflict, situation.root, tip, situation.main_branch
+            )
+            if situation is not None and tip
+            else []
+        )
+    except Exception:  # noqa: BLE001 -- the brief goes out without the measurement
+        logger.warning("could not check whether %s still merges", task.id, exc_info=True)
+        conflicts = []
+    if conflicts:
+        assert situation is not None
+        lines.append(
+            f"This task's branch no longer merges into {situation.main_branch}: "
+            f"{', '.join(conflicts)}. Other work has landed there since. Merge "
+            f"{situation.main_branch} into this task's branch, keep both sides, run the tests, "
+            "and record the evidence again on the resolved commit — evidence on the old commit "
+            "names work that cannot merge."
+        )
+        lines.append("")
+    if len(lines) == 2:
+        lines.append(
+            f"{by or 'The reviewer'} left no notes. Read the task's history with `task_history` "
+            "before starting."
+        )
+        lines.append("")
+    return lines
+
+
 async def _briefing_verdict_lines(session: AsyncSession, task: Task, *, agent: str) -> list[str]:
     """How a review turn ends, on the channel that drives tool calls.
 
@@ -2968,6 +3050,8 @@ async def _compose_loop_briefing(
             else _briefing_completion_lines(claimed_task, is_flow=bool(loop.spec_document_id))
         )
         lines.extend(await _briefing_evidence_lines(session, claimed_task, is_review=is_review))
+        if not is_review:
+            lines.extend(await _briefing_revision_lines(session, claimed_task))
 
     if loop.purpose:
         lines.append(f"Purpose: {loop.purpose}")

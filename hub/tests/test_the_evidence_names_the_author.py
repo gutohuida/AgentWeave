@@ -841,3 +841,64 @@ async def test_a_silent_review_of_operator_completed_work_with_nobody_left(
     assert f"{SILENT} has worked on this task" not in reason, reason
     assert f"{WORKER} has worked on this task" in reason, reason
     assert f"{HELD} is booked for task-2.7-op-held" in reason, reason
+
+
+# ---------------------------------------------------------------------------
+# F505 — an agent that recorded evidence is barred from reviewing even where another agent
+# completed the task (operator's decision, 2026-10-06)
+# ---------------------------------------------------------------------------
+
+COMPLETER = "ev-completer"
+
+
+async def _agent_completed_with_a_coauthor(db, *, suffix):
+    """F505's drive shape: `COMPLETER` built and completed the task; `AUTHOR` (sorted first) later
+    resolved its conflict in a work run and recorded evidence on the resolved commit."""
+    _job, loop = await _flow(db, suffix=suffix, agent=AUTHOR)
+    task = Task(
+        id=f"task-ev-{suffix}",
+        project_id="proj-test",
+        title=f"work {suffix}",
+        status="pending",
+        loop_id=loop.id,
+    )
+    db.add(task)
+    await db.commit()
+    await apply_transition(db, task, "in_progress", operator())
+    await apply_transition(db, task, "completed", run_actor(f"run-ev-{suffix}", COMPLETER))
+    await db.commit()
+    await _evidence(db, task.id, suffix=suffix)
+    return loop, task
+
+
+async def test_a_coauthor_s_approval_is_refused_though_another_agent_completed(app):
+    """Must fail with the `completing_agent is None` condition restored in
+    `_guard_author_is_not_reviewer`: the completer is decided, and that used to end the question."""
+    async with async_session_factory() as db:
+        _loop, task = await _agent_completed_with_a_coauthor(db, suffix="coauth")
+        assert await agent_that_completed(db, task.id) == COMPLETER
+        await _into_review_unassigned(db, task)
+        before = await _transition_count(db, task.id)
+
+    async with async_session_factory() as db:
+        fresh = await db.get(Task, task.id)
+        with pytest.raises(ActorNotPermittedError) as refused:
+            await apply_transition(db, fresh, "approved", run_actor("run-ev-coauth2", AUTHOR))
+        await db.rollback()
+
+    assert "recorded evidence for this task" in str(refused.value)
+    async with async_session_factory() as db:
+        assert (await db.get(Task, task.id)).status == "under_review"
+        assert await _transition_count(db, task.id) == before
+
+
+async def test_a_coauthor_is_not_offered_the_review_nor_dispatched_to_it(app):
+    """The offer and the dispatch read the same rule as the verdict, or the flow staffs a reviewer
+    whose verdict is then refused."""
+    async with async_session_factory() as db:
+        _loop, task = await _agent_completed_with_a_coauthor(db, suffix="offer")
+        assert not await task_is_claimable_by(db, task, AUTHOR)
+        assert await task_is_claimable_by(db, task, OTHER)
+        refusal = await agent_trigger.review_dispatch_refusal(db, task, reviewer=AUTHOR)
+        assert refusal is not None and refusal[0] == 403, refusal
+        assert "recorded evidence" in refusal[1]
