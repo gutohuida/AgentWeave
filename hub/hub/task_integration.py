@@ -32,8 +32,8 @@ from pathlib import Path
 from typing import Collection, Dict, List, Optional
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from . import requirement_evidence, worktrees
 from .db.models import (
