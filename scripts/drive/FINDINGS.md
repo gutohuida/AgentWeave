@@ -34705,7 +34705,7 @@ stated those failures against task 2.
 
 ## F519 (B) — a reviewer judges a dependent task's diff without its dependency's work, and sends correct work back
 
-**Status:** open
+**Status:** fixed (Tier 0) -- the review briefing (`review_turn._dependencies_sentence`, inside `verdict_evidence_sentence`, so both channels carry it) names each `depends_on` task with its title and merged commit, or its status if unmerged, and says merged work is not in this diff. Test: `test_review_briefing_names_dependencies.py`
 Found 2026-10-06 on `:8010` (`run-6e866403a514`). Task 2 (the fix) `depends_on` task 1 (the F510 acceptance
 tests, merged as `fb651cd`). The reviewer sent task 2 to `revision_needed`: "the diff adds no tests for any
 of the six acceptance criteria". The 7 tests are task 1's, on main, and pass on task 2's branch (run by hand:

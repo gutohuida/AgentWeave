@@ -221,6 +221,7 @@ async def verdict_evidence_sentence(
     rejected = " ".join(
         part
         for part in (
+            await _dependencies_sentence(session, task),
             _rejected_sentence(await rejected_identifiers(session, task)),
             await _checks_sentence(session, task),
         )
@@ -256,6 +257,49 @@ async def verdict_evidence_sentence(
         "refused, your verdict was not recorded: ask the operator with `ask_user` to decide the "
         "evidence named above, and approve once they say it is accepted. Do not tell anyone the "
         "task is approved until `update_task` has succeeded."
+    )
+
+
+async def _dependencies_sentence(session: AsyncSession, task: Task) -> Optional[str]:
+    """F519: what this task builds on, and where that work is. A reviewer judging the diff alone
+    sent a correct fix back for having no tests: they were its prerequisite's, already merged."""
+    from .db.models import TaskDependency, TaskIntegration
+
+    prerequisites = (
+        (
+            await session.execute(
+                select(Task)
+                .join(TaskDependency, TaskDependency.depends_on_task_id == Task.id)
+                .where(TaskDependency.task_id == task.id)
+                .order_by(Task.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not prerequisites:
+        return None
+    pieces = []
+    for prerequisite in prerequisites:
+        merged = (
+            await session.execute(
+                select(TaskIntegration.commit_sha)
+                .where(
+                    TaskIntegration.task_id == prerequisite.id,
+                    TaskIntegration.outcome == "merged",
+                )
+                .order_by(TaskIntegration.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        where = (
+            f"merged as `{merged[:12]}`" if merged else f"`{prerequisite.status}`, not merged yet"
+        )
+        pieces.append(f"task `{prerequisite.id}` ({prerequisite.title}: {where})")
+    return (
+        f"**This task builds on** {'; '.join(pieces)}. Merged work is on the main branch and "
+        "not in this task's diff: judge the change together with it, including tests it wrote "
+        "for this task to satisfy."
     )
 
 
@@ -314,8 +358,8 @@ async def _checks_sentence(session: AsyncSession, task: Task) -> Optional[str]:
         )
     if view.state == "error" and view.run is not None:
         return (
-            f"**This task's checks could not run** ({view.run.error}), so `approved` will be "
-            "refused until they run and pass."
+            f"**This task's checks could not run** ({view.run.error}). Approving runs them "
+            "again, and `approved` is refused until they pass."
         )
     return (
         "**This task's checks have not finished** on the work approval would merge, so "
