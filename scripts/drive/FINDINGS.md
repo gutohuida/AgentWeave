@@ -34501,3 +34501,19 @@ fixed. Review rounds per task 1/4/2 — the extra rounds were merge conflicts be
 of one slice (F504), not defects. The flow stopped itself on an empty queue. Observed, not filed:
 one Haiku reviewer loaded `update_task` through ToolSearch four times and never called it, ending
 with "I cannot directly invoke the AgentWeave tool"; the Hub restaffed the review as a divergence.
+
+## F507 (C) — the Claude model catalog does not know Sonnet 5.5; a runner on `claude-sonnet-5-5` is refused
+
+**Status:** open
+Found 2026-10-06 setting up the first real slice-flow run on the trial Hub `:8010` (interactive). Driven,
+not read. Area: **Runners & models**.
+
+`POST /runners {"cli": "claude", "model": "claude-sonnet-5-5"}` answered 4xx: "'claude-sonnet-5-5' is not a model
+'claude' declares; expected one of: claude-opus-5-5 (or opus), claude-sonnet-5 (or sonnet), ...". The
+catalog (`hub/hub/model_catalog.py:245`) lists `claude-sonnet-5` as the Sonnet and default; Sonnet 5.5
+(`claude-sonnet-5-5`) is the current Sonnet. Worked around with the `sonnet` alias, which the Claude CLI
+resolves itself at launch, so the Hub records `sonnet` rather than the model that actually ran. An
+operator who types the current model id is refused with a list that does not contain it.
+
+**Direction (not decided):** add `claude-sonnet-5-5` to the Claude catalog (and decide whether it
+becomes the default and owns the `sonnet` alias).
