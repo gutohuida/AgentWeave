@@ -1257,7 +1257,9 @@ def _operations() -> List[_Operation]:
                 "`slices` are a `roadmap`'s slices in build order (`key`, `title`, `intent`, "
                 "`done`, `builds_after`); a roadmap carries no requirements or tasks. `roadmap` "
                 '(`{"document": <roadmap path>, "slice": <key>}`) names the roadmap slice a '
-                "change document specifies; it is proposable once that roadmap is approved."
+                "change document specifies; it is proposable once that roadmap is approved. Each "
+                "entry in `tasks` lists the repo-relative paths it will edit in `files`, and "
+                "names sibling task keys in `depends_on`: chain any two tasks that share a path."
             ),
             http_note=(
                 "This is the one operation whose request is not flat: everything after `path` — "
@@ -1729,9 +1731,10 @@ SPEC_PHASE_DUTIES = {
         "`roadmap` plus the first slice's change document, not one large document. A slice is "
         "about a dozen requirements or fewer, as a few tasks; later slices are recorded in the "
         "roadmap, not specified, and each is drafted once the one before it is approved.\n"
-        "- **Order the tasks.** A task may name sibling task keys in `depends_on`. Tasks expected "
-        "to edit the same file are chained with `depends_on`, so same-file tasks are built in "
-        "order rather than in parallel."
+        "- **Declare files and order the tasks.** For each task you write, list in `files` the "
+        "repo-relative paths it will edit. Chain any two tasks that share a path with "
+        "`depends_on` (sibling task keys), so same-file tasks are built in order rather than in "
+        "parallel."
     ),
     "proposed": (
         "- This document is proposed and awaiting the operator's decision. Do not implement it, "
