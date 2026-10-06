@@ -1,6 +1,6 @@
 ## 0. Acceptance drive first (R3)
 
-- [ ] 0.1 Write `scripts/drive/d1006_checks_gate.py`: design.md's five steps, against a fresh Hub, with real Haiku agents. Run it on master and record that step 1 fails (no check run recorded).
+- [x] 0.1 Write `scripts/drive/d1006_checks_gate.py`: design.md's five steps, against a fresh Hub, with real Haiku agents. Run it on master and record that step 1 fails (no check run recorded). Ran on master `:8037`: `setup` fails, HTTP 422 `extra_forbidden` on `checks`.
 
 ## 1. Model and migration
 
