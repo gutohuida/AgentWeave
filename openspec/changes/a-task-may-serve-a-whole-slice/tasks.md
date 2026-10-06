@@ -133,6 +133,14 @@
 
 ## 6. Close
 
-- [ ] 6.1 Full suites (`pytest hub/tests/ -q`, `pytest tests/ -q`), with counts and a sha here.
-- [ ] 6.2 Drive D passes (a)-(e) on `:8010`.
-- [ ] 6.3 A `spec-queue/METRICS.md` row: tier, times, and which stage caught each defect.
+- [x] 6.1 `pytest hub/tests/ -q`: **6779 passed, 93 skipped** (2619.53s). `pytest tests/ -q`:
+  **567 passed, 3 skipped** (75.42s). Both green at `b30e7dc` (the tip this closing work started
+  from). Done 2026-10-06.
+- [x] 6.2 Restarted the trial Hub on `:8010` fresh (`DATABASE_URL` + `MY_F490_KEY`, no `--reload`,
+  killed the 1:19:58am process first so there was no doubt it was running every group's code) and
+  the stub provider on `18496`. Reran `testbed/drive-slices/drive_d.py` end to end: **(a) PASS, (b)
+  PASS, (c) PASS, (d) PASS, (e) PASS — policy digest `b6ac17363effa635...`** — `DRIVE D PASSED`.
+  Stopped the stub afterward; left the trial Hub running. Removed one untracked
+  `spec/changes/onyx-hydra/` directory the drive's project wrote (same precedent as groups 2-4).
+  `scripts/backlog_page.py --check`: current, nothing moved. Done 2026-10-06.
+- [x] 6.3 `spec-queue/METRICS.md` row appended. Done 2026-10-06.

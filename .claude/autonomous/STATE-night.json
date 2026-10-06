@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9ea4cdb",
     "stop_at": "2026-10-06T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "c1b-gate",
-    "next_action": "C1b group 6, close: 6.1 run `pytest hub/tests/ -q` and `pytest tests/ -q`, record both counts and the commit sha in tasks.md. 6.2 restart the trial Hub on :8010 (DATABASE_URL + MY_F490_KEY=fake-c1b-drive-not-a-key, no --reload, per .claude/reference/hubs.md) and the stub provider on 18496, then rerun testbed/drive-slices/drive_d.py end to end; confirm (a)-(e) all still PASS now that every group's code (1-5) is in, not just group 4's; stop the stub afterward, clean up any untracked spec/changes/<adjective>-<animal>/ directories the drive's project writes (established precedent, groups 2-4). 6.3 append a spec-queue/METRICS.md row for this change: tier (2 -- hazard, per CLAUDE.md's table: cross-cutting contract), spec/build/drive time, and which stage caught each real defect (R1's design.md review round caught the D5 has_rejected_evidence/lifecycle-state bug before any code was written; iter 4's drive caught the stub's identifier-mapping bug; iter 5's drive caught two drive-script bugs, not product bugs). Tick 6.1-6.3 in tasks.md.",
+    "current": "c1b-archive",
+    "next_action": "Archive a-task-may-serve-a-whole-slice: run openspec-sync-specs to fold the delta specs into openspec/specs/, then openspec-archive-change to move the change to openspec/changes/archive/. Set Status: fixed <sha> for any F<n> the proposal names in scripts/drive/FINDINGS.md, and correct FINDINGS.md's open-severity index if that status change shifts it. The spec-queue/METRICS.md row for this change is already appended (done in c1b-gate, iteration 8) -- do not duplicate it.",
     "queue": [
         {
             "id": "c1b-r1",
@@ -53,9 +53,9 @@
         },
         {
             "id": "c1b-gate",
-            "status": "open",
+            "status": "done",
             "title": "C1b group 6: close -- full suites, drive D passing, METRICS row",
-            "detail": "6.1 pytest hub/tests/ -q and pytest tests/ -q with counts+sha inline in tasks.md. 6.2 drive D passes (a)-(e) on :8010. 6.3 spec-queue/METRICS.md row: tier, times, which stage caught each defect."
+            "detail": "Done iter 8: 6.1 hub/tests 6779 passed/93 skipped, tests/ 567 passed/3 skipped, both at b30e7dc. 6.2 restarted trial Hub fresh + stub on 18496, drive_d.py (a)-(e) all PASS with every group's code in; removed untracked spec/changes/onyx-hydra/. 6.3 METRICS.md row appended: tier 2, spec 2h55/build 1h15/drive 0h20, R1 caught the D5 has_rejected_evidence/lifecycle-state bug before code; two drive-script (not product) bugs named separately."
         },
         {
             "id": "c1b-archive",
