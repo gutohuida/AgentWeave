@@ -10,5 +10,5 @@
 
 ## 3. Close
 
-- [ ] 3.1 Full Hub suite; ruff, black
-- [ ] 3.2 F520 `**Status:**` line; sync the delta into `openspec/specs/task-lifecycle-governance/spec.md`; archive
+- [x] 3.1 Full Hub suite; ruff, black (6923 passed after updating the old-contract conflict-attribution test)
+- [x] 3.2 F520 `**Status:**` line; sync the delta into `openspec/specs/task-lifecycle-governance/spec.md`; archive
