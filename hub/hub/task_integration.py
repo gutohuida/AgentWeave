@@ -31,7 +31,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Collection, Dict, List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import requirement_evidence, worktrees
@@ -258,7 +259,13 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
     The empty-`commit_sha` guard belongs to the filter and lives here, although it sat inside
     `integration_targets`' reduction loop until this function existed. Left there, a `git` footprint
     whose `commit_sha` is `""` would refuse an approval that the merge would then silently ignore.
+
+    **Another task's evidence counts only once that task is approved** (F520). Until then its own
+    approval -- its review and its checks -- is what lands it; counted here, accepting it merged it
+    through this task instead, bypassing both. Evidence recorded by this task, or by no task, counts
+    as before.
     """
+    recorder = aliased(Task)
     rows = (
         await session.execute(
             select(EvidenceFootprint, RequirementEvidence)
@@ -270,12 +277,19 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
                 TaskRequirementLink,
                 TaskRequirementLink.requirement_id == RequirementEvidence.requirement_id,
             )
+            .outerjoin(recorder, recorder.id == RequirementEvidence.task_id)
             .where(
                 TaskRequirementLink.task_id == task.id,
                 RequirementEvidence.project_id == task.project_id,
                 RequirementEvidence.review_state == review_state,
                 EvidenceFootprint.kind == "git",
                 EvidenceFootprint.commit_sha.is_not(None),
+                or_(
+                    RequirementEvidence.task_id.is_(None),
+                    RequirementEvidence.task_id == task.id,
+                    recorder.id.is_(None),
+                    recorder.status == "approved",
+                ),
             )
             .order_by(EvidenceFootprint.observed_at.asc())
         )
@@ -745,6 +759,12 @@ async def tasks_awaiting_this_commit(session: AsyncSession, evidence) -> List[Ta
     ).scalar_one_or_none()
     if footprint is None or footprint.kind != "git" or not footprint.commit_sha:
         return []
+    if evidence.task_id:
+        # F520: evidence another task recorded is a target of no task but its own until that task
+        # is approved (`_targets`); re-integrating a sibling here would only record a no-op.
+        recording = await session.get(Task, evidence.task_id)
+        if recording is not None and recording.status != "approved":
+            return []
 
     already = select(TaskIntegration.task_id).where(
         TaskIntegration.project_id == evidence.project_id,

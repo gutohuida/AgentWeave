@@ -555,8 +555,41 @@ async def test_the_refusal_names_the_requirement_and_both_remedies(
 async def test_the_refusal_names_the_task_that_recorded_the_evidence(
     app, auth_headers, builder, tmp_path
 ):
-    """A requirement may be served by more than one task, and this task's integration is what would
-    merge the other one's commit — so the reader needs a route back to the cause."""
+    """A requirement may be served by more than one task. Once the other task is approved, this
+    task's integration is what would merge its commit (F520: not before) — so the reader needs a
+    route back to the cause."""
+    from hub.db.models import Task
+
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    other = await linked_task(app, auth_headers, title="The other one")
+    commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n")
+    await record_evidence(app, builder, task_id=other)
+    git(tmp_path, "checkout", "-q", "main")
+    async with async_session_factory() as session:
+        # Approved with its evidence still awaiting, constructed directly: only an approved
+        # recorder's evidence is this task's to merge, and so this task's to wait on.
+        (await session.get(Task, other)).status = "approved"
+        await session.commit()
+
+    task = await linked_task(app, auth_headers, title="This one")
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+
+    assert detail["unaccepted"][0]["recorded_by_task"] == other
+    assert detail["unaccepted"][0]["recorded_by_another_task"] is True
+    assert other in detail["message"], detail["message"]
+
+
+@pytest.mark.asyncio
+async def test_an_unapproved_siblings_waiting_evidence_does_not_refuse_this_task(
+    app, auth_headers, builder, tmp_path
+):
+    """F520: evidence recorded by a task still under review is that task's to land, through its
+    own approval; it neither refuses nor merges through a sibling serving the same requirement."""
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
@@ -567,13 +600,9 @@ async def test_the_refusal_names_the_task_that_recorded_the_evidence(
     git(tmp_path, "checkout", "-q", "main")
 
     task = await linked_task(app, auth_headers, title="This one")
-    refused = await approve(app, auth_headers, task)
-    assert refused.status_code == 409, refused.text
-    detail = refused.json()["detail"]
-
-    assert detail["unaccepted"][0]["recorded_by_task"] == other
-    assert detail["unaccepted"][0]["recorded_by_another_task"] is True
-    assert other in detail["message"], detail["message"]
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+    assert not (tmp_path / "feature.py").exists()
 
 
 @pytest.mark.asyncio

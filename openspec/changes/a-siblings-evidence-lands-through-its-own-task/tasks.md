@@ -4,9 +4,9 @@
 
 ## 2. Build
 
-- [ ] 2.1 `task_integration._targets`: exclude evidence whose `task_id` names another task that is not `approved`
-- [ ] 2.2 `tasks_awaiting_this_commit`: re-integrate only the tasks the accepted evidence is a target of
-- [ ] 2.3 Guard: the existing integration/gate suites stay green (`test_task_integration*.py`, `test_approval_refuses_unaccepted_evidence.py`, `test_project_checks_gate.py`)
+- [x] 2.1 `task_integration._targets`: exclude evidence whose `task_id` names another task that is not `approved`
+- [x] 2.2 `tasks_awaiting_this_commit`: re-integrate only the tasks the accepted evidence is a target of
+- [x] 2.3 Guard: the existing integration/gate suites stay green (`test_task_integration*.py`, `test_approval_refuses_unaccepted_evidence.py`, `test_project_checks_gate.py`)
 
 ## 3. Close
 
