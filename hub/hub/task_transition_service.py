@@ -741,6 +741,15 @@ async def apply_transition(
     if to_status == "approved":
         await integrate_task(session, task, actor)
 
+    # A task completed outside a turn has its work committed already, so its checks can start now
+    # (approval-runs-the-projects-checks D4). One completed by a run is checked at that run's end,
+    # after the snapshot that commits its work (`project_checks.after_run`). Never raises.
+    if to_status == "completed" and actor.run_id is None:
+        from . import project_checks
+
+        if await project_checks.configured_for(session, task.project_id):
+            project_checks.schedule(task.project_id, task.id)
+
     # **After** integration (design D5). Release snapshots any uncommitted change onto the task
     # branch, so releasing first would advance the branch past the evidence commit before the merge
     # reads it.

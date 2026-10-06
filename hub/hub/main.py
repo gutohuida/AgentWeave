@@ -466,6 +466,11 @@ async def lifespan(app: FastAPI):
     instance_identity.load_or_create()
     await reconcile_interrupted_runs()
     await reconcile_stale_job_runs()
+    # A check run a previous Hub left `running` is `interrupted` (approval-runs-the-projects-checks
+    # D4); approval re-runs it when asked.
+    from .project_checks import interrupt_leftover_runs
+
+    await interrupt_leftover_runs()
     await init_scheduler()
     # After the scheduler, which holds the wakes; after both reconciliations, whose rows it reads
     # past (`a-spent-allowance-holds-the-queue`, D5).

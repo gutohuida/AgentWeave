@@ -14,10 +14,10 @@
 
 ## 3. Building and running a check run
 
-- [ ] 3.1 Tests first (real git repo fixtures): the would-merge commit equals main plus every target (D1); a conflicting target records `error`; a failing command records `failed` with its exit code and output tail; a timeout ends the process tree; the root checkout is unchanged; no Hub credential reaches the environment; output is scrubbed.
-- [ ] 3.2 `hub/hub/project_checks.py`: the D1 commit, the D2 scratch worktree, the D4 queue (two at a time, per-task join), D8's environment, and result rows (D3).
-- [ ] 3.3 Tests first: moving to `completed` enqueues a run and returns before it ends; a project without checks enqueues nothing; startup marks `running` rows `interrupted`.
-- [ ] 3.4 Wire the enqueue into `apply_transition` on `completed`, and the startup reconcile into `main.py`.
+- [x] 3.1 Tests first (real git repo fixtures): the would-merge commit equals main plus every target (D1); a conflicting target records `error`; a failing command records `failed` with its exit code and output tail; a timeout ends the process tree; the root checkout is unchanged; no Hub credential reaches the environment; output is scrubbed.
+- [x] 3.2 `hub/hub/project_checks.py`: the D1 commit, the D2 scratch worktree, the D4 queue (two at a time, per-task join), D8's environment, and result rows (D3).
+- [x] 3.3 Tests first: moving to `completed` enqueues a run and returns before it ends; a project without checks enqueues nothing; startup marks `running` rows `interrupted`.
+- [x] 3.4 Wire the enqueue into `apply_transition` on `completed`, and the startup reconcile into `main.py`. Also at each run's end (`project_checks.after_run`, both executors): an agent completes its task mid-turn, before the snapshot commits its work, so a run started at that transition would check the wrong tree. Found while building.
 
 ## 4. The gate
 
