@@ -549,6 +549,58 @@ async def test_the_last_task_closing_queues_the_drafting_turn(
 
 
 @pytest.mark.asyncio
+async def test_the_drafting_turn_says_what_was_rejected_and_what_merged(
+    app, auth_headers, planner, scheduled
+):
+    """F501. The real drafting run read every task's status, saw `approved` three times, skipped
+    `list_evidence`, and called work "solid" whose evidence the operator had rejected twice and
+    which never reached main. The turn has to carry those two facts itself, not ask for them."""
+    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
+    slice_path = await _proposed_slice_with(
+        app, auth_headers, planner, roadmap_path, tasks=_two_tasks()
+    )
+    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
+    first, second = approved.json()["tasks_created"]
+    identifier = (await app.get(f"{TASKS}/{first}", headers=auth_headers)).json()[
+        "requirement_ids"
+    ][0]
+    recorded = await app.post(
+        "/api/v1/agent-actions/spec/evidence",
+        json={"identifier": identifier, "summary": "ran it", "task_id": first},
+        headers=planner,
+    )
+    assert recorded.status_code == 201, recorded.text
+    decided = await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "rejected", "reason": "the documented test command fails"},
+        headers=auth_headers,
+    )
+    assert decided.status_code == 200, decided.text
+    # The second task serves the same requirement; its own accepted evidence keeps C1b's
+    # all-rejected block from refusing its approval.
+    other = await app.post(
+        "/api/v1/agent-actions/spec/evidence",
+        json={"identifier": identifier, "summary": "checked it", "task_id": second},
+        headers=planner,
+    )
+    assert other.status_code == 201, other.text
+    accepted = await app.post(
+        f"{BASE}/spec/evidence/{other.json()['id']}/decision",
+        json={"decision": "accepted"},
+        headers=auth_headers,
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    await _move(app, auth_headers, first, "rejected")
+    await _move(app, auth_headers, second, "in_progress", "completed", "under_review", "approved")
+    await _settle()
+
+    (entry,) = await _queued()
+    assert f"{identifier} evidence rejected: the documented test command fails" in entry.content
+    assert "no merge into the main branch is recorded" in entry.content
+
+
+@pytest.mark.asyncio
 async def test_the_drafting_turn_is_queued_once(app, auth_headers, planner, scheduled):
     roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
     slice_path = await _proposed_slice(app, auth_headers, planner, roadmap_path)
@@ -858,3 +910,14 @@ async def test_the_spec_read_names_the_roadmap_slice_for_the_app(app, auth_heade
     assert got.json()["roadmap_slice"] == {"document": roadmap_path, "slice": "s1"}
     got = await app.get(f"{BASE}/spec", params={"path": roadmap_path}, headers=auth_headers)
     assert "roadmap_slice" not in got.json()
+
+
+@pytest.mark.asyncio
+async def test_a_submission_says_whether_it_is_ready_to_propose(app, auth_headers, planner):
+    """F502. A real agent read `ok: true` beside eight blocking findings and told the operator the
+    document was ready. The answer to that question is now a field, not an inference."""
+    path = await _agent_create(app, planner, title="Slice one")
+    saved = await _agent_submit(app, planner, path, _slice_doc(acceptance_criteria=[]))
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["blocking"]
+    assert saved.json()["ready_to_propose"] is False

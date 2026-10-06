@@ -273,3 +273,52 @@ def test_a_document_with_all_three_dependency_problems_returns_all_three_finding
     )
     codes = _codes(payload)
     assert {"depends_on_unresolved", "dependency_cycle", "import_not_approved"} <= codes
+
+
+def test_a_criterion_written_inside_its_requirement_is_named_where_it_went():
+    """F502. A real agent nested its criteria under each requirement; the schema kept them, the
+    check counted none, and the refusal said only that there were none. The finding has to say the
+    field is not read and where criteria go."""
+    payload = _complete(
+        requirements=[
+            {
+                "key": "alpha",
+                "statement": "It responds in 200ms",
+                "modal": "MUST",
+                "acceptance_criteria": [{"statement": "it does"}],
+            }
+        ],
+        acceptance_criteria=[],
+    )
+    findings = [f for f in check(payload) if f.code == "unknown_field"]
+    assert [f.where for f in findings] == ["requirements[0].acceptance_criteria"]
+    assert "top-level acceptance_criteria" in findings[0].message
+
+
+def test_a_roadmap_slice_whose_done_says_nothing_is_reported():
+    """F502: `done: "false"` passed, and the drafting turn printed "Done when: false"."""
+    payload = _payload(
+        kind="roadmap",
+        scope={"in_scope": ["x"], "non_goals": ["y"]},
+        slices=[
+            {"key": "s1", "title": "One", "intent": "i", "done": "false"},
+            {"key": "s2", "title": "Two", "intent": "i", "done": "Overdue tasks are listed"},
+            {"key": "s3", "title": "Three", "intent": "i", "done": "no"},
+        ],
+    )
+    findings = [f for f in check(payload) if f.code == "slice_done_empty"]
+    assert [f.where for f in findings] == ["slices[0].done", "slices[2].done"]
+
+
+def test_a_boolean_done_is_refused_with_what_the_field_means():
+    """The second real drive: `done: false` six times, then `"no"` once a string was demanded."""
+    import pytest
+
+    from hub.spec_payload import PayloadError
+
+    with pytest.raises(PayloadError) as refused:
+        _payload(
+            kind="roadmap",
+            slices=[{"key": "s1", "title": "One", "intent": "i", "done": False}],
+        )
+    assert "not whether it is finished" in str(refused.value)

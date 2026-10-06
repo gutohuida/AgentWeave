@@ -920,7 +920,14 @@ async def test_1_8_a_roadmap_approval_writes_a_report_too(app, auth_headers, run
         "title": "Plan",
         "scope": {"in_scope": ["the plan"], "non_goals": ["the rest"]},
         # A roadmap carries slices, not requirements or tasks (C1a, `spec-roadmaps`).
-        "slices": [{"key": "s1", "title": "First slice", "intent": "i", "done": "d"}],
+        "slices": [
+            {
+                "key": "s1",
+                "title": "First slice",
+                "intent": "i",
+                "done": "the first slice works end to end",
+            }
+        ],
     }
     written = await _submit_document(app, run_headers, roadmap, path=path)
     assert written.status_code == 200, written.text

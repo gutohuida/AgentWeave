@@ -561,10 +561,30 @@ async def _check_unaccepted(
     # something, not about where the commit came from. That is why no second rule is needed for the
     # evidence-free route (design D8): a task whose merge its branch tip governs and which happens
     # to carry awaiting evidence gets the advisory, not the refusal, because its work does land.
-    if situation.will_merge:
+    # "Would merge" means a commit that is not in the main branch already (F499): `_targets` reaches
+    # another task's accepted commit through a shared requirement, and once that task's approval
+    # has merged it, counting it here let this approval merge nothing while its own work waited.
+    if await asyncio.to_thread(_merges_something_new, situation):
         refusal.advisory.extend(entries)
         return
     refusal.unaccepted.extend(entries)
+
+
+def _merges_something_new(situation: _MergeSituation) -> bool:
+    """Whether any commit approval would merge is not already in the main branch.
+
+    An unanswerable probe counts as new, which is how this read before F499: an unknown is not a
+    reason to refuse.
+    """
+    from . import requirement_evidence
+
+    return any(
+        requirement_evidence.is_reachable_from(
+            situation.root, target.commit_sha, situation.main_branch
+        )
+        is not True
+        for target in situation.will_merge
+    )
 
 
 async def _check_live_turn(

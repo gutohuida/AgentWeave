@@ -260,6 +260,20 @@ def check(
                 )
             )
 
+    findings.extend(_unknown_field_findings(payload))
+
+    if payload.kind == "roadmap":
+        for index, item in enumerate(payload.slices):
+            if len(item.done.split()) < _OUTCOME_WORDS:
+                findings.append(
+                    Finding(
+                        "slice_done_empty",
+                        f"slices[{index}].done",
+                        f"slice {item.key!r} does not say how anyone can tell it is finished; "
+                        "state the outcome that shows it is done",
+                    )
+                )
+
     if payload.roadmap is not None:
         findings.extend(_roadmap_link_findings(payload, roadmaps or {}))
 
@@ -287,6 +301,49 @@ def check(
                 )
             )
 
+    return findings
+
+
+#: The fewest words a slice's `done` can state an outcome in. Real agents read the field as a status
+#: and wrote "false", then "no" (F502); a list of such words is never complete, a sentence is the test.
+_OUTCOME_WORDS = 3
+
+#: Where a field written in the wrong place belongs, for the misplacements authors actually make.
+_BELONGS = {
+    ("requirement", "acceptance_criteria"): (
+        "acceptance criteria go in the top-level acceptance_criteria[], each naming this "
+        "requirement's key in `requirement`"
+    ),
+}
+
+
+def _unknown_field_findings(payload: SpecPayload) -> List[Finding]:
+    """Fields a part does not define (F502).
+
+    The schema keeps unknown fields so a rewrite loses nothing, so a field written in the wrong
+    place is stored and never read: a real agent nested its criteria under each requirement and was
+    then told there were none. A later schema version is refused at validation, so anything unknown
+    here was written for this one.
+    """
+    findings: List[Finding] = []
+    parts = (
+        ("requirements", "requirement", payload.requirements),
+        ("acceptance_criteria", "acceptance criterion", payload.acceptance_criteria),
+        ("tasks", "task", payload.tasks),
+        ("slices", "slice", payload.slices),
+    )
+    for collection, singular, items in parts:
+        for index, item in enumerate(items):
+            for name in sorted(item.model_extra or {}):
+                belongs = _BELONGS.get((singular, name))
+                findings.append(
+                    Finding(
+                        "unknown_field",
+                        f"{collection}[{index}].{name}",
+                        f"{name!r} is not a field of a {singular}, so nothing reads it"
+                        + (f"; {belongs}" if belongs else ""),
+                    )
+                )
     return findings
 
 

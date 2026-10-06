@@ -200,7 +200,12 @@ async def _queue_if_built(session: AsyncSession, document: SpecDocument) -> Opti
             project_id=document.project_id,
             agent=agent,
             origin_type="operator",
-            content=next_slice_message(detail, approved_path=document.path, tasks=tasks),
+            content=next_slice_message(
+                detail,
+                approved_path=document.path,
+                tasks=tasks,
+                outcomes=await _task_outcomes(session, tasks),
+            ),
             hop_depth=0,
             conversation_id=detail["conversation_id"],
             spec_document=detail["roadmap"],
@@ -216,28 +221,86 @@ async def _queue_if_built(session: AsyncSession, document: SpecDocument) -> Opti
     return agent
 
 
-def next_slice_message(detail: Dict[str, Any], *, approved_path: str, tasks: List[Task]) -> str:
-    """The fixed Hub text of the drafting turn (C1a D4, D4a)."""
+async def _task_outcomes(session: AsyncSession, tasks: List[Task]) -> Dict[str, List[str]]:
+    """Per task, the lines saying what reached main and what the operator rejected (F501).
+
+    Carried in the turn rather than left to `list_evidence`: the real drafting run read only the
+    task statuses, and `approved` said nothing about work that never merged or evidence rejected
+    twice before a later approval.
+    """
+    from .db.models import EvidenceReview, RequirementEvidence, SpecRequirement, TaskIntegration
+
+    ids = [t.id for t in tasks]
+    if not ids:
+        return {}
+    lines: Dict[str, List[str]] = {task_id: [] for task_id in ids}
+    integrations = (
+        (
+            await session.execute(
+                select(TaskIntegration)
+                .where(TaskIntegration.task_id.in_(ids))
+                .order_by(TaskIntegration.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    latest = {row.task_id: row for row in integrations}
+    for task_id in ids:
+        row = latest.get(task_id)
+        if row is None:
+            lines[task_id].append("no merge into the main branch is recorded")
+        elif row.outcome == "merged":
+            lines[task_id].append(f"merged into {row.target_branch or 'the main branch'}")
+        else:
+            lines[task_id].append(f"not merged ({row.outcome}): {row.reason}")
+    rejected = await session.execute(
+        select(RequirementEvidence.id, RequirementEvidence.task_id, SpecRequirement.identifier)
+        .join(SpecRequirement, SpecRequirement.id == RequirementEvidence.requirement_id)
+        .where(RequirementEvidence.task_id.in_(ids), RequirementEvidence.review_state == "rejected")
+        .order_by(RequirementEvidence.produced_at)
+    )
+    for evidence_id, task_id, identifier in rejected.all():
+        reason = await session.scalar(
+            select(EvidenceReview.reason)
+            .where(EvidenceReview.evidence_id == evidence_id, EvidenceReview.decision == "rejected")
+            .order_by(EvidenceReview.sequence.desc())
+            .limit(1)
+        )
+        lines[task_id].append(f"{identifier} evidence rejected: {reason or '(no reason given)'}")
+    return lines
+
+
+def next_slice_message(
+    detail: Dict[str, Any],
+    *,
+    approved_path: str,
+    tasks: List[Task],
+    outcomes: Optional[Dict[str, List[str]]] = None,
+) -> str:
+    """The fixed Hub text of the drafting turn (C1a D4, D4a; F501 adds each task's outcomes)."""
     roadmap_path = detail["roadmap"]
     approved = detail.get("approved_slice") or {}
     following = detail.get("next_slice") or {}
     link = f'{{"document": "{roadmap_path}", "slice": "{following.get("key")}"}}'
+    task_lines: List[str] = []
+    for t in tasks:
+        task_lines.append(f"- `{t.id}` {t.title}: {t.status}")
+        task_lines.extend(f"  - {line}" for line in (outcomes or {}).get(t.id, []))
     lines = [
         f"Slice `{approved.get('key')}` ({approved.get('title') or ''}) of the roadmap "
         f"{detail.get('roadmap_title')!r} (`{roadmap_path}`), specified by `{approved_path}`, is "
         "built: none of its tasks is still open. When the operator approved it, they asked you to "
         "draft the next slice once it was built.",
         "Its tasks and how they ended:",
-        *(
-            [f"- `{t.id}` {t.title}: {t.status}" for t in tasks]
-            or ["- none: no task was linked to it"]
-        ),
+        *(task_lines or ["- none: no task was linked to it"]),
         f"The next slice is `{following.get('key')}`: {following.get('title') or ''}.",
         f"- Intent: {following.get('intent') or '(not stated)'}",
         f"- Done when: {following.get('done') or '(not stated)'}",
-        "Before drafting, read the roadmap with `read_spec_document`, and read those tasks (their "
-        "notes and evidence) with `get_task` and `list_evidence`: what building that slice taught "
-        "you belongs in this one, and a rejected task's work is not done.",
+        "Before drafting, read the roadmap with `read_spec_document`, and read those tasks with "
+        "`get_task` and `list_evidence`. Work that did not reach the main branch is not done, "
+        "whatever its status says, and a rejection's reason is something the next slice must not "
+        "repeat: what building that slice taught you belongs in this one.",
         "Then create a change document with `create_spec_document` and submit it with "
         f"`roadmap: {link}`. Keep it to about a dozen requirements or fewer, as a few tasks. Do "
         "not implement anything.",

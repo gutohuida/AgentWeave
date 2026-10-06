@@ -3681,7 +3681,8 @@ def submit_spec_document(
 
     `slices` — a `roadmap` document's slices, in the order they are built: objects with `key`
       (lowercase, hyphenated, unique), `title`, `intent` (the outcome the operator could see
-      working), `done` (how anyone can tell it is finished) and `builds_after` (keys of earlier
+      working), `done` (a sentence: the outcome that shows it is finished, not whether it is
+      finished yet) and `builds_after` (keys of earlier
       slices). Only on a roadmap, which carries no `requirements`, `acceptance_criteria` or
       `tasks` — those go in each slice's change document.
 
@@ -3689,8 +3690,9 @@ def submit_spec_document(
       `{"document": "<roadmap path>", "slice": "<slice key>"}`. Proposing it is refused until that
       roadmap is approved and holds that slice. Include it in every later submission.
 
-    Returns the path, the phase, the identifier assigned to each requirement key, and `blocking` —
-    what would refuse a proposal right now.
+    Returns the path, the phase, the identifier assigned to each requirement key, `blocking` —
+    what would refuse a proposal right now — and `ready_to_propose`, which is false while anything
+    blocks. A saved document is not a ready one: say it is ready only when that field is true.
     """
     document: Dict[str, Any] = {
         "schema_version": schema_version,

@@ -34348,7 +34348,7 @@ correct for the shape it was built from, but the rate at which real checkpoints 
 
 ## F499 (A) — approving a task whose requirements another task also serves merges the other task's commit, and the approved task's own work never lands
 
-**Status:** open
+**Status:** fixed (this commit) -- Tier 0: `requirement_gate._check_unaccepted` allows the mixed case only where a commit approval would merge is not already in the main branch (`_merges_something_new`). Test `test_another_tasks_merged_commit_does_not_stand_in_for_this_tasks_waiting_work` fails before. Driven 2026-10-06 on `:8031`: every slice-1 approval merged its own task branch (`6abdcaf`, `46557a0`, `747131f`); the shared-requirement shape itself did not recur live (the slice had disjoint requirements), so that shape is test-only
 Found 2026-10-06 by the first real end-to-end drive of the slice spec flow (C1a + C1b on master
 `d4c65eb`), drive Hub `:8030` (profile `slices1006`), project `proj-e1e7ccbc8e78`, real Haiku turns.
 Driven, not read. Area: **Worktrees & integration** / **Requirements, evidence & coverage**.
@@ -34380,7 +34380,7 @@ Severity A: approved work silently lost, and the record says nothing was left to
 
 ## F500 (A) — a reviewer records its own evidence during the review, which lifts C1b's rejected-requirement block, then approves over the operator's rejection
 
-**Status:** open
+**Status:** fixed (this commit) -- Tier 0: `requirement_evidence.record` refuses an agent run reviewing the task (`review_task_for_run`) with `reviewer_records_evidence`. Driven 2026-10-06 on `:8031`: `run-eaa296bea5d7` (planner reviewing task 3) was refused twice with the new sentence, then read the author evidence with `list_evidence` and gave its verdict. Adjacent gap filed as F505
 Same drive as F499. Area: **Requirements, evidence & coverage** / **Flows & review**.
 
 The operator rejected every piece of `task-06d8e481926e`'s evidence twice (FR-2, FR-6, then FR-2,
@@ -34397,7 +34397,7 @@ stop, on its first real slice. Related but distinct: F497 (reviewer not told the
 
 ## F501 (B) — the next slice is drafted from task statuses alone: the agent skipped `list_evidence`, missed two rejections and unmerged work, and called the model "solid"
 
-**Status:** open
+**Status:** fixed (this commit) -- Tier 0: the drafting turn lists, per task, its latest merge outcome and each rejected evidence piece with its reason (`slice_drafting._task_outcomes`). Driven 2026-10-06 on `:8031`: the queued message carried "merged into master" ×3 and the FR-2 rejection reason; the drafting run called `list_evidence` and named the merge conflict in its notes
 Same drive. Area: **Spec documents** (C1a's drafting turn).
 
 The queued drafting message (`entry-99eebc58aa30`) asks the author to read the tasks' notes and
@@ -34413,7 +34413,7 @@ than asking the agent to fetch it.
 
 ## F502 (C) — an agent learns the spec payload schema by trial and error: seven rejected submits in two turns, and a misplaced field is accepted silently
 
-**Status:** open
+**Status:** fixed (this commit) -- Tier 0: `unknown_field` names a field a part does not define, with where criteria belong; a roadmap slice needs a `done` of at least three words (`slice_done_empty`); a boolean `done` is refused with what the field means; the agent submit answers `ready_to_propose`. Driven 2026-10-06 on `:8031`: the planner fixed non-goals unprompted and said "ready" only when `ready_to_propose` was true (slice 2 proposed clean). Schema discovery is still by trial (4 rejected submits): not fixed, the payload errors are already batched
 Same drive. Area: **Spec documents** / **Agent environment**.
 
 Over the two authoring turns (`run-00a1dcc17f30`, `run-c5256b54ad60`, Claude Code on Haiku via
@@ -34442,3 +34442,46 @@ naming the permitted words; the flow stopped itself with "loop queue is empty". 
 to slice 2 drafted in 22 minutes, 11 real turns, $2.97 API-equivalent (authoring $0.61, build
 $0.83, review $0.87, slice-2 drafting $0.61). Review rounds per task 1/2/1; first-pass approval 2
 of 3 — but F499/F500 make every approval in this slice suspect.
+
+## F504 (B) — a task sent back as `revision_needed` reaches its author with no reason, so a merge conflict loops
+
+**Status:** open
+Found 2026-10-06 by the acceptance drive for F499–F502 (drive Hub `:8031`, profile `slices1006b`,
+project `proj-abe05d2040fb`, real Haiku turns). Driven. Area: **Flows & review**.
+
+`task-6b956bab2b51`'s approval was refused because its branch no longer merged into master (task 1
+had merged first; both edited `tests/test_store.py`), and the reviewer moved it to
+`revision_needed`. The flow's rework brief to the author (`entry-f2d6e759dcf3`) carries the
+standing loop text and the task's original description and criteria: nothing about the conflict,
+the refusal or the reviewer's notes. The author (`run-766835491458`) re-ran the tests, found them
+green, tried to re-record identical evidence (refused as a duplicate) and moved the task to
+`completed` again with the same conflicting commit (`bff98ca`). The next review was refused for the
+same conflict. The reviewer's own notes were overwritten by the author's on completion. It took two
+operator messages naming the conflict to finish the slice. Direction, not decided: the rework brief
+carries the latest refusal and the reviewer's verdict notes.
+
+## F505 (C) — an agent that co-authored a task's fix and recorded evidence for it can approve it
+
+**Status:** open — a design question for the operator
+Same drive. Area: **Flows & review**.
+
+`builder`, staffed to review `task-80001982159f` (authored by `reviewer`), was messaged by another
+agent to resolve its merge conflict. In a *work* run (`run-98fbf4aa530e`) it committed the
+resolution (`14b1edb`, `46557a0`) and recorded FR-3/FR-4 evidence on it; F500's refusal does not
+fire there, by design (only a review run is refused). In its next review run it approved the task.
+`_guard_author_is_not_reviewer` compares only the completing agent where one exists, and says so on
+purpose ("another agent's evidence row on the same task does not widen a decided answer"). So the
+rule separating author from reviewer does not cover a reviewer that became a co-author. Widening it
+reverses a documented decision, so it is filed, not changed.
+
+## F506 (D) — what the acceptance drive measured
+
+**Status:** noted
+Request → roadmap + slice 1 → build → slice 2 drafted in 26 minutes, 18 real Haiku turns, $4.28
+API-equivalent (planner $2.23, builder $1.54, reviewer $0.51) on `:8031`. Slice 1: 4 requirements,
+3 tasks after one operator note (7 before); slice 2: 5 requirements, 3 tasks, proposed clean. All
+three slice-1 tasks merged their own branch; master: 52 tests pass, the search and id-reuse bugs
+fixed. Review rounds per task 1/4/2 — the extra rounds were merge conflicts between parallel tasks
+of one slice (F504), not defects. The flow stopped itself on an empty queue. Observed, not filed:
+one Haiku reviewer loaded `update_task` through ToolSearch four times and never called it, ending
+with "I cannot directly invoke the AgentWeave tool"; the Hub restaffed the review as a divergence.

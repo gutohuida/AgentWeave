@@ -94,6 +94,29 @@ class Footprint:
 # ---------------------------------------------------------------------------
 
 
+async def _refuse_a_reviewer_recording(
+    session: AsyncSession, run_id: str, task_id: str, requirement: SpecRequirement
+) -> None:
+    """Refuse evidence for a task from the run reviewing that task (F500).
+
+    A reviewer judges the evidence the task's author recorded. Evidence it records itself is
+    evidence it then approves: one fresh `awaiting` row was enough to make a rejected requirement's
+    evidence no longer all rejected, which lifted the block on it, and the reviewer approved over
+    the operator's rejection.
+    """
+    from .run_task_binding import review_task_for_run
+
+    run = await session.get(Run, run_id)
+    if run is None or await review_task_for_run(session, run) != task_id:
+        return
+    raise EvidenceRefusedError(
+        f"This run is reviewing {task_id}, and a reviewer judges the evidence the task's author "
+        f"recorded rather than recording its own. If that evidence does not demonstrate "
+        f"{requirement.identifier}, move {task_id} to revision_needed and say what is missing.",
+        code="reviewer_records_evidence",
+    )
+
+
 async def record(
     session: AsyncSession,
     requirement: SpecRequirement,
@@ -128,6 +151,9 @@ async def record(
         # only quiet. Without this the row lands with `task_id` NULL and `commit_for_task_review`,
         # which selects on that column, reports the task as having no evidence at all (F74).
         task_id = await task_bound_to_run(session, actor.run_id)
+
+    if actor.kind == "agent" and actor.run_id and task_id:
+        await _refuse_a_reviewer_recording(session, actor.run_id, task_id, requirement)
 
     taken: Optional[Footprint] = None
     if workspace is not None:

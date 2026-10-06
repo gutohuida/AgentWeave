@@ -928,6 +928,42 @@ async def test_a_commit_this_task_already_merged_is_not_attempted_again(
     assert await integrations(app, auth_headers, task) == before
 
 
+@pytest.mark.asyncio
+async def test_another_tasks_merged_commit_does_not_stand_in_for_this_tasks_waiting_work(
+    app, auth_headers, builder, tmp_path
+):
+    """F499, the drive's shape. Two tasks of one slice share a requirement (C1b made that normal).
+    The first task's evidence is accepted and its approval merges it. The second task's own work
+    waits unjudged — and its approval used to pass as "the mixed case", because `_targets` reaches
+    the first task's accepted commit through the shared requirement. That commit was already in
+    main, so the approval merged nothing, recorded "nothing to merge", and the second task's work
+    never landed. Something else would merge only where a target is not already in main."""
+    make_repo(tmp_path)
+    await make_two_requirement_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    first_task = await linked_task_for(app, auth_headers, ["FR-1"], title="First")
+    first = commit_on_branch(tmp_path, AGENT_BRANCH, "one.py", "1\n")
+    first_evidence = await record_evidence_for(app, builder, "FR-1", task_id=first_task)
+    git(tmp_path, "checkout", "-q", "main")
+    await accept(app, auth_headers, first_evidence)
+    assert (await approve(app, auth_headers, first_task)).status_code == 200
+    assert first in commits_on(tmp_path, "main")
+
+    second_task = await linked_task_for(app, auth_headers, ["FR-1", "FR-2"], title="Second")
+    second = commit_on_branch(tmp_path, "agentweave/second", "two.py", "2\n")
+    await record_evidence_for(app, builder, "FR-1", task_id=second_task)
+    await record_evidence_for(app, builder, "FR-2", task_id=second_task)
+    git(tmp_path, "checkout", "-q", "main")
+
+    refused = await approve(app, auth_headers, second_task)
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"]["code"] == "gate_unsatisfied", refused.text
+    assert second not in commits_on(tmp_path, "main")
+    fetched = await app.get(f"{TASKS}/{second_task}", headers=auth_headers)
+    assert fetched.json()["status"] != "approved"
+
+
 # ---------------------------------------------------------------------------
 # Group 6 — the surfaces the sentence has to reach.
 # ---------------------------------------------------------------------------

@@ -30,7 +30,7 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 # The contract is versioned rather than final. Gates and traceability have not
 # yet stated their requirements on it, so freezing it now would ship a schema
@@ -216,11 +216,25 @@ class Slice(_Part):
     intent: str = Field(
         default="", description="The outcome the operator could see working once it is built."
     )
-    done: str = Field(default="", description="How anyone can tell the slice is finished.")
+    done: str = Field(
+        default="",
+        description="A sentence: the outcome that shows the slice is finished — not whether it is finished yet.",
+    )
     builds_after: List[str] = Field(
         default_factory=list,
         description="Keys of the slices of this roadmap it builds on.",
     )
+
+    @field_validator("done", mode="before")
+    @classmethod
+    def _done_is_a_criterion(cls, value: Any) -> Any:
+        # F502: real agents sent `done: false` (a status) and then the string "no".
+        if isinstance(value, bool):
+            raise ValueError(
+                "done is the outcome that shows the slice is finished, written as a sentence, "
+                "not whether it is finished yet"
+            )
+        return value
 
 
 class RoadmapLink(_Part):
