@@ -296,6 +296,7 @@ async def _apply_and_write(
             for f in (
                 *spec_completeness.overlap_warnings(payload),
                 *spec_completeness.undeclared_files_warnings(payload),
+                *spec_completeness.test_only_task_warnings(payload),
             )
         ],
     )

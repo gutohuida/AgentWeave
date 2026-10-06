@@ -388,6 +388,53 @@ def undeclared_files_warnings(payload: SpecPayload) -> List[Finding]:
     ]
 
 
+_TEST_DIRS = {"tests", "test", "__tests__"}
+
+
+def is_test_path(path: str) -> bool:
+    """Whether a repo-relative path is a test by the common conventions: a `tests`/`test`/
+    `__tests__` directory, or a `test_*`, `*_test.*`, `*.test.*` or `*.spec.*` file."""
+    parts = path.replace(chr(92), "/").strip("/").split("/")
+    name = parts[-1]
+    stem = name.split(".")[0]
+    return (
+        any(part in _TEST_DIRS for part in parts[:-1])
+        or stem.startswith("test_")
+        or stem.endswith("_test")
+        or ".test." in name
+        or ".spec." in name
+    )
+
+
+def test_only_task_warnings(payload: SpecPayload) -> List[Finding]:
+    """Tasks that edit only tests while another local task depends on them (F512).
+
+    That shape is a test written red for a later task to turn green. Approval runs the project's
+    checks on the work it would merge, so the first task can never pass them, and lands only by an
+    operator override. Advisory, like `overlap_warnings`; a test task nothing depends on (covering
+    code that already works) is not this shape and is not named.
+    """
+    local = [t for t in payload.tasks if t.from_ is None]
+    warnings: List[Finding] = []
+    for task in local:
+        if not task.files or not all(is_test_path(path) for path in task.files):
+            continue
+        dependents = [t.key for t in local if task.key in t.depends_on]
+        if not dependents:
+            continue
+        names = ", ".join(repr(key) for key in dependents)
+        warnings.append(
+            Finding(
+                "test_only_task",
+                "tasks",
+                f"task {task.key!r} edits only tests and {names} depends on it, so it is red until "
+                "they land and fails the project's checks at approval; put the failing test and "
+                "the fix that turns it green in one task",
+            )
+        )
+    return warnings
+
+
 #: The fewest words a slice's `done` can state an outcome in. Real agents read the field as a status
 #: and wrote "false", then "no" (F502); a list of such words is never complete, a sentence is the test.
 _OUTCOME_WORDS = 3

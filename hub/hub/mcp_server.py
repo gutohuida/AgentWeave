@@ -3663,7 +3663,9 @@ def submit_spec_document(
       in order rather than in parallel. `files` optionally lists the repo-relative paths (never
       empty or absolute; a directory covers what is beneath it) a task expects to edit; two tasks
       with overlapping `files` and no `depends_on` path between them draw a `warnings` entry in
-      the response, which never blocks a proposal.
+      the response, which never blocks a proposal. A test and its fix are one task: approval runs
+      the project's checks, so a task whose work is a test left red for a later task can never
+      pass them, and draws a `warnings` entry too.
 
     `algorithms` — objects with `name` and `steps`. Ordered or conditional behaviour goes here
       rather than in a paragraph, where the order has to be guessed at.

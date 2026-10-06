@@ -1734,7 +1734,11 @@ SPEC_PHASE_DUTIES = {
         "- **Declare files and order the tasks.** For each task you write, list in `files` the "
         "repo-relative paths it will edit. Chain any two tasks that share a path with "
         "`depends_on` (sibling task keys), so same-file tasks are built in order rather than in "
-        "parallel."
+        "parallel.\n"
+        "- **A test and its fix are one task.** Approval runs the project's checks on the work "
+        "it would merge, so every task must leave them green. Have the task write its failing "
+        "test first and then make it pass; never write a task whose work is a test that stays "
+        "red until a later task lands."
     ),
     "proposed": (
         "- This document is proposed and awaiting the operator's decision. Do not implement it, "
