@@ -17,6 +17,21 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-10-06
+
+Written ~22:58 in an interactive session with the operator present (operator: "Run, but fence F510").
+No new APPROVED rows: the window works the backlog as normal, with these fences.
+
+- **F510 is the trial's, not tonight's.** It was built on the trial Hub `:8010` (document
+  `spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/`); its
+  work is already on master (`3bae149`, `4f2face`). Do not build, re-spec or archive it.
+- **F520 and F521 are in-session work, not tonight's.** Filed tonight from the trial; their fixes are
+  the interactive session's. Do not build them.
+- `hub/tests/test_a_review_turn_reviews_the_branch_tip.py` is the trial's file. If it is red, record it in
+  the log and leave it; do not edit it.
+- Do not start, stop, restart or call the trial Hub `:8010` (as always), and do not touch
+  `.agentweave/checks/` or `.agentweave/tasks/` worktrees.
+
 ## 2026-10-05
 
 There is no review page. This was written in an interactive session with the operator present (operator: "Credits change +
