@@ -20,9 +20,14 @@ DECIDED. Absence is not consent.
 
 ## Open
 
-### F489-fix: how should the Hub learn a Copilot turn's failure cannot succeed on retry? -- 2026-10-06 night
+### F489-fix: how should the Hub learn a Copilot turn's failure cannot succeed on retry? -- 2026-10-06 night, DECIDED 2026-10-06
 
-- OPEN      f489-retry-signal  how the no-retry signal reaches `return_run_entries`, and what
+- DECIDED   f489-retry-signal  **(a): a Copilot-only `retryable: Optional[bool] = None` on
+  `copilot_acp.TurnOutcome`, set `False` for an `authentication` or `quota` `errorType`, threaded
+  through the one app-server call site; the entry is withdrawn at once with its own
+  `abandoned_reason`** (operator, 2026-10-06, as recommended in the morning briefing). Every other
+  failure keeps today's retry behaviour; Codex's `TurnOutcome` is untouched; no new hold variant.
+  The question was: how the no-retry signal reaches `return_run_entries`, and what
   "waits for the operator" means when there is no reset time to wait for.
 
 F489 (`scripts/drive/FINDINGS.md`) names the direction but not the design: a turn that failed with
