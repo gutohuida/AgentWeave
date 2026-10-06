@@ -885,6 +885,32 @@ async def retry_integration(session: AsyncSession, task: Task, actor: Actor) -> 
     return await integrate_task(session, task, actor)
 
 
+async def _hub_written_documents(session: AsyncSession, workspace, project_id: str) -> set:
+    """The project's documents whose file is exactly what the Hub last wrote (F515).
+
+    `content_digest` is stamped by every Hub write of a document, so a file that still hashes to it
+    holds no one's work but the Hub's. An operator's edit to the same file changes the hash and
+    counts as theirs, as it should.
+    """
+    from . import spec_documents, spec_lifecycle
+    from .db.models import SpecDocument
+
+    rows = (
+        (await session.execute(select(SpecDocument).where(SpecDocument.project_id == project_id)))
+        .scalars()
+        .all()
+    )
+    written = set()
+    for document in rows:
+        try:
+            content = spec_documents.read_document(workspace, document.path)
+        except Exception:  # noqa: BLE001 - an unreadable file is simply not exempt
+            continue
+        if content is not None and spec_lifecycle.digest(content) == document.content_digest:
+            written.add(document.path)
+    return written
+
+
 async def integrate_task(session: AsyncSession, task: Task, actor: Actor) -> list:
     """Put the approved work in the product, and record what happened either way.
 
@@ -959,7 +985,11 @@ async def integrate_task(session: AsyncSession, task: Task, actor: Actor) -> lis
             )
         )
 
-    results = [task_integration.integrate(root, target, project.main_branch) for target in targets]
+    hub_written = await _hub_written_documents(session, workspace, task.project_id)
+    results = [
+        task_integration.integrate(root, target, project.main_branch, hub_written=hub_written)
+        for target in targets
+    ]
     for result in results:
         _record(result)
 

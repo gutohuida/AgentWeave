@@ -29,7 +29,7 @@ import logging
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Collection, Dict, List, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -194,8 +194,14 @@ def current_branch(root: Path) -> Optional[str]:
     return result.stdout.strip() or None
 
 
-def has_uncommitted_changes(root: Path) -> bool:
+def has_uncommitted_changes(root: Path, hub_written: Collection[str] = ()) -> bool:
     """Whether *tracked* files have uncommitted modifications.
+
+    *hub_written* names files whose modification is the Hub's own write, byte for byte (F515): a
+    document's phase re-render rewrites a file the operator may have committed, and counting that
+    blocked every merge of the document's own tasks with a reason naming work that was not theirs.
+    Exempting them is as safe as the untracked case below: a merge that would touch one is refused
+    by git, and recorded as a failure.
 
     Untracked files are deliberately not counted. The Hub writes specification documents into the
     project directory, so a project that has ever had a document has untracked content essentially
@@ -208,7 +214,9 @@ def has_uncommitted_changes(root: Path) -> bool:
     result = _git(root, "status", "--porcelain", "--untracked-files=no")
     if result.returncode != 0:
         return False
-    return bool(result.stdout.strip())
+    exempt = set(hub_written)
+    # `XY path`, or `XY old -> new` for a rename: a rename is never the Hub's write.
+    return any(line[3:] not in exempt for line in result.stdout.splitlines() if line.strip())
 
 
 @dataclass
@@ -517,7 +525,9 @@ class IntegrationResult:
     rode_along: List[str] = field(default_factory=list)
 
 
-def integrate(root: Path, target: Target, main_branch: str) -> IntegrationResult:
+def integrate(
+    root: Path, target: Target, main_branch: str, *, hub_written: Collection[str] = ()
+) -> IntegrationResult:
     """Merge one commit into *main_branch*, locally.
 
     Preconditions are checked here rather than assumed, and each failure returns a `skipped` with a
@@ -546,7 +556,7 @@ def integrate(root: Path, target: Target, main_branch: str) -> IntegrationResult
         base.reason = ALREADY_INTEGRATED.format(commit=target.commit_sha[:12], target=main_branch)
         return base
 
-    if has_uncommitted_changes(root):
+    if has_uncommitted_changes(root, hub_written):
         base.reason = CHECKOUT_DIRTY
         return base
 
