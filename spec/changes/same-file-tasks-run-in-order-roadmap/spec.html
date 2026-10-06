@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Same-file tasks of a slice run in order</title>
+<meta name="aw-spec-kind" content="roadmap">
+<meta name="aw-spec-status" content="approved">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Same-file tasks of a slice run in order</h1>
+<p class="aw-meta"><span class="aw-chip">roadmap</span><span class="aw-chip aw-chip-phase-done">approved</span><span class="aw-chip">sketch</span></p>
+
+<section id="summary"><h2>Summary</h2><p>Tasks of one slice that edit the same files stop conflicting with each other, by being built one after another instead of in parallel.</p></section><section id="problem"><h2>Problem</h2><p>Measured 2026-10-06 in three end-to-end drives of the slice spec flow (scripts/drive/FINDINGS.md F504, F506; .claude/handoffs/DEAD-ENDS.md 2026-10-06): parallel tasks of one slice routinely edit the same files, so after the first merges every sibling conflicts with main. The approval gate refuses, the reviewer sends the task back, the author merges main and resubmits. Review rounds per task were 1/4/2 in one slice, the extra rounds being merge conflicts rather than defects; each costs a full review turn plus a rework turn. The ordering machinery already exists (task depends_on, gated at start by dependency_gate and the flow&#x27;s claim), but the planner is never told it exists: the submit_spec_document tool docs describe a task without depends_on, and nothing notices two unordered tasks that touch the same files.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>Telling the planner that tasks expected to edit the same file must be ordered with depends_on</li><li>Letting a task declare the files it expects to edit, and noticing at submission when two unordered tasks overlap</li><li>Measuring afterwards whether conflict-caused review rounds went down</li></ul><h3>Non-goals</h3><ul><li>Resolving merge conflicts automatically</li><li>Changing how the dependency gate or a flow&#x27;s claim works</li><li>Inferring a task&#x27;s files in the Hub without the planner declaring them</li><li>Any change that requires restarting the Hub while a slice is being built, or a database migration</li></ul></section><section id="slices"><h2>Slices</h2><ol><li id="slice-declare-and-warn"><strong>declare-and-warn</strong> — Planner orders same-file tasks and is warned when it does not<br>A planner drafting a slice is told to chain tasks that edit the same files, can declare each task&#x27;s files, and sees a warning when two unordered tasks overlap.<br><span class="aw-note">Done when: A slice whose tasks share a file is drafted with those tasks chained, or the submission names the overlap, and the acceptance test for it passes.</span></li><li id="slice-measure-conflict-rounds"><strong>measure-conflict-rounds</strong> — Conflict-caused review rounds are counted per slice<br>The operator can see, for a finished slice, how many revision_needed rounds were merge conflicts, so whether slice 1 worked is a number and not an impression.<br><span class="aw-note">Done when: For a slice, the count of sends-back caused by a merge conflict is retrievable and agrees with the task history.</span><br><span class="aw-note">Builds after: declare-and-warn</span></li><li id="slice-flag-missed-overlap"><strong>flag-missed-overlap</strong> — Overlaps the planner missed are flagged from real work<br>When a task&#x27;s actual changed files overlap an unordered sibling&#x27;s, the operator and reviewer are told before approval hits a conflict.<br><span class="aw-note">Done when: A task whose real changes overlap an unordered sibling is flagged before its approval is refused for a conflict.</span><br><span class="aw-note">Builds after: measure-conflict-rounds</span></li></ol></section><section id="requirements"><h2>Requirements</h2><p class="aw-empty">No requirements yet.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "roadmap",
+  "title": "Same-file tasks of a slice run in order",
+  "summary": "Tasks of one slice that edit the same files stop conflicting with each other, by being built one after another instead of in parallel.",
+  "problem": "Measured 2026-10-06 in three end-to-end drives of the slice spec flow (scripts/drive/FINDINGS.md F504, F506; .claude/handoffs/DEAD-ENDS.md 2026-10-06): parallel tasks of one slice routinely edit the same files, so after the first merges every sibling conflicts with main. The approval gate refuses, the reviewer sends the task back, the author merges main and resubmits. Review rounds per task were 1/4/2 in one slice, the extra rounds being merge conflicts rather than defects; each costs a full review turn plus a rework turn. The ordering machinery already exists (task depends_on, gated at start by dependency_gate and the flow's claim), but the planner is never told it exists: the submit_spec_document tool docs describe a task without depends_on, and nothing notices two unordered tasks that touch the same files.",
+  "scope": {
+    "in_scope": [
+      "Telling the planner that tasks expected to edit the same file must be ordered with depends_on",
+      "Letting a task declare the files it expects to edit, and noticing at submission when two unordered tasks overlap",
+      "Measuring afterwards whether conflict-caused review rounds went down"
+    ],
+    "non_goals": [
+      "Resolving merge conflicts automatically",
+      "Changing how the dependency gate or a flow's claim works",
+      "Inferring a task's files in the Hub without the planner declaring them",
+      "Any change that requires restarting the Hub while a slice is being built, or a database migration"
+    ]
+  },
+  "requirements": [],
+  "acceptance_criteria": [],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "slices": [
+    {
+      "key": "declare-and-warn",
+      "title": "Planner orders same-file tasks and is warned when it does not",
+      "intent": "A planner drafting a slice is told to chain tasks that edit the same files, can declare each task's files, and sees a warning when two unordered tasks overlap.",
+      "done": "A slice whose tasks share a file is drafted with those tasks chained, or the submission names the overlap, and the acceptance test for it passes.",
+      "builds_after": []
+    },
+    {
+      "key": "measure-conflict-rounds",
+      "title": "Conflict-caused review rounds are counted per slice",
+      "intent": "The operator can see, for a finished slice, how many revision_needed rounds were merge conflicts, so whether slice 1 worked is a number and not an impression.",
+      "done": "For a slice, the count of sends-back caused by a merge conflict is retrievable and agrees with the task history.",
+      "builds_after": [
+        "declare-and-warn"
+      ]
+    },
+    {
+      "key": "flag-missed-overlap",
+      "title": "Overlaps the planner missed are flagged from real work",
+      "intent": "When a task's actual changed files overlap an unordered sibling's, the operator and reviewer are told before approval hits a conflict.",
+      "done": "A task whose real changes overlap an unordered sibling is flagged before its approval is refused for a conflict.",
+      "builds_after": [
+        "measure-conflict-rounds"
+      ]
+    }
+  ],
+  "aw_identity": {
+    "requirements": {},
+    "high_water": 0,
+    "retired": {},
+    "digests": {}
+  }
+}
+</script>
+</body>
+</html>
