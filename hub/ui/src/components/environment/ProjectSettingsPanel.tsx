@@ -11,6 +11,7 @@ import {
 import { useModelCatalog, catalogModelLabel, resolveCatalogModel } from '@/api/modelCatalog'
 import { useRunners } from '@/api/runners'
 import { Button } from '@/components/ui/button'
+import { ProjectChecksEditor } from '@/components/environment/ProjectChecksEditor'
 import { Select } from '@/components/ui/input'
 import { DeleteProjectDialog } from '@/components/environment/DeleteProjectDialog'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
@@ -212,6 +213,18 @@ export function ProjectSettingsPanel() {
           </Button>
         </SettingsRow>
       )}
+
+      {/* What the Hub runs on the work a task's approval would merge; approval waits for them to
+          pass (approval-runs-the-projects-checks). Only the operator sets these. */}
+      <SettingsRow
+        label="Checks"
+        description="Commands run on main plus a task's work when it completes. Approval is refused until they pass. None means approval is unchanged."
+      >
+        <ProjectChecksEditor
+          checks={form.checks ?? []}
+          onChange={(checks) => set('checks', checks.length ? checks : null)}
+        />
+      </SettingsRow>
 
       <SettingsRow label="Automatic checkpointing" description={MODE_DESCRIPTION[form.checkpoint_mode]}>
         <Select

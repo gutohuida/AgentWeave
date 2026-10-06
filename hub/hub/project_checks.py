@@ -319,10 +319,11 @@ def is_running(task_id: str) -> bool:
     return task_id in _starting or (current is not None and not current.done())
 
 
-async def request_run(project_id: str, task_id: str) -> Optional[str]:
+async def request_run(project_id: str, task_id: str, *, force: bool = False) -> Optional[str]:
     """Start a run for *task_id* unless one is executing or the latest result is current.
 
-    Returns the id of the run that is or will be current, or `None` where no check applies.
+    Returns the id of the run that is or will be current, or `None` where no check applies or one is
+    already executing. *force* (the operator's re-run) starts one even over a current result.
     """
     if is_running(task_id):
         return None
@@ -351,7 +352,8 @@ async def request_run(project_id: str, task_id: str) -> Optional[str]:
                 return None
             latest = await latest_run(session, task_id)
             if (
-                latest is not None
+                not force
+                and latest is not None
                 and latest.state in DECIDED
                 and latest.main_sha == tip
                 and list(latest.target_shas or []) == targets
@@ -477,3 +479,18 @@ async def interrupt_leftover_runs() -> int:
         )
         await session.commit()
         return int(result.rowcount or 0)
+
+
+def run_view(run: TaskCheckRun) -> Dict[str, Any]:
+    """A check run as the task drawer reads it."""
+    return {
+        "id": run.id,
+        "state": run.state,
+        "main_sha": run.main_sha,
+        "target_shas": list(run.target_shas or []),
+        "merged_sha": run.merged_sha,
+        "results": list(run.results or []),
+        "error": run.error,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "ended_at": run.ended_at.isoformat() if run.ended_at else None,
+    }

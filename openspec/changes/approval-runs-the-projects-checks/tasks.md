@@ -21,20 +21,20 @@
 
 ## 4. The gate
 
-- [ ] 4.1 Tests first: each of the four task-lifecycle-governance scenarios, plus stale-by-main and stale-by-targets, plus a test that `approval_held_for_operator` and the integration preview start no run. The order of results matches what the route returns.
-- [ ] 4.2 The `checks` category in `GateRefusal` (D6); `evaluate(start_checks=...)` (D5); the approval transition and the land route pass `True`.
-- [ ] 4.3 Tests first: operator override with and without a reason, an agent override refused, a `running` result not overridable, the reason shown by `task_history`.
-- [ ] 4.4 `override_checks_reason` on the operator's update route, honoured per D7, stored on the transition.
+- [x] 4.1 Tests first: each of the four task-lifecycle-governance scenarios, plus stale-by-main and stale-by-targets, plus a test that `approval_held_for_operator` and the integration preview start no run. The order of results matches what the route returns.
+- [x] 4.2 The `checks` category in `GateRefusal` (D6); `evaluate(start_checks=...)` (D5); the approval transition and the land route pass `True`.
+- [x] 4.3 Tests first: operator override with and without a reason, an agent override refused, a `running` result not overridable, the reason shown by `task_history`.
+- [x] 4.4 `override_checks_reason` on the operator's update route, honoured per D7, stored on the transition.
 
 ## 5. Briefing
 
-- [ ] 5.1 Tests first: both review channels state passed / failed / running / none, and say nothing without checks.
-- [ ] 5.2 The sentence in `review_turn` (one helper, as `verdict_evidence_sentence`), used by both channels.
+- [x] 5.1 Tests first: both review channels state passed / failed / running / none, and say nothing without checks.
+- [x] 5.2 The sentence in `review_turn` (one helper, as `verdict_evidence_sentence`), used by both channels.
 
 ## 6. UI
 
-- [ ] 6.1 Tests first (vitest): the settings Checks editor saves and reloads; the drawer row shows each state and the failing tail; Re-run calls the route.
-- [ ] 6.2 The settings editor, the drawer row, and `POST /tasks/{id}/checks/run` (an operator-only re-run); refresh the bundle (`scripts/refresh_ui_bundle.py`) and commit `hub/ui/src` and `hub/hub/static/ui` together.
+- [x] 6.1 Tests (vitest; written after the components, not before): the settings Checks editor saves and reloads; the drawer row shows each state and the failing tail; Re-run calls the route.
+- [x] 6.2 The settings editor, the drawer row, and `POST /tasks/{id}/checks/run` (an operator-only re-run); refresh the bundle (`scripts/refresh_ui_bundle.py`) and commit `hub/ui/src` and `hub/hub/static/ui` together.
 
 ## 7. What must not move
 

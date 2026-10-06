@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getJson, patchJson, postJson } from './client'
+import { ApiError, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { neutraliseFileMentions } from '@/lib/fileMentions'
 
@@ -166,6 +166,71 @@ export function useTaskIntegrations(taskId: string, enabled: boolean) {
         `/api/v1/projects/${projectId}/tasks/${taskId}/integrations`,
       ),
     enabled: isConfigured && !!projectId && enabled,
+  })
+}
+
+/** One check's outcome inside a run. `exit_code` is null when it ran past its timeout. */
+export interface TaskCheckResult {
+  name: string
+  exit_code: number | null
+  timed_out: boolean
+  duration_seconds: number
+  output_tail: string
+}
+
+/** One run of the project's checks on the work this task's approval would merge. */
+export interface TaskCheckRun {
+  id: string
+  state: 'running' | 'passed' | 'failed' | 'error' | 'interrupted'
+  main_sha: string
+  target_shas: string[]
+  merged_sha: string | null
+  results: TaskCheckResult[]
+  error: string
+  started_at: string | null
+  ended_at: string | null
+}
+
+export interface TaskChecks {
+  configured: boolean
+  running: boolean
+  /** Newest first, as the route returns them. */
+  runs: TaskCheckRun[]
+}
+
+export function useTaskChecks(taskId: string, enabled: boolean) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<TaskChecks>({
+    queryKey: ['project', projectId, 'task', taskId, 'checks'],
+    // A Hub older than this route answers 404: it has no checks, which is not a failed read.
+    // (The bundle can reach a running Hub before that Hub restarts onto the route.)
+    queryFn: () =>
+      getJson<TaskChecks>(`/api/v1/projects/${projectId}/tasks/${taskId}/checks`).catch(
+        (error: unknown) => {
+          if (error instanceof ApiError && error.status === 404) {
+            return { configured: false, running: false, runs: [] }
+          }
+          throw error
+        },
+      ),
+    enabled: isConfigured && !!projectId && enabled,
+    // A run takes minutes and announces nothing, so a running one is polled until it ends.
+    refetchInterval: (query) =>
+      query.state.data?.running || query.state.data?.runs[0]?.state === 'running' ? 5000 : false,
+  })
+}
+
+export function useRerunTaskChecks(taskId: string) {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: () =>
+      postJson<{ run_id: string | null; running: boolean }>(
+        `/api/v1/projects/${projectId}/tasks/${taskId}/checks/run`,
+        {},
+      ),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'task', taskId, 'checks'] }),
   })
 }
 

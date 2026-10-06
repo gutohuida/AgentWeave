@@ -90,6 +90,17 @@ REVIEWER_SENDS_BACK = (
     "the task to revision_needed with notes naming the conflict."
 )
 
+#: A failing check is the author's to fix; a reviewer who meets it sends the work back
+#: (`approval-runs-the-projects-checks` D6, as F504 and F497 did for the other two refusals).
+REVIEWER_SENDS_BACK_CHECKS = (
+    "If you are reviewing this task, fixing what the checks found is its author's work, not yours: "
+    "move the task to revision_needed with notes quoting the failing output."
+)
+
+#: How much of a failing check's output a refusal quotes. Agents read only the message.
+CHECK_TAIL_IN_MESSAGE = 1500
+NEWLINE = chr(10)
+
 #: The rejected refusal's remedy is the author's; a reviewer who meets it has its own move (F497).
 REVIEWER_SENDS_BACK_REJECTED = (
     "If you are reviewing this task, replacing rejected evidence is its author's work, not yours: "
@@ -132,6 +143,13 @@ class GateRefusal:
     # refusal — deliberately absent from `refuses` and from `detail()`. Refusing would block work
     # that is genuinely ready because a second piece is still in review.
     advisory: List[Dict[str, Any]] = field(default_factory=list)
+    # The project's checks have not passed on the work approval would merge
+    # (`approval-runs-the-projects-checks`). A sixth kind of claim: "this merges and breaks the
+    # project", or "whether it does is not known yet". One entry, carrying the run's state.
+    checks: List[Dict[str, Any]] = field(default_factory=list)
+    # Set when the operator's stated reason cleared a failed or errored check result; the caller
+    # records the reason on the transition.
+    checks_overridden: bool = False
 
     @property
     def refuses(self) -> bool:
@@ -141,6 +159,7 @@ class GateRefusal:
             or self.unmergeable
             or self.unaccepted
             or self.unfinished
+            or self.checks
         )
 
     def detail(self) -> str:
@@ -159,6 +178,7 @@ class GateRefusal:
                 self._merge_detail(),
                 self._unaccepted_detail(),
                 self._unfinished_detail(),
+                self._checks_detail(),
             )
             if sentence
         )
@@ -349,9 +369,48 @@ class GateRefusal:
             f"turn too."
         )
 
+    def _checks_detail(self) -> str:
+        """What the checks said, quoting the failing output, and who acts on it."""
+        if not self.checks:
+            return ""
+        entry = self.checks[0]
+        state = entry.get("state")
+        if state in ("running", "started"):
+            return (
+                "This task's checks are still running on the work approval would merge. Nothing is "
+                "wrong yet; approval can be retried when they finish."
+            )
+        if state == "not_run":
+            return (
+                "This task's checks have not run on the work approval would merge yet; they start "
+                "when its approval is requested."
+            )
+        if state == "error":
+            return (
+                f"This task's checks could not run: {entry.get('error') or 'an unknown error'}. "
+                "Approval is refused until they run and pass."
+            )
+        parts = []
+        for failure in entry.get("failing") or []:
+            how = (
+                "ran past its timeout"
+                if failure.get("timed_out")
+                else f"exited {failure.get('exit_code')}"
+            )
+            tail = str(failure.get("output_tail") or "")[-CHECK_TAIL_IN_MESSAGE:].strip()
+            parts.append(f"`{failure.get('name')}` {how}:" + NEWLINE + tail)
+        return (
+            "This task's checks failed on the work approval would merge, so approving would land "
+            "work that breaks the project. "
+            + (NEWLINE * 2).join(parts)
+            + NEWLINE * 2
+            + REVIEWER_SENDS_BACK_CHECKS
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "code": "gate_unsatisfied",
+            "checks": list(self.checks),
             "blocking": list(self.blocking),
             "diagnostics": list(self.diagnostics),
             "unmergeable": list(self.unmergeable),
@@ -706,8 +765,58 @@ async def rejected_identifiers(session: AsyncSession, task: Task) -> List[str]:
     return [entry.identifier or "a requirement" for entry in entries]
 
 
+async def _check_checks(
+    session: AsyncSession,
+    task: Task,
+    refusal: GateRefusal,
+    situation: "_MergeSituation",
+    *,
+    start_checks: bool,
+    override_checks_reason: Optional[str],
+) -> None:
+    """The project's checks on the work approval would merge (`approval-runs-the-projects-checks`).
+
+    Reads the recorded result and never runs a check. Only a caller that is approving
+    (*start_checks*) may schedule a run, in the background, for a result that is missing, stale or
+    interrupted (D5); every other caller of the gate reads only.
+    """
+    from . import project_checks
+
+    targets = [target.commit_sha for target in situation.will_merge]
+    view = await project_checks.view(session, task, situation.root, situation.main_branch, targets)
+    if view is None or view.state == "passed":
+        return
+    run = view.run
+    if view.state in ("failed", "error") and (override_checks_reason or "").strip():
+        refusal.checks_overridden = True
+        return
+    state = view.state
+    if state in ("missing", "stale", "interrupted"):
+        if start_checks:
+            project_checks.schedule(task.project_id, task.id)
+            state = "running"
+        else:
+            state = "not_run"
+    results = list(run.results or []) if run is not None and view.state == "failed" else []
+    refusal.checks.append(
+        {
+            "state": state,
+            "run_id": (
+                run.id if run is not None and view.state in ("failed", "error", "running") else None
+            ),
+            "failing": [r for r in results if project_checks.failed(r)],
+            "error": run.error if run is not None and view.state == "error" else "",
+        }
+    )
+
+
 async def evaluate(
-    session: AsyncSession, task: Task, *, acting_run_id: Optional[str] = None
+    session: AsyncSession,
+    task: Task,
+    *,
+    acting_run_id: Optional[str] = None,
+    start_checks: bool = False,
+    override_checks_reason: Optional[str] = None,
 ) -> tuple[GateRefusal, str]:
     """`(refusal, policy_digest)` for moving this task to `approved`.
 
@@ -719,6 +828,9 @@ async def evaluate(
     from the liveness check below: **a turn is never blocked by itself** (design D10). Widening the
     signature keeps no second surface in step — `task_transition_service.py:555` is the only caller,
     checked rather than assumed.
+
+    *start_checks* is passed only by a caller that is approving (the transition and the land
+    route); *override_checks_reason* only by the operator's approval. See `_check_checks`.
     """
     refusal = GateRefusal()
     # Both repository-aware checks, and both **above** the early return two statements down. That
@@ -728,6 +840,14 @@ async def evaluate(
     if situation is not None:
         await _check_mergeable(session, task, refusal, situation)
         await _check_unaccepted(session, task, refusal, situation)
+        await _check_checks(
+            session,
+            task,
+            refusal,
+            situation,
+            start_checks=start_checks,
+            override_checks_reason=override_checks_reason,
+        )
 
     # Beside that block rather than inside it, and above the early return for the same reason both
     # of the above are. Liveness is not a question about the repository — see `_check_live_turn`,

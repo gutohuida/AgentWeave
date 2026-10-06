@@ -126,6 +126,38 @@ describe('phase 5 project settings and locate repair', () => {
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ main_branch: 'trunk' }))
   })
 
+  it('adds, edits and saves a check, and saves none as null', () => {
+    render(<ProjectSettingsPanel />)
+    fireEvent.click(screen.getByText('Add check'))
+    fireEvent.change(screen.getByLabelText('Check 1 name'), { target: { value: 'tests' } })
+    fireEvent.change(screen.getByLabelText('Check 1 command'), { target: { value: 'pytest -q' } })
+    fireEvent.click(screen.getByText('Save settings'))
+    expect(update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        checks: [{ name: 'tests', command: 'pytest -q', timeout_seconds: 900 }],
+      }),
+    )
+    fireEvent.click(screen.getByLabelText('Remove check 1'))
+    fireEvent.click(screen.getByText('Save settings'))
+    expect(update).toHaveBeenLastCalledWith(expect.objectContaining({ checks: null }))
+  })
+
+  it('shows the saved checks in order and reorders them', () => {
+    settings = {
+      ...makeSettings(),
+      checks: [
+        { name: 'lint', command: 'ruff check .', timeout_seconds: 120 },
+        { name: 'tests', command: 'pytest -q', timeout_seconds: 900 },
+      ],
+    } as typeof settings
+    render(<ProjectSettingsPanel />)
+    expect(screen.getByLabelText('Check 1 name')).toHaveValue('lint')
+    fireEvent.click(screen.getByLabelText('Move check 2 up'))
+    fireEvent.click(screen.getByText('Save settings'))
+    const saved = update.mock.calls[update.mock.calls.length - 1][0]
+    expect(saved.checks.map((check: { name: string }) => check.name)).toEqual(['tests', 'lint'])
+  })
+
   it('offers the detected branch without choosing it', () => {
     render(<ProjectSettingsPanel />)
     // A suggestion is safe for a report and unsafe for a write, so it is a placeholder and a

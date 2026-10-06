@@ -50,6 +50,7 @@ from hub.db.models import (
     SpecRequirementRevision,
     SpecRigorEvent,
     Task,
+    TaskCheckRun,
     TaskDependency,
     TaskDependencyReference,
     TaskIntegration,
@@ -80,6 +81,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "task_transitions",
     "task_requirement_references",
     "task_integrations",
+    "task_check_runs",
     "spec_rigor_events",
     "spec_requirements",
     "spec_document_events",
@@ -384,6 +386,18 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             task_id=f"task-{tag}",
             outcome="merged",
             actor_kind="operator",
+        )
+    )
+    session.add(
+        TaskCheckRun(
+            id=f"checkrun-{tag}",
+            project_id=project_id,
+            task_id=f"task-{tag}",
+            main_sha="0" * 40,
+            target_shas=[],
+            state="passed",
+            results=[],
+            error="",
         )
     )
     session.add(

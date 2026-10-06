@@ -100,6 +100,16 @@ export interface ProjectSettings {
   /** The branch approving a task merges into. Null means "not chosen", and nothing merges — which
    *  is why the integration note tells the operator to come here. */
   main_branch: string | null
+  /** Commands the Hub runs on the work a task's approval would merge; approval is refused until
+   *  they pass. Null means no checks, and approval is unchanged. Only the operator sets these. */
+  checks: ProjectCheck[] | null
+}
+
+/** One of a project's checks (`approval-runs-the-projects-checks`). */
+export interface ProjectCheck {
+  name: string
+  command: string
+  timeout_seconds: number
 }
 
 export type ProjectSettingsInput = ProjectSettings

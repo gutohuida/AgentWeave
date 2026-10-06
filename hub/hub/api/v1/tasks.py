@@ -1244,6 +1244,57 @@ async def _integration_view(session: AsyncSession, task_id: str) -> dict:
     }
 
 
+@router.get("/{task_id}/checks")
+async def task_checks(
+    task_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """This task's check runs, newest first (`approval-runs-the-projects-checks`). Read-only."""
+    from ... import project_checks
+    from ...db.models import Project, TaskCheckRun
+
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project[0]:
+        raise HTTPException(status_code=404, detail="Task not found")
+    runs = (
+        (
+            await session.execute(
+                select(TaskCheckRun)
+                .where(TaskCheckRun.task_id == task_id)
+                .order_by(TaskCheckRun.started_at.desc(), TaskCheckRun.id.desc())
+                .limit(10)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "configured": bool(
+            project_checks.configured_checks(await session.get(Project, project[0]))
+        ),
+        "running": project_checks.is_running(task_id),
+        "runs": [project_checks.run_view(run) for run in runs],
+    }
+
+
+@router.post("/{task_id}/checks/run", status_code=202)
+async def run_task_checks(
+    task_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Run this task's checks again now, even over a current result -- the operator's lever after
+    fixing what made them fail for reasons outside the work."""
+    from ... import project_checks
+
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project[0]:
+        raise HTTPException(status_code=404, detail="Task not found")
+    run_id = await project_checks.request_run(project[0], task_id, force=True)
+    return {"run_id": run_id, "running": project_checks.is_running(task_id)}
+
+
 @router.post("/{task_id}/integrations/retry")
 async def retry_task_integration(
     task_id: str,
@@ -1344,6 +1395,16 @@ async def update_task_for_actor(
         raise HTTPException(
             status_code=403,
             detail="A task's loop assignment is set at creation and cannot be changed afterwards.",
+        )
+    if (body.override_checks_reason or "").strip() and not actor.is_operator:
+        # The operator's alone (`approval-runs-the-projects-checks` D7), and refused before any
+        # field is touched, whatever status the request names.
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Only the operator can approve over failing checks. Send the task back to its "
+                "author with revision_needed instead."
+            ),
         )
     if "title" in body.model_fields_set and not actor.is_operator:
         # The operator's statement, like the description (design D2,
@@ -1458,7 +1519,13 @@ async def update_task_for_actor(
         # on the way out, which rolls the transaction back. (This comment used to say nothing had
         # been mutated at this point, which stopped being true when F70 moved the assignee write
         # above the transition — the guarantee is the same, the reason for it is not.)
-        transition = await apply_transition(session, task, body.status, actor)
+        transition = await apply_transition(
+            session,
+            task,
+            body.status,
+            actor,
+            override_checks_reason=body.override_checks_reason,
+        )
         approval_report = list(getattr(transition, "reported_advisories", None) or [])
         # Every exit from the waiting status drops the text, whichever exit it was — released,
         # reassigned or abandoned. A reason outliving its block describes something that already
@@ -1676,7 +1743,9 @@ async def land_task(
     # `test_the_gate_is_decided_before_anything_is_attempted`, which observes the call sequence,
     # fails. What is bought is ordering, which matters the moment a fourth step or a non-gate
     # refusal joins the sequence — not the response, which the transaction already covers.
-    refusal, _policy = await evaluate_approval_gate(session, task, acting_run_id=None)
+    refusal, _policy = await evaluate_approval_gate(
+        session, task, acting_run_id=None, start_checks=True
+    )
     if refusal.refuses:
         raise GateUnsatisfiedError(refusal)
     # Step one: the author's hold. `None` rather than the operator's name — the operator is not an
@@ -1725,6 +1794,8 @@ def _transition_view(
         # requirements held. Written on every gated transition and, until this route, readable by
         # nobody (F203).
         "policy_digest": row.policy_digest,
+        # Why the operator approved over failing checks (`approval-runs-the-projects-checks`).
+        "override_reason": row.override_reason,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 

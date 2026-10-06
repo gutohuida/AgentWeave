@@ -19,6 +19,7 @@ only enforce where the agent may act, never what it thinks it is doing.
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,6 +36,8 @@ from .spec_documents import read_document
 from .spec_manifest import SpecPathError
 from .spec_payload import extract_payload
 from .subprocess_windows import no_console_kwargs
+
+logger = logging.getLogger(__name__)
 
 
 class ReviewTurnRefused(RuntimeError):  # noqa: N818 - "refused" is the outcome, not a fault
@@ -215,7 +218,15 @@ async def verdict_evidence_sentence(
     from . import task_integration
     from .requirement_gate import _identifiers_for, rejected_identifiers
 
-    rejected = _rejected_sentence(await rejected_identifiers(session, task))
+    rejected = " ".join(
+        part
+        for part in (
+            _rejected_sentence(await rejected_identifiers(session, task)),
+            await _checks_sentence(session, task),
+        )
+        if part
+    )
+    rejected = rejected or None
     awaiting = await task_integration.awaiting_targets(session, task)
     if not awaiting or not await task_integration.evidence_governs(session, task):
         return rejected
@@ -260,6 +271,55 @@ def _rejected_sentence(identifiers: List[str]) -> Optional[str]:
         "records evidence that satisfies it. Replacing it is not your work: if that is still true "
         "when you decide, end with `revision_needed` and notes naming what was rejected and why "
         "-- that returns the task to its author."
+    )
+
+
+async def _checks_sentence(session: AsyncSession, task: Task) -> Optional[str]:
+    """The task's check result, for a reviewer (`approval-runs-the-projects-checks`, agent-flows).
+
+    Reads what is recorded and starts nothing. `None` where no check applies. A failure is quoted,
+    because the reviewer's notes are what the author reworks from."""
+    from . import project_checks
+    from .requirement_gate import merge_situation
+
+    try:
+        situation = await merge_situation(session, task)
+        if situation is None:
+            return None
+        view = await project_checks.view(
+            session,
+            task,
+            situation.root,
+            situation.main_branch,
+            [target.commit_sha for target in situation.will_merge],
+        )
+    except Exception:  # noqa: BLE001 -- a briefing never fails over a diagnostic
+        logger.warning("could not read the checks of task %s", task.id, exc_info=True)
+        return None
+    if view is None:
+        return None
+    if view.state == "passed":
+        return "**This task's checks passed** on the work approval would merge."
+    returns_it = (
+        "Fixing it is not your work: end with `revision_needed` and notes quoting the failing "
+        "output -- that returns the task to its author."
+    )
+    if view.state == "failed" and view.run is not None:
+        failing = [r for r in view.run.results or [] if project_checks.failed(r)]
+        names = ", ".join(f"`{r.get('name')}`" for r in failing)
+        tail = str((failing[-1].get("output_tail") if failing else "") or "")[-600:].strip()
+        return (
+            f"**This task's checks failed** ({names}) on the work approval would merge, so "
+            f"`approved` will be refused until they pass. Last output: {tail!r}. {returns_it}"
+        )
+    if view.state == "error" and view.run is not None:
+        return (
+            f"**This task's checks could not run** ({view.run.error}), so `approved` will be "
+            "refused until they run and pass."
+        )
+    return (
+        "**This task's checks have not finished** on the work approval would merge, so "
+        "`approved` will be refused until they pass. If they fail, " + returns_it
     )
 
 

@@ -18,6 +18,7 @@ import {
 import { useAgents } from '@/api/agents'
 import { useSpecDocuments } from '@/api/spec'
 import { TaskTransitionHistory } from '@/components/tasks/TaskTransitionHistory'
+import { TaskChecksRow } from '@/components/tasks/TaskChecksRow'
 import { RowMenu } from '@/components/layout/RowMenu'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
@@ -803,6 +804,9 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         {/* Who moved it, when, and under what policy (F203). Below the task's own fields because
             it answers a question asked after reading them, and above the neglect policy because
             that is a setting rather than a record. */}
+        {/* The project's checks on the work approval would merge, which approval waits for. */}
+        <TaskChecksRow taskId={task.id} />
+
         <TaskTransitionHistory taskId={task.id} open />
 
         {/* How this task's neglect is answered. Here, on the task, rather than in a settings

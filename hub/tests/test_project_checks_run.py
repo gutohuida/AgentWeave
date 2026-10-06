@@ -273,3 +273,28 @@ async def test_a_restart_interrupts_a_run_left_running(app, tmp_path):
     assert await project_checks.interrupt_leftover_runs() == 1
     [run] = await _runs(task_id)
     assert run.state == "interrupted" and run.ended_at is not None
+
+
+@pytest.mark.asyncio
+async def test_the_drawer_reads_runs_newest_first_and_the_operator_re_runs(
+    app, auth_headers, tmp_path
+):
+    task_id, _ = await _task_with_work(tmp_path)
+    await _project([PASS])
+    await project_checks.request_run("proj-test", task_id)
+    await project_checks.drain()
+
+    rerun = await app.post(
+        f"/api/v1/projects/proj-test/tasks/{task_id}/checks/run", headers=auth_headers
+    )
+    assert rerun.status_code == 202, rerun.text
+    await project_checks.drain()
+
+    read = await app.get(f"/api/v1/projects/proj-test/tasks/{task_id}/checks", headers=auth_headers)
+    assert read.status_code == 200, read.text
+    body = read.json()
+    assert body["configured"] is True and body["running"] is False
+    runs = body["runs"]
+    assert [r["state"] for r in runs] == ["passed", "passed"], "a forced re-run is a new run"
+    assert runs[0]["id"] == rerun.json()["run_id"], "newest first"
+    assert runs[0]["results"][0]["name"] == "ok"

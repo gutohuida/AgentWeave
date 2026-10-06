@@ -119,6 +119,9 @@ class TaskCreate(RequestModel):
 
 class TaskUpdate(RequestModel):
     status: Optional[str] = Field(default=None, max_length=64)
+    # The operator's reason for approving over failing checks (`approval-runs-the-projects-checks`
+    # D7). Refused from any agent; ignored unless the move is to `approved`.
+    override_checks_reason: Optional[str] = Field(default=None, max_length=2000)
     priority: Optional[str] = Field(default=None, max_length=64)
     # `None` means *clear it*, not *leave it alone* — the difference is carried by
     # `model_fields_set`, exactly as `escalation_agent` below carries it.

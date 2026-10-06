@@ -32,7 +32,8 @@ Non-goals are in `proposal.md`. Briefly: no agent-supplied commands, no checks f
 - The gate reads the newest row for the task. It is *current* when `main_sha` equals main's tip and `target_shas` equals today's `merge_targets`. Anything else is stale.
 - Rows are append-only, as `TaskIntegration` is (`models.py:2705`). The history is the audit trail.
 
-**D4. Runs execute in an in-process queue, two at a time.**
+**D4. Runs execute in an in-process queue, two at a time, started at two moments.**
+- *Changed while building:* an agent completes its task mid-turn, and the commit holding its work is made only at the turn's end. A run started at that transition would check the old tree. So a run starts at the `completed` transition only when no run made it (`actor.run_id is None`). For a run's task it starts at that run's end, after the snapshot commit (`project_checks.after_run`, in both executors). Both start only when the project has checks.
 - Each run is an asyncio task holding a `subprocess` per check (`shell=True`, `cwd` = scratch).
 - On timeout the run calls `pty_runner.terminate_process_tree` (:184).
 - A run already executing for the task is joined rather than duplicated.
@@ -54,10 +55,10 @@ Non-goals are in `proposal.md`. Briefly: no agent-supplied commands, no checks f
 - It is stored on `task_transitions.override_reason`, so `task_history` shows it.
 - It clears the `checks` category only. Every other category still refuses.
 
-**D8. The environment is the Hub's minus credentials.**
-- Removed: `AW_RUN_TOKEN`, `AW_API_KEY`, `HUB_API_KEY`, `HUB_URL`, and any variable whose value starts `aw_live_`.
+**D8. The environment is the Hub's minus the Hub's own configuration.**
+- Removed: every `AW_*`, `HUB_*` and `AGENTWEAVE_*` variable, `DATABASE_URL`, and any variable whose value starts `aw_live_` or `aw_run_`. *Changed while building:* `DATABASE_URL` would have pointed a project's tests at the Hub's own database.
 - Provider keys stay, because a project's tests may need them, and the operator chose the commands.
-- Output is passed through `run_secrets.scrub` before it is stored, as run errors are.
+- Output is scrubbed of the removed values and of any `aw_live_`/`aw_run_` token before it is stored. `run_secrets.scrub` is per-run and does not apply.
 
 **D9. The UI is the smallest that makes it usable without the API.**
 - A Checks list in project settings (name, command, timeout; add, remove, reorder).

@@ -583,6 +583,7 @@ async def apply_transition(
     actor: Actor,
     origin: str = ORIGIN_ACTOR,
     job_id: Optional[str] = None,
+    override_checks_reason: Optional[str] = None,
 ) -> Optional[TaskTransition]:
     """Move `task` to `to_status` as `actor`, recording it. Returns None when nothing changed.
 
@@ -675,14 +676,30 @@ async def apply_transition(
     # is the one every status write already passes through.
     policy = ""
     reported: list = []
+    overridden: Optional[str] = None
     if to_status == "approved":
         from .requirement_gate import evaluate
 
         # The acting run, excluded from the gate's liveness check: a turn is never blocked by
         # itself (design D10). `None` for the operator, which excludes nothing.
-        refusal, policy = await evaluate(session, task, acting_run_id=actor.run_id)
+        # Only the operator may approve over failing checks, and only with a reason
+        # (`approval-runs-the-projects-checks` D7). Approving may start a check run (D5).
+        reason = (override_checks_reason or "").strip() or None
+        if reason is not None and not actor.is_operator:
+            raise ActorNotPermittedError(
+                "Only the operator can approve over failing checks; send the task back to its "
+                "author with revision_needed instead."
+            )
+        refusal, policy = await evaluate(
+            session,
+            task,
+            acting_run_id=actor.run_id,
+            start_checks=True,
+            override_checks_reason=reason,
+        )
         if refusal.refuses:
             raise GateUnsatisfiedError(refusal)
+        overridden = reason if refusal.checks_overridden else None
         # `contract` never refuses, so its unmet and rejected requirements have nowhere to surface
         # unless this call carries them out. Not persisted — a transient attribute on the returned
         # row rather than a column, because this is a report at the moment of approval, not an
@@ -720,6 +737,7 @@ async def apply_transition(
         # What governed this move. Null where no policy did — a fact about the transition rather
         # than a gap in it.
         policy_digest=policy or None,
+        override_reason=overridden,
     )
     # Not a column — see the comment where `reported` is built. `TaskResponse` reads this off the
     # object this same call returns; nothing else looks for it, and nothing persists it.
