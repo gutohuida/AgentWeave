@@ -921,3 +921,26 @@ async def test_a_submission_says_whether_it_is_ready_to_propose(app, auth_header
     assert saved.status_code == 200, saved.text
     assert saved.json()["blocking"]
     assert saved.json()["ready_to_propose"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_submission_warns_of_unordered_overlap_without_blocking_it(
+    app, auth_headers, planner
+):
+    """The warning rides the submit response; `ready_to_propose` is decided by `blocking` alone."""
+    path = await _agent_create(app, planner, title="Slice one")
+    tasks = [
+        {"key": key, "description": "Build it", "requirements": ["alpha"], "files": ["hub/hub/x.py"]}
+        for key in ("t1", "t2")
+    ]
+    saved = await _agent_submit(app, planner, path, _slice_doc(roadmap=None, tasks=tasks))
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["ready_to_propose"] is True
+    assert len(body["warnings"]) == 1
+    assert "t1" in body["warnings"][0]["message"]
+    assert "hub/hub/x.py" in body["warnings"][0]["message"]
+
+    tasks[1]["depends_on"] = ["t1"]
+    saved = await _agent_submit(app, planner, path, _slice_doc(roadmap=None, tasks=tasks))
+    assert saved.json()["warnings"] == []

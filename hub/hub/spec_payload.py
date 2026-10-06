@@ -40,6 +40,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 SCHEMA_VERSION = 1
 
 KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+_ABSOLUTE_PATH_RE = re.compile(r"^([/\\]|[A-Za-z]:)")
 MODALS = ("MUST", "SHOULD", "MAY", "SHALL")
 KINDS = ("baseline", "system-map", "roadmap", "change-spec", "capability")
 
@@ -128,6 +129,10 @@ class Task(_Part):
     depends_on: List[str] = Field(
         default_factory=list,
         description="Keys of sibling tasks in THIS document — local only — that must be approved before this one may start. An imported entry (see `from`) is named the same way once declared, so it can be depended on like any other sibling. This is where ordering gets taught, the same place decomposition is.",
+    )
+    files: List[str] = Field(
+        default_factory=list,
+        description="Repo-relative paths this task expects to edit. A directory covers every path beneath it. Two tasks whose files overlap and that are not ordered by `depends_on` draw a warning on submission. Optional.",
     )
     from_: Optional[ImportedFrom] = Field(
         default=None,
@@ -426,6 +431,20 @@ def validate_payload(raw: Any) -> SpecPayload:
                     field=f"tasks[{index}].requirements[{position}]",
                 )
 
+    for index, task in enumerate(payload.tasks):
+        for position, path in enumerate(task.files):
+            if not path.strip():
+                raise PayloadError(
+                    f"task {task.key!r} lists an empty path in files",
+                    field=f"tasks[{index}].files[{position}]",
+                )
+            if _ABSOLUTE_PATH_RE.match(path.strip()):
+                raise PayloadError(
+                    f"task {task.key!r} lists {path!r} in files, which is absolute; "
+                    "files are repo-relative",
+                    field=f"tasks[{index}].files[{position}]",
+                )
+
     for collection, label in (
         (payload.acceptance_criteria, "acceptance_criteria"),
         (payload.tasks, "tasks"),
@@ -487,6 +506,11 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
             data.pop(key, None)
     if not data.get("slices"):
         data.pop("slices", None)
+    # An undeclared `files` is dropped for the same reason: it must not change the bytes of every
+    # task already stored.
+    for task in data.get("tasks") or []:
+        if not task.get("files"):
+            task.pop("files", None)
     return data
 
 
