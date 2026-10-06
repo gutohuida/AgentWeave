@@ -34585,7 +34585,7 @@ that share one"), not a principle. Then re-drive.
 
 ## F510 (B) — a task on a loop whose work merges its branch tip can never be given a review turn
 
-**Status:** open
+**Status:** built on the trial Hub `:8010` (2026-10-06, document `spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/`): `task_integration.review_target`, tests in `hub/tests/test_a_review_turn_reviews_the_branch_tip.py`; on master as `3bae149`/`4f2face` -- landed through F520, not through its own approval; trial task `task-acc4664bee5a` still `under_review`. Not driven live yet.
 Found 2026-10-06 by the acceptance drive of `approval-runs-the-projects-checks` (fresh Hub `:8038`,
 profile `checks1006c`). Driven, not read. Area: **Flows & review**.
 
@@ -34712,3 +34712,29 @@ of the six acceptance criteria". The 7 tests are task 1's, on main, and pass on 
 `7 passed`). The review briefing does not name the tasks this one depends on or where their work is.
 F512's one-task rule removes this shape for new documents; documents that legitimately chain tasks still
 meet it. **Direction:** the review briefing names each `depends_on` task, its status, and its merged commit.
+
+## F520 (A) — accepting one task's evidence merges it into main through another approved task that serves the same requirement
+
+**Status:** open (in-session; fenced from the night window in APPROVALS 2026-10-06)
+Found 2026-10-06 on `:8010`, F510 trial slice. Driven, not read. Area: **Evidence & integration**.
+
+Task 1 (`task-f5698f83dfc3`) was approved and merged at ~19:2xZ. Task 2 (`task-acc4664bee5a`) serves the same
+FR-1..3. At 21:10Z the operator accepted task 2's six evidence items. At 21:11:21Z and 21:11:22Z,
+`task_integrations` recorded two `merged` rows **for task 1** with task 2's commits (`ea8795a` -> `3bae149`,
+`838d833` -> `4f2face` on master), `actor_kind=operator`. Task 2 was still `under_review`, never approved,
+and every one of its check runs had `error`ed. So its review verdict and the checks gate were both bypassed.
+`merge_targets` for a task is the accepted evidence for its requirements from any task, so an approved task
+whose integration runs again picks up a sibling's accepted, unapproved work. The trigger for the
+re-integration at 21:11 is not yet identified (the evidence decision route, or the reachability refresh).
+**Direction:** a task's merge targets are the accepted evidence recorded *by that task* (or by tasks already
+approved); never a sibling still under review.
+
+## F521 (B) — a half-made check worktree stays `locked` and refuses every later run
+
+**Status:** open (in-session)
+Found 2026-10-06 on `:8010`, task 2. After F516's timeout the scratch worktree
+`.agentweave/checks/task-acc4664bee5a` was left registered and `locked` (`git worktree list`), and both later
+runs (20:16Z, 21:11Z) recorded `error`: "fatal: '...' is a missing but locked worktree; use 'add -f -f' to
+override, or 'unlock' and 'prune' or 'remove' to clear". `_remove_checkout` runs `worktree remove --force`
+(one `-f` does not remove a locked worktree) and `worktree prune` (which skips locked ones), so the run
+can never recover by itself. **Direction:** unlock before removing, or `remove -f -f`.
