@@ -152,7 +152,18 @@ def _checkout_path(root: Path, task_id: str) -> Path:
 
 
 def _remove_checkout(root: Path, path: Path) -> None:
-    _git(root, "worktree", "remove", "--force", str(path), timeout=CHECKOUT_TIMEOUT_SECONDS)
+    # F521: a run killed mid-`add` leaves the registration `locked`. One `--force` does not remove a
+    # locked worktree, `prune` skips it, and every later `add` is refused; unlock it first.
+    _git(root, "worktree", "unlock", str(path))
+    _git(
+        root,
+        "worktree",
+        "remove",
+        "--force",
+        "--force",
+        str(path),
+        timeout=CHECKOUT_TIMEOUT_SECONDS,
+    )
     if path.exists():
         shutil.rmtree(path, ignore_errors=True)
     _git(root, "worktree", "prune")

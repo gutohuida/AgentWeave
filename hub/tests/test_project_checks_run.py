@@ -360,3 +360,25 @@ async def test_work_already_on_main_is_not_checked(app, tmp_path):
     assert await project_checks.request_run("proj-test", task_id) is None
     await project_checks.drain()
     assert await _runs(task_id) == []
+
+
+def test_a_locked_leftover_checkout_does_not_refuse_the_next_run(tmp_path):
+    """F521: a timed-out `worktree add` left its registration `locked` with the directory gone, and
+    every later run failed: "is a missing but locked worktree; use 'add -f -f' to override". One
+    `--force` neither removes a locked worktree nor overrides one, and `prune` skips it."""
+    import shutil
+
+    make_repo(tmp_path)
+    head = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    leftover = project_checks._checkout_path(tmp_path, "task-locked")
+    leftover.parent.mkdir(parents=True, exist_ok=True)
+    assert git(tmp_path, "worktree", "add", "--detach", str(leftover), head).returncode == 0
+    assert git(tmp_path, "worktree", "lock", str(leftover)).returncode == 0
+    shutil.rmtree(leftover)
+
+    path = project_checks._checkout(tmp_path, "task-locked", head)
+    assert (path / "README.md").exists()
+    project_checks._remove_checkout(tmp_path, path)
+    assert str(leftover).replace("\\", "/") not in git(tmp_path, "worktree", "list").stdout.replace(
+        "\\", "/"
+    )
