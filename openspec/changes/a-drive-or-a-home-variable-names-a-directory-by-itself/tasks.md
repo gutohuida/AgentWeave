@@ -25,15 +25,26 @@
 
 ## 1. Tests first (in `hub/tests/test_permission_approver.py`) — each must fail on today's code or on the R3 design as written (each row says which)
 
-- [ ] 1.1 F402, PowerShell, on Windows only (`skipif os.name != "nt"`; runs in the `hub-judge-windows` job; the workspace fixture's drive is the tmp drive). Refused as outside, naming the word with its colon: `Copy-Item notes.md <other>:`, `Copy-Item x <other>:foo`, `Copy-Item x -Destination:<other>:`, where `<other>` is an **existing** drive that is not the workspace's (operator, `B4-drive-exists`; taken or made with `subst` as in 1.5c). Each FAILS today (allow)
+- [x] 1.1 F402, PowerShell, on Windows only (`skipif os.name != "nt"`; runs in the `hub-judge-windows` job; the workspace fixture's drive is the tmp drive). Refused as outside, naming the word with its colon: `Copy-Item notes.md <other>:`, `Copy-Item x <other>:foo`, `Copy-Item x -Destination:<other>:`, where `<other>` is an **existing** drive that is not the workspace's (operator, `B4-drive-exists`; taken or made with `subst` as in 1.5c). Each FAILS today (allow)
 
-  **Measured, not ticked.** Made a real second drive with `subst Z: C:\Windows\Temp` on this machine (only `C:` otherwise real) and ran all three cases directly against `_decide`, workspace on `C:`: `Copy-Item notes.md Z:`, `Copy-Item x Z:foo`, and `Copy-Item x -Destination:Z:` are each `allow=True`, reason "inside your workspace" -- confirming the task's own "FAILS today (allow)" claim rather than assuming it. Did not add these rows to `_TABLE`: ticking this task means asserting `allow=False`, and getting there needs `_PS_DRIVE_RE`, the colon-joined option reading, and `_drive_exists` (this change's own D1/task 2.0-2.1) gated behind `_DRIVE_LETTERS` (the sibling change's D9) -- a one-line constant, but task 0.4 above, still unticked, names the sibling as "built first" for exactly this reason, and the sibling's own remaining work that would deliver D9 in sequence (task 2.2a) is itself parked on D7/D8/D11/D12 (see `the-shell-judge-reads-a-word-whole` tasks.md). Removed the `subst` mapping (`subst Z: /d`) after measuring. Queued next: task 1.2, which needs no drive machinery (the workspace's own drive already resolves inside without an existence check).
+  **Built (night 2026-10-06, with 2.1 and 2.2's drive check).** `test_another_existing_drive_is_outside`
+  (`1.1a`-`1.1c`, Windows only) takes an existing drive other than the workspace's, else makes one with
+  `subst` over the fixture's `outside/` and removes it in `finally`. Red first (each `allow=True`,
+  "inside your workspace"), green after. Mutation: removing rule 4's drive check fails all three;
+  removing `_words`' colon-keeping fails `1.1a`/`1.1c` (`Z:foo` never lost its colon). Also driven
+  through a spawned stdio MCP server with a real `subst Q:`: PowerShell `Copy-Item notes.md Q:` and
+  `-Destination:Q:`, and Bash `python w.py Q:`, each denied naming the word and where it resolves.
+
 - [x] 1.2 F402 controls that stand, both platforms. PowerShell: `Copy-Item x <own drive>:` and `<own>:foo` (Windows), `git show HEAD:README.md`, `sed s:a:b: f`. Bash: `cp notes.md C:`, with the workspace on C on Windows. Each PASSES today and catches a rule that ignores the dialect or the second colon
 
   Measured directly against `_decide` (workspace on `C:`, this machine): `Copy-Item x C:`, `Copy-Item x C:foo`, `git show HEAD:README.md`, `sed s:a:b: f` (PowerShell), and `cp notes.md C:` (Bash) are each `allow=True` today. Added as rows `1.2a`-`1.2e` to `_TABLE` in `hub/tests/test_permission_approver.py`, using a new `<owndrive>` placeholder (`test_the_decided_table` substitutes the workspace's actual drive) so the row is not pinned to `C:` specifically; `1.2a`, `1.2b` and `1.2e` (the ones that use a drive letter) are `skipif sys.platform != "win32"`, since a bare drive letter is not a POSIX concept. No production code changed -- these are forward-looking regression guards for the fix task 1.1 is blocked on. `py -3.11 -m pytest hub/tests/test_permission_approver.py -q`: 305 passed, 1 skipped (up from 300). `ruff check`: clean. `black --check --target-version py311`: required one reformat (wrapped the new `skipif` calls), reapplied and reconfirmed clean and still 305 passed.
-- [ ] 1.3 F402 `Temp:`: PowerShell `Copy-Item x Temp:` refused as outside, with `TMP`/`TEMP` monkeypatched to a directory outside the workspace; FAILS today. (R6, design D1) In the bash reading `temp:` stays an ordinary word, with `_DRIVE_LETTERS` monkeypatched True and the same `TMP`/`TEMP`: Bash `cat <<'EOF'` / `temp: 5` / `EOF` is allowed (FAILS against R5, which kept the colon in bash on a drive-letter host), and Bash `pwsh -c 'Copy-Item x Temp:'` is allowed (the named residual, asserted so a change of mind is visible)
+- [x] 1.3 F402 `Temp:`: PowerShell `Copy-Item x Temp:` refused as outside, with `TMP`/`TEMP` monkeypatched to a directory outside the workspace; FAILS today. (R6, design D1) In the bash reading `temp:` stays an ordinary word, with `_DRIVE_LETTERS` monkeypatched True and the same `TMP`/`TEMP`: Bash `cat <<'EOF'` / `temp: 5` / `EOF` is allowed (FAILS against R5, which kept the colon in bash on a drive-letter host), and Bash `pwsh -c 'Copy-Item x Temp:'` is allowed (the named residual, asserted so a change of mind is visible)
 
-  **Not attempted, flagged only (inferred from the design text, not measured).** The row's own wording monkeypatches `_DRIVE_LETTERS`, a symbol that does not exist in `hub/hub/mcp_server.py` today (confirmed by `grep`, same gap as task 1.1). Same block as 1.1; leave for whoever builds D9.
+  **Built.** `test_temp_is_a_drive_in_powershell_only` (both platforms; `tempfile.tempdir` reset so
+  `TMP`/`TEMP` take effect). Red first (allowed), green after. Mutation: reading `Temp:` in both
+  dialects fails the bash heredoc assertion (`'temp:' is outside`). Driven through the stdio server:
+  `Copy-Item x Temp:` denied.
+
 - [x] 1.4 F401, refused as uncheckable (the reason contains "cannot be checked", not "outside"). Each FAILS today:
   - Bash: `cp notes.md $HOME`, `"$HOME"`, `${HOME}`, `$OLDPWD`, `$TMP`, `--target-directory=$HOME`, `cp x %USERPROFILE%`.
   - PowerShell: `Copy-Item x $HOME`, `$env:USERPROFILE`, `$ENV:temp`, `-Destination:$HOME`.
@@ -210,7 +221,13 @@
   `approve_tool_call` no-return-annotation gap `.claude/rules/mcp-server.md` names as deliberate
   (line number unchanged by this task's own addition, which sits earlier in the file). `git diff
   --stat`: only the two expected files changed.
-- [ ] 2.1 `_words(arguments, dialect)` and `_PS_DRIVE_RE`, keeping the colon for a bare drive and for a colon-joined option whose value is a drive (design D1, R2); (R6) `Temp:` keeps its colon in the PowerShell reading only. Pass the dialect from `_read_command`. `_DRIVE_LETTERS` is read at call time (the sibling's D9): no regex or default argument built from it at import, or task 1.5c's monkeypatch passes without reaching the code
+- [x] 2.1 `_words(arguments, dialect)` and `_PS_DRIVE_RE`, keeping the colon for a bare drive and for a colon-joined option whose value is a drive (design D1, R2); (R6) `Temp:` keeps its colon in the PowerShell reading only. Pass the dialect from `_read_command`. `_DRIVE_LETTERS` is read at call time (the sibling's D9): no regex or default argument built from it at import, or task 1.5c's monkeypatch passes without reaching the code
+
+  **Built.** `_drive_word` (called first in `_words`, which now takes `dialect` at all three call
+  sites) and `_PS_DRIVE_RE`/`_PS_TEMP_DRIVE_RE`; `_DRIVE_LETTERS` read at call time. Rule 4's drive
+  check is `_judge_drive_word`, first in rule 4, refusal-only, probing `budget.drive_exists` on a
+  drive-letter host. 2.2 stays open: its D10 link check is not built yet.
+
 - [ ] 2.2 Rule 4, in this order:
   - the drive check (PowerShell on any host; bash where `_DRIVE_LETTERS`, design D4), made on a drive-letter host only when `_drive_exists(letter)` (design D1, `B4-drive-exists`), and returning only a refusal, never ending the rule on an inside or skipped answer;
   - the `~` after a colon;

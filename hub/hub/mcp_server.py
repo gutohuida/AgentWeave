@@ -15,6 +15,7 @@ import os
 import re
 import stat
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -1142,6 +1143,13 @@ _TILDE_PREFIX_RE = re.compile(r"~(?:[+-]|[A-Za-z_][A-Za-z0-9._-]*)?")
 _CMD_VARIABLE_RE = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*%")
 _WORD_SPLIT_RE = re.compile(r"[\s=,]+")
 _WORD_TRIM = "\"'`{}[]()<>|;&:"
+# a-drive-or-a-home-variable-names-a-directory-by-itself, D1 (F402): a drive with no separator after
+# it (`Z:`, `Z:foo`) names that drive's current directory, so `_words` keeps its colon rather than
+# trimming it -- in the PowerShell reading, and in the bash reading on a drive-letter host (D4).
+# `Temp:` is a drive of PowerShell's FileSystem provider only (R6, `B4-temp-dialect`).
+_WORD_TRIM_KEEP_COLON = _WORD_TRIM.replace(":", "")
+_PS_DRIVE_RE = re.compile(r"[A-Za-z]:[^:\\/]*")
+_PS_TEMP_DRIVE_RE = re.compile(r"(?i)temp:[^:\\/]*")
 _ARGUMENT_ENDS = "|;&<>()"
 
 # D4: the null device and standard streams a bash-spawned msys maps, as a whole word only (the-
@@ -2085,6 +2093,30 @@ def _escape_removed_levels(word: str) -> List[str]:
     return levels
 
 
+def _judge_drive_word(
+    budget: "_Budget", word: str, root: str, argument: str, continues: bool, dialect: str
+) -> Optional[Dict[str, Any]]:
+    """D1: a separator-less word (or colon-joined option value) that names a drive, judged as that
+    drive's current directory, quoting the word. On a drive-letter host only a drive that exists
+    is judged (operator, `B4-drive-exists`); on POSIX (pwsh) `Z:` is a file name, judged as one.
+    PowerShell's `Temp:` names the temporary directory, `_UNRESOLVED` when there is none usable."""
+    if dialect != "powershell" and not _DRIVE_LETTERS:
+        return None
+    joined = _COLON_OPTION_RE.match(word)
+    value = word[joined.end() :] if joined else word
+    if dialect == "powershell" and _PS_TEMP_DRIVE_RE.fullmatch(value):
+        try:
+            temporary = tempfile.gettempdir()
+        except Exception:
+            return _refuse(word, _UNRESOLVED)
+        return _judge_path(os.path.join(temporary, value[5:]), root, word, argument, continues)
+    if not _PS_DRIVE_RE.fullmatch(value):
+        return None
+    if _DRIVE_LETTERS and not budget.drive_exists(value[0].upper()):
+        return None
+    return _judge_path(value, root, word, argument, continues)
+
+
 def _judge_word(
     budget: "_Budget",
     word: str,
@@ -2115,6 +2147,13 @@ def _judge_word(
     if has_separator and _expands(word):  # 3: where it points is decided when the shell runs
         return _refuse(word, _UNCHECKED)
     if not has_separator:  # 4: a name in the directory the shell runs in -- unless it names another
+        # F402 (D1, D4): a drive word names that drive's current directory. The check only ever
+        # refuses; an inside or skipped answer goes on to the checks below. F401's checks follow
+        # (D2, D3): D5's option (d), a bare directory variable and a surviving `..`, not every
+        # expansion.
+        refusal = _judge_drive_word(budget, word, root, argument, continues, dialect)
+        if refusal:
+            return refusal
         value = word
         joined = _COLON_OPTION_RE.match(word)
         if joined:
@@ -2875,7 +2914,24 @@ def _bracket_kept_word(piece: str, ordinary: str) -> Optional[Tuple[str, str]]:
     return kept, left
 
 
-def _words(arguments: List[str]) -> List[Tuple[str, str, bool, bool]]:
+def _drive_word(piece: str, dialect: str) -> Optional[str]:
+    """D1: `piece` trimmed with its colon kept, when that names a drive (`Z:`, `Z:foo`, PowerShell's
+    `Temp:`) or a colon-joined option whose value does (`-Destination:Z:`); else None, and the
+    ordinary trim applies. The PowerShell reading on any host; the bash reading only where
+    `_DRIVE_LETTERS` (read at call time, D9)."""
+    if dialect != "powershell" and not _DRIVE_LETTERS:
+        return None
+    word = piece.strip(_WORD_TRIM_KEEP_COLON)
+    joined = _COLON_OPTION_RE.match(word)
+    value = word[joined.end() :] if joined else word
+    if _PS_DRIVE_RE.fullmatch(value):
+        return word
+    if dialect == "powershell" and _PS_TEMP_DRIVE_RE.fullmatch(value):
+        return word
+    return None
+
+
+def _words(arguments: List[str], dialect: str) -> List[Tuple[str, str, bool, bool]]:
     """Each argument's words, as (word, its argument, whether the argument carries on past it,
     whether a `:` was trimmed directly after the word).
 
@@ -2888,11 +2944,20 @@ def _words(arguments: List[str]) -> List[Tuple[str, str, bool, bool]]:
     (R6, D11) A piece whose trim removed a `[` or `]` also yields the bracket-kept word alongside
     it (`_bracket_kept_word`), so a bracket expression at a word's edge (`[u]p/x`, `u[p]`) is judged
     with its brackets intact too, not only with them stripped.
+
+    A piece naming a drive keeps its colon (`_drive_word`, D1), so rule 4 can judge the drive.
     """
     words: List[Tuple[str, str, bool, bool]] = []
     for argument in arguments:
         pieces = _WORD_SPLIT_RE.split(argument)
         for position, piece in enumerate(pieces):
+            drive = _drive_word(piece, dialect)
+            if drive is not None:
+                continues = (
+                    position < len(pieces) - 1 or piece.rstrip(_WORD_TRIM_KEEP_COLON) != piece
+                )
+                words.append((drive, argument, continues, False))
+                continue
             left_trimmed = piece.lstrip(_WORD_TRIM)
             word = left_trimmed.rstrip(_WORD_TRIM)
             if word:
@@ -2950,7 +3015,7 @@ def _read_command(
             else:
                 expanded_arguments.append(argument)
         arguments = expanded_arguments
-    words = _words(arguments)
+    words = _words(arguments, dialect)
     references = sum(1 for word, _, _, _ in words if _HUB_REFERENCE_RE[dialect].match(word))
     # A reference is trusted only when the command names `HUB_URL` nowhere else. That refuses
     # every way of reassigning it first (`HUB_URL=`, `export`, `$env:HUB_URL =`) without a list.
@@ -2973,7 +3038,7 @@ def _read_command(
         inner_alternatives = budget.expand_braces(marked, dialect)
         if inner_alternatives is None:
             return _refuse(argument, _TOO_MANY)
-        for word, inner_argument, continues, trailing_colon in _words(inner_alternatives):
+        for word, inner_argument, continues, trailing_colon in _words(inner_alternatives, dialect):
             refusal = _memo_judge_word(
                 budget,
                 word,
@@ -3339,7 +3404,7 @@ def _names_a_runtime_value(command: str, dialect: str, reading: str) -> bool:
     """Whether any word of `command`, or a substitution nested in it, holds something the shell
     decides when it runs -- which the judge above cannot see."""
     arguments, nested = _lex(command, dialect == "bash", reading)
-    return bool(nested) or any(_expands(word) for word, _, _, _ in _words(arguments))
+    return bool(nested) or any(_expands(word) for word, _, _, _ in _words(arguments, dialect))
 
 
 def _report_decision(tool_name: str, decision: Dict[str, Any], tool_use_id: str) -> None:

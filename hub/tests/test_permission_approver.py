@@ -626,6 +626,77 @@ def test_drive_exists_is_memoized_per_budget(monkeypatch):
     assert calls == ["C:\\"]  # the second call is served from the memo, not a second `os.stat`
 
 
+@pytest.fixture()
+def other_drive(workspace):
+    """An existing drive letter that is not the workspace's (operator, `B4-drive-exists`): one the
+    host already has, otherwise one made with `subst` pointing at the fixture's `outside/` and
+    removed afterwards. Skips when neither is possible."""
+    own = os.path.realpath(workspace)[0].upper()
+    for letter in "DEFGHIJKLMNOPQRSTUVWXYZ":
+        if letter != own and os.path.exists(letter + ":\\"):
+            yield letter
+            return
+    outside = str(workspace.parent / "outside")
+    for letter in "ZYXWVUTSRQ":
+        if os.path.exists(letter + ":\\"):
+            continue
+        made = subprocess.run(["subst", letter + ":", outside], capture_output=True)
+        if made.returncode != 0 or not os.path.exists(letter + ":\\"):
+            continue
+        try:
+            yield letter
+        finally:
+            subprocess.run(["subst", letter + ":", "/d"], capture_output=True)
+        return
+    pytest.skip("no second drive, and subst could not make one")
+
+
+# a-drive-or-a-home-variable-names-a-directory-by-itself, task 1.1 (F402, design D1): a bare drive,
+# a drive and a name, and a colon-joined option whose value is a drive each name that drive's
+# current directory, so a drive that exists and is not the workspace's is outside. The refusal
+# names the word with its colon.
+@pytest.mark.skipif(sys.platform != "win32", reason="drive letters are a Windows concept")
+@pytest.mark.parametrize(
+    "command, shown",
+    [
+        ("Copy-Item notes.md <other>:", "<other>:"),
+        ("Copy-Item x <other>:foo", "<other>:foo"),
+        ("Copy-Item x -Destination:<other>:", "-Destination:<other>:"),
+    ],
+    ids=["1.1a", "1.1b", "1.1c"],
+)
+def test_another_existing_drive_is_outside(workspace, other_drive, command, shown):
+    decision = _decide("PowerShell", {"command": command.replace("<other>", other_drive)})
+    assert decision["allow"] is False, decision["reason"]
+    assert "is outside your workspace" in decision["reason"]
+    assert repr(shown.replace("<other>", other_drive)) in decision["reason"]
+
+
+# Task 1.3 (F402, design D1, R6): `Temp:` is a drive of PowerShell's FileSystem provider, naming
+# the temporary directory -- in the PowerShell reading only. `tempfile` caches its answer, so the
+# cache is cleared for `TMP`/`TEMP` to take effect.
+def test_temp_is_a_drive_in_powershell_only(workspace, monkeypatch):
+    from hub import mcp_server
+
+    outside = str(workspace.parent / "outside")
+    for name in ("TMP", "TEMP", "TMPDIR"):
+        monkeypatch.setenv(name, outside)
+    monkeypatch.setattr(tempfile, "tempdir", None)
+    monkeypatch.setattr(mcp_server, "_DRIVE_LETTERS", True)
+
+    refused = _decide("PowerShell", {"command": "Copy-Item x Temp:"})
+    assert refused["allow"] is False, refused["reason"]
+    assert "is outside your workspace" in refused["reason"]
+    assert repr("Temp:") in refused["reason"]
+
+    # In the bash reading `temp:` stays an ordinary word: a heredoc line is text, not a drive.
+    heredoc = _decide("Bash", {"command": "cat <<'EOF'\ntemp: 5\nEOF"})
+    assert heredoc["allow"] is True, heredoc["reason"]
+    # The named residual (`B4-temp-dialect`): a nested PowerShell is read as bash text.
+    nested = _decide("Bash", {"command": "pwsh -c 'Copy-Item x Temp:'"})
+    assert nested["allow"] is True, nested["reason"]
+
+
 def test_a_fetch_is_not_governed(workspace, monkeypatch):
     """N8. The rule governs shell command text only (D7). A change that brings fetch under it
     must flip this deliberately."""

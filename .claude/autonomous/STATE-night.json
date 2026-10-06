@@ -8,18 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "4f2face",
     "stop_at": "2026-10-07T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-06-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-drive-or-a-home-variable-impl-1",
-    "next_action": "Item a-drive-or-a-home-variable-impl-1: in openspec/changes/a-drive-or-a-home-variable-names-a-directory-by-itself/tasks.md take group 1 vertical slices (tests 1.1,1.3 then their code in group 2 as named); read design.md by section. Tick only what is really done, run CLI suite + judge test files, commit and push.",
+    "current": "a-drive-or-a-home-variable-impl-2",
+    "next_action": "Item a-drive-or-a-home-variable-impl-2: in openspec/changes/a-drive-or-a-home-variable-names-a-directory-by-itself/tasks.md take 1.4b-1.4f with the rule-4 code they need (D2 spellings, D3 remainder, D10 link check in 2.2); each test red then green; mutation-check once; run judge files + regression union (hub/ and tests/ separately), commit and push.",
     "queue": [
         {
             "id": "a-drive-or-a-home-variable-impl-1",
-            "status": "open",
+            "status": "done",
             "title": "B4 change 2 (F401/F402, approved B4-approve): group 1 tests 1.1-1.3 with the code they need",
-            "detail": "openspec/changes/a-drive-or-a-home-variable-names-a-directory-by-itself; 14 of 31 tasks done at compose. Test each before its code (vertical slice). F392 rule 2: run the union of every open change's guard files."
+            "detail": "Done iter 2: tasks 1.1, 1.3, 2.1 (+2.2 drive check) built, mutation-checked, driven via stdio server."
         },
         {
             "id": "a-drive-or-a-home-variable-impl-2",
