@@ -78,7 +78,7 @@ Pick the tier **before** writing anything, and state it in the first commit:
 |---|---|---|
 | **0 — fix** | A finding with a repro, or a diff you can say in one sentence | No openspec change. A test that fails before the fix at the seam the finding names → fix → drive → set the finding's `**Status:**` line in `scripts/drive/FINDINGS.md`. |
 | **1 — change** | Normal feature or multi-file behaviour | A short proposal (requirements + scenarios + **acceptance drive**), **one grounded review round**, build, drive. |
-| **2 — hazard** | Migrations, Hub-restart or live-data hazard, secrets/auth/security, cross-cutting contracts | Full spec loop: R1 propose, R2 grounded review, **R3 = acceptance drive written and failing before build**, then the Opus review. |
+| **2 — hazard** | Migrations, Hub-restart or live-data hazard, secrets/auth/security, cross-cutting contracts | A short proposal that names the hazard and the migration/rollback, the **acceptance drive written and failing before the build**, build, drive. No separate review rounds (operator, 2026-10-06). |
 
 - **Acceptance drive first.** Every Tier 1/2 change names, before the build, the drive step or e2e
   test that fails while the behaviour cannot fire end to end, and passes only when it can. It is the
@@ -93,7 +93,8 @@ Pick the tier **before** writing anything, and state it in the first commit:
   commits, while `tasks.md` carries a one-line pointer. A change whose spec outgrows its code is a smell:
   stop and split, or build.
 - **New problems found during review go to the backlog, not into the change.**
-- *"Do a spec loop"* still means R1/R2/R3 as above. Use it for Tier 2, or when the operator asks.
+- **No R1/R2/R3 review rounds by default, at any tier** (operator, 2026-10-06: "we don't need more
+  R1-R2-R3"). Run a review round only when the operator asks for one.
 - **Trial until ~2026-10-18:** when a change or fix closes, append a row to `spec-queue/METRICS.md`
   (tier, spec/build/drive time, and which stage caught each real defect).
 
