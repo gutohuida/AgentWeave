@@ -1776,4 +1776,5 @@ async def submit_spec_document(
         # F502: an agent read the call's success beside eight blocking findings as "ready".
         "ready_to_propose": not result.blocking,
         "divergence": result.divergence,
+        "warnings": result.warnings,
     }

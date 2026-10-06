@@ -304,6 +304,67 @@ def check(
     return findings
 
 
+def _normalise_path(path: str) -> str:
+    return path.strip().replace("\\", "/").strip("/")
+
+
+def paths_overlap(a: str, b: str) -> Optional[str]:
+    """The overlapping path of two declared paths, or None. A directory covers what is beneath it."""
+    left, right = _normalise_path(a), _normalise_path(b)
+    if left == right or right.startswith(left + "/"):
+        return right
+    if left.startswith(right + "/"):
+        return left
+    return None
+
+
+def overlap_warnings(payload: SpecPayload) -> List[Finding]:
+    """Pairs of tasks that declare overlapping `files` with no `depends_on` path between them.
+
+    Advisory only: these never enter `check`, so `ready_to_propose` is unaffected. Imported entries
+    and tasks declaring no `files` are never named.
+    """
+    declared = [t for t in payload.tasks if t.from_ is None and t.files]
+    edges = {t.key: list(t.depends_on) for t in payload.tasks}
+
+    def reaches(start: str, goal: str) -> bool:
+        seen, todo = set(), [start]
+        while todo:
+            key = todo.pop()
+            for nxt in edges.get(key, []):
+                if nxt == goal:
+                    return True
+                if nxt not in seen:
+                    seen.add(nxt)
+                    todo.append(nxt)
+        return False
+
+    warnings: List[Finding] = []
+    for i, first in enumerate(declared):
+        for second in declared[i + 1 :]:
+            shared = next(
+                (
+                    hit
+                    for a in first.files
+                    for b in second.files
+                    if (hit := paths_overlap(a, b)) is not None
+                ),
+                None,
+            )
+            if shared is None or reaches(first.key, second.key) or reaches(second.key, first.key):
+                continue
+            warnings.append(
+                Finding(
+                    "unordered_file_overlap",
+                    "tasks",
+                    f"tasks {first.key!r} and {second.key!r} both declare {shared!r} and neither "
+                    "depends_on the other, so they would be built in parallel; chain them with "
+                    "depends_on",
+                )
+            )
+    return warnings
+
+
 #: The fewest words a slice's `done` can state an outcome in. Real agents read the field as a status
 #: and wrote "false", then "no" (F502); a list of such words is never complete, a sentence is the test.
 _OUTCOME_WORDS = 3

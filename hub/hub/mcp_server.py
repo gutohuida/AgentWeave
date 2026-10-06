@@ -3657,7 +3657,10 @@ def submit_spec_document(
       derived from the description, which reads as prose because that is what it is. A task may
       also name sibling task keys in `depends_on`; it is not started until they are done. Tasks
       expected to edit the same file are chained with `depends_on`, so same-file tasks are built
-      in order rather than in parallel.
+      in order rather than in parallel. `files` optionally lists the repo-relative paths (never
+      empty or absolute; a directory covers what is beneath it) a task expects to edit; two tasks
+      with overlapping `files` and no `depends_on` path between them draw a `warnings` entry in
+      the response, which never blocks a proposal.
 
     `algorithms` — objects with `name` and `steps`. Ordered or conditional behaviour goes here
       rather than in a paragraph, where the order has to be guessed at.

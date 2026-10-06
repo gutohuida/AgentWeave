@@ -47,6 +47,7 @@ class SaveResult:
     identifiers: Dict[str, str] = field(default_factory=dict)
     blocking: List[Dict[str, Any]] = field(default_factory=list)
     divergence: Optional[Dict[str, str]] = None
+    warnings: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -290,6 +291,7 @@ async def _apply_and_write(
             )
         ],
         divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
+        warnings=[f.to_dict() for f in spec_completeness.overlap_warnings(payload)],
     )
 
 
