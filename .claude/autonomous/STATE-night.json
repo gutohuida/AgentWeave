@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9ea4cdb",
     "stop_at": "2026-10-06T07:00:00+01:00",
-    "iteration": 20,
+    "iteration": 21,
     "log_file": ".claude/autonomous/2026-10-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "copilot-credits-archive",
-    "next_action": "Archive a-copilot-one-shot-records-its-credits: openspec-sync-specs then openspec-archive-change. Task 3 drove real at iter 20 (F498): both worker_invocations rows (checkpoint, checkpoint_probe) came back cli='copilot', outcome='ok' but ai_nano_aiu/premium_requests NULL on both -- the real Copilot one-shot carried no session.usage_checkpoint line, unlike the single fixture capture the change is built on. GET /accounting confirmed showing neither figure (D5). This is not a code defect in 2.1/2.2 (D4's already-named 'no checkpoint' row) -- F498 is open, filed in scripts/drive/FINDINGS.md, not this change's to fix. Do not set F498 Status: fixed when archiving -- it names an open question about live checkpoint-event frequency, not something this change closes. Check if F486 or F489 are named by this change's own files before setting any Status: line (grep the change dir first, as c1b-archive iter 9 did) -- likely none are. Append a spec-queue/METRICS.md row for this change (tier 2: spec/build/drive hours, which stage caught the real defect -- note F498 was caught only by the drive, not by R1-R3 or the Opus review, since it needed a live call). Then advance current/next_action to f489-impl (queue already describes it).",
+    "current": "f489-impl",
+    "next_action": "Tier-0 fix F489 (scripts/drive/FINDINGS.md, C, APPROVED-FIXES tonight): a turn failing with a root session.error whose errorType is authentication (or quota, D5's pattern) is retried today even though retrying cannot succeed -- stop retrying that class of failure; the entry should wait for the operator instead. Write a test that fails at the retry seam first (find the retry-decision code -- likely near the turn-failure handling in hub/hub/runner.py or the worker/turn-retry path; grep for errorType/authentication/quota first, F489's text names the direction but not the exact file). If the right fix needs more than a one-sentence spec choice once you're in the code, stop and leave an OPEN spec-queue/DECISIONS.md row for the day window instead of stretching it -- do not guess a design. Then: fix, full relevant pytest file green, lint (ruff/black/mypy per CLAUDE.md's exact CI invocations), a quick mutation check (revert the fix, confirm the new test fails), drive it for real (a run that fails on auth/quota on a live Hub does not get auto-retried, the operator still gets the turn to answer), then set F489's Status: fixed <sha> in FINDINGS.md and append a spec-queue/METRICS.md row (tier 0).",
     "queue": [
         {
             "id": "c1b-r1",
@@ -77,9 +77,9 @@
         },
         {
             "id": "copilot-credits-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive a-copilot-one-shot-records-its-credits and sync specs",
-            "detail": "openspec-sync-specs then openspec-archive-change; set Status: fixed <sha> for any F<n> it names; append spec-queue/METRICS.md row."
+            "detail": "Done iter 21: grepped the change dir -- only F486 and F498 named, both cited as pre-existing/open context (F486 for the sibling change that never carries credits; F498 is this change's own just-filed open question), neither closed here, so no FINDINGS.md Status lines set. Synced the one delta spec (usage-accounting) by hand: the MODIFIED Copilot-run requirement gained the malformed-session-total sentence and its new scenario (inserted after 'A clock that steps backwards' and before the pre-existing 'Credits do not gate scheduling' scenario, which stayed put -- an early edit briefly mis-promoted that scenario's heading to a requirement heading, caught by rereading the file and fixed before staging); the new ADDED requirement (one-shot calls record their last checkpoint) appended verbatim after it with its six scenarios. openspec validate --specs --strict: 44 passed, 0 failed. Archived to openspec/changes/archive/2026-10-06-a-copilot-one-shot-records-its-credits (14/14 tasks ticked). Backlog regenerated (unbuilt changes 19->18, F498 newly counted). METRICS.md row appended: tier 2, spec 0h20 (2026-10-03 R1-R3+Opus), build 0h20 (iter10's actual coding, not the unattended wait), drive 0h10 (iter20's real checkpoint+probe) -- F498 caught only by the live drive, not by review or tests."
         },
         {
             "id": "f489-impl",
