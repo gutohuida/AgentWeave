@@ -77,12 +77,12 @@
   305; +16 rows). `ruff check`: clean. `black --check --target-version py311`: required one
   reformat of the test file (the new rows' line wrapping); reapplied and reconfirmed clean, still
   321 passed.
-- [ ] 1.4b (R4, the extended list and spellings), refused as uncheckable. Each FAILS today (allowed; measured for most at `b7d976a`) and FAILS against the R3 design (not on its list, or its PowerShell regex does not match):
+- [x] 1.4b (R4, the extended list and spellings), refused as uncheckable. Each FAILS today (allowed; measured for most at `b7d976a`) and FAILS against the R3 design (not on its list, or its PowerShell regex does not match):
   - Bash: `cp n $HOMEPATH`, `cp n $HOMEDRIVE$HOMEPATH`, `cp n $PUBLIC`, `cp n $OneDrive`, `cp n $ONEDRIVE`, `cp n $ProgramData`, `cp n $ALLUSERSPROFILE`, `cp n $SYSTEMROOT`, `cp n $windir`, `cp n $PROGRAMFILES`, `cp n $XDG_CONFIG_HOME`, `cp n $XDG_RUNTIME_DIR`.
   - PowerShell: `Copy-Item x ${env:TEMP}`, `${HOME}`, `$variable:HOME`, `$global:HOME`, `$script:PWD`, `$PROFILE`, `$PSHOME`, `${env:ProgramFiles(x86)}`.
   - Either dialect: `cp x %CD%`.
-- [ ] 1.4c (R4, after a colon) `dd if=n of=c:$HOMEPATH` and `echo PATH=a:$HOME` refused as uncheckable. Each FAILS today and against R3
-- [ ] 1.4d (R4, **inner-shell `$HOME`**) Refused as uncheckable. Each FAILS today (allowed, measured) and FAILS against the R3 design, which excluded `_LITERAL_DOLLAR` on purpose:
+- [x] 1.4c (R4, after a colon) `dd if=n of=c:$HOMEPATH` and `echo PATH=a:$HOME` refused as uncheckable. Each FAILS today and against R3
+- [x] 1.4d (R4, **inner-shell `$HOME`**) Refused as uncheckable. Each FAILS today (allowed, measured) and FAILS against the R3 design, which excluded `_LITERAL_DOLLAR` on purpose:
   - Bash tool: `bash -c 'cp n $HOME'`, `sh -c "cp n \$HOME"`, `bash -c 'cp n ${HOME}'`, `bash -c 'cp n ..$x'`, `powershell -c 'Copy-Item x $HOME'`.
   - PowerShell tool: `bash -c 'cp n $HOME'`, `powershell -c 'Copy-Item x ${env:TEMP}'`.
   - POSIX CI: `bash -c 'bash -c "cp n \$HOME"'`, which needs the sibling change's level-by-level escape reading.
@@ -91,11 +91,11 @@
     it holds a variable). The sibling's row `1.7c4` asserts it; this task should not claim it
     "FAILS today".
   - (R6) Bash tool: `powershell -c 'Copy-Item x $env:TEMP'` and `powershell -c 'Copy-Item x ${env:USERPROFILE}'`. Each FAILS today (allowed, measured: the words are `␀env:TEMP` and `␀{env:USERPROFILE`) and FAILS against R5, whose bash pattern had no `env:` form.
-- [ ] 1.4e (R4, D3) Refused as uncheckable. Each FAILS today (allowed, measured) and FAILS against R3 (whose D3 read only the text before the first expansion):
+- [x] 1.4e (R4, D3) Refused as uncheckable. Each FAILS today (allowed, measured) and FAILS against R3 (whose D3 read only the text before the first expansion):
   - Bash: `cp n $x..`, `cp n $(true)..`, `cp n .$x.`, `` cp n `true`.. ``;
   - Bash tool: `` bash -c 'cp n `true`..' ``;
   - PowerShell: `Copy-Item n $x..`.
-- [ ] 1.4f (R4, D10) With the sibling change's link fixture (`up` → outside, made with `os.symlink` or `_winapi.CreateJunction`), refused as outside, naming where `up` resolves. Each FAILS today (allowed, measured) and against R3:
+- [x] 1.4f (R4, D10) With the sibling change's link fixture (`up` → outside, made with `os.symlink` or `_winapi.CreateJunction`), refused as outside, naming where `up` resolves. Each FAILS today (allowed, measured) and against R3:
   - Bash: `cp n up`, `cp n u*`, `cp -tup n`, `cp n {up,x}`, `cp --target-directory=up n`, and `ls -d .*` with a link `.l` → outside;
   - PowerShell: `Copy-Item n up`, `Copy-Item n -Destination:up`;
   - (R6) Bash: `cp n [u]p` and `cp n u[p]`. Each FAILS today (allowed, measured; both wrote through `up` in Git Bash) and FAILS against R5 (the words are `u]p` and `u[p`; needs the sibling's D11 bracket-kept word).
@@ -103,6 +103,21 @@
   Controls allowed: `cp n sub`, `ls in` (an inside link), `cp -r n newdir`, `grep -r foo --exclude-dir=node_modules .` with no `node_modules` link. With `node_modules` a link to outside, that grep is **refused**: assert it, so the accepted cost stays visible.
 
   (R8, the third review's LOW; the sibling's D8 step 2) With `node_modules`, `venv` and `.venv` each a link to outside at the workspace root, a bare bracket expression is matched as the shell matches it, not as `*`. Allowed: Bash `grep '[0-9]' f`, `tr '[:upper:]' '[:lower:]'` and `grep '[[:digit:]]' f` (the bracket-kept words `[0-9]`, `[:upper:]`, `[:lower:]` and `[[:digit:]]` reach step 3), and PowerShell `Select-String '[0-9]' f` (no dot rule there, so `.venv` would match a `*`). Each PASSES today (allowed, measured) and FAILS against the sibling's D8 as R7 wrote it (every bracket expression relaxed to `*`, which matches the links). In the same fixture `cp n [u]p` and `cp n u[p]` stay refused, naming where `up` resolves: the second review's HIGH 1 is not reopened (`fnmatch` matches both to `up`, measured).
+  **Built 1.4b-1.4f (night 2026-10-06, iteration 3), with 2.2's D2/D3/D10 code.** Rows `1.4b1`-`1.4b22`,
+  `1.4c1`-`1.4c2`, `1.4d1`-`1.4d10`, `1.4e1`-`1.4e6` in `_TABLE`; 1.4f as
+  `test_a_link_named_without_a_separator_is_judged_by_where_it_lands` (`1.4f1`-`1.4f14`, links `up`, `in`,
+  `.l`) and `test_a_linked_dependency_directory_is_refused_by_name_only` (`1.4f15`-`1.4f21`, the
+  `node_modules`/`venv`/`.venv` cost and R8's bracket controls). Red first: 43 failed with the fix stashed.
+  Measured before building, **not** failing today: `1.4b13`/`1.4b14` (PowerShell `${env:TEMP}`, `${HOME}`)
+  and `1.4d1`-`1.4d8` were already refused by task 1.4's base list; the rows assert them anyway. One
+  surprise: `_words` trims a leading backtick, so `` bash -c 'cp n `true`..' `` reaches rule 4 as
+  ``true`..``; D3's remainder is also read with that backtick restored. Mutation: each piece removed
+  fails exactly its rows (colon scan: 1.4c; restored backtick: 1.4e5; glued suffix: 1.4f3; bash `env:`:
+  1.4d9/10; `%CD%`: 1.4b21/22; link check: 7 rows; glob step: 6 rows). Driven through a spawned stdio
+  `mcp_server.py` with real junctions: all 51 shapes answered as the tests say.
+  Expected move: the sibling's rows `1.4e6`/`1.4e7` (`cp n [u]p`, `cp n u[p]`, allowed "until the
+  sibling change's 1.4f") now assert refused.
+
 - [x] 1.5 F401 controls that must stay allowed. Each PASSES today and names the rule it catches:
   - `echo $x`, `for f in $files; do echo $f; done`, `test -n "$VAR"`;
   - `echo $HOMEDIR` (a prefix match), `echo '$HOMEDIR'`;
@@ -228,7 +243,7 @@
   check is `_judge_drive_word`, first in rule 4, refusal-only, probing `budget.drive_exists` on a
   drive-letter host. 2.2 stays open: its D10 link check is not built yet.
 
-- [ ] 2.2 Rule 4, in this order:
+- [x] 2.2 Rule 4, in this order:
   - the drive check (PowerShell on any host; bash where `_DRIVE_LETTERS`, design D4), made on a drive-letter host only when `_drive_exists(letter)` (design D1, `B4-drive-exists`), and returning only a refusal, never ending the rule on an inside or skipped answer;
   - the `~` after a colon;
   - the `..`-glob;
@@ -237,6 +252,12 @@
   - (R4) the link check with glued-option suffixes, and `_glob_links` on a separator-less glob (design D10).
 
   Add a comment naming F401, F402 and D5.
+
+  **Built (iteration 3).** D2 is the full list and spellings (`_DIRECTORY_VARIABLE_NAMES`, bash `env:`
+  form, PowerShell scopes), checked at the value's start and after each `:`; D3's remainder is
+  `_names_the_parent_once_expanded` (`_EXPANSION_RE`); D10 is `_judge_link_word`, last in rule 4 (a
+  name via `lexists` + `_judge_path`, glued-run suffixes, a glob via `_glob_links`; a `:` value on a
+  drive-letter host is left to D1). Rule 4's opening comment already names F401, F402 and D5.
 - [ ] 2.3 Extend `_decide`'s docstring: a bare reference to any other variable, and a substitution, are not judged
 - [ ] 2.4 Run the judge's test files and the full `hub/tests/` with `claude` off PATH, and record the counts. Expected moves: exactly group 1's new rows. Confirm that the `hub-judge-windows` job ran the Windows rows and passed, or do not tick
 - [ ] 2.5 ruff and black as in CLAUDE.md

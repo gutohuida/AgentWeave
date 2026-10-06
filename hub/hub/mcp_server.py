@@ -1210,34 +1210,97 @@ _LITERAL_DOLLAR = "\ue024"
 _MAX_NESTING = 8
 
 # D2 (F401): a bare reference to a variable the shell, the host or the platform sets for every
-# process, whose value is one directory, is uncheckable by itself. Matched at the start of rule
-# 4's `value` (task 1.4's base list only; the extended spelling table is task 1.4b and after).
-# `\{?` reaches the brace form (`_words` trims the closing `}`, so `${HOME}` arrives as `${HOME`),
-# and the lookahead -- "not followed by a name character" -- is what leaves `$HOMEDIR` alone while
-# still refusing `$HOME.bak` and `$PWD..`, siblings of home and of the workspace (R2).
-_DIRECTORY_VARIABLE_NAMES = {
-    "bash": ("HOME", "OLDPWD", "TMP", "PWD"),
-    "powershell_env": ("USERPROFILE", "TEMP"),
-    "powershell_auto": ("HOME", "PWD"),
-}
+# process, whose value is one directory (one file for `PROFILE`, one drive for `HOMEDRIVE` and
+# `SystemDrive`), is uncheckable by itself. Matched at the start of rule 4's `value` and directly
+# after each `:` in it (R4: Git Bash expands `of=c:$HOMEPATH`). `\{?` reaches the brace form
+# (`_words` trims the closing `}`, so `${HOME}` arrives as `${HOME`), and the lookahead -- "not
+# followed by a name character" -- is what leaves `$HOMEDIR` alone while still refusing `$HOME.bak`
+# and `$PWD..`, siblings of home and of the workspace (R2). `_LITERAL_DOLLAR` matches too (R4): a
+# quoted reference is exactly what an inner shell expands. Tool-specific and user variables
+# (`VIRTUAL_ENV`, `$tmp`) are the named residual, not judged.
+_DIRECTORY_VARIABLE_NAMES = (
+    "HOME",
+    "USERPROFILE",
+    "HOMEPATH",
+    "HOMEDRIVE",
+    "SystemDrive",
+    "PWD",
+    "OLDPWD",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PUBLIC",
+    "OneDrive",
+    "OneDriveConsumer",
+    "OneDriveCommercial",
+    "ProgramData",
+    "ALLUSERSPROFILE",
+    "SystemRoot",
+    "windir",
+    "ProgramFiles",
+    "ProgramW6432",
+    "CommonProgramFiles",
+    "CommonProgramW6432",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_STATE_HOME",
+    "XDG_RUNTIME_DIR",
+    "PSHOME",
+    "PROFILE",
+)
+# PowerShell's own automatic variables; any other bare `$NAME` there is the script's, not the
+# environment's (R6: `$TEMP` is empty in PowerShell 5.1), so it needs `env:`.
+_POWERSHELL_DIRECTORY_VARIABLES = ("HOME", "PWD", "PSHOME", "PROFILE")
+_ANY_DIRECTORY_VARIABLE = "|".join(sorted(_DIRECTORY_VARIABLE_NAMES, key=len, reverse=True))
 _DIRECTORY_VARIABLE_RE = {
+    # A POSIX name exactly; a Windows name as Windows spells it or in capitals, the two forms msys
+    # keeps (`OneDrive`, `PROGRAMFILES`), so a lowercase user `$tmp` is not matched. (R6) Also
+    # PowerShell's `env:` spelling, handed to a nested PowerShell, in any case.
     "bash": re.compile(
-        "^[$" + _LITERAL_DOLLAR + "]\\{?(?:" + "|".join(_DIRECTORY_VARIABLE_NAMES["bash"]) + ")"
-        "(?![A-Za-z0-9_])"
+        "[$"
+        + _LITERAL_DOLLAR
+        + "]\\{?(?:(?i:env:(?:"
+        + _ANY_DIRECTORY_VARIABLE
+        + "))|"
+        + "|".join(
+            sorted(
+                {
+                    spelling
+                    for name in _DIRECTORY_VARIABLE_NAMES
+                    for spelling in (name, name.upper())
+                },
+                key=len,
+                reverse=True,
+            )
+        )
+        + ")(?![A-Za-z0-9_])"
     ),
     "powershell": re.compile(
-        "(?i)^[$"
+        "(?i)[$"
         + _LITERAL_DOLLAR
         + "]\\{?(?:env:(?:"
-        + "|".join(_DIRECTORY_VARIABLE_NAMES["powershell_env"])
-        + ")|(?:"
-        + "|".join(_DIRECTORY_VARIABLE_NAMES["powershell_auto"])
+        + _ANY_DIRECTORY_VARIABLE
+        + ")|(?:(?:variable|global|local|script|private|using):)?(?:"
+        + "|".join(_POWERSHELL_DIRECTORY_VARIABLES)
         + "))(?![A-Za-z0-9_])"
     ),
 }
-# The `%NAME%` form (a nested `cmd`) is read in either dialect, the same way rule 3's `_expands`
-# already treats it as an expansion regardless of dialect.
-_CMD_DIRECTORY_VARIABLE_NAMES = {"USERPROFILE"}
+# The `%NAME%` form (a nested `cmd`) is read in either dialect and any case, the same way rule 3's
+# `_expands` already treats it as an expansion regardless of dialect; cmd adds `%CD%`.
+_CMD_DIRECTORY_VARIABLE_NAMES = {name.upper() for name in _DIRECTORY_VARIABLE_NAMES} | {"CD"}
+# D3 (R4): what one expansion spells, removed to see whether the rest still names the parent: the
+# substitution marker, `$NAME`, `${...}` (its closing `}` optional, since `_words` trims it), `$`
+# and a special parameter, an inner shell's backtick span, and `%NAME%` -- each with a literal `$`
+# too, since an inner shell expands that.
+_EXPANSION_RE = re.compile(
+    re.escape(_SUBSTITUTION)
+    + "|[$"
+    + _LITERAL_DOLLAR
+    + "](?:\\{[^}]*\\}?|[A-Za-z_][A-Za-z0-9_]*|[0-9@*#?$!-])|`[^`]*`?|%[A-Za-z_][A-Za-z0-9_]*%"
+)
 
 # D1: an unquoted, unescaped `{`, `,` and `}` in bash, marked so `_expand_braces` can tell one
 # from a literal character the lexer already rendered plain (a quoted or escaped one, or one
@@ -1985,15 +2048,17 @@ def _expands(text: str) -> bool:
 
 
 def _directory_variable_reference(value: str, dialect: str) -> bool:
-    """Whether `value` opens with a bare reference to a directory variable (D2, F401): the
-    dialect's own spelling, or a `%NAME%` form read in either dialect, each not followed by a name
-    character."""
-    if _DIRECTORY_VARIABLE_RE[dialect].match(value):
-        return True
-    match = _CMD_VARIABLE_RE.match(value)
-    if match and match.group()[1:-1].upper() in _CMD_DIRECTORY_VARIABLE_NAMES:
-        tail = value[match.end() :]
-        return not tail[:1].isalnum() and tail[:1] != "_"
+    """Whether `value` holds a bare reference to a directory variable (D2, F401) at its start or
+    directly after one of its `:` (R4): the dialect's own spelling, or a `%NAME%` form read in
+    either dialect, each not followed by a name character."""
+    for start in [0] + [index + 1 for index, char in enumerate(value) if char == ":"]:
+        if _DIRECTORY_VARIABLE_RE[dialect].match(value, start):
+            return True
+        match = _CMD_VARIABLE_RE.match(value, start)
+        if match and match.group()[1:-1].upper() in _CMD_DIRECTORY_VARIABLE_NAMES:
+            tail = value[match.end() :]
+            if not tail[:1].isalnum() and tail[:1] != "_":
+                return True
     return False
 
 
@@ -2005,6 +2070,51 @@ def _first_expansion_start(value: str) -> int:
     if match:
         starts.append(match.start())
     return min(starts) if starts else -1
+
+
+def _names_the_parent_once_expanded(value: str) -> bool:
+    """D3 (R4): an unset variable or an empty substitution leaves the rest in place, so a value
+    (cut at a NUL) that is exactly `..` once every expansion is removed names the parent (`$x..`,
+    `$(true)..`, `.$x.`). `_words` trims a backtick from a word's start, so an inner shell's
+    `` `true`.. `` arrives as ``true`..``: it is also read with that backtick restored."""
+    cut = value.partition("\x00")[0]
+    readings = (cut, "`" + cut) if "`" in cut else (cut,)
+    for text in readings:
+        removed = _EXPANSION_RE.sub("", text)
+        if removed != text and removed == "..":
+            return True
+    return False
+
+
+def _judge_link_word(
+    budget: "_Budget",
+    value: str,
+    glued_run: str,
+    word: str,
+    root: str,
+    argument: str,
+    continues: bool,
+    dialect: str,
+) -> Optional[Dict[str, Any]]:
+    """D10 (R4): rule 4's premise, that a separator-less word names an entry of the directory the
+    shell runs in, is false for a link out of it. So `value` (cut at a NUL) is judged as the entry
+    it names when one exists (`_where` resolves a link, and the refusal names where it lands), or
+    by the links it matches when it is a glob (the sibling's `_glob_links`, bracket-kept words
+    included). A glued short option run with no value left (`-tup`) has each suffix after its
+    first letter tried as a name, since which letters take a value is the program's business. On
+    a drive-letter host a value with a `:` is D1's, not this check's."""
+    value = value.partition("\x00")[0]
+    if _DRIVE_LETTERS and ":" in value:
+        return None
+    if _holds_glob_character(value):
+        return _glob_links(os.path.join(root, value), word, root, budget, dialect == "bash")
+    names = [value] if value else [glued_run[index:] for index in range(1, len(glued_run))]
+    for name in names:
+        if os.path.lexists(os.path.join(root, name)):
+            refusal = _judge_path(name, root, word, argument, continues)
+            if refusal:
+                return refusal
+    return None
 
 
 def _effective_port(parts: urllib.parse.SplitResult) -> Optional[int]:
@@ -2154,7 +2264,7 @@ def _judge_word(
         refusal = _judge_drive_word(budget, word, root, argument, continues, dialect)
         if refusal:
             return refusal
-        value = word
+        value, glued_run = word, ""
         joined = _COLON_OPTION_RE.match(word)
         if joined:
             value = word[joined.end() :]
@@ -2165,7 +2275,7 @@ def _judge_word(
                 return _refuse(word, _UNCHECKED)
             glued = _GLUED_OPTION_RE.match(word)
             if glued:
-                value = word[glued.end() :]
+                value, glued_run = word[glued.end() :], glued.group()[1:]
         last_colon = value.rfind(":")
         if last_colon >= 0 and _TILDE_PREFIX_RE.fullmatch(value[last_colon + 1 :]):  # D4
             return _refuse(word, _UNCHECKED)
@@ -2173,6 +2283,8 @@ def _judge_word(
             return _refuse(word, _UNCHECKED)
         expansion_start = _first_expansion_start(value)
         if expansion_start >= 0 and value[:expansion_start] == "..":  # D3 (F401)
+            return _refuse(word, _UNCHECKED)
+        if _names_the_parent_once_expanded(value):  # D3 (R4)
             return _refuse(word, _UNCHECKED)
         cut = value.partition("\x00")[0]
         if cut == "..":
@@ -2184,7 +2296,9 @@ def _judge_word(
             and fnmatch.fnmatchcase("..", cut)
         ):
             return _judge_path("..", root, word, argument, continues)
-        return None
+        return _judge_link_word(
+            budget, value, glued_run, word, root, argument, continues, dialect
+        )  # D10
     if dialect == "bash" and word in _BASH_DEVICES:  # D4: the null device, stdin/out/err
         return None
     if "::" not in word and (  # D7: a `::` word is not plain in either dialect -- rule 6 reads it

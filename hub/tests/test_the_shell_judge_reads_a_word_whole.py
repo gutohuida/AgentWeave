@@ -258,10 +258,11 @@ _TABLE = [
     _row("1.4e3", "echo arr[0] x[1:]", True),
     _row("1.4e4", 'python -c \'["a","b"]\'', True),
     _row("1.4e5", "ls sub/[ab].py", True),
-    # The separator-less forms stay allowed under this change alone (task 1.4e's own note); the
-    # sibling change's 1.4f refuses them once its drive machinery lands.
-    _row("1.4e6", "cp n [u]p", True),
-    _row("1.4e7", "cp n u[p]", True),
+    # The separator-less forms were allowed under this change alone (task 1.4e's own note); the
+    # sibling change's 1.4f (D10, a-drive-or-a-home-variable-names-a-directory-by-itself) now
+    # refuses them: the bracket-kept word reaches `_glob_links` and matches the `up` link.
+    _row("1.4e6", "cp n [u]p", False),
+    _row("1.4e7", "cp n u[p]", False),
     # Task 2.2a, D7's first bullet: the word is judged at each backslash-escape-removed level, not
     # only as written. One real backslash (inside double quotes, so the lexer's own unquoted-
     # backslash rule never touches it) is still allowed as written (`.\./x` is a dot-leading name

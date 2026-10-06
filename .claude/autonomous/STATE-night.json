@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4f2face",
     "stop_at": "2026-10-07T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-06-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-drive-or-a-home-variable-impl-2",
-    "next_action": "Item a-drive-or-a-home-variable-impl-2: in openspec/changes/a-drive-or-a-home-variable-names-a-directory-by-itself/tasks.md take 1.4b-1.4f with the rule-4 code they need (D2 spellings, D3 remainder, D10 link check in 2.2); each test red then green; mutation-check once; run judge files + regression union (hub/ and tests/ separately), commit and push.",
+    "current": "a-drive-or-a-home-variable-impl-3",
+    "next_action": "Item a-drive-or-a-home-variable-impl-3: in openspec/changes/a-drive-or-a-home-variable-names-a-directory-by-itself/tasks.md take 2.3 (extend _decide's docstring), 1.5b, 1.5c, 1.6, then 2.4 (full hub/tests/ with claude off PATH, counts written into the task line; check the hub-judge-windows CI job before ticking) and 2.5 (ruff/black). Run long suites in the FOREGROUND (timeout 600000, split if needed); never end the turn while a suite runs. Commit and push.",
     "queue": [
         {
             "id": "a-drive-or-a-home-variable-impl-1",
@@ -23,14 +23,14 @@
         },
         {
             "id": "a-drive-or-a-home-variable-impl-2",
-            "status": "open",
+            "status": "done",
             "title": "Same change: tasks 1.4b-1.4f with rule-4 code (2.1-2.3)",
-            "detail": "Each test FAILS today; show red then green; mutation-check the real code once."
+            "detail": "Done iter 3: 1.4b-1.4f + 2.2 (D2 spellings, D3 remainder, D10 link check); red 45, union 1025 passed, driven via stdio server with junctions."
         },
         {
             "id": "a-drive-or-a-home-variable-impl-3",
             "status": "open",
-            "title": "Same change: 1.5b, 1.5c, 1.6, 2.4 (full suite with claude off PATH, counts inline), 2.5",
+            "title": "Same change: 2.3 (docstring), 1.5b, 1.5c, 1.6, 2.4 (full suite with claude off PATH, counts inline), 2.5",
             "detail": "F392 rule 1: counts written into the task line."
         },
         {

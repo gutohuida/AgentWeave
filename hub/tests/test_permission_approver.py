@@ -435,6 +435,56 @@ _TABLE = [
     _row("1.4s", "cp x $HOME.bak", False, _UNCHECKED),
     _row("1.4t", "cp x $PWD..", False, _UNCHECKED),
     _row("1.4u", "cp x ${HOME-y}", False, _UNCHECKED),
+    # Task 1.4b (R4, D2's complete spellings): bash keeps a Windows name as spelled or in
+    # capitals; PowerShell needs `env:` for an environment name, and takes its own four with or
+    # without a scope; `%CD%` in either dialect. Each FAILS today (allowed) except 1.4b13/1.4b14,
+    # which a brace already refused.
+    _row("1.4b1", "cp n $HOMEPATH", False, _UNCHECKED),
+    _row("1.4b2", "cp n $HOMEDRIVE$HOMEPATH", False, _UNCHECKED),
+    _row("1.4b3", "cp n $PUBLIC", False, _UNCHECKED),
+    _row("1.4b4", "cp n $OneDrive", False, _UNCHECKED),
+    _row("1.4b5", "cp n $ONEDRIVE", False, _UNCHECKED),
+    _row("1.4b6", "cp n $ProgramData", False, _UNCHECKED),
+    _row("1.4b7", "cp n $ALLUSERSPROFILE", False, _UNCHECKED),
+    _row("1.4b8", "cp n $SYSTEMROOT", False, _UNCHECKED),
+    _row("1.4b9", "cp n $windir", False, _UNCHECKED),
+    _row("1.4b10", "cp n $PROGRAMFILES", False, _UNCHECKED),
+    _row("1.4b11", "cp n $XDG_CONFIG_HOME", False, _UNCHECKED),
+    _row("1.4b12", "cp n $XDG_RUNTIME_DIR", False, _UNCHECKED),
+    _row("1.4b13", "Copy-Item x ${env:TEMP}", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4b14", "Copy-Item x ${HOME}", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4b15", "Copy-Item x $variable:HOME", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4b16", "Copy-Item x $global:HOME", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4b17", "Copy-Item x $script:PWD", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4b18", "Copy-Item x $PROFILE", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4b19", "Copy-Item x $PSHOME", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4b20", "Copy-Item x ${env:ProgramFiles(x86)}", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4b21", "cp x %CD%", False, _UNCHECKED),
+    _row("1.4b22", "cp x %CD%", False, _UNCHECKED, tool="PowerShell"),
+    # Task 1.4c (R4, D2 after a colon): Git Bash expands `of=c:$HOMEPATH` to the home directory.
+    _row("1.4c1", "dd if=n of=c:$HOMEPATH", False, _UNCHECKED),
+    _row("1.4c2", "echo PATH=a:$HOME", False, _UNCHECKED),
+    # Task 1.4d (R4): a quoted `$` is what an inner shell expands. 1.4d1-1.4d7 and 1.4d8 (the
+    # sibling's 1.7c4) were already refused by the base list matching `_LITERAL_DOLLAR`; 1.4d9 and
+    # 1.4d10 (R6, bash's `env:` form) FAIL today.
+    _row("1.4d1", "bash -c 'cp n $HOME'", False, _UNCHECKED),
+    _row("1.4d2", r'sh -c "cp n \$HOME"', False, _UNCHECKED),
+    _row("1.4d3", "bash -c 'cp n ${HOME}'", False, _UNCHECKED),
+    _row("1.4d4", "bash -c 'cp n ..$x'", False, _UNCHECKED),
+    _row("1.4d5", "powershell -c 'Copy-Item x $HOME'", False, _UNCHECKED),
+    _row("1.4d6", "bash -c 'cp n $HOME'", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4d7", "powershell -c 'Copy-Item x ${env:TEMP}'", False, _UNCHECKED, tool="PowerShell"),
+    _row("1.4d8", r"""bash -c 'bash -c "cp n \$HOME"'""", False, _UNCHECKED),
+    _row("1.4d9", "powershell -c 'Copy-Item x $env:TEMP'", False, _UNCHECKED),
+    _row("1.4d10", "powershell -c 'Copy-Item x ${env:USERPROFILE}'", False, _UNCHECKED),
+    # Task 1.4e (R4, D3): with every expansion removed the rest is `..`, the parent. Each FAILS
+    # today (allowed).
+    _row("1.4e1", "cp n $x..", False, _UNCHECKED),
+    _row("1.4e2", "cp n $(true)..", False, _UNCHECKED),
+    _row("1.4e3", "cp n .$x.", False, _UNCHECKED),
+    _row("1.4e4", "cp n `true`..", False, _UNCHECKED),
+    _row("1.4e5", "bash -c 'cp n `true`..'", False, _UNCHECKED),
+    _row("1.4e6", "Copy-Item n $x..", False, _UNCHECKED, tool="PowerShell"),
     # a-drive-or-a-home-variable-names-a-directory-by-itself, task 1.5: controls that must stay
     # allowed -- none of these names a directory variable from D2's list. IDs skip 1.5a-1.5c: each
     # names a separate, later task (the accepted costs, D4's drive/tilde/glob rows, and
@@ -695,6 +745,91 @@ def test_temp_is_a_drive_in_powershell_only(workspace, monkeypatch):
     # The named residual (`B4-temp-dialect`): a nested PowerShell is read as bash text.
     nested = _decide("Bash", {"command": "pwsh -c 'Copy-Item x Temp:'"})
     assert nested["allow"] is True, nested["reason"]
+
+
+def _link(link: Path, target: Path) -> None:
+    """A directory link made without privilege: a junction on Windows, a symlink elsewhere (the
+    sibling change's helper, `test_the_shell_judge_reads_a_word_whole.py`)."""
+    if _WINDOWS:
+        import _winapi
+
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        link.symlink_to(target, target_is_directory=True)
+
+
+def _assert_through_the_link(decision, outside: Path) -> None:
+    assert decision["allow"] is False, decision["reason"]
+    assert "is outside your workspace" in decision["reason"]
+    assert repr(os.path.realpath(outside)) in decision["reason"]
+
+
+# Task 1.4f (R4, D10): rule 4's premise -- a word with no separator names an entry of the
+# directory the shell runs in, so it cannot leave -- is false for a link. With `up` a link out,
+# `in` a link to `sub` and `.l` a dot-named link out, a bare name, a glob, a glued short option's
+# suffix and a bracket glob (the sibling's D11 bracket-kept word) are judged by the link, and the
+# refusal names where it lands. Each refused row FAILS today (allowed).
+@pytest.mark.parametrize(
+    "tool, command, allow",
+    [
+        pytest.param("Bash", "cp n up", False, id="1.4f1"),
+        pytest.param("Bash", "cp n u*", False, id="1.4f2"),
+        pytest.param("Bash", "cp -tup n", False, id="1.4f3"),
+        pytest.param("Bash", "cp n {up,x}", False, id="1.4f4"),
+        pytest.param("Bash", "cp --target-directory=up n", False, id="1.4f5"),
+        pytest.param("Bash", "ls -d .*", False, id="1.4f6"),
+        pytest.param("PowerShell", "Copy-Item n up", False, id="1.4f7"),
+        pytest.param("PowerShell", "Copy-Item n -Destination:up", False, id="1.4f8"),
+        pytest.param("Bash", "cp n [u]p", False, id="1.4f9"),
+        pytest.param("Bash", "cp n u[p]", False, id="1.4f10"),
+        # Controls: an entry that is not a link, an inside link, a name that does not exist, and
+        # a `node_modules` mention with no such link.
+        pytest.param("Bash", "cp n sub", True, id="1.4f11"),
+        pytest.param("Bash", "ls in", True, id="1.4f12"),
+        pytest.param("Bash", "cp -r n newdir", True, id="1.4f13"),
+        pytest.param("Bash", "grep -r foo --exclude-dir=node_modules .", True, id="1.4f14"),
+    ],
+)
+def test_a_link_named_without_a_separator_is_judged_by_where_it_lands(
+    workspace, tool, command, allow
+):
+    outside = workspace.parent / "outside"
+    _link(workspace / "up", outside)
+    _link(workspace / "in", workspace / "sub")
+    _link(workspace / ".l", outside)
+    decision = _decide(tool, {"command": command})
+    if allow:
+        assert decision["allow"] is True, decision["reason"]
+    else:
+        _assert_through_the_link(decision, outside)
+
+
+# Task 1.4f, the accepted cost and (R8) the bracket reading: with `node_modules`, `venv` and
+# `.venv` each a link out (the Hub's shared-dependency links), a bare mention of one is refused --
+# asserted so the cost stays visible (F444) -- while a bare bracket expression is matched as the
+# shell matches it, not as `*`, so a regular expression or a `tr` class stands. `[u]p` and `u[p]`
+# still reach `up`.
+@pytest.mark.parametrize(
+    "tool, command, allow",
+    [
+        pytest.param("Bash", "grep -r foo --exclude-dir=node_modules .", False, id="1.4f15"),
+        pytest.param("Bash", "grep '[0-9]' f", True, id="1.4f16"),
+        pytest.param("Bash", "tr '[:upper:]' '[:lower:]'", True, id="1.4f17"),
+        pytest.param("Bash", "grep '[[:digit:]]' f", True, id="1.4f18"),
+        pytest.param("PowerShell", "Select-String '[0-9]' f", True, id="1.4f19"),
+        pytest.param("Bash", "cp n [u]p", False, id="1.4f20"),
+        pytest.param("Bash", "cp n u[p]", False, id="1.4f21"),
+    ],
+)
+def test_a_linked_dependency_directory_is_refused_by_name_only(workspace, tool, command, allow):
+    outside = workspace.parent / "outside"
+    for name in ("node_modules", "venv", ".venv", "up"):
+        _link(workspace / name, outside)
+    decision = _decide(tool, {"command": command})
+    if allow:
+        assert decision["allow"] is True, decision["reason"]
+    else:
+        _assert_through_the_link(decision, outside)
 
 
 def test_a_fetch_is_not_governed(workspace, monkeypatch):
