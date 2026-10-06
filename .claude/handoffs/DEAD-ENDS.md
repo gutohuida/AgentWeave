@@ -2019,3 +2019,20 @@ disappears is indistinguishable from one that was forgotten.
   type hosted even after multiple attempts"** (GitHub capacity, three runs in a row on
   `f17c8e0..0fcdce7`). Read `gh run view <id>` before debugging. Every job that ran passed;
   `gh run rerun <id> --failed` retries only the unacquired ones.
+- **2026-10-06 (home) — the Hub's `agent_outputs` stores a tool call as only "Called PowerShell" /
+  "tool completed"**, so it cannot show what an agent ran or what a refusal said. Read the Claude
+  transcript instead: `runs.session_id` → `~/.claude/projects/<mangled workspace dir>/<session_id>.jsonl`
+  (the workspace is the task or agent checkout, e.g. `C--Users-huida-Documents-aw-…--agentweave-worktrees-planner`).
+  A resumed session's file holds earlier turns too: filter by the run's `started_at`.
+- **2026-10-06 (home) — evidence decision words are `accepted` / `rejected`**, not `accept` /
+  `reject` (422 `unknown_decision`). Questions are answered with `PATCH /questions/{id}`
+  `{"answer": ..., "labels": [...]}`; the asking column is `questions.from_agent`; runs carry
+  `initiator`, not `origin_type`.
+- **2026-10-06 (home) — "does this branch still merge?" without touching a checkout:
+  `git merge-tree --write-tree master HEAD` (exit 0 = clean)**, the same plumbing
+  `task_integration.would_conflict` uses.
+- **2026-10-06 (home) — a test `Task` needs an id `task-<hex>` to name a branch**
+  (`worktrees.task_branch_name` raises on `task-contract-x`); the briefing fixtures' ids do not.
+- **2026-10-06 (home) — parallel tasks of one slice that all edit the same files conflict after the
+  first merges, every time** (two real slice drives). That is the product working: the gate
+  refuses, the reviewer sends it back, the author merges main. Expect 1-3 extra rounds per slice.
