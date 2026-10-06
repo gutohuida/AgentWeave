@@ -42,6 +42,10 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     // and cannot be given a provider without changing what it is testing. Behaviour of the button
     // itself belongs to `taskLandingAction.test.tsx`, which does wrap one.
     useLandTask: () => ({ mutate: vi.fn(), isPending: false }),
+    // The checks row (approval-runs-the-projects-checks), stubbed for the same reason: its
+    // behaviour belongs to `taskChecksRow.test.tsx`.
+    useTaskChecks: () => ({ data: undefined, error: null }),
+    useRerunTaskChecks: () => ({ mutate: vi.fn(), isPending: false, error: null }),
     // Overridden per-test via `renameMutate`/`renameOnError`/`renameOnSuccess` below (F125,
     // `the-operator-can-rename-a-task`) — the drawer's title editor is what is under test here, not
     // the hook's own request shape (that is `tasksApi.test.tsx`).
