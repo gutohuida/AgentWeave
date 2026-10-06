@@ -292,13 +292,22 @@
 
 ## 3. Real shells
 
-- [ ] 3.1 In `testbed/scratch/`:
+- [x] 3.1 In `testbed/scratch/`:
   - PowerShell 5.1, with a second drive available (or `subst`): `Copy-Item notes.md Z:` lands outside, and `Copy-Item notes.md C:` lands in the current location.
   - Git Bash: `cp notes.md $HOME` lands in home, and `cp notes.md C:` writes a file named `C:`.
   - (R4) Git Bash, with `x` unset: `echo $x.. $(true)..` prints `.. ..`; `ls -d c:$HOMEPATH` lists home; with a junction `up` pointing outside, `cp n up` lands outside.
   - (R6) Git Bash: `cp n [u]p` and `cp n u[p]` land outside through `up`. PowerShell 5.1: `$TEMP` is empty and `$tmp = New-TemporaryFile; Remove-Item $tmp` runs.
 
   Delete the scratch.
+
+  **Evidence (night iteration 5, real shells, `subst Q:` for the second drive, junction `up` -> outside):**
+  Git Bash: `cp notes.md $HOME` landed in `/c/Users/huida`; `cp notes.md C:` wrote a file literally named `C:`
+  in the cwd; `echo $x.. $(true)..` printed `.. ..`; `ls -d c:$HOMEPATH` listed `c:\Users\huida`;
+  `cp n up`, `cp n [u]p`, `cp n u[p]` each landed in `outside/` through the junction.
+  PowerShell 5.1.26100: `Copy-Item notes.md Q:` landed in `outside/`; `Copy-Item notes.md C:` targeted the
+  current location (it failed "cannot overwrite notes.md with itself"); `$TEMP` printed empty;
+  `$tmp = New-TemporaryFile; Remove-Item $tmp` ran. Every shell behaviour matches the spec. Scratch, junction
+  and subst removed (the harness refused `rm`/`Remove-Item` of `C:`/`Q:\` paths, so those were cleaned by `rmdir`/`subst /D`).
 
 ## 4. Close
 

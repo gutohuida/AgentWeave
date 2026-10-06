@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4f2face",
     "stop_at": "2026-10-07T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-10-06-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-drive-or-a-home-variable-drive",
-    "next_action": "Item a-drive-or-a-home-variable-drive: first `gh run list --branch autonomous/2026-10-06-daily`; if the iteration-4 commit's run finished and its hub-judge-windows log shows test_bash_reads_another_existing_drive_as_outside[1.5b8/1.5b9] and test_an_existing_drive_is_judged_by_the_real_probe[1.5c7/1.5c8] PASSED (not SKIPPED), tick task 2.4 in openspec/changes/a-drive-or-a-home-variable-names-a-directory-by-itself/tasks.md, naming the run id; if it failed, fix that first. Then task 3.1 in testbed/scratch/ (PowerShell 5.1 with subst for a second drive; Git Bash rows incl. a junction `up`; delete the scratch afterwards). Record what each real shell did in 3.1's evidence. Commit and push.",
+    "current": "a-drive-or-a-home-variable-archive",
+    "next_action": "Item a-drive-or-a-home-variable-archive: first `gh run view 37545991226` (or `gh run list --branch autonomous/2026-10-06-daily`); if finished and its hub-judge-windows log shows test_bash_reads_another_existing_drive_as_outside[1.5b8/1.5b9] and test_an_existing_drive_is_judged_by_the_real_probe[1.5c7/1.5c8] PASSED (not SKIPPED), tick task 2.4 in openspec/changes/a-drive-or-a-home-variable-names-a-directory-by-itself/tasks.md naming the run id; if it failed, fix that first; if still running, do nothing else but log and leave it. Task 3.1 is done (iter 5). Then 4.1: read the sibling the-shell-judge-reads-a-word-whole first, then F401/F402 -> fixed <sha>, METRICS row, openspec validate --strict, archive if ordering allows. Commit and push.",
     "queue": [
         {
             "id": "a-drive-or-a-home-variable-impl-1",
@@ -35,9 +35,9 @@
         },
         {
             "id": "a-drive-or-a-home-variable-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive the judge change in testbed/scratch (3.1) on a fresh drive profile and port",
-            "detail": "Chosen port netstat-checked; never 8000/8010; AW_HUB and AW_KEY exported."
+            "detail": "Done iter 5: 3.1 driven in real PowerShell 5.1 + Git Bash; 2.4 tick still pending CI."
         },
         {
             "id": "a-drive-or-a-home-variable-archive",
