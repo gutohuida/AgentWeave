@@ -102,12 +102,26 @@ def setup():
     assert saved.get("checks") == [CHECK], f"FAIL checks did not round-trip: {saved.get('checks')}"
     e2e.cmd_agent(project, "builder", "-", "claude", HAIKU)
     e2e.cmd_agent(project, "reviewer", "-", "claude", HAIKU)
-    save({"project": project, "root": str(root)})
+    # A loop whose work merges its branch tip: an operator task on no loop merges only accepted
+    # evidence, so it has no merge target and no check would ever run (correctly). Disabled: it
+    # never fires; it only gives the tasks a source.
+    job = must(
+        *e2e.request(
+            "POST",
+            f"/projects/{project}/jobs",
+            {"name": "checks drive", "agent": "builder", "message": "work", "cron": "0 0 1 1 *",
+             "enabled": False, "purpose": "checks drive", "work_needs_evidence": False},
+        ),
+        "create loop",
+    )
+    loop = e2e.ro().execute("select id from loops where job_id=?", (job["id"],)).fetchone()["id"]
+    save({"project": project, "root": str(root), "loop": loop})
     print("PASS setup: checks saved and read back")
 
 
 def new_task(project, title, description):
-    body = {"title": title, "description": description, "assignee": "builder"}
+    body = {"title": title, "description": description, "assignee": "builder",
+            "loop_id": load()["loop"]}
     return must(*e2e.request("POST", f"/projects/{project}/tasks", body), "create task")["id"]
 
 
@@ -128,18 +142,21 @@ def break_():
     print("PASS break: run failed ->", json.loads(row["results"])[0].get("exit_code"))
 
 
+def _review_turn(project, task, message):
+    """A review by a real agent through a turn bound to the task. A dispatched review turn needs
+    evidence naming a commit (`requirement_evidence.commit_for_task_review`), which a task on a
+    branch-tip loop never has -- a gap outside this change, filed separately."""
+    must(*e2e.request("PATCH", f"/projects/{project}/tasks/{task}",
+                      {"status": "under_review", "assignee": "reviewer"}), "enter review")
+    turn(project, "reviewer", message, task=task)
+    return e2e.ro().execute("select status from tasks where id=?", (task,)).fetchone()["status"]
+
+
 def review():
     state = load()
     project, task = state["project"], state["task"]
-    status, res = e2e.request(
-        "POST",
-        f"/projects/{project}/agent/trigger",
-        {"agent": "reviewer", "message": f"Review task {task} and record your verdict.",
-         "review_task_id": task, "session_mode": "new"},
-    )
-    run_id = must(status, res, "dispatch review")["run_id"]
-    e2e.wait_for(run_id, 15)
-    st = e2e.ro().execute("select status from tasks where id=?", (task,)).fetchone()["status"]
+    st = _review_turn(project, task, f"You are reviewing task {task} (calc.add). Decide with "
+                      "update_task: `approved` if the work is right, `revision_needed` if not.")
     assert st == "revision_needed", f"FAIL reviewer left the task {st}"
     print("PASS review: sent back")
 
@@ -151,14 +168,8 @@ def fix():
          "return a + b), then set the task to completed.", task=task)
     row = wait_run(task)
     assert row["state"] == "passed", f"FAIL expected passed, got {row}"
-    status, res = e2e.request(
-        "POST",
-        f"/projects/{project}/agent/trigger",
-        {"agent": "reviewer", "message": f"Review task {task} again and record your verdict.",
-         "review_task_id": task, "session_mode": "new"},
-    )
-    e2e.wait_for(must(status, res, "dispatch review")["run_id"], 15)
-    st = e2e.ro().execute("select status from tasks where id=?", (task,)).fetchone()["status"]
+    st = _review_turn(project, task, f"You are reviewing task {task} again (calc.add). Decide "
+                      "with update_task: `approved` if the work is right, `revision_needed` if not.")
     assert st == "approved", f"FAIL expected approved, got {st}"
     print("PASS fix: passed and approved")
 
@@ -166,17 +177,22 @@ def fix():
 def override():
     state = load()
     project = state["project"]
-    task = new_task(project, "Break it again", "Change calc.add to return a * b, then complete.")
-    turn(project, "builder", f"Do task {task}: change calc.add to return a * b, then set the "
-         "task to completed.", task=task)
+    task = state.get("override_task") or new_task(
+        project, "Break it again", "Change calc.add to return a * b, then complete."
+    )
+    state["override_task"] = task
+    save(state)
+    if e2e.ro().execute("select status from tasks where id=?", (task,)).fetchone()["status"] != "completed":
+        turn(project, "builder", f"Do task {task}: change calc.add to return a * b, then set the "
+             "task to completed.", task=task)
     assert wait_run(task)["state"] == "failed"
-    for status in ("under_review",):
-        must(*e2e.request("PATCH", f"/projects/{project}/tasks/{task}", {"status": status}), status)
+    must(*e2e.request("PATCH", f"/projects/{project}/tasks/{task}",
+                      {"status": "under_review", "assignee": "reviewer"}), "under_review")
     refused = e2e.request("PATCH", f"/projects/{project}/tasks/{task}", {"status": "approved"})
     assert refused[0] == 409, f"FAIL operator approval without a reason was not refused: {refused}"
     body = {"status": "approved", "override_checks_reason": "drive: intentional override"}
     must(*e2e.request("PATCH", f"/projects/{project}/tasks/{task}", body), "override")
-    history = json.dumps(e2e.request("GET", f"/projects/{project}/tasks/{task}/history")[1])
+    history = json.dumps(e2e.request("GET", f"/projects/{project}/tasks/{task}/transitions")[1])
     assert "drive: intentional override" in history, "FAIL the reason is not in the history"
     print("PASS override: approved with the reason on record")
 

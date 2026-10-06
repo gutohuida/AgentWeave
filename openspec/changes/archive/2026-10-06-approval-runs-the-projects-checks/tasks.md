@@ -38,6 +38,6 @@
 
 ## 7. What must not move
 
-- [ ] 7.1 Full suites: `pytest hub/tests/ -q`, `pytest tests/ -q`, `cd hub/ui && npm test`, and CI's lint set, with counts on this line.
-- [ ] 7.2 Run the acceptance drive (0.1) to completion, all five steps passing. Record it in `scripts/drive/FINDINGS.md` and as a `spec-queue/METRICS.md` row.
-- [ ] 7.3 Reconcile `openspec/specs/` (sync) and archive.
+- [x] 7.1 Full suites: `pytest hub/tests/ -q` 6884 passed, 93 skipped; `pytest tests/ -q` 567 passed, 3 skipped (both at 3d717a7); `vitest` 1877 passed at 46e2a38; ruff, black and eslint clean.
+- [x] 7.2 Run the acceptance drive (0.1) to completion, all five steps passing. Record it in `scripts/drive/FINDINGS.md` and as a `spec-queue/METRICS.md` row. All five passed on `:8038` (F511). Step 2's reviewer judged by running pytest itself, so the agent-facing refusal is test-only. Found F510 (a branch-tip loop's task can't be given a review turn).
+- [x] 7.3 Reconcile `openspec/specs/` (sync) and archive.

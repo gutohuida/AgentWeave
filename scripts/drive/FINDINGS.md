@@ -34582,3 +34582,33 @@ this repo's named dominant failure mode, caught only by driving.
 the listing carrying each tool's whole description), and put the `files` field and the same-file rule where
 every planner reads it (the exploring duty), stated as a step ("for each task, list `files`; chain any two
 that share one"), not a principle. Then re-drive.
+
+## F510 (B) — a task on a loop whose work merges its branch tip can never be given a review turn
+
+**Status:** open
+Found 2026-10-06 by the acceptance drive of `approval-runs-the-projects-checks` (fresh Hub `:8038`,
+profile `checks1006c`). Driven, not read. Area: **Flows & review**.
+
+A loop created with `work_needs_evidence: false` merges its task's branch tip at approval
+(`task_integration.evidence_governs`), so its tasks need no evidence, and have none: evidence is
+recorded against a requirement, and such a task usually serves none. But a review turn is only ever
+handed a commit through evidence (`requirement_evidence.commit_for_task_review`, :985), so
+`POST /agent/trigger` with `review_task_id` answers 409 "task ... has no recorded evidence, so there is no
+commit to review" -- for every task of that loop, forever. The flow's own review staffing reads the same
+function. The drive worked around it with a turn bound to the task.
+
+**Direction (not decided):** where evidence does not govern the merge, review the task's branch tip --
+the same commit approval would merge (`task_integration.merge_targets`).
+
+## F511 (D) — what the checks-gate acceptance drive measured
+
+**Status:** noted
+`scripts/drive/d1006_checks_gate.py` on `:8038`, real Haiku agents, check `py -3.11 -m pytest -q`:
+(1) the builder completed its task mid-turn; the run started at the turn's end and checked the
+snapshot commit `0c6adce` (the work), `failed` with `assert -1 == 5`; (2) the reviewer ran pytest
+itself and sent the task back -- it never met the gate refusal, so the agent-facing refusal is
+test-only; (3) the fix `d25c9d8` `passed` and approval merged exactly that commit; (4) the operator's
+approval without a reason was refused, with "drive: intentional override" it merged and the reason is in
+`/transitions`; (5) a Hub killed mid-run reads the run `interrupted` after restart. Limits seen: a
+killed Hub leaves the run's scratch worktree (removed by the next run on that task) and its check
+processes (they finish on their own).
