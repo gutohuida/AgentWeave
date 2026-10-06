@@ -453,7 +453,9 @@ def access_path_notice(
         "root — unquoted, with nothing chained before or after it, which needs no approval in any "
         "posture — for example `aw-tool create_task .agentweave/calls/1.json`. A tool with no "
         "required argument needs "
-        "no file (`aw-tool list_tasks`), and `aw-tool --list` names every tool and its arguments. "
+        "no file (`aw-tool list_tasks`), and `aw-tool --list` names every tool and its arguments "
+        "but shows only the first line of each description; `aw-tool --help <tool>` shows the "
+        "whole description. "
         "The result is one JSON object, the last line of the output. Inbound content is already "
         "included in this turn; no retrieval is needed."
     )

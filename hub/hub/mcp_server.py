@@ -3080,6 +3080,8 @@ def _hub_own_command(tool_name: str, command: str, workspace: str) -> bool:
     names = ("aw-tool", "aw-tool.cmd") if powershell else ("aw-tool",)
     if (words[0].lower() if powershell else words[0]) not in names:
         return False
+    if words[1] == "--help" and len(words) == 3:
+        return words[2] in _CALLABLE_TOOLS
     if words[1] in _CALL_COMMAND_FLAGS:
         return len(words) == 2
     if words[1] not in _CALLABLE_TOOLS:
@@ -4062,6 +4064,26 @@ def call_main(argv: List[str]) -> int:
         if not argv:
             raise _CallUsageError(_CALL_HELP)
         if argv[0] in ("--help", "-h"):
+            if len(argv) > 1:
+                topic = argv[1]
+                topic_fn = _CALLABLE_TOOLS.get(topic)
+                if topic_fn is None:
+                    raise _CallUsageError(
+                        f"{topic!r} is not a callable tool; `aw-tool --list` names them."
+                    )
+                parameters, required = _call_parameters(topic_fn)
+                _call_emit(
+                    {
+                        "ok": True,
+                        "result": {
+                            "name": topic,
+                            "parameters": parameters,
+                            "required": required,
+                            "description": inspect.getdoc(topic_fn) or "",
+                        },
+                    }
+                )
+                return 0
             _call_emit({"ok": True, "result": {"usage": _CALL_HELP}})
             return 0
         if argv[0] == "--list":
