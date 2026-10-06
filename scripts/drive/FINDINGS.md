@@ -34081,9 +34081,16 @@ message→tool_call flush, in the order the mapper actually emits them.
 
 ## F489 (C) — the Hub retries a Copilot turn three times on an authentication failure that cannot succeed on retry
 
-**Status:** open, found 2026-10-04 by drive task 7.3 of `a-copilot-agent-uses-hooks-and-its-own-agents`
+**Status:** fixed (this commit) -- as decided in `spec-queue/DECISIONS.md` `f489-retry-signal` (a):
+a root `session.error` whose `errorType` is `authentication` or `quota` sets
+`copilot_acp.TurnOutcome.retryable = False` (and `error_kind`); the RPC executor passes both to
+`return_run_entries`, which withdraws the entry after its first attempt with the reason "the turn
+failed with `authentication`, which retrying cannot fix; the Hub did not retry". A refusal with a
+reset ahead still holds instead. Tests in `test_an_unretryable_failure_is_not_retried.py`. Driven
+2026-10-06 on a fresh Hub `:8032` (BYOK runner, key var `invalid`, real Copilot CLI): one run, one
+error card, entry withdrawn at attempt 1, `queue_entry_abandoned` carrying the reason.
+Found 2026-10-04 by drive task 7.3 of `a-copilot-agent-uses-hooks-and-its-own-agents`
 (interactive; trial Hub `:8010`), and seen identically by the 2026-10-03 drive of the same task.
-**Ready:** no change owns it.
 
 One operator message to `cp5` on a Copilot provider runner whose key variable holds `invalid` made
 three runs (`run-905f58dd3ac9`, `run-6988ccc8d1cb`, `run-aa933d99e455`), each ending with the same

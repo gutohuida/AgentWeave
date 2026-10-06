@@ -941,6 +941,10 @@ def _subagent_id(params: Mapping[str, Any], data: Mapping[str, Any]) -> Optional
 
 #: A Copilot `errorType` that may name an error code (D5); anything else is `copilot.unknown`.
 _ERROR_TYPE_RE = re.compile(r"^[a-z_]{1,32}$")
+
+#: Root `errorType`s the same input cannot get past by being sent again: a refused credential
+#: stays refused until the operator changes it, and a spent quota until it resets (F489).
+UNRETRYABLE_ERROR_KINDS = frozenset({"authentication", "quota"})
 _SUBAGENT_PHASES = {
     "subagent.started": "subagent_started",
     "subagent.completed": "subagent_completed",
@@ -1020,6 +1024,8 @@ class CopilotEventMapper:
         self.resolved_model: Optional[str] = None
         #: The root agent's first `session.error` message this turn; it fails the turn (D10, R3).
         self.root_error: Optional[str] = None
+        #: That error's `errorType`, normalized as its `copilot.<kind>` event code is (F489).
+        self.root_error_kind: Optional[str] = None
         self._message: List[str] = []
         self._thought: List[str] = []
         self._notices: List[_Notice] = []
@@ -1317,15 +1323,16 @@ class CopilotEventMapper:
         if not isinstance(message, str) or not message:
             return []
         subagent_id = _subagent_id(params, data)
-        if subagent_id is None and self.root_error is None:
-            self.root_error = message
-        self._error_echoes.append(f"Error: {message}")
         error_type = data.get("errorType")
         kind = (
             error_type
             if isinstance(error_type, str) and _ERROR_TYPE_RE.match(error_type)
             else "unknown"
         )
+        if subagent_id is None and self.root_error is None:
+            self.root_error = message
+            self.root_error_kind = kind
+        self._error_echoes.append(f"Error: {message}")
         return [
             error_event(
                 code=f"copilot.{kind}",
@@ -1955,6 +1962,11 @@ class TurnOutcome:
     exit_code: Optional[int] = None
     #: What Copilot last wrote to its error stream, for a failure that raised nothing.
     stderr_tail: Optional[str] = None
+    #: `False` when the turn failed in a way the same input cannot fix on retry; `None` keeps
+    #: the queue's ordinary retry (F489). Never `True`: nothing claims a retry will succeed.
+    retryable: Optional[bool] = None
+    #: The root `session.error`'s `errorType` that failed the turn, where one did.
+    error_kind: Optional[str] = None
 
 
 def _options_of(response: Mapping[str, Any]) -> Optional[List[Dict[str, Any]]]:
@@ -2791,6 +2803,7 @@ async def _await_prompt(
     state["close_forced"] = bool(
         state["cancel_sent_at"] is not None or failure is not None or prompt_result is None
     )
+    error_kind: Optional[str] = None
     if state["forced_failure"] is not None:
         status, error = "failed", state["forced_failure"]
     elif state["interrupted"] or stop_reason == "cancelled":
@@ -2799,6 +2812,7 @@ async def _await_prompt(
         status, error = "failed", failure
     elif mapper.root_error is not None:
         status, error = "failed", mapper.root_error
+        error_kind = mapper.root_error_kind
     elif ledger.refused:
         # D8: a quota refusal fails the turn whatever the stop reason, so its input is requeued.
         status, error = "failed", "Copilot refused the turn: the plan's quota is spent."
@@ -2810,4 +2824,6 @@ async def _await_prompt(
         error=error,
         exit_code=session.returncode,
         stderr_tail=session.stderr_tail() or None,
+        retryable=False if error_kind in UNRETRYABLE_ERROR_KINDS else None,
+        error_kind=error_kind,
     )

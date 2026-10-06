@@ -295,7 +295,12 @@ DELIVERY_ATTEMPT_LIMIT = 3
 
 
 async def return_run_entries(
-    db: AsyncSession, run_id: str, *, refusal: Optional["AllowanceRefusal"] = None
+    db: AsyncSession,
+    run_id: str,
+    *,
+    refusal: Optional["AllowanceRefusal"] = None,
+    retryable: Optional[bool] = None,
+    failure_kind: Optional[str] = None,
 ) -> List[str]:
     """Put a failed run's input back, unless putting it back is what keeps failing.
 
@@ -324,6 +329,12 @@ async def return_run_entries(
     provider session would discard the agent's context for nothing, and withdrawing the entry would
     drop the operator's message for a wait with a stated end. `waiting_reason` stays cleared: the
     status route derives the hold live, and a stored copy would outlive it (F97).
+
+    **A failure retrying cannot fix is withdrawn at once** (F489). `retryable=False` means the
+    provider said why the turn failed and sending the same input again would fail the same way
+    (Copilot's `authentication`, *failure_kind*): the attempt is counted, the provider session is
+    kept — it was not what failed — and the entry is withdrawn with a reason naming the failure.
+    A refusal still wins: a spent allowance with a reset ahead is a wait, not a give-up.
     """
     result = await db.execute(
         select(InboundQueueEntry).where(
@@ -342,6 +353,15 @@ async def return_run_entries(
             requeued.append(entry.id)
             continue
         entry.delivery_attempts = (entry.delivery_attempts or 0) + 1
+
+        if retryable is False:
+            entry.state = "withdrawn"
+            entry.withdrawn_at = datetime.now(timezone.utc)
+            entry.abandoned_reason = (
+                f"the turn failed with `{failure_kind or 'an error'}`, which retrying cannot fix;"
+                " the Hub did not retry"
+            )
+            continue
 
         if entry.delivery_attempts >= RESUME_RETRY_LIMIT and entry.conversation_id:
             # The one change that breaks the loop. Cleared rather than flagged, because

@@ -4023,8 +4023,15 @@ async def _execute_rpc_run(
             # refusal for the reason given there: the firing is delivered at the reset.
             if refusal is None:
                 await finalize_job_run_for_conversation(db, conversation_id, final_status)
+            # F489: Copilot names a failure no retry can fix; Codex's outcome has no such field.
             returned = (
-                await return_run_entries(db, run_id, refusal=refusal)
+                await return_run_entries(
+                    db,
+                    run_id,
+                    refusal=refusal,
+                    retryable=getattr(outcome, "retryable", None),
+                    failure_kind=getattr(outcome, "error_kind", None),
+                )
                 if final_status == "failed" and binding_conflict is None
                 else []
             )
