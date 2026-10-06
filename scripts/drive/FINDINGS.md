@@ -34345,3 +34345,100 @@ or several real calls across a day) would show whether the checkpoint event is c
 session length, model, or something else) or just rare. Until then, 2.1/2.2's fix is confirmed
 correct for the shape it was built from, but the rate at which real checkpoints actually carry a
 `session.usage_checkpoint` line is open.
+
+## F499 (A) — approving a task whose requirements another task also serves merges the other task's commit, and the approved task's own work never lands
+
+**Status:** open
+Found 2026-10-06 by the first real end-to-end drive of the slice spec flow (C1a + C1b on master
+`d4c65eb`), drive Hub `:8030` (profile `slices1006`), project `proj-e1e7ccbc8e78`, real Haiku turns.
+Driven, not read. Area: **Worktrees & integration** / **Requirements, evidence & coverage**.
+
+Slice 1 had three tasks serving overlapping requirements: `task-df903972e237` (FR-1, FR-7),
+`task-06d8e481926e` (FR-2, FR-6), and `task-d60d02d44630` "Write comprehensive pytest tests" (all
+four). The operator accepted only task 1's evidence (FR-1, FR-7). Task 1 was approved and merged
+(`e5bb402`). Tasks 3 and 2 were then approved, and **both** integrations recorded task 1's commit
+from task 1's branch:
+
+```
+task-d60d02d44630  e5bb402e  agentweave/task/task-df903972e237  skipped  e5bb402e231d is already in master; there was nothing to merge
+task-06d8e481926e  e5bb402e  agentweave/task/task-df903972e237  skipped  e5bb402e231d is already in master; there was nothing to merge
+```
+
+`git merge-base --is-ancestor dbb3624 master` (task 3's own commit, its 28 tests): not in master.
+On master, `Store.search('report')` still misses "write Report": the slice's headline bug fix,
+task 2's work, never landed, while the board shows the slice 3/3 approved and the next slice was
+drafted on that basis (F501).
+
+Cause: `task_integration._targets` (`hub/hub/task_integration.py:254-274`) reaches evidence through
+`TaskRequirementLink`, so any accepted evidence on a *shared* requirement becomes this task's merge
+target ("deliberately", per its docstring). With none of the task's own evidence accepted, the only
+accepted targets were task 1's, and the merge was a no-op reported as success-shaped "skipped".
+C1b (`a-task-may-serve-a-whole-slice`) made requirement overlap between a slice's tasks the normal
+shape, so this now fires on an ordinary slice. Not covered by an open finding or change (F357's fix
+names "another task on a shared requirement" in a briefing; it does not touch the merge source).
+Severity A: approved work silently lost, and the record says nothing was left to merge.
+
+## F500 (A) — a reviewer records its own evidence during the review, which lifts C1b's rejected-requirement block, then approves over the operator's rejection
+
+**Status:** open
+Same drive as F499. Area: **Requirements, evidence & coverage** / **Flows & review**.
+
+The operator rejected every piece of `task-06d8e481926e`'s evidence twice (FR-2, FR-6, then FR-2,
+FR-6, FR-7 after the revision), with reasons (the documented test command fails at collection).
+The flow staffed `builder` to review it (`run-be4134b130c8`). During that review run the reviewer
+recorded **new** evidence on the task under review, for FR-2, FR-6 and FR-7 (`actor=builder`,
+`review_state=awaiting`), then moved the task `under_review → approved` (transition
+`ttr-2f1417c04ec7`, `policy_digest 3124f244…`). C1b's D2 blocks a requirement only when its
+current-digest evidence is *all* rejected; one fresh awaiting row by the reviewer makes it not-all.
+The same happened on the other two reviews (`run-8b43483b396d` recorded four rows on task 3;
+`planner` recorded FR-1/FR-6/FR-7 rows on task 1 while reviewing it), so the reviewer is routinely
+also an evidence author on the task it judges. This reproduces the FR-11 incident C1b exists to
+stop, on its first real slice. Related but distinct: F497 (reviewer not told the block exists).
+
+## F501 (B) — the next slice is drafted from task statuses alone: the agent skipped `list_evidence`, missed two rejections and unmerged work, and called the model "solid"
+
+**Status:** open
+Same drive. Area: **Spec documents** (C1a's drafting turn).
+
+The queued drafting message (`entry-99eebc58aa30`) asks the author to read the tasks' notes and
+evidence with `get_task` and `list_evidence`. The real run (`run-247a6dad4e46`) called
+`read_spec_document` ×2 and `get_task` ×3, never `list_evidence`, and wrote: "The data model
+(priority, ID counter, case-insensitive search) is solid". Case-insensitive search is not on
+master (F499) and its evidence was rejected twice. The message itself lists each task only as
+`approved`, which is all the agent needed to stop reading. Slice 2 then repeats slice 1's shape
+unchanged: a "Write comprehensive tests" task serving every requirement beside three parallel
+tasks that all edit `tasktrack/model.py` (the shape that produced F499). Direction, not decided:
+put each task's evidence outcome and integration outcome in the drafting message itself rather
+than asking the agent to fetch it.
+
+## F502 (C) — an agent learns the spec payload schema by trial and error: seven rejected submits in two turns, and a misplaced field is accepted silently
+
+**Status:** open
+Same drive. Area: **Spec documents** / **Agent environment**.
+
+Over the two authoring turns (`run-00a1dcc17f30`, `run-c5256b54ad60`, Claude Code on Haiku via
+`aw-tool`), `submit_spec_document` refused 7 of 11 calls, one schema rule at a time: `slices[].done`
+must be a string; `scope` must be an object; `requirements[].key` required, then lowercase; `modal`
+uppercase; top-level `acceptance_criteria[]` needs `key/requirement/given/when/then`. Meanwhile
+`requirements[].acceptance_criteria: [{statement}]` (a shape the schema does not have) was accepted
+because `spec_payload._Part` is `extra="allow"` (`hub/hub/spec_payload.py:69`), and propose then
+said "has no acceptance criterion" with no hint that criteria were present in the wrong place.
+The first turn also reported both documents "ready" while its last submit returned
+`requirement_without_criterion`/`requirement_without_task` blocking, and the roadmap's slices were
+accepted with `done: "false"` (the drafting message prints "Done when: false"). The operator needed
+one corrective turn ($0.37) to get both documents through.
+
+## F503 (D) — what held in the first real slice drive
+
+**Status:** noted
+Same drive, recorded so the ledger does not describe only defects. Held: proposing the roadmap
+refused legibly on `non_goals_empty`; slice 1 refused until every requirement had a criterion and a
+task; slice 1 approval with `draft_next_slice` answered `next_slice.state=waiting, open_tasks=3`
+and queued nothing; the drafting entry was queued exactly once, as `origin_type=operator`, when the
+last task closed; the drafted slice 2 links the roadmap and is within the size target (4
+requirements, 4 tasks); no agent reviewed its own task; deciding evidence recorded by a live run
+answered 409 `recording_run_live` naming what to do instead; an unknown decision word answered 422
+naming the permitted words; the flow stopped itself with "loop queue is empty". Measured: request
+to slice 2 drafted in 22 minutes, 11 real turns, $2.97 API-equivalent (authoring $0.61, build
+$0.83, review $0.87, slice-2 drafting $0.61). Review rounds per task 1/2/1; first-pass approval 2
+of 3 — but F499/F500 make every approval in this slice suspect.
