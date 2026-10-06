@@ -1429,13 +1429,18 @@ Verification SHALL be determined by the same coverage computation the document a
 use. A gate that computed its own answer could refuse a task while the document beside it reported
 everything satisfied, and nothing would establish which was wrong.
 
-`sketch` and `contract` requirements SHALL report their state and SHALL NOT block the transition.
+`sketch` and `contract` requirements SHALL report their state and SHALL NOT block the transition,
+except that a requirement whose state is `rejected` SHALL block it at every rigor. `rejected` means
+every piece of evidence recorded for the requirement's current wording was reviewed and rejected;
+approving a task over it records as done a requirement whose only proof was judged not to prove it
+(the FR-11 incident). The way out is the author's own: recording new evidence moves the
+requirement out of `rejected`.
 A requirement that is structurally invalid or carries no identifier SHALL prevent a gate from
 passing, and SHALL be reported as the diagnostic it is rather than as an unverified requirement.
 
 The refusal SHALL be typed, and SHALL name each requirement that caused it together with what would
-satisfy it — no linked evidence, evidence awaiting review, or evidence that no longer applies to the
-current wording. A refusal that does not say what to do about it cannot be acted on, and an
+satisfy it — no linked evidence, evidence awaiting review, evidence that was reviewed and rejected,
+or evidence that no longer applies to the current wording. A refusal that does not say what to do about it cannot be acted on, and an
 unactionable gate is turned off.
 
 The refusal SHALL hold identically across every access path: the operator's interface, an agent's
@@ -1463,13 +1468,33 @@ HTTP action, the tool surface, and a scheduled job.
 #### Scenario: A sketch does not block
 
 - **WHEN** approval is requested for a task whose linked requirements are all `sketch` rigor and
-  unverified
+  unverified, and none is `rejected`
 - **THEN** the transition succeeds
+
+#### Scenario: A rejected requirement blocks at every rigor
+
+- **WHEN** approval is requested for a task serving a `sketch`, `contract` or `gate` requirement
+  whose every piece of evidence for its current wording was rejected
+- **THEN** the transition is refused, naming that requirement, its state `rejected`, and the remedy
+  to record evidence that satisfies the current wording
+- **AND** the task's status is unchanged
+
+#### Scenario: New evidence lifts the block
+
+- **WHEN** new evidence is recorded for that requirement, and accepted
+- **AND** approval is requested again on a `sketch` document
+- **THEN** the transition succeeds
+
+#### Scenario: A rejected contract requirement is refused, not reported
+
+- **WHEN** approval is refused for a task serving a `rejected` `contract` requirement
+- **THEN** the requirement appears once, among the refusal's blocking requirements, and not among
+  the reported ones
 
 #### Scenario: A contract does not block
 
 - **WHEN** approval is requested for a task whose linked requirements are `contract` rigor and
-  unverified
+  unverified, and none is `rejected`
 - **THEN** the transition succeeds
 - **AND** their state is still reported
 
@@ -1502,11 +1527,26 @@ Which rigor a document holds is editable by the operator. Without recording what
 decision, a gate that passed last month cannot be explained today — and the policy being editable is
 what turns that from a theoretical concern into a live one.
 
+Approval of a task that serves requirements is governed at every rigor, because a `rejected`
+requirement blocks it at every rigor. So its transition SHALL record the state and rigor of each
+requirement the task serves, `sketch` included. A task serving no requirement was governed by no
+requirement policy, and its transition SHALL record none.
+
 #### Scenario: A passed gate stays explicable
 
 - **WHEN** a task is approved under a gate
 - **AND** the document's rigor is later changed
 - **THEN** the recorded transition still states the policy that applied when it was approved
+
+#### Scenario: A sketch approval records its policy
+
+- **WHEN** a task serving `sketch` requirements is approved
+- **THEN** the recorded transition carries the policy: each served requirement's state and rigor
+
+#### Scenario: A task serving nothing records no policy
+
+- **WHEN** a task serving no requirement is approved
+- **THEN** the recorded transition carries no policy
 
 ### Requirement: A task list can be scoped to one loop's queue
 
@@ -2335,9 +2375,11 @@ of an integration, only by one that would fail.
 integration merges, so refusing on it would state a remedy that does not work: the operator accepts
 it, approval is refused again for the same reason, and there is no further move.
 
-**Rejected evidence SHALL NOT cause the refusal.** It has been judged, the judgement was the other
+**Rejected evidence SHALL NOT cause this refusal.** It has been judged, the judgement was the other
 way, and the author's only legitimate next move is to record evidence that satisfies the wording. A
-refusal there would wedge the task behind a decision its holder cannot reverse.
+refusal *about merging* there would wedge the task behind a decision its holder cannot reverse. A
+requirement whose evidence is all rejected refuses approval separately, under "Approval is refused
+while a gated requirement is unverified", whose remedy is that next move.
 
 **The refusal SHALL NOT fire where integration could not be attempted in any case** — where the
 project has no configured main branch, where its working directory cannot be resolved, where it is
@@ -2400,8 +2442,15 @@ enforcement point.
 #### Scenario: Rejected evidence does not refuse
 
 - **WHEN** approval is requested for a task whose only evidence naming a commit was reviewed and
+  rejected, and each requirement it serves also has accepted evidence naming no commit
+- **THEN** the approval succeeds, and nothing is merged
+
+#### Scenario: Evidence all rejected is refused by the requirement, not by this refusal
+
+- **WHEN** approval is requested for a task serving a requirement whose every piece of evidence was
   rejected
-- **THEN** the approval succeeds
+- **THEN** it is refused as a `rejected` requirement, with the remedy to record evidence, and not as
+  evidence awaiting review
 
 #### Scenario: The refusal says whose evidence it is
 

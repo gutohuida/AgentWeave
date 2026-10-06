@@ -1462,22 +1462,6 @@ wording is reported as `verified`, not shadowed by an earlier rejection.
   same wording that is accepted
 - **THEN** its coverage state is reported as verified
 
-### Requirement: A declared task's requirement span is capped, and the Hub enforces it
-
-The Hub SHALL refuse a document's transition to `proposed` when any task it declares names more
-requirements than a stated ceiling. The ceiling MUST be named in the refusal.
-
-#### Scenario: A task naming too many requirements blocks the transition
-
-- **WHEN** a document contains a declared task naming more requirements than the ceiling permits
-- **THEN** the transition to `proposed` is refused
-- **AND** the offending task and the ceiling are named
-
-#### Scenario: A task at the ceiling is not refused
-
-- **WHEN** a document contains a declared task naming exactly the ceiling's number of requirements
-- **THEN** that task does not, on its own, block the transition
-
 ### Requirement: The operator can write a document's content
 
 The Hub SHALL offer the operator a way to write a document's content directly, without an agent and

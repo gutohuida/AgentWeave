@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9ea4cdb",
     "stop_at": "2026-10-06T07:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-10-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "c1b-archive",
-    "next_action": "Archive a-task-may-serve-a-whole-slice: run openspec-sync-specs to fold the delta specs into openspec/specs/, then openspec-archive-change to move the change to openspec/changes/archive/. Set Status: fixed <sha> for any F<n> the proposal names in scripts/drive/FINDINGS.md, and correct FINDINGS.md's open-severity index if that status change shifts it. The spec-queue/METRICS.md row for this change is already appended (done in c1b-gate, iteration 8) -- do not duplicate it.",
+    "current": "copilot-credits-impl",
+    "next_action": "a-copilot-one-shot-records-its-credits tasks 0.5, 1.1-2.3 (openspec/changes/a-copilot-one-shot-records-its-credits/tasks.md). 0.5: record tonight's APPROVALS.md 2026-10-05 line as the operator approval. 1.1-1.4 tests first against fixtures/copilot_acp/oneshot_ok.jsonl. 2.1 copilot_usage.py checkpoint_totals; 2.2 runner_adapters/copilot.py parse_copilot_envelope keeps last checkpoint on all three exits. 2.3 run the named test files, then full hub/tests/ with claude stripped from PATH, then lint.",
     "queue": [
         {
             "id": "c1b-r1",
@@ -59,9 +59,9 @@
         },
         {
             "id": "c1b-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive a-task-may-serve-a-whole-slice and sync specs",
-            "detail": "openspec-sync-specs then openspec-archive-change. Set Status: fixed <sha> for any F<n> the proposal names and correct FINDINGS.md's open-severity index. Append the METRICS.md row if not already done in c1b-gate."
+            "detail": "Done iter 9: no F<n> is fixed by this change (only F495/F497 referenced, both pre-existing/backlog, neither closed here) -- confirmed by grepping the change dir, so no FINDINGS.md status lines to set. Synced all three deltas by hand (requirement-traceability, spec-document-authority, task-lifecycle-governance spec.md files are 100-150 KB, over the large-read-guard hook's threshold, so edited by targeted Grep+Read+Edit instead of a whole read): added D5's task-card requirement-traceability requirement verbatim; merged D2/D3/D4's rejected-at-every-rigor wording and scenarios into the three task-lifecycle-governance requirements (the gate requirement, the policy-digest requirement, and the unaccepted-evidence requirement's rescoped 'rejected evidence' sentence); removed the capped-span requirement from spec-document-authority per its REMOVED delta. openspec validate --specs --strict: 44 passed, 0 failed. Archived the change to openspec/changes/archive/2026-10-06-a-task-may-serve-a-whole-slice (15/15 tasks ticked). Backlog regenerated (unbuilt changes 20->19). METRICS.md row already appended in c1b-gate -- not duplicated."
         },
         {
             "id": "copilot-credits-impl",
