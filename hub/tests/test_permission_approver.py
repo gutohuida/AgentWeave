@@ -747,6 +747,121 @@ def test_temp_is_a_drive_in_powershell_only(workspace, monkeypatch):
     assert nested["allow"] is True, nested["reason"]
 
 
+# Task 1.5b's first bullet (design D4): on a drive-letter host the Bash tool's reading keeps a
+# drive's colon too, and a nested PowerShell is read as bash text, so both name the other drive.
+@pytest.mark.skipif(sys.platform != "win32", reason="drive letters are a Windows concept")
+@pytest.mark.parametrize(
+    "command",
+    ["python w.py <other>:", "powershell -c 'Copy-Item x <other>:'"],
+    ids=["1.5b8", "1.5b9"],
+)
+def test_bash_reads_another_existing_drive_as_outside(workspace, other_drive, command):
+    decision = _decide("Bash", {"command": command.replace("<other>", other_drive)})
+    assert decision["allow"] is False, decision["reason"]
+    assert "is outside your workspace" in decision["reason"]
+    assert repr(other_drive + ":") in decision["reason"]
+
+
+# Its control: the workspace's own drive names its current directory, which is inside.
+@pytest.mark.skipif(sys.platform != "win32", reason="drive letters are a Windows concept")
+def test_bash_reads_the_workspace_drive_as_inside(workspace):
+    own = os.path.realpath(workspace)[:2]
+    decision = _decide("Bash", {"command": f"cp notes.md {own}"})
+    assert decision["allow"] is True, decision["reason"]
+
+
+# Task 1.5c (operator, `B4-drive-exists`; design D1): a drive word is judged only when the drive
+# exists. The probe and the host are monkeypatched, so these hold on Linux CI too; a spy on
+# `_judge_path` is the assertion, since on Linux `_where("e:")` is inside either way.
+_HEREDOC_E = "py - <<'PY'\ntry:\n    pass\nexcept Exception as e:\n    print(e)\nPY"
+_JQ_A_B = "jq '{a: .x, b: .y}' f"
+
+
+@pytest.fixture()
+def drive_probe(workspace, monkeypatch):
+    """A drive-letter host whose probe answers from `present` and records each letter asked, and
+    the words `_judge_path` receives."""
+    from hub import mcp_server
+
+    probe = {"present": set(), "asked": [], "judged": []}
+
+    def fake_drive_exists(letter):
+        probe["asked"].append(letter)
+        return letter in probe["present"]
+
+    real_judge_path = mcp_server._judge_path
+
+    def spy(path, *args, **kwargs):
+        probe["judged"].append(path)
+        return real_judge_path(path, *args, **kwargs)
+
+    monkeypatch.setattr(mcp_server, "_DRIVE_LETTERS", True)
+    monkeypatch.setattr(mcp_server, "_drive_exists", fake_drive_exists)
+    monkeypatch.setattr(mcp_server, "_judge_path", spy)
+    return probe
+
+
+@pytest.mark.parametrize("command", [_HEREDOC_E, _JQ_A_B], ids=["1.5c1", "1.5c2"])
+def test_a_drive_that_does_not_exist_is_not_judged(drive_probe, command):
+    decision = _decide("Bash", {"command": command})
+    assert decision["allow"] is True, decision["reason"]
+    named = {word.lower() for word in drive_probe["judged"]}
+    assert not named & {"e:", "a:", "b:"}, drive_probe["judged"]
+
+
+def test_a_drive_that_exists_is_judged(drive_probe):
+    drive_probe["present"].add("E")
+    _decide("Bash", {"command": _HEREDOC_E})
+    assert "e:" in drive_probe["judged"]
+
+
+def test_a_variable_after_a_drive_colon_never_asks_the_probe(drive_probe):
+    decision = _decide("Bash", {"command": "dd if=n of=e:$HOMEPATH"})
+    assert decision["allow"] is False, decision["reason"]
+    assert "cannot be checked" in decision["reason"]
+    assert "outside your workspace" not in decision["reason"]
+
+
+def test_the_probe_is_asked_once_per_letter_per_decision(drive_probe):
+    # Three different words, so the per-word memo cannot be what saves the second and third probe.
+    _decide("Bash", {"command": "cp e: e:x e:y"})
+    assert drive_probe["asked"] == ["E"]
+
+
+# Task 1.5c's Windows bullet: the real probe, no monkeypatch. A host with an E or A drive would
+# judge the heredoc's `e:` or jq's `a:` as that drive, so it skips.
+@pytest.mark.skipif(sys.platform != "win32", reason="drive letters are a Windows concept")
+@pytest.mark.parametrize("command", [_HEREDOC_E, _JQ_A_B], ids=["1.5c5", "1.5c6"])
+def test_a_missing_drive_is_not_judged_by_the_real_probe(workspace, command):
+    if any(os.path.exists(letter + ":\\") for letter in "EAB"):
+        pytest.skip("this host has an E, A or B drive")
+    decision = _decide("Bash", {"command": command})
+    assert decision["allow"] is True, decision["reason"]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="drive letters are a Windows concept")
+@pytest.mark.parametrize(
+    "tool, command",
+    [("PowerShell", "Copy-Item x <other>:"), ("Bash", "python w.py <other>:")],
+    ids=["1.5c7", "1.5c8"],
+)
+def test_an_existing_drive_is_judged_by_the_real_probe(workspace, other_drive, tool, command):
+    decision = _decide(tool, {"command": command.replace("<other>", other_drive)})
+    assert decision["allow"] is False, decision["reason"]
+    assert "is outside your workspace" in decision["reason"]
+    assert repr(other_drive + ":") in decision["reason"]
+
+
+# An inside answer for the workspace's own drive does not end rule 4: the variable after the colon
+# is still read (D2).
+@pytest.mark.skipif(sys.platform != "win32", reason="drive letters are a Windows concept")
+def test_a_variable_after_the_workspace_drive_is_uncheckable(workspace):
+    own = os.path.realpath(workspace)[:2]
+    decision = _decide("Bash", {"command": f"dd if=n of={own}$HOMEPATH"})
+    assert decision["allow"] is False, decision["reason"]
+    assert "cannot be checked" in decision["reason"]
+
+
 def _link(link: Path, target: Path) -> None:
     """A directory link made without privilege: a junction on Windows, a symlink elsewhere (the
     sibling change's helper, `test_the_shell_judge_reads_a_word_whole.py`)."""

@@ -3446,6 +3446,11 @@ def _decide(
     boundary, not a sandbox. Nor does it govern network access: it rules only on which address a
     shell command's text may name, and a fetch tool's URL is not read at all.
 
+    A variable that names a directory (`$HOME`, `$env:USERPROFILE`, `%CD%`, ...; F401, design D2)
+    and a drive that exists (`D:`, `Temp:`; F402, D1) are judged. A bare reference to any other
+    variable, and a substitution, are not: `cp x $tmp` and `cp x $(git rev-parse --show-toplevel)`
+    are allowed, with a reason saying the shell decides that value when it runs.
+
     `workspace` and `hub_url` default to this process's `AW_WORKSPACE_DIR` and `HUB_URL`, which are
     the run's own in the spawned MCP process. A caller judging in the Hub process (Copilot's ACP
     client, `a-copilot-agent-runs-over-acp` D8) passes the run's values instead: the Hub's own

@@ -169,7 +169,7 @@
   no-return-annotation gap `.claude/rules/mcp-server.md` names as deliberate (shifted line only).
   `git diff --stat`: only the two expected files changed, production diff is the single tuple
   element.
-- [ ] 1.5b (R3, design D4). Each FAILS today (allowed):
+- [x] 1.5b (R3, design D4). Each FAILS today (allowed):
   - Windows, Bash tool: `python w.py <other>:` and `powershell -c 'Copy-Item x <other>:'`, with `<other>` an existing drive as in 1.1, refused as outside;
   - both platforms: `dd if=x of=c:~` and `echo PATH=a:~`, refused as uncheckable;
   - `cp x ..*` and `cp x .{,.}*`, refused as outside.
@@ -200,7 +200,13 @@
   no-return-annotation gap (line shifted only). `git diff --stat`: only the two expected files
   changed. The `cp notes.md C:` control (bullet 1's own) was not added as a row here -- it belongs
   with the drive machinery it is a control *for*, same as 1.5c's own controls.
-- [ ] 1.5c (operator, `B4-drive-exists`; design D1, `_drive_exists`) A drive word is judged only when the drive exists:
+
+  **Bullet 1 built (night iteration 4).** The drive machinery landed in 2.1/2.2, so measured first:
+  both rows already refused, naming `Q:` (a real `subst Q:`). Added
+  `test_bash_reads_another_existing_drive_as_outside` (`1.5b8`, `1.5b9`, the `other_drive` fixture)
+  and the control `test_bash_reads_the_workspace_drive_as_inside`. Mutation: the bash reading
+  dropping the colon (`_drive_word` PowerShell-only) -> `1.5b8`, `1.5b9` fail.
+- [x] 1.5c (operator, `B4-drive-exists`; design D1, `_drive_exists`) A drive word is judged only when the drive exists:
   - **Both platforms (Linux CI included), with `_DRIVE_LETTERS` monkeypatched True and `_drive_exists` monkeypatched**, and a spy on `_judge_path`:
     - probe answers False for E and A: `py - <<'PY'` / `try:` / `    pass` / `except Exception as e:` / `    print(e)` / `PY`, and `jq '{a: .x, b: .y}' f`, are allowed, and `_judge_path` never receives `e:`, `a:` or `b:`. Each FAILS against R4 as written (judged as a drive regardless);
     - probe answers True for E: the word `e:` reaches `_judge_path` (on Linux `_where("e:")` is inside, so the spy, not the verdict, is the assertion). FAILS today (the colon is trimmed);
@@ -208,7 +214,18 @@
     - the probe is called once per letter per `_decide` (memo): a command naming `e:` three times calls it once.
   - **`_drive_exists` itself, both platforms**, with `os.stat` monkeypatched for drive-root arguments only (delegating every other path): `FileNotFoundError` → False; a return → True; `PermissionError`, `OSError(22, "not ready", None, 21)`, `ValueError` and a bare `RuntimeError` → True (a raise counts as existing), and none propagates.
   - **Windows job, real probe:** with no drive E and no drive A present (`skipif` either exists), the heredoc and the `jq` row above are allowed. `Copy-Item x <other>:` and Bash `python w.py <other>:`, with `<other>` an existing drive other than the workspace's, are refused as outside, naming the word with its colon: the test takes an existing letter if the runner has one (`windows-latest` normally has D), otherwise it makes one with `subst` pointing at the fixture's `outside/` and removes it in `finally`; skip if `subst` fails. Each FAILS today (allowed). `dd if=n of=<own>:$HOMEPATH`, with `<own>` the workspace's drive, is refused as uncheckable: catches a drive check that ends rule 4 on an inside answer
-- [ ] 1.6 Update the `_decide` docstring assertion if any test pins its text; rows R5, R6 and X3b keep their answers
+
+  **Built (night iteration 4).** Measured first: every row already answered as specified. Tests in
+  `hub/tests/test_permission_approver.py`: a `drive_probe` fixture (`_DRIVE_LETTERS` True,
+  `_drive_exists` faked, `_judge_path` spied) with `1.5c1`/`1.5c2` (not judged), the exists row, the
+  `e:$HOMEPATH` row and the once-per-letter row (`cp e: e:x e:y`: three different words, so the
+  per-word memo cannot hide a missing probe memo); the real-probe Windows rows `1.5c5`-`1.5c8` and
+  `test_a_variable_after_the_workspace_drive_is_uncheckable`. The `_drive_exists` bullet was 2.0's.
+  Mutations: existence gate removed -> 6 fail (incl. `e:$HOMEPATH`, then judged as a drive path);
+  `_Budget.drive_exists` memo removed -> the once-per-letter row fails; bash colon dropped -> 5 fail.
+- [x] 1.6 Update the `_decide` docstring assertion if any test pins its text; rows R5, R6 and X3b keep their answers
+
+  No test pins `_decide.__doc__` (grep of `hub/tests/` for `__doc__`); R5, R6, X3b pass in the 2.4 run.
 
 ## 2. The fix
 
@@ -258,9 +275,20 @@
   `_names_the_parent_once_expanded` (`_EXPANSION_RE`); D10 is `_judge_link_word`, last in rule 4 (a
   name via `lexists` + `_judge_path`, glued-run suffixes, a glob via `_glob_links`; a `:` value on a
   drive-letter host is left to D1). Rule 4's opening comment already names F401, F402 and D5.
-- [ ] 2.3 Extend `_decide`'s docstring: a bare reference to any other variable, and a substitution, are not judged
+- [x] 2.3 Extend `_decide`'s docstring: a bare reference to any other variable, and a substitution, are not judged
+
+  A paragraph naming what is judged (D1, D2) and what is not; its two examples measured allowed with the runtime-value reason.
 - [ ] 2.4 Run the judge's test files and the full `hub/tests/` with `claude` off PATH, and record the counts. Expected moves: exactly group 1's new rows. Confirm that the `hub-judge-windows` job ran the Windows rows and passed, or do not tick
-- [ ] 2.5 ruff and black as in CLAUDE.md
+
+  **Counts (night iteration 4, `claude` off PATH, 4 chunks, xdist):** full `hub/tests/` 6997
+  passed, 21 skipped, 1 failed: `test_scheduler.py::test_loop_queue_exhausted_event_prefers_the_question_when_both_are_outstanding`,
+  the known order dependence (FINDINGS.md F264's fix note: that file's exhaustion tests need an
+  earlier test's schema); the file run serially, as CI runs it: 65 passed. Moves: only group 1's
+  rows. `hub-judge-windows` at `9453a7d` ran 1.1a-c, 1.3, 1.4f and passed; **left unticked** until
+  it runs this commit's `1.5b8`/`1.5b9`/`1.5c5`-`1.5c8`.
+- [x] 2.5 ruff and black as in CLAUDE.md
+
+  `ruff check src/ hub/ tests/` clean; `black --check --target-version py311` 718 files unchanged.
 
 ## 3. Real shells
 
