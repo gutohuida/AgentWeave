@@ -34294,3 +34294,47 @@ a refusal they had not been briefed on.
 
 **Direction (not decided):** the same sentence also names each served requirement in `rejected` and
 says `revision_needed` is the verdict that returns it to its author (F495).
+
+## F498 (C) — a real live Copilot checkpoint call recorded no credits: the single capture's
+`session.usage_checkpoint` is not guaranteed on every one-shot
+
+**Status:** open
+Found 2026-10-06 night by `a-copilot-one-shot-records-its-credits` task 3.1's drive, on the real
+trial Hub (`:8010`, `proj-d85a82bf4216`), spending both calls of the 2-call budget. Driven, not
+just read.
+
+Set the project's `checkpoint_runner_id` to `runner-72c07eca7e75` (`copilot-s5drive`, a real
+GitHub Copilot CLI runner — `provider_config: null`, `model: null`, so Free-plan Auto), then
+`POST /conversations/conv-15d28aac6465/checkpoint` for agent `cp5` (`cp5` already carried 51K
+tokens of real conversation history). The route returned `201` with `status: "ready"`,
+`probe_status: "passed"` — the checkpoint body itself is real and well-formed. `mode=ro` read of
+`worker_invocations` afterward:
+
+```
+wrk-02f48c6671b4  checkpoint        copilot  ok  error=None  ai_nano_aiu=None  premium_requests=None
+wrk-bdea16321100  checkpoint_probe  copilot  ok  error=None  ai_nano_aiu=None  premium_requests=None
+```
+
+Both fields are `NULL` on both rows, where task 3.1 expected non-`NULL` the way the single
+2026-09-29 capture (`oneshot_ok.jsonl`) and 2.1/2.2's fix predict. `outcome="ok"` and `error=None`
+rule out a spawn/envelope failure — `parse_copilot_envelope` ran to completion and simply found no
+`session.usage_checkpoint` line in this stdout, which is exactly D4's already-named "no checkpoint"
+row (`empty usage (unchanged)`), not a bug in 2.1/2.2's code. The Hub process serving `:8010` was
+confirmed started at `2026-10-06T02:49:44` (PID 23496, listening on 8010), after `b79c11b`'s fix
+landed — so this was not stale code. `GET /accounting` showed neither figure for either row (its
+`recent_turns` list does not reach past 2026-10-05T12:42, confirming D5 as designed: no route reads
+`worker_invocations` credits).
+
+So the single capture this change's design is built on is not representative of every real
+one-shot: whether a given Copilot one-shot emits `session.usage_checkpoint` at all is UNVERIFIED
+beyond that one capture, and this round measured a real, well-formed, successful call that did
+not. The budget is spent (2/2 calls), so this is not re-driven tonight. Task 3.2: no independent
+non-interactive reading of Copilot's own usage report was found (matching
+`a-copilot-agent-uses-hooks-and-its-own-agents` task 7.1's finding for `/usage`) — recorded as "not
+compared: no independent reading".
+
+**Direction (not decided):** a second, deliberately provoked capture (a longer or BYOK one-shot,
+or several real calls across a day) would show whether the checkpoint event is conditional (on
+session length, model, or something else) or just rare. Until then, 2.1/2.2's fix is confirmed
+correct for the shape it was built from, but the rate at which real checkpoints actually carry a
+`session.usage_checkpoint` line is open.
