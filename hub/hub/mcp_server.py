@@ -4062,6 +4062,26 @@ def call_main(argv: List[str]) -> int:
         if not argv:
             raise _CallUsageError(_CALL_HELP)
         if argv[0] in ("--help", "-h"):
+            if len(argv) > 1:
+                topic = argv[1]
+                topic_fn = _CALLABLE_TOOLS.get(topic)
+                if topic_fn is None:
+                    raise _CallUsageError(
+                        f"{topic!r} is not a callable tool; `aw-tool --list` names them."
+                    )
+                parameters, required = _call_parameters(topic_fn)
+                _call_emit(
+                    {
+                        "ok": True,
+                        "result": {
+                            "name": topic,
+                            "parameters": parameters,
+                            "required": required,
+                            "description": inspect.getdoc(topic_fn) or "",
+                        },
+                    }
+                )
+                return 0
             _call_emit({"ok": True, "result": {"usage": _CALL_HELP}})
             return 0
         if argv[0] == "--list":
