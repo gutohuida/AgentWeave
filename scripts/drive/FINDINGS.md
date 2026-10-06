@@ -34538,9 +34538,20 @@ agents gets reviews from them silently. The operator learns who reviews only fro
 **Direction (not decided):** a document-level default reviewer the flow form and the planner both set, shown at
 approval ("reviewed by: X" or "reviewed by: any free agent"), so the operator approves the staffing they were told.
 
+**Recurred 2026-10-06** in slice 1c: the operator's request said "name `aw-reviewer` as reviewer"; the
+planner wrote "Reviewer: aw-reviewer." in the design and left the task's `reviewer` field null (slice 1b,
+told the same, did set it).
+
 ## F509 (A) — slice 1 of "same-file tasks build in order" cannot fire for an `aw-tool` agent: it never sees the text that teaches it
 
-**Status:** partly fixed by trial slice 1b (merged `b36c084`, `95922ba`, built through the `:8010` flow) --
+**Status:** fixed by trial slices 1b + 1c (1c merged `f0637dc`: a multi-task document whose tasks declare
+no `files` draws an `undeclared_task_files` warning). Re-driven 2026-10-06 on a fresh Hub `:8036`, the
+neutral request twice, Haiku: both declared `files`; run 1 met `unordered_file_overlap`, chained all four
+tasks and resubmitted clean; run 2 revised twice and stopped with two pairs still unordered, its last
+response naming the overlap (the slice's pass condition: chained, or the overlap named). Across the 1b and
+1c drives Haiku declared `files` 3 times in 4; 1c's own warning was not needed live (test-only). A planner
+that is told of an overlap and stops anyway is the remaining gap (roadmap slice `flag-missed-overlap`).
+Earlier status: partly fixed by trial slice 1b (merged `b36c084`, `95922ba`, built through the `:8010` flow) --
 the exploring duty now states a per-task step (list `files`; chain tasks sharing a path), the tool section
 names `depends_on` and `files` on every access path, and `aw-tool --help <tool>` prints a whole description
 (recognised as the Hub's own call). Re-driven 2026-10-06 on a fresh Hub `:8035`, the same two requests, Haiku:
