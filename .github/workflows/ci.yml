@@ -12,6 +12,15 @@ on:
   pull_request:
     branches: [ master ]
 
+# A newer master push cancels the older master run: interactive sessions push code and its
+# bookkeeping back to back, and five full runs at once queued for runners. Every other ref gets a
+# group of its own sha, so nothing is cancelled there -- and that is required, not caution: a
+# shared group cancels a *pending* run even with cancel-in-progress off, and the loop's driver
+# (`run-iteration.ps1`) reads `cancelled` on an `autonomous/**` sha as red.
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.ref == 'refs/heads/master' && 'tip' || github.sha }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/master' }}
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -138,9 +147,16 @@ jobs:
     - name: Test Hub with pytest
       # --timeout turns a wedged test into a dumped stack and a failure in minutes instead of
       # a silent 6-hour job timeout (F394). "thread" kills the whole process, so it works
-      # for a test blocked in a sqlite lock, where a signal would not be delivered.
+      # for a test blocked in a sqlite lock, where a signal would not be delivered; under xdist it
+      # takes down only that worker, which xdist reports and replaces.
+      #
+      # -n auto: run serially, this step was the whole wall clock of CI (16-28 min). Each worker is
+      # its own process with its own database (conftest.py's mkdtemp). `--dist loadfile` keeps a
+      # file whole and in order on one worker: some files rely on an earlier test in the same file
+      # (test_scheduler.py's exhaustion tests, F264), which `load` would split across workers.
+      # A failure that appears only here is a test-isolation bug: fix the test, do not drop -n.
       run: |
-        pytest tests/ -v --timeout=300 --timeout-method=thread
+        pytest tests/ -v -n auto --dist loadfile --timeout=300 --timeout-method=thread --durations=25
 
   hub-judge-windows:
     # D9: the shell judge's drive-letter branches (`_DRIVE_LETTERS`, the drive-piece rule, the
