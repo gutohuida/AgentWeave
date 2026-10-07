@@ -53,6 +53,12 @@ DECIDED. Absence is not consent.
   Phase 4 is done and the openspec change queue is empty. Until then a trial outcome is still
   reconciled into `openspec/specs/` by hand, and `scripts/migrate_openspec_corpus.py --only <cap>`
   refreshes a mirror copy.
+- DECIDED   spec-source-after-migration (revisited)  **Re-import, then switch: `spec/` is the source
+  of truth** (operator, 2026-10-07, as recommended, after Phase 4 closed). The six capabilities 4a-4d
+  changed were re-imported through `:8010`; all 45 requirement counts equal openspec's. `openspec/specs/`
+  is frozen with a pointer `README.md`; CLAUDE.md's spec section says where behaviour now lives. The
+  11 changes still in `openspec/changes/` finish there and apply their deltas to the `spec/` capability
+  document through the Hub; new work (Phase 5 first) is authored in the app.
 
 ### `the-corpus-is-indexed-arranged-and-adopted-from-the-app`: merge -- 2026-09-24 review, DECIDED 2026-09-24, recorded 2026-10-07
 

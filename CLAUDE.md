@@ -25,7 +25,7 @@ retired, deliberately: the Hub-owned spec flow shipped 2026-08-12/13 and has bee
 | Pointing the Hub **you are editing** at this repo | A Hub code change restarts the process orchestrating the work and kills runs in flight. |
 | Invoking the legacy `aw-*` collab skills | Product source in `src/agentweave/templates/skills/` — a feature you implement, not a workflow you run. |
 | Delegating this repo's work through AgentWeave messaging | Do the work directly, or use Claude Code subagents. |
-| Moving `openspec/specs/` into `spec/` | The operator's call, not yet made. |
+| Editing `openspec/specs/` | Frozen 2026-10-07: `spec/` is the source of truth (operator's call). |
 
 ## The Hubs on this machine
 
@@ -42,23 +42,23 @@ retired, deliberately: the Hub-owned spec flow shipped 2026-08-12/13 and has bee
   Its restart runs this checkout's migrations on their real data, and **a committed UI bundle
   reaches their live app on their next reload.**
 
-## Specifications — openspec owns the corpus, AgentWeave takes new work
+## Specifications — `spec/` owns the corpus (since 2026-10-07)
 
 AgentWeave's lifecycle is `exploring → proposed → approved → archived` (`hub/hub/spec_lifecycle.py`)
 plus `current`, reached only through `create_document` (a `capability`-kind document is created
-there). The 30 accumulated `openspec/specs/<capability>/` documents stay in openspec until the
-operator decides to migrate them.
+there). The operator made `spec/` the source of truth on 2026-10-07, after re-importing all 45
+capabilities (requirement counts verified equal to openspec's).
 
-- **openspec keeps** `openspec/specs/` (current behaviour), `openspec/changes/<date>-<name>/`
-  (in-flight: `proposal.md`, `design.md`, `tasks.md`, spec deltas), `openspec/changes/archive/`, and
-  `openspec/explorations/`. Use the `openspec-propose`, `openspec-apply-change`,
-  `openspec-sync-specs` and `openspec-archive-change` skills. Requirements use `### Requirement:`
-  with `#### Scenario:` blocks and MUST/SHALL language.
-- **AgentWeave takes** new changes chosen for the trial, one at a time, authored in the app —
-  prefer a self-contained slice with no Hub-restart hazard; reconcile the outcome back into
-  `openspec/specs/` by hand.
-- **Which one?** Already in `openspec/changes/` → finish it there. New → ask the operator; do not
-  silently pick. Never carry one change in both.
+- **Current behaviour** lives in `spec/capabilities/<capability>/spec.html`, owned by the Hub:
+  change one through the app or the Hub's document routes (trial Hub `:8010`,
+  `proj-d85a82bf4216`), **never by editing the HTML**. `spec/index.json` and `spec/agentweave.html`
+  are the map. `openspec/specs/` is frozen (see its `README.md`); do not edit or re-sync it.
+- **New changes** are authored in the app as `spec/changes/<name>/` documents, one at a time — prefer
+  a self-contained slice with no Hub-restart hazard.
+- **The changes already in `openspec/changes/`** finish there (`openspec-apply-change`,
+  `openspec-archive-change --skip-specs`), and their deltas are applied to the `spec/` capability
+  document through the Hub instead of to `openspec/specs/`. Never carry one change in both.
+- **Which one?** New work → ask the operator; do not silently pick.
 - **Never mark a task complete on the strength of a plan existing.** Only real, verified
   implementation closes a task.
 - The spec flow is both the thing you use and the thing you build: **when it frustrates you, record
