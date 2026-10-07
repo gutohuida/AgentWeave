@@ -1426,6 +1426,13 @@ def _judge_resolved(absolute: str, resolved: str, root: str) -> Optional[str]:
     return None
 
 
+def _names_a_network_path(path: str) -> bool:
+    """F464: whether `path` opens with two separators -- a UNC (`\\\\host\\share`, `//host/share`)
+    or device (`\\\\?\\`, `\\\\.\\`) spelling. Resolving one makes the platform contact the host
+    (21 s for an unreachable one), so `_where` decides on the spelling, before any `realpath`."""
+    return len(path) >= 2 and path[0] in "/\\" and path[1] in "/\\"
+
+
 def _where(path: str, root: str) -> Optional[str]:
     """Why `path` is not inside the workspace, or None when it is.
 
@@ -1437,6 +1444,8 @@ def _where(path: str, root: str) -> Optional[str]:
     word reaches a native program (which resolves `..` lexically) or msys (which resolves it
     physically, the way `_physical` does).
     """
+    if _DRIVE_LETTERS and _names_a_network_path(path) and not _names_a_network_path(root):
+        return _OUTSIDE
     absolute = path if os.path.isabs(path) else os.path.join(root, path)
     try:
         resolved = os.path.realpath(absolute)
@@ -3219,6 +3228,8 @@ def _hub_calls_root(workspace: str) -> Optional[str]:
 def _inside_hub_calls_root(path: str, workspace: str) -> bool:
     """A `.json` file whose real path is inside the calls root (the calls-root rule). A relative
     path resolves against the workspace; a file-level link out, `..` and another drive fail."""
+    if _DRIVE_LETTERS and _names_a_network_path(path):
+        return False
     root = _hub_calls_root(workspace)
     if root is None:
         return False
@@ -4233,6 +4244,8 @@ def _read_call_args(arg: str) -> Dict[str, Any]:
         normal_root = os.path.normcase(root)
         if os.path.normcase(os.path.realpath(root)) != normal_root:
             raise _CallUsageError(f"{where} .agentweave/calls is a link, not that directory.")
+        if _DRIVE_LETTERS and _names_a_network_path(arg):
+            raise _CallUsageError(f"{where} {arg!r} is not.")
         real = os.path.realpath(os.path.abspath(arg))
         normal_real = os.path.normcase(real)
         inside = (

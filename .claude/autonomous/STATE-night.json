@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4055151",
     "stop_at": "2026-10-08T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-10-07-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F464-impl",
-    "next_action": "CI gate first: `gh run list --branch autonomous/2026-10-07-daily` for the F468 push (iteration 3). If hub-test is red, fix it before anything else (F530's guard names a which-leaker). If green, build F464-impl: read .claude/rules/ for hub/hub/mcp_server.py first, test at the seam, fix, drive on a throwaway Hub (port 8041, temp DB; see testbed/f468/drive.py).",
+    "current": "F463-impl",
+    "next_action": "CI gate first: `gh run list --branch autonomous/2026-10-07-daily` for the F468 and F464 pushes (a second green push confirms F530). If hub-test is red, fix it first. If green, build F463-impl (Tier 0): provider_allowance._newest_informative orders TurnUsage by observed_at DESC (hub/hub/provider_allowance.py:122-131); order by insertion (rowid) instead; test: two readings, later-inserted carries earlier observed_at. Drive on a throwaway Hub (port 8041, temp DB; see testbed/f468/drive.py).",
     "queue": [
         {
             "id": "F530-impl",
@@ -30,9 +30,9 @@
         },
         {
             "id": "F464-impl",
-            "status": "open",
+            "status": "done",
             "title": "F464: _where resolves UNC path over network",
-            "detail": "Edits hub/hub/mcp_server.py: read .claude/rules/ for it first (stdlib+fastmcp only)."
+            "detail": "Edits hub/hub/mcp_server.py: read .claude/rules/ for it first (stdlib+fastmcp only). BUILT iteration 4; see FINDINGS F464."
         },
         {
             "id": "F463-impl",
