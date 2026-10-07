@@ -192,6 +192,21 @@ describe('the corpus strip', () => {
     expect(result).toContain('spec/stray.html: no payload block')
     expect(result).toContain('discovery_truncated — spec/')
   })
+
+  it('a rebuild after adopting clears "rebuild the index to file them"', () => {
+    state.answers.adoptAll.push({
+      ok: { documents: {}, adopted: ['spec/loose.html'], skipped: [], diagnostics: [] },
+    })
+    state.answers.reindex.push({
+      ok: reindexAnswer({ written: { path: 'spec/index.json', documents: 4, home: 'spec/home.html' } }),
+    })
+    strip()
+    fireEvent.click(screen.getByTestId('spec-corpus-adopt-all'))
+    expect(screen.getByTestId('spec-corpus-adopt-result').textContent).toContain('Rebuild the index')
+    fireEvent.click(screen.getByTestId('spec-corpus-rebuild'))
+    expect(screen.queryByTestId('spec-corpus-adopt-result')).toBeNull()
+    expect(screen.getByTestId('spec-corpus-summary')).toBeTruthy()
+  })
 })
 
 describe('Adopt beside an untracked document', () => {

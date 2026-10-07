@@ -67,6 +67,9 @@ export function SpecCorpusStrip({ specList, adoptedSinceRebuild = false, onRebui
     reindex.mutate(chosen ? { home: chosen } : {}, {
       onSuccess: (answer) => {
         setResult(answer)
+        // "Rebuild the index to file them" is no longer true once it has been rebuilt (drive,
+        // 2026-10-07: the sentence stayed under the rebuild's own summary).
+        setAdopted(null)
         setHome('')
         onRebuilt?.()
       },
@@ -115,7 +118,9 @@ export function SpecCorpusStrip({ specList, adoptedSinceRebuild = false, onRebui
         </p>
         <Button
           size="xs"
-          variant={rebuildPrimary ? 'primary' : 'ghost'}
+          // Quiet is `outline`, not `ghost`: on the dialog's surface a ghost button read as disabled
+          // (drive, 2026-10-07).
+          variant={rebuildPrimary ? 'primary' : 'outline'}
           data-testid="spec-corpus-rebuild"
           disabled={busy}
           onClick={() => rebuild()}
