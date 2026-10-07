@@ -62,7 +62,10 @@ vi.mock('@/components/agents/AgentOutputPanel', () => ({
 
 // No `getJson`, so every read the panel does not stub fails; `readableApiError` is here because a
 // panel section that says a read failed (the retired-requirements list, F211) calls it to say so.
-vi.mock('@/api/client', () => ({
+vi.mock('@/api/client', async (importOriginal) => ({
+  // The real `ApiError` (and the rest): `@/api/spec` reads a refusal with `instanceof ApiError`,
+  // and a mock without it throws the moment any panel shows a failed read.
+  ...(await importOriginal<typeof import('@/api/client')>()),
   fetchWithAuth: vi.fn(),
   readableApiError: (_error: unknown, fallback: string) => fallback,
 }))
