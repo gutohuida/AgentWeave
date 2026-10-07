@@ -513,6 +513,85 @@ def _merge_prerequisites(worktree: Path, task_id: str, prerequisites: Tuple[str,
             )
 
 
+def _catch_up_prerequisites(
+    worktree: Path, task_id: str, approved: Sequence[Tuple[str, str]]
+) -> None:
+    """Bring into an **existing** task branch the approved prerequisites' commits it lacks (F158).
+
+    `a-task-checkout-catches-up-with-its-approved-prerequisites` D1-D6. The creation path merges
+    prerequisites once, with an unwind that is safe only because the branch is seconds old; this is
+    the other path, where the branch carries the task's own work and nothing may be destroyed:
+
+    - nothing missing -> nothing happens (one `merge-base` per approved commit, none when there are
+      none);
+    - uncommitted changes with something to merge -> refused, untouched;
+    - a conflict, or a merge git does not finish in time -> `merge --abort`, refused, the branch tip
+      and files as before.
+
+    Every refusal names the prerequisite task, its commit, this checkout and the command that merges
+    it, because the turn is refused until somebody does (D5); the trigger's task-checkout refusal
+    carries it to the operator as unstaffed work rather than a silent retry.
+    """
+    missing = []
+    for prerequisite_id, sha in approved:
+        known = _run_git(
+            worktree, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}", check=False
+        )
+        if known.returncode != 0:
+            raise IsolationUnavailableError(
+                f"the approved work of {prerequisite_id}, which {task_id} depends on, cannot be "
+                f"brought in: commit {sha[:12]} is missing from this repository, so the branch "
+                "that carried it has probably been deleted."
+            )
+        contained = _run_git(worktree, "merge-base", "--is-ancestor", sha, "HEAD", check=False)
+        if contained.returncode != 0:
+            missing.append((prerequisite_id, sha))
+    if not missing:
+        return
+
+    command = f"git -C {worktree} merge --no-ff {missing[0][1]}"
+    if _has_uncommitted_changes(worktree):
+        raise IsolationUnavailableError(
+            f"{task_id}'s checkout at {worktree} has uncommitted changes, and the approved work of "
+            f"{missing[0][0]} (commit {missing[0][1][:12]}) has to be merged into it first. Commit "
+            f"or set aside those changes, then `{command}`; nothing was changed."
+        )
+
+    for prerequisite_id, sha in missing:
+        command = f"git -C {worktree} merge --no-ff {sha}"
+        try:
+            merged = _run_git(
+                worktree,
+                "-c",
+                f"user.name={COMMIT_IDENTITY[0]}",
+                "-c",
+                f"user.email={COMMIT_IDENTITY[1]}",
+                "merge",
+                "--no-ff",
+                "-m",
+                f"Bring in approved prerequisite work {sha[:12]} ({prerequisite_id})",
+                sha,
+                check=False,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            with contextlib.suppress(OSError, subprocess.SubprocessError):
+                _run_git(worktree, "merge", "--abort", check=False)
+            raise IsolationUnavailableError(
+                f"merging the approved work of {prerequisite_id} (commit {sha[:12]}) into "
+                f"{task_id}'s checkout at {worktree} did not finish ({type(exc).__name__}); it was "
+                f"abandoned and nothing was changed. Retry it by hand with `{command}`."
+            ) from exc
+        if merged.returncode != 0:
+            with contextlib.suppress(OSError, subprocess.SubprocessError):
+                _run_git(worktree, "merge", "--abort", check=False)
+            raise IsolationUnavailableError(
+                f"the approved work of {prerequisite_id} (commit {sha[:12]}) conflicts with work "
+                f"already on {task_id}'s branch, so it could not be merged into the checkout at "
+                f"{worktree}; nothing was changed. Reconcile it there with `{command}`; this "
+                "task's turns are refused until it is in."
+            )
+
+
 def _unwind_task_worktree(repo_root: Path, path: Path, branch: str) -> None:
     """Undo a half-provisioned task checkout, in the order git forces (design D1).
 
@@ -544,6 +623,7 @@ def ensure_task_worktree(
     task_id: str,
     base: str,
     prerequisites: Sequence[str] = (),
+    approved: Sequence[Tuple[str, str]] = (),
 ) -> Path:
     """Provision *task_id*'s isolated checkout at *base*, creating it if absent. Idempotent.
 
@@ -552,9 +632,11 @@ def ensure_task_worktree(
     layer by design (see the module docstring), so the Hub layer resolves the project's
     integration base and `task_integration.integration_targets` and passes plain values in.
 
-    Prerequisites are merged **only when the branch is created**. On any later call the branch
-    already carries the task's own work, and the all-or-nothing unwind below would destroy it —
-    the unwind is safe precisely because the branch is seconds old and carries nothing unique.
+    `prerequisites` are merged when the branch is created, with the all-or-nothing unwind below —
+    safe precisely because the branch is seconds old and carries nothing unique. On any later call
+    the branch carries the task's own work, so only `approved` — `(prerequisite task, commit)` pairs
+    of prerequisites at `approved` — are brought in, never destructively
+    (`_catch_up_prerequisites`, F158): a prerequisite approved after the branch was cut reaches it.
 
     Provisioning is all-or-nothing: a prerequisite that cannot be brought in leaves no checkout
     and no branch behind, and refuses the turn.
@@ -593,6 +675,7 @@ def ensure_task_worktree(
                 "before this task runs again. Do not remove the directory: it is the registered "
                 "checkout for this task and carries its work."
             )
+        _catch_up_prerequisites(path, task_id, approved)
         return path
 
     _run_git(repo_root, "worktree", "prune", check=False)
@@ -610,10 +693,11 @@ def ensure_task_worktree(
     path.parent.mkdir(parents=True, exist_ok=True)
     if branch_exists:
         # The task was released (design D5) and is being worked again. Its own history is on
-        # the branch, so it resumes from there rather than restarting at the base — and its
-        # prerequisites were merged when the branch was created.
+        # the branch, so it resumes from there rather than restarting at the base; prerequisites
+        # approved since the branch was cut are brought in (F158).
         _run_git(repo_root, "worktree", "add", str(path), branch)
         _symlink_shared_dependencies(repo_root, path)
+        _catch_up_prerequisites(path, task_id, approved)
         return path
 
     _run_git(repo_root, "worktree", "add", "-b", branch, str(path), base)
@@ -786,6 +870,7 @@ def resolve_turn_workspace(
     task_id: Optional[str] = None,
     base: Optional[str] = None,
     prerequisites: Sequence[str] = (),
+    approved: Sequence[Tuple[str, str]] = (),
 ) -> Path:
     """Return the directory a spawned process should use as its cwd, for *this turn* (design D3).
 
@@ -822,7 +907,7 @@ def resolve_turn_workspace(
     # rather than only at registration. The task path is the same funnel and needs the same
     # seeding, before there is anything to ignore.
     seed_repo_excludes(repo_root)
-    return ensure_task_worktree(repo_root, task_id, base, prerequisites)
+    return ensure_task_worktree(repo_root, task_id, base, prerequisites, approved)
 
 
 def turn_branch_name(

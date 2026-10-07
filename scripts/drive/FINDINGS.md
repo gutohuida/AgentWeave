@@ -12947,7 +12947,7 @@ shipped route, which is the operator's call and not a round-1 side effect.
 
 ## F158 (B) — a task branch cut before its prerequisite was approved never gets that prerequisite's work
 
-**Status:** open. This entry says *"not fixed"*, and the change it was raised against agrees:
+**Status:** fixed (Tier 2, `a-task-checkout-catches-up-with-its-approved-prerequisites`, 2026-10-07) -- every turn on an existing task branch merges the commits of approved prerequisites it lacks (`worktrees._catch_up_prerequisites`), never destructively; a conflict, uncommitted changes or a git timeout aborts and refuses naming the prerequisite, commit, checkout and merge command. Driven on `:8010` with real Haiku turns (`scripts/drive/d1007_catch_up_drive.py`, 6/6). Was: open. This entry says *"not fixed"*, and the change it was raised against agrees:
 `2026-09-01-a-loop-declares-whether-it-needs-evidence/design.md:729` -- *"F158 stands, unfixed and
 out of scope"*. The candidate repair is still the open decision that design names. [classified 2026-09-09, D-2]
 

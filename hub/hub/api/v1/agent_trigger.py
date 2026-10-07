@@ -1193,6 +1193,7 @@ async def _trigger_agent_directly(
                 task_id=turn_workspace.task_id,
                 base=turn_workspace.base,
                 prerequisites=turn_workspace.prerequisites,
+                approved=turn_workspace.approved,
             )
         except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
             # Which workspace failed? `resolve_turn_workspace` prepares the **task's** checkout or

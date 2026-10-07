@@ -1060,7 +1060,7 @@ def _no_real_worktree_provision(monkeypatch):
     monkeypatch.setattr(
         worktrees,
         "ensure_task_worktree",
-        lambda repo_root, task_id, base, prerequisites=(): repo_root,
+        lambda repo_root, task_id, base, prerequisites=(), approved=(): repo_root,
     )
 
 

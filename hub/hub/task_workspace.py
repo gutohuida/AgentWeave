@@ -49,6 +49,9 @@ class TurnWorkspace(NamedTuple):
     task_id: Optional[str]
     base: Optional[str]
     prerequisites: Tuple[str, ...]
+    #: `(prerequisite task id, commit)` for prerequisites at `approved` only: what an *existing*
+    #: branch takes in (F158). Unlike `prerequisites`, no unapproved prerequisite's evidence.
+    approved: Tuple[Tuple[str, str], ...] = ()
 
 
 #: The answer for every turn that is not getting a task workspace.
@@ -150,10 +153,12 @@ async def resolve_turn_workspace_inputs(
         _warn_when_the_id_is_why(task)
         return UNBOUND
 
+    prerequisites, approved = await _prerequisite_commits(session, task, repo_root)
     return TurnWorkspace(
         task_id=task.id,
         base=await _integration_base(session, project_id, repo_root),
-        prerequisites=await _prerequisite_commits(session, task, repo_root),
+        prerequisites=prerequisites,
+        approved=approved,
     )
 
 
@@ -176,8 +181,9 @@ async def _integration_base(session: AsyncSession, project_id: str, repo_root: P
 
 async def _prerequisite_commits(
     session: AsyncSession, task: Task, repo_root: Path
-) -> Tuple[str, ...]:
-    """Every commit *task*'s direct prerequisites contributed, in a stable order.
+) -> Tuple[Tuple[str, ...], Tuple[Tuple[str, str], ...]]:
+    """Every commit *task*'s direct prerequisites contributed, in a stable order — and, second,
+    the `(prerequisite, commit)` pairs of those at `approved`, which an existing branch takes in.
 
     **Direct only, and that is sufficient rather than approximate.** If A → B → C and each link was
     provisioned under this scheme, B's branch already carries A's work, so merging B's commits into
@@ -215,10 +221,11 @@ async def _prerequisite_commits(
     that checkout today. A blanket status check would have stopped it, breaching the same
     requirement D12 exists to satisfy, in the other direction.
 
-    Resolved on every task-bound turn even though `ensure_task_worktree` merges only when it creates
-    the branch. That costs one query for the overwhelmingly common case of a task with no
-    prerequisites at all, and the alternative — deciding here whether the branch already exists —
-    would put a copy of `ensure_task_worktree`'s own idempotency check on the far side of a race.
+    Resolved on every task-bound turn: the first answer seeds a branch being created, the second
+    tops up one that exists (F158, `a-task-checkout-catches-up-with-its-approved-prerequisites`).
+    Only `approved` prerequisites are chased into an existing branch — a prerequisite still being
+    worked would otherwise push unapproved work into a checkout an agent is writing in, the property
+    F159's paragraph above defends. It costs one query for a task with no prerequisites at all.
     """
     prerequisites = (
         (
@@ -235,11 +242,17 @@ async def _prerequisite_commits(
         .all()
     )
     commits: List[str] = []
+    approved: List[Tuple[str, str]] = []
     for prerequisite in prerequisites:
         governed = await task_integration.evidence_governs(session, prerequisite)
-        if not governed and prerequisite.status != dependency_gate.MET_STATUS:
+        is_approved = prerequisite.status == dependency_gate.MET_STATUS
+        if not governed and not is_approved:
             continue
         for target in await task_integration.merge_targets(session, prerequisite, repo_root):
             if target.commit_sha and target.commit_sha not in commits:
                 commits.append(target.commit_sha)
-    return tuple(commits)
+            if is_approved and target.commit_sha:
+                pair = (prerequisite.id, target.commit_sha)
+                if pair not in approved:
+                    approved.append(pair)
+    return tuple(commits), tuple(approved)

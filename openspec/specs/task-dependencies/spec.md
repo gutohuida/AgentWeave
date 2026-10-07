@@ -363,6 +363,20 @@ checkout an agent is about to write in would place work nobody has judged under 
 authorship. Where a prerequisite's work is integrated from evidence, this changes nothing: evidence
 that has not been accepted names no commit anyway.
 
+**This SHALL hold for a checkout that already exists, not only for one being created.** A task's
+checkout is created by its first turn, and a turn can be bound to a task before its prerequisites are
+approved: the operator can start one, an agent's message can name the task, and a prerequisite can
+be declared after the task has been worked. Such a checkout was created without the prerequisite's
+work, correctly, because the prerequisite was not yet approved. When a later turn is bound to the
+task, each approved prerequisite's commit that the checkout does not already contain SHALL be brought
+in before that turn starts. A checkout that is only ever seeded when it is created carries forever
+the prerequisites that happened to be approved at that moment, and every surface meanwhile reports
+the dependency as satisfied.
+
+Bringing work into an existing checkout SHALL NOT discard anything the checkout holds. Where the
+checkout has changes that are not committed, or the merge conflicts, the merge SHALL be abandoned,
+leaving the checkout exactly as it was, and the turn SHALL NOT start.
+
 Where a prerequisite's work cannot be brought in without conflict, the turn SHALL NOT start, and the refusal SHALL name the prerequisite. Starting an agent on a checkout that silently lacks what it was told to build on produces work against the wrong base and evidence that describes a tree nobody reviewed.
 
 #### Scenario: A prerequisite that was approved but not integrated
@@ -392,6 +406,25 @@ Where a prerequisite's work cannot be brought in without conflict, the turn SHAL
 
 - **WHEN** a task starts whose prerequisite's accepted evidence names paths rather than a commit
 - **THEN** the checkout is created without refusing the turn
+
+#### Scenario: A checkout created before its prerequisite was approved catches up
+
+- **WHEN** a task's checkout was created while a prerequisite was not yet approved
+- **AND** that prerequisite is later approved, and its work did not reach the main branch
+- **AND** a later turn is bound to the task
+- **THEN** that turn's checkout contains the prerequisite's work
+- **AND** the work the task's own turns committed is still there
+
+#### Scenario: A prerequisite declared after the task was worked is brought in
+
+- **WHEN** a prerequisite is declared for a task whose checkout already exists, and that prerequisite is approved
+- **THEN** the next turn bound to the task has the prerequisite's work in its checkout
+
+#### Scenario: An existing checkout is never damaged by catching up
+
+- **WHEN** bringing an approved prerequisite's work into an existing task checkout conflicts, or the checkout has uncommitted changes
+- **THEN** the turn does not start, and the refusal names the prerequisite
+- **AND** the checkout's branch and files are exactly as they were before the attempt
 
 #### Scenario: A prerequisite that cannot be brought in
 
