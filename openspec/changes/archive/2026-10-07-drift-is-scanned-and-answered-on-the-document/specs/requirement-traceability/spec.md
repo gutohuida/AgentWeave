@@ -3,8 +3,8 @@
 ### Requirement: A changed implementation raises a candidate, never an edit
 
 Where evidence is recorded, the Hub SHALL capture the implementation footprint it was produced
-against: in a git repository, the commit and the changed blob identifiers; where the project is not
-a repository, the changed paths and a content hash of each. Both SHALL be supported, because a
+against: in a git repository, the commit and the blob identifiers of the files the evidence is
+about; where the project is not a repository, those paths and a content hash of each. Both SHALL be supported, because a
 project without a repository is a supported first-class case and would otherwise be permanently
 unverifiable.
 
@@ -22,10 +22,14 @@ because review and integration both act on it: a review turn is checked out to t
 commit, and integration merges on whether that commit is reachable from the main branch.
 
 Where a footprint is captured, the response to the recording SHALL report it, so the recorder can
-see which tree their evidence was attached to at the moment they can still correct it.
+see which tree their evidence was attached to at the moment they can still correct it. An agent's
+footprint taken before its run's work is committed SHALL be reported as provisional until the run
+ends.
 
-A later change to a linked footprint, with no new requirement revision and no explicit resolution,
-SHALL raise a drift candidate.
+A later change to a file a linked footprint watches, with no new requirement revision and no
+explicit resolution, SHALL raise a drift candidate. A footprint that watches nothing -- it names no
+file, or it was recorded before footprints recorded what they watch and could not be rebuilt -- SHALL
+NOT be scanned, and SHALL be listed as unwatched with its reason instead.
 
 The Hub SHALL NOT edit a specification document in response to drift. That an implementation changed
 is observable; that a requirement *should* change is a judgement, and inferring it would rewrite an
@@ -55,20 +59,26 @@ gate. What changes is only that the footprint stops implying a completeness it c
 
 #### Scenario: A changed footprint is noticed
 
-- **WHEN** a file named in a requirement's evidence footprint changes and the requirement does not
+- **WHEN** a file a requirement's evidence footprint watches changes and the requirement does not
 - **THEN** a drift candidate exists for that requirement
+
+#### Scenario: A footprint that watches nothing is listed, not scanned
+
+- **WHEN** accepted evidence's footprint watches nothing
+- **THEN** no drift candidate is raised for it
+- **AND** it is listed as unwatched with its reason
 
 #### Scenario: A project without a repository still records a footprint
 
 - **WHEN** evidence is recorded in a project that is not a git repository
-- **THEN** the footprint names the changed paths and a content hash of each
+- **THEN** the footprint names the paths the evidence is about and a content hash of each
 - **AND** a later change to one of them raises a drift candidate
 
 #### Scenario: The footprint describes the commit the recorder named
 
 - **WHEN** an operator records evidence whose locator names a commit in the project's repository
-- **THEN** the footprint names that commit, its tree, and whether it is reachable from the main
-  branch
+- **THEN** the footprint names that commit, the files it watches there, and whether it is
+  reachable from the main branch
 - **AND** it does not name the commit the operator's own checkout is on
 
 #### Scenario: A locator naming an absent commit is refused
@@ -90,7 +100,8 @@ gate. What changes is only that the footprint stops implying a completeness it c
 #### Scenario: Recording evidence reports the footprint it captured
 
 - **WHEN** evidence is recorded and a footprint is captured for it
-- **THEN** the response describing that evidence reports the footprint
+- **THEN** the response describing that evidence reports the footprint, and marks it provisional
+  when an agent's footprint was taken mid-turn
 
 #### Scenario: Drift never rewrites the document
 

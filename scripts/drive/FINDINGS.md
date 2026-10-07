@@ -9918,7 +9918,7 @@ still open.
 
 ## F129 (B) — requirement drift works, and the app cannot reach any of it
 
-**Status:** open. Verified 2026-09-09: `hub/ui/src` contains no reference to `spec/drift`,
+**Status:** fixed (Tier 1, `drift-is-scanned-and-answered-on-the-document`, `0cf3a60`, 2026-10-07) -- the drift panel under each document's coverage bar scans and answers candidates; driven in Chromium on `:8010` (7/7). Was: open. Verified 2026-09-09: `hub/ui/src` contains no reference to `spec/drift`,
 `drift/detect` or `requirement_drift`, so the detection route is still unreachable from the app.
 Named in the 2026-08-30 release roadmap, never specced. F132 sharpens it -- read that entry's
 *"what this changes about F129's fix"* before proposing one. [classified 2026-09-09, D-2]
@@ -33187,7 +33187,7 @@ and passes today.
 
 ## F430 (B) — a drift candidate can be answered twice, and the second answer overwrites the first
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 4). `resolve_drift` has no state check. **Carried by B6's `drift-is-scanned-and-answered-on-the-document`** (it answers once; a second answer is a 409).
+**Status:** fixed (Tier 1, `drift-is-scanned-and-answered-on-the-document`, `0cf3a60`, 2026-10-07) -- a second answer is refused 409 `drift_not_open`. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 4). `resolve_drift` has no state check. **Carried by B6's `drift-is-scanned-and-answered-on-the-document`** (it answers once; a second answer is a 409).
 
 
 ## F431 (C) — an accept refused as stale commits `stale` and leaves the row on screen
@@ -33217,7 +33217,7 @@ and passes today.
 
 ## F436 (B) — any drift answer silences that exact change forever, whether or not the answer was true
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 11). Found by R3. For example, pressing *Code corrected* before the code is actually reverted stops the candidate from ever returning (`requirement_evidence.py:1221`, `:1160-1163`). Not carried. B6's change 2 words its buttons as past-tense facts. Repair shape: re-check that the answer holds on the next scan, or scope the silence to the answered commit.
+**Status:** fixed (Tier 1, `drift-is-scanned-and-answered-on-the-document`, `0cf3a60`, 2026-10-07) -- *Code corrected* stores no fingerprint, so the same change still there is asked again (driven). Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 11). Found by R3. For example, pressing *Code corrected* before the code is actually reverted stops the candidate from ever returning (`requirement_evidence.py:1221`, `:1160-1163`). Not carried. B6's change 2 words its buttons as past-tense facts. Repair shape: re-check that the answer holds on the next scan, or scope the silence to the answered commit.
 
 ## F437 (B) — an operator's review request queued for a busy reviewer leaves a flow's completed task in the pool, so a second review can be staffed
 

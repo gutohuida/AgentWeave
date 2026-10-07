@@ -117,7 +117,9 @@ def main():
         scanned = page.locator('[data-testid="spec-drift-scanned"]').inner_text()
         check("the scan says what it found", "1 new" in scanned and "1 on this document" in scanned, scanned)
 
-        api("PATCH", f"{P}/tasks/{task_id}", {"status": "completed"})
+        for step in ("in_progress", "completed"):
+            code, moved = api("PATCH", f"{P}/tasks/{task_id}", {"status": step})
+            assert code == 200, (step, moved)
         code, refused = api("POST", f"{P}/tasks/{task_id}/land")
         check("approval is refused with the new remedy", code == 409 and "the operator answers the drift candidate" in str(refused), str(refused)[:300])
 
