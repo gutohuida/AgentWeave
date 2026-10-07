@@ -1904,8 +1904,9 @@ disappears is indistinguishable from one that was forgotten.
   measured or mutation-checked on this machine (no WSL either); its evidence is the Linux `hub-test` CI
   job, grepped from `gh run view --job <id> --log`.
 - **2026-10-04 (home) — the full Hub suite runs in 11–15 minutes with `-n 8`.** `pytest-xdist` 3.8 is
-  installed (20 cores). Serial, with other pytest runs alongside, it projected past three hours. CI runs
-  it serially; any failure seen only under `-n` needs a serial re-run before it counts.
+  installed (20 cores). Serial, with other pytest runs alongside, it projected past three hours. CI ran
+  it serially until 2026-10-07 (`741f44e`: now `-n auto --dist loadfile`); any failure seen only under `-n`
+  needs a serial re-run before it counts -- and then a test fix, not a dropped `-n`.
 - **2026-10-04 (home) — measuring which tests a change moved: run the base's tests against the tip's
   code.** `git worktree add --detach <short path> <base>`, then `git checkout master -- hub/hub` inside
   it, and run `py -3.11 -m pytest tests/` from its `hub/` (`-m` puts the cwd first, so `import hub`
@@ -2121,3 +2122,10 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-10-07 (home) -- CORRECTION to the gh entry above: `--branch master` is unreliable too.** It
   showed today's runs once and September's runs four minutes later. Unfiltered
   `gh run list --limit 8` and `gh run list --commit <full sha>` both showed the live runs; use those.
+- **2026-10-07 (home, night) -- master CI runs now cancel each other (`741f44e`).** A newer push to
+  master cancels the older run, so `cancelled` on a superseded master sha is not red: read the tip's run.
+  `check-build` still prints `cancelled` as a failure. `autonomous/**` and PR runs are never cancelled
+  (per-sha concurrency groups), because `run-iteration.ps1` counts `cancelled` as red. Pushing code
+  and bookkeeping together, in one push, gives one run.
+- **2026-10-07 (home, night) -- a pytest log written by PowerShell `*>` here is UTF-8, not UTF-16.**
+  Decoding it as UTF-16 turns it to CJK noise; plain `grep -a` reads it.
