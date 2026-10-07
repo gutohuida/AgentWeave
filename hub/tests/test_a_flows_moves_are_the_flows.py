@@ -158,6 +158,7 @@ async def test_an_operators_by_hand_review_is_the_operators(
     assert (row.origin, row.job_id) == (ORIGIN_ACTOR, None)
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_loop_queued_review_delivered_late_is_recorded_as_the_loops(
     app, auth_headers, bind_runner, tmp_path
 ):
@@ -173,6 +174,7 @@ async def test_a_loop_queued_review_delivered_late_is_recorded_as_the_loops(
     assert (row.actor_kind, row.origin, row.job_id) == ("operator", ORIGIN_JOB, job.id)
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_delivery_with_the_operators_own_entry_is_the_operators(
     app, auth_headers, bind_runner, tmp_path
 ):
@@ -190,6 +192,7 @@ async def test_a_delivery_with_the_operators_own_entry_is_the_operators(
     assert (row.origin, row.job_id) == (ORIGIN_ACTOR, None)
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_divergence_restaffed_review_stays_the_operators(
     app, auth_headers, bind_runner, tmp_path
 ):

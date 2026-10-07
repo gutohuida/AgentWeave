@@ -1202,3 +1202,48 @@ def _copilot_homes_stay_out_of_the_real_home(tmp_path_factory, monkeypatch):
 
     monkeypatch.setattr(copilot_home, "copilot_home_root", _root)
     monkeypatch.setattr(copilot_home, "operator_copilot_home", _operator_home)
+
+
+@pytest.fixture
+def no_agent_cli_spawn():
+    """For a test that fires a real trigger with `which` faked so the runner resolves, and does not
+    care about the process. The spawn fails as the fake path (`/usr/bin/claude`) already did, but
+    without a real `PtySession.spawn`: that would import the pty backend under the fake, which then
+    keeps it for every later spawn in the worker (F530, guarded below)."""
+    from unittest.mock import patch
+
+    from hub.pty_runner import PtySession
+
+    failure = FileNotFoundError("no agent CLI is spawned in this test (no_agent_cli_spawn)")
+    with patch.object(PtySession, "spawn", side_effect=failure):
+        yield
+
+
+# F530. The pty backends bind `which` once, when first imported: `ptyprocess.ptyprocess` does
+# `from .util import which`, `ptyprocess.util` does `from shutil import which`, and
+# `winpty.ptyprocess` does `from shutil import which`. `PtySession.spawn` imports its backend lazily,
+# so if the first spawn in a process happens while a test has `shutil.which` patched, the backend
+# keeps that fake for the rest of the process, and every later spawn resolves `sys.executable`
+# through it. Under xdist that is whichever test shares a worker with the leaker: CI saw `ptyprocess`
+# exec `/usr/bin/claude` for `[sys.executable, "-c", ...]`. This check runs after every function
+# fixture has been finalized, `monkeypatch` included, and fails the test that left `which` changed.
+_REAL_WHICH = shutil.which
+_PTY_BACKENDS = ("ptyprocess.util", "ptyprocess.ptyprocess", "winpty.ptyprocess")
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_teardown(item, nextitem):
+    result = yield
+    leaked = [
+        module.__name__
+        for module in (shutil, *(sys.modules.get(n) for n in _PTY_BACKENDS))
+        if module is not None and getattr(module, "which", _REAL_WHICH) is not _REAL_WHICH
+    ]
+    if leaked:
+        for name in leaked:
+            sys.modules[name].which = _REAL_WHICH
+        raise AssertionError(
+            f"{item.nodeid} left `which` patched in {leaked}; a pty backend imported while it "
+            "was patched keeps the fake for every later spawn in this process (F530)."
+        )
+    return result

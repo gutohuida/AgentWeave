@@ -460,6 +460,7 @@ async def test_the_operator_is_refused_at_once_for_a_review_someone_else_holds(
         assert await _snapshot(db, task.id) == ("under_review", REVIEWER)
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_dispatchable_review_is_not_refused_by_the_route(
     app, auth_headers, bind_runner, tmp_path
 ):

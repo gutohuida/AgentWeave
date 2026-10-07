@@ -205,6 +205,7 @@ async def _queued_for(agent):
         )
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_flow_staffing_its_own_review_is_not_refused(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path
 ):
@@ -249,6 +250,7 @@ async def test_a_flow_staffing_its_own_review_is_not_refused(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_wedged_review_is_restaffed_to_a_real_reviewer(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path
 ):

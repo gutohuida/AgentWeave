@@ -8,18 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "4055151",
     "stop_at": "2026-10-08T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-07-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F530-impl",
-    "next_action": "F530-impl: CI first. Add an autouse guard in hub/tests/conftest.py failing the test that leaves shutil.which changed, find the leaker with a local `-n 4 --dist loadfile` run, fix that test, then set F530 Status fixed. Never drop -n. Check CI verdict for the previous push first.",
+    "current": "F468-impl",
+    "next_action": "CI gate first: `gh run list --branch autonomous/2026-10-07-daily` for the F530 push (iteration 2). If hub-test is red, read the failure, back to F530 (guard error names the leaker; run testbed/f530/run_wsl.sh in WSL). If green, mark F530-impl done (second green push confirms it) and build F468-impl: send_message to self returns 400 naming the reply; test at the route seam first, fix, drive on :8010.",
     "queue": [
         {
             "id": "F530-impl",
-            "status": "open",
+            "status": "built-pending-ci",
             "title": "F530: leaked shutil.which patch turns hub-test red under xdist",
-            "detail": "See FINDINGS F530. Guard in hub/tests/conftest.py names the leaker; fix the leaker; no patching around in test_pty_runner. Accept: local -n 4 --dist loadfile green + CI green. Nothing else is built until CI is green on the tip.",
+            "detail": "See FINDINGS F530. Guard in hub/tests/conftest.py names the leaker; fix the leaker; no patching around in test_pty_runner. Accept: local -n 4 --dist loadfile green + CI green. Nothing else is built until CI is green on the tip. BUILT iteration 2: 18 leakers marked no_agent_cli_spawn + teardown guard; WSL full -n 4 green. Needs CI green on this push and the next.",
             "model": "opus"
         },
         {
