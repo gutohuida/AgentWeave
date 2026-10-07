@@ -20,6 +20,15 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### F525: how a legacy footprint is rebuilt -- 2026-10-07 interactive, DECIDED 2026-10-07
+
+- DECIDED   drift-legacy-baseline  **(d): a row rebuilt from its merge watches from today's main; a
+  row rebuilt from its locator keeps the commit it was verified at** (operator, 2026-10-07, as
+  recommended). Found by driving the backfill on this repository's trial project: the first scan
+  raised 19 of 28 rebuilt rows, mostly ledgers and logs a merge brought in. Rejected: (a) keep
+  (answer them all), (b) every row from today (loses "changed since verified" for named files),
+  (c) locator rows only (13 of 28 left unwatched).
+
 ### Phase 4 fold-ins: the decisions the REVISING rows of 2026-09-24 carried -- recorded 2026-10-07
 
 - DECIDED   q-f158  **(B) top up, with D2: refuse on conflict** (operator, `APPROVALS.md` 2026-09-24,

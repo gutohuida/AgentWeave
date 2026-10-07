@@ -33,6 +33,13 @@ footprints are **backfilled** (`drift-legacy-backfill`), both recorded in `DECIS
   provisional marker. `drift-is-scanned-and-answered-on-the-document` restates it again over this
   one when it archives (its task 0.4).
 
+- **D6' (operator, 2026-10-07, F525) — a merge-rebuilt row watches from today.** Driving the
+  backfill on this repository's trial project rebuilt 28 of 31 legacy rows and its first scan raised
+  19 candidates, mostly ledgers and logs a merge brought in. A row rebuilt from its **merge** now takes
+  the main tip's blobs as its baseline; a row rebuilt from its **locator** keeps the verified commit.
+  On a copy of the same database the merge rows then raised 0 (9 rebuilt, 4 listed: their files no
+  longer exist on main).
+
 **Tier 2** (migration on live data, a cross-cutting contract). **Hazard:** the migration adds a
 nullable column, a no-op for existing rows; the first Scan for drift on `:8000` after its restart
 rewrites `entries`/`watched_from` of up to 46 accepted footprints. **Rollback:** `UPDATE

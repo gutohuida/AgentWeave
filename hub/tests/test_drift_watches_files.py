@@ -355,6 +355,53 @@ async def test_a_legacy_footprint_is_rebuilt_from_its_merge(app, auth_headers, b
 
 
 @pytest.mark.asyncio
+async def test_a_merge_rebuilt_footprint_starts_watching_from_today(
+    app, auth_headers, builder, tmp_path
+):
+    """F525 (operator, option d): a row rebuilt from its merge takes today's main as its baseline,
+    so the first scan after the backfill does not ask about every file touched since the merge; a
+    change after the backfill still raises."""
+    repo(tmp_path, {"README.md": "r\n"})
+    await set_main_branch("main")
+    git(tmp_path, "checkout", "-q", "-b", "feature")
+    work = commit(tmp_path, "ledger.py", "one\n")
+    git(tmp_path, "checkout", "-q", "main")
+    git(tmp_path, "merge", "-q", "--no-ff", "-m", "merge feature", "feature")
+    commit(tmp_path, "ledger.py", "edited on main before the backfill\n")
+    await _document(app, auth_headers, builder)
+    ev = await operator(app, auth_headers, "")
+    await _make_legacy(
+        ev["id"], commit_sha=work, tree=requirement_evidence.tree_entries(tmp_path, work)
+    )
+
+    assert await _detect(app, auth_headers) == []
+    assert (await footprint(ev["id"])).watched_from == ["merge"]
+
+    commit(tmp_path, "ledger.py", "edited after the backfill\n")
+    assert len(await _detect(app, auth_headers)) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_locator_rebuilt_footprint_keeps_its_verified_baseline(
+    app, auth_headers, builder, tmp_path
+):
+    """F525 (option d): a row rebuilt from its locator keeps the commit it was verified at, so a
+    change to the file it names since then is a real question and raises."""
+    repo(tmp_path, {"ledger.py": "one\n"})
+    await set_main_branch("main")
+    verified = git(tmp_path, "rev-parse", "HEAD")
+    await _document(app, auth_headers, builder)
+    ev = await operator(app, auth_headers, "ledger.py")
+    await _make_legacy(
+        ev["id"], commit_sha=verified, tree=requirement_evidence.tree_entries(tmp_path, verified)
+    )
+    commit(tmp_path, "ledger.py", "changed since it was verified\n")
+
+    assert len(await _detect(app, auth_headers)) == 1
+    assert (await footprint(ev["id"])).watched_from == ["locator"]
+
+
+@pytest.mark.asyncio
 async def test_a_legacy_footprint_whose_merge_is_not_found_is_listed_not_scanned(
     app, auth_headers, builder, tmp_path
 ):
@@ -407,4 +454,3 @@ def test_a_footprint_cannot_be_built_without_saying_what_it_watches():
     """1.20 (D7): no default, so no constructor silently writes the NULL that means legacy."""
     with pytest.raises(TypeError):
         requirement_evidence.Footprint(kind="git")  # type: ignore[call-arg]
-

@@ -17437,7 +17437,7 @@ a surface that does will need. Measured by `test_requirement_coverage.py`
 
 ## F217 (C) — an agent's accepted evidence is never drift-checked in practice, and an operator's for the same requirement is
 
-**Status:** open. The branch-basis asymmetry stands: an agent's footprint is always a
+**Status:** fixed (Tier 2, `drift-watches-the-files-its-evidence-is-about`, `c954bb9`, 2026-10-07) -- a footprint that has reached the main line is compared against it, whatever its branch says; driven on `:8010` (leg 2 of `d1007_drift_watch_drive.py`: a change on main to merged work raises). Was: open. The branch-basis asymmetry stands: an agent's footprint is always a
 worktree branch, so agent evidence is always the case drift cannot see, and nothing states that
 anywhere a reader of the coverage bar would meet it. Named in no change. [classified 2026-09-09, D-3]
 
@@ -33172,7 +33172,7 @@ and passes today.
 
 ## F427 (B) — a footprint watches the whole tree, so one commit raises a drift candidate for every piece of evidence
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 1). Measured by R1: evidence on `ledger.py`, then a commit to `other.py`, gave one candidate. The footprint's `entries` hold the whole tree (`requirement_evidence.py:539`, `:969`). **Carried by B6's `drift-watches-the-files-its-evidence-is-about`** (approved 2026-09-24).
+**Status:** fixed (Tier 2, `drift-watches-the-files-its-evidence-is-about`, `c954bb9`, 2026-10-07) -- a footprint watches the files its evidence is about (locator words in the tree, the named commit, or the branch's changes), not the whole tree; an unrelated commit raises nothing (leg 1). Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 1). Measured by R1: evidence on `ledger.py`, then a commit to `other.py`, gave one candidate. The footprint's `entries` hold the whole tree (`requirement_evidence.py:539`, `:969`). **Carried by B6's `drift-watches-the-files-its-evidence-is-about`** (approved 2026-09-24).
 
 
 ## F428 (C) — rejecting a proposal in the app leaves it on screen
@@ -33197,7 +33197,7 @@ and passes today.
 
 ## F432 (C) — evidence with no footprint row is never scanned and never reported
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 10). Found by R2. **Carried by B6's `drift-watches-the-files-its-evidence-is-about`** (listed as unwatched, reason `no_footprint`).
+**Status:** fixed (Tier 2, `drift-watches-the-files-its-evidence-is-about`, `c954bb9`, 2026-10-07) -- evidence with no footprint is listed as `no_footprint` in `GET /spec/drift`'s `unwatched`. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 10). Found by R2. **Carried by B6's `drift-watches-the-files-its-evidence-is-about`** (listed as unwatched, reason `no_footprint`).
 
 
 ## F433 (C) — only one unit of a multi-unit proposal can be accepted before its siblings go stale
@@ -34789,7 +34789,7 @@ rendered string, and a read normalises line endings).
 
 ## F525 (B) — the first Scan for drift after the legacy backfill raises a candidate for most old evidence at once
 
-**Status:** open (filed 2026-10-07 by the acceptance drive of `drift-watches-the-files-its-evidence-is-about`; a decision for the operator, not a defect in the build)
+**Status:** fixed by operator decision (option d, 2026-10-07) -- a legacy row rebuilt from its merge takes today's main as its baseline; one rebuilt from its locator keeps its verified commit. On a copy of the trial DB the merge rows then raised 0 (was 10). Was: open (filed 2026-10-07 by the acceptance drive of `drift-watches-the-files-its-evidence-is-about`; a decision for the operator, not a defect in the build)
 **Source:** drive
 **Theme:** Spec & requirements
 

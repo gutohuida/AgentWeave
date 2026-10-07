@@ -23,7 +23,10 @@ nothing.
 A footprint recorded before the footprint recorded what it watches SHALL be rebuilt, where its
 commit's merge into the main line can be found, from the locator and the files that merge brought in
 (measured 2026-09-24: 42 of 46 accepted rows); one that cannot be rebuilt SHALL NOT be scanned, and
-SHALL be listed as watching nothing for that reason.
+SHALL be listed as watching nothing for that reason. A footprint rebuilt from its locator SHALL keep
+the commit it was verified at as its baseline; one rebuilt from its merge SHALL take the main line as
+it stands when it is rebuilt, so that its first scan does not ask about every file that merge brought
+in that anyone has touched since (F525: 19 of 28 rows on the trial instance, mostly ledgers and logs).
 
 #### Scenario: A change to a file the evidence is not about raises nothing
 
@@ -64,6 +67,7 @@ SHALL be listed as watching nothing for that reason.
 
 - **WHEN** accepted evidence recorded before footprints recorded what they watch has a commit whose merge into the main line can be found
 - **THEN** its footprint is rebuilt to watch the files its locator names, or else the files that merge brought in
+- **AND** a footprint rebuilt from its merge raises nothing for a change made before it was rebuilt
 - **AND** evidence whose merge cannot be found is listed as recorded before watching
 
 #### Scenario: Agent evidence recorded mid-turn is narrowed when its run ends

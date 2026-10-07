@@ -1508,6 +1508,11 @@ async def backfill_legacy_footprints(
     main = _main_ref(root, main_branch)
     if main is None:
         return 0
+    # F525 (operator, option d): a row rebuilt from its merge watches from *today's* main, so the
+    # first scan does not ask about every file the merge brought in that anyone touched since -- on
+    # the trial Hub that was 19 of 28 rows, mostly ledgers and logs. A row rebuilt from its locator
+    # keeps the commit it was verified at: the file it names changing since is a real question.
+    main_tree = tree_entries(root, main) or {}
     rows = (
         await session.execute(
             select(RequirementEvidence, EvidenceFootprint)
@@ -1531,16 +1536,19 @@ async def backfill_legacy_footprints(
         if not tree:
             continue
         chosen = _locator_paths(evidence.locator or "", tree)
-        watched_from = ["locator"]
-        if not chosen:
+        if chosen:
+            entries = {path: tree[path] for path in chosen}
+            watched_from = ["locator"]
+        else:
             merge = _merge_into(root, commit, main)
             if merge is None:
                 continue
-            chosen = [path for path in _commit_paths(root, merge) if path in tree]
+            changed = [path for path in _commit_paths(root, merge) if path in main_tree]
+            entries = {path: main_tree[path] for path in changed}
             watched_from = ["merge"]
-        if not chosen:
+        if not entries:
             continue
-        footprint.entries = {path: tree[path] for path in chosen}
+        footprint.entries = entries
         footprint.watched_from = watched_from
         updated += 1
     return updated
