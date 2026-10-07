@@ -16802,7 +16802,7 @@ recovering it is a standing drift warning rather than lost work.
 
 ## F206 (B) — five of the spec flow's operator-only routes have no operator surface
 
-**Status:** open. Filed by the row-9a sweep (`fce9f83`) and carried into the 2026-09-01
+**Status:** fixed for four of the five routes (Tier 1, `the-corpus-is-indexed-arranged-and-adopted-from-the-app`, `151e652`, `d401650`, 2026-10-07) -- reindex, arrange, adopt and adopt-all have a surface: the corpus strip in the document browser, Adopt beside each untracked row, Place under… on a filed document. Driven in Chromium on `:8010` (`scripts/drive/d1007_corpus_drive.py`, 8/8). Merge stays API-only by decision `corpus-merge-m1` (waits on a capability authoring path). Was: open. Filed by the row-9a sweep (`fce9f83`) and carried into the 2026-09-01
 research page and review page. No change addresses it. [classified 2026-09-09, D-2]
 
 Measured twice from outside the product: against `hub/hub/static/ui` (**the bundle this Hub
@@ -33207,7 +33207,7 @@ and passes today.
 
 ## F434 (B) — reindex and arrange write files before the database commit, so an `OSError` leaves files written and digests rolled back
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 6). `spec.py:1255-1265`, `:1375-1379`. Not carried. Repair shape: write after the commit, or delete what was written on failure, answering a sentence and not a bare 500.
+**Status:** fixed (Tier 1, carried by `the-corpus-is-indexed-arranged-and-adopted-from-the-app` D6, `8d6e5bb`, 2026-10-07) -- `write_index` is atomic (temp file + `os.replace`); reindex answers 200 with `index_write_failed` and still commits the requirement index; a document's failed re-render is a `write_failed` skip; arrange refuses with a sentence before placing anything. Tests: `test_spec_index_writer.py` (four failed on HEAD). Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 6). `spec.py:1255-1265`, `:1375-1379`. Not carried. Repair shape: write after the commit, or delete what was written on failure, answering a sentence and not a bare 500.
 
 
 ## F435 (C) — a drift candidate is never superseded when its requirement is reworded, although the model says it is

@@ -20,6 +20,14 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### `the-corpus-is-indexed-arranged-and-adopted-from-the-app`: merge -- 2026-09-24 review, DECIDED 2026-09-24, recorded 2026-10-07
+
+- DECIDED   corpus-merge-m1  **M1: merge stays API-only in this change** (operator, approving the
+  change in `APPROVALS.md` 2026-09-24: "M1: merge stays API-only; M3 queued as R9"). F206 closes for
+  reindex, arrange, adopt and adopt-all; `POST /documents/{path}/merge` waits on a capability
+  authoring path. M3 (agents draft capability content as proposals) is its own exploration.
+  Recorded here when the change was built (task 0.3), since only the APPROVALS row carried it.
+
 ### F489-fix: how should the Hub learn a Copilot turn's failure cannot succeed on retry? -- 2026-10-06 night, DECIDED 2026-10-06
 
 - DECIDED   f489-retry-signal  **(a): a Copilot-only `retryable: Optional[bool] = None` on
