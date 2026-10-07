@@ -192,7 +192,7 @@ class AgentJobCreate(RequestModel):
     stop_at: Optional[datetime] = None
     stop_when_queue_empties: bool = False
     work_needs_evidence: Optional[bool] = None
-    spec_document_id: Optional[str] = Field(default=None, max_length=64)
+    spec_document_id: Optional[str] = Field(default=None, max_length=255)
     initial_tasks: Optional[List[Dict[str, Any]]] = None
 
     @field_validator("session_mode")

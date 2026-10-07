@@ -164,6 +164,15 @@ async def _document_id_for(
         return None
     value = spec_document_id.strip()
     if not value.startswith("spec/"):
+        # The request accepts a path's length (255); the loop stores an id (64).
+        if len(value) > 64:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"spec_document_id '{value[:80]}…' is neither a document id (at most 64 "
+                    "characters) nor a path beginning 'spec/'"
+                ),
+            )
         return value
     document_id = (
         await session.execute(

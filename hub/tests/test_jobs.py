@@ -1365,7 +1365,12 @@ async def test_a_flow_named_by_its_documents_path_adopts_the_documents_tasks(app
     """F451. Every spec tool takes the path, and a flow given it stored the path: tasks carry the
     id, so its queue stayed `{}` for good, and a second flow on the same document by id was not a
     conflict."""
-    path = "spec/changes/f451-by-path/spec.html"
+    # As long as real ones: the F510 document's path is 99 characters, and the request used to
+    # cap this field at 64, so a real path was refused before it was ever resolved (drive, 2026-10-07).
+    path = (
+        "spec/changes/a-flow-named-by-its-path-adopts-the-tasks-of-the-document-it-names/spec.html"
+    )
+    assert len(path) > 64
     await _spec_document("spdoc-f451a", path)
     await _materialised_task("task-f451-a", "spdoc-f451a")
 

@@ -27,7 +27,7 @@ class JobCreate(RequestModel):
     # The loop's source document (design D1). Nullable — a loop need not declare one. Enforced
     # unique across loops at the route layer (409) and the DB layer (`Loop.spec_document_id`'s own
     # `unique=True`), not just one or the other.
-    spec_document_id: Optional[str] = Field(default=None, max_length=64)
+    spec_document_id: Optional[str] = Field(default=None, max_length=255)
     # Seeds the new loop's queue in the same call that creates it (design D2, `create_loop`'s
     # "definition window"). Each entry is the same shape `TaskCreate` accepts — a plain dict
     # rather than a nested model, matching `submit_spec_document`'s own reasoning: a closed
@@ -65,7 +65,7 @@ class JobUpdate(RequestModel):
     stop_at: Optional[datetime] = None
     stop_when_queue_empties: Optional[bool] = None
     stop_reason: Optional[str] = Field(default=None, max_length=4000)
-    spec_document_id: Optional[str] = Field(default=None, max_length=64)
+    spec_document_id: Optional[str] = Field(default=None, max_length=255)
     # The job's default agent. Operator-only (403 from an agent's run); staged on a loop, applied at
     # once on a plain job (`a-flow-is-configured-from-its-own-tab` D2).
     agent: Optional[str] = Field(default=None, max_length=64)
