@@ -2099,3 +2099,22 @@ disappears is indistinguishable from one that was forgotten.
   commit. A flow's width is bounded by free agents, not a setting: two reviewable tasks and two free
   agents fire together. `spec/capabilities/*.html` payloads: read them with
   `hub.spec_payload.extract_payload` (run from `hub/`), not a hand-written regex.
+
+- **2026-10-07 (home, evening) -- a local full Hub suite takes ~39 min serial; use `-n 8`.** The
+  2026-10-04 entry above already said so and was not read: two serial runs this session took 39 min
+  and (sharing the machine with a second suite and drives) crawled at ~1.5%/min. Run
+  `py -3.11 -m pytest tests -n 8` from `hub/`; re-run any `-n`-only failure serially before it counts.
+  Operator decision the same evening: push after the targeted tests and let CI run the full suite.
+- **2026-10-07 (home) -- `gh run list --workflow ci.yml` returned September runs, not today's.**
+  `gh run list --branch master --limit 6` (filter the Docker workflow out by eye) showed the live ones.
+- **2026-10-07 (home) -- the heredoc newline trap again, twice:** a Python script fed through a Bash
+  heredoc turned a backslash-n inside a string literal into a real newline, both in a generated
+  drive script and in a METRICS row. Write any file content containing a newline escape with the
+  Write/Edit tools, not through a heredoc-fed script.
+- **2026-10-07 (home) -- committing part of one file without `git add -p`** (interactive, unsupported
+  here): write the partial version to scratch, then
+  `git update-index --cacheinfo 100644,$(git hash-object -w <scratch file>),<path>`. The working
+  tree keeps the full version. Used to split F450 from F425 in `task_transition_service.py`.
+- **2026-10-07 (home) -- operator evidence footprints pin HEAD at recording time** (F529):
+  `POST .../project/spec/evidence` has no commit field, so record it right after the build commit,
+  not after later commits, if the footprint should name the work.
