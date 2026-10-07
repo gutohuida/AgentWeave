@@ -1738,7 +1738,10 @@ SPEC_PHASE_DUTIES = {
         "- **A test and its fix are one task.** Approval runs the project's checks on the work "
         "it would merge, so every task must leave them green. Have the task write its failing "
         "test first and then make it pass; never write a task whose work is a test that stays "
-        "red until a later task lands."
+        "red until a later task lands.\n"
+        "- **Name the reviewer in the field, not the prose.** A flow gives each review to the "
+        "agent in the task's `reviewer`, and to any free agent when it is empty; saying who "
+        "reviews in the design text sets nothing."
     ),
     "proposed": (
         "- This document is proposed and awaiting the operator's decision. Do not implement it, "

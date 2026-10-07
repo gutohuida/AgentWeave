@@ -34520,7 +34520,7 @@ becomes the default and owns the `sonnet` alias).
 
 ## F508 (B) — the planner promised a reviewer the document never declared; the flow staffed a leftover stub agent
 
-**Status:** open
+**Status:** partly fixed (Tier 0, 2026-10-07) -- the warning half: a flow-delivered document none of whose tasks names a `reviewer` is warned on submission (`spec_completeness.reviewer_undeclared_warnings`, advisory), and the exploring duty says "Name the reviewer in the field, not the prose". Test: `test_spec_reviewer_undeclared_warning.py` (no warning before). Still open: the document-level default reviewer (Tier 1, plan Phase 5).
 Found 2026-10-06 in the first real slice-flow run on the trial Hub `:8010` (change "same-file tasks of a slice
 build in order", flow `job-4182c24930d5`). Driven, not read. Area: **Flows & review** / **Spec documents**.
 
