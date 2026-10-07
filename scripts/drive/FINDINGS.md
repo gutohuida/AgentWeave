@@ -34585,7 +34585,7 @@ that share one"), not a principle. Then re-drive.
 
 ## F510 (B) — a task on a loop whose work merges its branch tip can never be given a review turn
 
-**Status:** built on the trial Hub `:8010` (2026-10-06, document `spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/`): `task_integration.review_target`, tests in `hub/tests/test_a_review_turn_reviews_the_branch_tip.py`; on master as `3bae149`/`4f2face` -- landed through F520, not through its own approval; trial task `task-acc4664bee5a` still `under_review`. Not driven live yet.
+**Status:** built on the trial Hub `:8010` (2026-10-06, document `spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/`): `task_integration.review_target`, tests in `hub/tests/test_a_review_turn_reviews_the_branch_tip.py`; on master as `3bae149`/`4f2face` -- landed through F520, not through its own approval; trial task `task-acc4664bee5a` still `under_review`. Not driven live yet. **Closed 2026-10-07:** `:8010` restarted onto `333fa9d`; task 2 approved by the operator's PATCH -- no check applied (F518), integration `skipped` "838d833643ab is already in master; there was nothing to merge"; loop `loop-ec88f6101755` stopped `completed` ("loop queue is empty"). Reconciled into `openspec/specs/agent-conversation-workspace` (`da1f784`).
 Found 2026-10-06 by the acceptance drive of `approval-runs-the-projects-checks` (fresh Hub `:8038`,
 profile `checks1006c`). Driven, not read. Area: **Flows & review**.
 
@@ -34696,7 +34696,9 @@ database is locked [SQL: UPDATE runs SET pid=?]`. The flow staffed a second revi
 
 **Status:** fixed (Tier 0) -- `project_checks.unmerged` drops targets already reachable from the main tip,
 in both `view` and `request_run`; nothing unmerged means no check applies. Test:
-`test_project_checks_run.py::test_work_already_on_main_is_not_checked`.
+`test_project_checks_run.py::test_work_already_on_main_is_not_checked`. Driven 2026-10-07 on `:8010`
+(`333fa9d`): approving `task-acc4664bee5a`, whose targets `252076c`/`838d833` are both on master, started no
+check run and the gate did not wait on one.
 Found 2026-10-06 on `:8010`, F510 slice task 2. Its check run's `target_shas` were `[252076c]`: task 1's
 accepted evidence, already merged (`fb651cd`), because both tasks serve FR-1..3. `merge_targets` names
 accepted evidence for the task's requirements; before task 2's own evidence is accepted, that is only work
@@ -34738,3 +34740,16 @@ runs (20:16Z, 21:11Z) recorded `error`: "fatal: '...' is a missing but locked wo
 override, or 'unlock' and 'prune' or 'remove' to clear". `_remove_checkout` runs `worktree remove --force`
 (one `-f` does not remove a locked worktree) and `worktree prune` (which skips locked ones), so the run
 can never recover by itself. **Direction:** unlock before removing, or `remove -f -f`.
+Not driven live: on 2026-10-07 the leftover was cleared by hand (`unlock` + `remove -f -f`) before `:8010`
+restarted, so the fix has its unit test only.
+
+## F522 (C) — the integration preview counts commits already on the main branch as "will merge"
+
+**Status:** open (Tier 0, queued in the spec-flow plan's Phase 1)
+Found 2026-10-07 on `:8010` (`333fa9d`), task `task-acc4664bee5a`. `GET /tasks/{id}/integration-preview`
+answered `will_attempt_merge: true`, "approval will merge 2 commits into master; it merges cleanly as of now"
+for targets `252076c`/`838d833` -- both already reachable from master. Approving then recorded `skipped`,
+"838d833643ab is already in master; there was nothing to merge". The preview (`api/v1/tasks.py:1171-1194`)
+never asks reachability; `project_checks.unmerged` (F518) already does, so the drawer and the merge give two
+answers to one question. **Direction:** filter the preview's targets through the same reachability test and
+say "already in master; approval merges nothing".
