@@ -2060,3 +2060,22 @@ disappears is indistinguishable from one that was forgotten.
   footprint row before believing it.
 - **2026-10-06 (home) — `ruff check ... && pytest ...` in one background command**: a lint failure silently
   skips the suite and the notification still says "completed (exit 0)" from the tail. Run them separately.
+- **2026-10-07 (home) — a Bash-tool heredoc running Python fails with `unexpected EOF while looking for matching
+  `''` on some bodies** (long ones mixing quotes and backticks), even with `<<'EOF'`. Nothing runs. Write the
+  script to a scratch file with the Write tool and run `py -3.11 <file>` instead.
+- **2026-10-07 (home) — editing a migration or `test_migrations.py` while a full `pytest hub/tests` runs in the
+  background gives spurious failures**: alembic reads `migrations/versions/*.py` from disk at test time, so
+  ~25 `test_migrations.py` tests failed on a head bump made mid-run. Edit Hub code and migrations only
+  between suite runs; test-file-only edits are safe once collection is done.
+- **2026-10-07 (home) — `npx vitest run | grep … && git commit` commits even when tests fail**: the grep
+  succeeds on the summary line. Gate on vitest's own exit code (or read the summary) before committing;
+  `0cf3a60` went in with 11 failures this way.
+- **2026-10-07 (home) — a SQLAlchemy `JSON` column set to Python `None` stores JSON `null`, not SQL `NULL`**:
+  `col.is_(None)` misses ORM-written rows (a migration-added column holds SQL NULL). Filter in Python
+  (`row.col is None`) when both can occur.
+- **2026-10-07 (home) — `git checkout -- <test file>` to undo a one-line debug edit also discards every
+  uncommitted test added to that file.** Undo a debug edit with the Edit tool, or commit first.
+- **2026-10-07 (home) — on the Hub, a plain task approved with no evidence merges nothing** (`task_integrations`
+  says "no accepted evidence names a commit"), so it offers no commit to dependents either. A drive that needs
+  a task's work to flow needs accepted evidence or an evidence-free loop (`work_needs_evidence: false`, whose
+  work is the branch tip).
