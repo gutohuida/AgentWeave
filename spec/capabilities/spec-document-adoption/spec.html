@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spec document adoption</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Spec document adoption</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-nav"><a href="../../agentweave.html">Home</a></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">9</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">9</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">24</span> criteria</p>
+<section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL create a `spec_documents` row for a specification file that exists in the project&#x27;s `spec/` tree and has no row, deriving the document&#x27;s identity from the file&#x27;s own content. The adopted document MUST thereafter be indistinguishable from one created through the Hub, so that phase transitions, requirement indexing, coverage, evidence and task materialisation all operate on it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Adoption SHALL be read-only on disk. No adoption path may write, truncate, rename or delete a specification file, whatever the outcome of the adoption.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Adoption SHALL take the adopted document&#x27;s phase from the `aw-spec-status` metadata the renderer writes into the file, because the payload block does not carry it. Where that metadata is absent, names no known phase, or names a phase the document&#x27;s kind may not be in, adoption SHALL fall back to the phase a newly created document of that kind would receive: `current` for a `capability` document, `exploring` otherwise.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Adoption SHALL refuse a file from which no payload block can be read, rather than inventing an identity for it. The Hub has no title or kind for such a file, and a guessed name would enter a file that outlives the machine that guessed it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 9</span><p><span class="aw-modal aw-modal-must">MUST</span> Where the adopted path already has a `spec_documents` row, adoption SHALL refuse and SHALL report every field on which the file and the row disagree. Adoption MUST NOT update an existing row from a file: resolving that disagreement is a separate operator decision.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL offer adoption of every adoptable document in the project&#x27;s `spec/` tree in a single operation, so that a project whose database was created after its files — a clone, a migration, or a restored machine — is recoverable without one call per document.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 7 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Adoption SHALL resolve every path through the project workspace and SHALL refuse any path that escapes the project&#x27;s `spec/` tree, on the same terms as existing document discovery.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 8 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Once adopted, a document SHALL be filed into `spec/index.json` by the existing reindex operation, carrying its real title and kind rather than being reported as unindexable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 9 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where the operator&#x27;s document browser lists a specification file that exists on disk and has no document record, the interface SHALL offer to adopt it there, and SHALL offer to adopt every such file at once.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A clone, a restore or a second machine produces a corpus whose files predate its records. The browser already shows those files; showing them without a way to track them leaves the operator looking at documents the Hub cannot move through any phase. Each refusal or skip SHALL be shown with the reason the Hub gave, including the disagreements an already-tracked path reports, and a corpus-wide adoption SHALL show its discovery diagnostics, so a truncated sweep is not presented as a complete one.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator adopts a path under `spec/` that holds a document carrying a readable</td><td>a row is created whose `title` and `kind` are the payload&#x27;s own `title` and `kind` the response reports the document&#x27;s identifier and the path adopted</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document declaring requirements is adopted</td><td>its requirements are indexed against the new row each requirement is resolvable by its identifier through the existing requirement lookup</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a change-spec document in `exploring` is adopted and the operator then closes exploration</td><td>the transition succeeds against the adopted row</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document is adopted successfully</td><td>the file&#x27;s bytes are identical to what they were before the call</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an adoption is refused for any reason</td><td>the file&#x27;s bytes are identical to what they were before the call</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>corpus-wide adoption runs over a directory of documents</td><td>every file in that directory is byte-identical to what it was before the call</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document whose `aw-spec-status` is `current` and whose payload `kind` is `capability` is</td><td>the row&#x27;s phase is `current`</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document carrying a valid payload but no `aw-spec-status` metadata is adopted</td><td>the row&#x27;s phase is `current` if its payload `kind` is `capability`, and `exploring` the response reports that the phase was defaulted rather than read</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document whose `aw-spec-status` names no known phase is adopted</td><td>the row&#x27;s phase is the kind-derived default the response reports the unrecognised value</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document whose `aw-spec-status` names a known phase that its own kind may not be in is</td><td>the row&#x27;s phase is the kind-derived default the response reports the value the file carried the document is adopted rather than refused</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator adopts a path holding an HTML file with no `aw-spec-payload` block</td><td>the adoption is refused with a reason naming the missing payload no `spec_documents` row is created for that path</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the payload block is present but is not valid JSON, or is not a JSON object</td><td>the adoption is refused with a reason naming the unreadable payload no `spec_documents` row is created for that path</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator adopts a path that already has a row</td><td>the adoption is refused the existing row is unchanged</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an adoption is refused because a row exists, and the file&#x27;s title, kind or phase differ</td><td>the response names each differing field with both the file&#x27;s value and the row&#x27;s value</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an adoption is refused because a row exists, and the file and row agree on title, kind</td><td>the response reports no differing fields</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>corpus-wide adoption runs over a `spec/` tree containing untracked documents that carry</td><td>a row is created for each of them the response lists each adopted path</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>corpus-wide adoption encounters a document with no readable payload, or a path that</td><td>that document is skipped with a stated reason the remaining adoptable documents are still adopted</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>corpus-wide adoption is run twice in succession with no intervening change</td><td>the second run adopts nothing, reports every path as already tracked, and creates no</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator adopts a path that resolves outside the project&#x27;s `spec/` directory</td><td>the adoption is refused no row is created</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the adopted path traverses outside the project workspace root</td><td>the adoption is refused before the file is read</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document that reindex previously reported as `unindexable_document` is adopted, and</td><td>the document appears in `spec/index.json` with the title and kind from its payload it is no longer reported as unindexable</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the specification tree is listed after an adopted document has been filed</td><td>that document&#x27;s entry carries a non-null document identifier and its phase</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the browser lists a file with no document record the operator adopts it from that row</td><td>a document record exists for it the row no longer offers adoption</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>several listed files have no document record the operator adopts them all</td><td>each adoptable file gains a record each skipped file is shown with its reason</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/spec-document-adoption/spec.md (9 requirements, 24 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 24 of 24 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Spec document adoption",
+  "summary": "",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "adopting-a-document-that-already-exists-on-disk",
+      "statement": "The Hub SHALL create a `spec_documents` row for a specification file that exists in the project's `spec/` tree and has no row, deriving the document's identity from the file's own content. The adopted document MUST thereafter be indistinguishable from one created through the Hub, so that phase transitions, requirement indexing, coverage, evidence and task materialisation all operate on it.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "adoption-never-modifies-the-file",
+      "statement": "Adoption SHALL be read-only on disk. No adoption path may write, truncate, rename or delete a specification file, whatever the outcome of the adoption.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "phase-is-derived-from-the-document-s-own-status",
+      "statement": "Adoption SHALL take the adopted document's phase from the `aw-spec-status` metadata the renderer writes into the file, because the payload block does not carry it. Where that metadata is absent, names no known phase, or names a phase the document's kind may not be in, adoption SHALL fall back to the phase a newly created document of that kind would receive: `current` for a `capability` document, `exploring` otherwise.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-file-with-no-readable-payload-is-refused",
+      "statement": "Adoption SHALL refuse a file from which no payload block can be read, rather than inventing an identity for it. The Hub has no title or kind for such a file, and a guessed name would enter a file that outlives the machine that guessed it.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "an-already-tracked-path-is-refused-with-its-disagreements-re",
+      "statement": "Where the adopted path already has a `spec_documents` row, adoption SHALL refuse and SHALL report every field on which the file and the row disagree. Adoption MUST NOT update an existing row from a file: resolving that disagreement is a separate operator decision.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-corpus-is-adoptable-in-one-operation",
+      "statement": "The Hub SHALL offer adoption of every adoptable document in the project's `spec/` tree in a single operation, so that a project whose database was created after its files — a clone, a migration, or a restored machine — is recoverable without one call per document.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "adoption-only-reaches-documents-inside-the-project-s-spec-tr",
+      "statement": "Adoption SHALL resolve every path through the project workspace and SHALL refuse any path that escapes the project's `spec/` tree, on the same terms as existing document discovery.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "an-adopted-document-becomes-indexable",
+      "statement": "Once adopted, a document SHALL be filed into `spec/index.json` by the existing reindex operation, carrying its real title and kind rather than being reported as unindexable.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "an-untracked-document-is-adoptable-from-where-it-is-listed",
+      "statement": "Where the operator's document browser lists a specification file that exists on disk and has no document record, the interface SHALL offer to adopt it there, and SHALL offer to adopt every such file at once.",
+      "modal": "SHALL",
+      "rationale": "A clone, a restore or a second machine produces a corpus whose files predate its records. The browser already shows those files; showing them without a way to track them leaves the operator looking at documents the Hub cannot move through any phase. Each refusal or skip SHALL be shown with the reason the Hub gave, including the disagreements an already-tracked path reports, and a corpus-wide adoption SHALL show its discovery diagnostics, so a truncated sweep is not presented as a complete one.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "adopting-a-document-that-already-exists-on-disk",
+      "given": "",
+      "when": "the operator adopts a path under `spec/` that holds a document carrying a readable",
+      "then": "a row is created whose `title` and `kind` are the payload's own `title` and `kind` the response reports the document's identifier and the path adopted"
+    },
+    {
+      "key": "ac2",
+      "requirement": "adopting-a-document-that-already-exists-on-disk",
+      "given": "",
+      "when": "a document declaring requirements is adopted",
+      "then": "its requirements are indexed against the new row each requirement is resolvable by its identifier through the existing requirement lookup"
+    },
+    {
+      "key": "ac3",
+      "requirement": "adopting-a-document-that-already-exists-on-disk",
+      "given": "",
+      "when": "a change-spec document in `exploring` is adopted and the operator then closes exploration",
+      "then": "the transition succeeds against the adopted row"
+    },
+    {
+      "key": "ac4",
+      "requirement": "adoption-never-modifies-the-file",
+      "given": "",
+      "when": "a document is adopted successfully",
+      "then": "the file's bytes are identical to what they were before the call"
+    },
+    {
+      "key": "ac5",
+      "requirement": "adoption-never-modifies-the-file",
+      "given": "",
+      "when": "an adoption is refused for any reason",
+      "then": "the file's bytes are identical to what they were before the call"
+    },
+    {
+      "key": "ac6",
+      "requirement": "adoption-never-modifies-the-file",
+      "given": "",
+      "when": "corpus-wide adoption runs over a directory of documents",
+      "then": "every file in that directory is byte-identical to what it was before the call"
+    },
+    {
+      "key": "ac7",
+      "requirement": "phase-is-derived-from-the-document-s-own-status",
+      "given": "",
+      "when": "a document whose `aw-spec-status` is `current` and whose payload `kind` is `capability` is",
+      "then": "the row's phase is `current`"
+    },
+    {
+      "key": "ac8",
+      "requirement": "phase-is-derived-from-the-document-s-own-status",
+      "given": "",
+      "when": "a document carrying a valid payload but no `aw-spec-status` metadata is adopted",
+      "then": "the row's phase is `current` if its payload `kind` is `capability`, and `exploring` the response reports that the phase was defaulted rather than read"
+    },
+    {
+      "key": "ac9",
+      "requirement": "phase-is-derived-from-the-document-s-own-status",
+      "given": "",
+      "when": "a document whose `aw-spec-status` names no known phase is adopted",
+      "then": "the row's phase is the kind-derived default the response reports the unrecognised value"
+    },
+    {
+      "key": "ac10",
+      "requirement": "phase-is-derived-from-the-document-s-own-status",
+      "given": "",
+      "when": "a document whose `aw-spec-status` names a known phase that its own kind may not be in is",
+      "then": "the row's phase is the kind-derived default the response reports the value the file carried the document is adopted rather than refused"
+    },
+    {
+      "key": "ac11",
+      "requirement": "a-file-with-no-readable-payload-is-refused",
+      "given": "",
+      "when": "the operator adopts a path holding an HTML file with no `aw-spec-payload` block",
+      "then": "the adoption is refused with a reason naming the missing payload no `spec_documents` row is created for that path"
+    },
+    {
+      "key": "ac12",
+      "requirement": "a-file-with-no-readable-payload-is-refused",
+      "given": "",
+      "when": "the payload block is present but is not valid JSON, or is not a JSON object",
+      "then": "the adoption is refused with a reason naming the unreadable payload no `spec_documents` row is created for that path"
+    },
+    {
+      "key": "ac13",
+      "requirement": "an-already-tracked-path-is-refused-with-its-disagreements-re",
+      "given": "",
+      "when": "the operator adopts a path that already has a row",
+      "then": "the adoption is refused the existing row is unchanged"
+    },
+    {
+      "key": "ac14",
+      "requirement": "an-already-tracked-path-is-refused-with-its-disagreements-re",
+      "given": "",
+      "when": "an adoption is refused because a row exists, and the file's title, kind or phase differ",
+      "then": "the response names each differing field with both the file's value and the row's value"
+    },
+    {
+      "key": "ac15",
+      "requirement": "an-already-tracked-path-is-refused-with-its-disagreements-re",
+      "given": "",
+      "when": "an adoption is refused because a row exists, and the file and row agree on title, kind",
+      "then": "the response reports no differing fields"
+    },
+    {
+      "key": "ac16",
+      "requirement": "a-corpus-is-adoptable-in-one-operation",
+      "given": "",
+      "when": "corpus-wide adoption runs over a `spec/` tree containing untracked documents that carry",
+      "then": "a row is created for each of them the response lists each adopted path"
+    },
+    {
+      "key": "ac17",
+      "requirement": "a-corpus-is-adoptable-in-one-operation",
+      "given": "",
+      "when": "corpus-wide adoption encounters a document with no readable payload, or a path that",
+      "then": "that document is skipped with a stated reason the remaining adoptable documents are still adopted"
+    },
+    {
+      "key": "ac18",
+      "requirement": "a-corpus-is-adoptable-in-one-operation",
+      "given": "",
+      "when": "corpus-wide adoption is run twice in succession with no intervening change",
+      "then": "the second run adopts nothing, reports every path as already tracked, and creates no"
+    },
+    {
+      "key": "ac19",
+      "requirement": "adoption-only-reaches-documents-inside-the-project-s-spec-tr",
+      "given": "",
+      "when": "the operator adopts a path that resolves outside the project's `spec/` directory",
+      "then": "the adoption is refused no row is created"
+    },
+    {
+      "key": "ac20",
+      "requirement": "adoption-only-reaches-documents-inside-the-project-s-spec-tr",
+      "given": "",
+      "when": "the adopted path traverses outside the project workspace root",
+      "then": "the adoption is refused before the file is read"
+    },
+    {
+      "key": "ac21",
+      "requirement": "an-adopted-document-becomes-indexable",
+      "given": "",
+      "when": "a document that reindex previously reported as `unindexable_document` is adopted, and",
+      "then": "the document appears in `spec/index.json` with the title and kind from its payload it is no longer reported as unindexable"
+    },
+    {
+      "key": "ac22",
+      "requirement": "an-adopted-document-becomes-indexable",
+      "given": "",
+      "when": "the specification tree is listed after an adopted document has been filed",
+      "then": "that document's entry carries a non-null document identifier and its phase"
+    },
+    {
+      "key": "ac23",
+      "requirement": "an-untracked-document-is-adoptable-from-where-it-is-listed",
+      "given": "",
+      "when": "the browser lists a file with no document record the operator adopts it from that row",
+      "then": "a document record exists for it the row no longer offers adoption"
+    },
+    {
+      "key": "ac24",
+      "requirement": "an-untracked-document-is-adoptable-from-where-it-is-listed",
+      "given": "",
+      "when": "several listed files have no document record the operator adopts them all",
+      "then": "each adoptable file gains a record each skipped file is shown with its reason"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/spec-document-adoption/spec.md (9 requirements, 24 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenarios-state-no-starting-state: 24 of 24 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "adopting-a-document-that-already-exists-on-disk": "FR-1",
+      "adoption-never-modifies-the-file": "FR-2",
+      "phase-is-derived-from-the-document-s-own-status": "FR-3",
+      "a-file-with-no-readable-payload-is-refused": "FR-4",
+      "an-already-tracked-path-is-refused-with-its-disagreements-re": "FR-5",
+      "a-corpus-is-adoptable-in-one-operation": "FR-6",
+      "adoption-only-reaches-documents-inside-the-project-s-spec-tr": "FR-7",
+      "an-adopted-document-becomes-indexable": "FR-8",
+      "an-untracked-document-is-adoptable-from-where-it-is-listed": "FR-9"
+    },
+    "high_water": 9,
+    "retired": {},
+    "digests": {
+      "FR-1": "1c0a180569b7d9131173ef2d53e9a4565e1be77fd3be7a4d82e97e545587488c",
+      "FR-2": "c80ff1d50885b68c5f059c1688709d6432e58abb92dc0bf31679f6df2ff5309e",
+      "FR-3": "33a149d4c3443620c1578c8e99f38f92ce21131f81e676e76f062ce0cbd0e303",
+      "FR-4": "eac070617fe33ca2cce91be7d64d81f5bb440d340054ad86b56838e782de1f06",
+      "FR-5": "f91724960cfe919ece159a7beef40b52708b438fcb12c2a841c40cd46f08abfd",
+      "FR-6": "55bed5c613d67a0b887132af5a2ddeebd004b5a784199cfefec41e7b0127ed4d",
+      "FR-7": "fb1804b1c94931b343372f83d3b1177fc94f79db145ca32694cf7b84e5e98ad5",
+      "FR-8": "fcb2501bb80cbf055b15009a3090235ab02207e627ef84fd125912327b1630b7",
+      "FR-9": "5a0a64737f7dd565497f1039946f7ff8d1f7128a8b538468bfa599e21d191612"
+    }
+  }
+}
+</script>
+</body>
+</html>

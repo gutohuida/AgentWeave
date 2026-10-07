@@ -123,6 +123,22 @@
       "order": 90
     },
     {
+      "path": "spec/capabilities/agent-document-creation/spec.html",
+      "title": "Agent document creation",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 420
+    },
+    {
+      "path": "spec/capabilities/agent-flows/spec.html",
+      "title": "Agent flows",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 430
+    },
+    {
       "path": "spec/capabilities/agent-loops/spec.html",
       "title": "Agent loops",
       "kind": "capability",
@@ -187,6 +203,14 @@
       "order": 170
     },
     {
+      "path": "spec/capabilities/hub-api-request-contract/spec.html",
+      "title": "Hub api request contract",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 440
+    },
+    {
       "path": "spec/capabilities/hub-interaction-feedback/spec.html",
       "title": "Hub interaction feedback",
       "kind": "capability",
@@ -211,6 +235,14 @@
       "order": 200
     },
     {
+      "path": "spec/capabilities/loop-firing-accountability/spec.html",
+      "title": "Loop firing accountability",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 450
+    },
+    {
       "path": "spec/capabilities/model-catalog/spec.html",
       "title": "Model catalog",
       "kind": "capability",
@@ -233,6 +265,14 @@
       "status": "current",
       "parent": "spec/areas/agents-and-execution.html",
       "order": 230
+    },
+    {
+      "path": "spec/capabilities/project-checks/spec.html",
+      "title": "Project checks",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 460
     },
     {
       "path": "spec/capabilities/project-environment-settings/spec.html",
@@ -299,12 +339,52 @@
       "order": 290
     },
     {
+      "path": "spec/capabilities/spec-corpus-map/spec.html",
+      "title": "Spec corpus map",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 470
+    },
+    {
+      "path": "spec/capabilities/spec-document-adoption/spec.html",
+      "title": "Spec document adoption",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 480
+    },
+    {
       "path": "spec/capabilities/spec-document-authority/spec.html",
       "title": "Spec document authority",
       "kind": "capability",
       "status": "current",
       "parent": "spec/areas/specification.html",
       "order": 300
+    },
+    {
+      "path": "spec/capabilities/spec-roadmaps/spec.html",
+      "title": "Spec roadmaps",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 490
+    },
+    {
+      "path": "spec/capabilities/task-dependencies/spec.html",
+      "title": "Task dependencies",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 500
+    },
+    {
+      "path": "spec/capabilities/task-dependency-board/spec.html",
+      "title": "Task dependency board",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 510
     },
     {
       "path": "spec/capabilities/task-lifecycle-governance/spec.html",
@@ -323,12 +403,68 @@
       "order": 320
     },
     {
+      "path": "spec/capabilities/turn-outcome-visibility/spec.html",
+      "title": "Turn outcome visibility",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 520
+    },
+    {
       "path": "spec/capabilities/usage-accounting/spec.html",
       "title": "Usage accounting",
       "kind": "capability",
       "status": "current",
       "parent": "spec/areas/the-local-instance.html",
       "order": 330
+    },
+    {
+      "path": "spec/capabilities/workspace-isolation/spec.html",
+      "title": "Workspace isolation",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 530
+    },
+    {
+      "path": "spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/spec.html",
+      "title": "A review turn reviews the branch tip where evidence does not govern the merge",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 540
+    },
+    {
+      "path": "spec/changes/same-file-tasks-build-in-order-the-shim-planner-is-told/spec.html",
+      "title": "Slice 1b: a planner on the aw-tool path is told about files and same-file ordering",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 550
+    },
+    {
+      "path": "spec/changes/same-file-tasks-build-in-order/spec.html",
+      "title": "Tasks of one slice that edit the same files build in order",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 560
+    },
+    {
+      "path": "spec/changes/same-file-tasks-run-in-order-roadmap/spec.html",
+      "title": "Same-file tasks of a slice run in order",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 570
+    },
+    {
+      "path": "spec/changes/submission-warns-when-a-multi-task-planner-declares-no-files/spec.html",
+      "title": "Submission warns when a multi-task planner declares no files",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 580
     }
   ]
 }

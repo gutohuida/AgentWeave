@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task dependencies</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Task dependencies</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-nav"><a href="../../agentweave.html">Home</a></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">11</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">11</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">40</span> criteria</p>
+<section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> A specification document&#x27;s declared tasks SHALL be able to name other tasks in the same document that must finish before they may begin, referenced by the task key the document already assigns.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A decomposition without order is a claim that every piece of work can start at once, which is almost never true. Approving one produced a board of tasks all appearing ready, leaving the operator to hold the real order in their head and the agents to discover it by collision. Task keys are already stable handles unique within a document and are already kept across rewordings, so a dependency SHALL be expressed with them rather than with a new identifier.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> A task SHALL NOT be moved to in-progress while any task it depends on is not yet approved, where that move starts work. A task with unmet dependencies SHALL still be assignable, and SHALL still be rejectable.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Being unable to start and having stopped are different states, and the task lifecycle already distinguishes them: a task nobody has started is pending, and the status meaning &quot;stopped&quot; is reachable only from in-progress and denotes work waiting on something a person must supply. A dependency is a precondition on the act of starting, not a property the task carries. Assignability is deliberate: it is what allows an entire wave of work to be assigned in advance, with each task starting when its own prerequisites clear. **Resuming a stopped task is not starting it, and is not gated.** This reverses the resumption scenario this requirement previously carried, and the reversal follows from the paragraph above rather than from a new judgement. The waiting status is reachable only from in-progress, and the edge into in-progress is the gated one — so a task that is waiting has already passed this gate and has already begun. It follows that a prerequisite can only fail at the resume edge if it changed *after* the task started: it left approved, or it was declared while the task was already waiting. The first of those is the case the sibling requirement below already governs — a dependent that has started continues, flagged rather than stopped — so gating the resume edge contradicts it. The second is a dependency declared against work already under way, and it is likewise too late to prevent that work: the gate would not stop the work, only the record of it. The cost of gating it is not symmetrical with the cost of not gating it. A refused resumption strands the task: the operator&#x27;s answer releases nothing, and an agent whose question went unanswered is refused the completion of work it has already finished, with no action available to it either way. An ungated resumption returns a task to the state the regression requirement below already describes and already requires to be surfaced.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> A dependency SHALL count as met only when the task depended upon has reached approved.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Completion is the author&#x27;s claim that work is done; approval is a second party&#x27;s agreement that it is. Advancing on completion would let each wave build on work that has not been reviewed and may be sent back, and the product&#x27;s review separation exists because that distinction is worth enforcing. A consequence follows and is intended: because approval is also where a task&#x27;s requirement coverage is judged, a chain of dependent work cannot advance past work whose requirements are unverified. A second consequence follows and must be accommodated rather than resisted: every wave passes through review, and review requires a party other than the author.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where a task depended upon leaves approved after a dependent has already started, the dependent SHALL continue, and the situation SHALL be surfaced.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The gate is a precondition evaluated when work starts, not an invariant maintained while it runs. Halting a running task would take work away from an agent mid-turn on the strength of a change to a different task, which is a larger intervention than the situation warrants and one nothing can undo cleanly.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where a task depends on a task that has been rejected, the Hub SHALL report that the dependent is gated on rejected work and SHALL NOT release, reject, or otherwise resolve the dependent on the operator&#x27;s behalf.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A rejected task will never reach approved, so its dependents can never start, and the transition out of rejected is the operator&#x27;s alone. That is a decision — reopen the rejected work, or change the document so the dependency no longer exists — and both answers are sometimes right. Propagating rejection to dependents is refused: one rejection would cascade through a decomposition without the operator seeing it happen. Treating rejected as met is refused: a task would become startable because its prerequisite was abandoned.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> A document SHALL be able to declare a task belonging to another document as an entry of its own, marked as imported, so that its local tasks may depend on it using a local key.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Work crosses documents. Expressing that with a qualified reference inside the dependency field would give one field two grammars; declaring the foreign task as an entry keeps dependencies a list of local keys, makes the dependency visible to a reader of the document rather than only to a screen, and keeps a per-document view able to lay itself out without consulting another document. An imported entry SHALL resolve to the existing task and SHALL NOT create one. An import whose referenced task cannot be found SHALL be preserved and reported rather than dropped.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 7 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> An imported entry SHALL name a document that has been approved. An import naming a document in any other phase SHALL be reported as blocking a proposal.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Two things follow from the restriction, and both are the reason for it. An approved document&#x27;s path is permanent, so the reference cannot be broken by a rename. And an approved document has already produced its tasks, so the task being imported is guaranteed to exist. The check SHALL be reported at submission rather than refused, consistent with the standing rule that a document under discussion is incomplete by definition and that it is the transition to proposed that cares. An author must be able to write down a dependency on work that is still being explored.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 8 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where a task has no owning specification document, the Hub SHALL refuse to record a dependency for it and SHALL state why.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A dependency is declared by a document, and a task created by hand belongs to none — so there is nothing that could declare its edges and no place the edge could be written down. The refusal exists so that this reads as a rule rather than as a feature quietly not working.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 9 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> A document&#x27;s task MAY name a reviewer, and the Hub SHALL treat that name as a hint to be resolved rather than as an agent identity. A task naming no reviewer SHALL validate and materialise exactly as one authored before this field existed.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A named reviewer that resolves to nothing on this machine SHALL be preserved and reported, and SHALL NOT cause the document to be refused. A document is committed and is expected to reproduce on a machine whose agent roster differs from its author&#x27;s, so an unresolvable name is an ordinary condition rather than an error.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 10 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> An operator SHALL be able to declare that one task depends on another, for tasks they created, without authoring a specification document.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Today dependency rows are written in exactly one place, reached only when an approved document carries ordering keys. The task-update surface refuses the field and no dependency route exists. So an operator cannot say &quot;B needs A&quot; about two tasks they made, and the whole subsystem — the gate, the board tab, two tables, and the prerequisite and dependent fields on every task — is reachable only if an agent happens to author the right keys into a document that is then approved. In the sweep the agent authored no ordering at all, so the graph came out empty and the gate was never exercisable. Both paths SHALL write dependencies through one shared writer, so the graph cannot be built two different ways.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span><a class="aw-anchor-copy" href="#FR-11" aria-label="Link to FR-11" title="Link to #FR-11">#</a> <span class="aw-position">Requirement 11 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> A task&#x27;s isolated checkout SHALL contain the work of every prerequisite the task was permitted to start on, whether or not that work reached the project&#x27;s main branch.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A dependency is met at `approved`, and approval attempts integration — but integration is best-effort and never blocks an approval, so a prerequisite can be `approved` with its work not on the main branch: the project may have no main branch named, the accepted evidence may name no commit at all, the operator&#x27;s own checkout may be mid-edit or parked elsewhere, or the merge may have failed outright. Isolating work per task removes the accident that used to cover this, which was that a dependent held by the same agent inherited the prerequisite&#x27;s commits because it was literally the same branch. The checkout SHALL be created from the branch approved work is integrated into, and each direct prerequisite&#x27;s commit **that the system would integrate for that prerequisite** SHALL then be brought in where it is not already contained. A prerequisite for which no commit would be integrated contributes nothing, because there is no commit to bring; that is a supported project shape, not a failure. **This sentence named a prerequisite&#x27;s accepted evidence commit until now, because evidence was the only thing that could name what a task integrates.** It no longer is: a task whose loop declared that its work needs no evidence integrates its own branch, and for such a prerequisite there is no accepted evidence commit to bring, so the unamended sentence would carry nothing while the requirement&#x27;s own opening sentence says the successor&#x27;s checkout must contain that work. The two are reconciled by naming the answer rather than one of its sources — the same answer approval would merge, asked one place earlier. **Only a prerequisite that is `approved` SHALL contribute.** A dependency is met at `approved` and nothing earlier, so this is what the gate already guarantees for every prerequisite a task was *permitted* to start on — but it SHALL be enforced here rather than assumed, because a task&#x27;s branch can be created before the gate has fired, and bringing an unapproved prerequisite&#x27;s work into a checkout an agent is about to write in would place work nobody has judged under the successor&#x27;s authorship. Where a prerequisite&#x27;s work is integrated from evidence, this changes nothing: evidence that has not been accepted names no commit anyway. Where a prerequisite&#x27;s work cannot be brought in without conflict, the turn SHALL NOT start, and the refusal SHALL name the prerequisite. Starting an agent on a checkout that silently lacks what it was told to build on produces work against the wrong base and evidence that describes a tree nobody reviewed.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document declaring a task that depends on a sibling task is approved</td><td>both tasks are created the dependency between them is recorded</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a submitted document declares a dependency on a key that no task in the document defines</td><td>the submission is accepted the unresolved key is reported as blocking a proposal</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a submitted document declares tasks whose dependencies form a cycle</td><td>the submission is accepted the cycle is reported as blocking a proposal</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document declaring tasks with no dependencies is approved</td><td>the tasks are created with no dependency recorded none of them is prevented from starting</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task whose prerequisite is not approved is moved to in-progress</td><td>the move is refused the refusal names the prerequisite that is not met</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task whose prerequisite is not approved is assigned to an agent</td><td>the assignment succeeds</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator rejects a task whose prerequisite is not approved</td><td>the rejection succeeds</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the last unapproved prerequisite of a task becomes approved</td><td>that task may be moved to in-progress</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a task waiting on a person, whose prerequisite is not approved</td><td>the wait ends by any route</td><td>the task returns to in-progress the return is not refused for the unmet prerequisite</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a task waiting on a person</td><td>a dependency on unapproved work is declared against it, and the wait then ends</td><td>the task returns to in-progress the unmet prerequisite is reported against the task</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a loop&#x27;s board and the transition service are each asked whether a waiting task may</td><td>neither refuses it</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a prerequisite reaches completed and has not been approved</td><td>its dependent still cannot be started</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a prerequisite reaches approved</td><td>its dependent may be started</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an approved prerequisite is moved back to a state needing revision, and its dependent is</td><td>the dependent&#x27;s status is unchanged</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a dependent is running on a prerequisite that has left approved</td><td>that situation is reported against the dependent</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task whose prerequisite has been rejected is moved to in-progress</td><td>the move is refused</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task is gated on a rejected prerequisite</td><td>the report names the rejected task</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task with dependents is rejected</td><td>the status of its dependents is unchanged</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document declaring an imported entry and a local task depending on it is approved</td><td>the local task is created its dependency is recorded against the existing foreign task</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document declaring an imported entry is approved</td><td>no new task is created for that entry</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an imported entry names a task that cannot be found</td><td>the reference is preserved it is reported</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document is submitted with an import naming a document that is still exploring</td><td>the submission is accepted the import is reported as blocking a proposal</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>that document is proposed</td><td>the proposal is refused</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the imported document reaches approved and the importing document is proposed again</td><td>the import no longer blocks</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a dependency is recorded for a task with no owning document</td><td>it is refused the refusal states that dependencies are declared by a document</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a payload whose task names a reviewer is rendered and read back</td><td>the recovered payload names the same reviewer</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a payload whose tasks name no reviewer is submitted</td><td>it validates and materialises exactly as it did before this field existed</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document names a reviewer matching no charter and no agent in this project</td><td>the submission succeeds the unresolvable name is reported among the document&#x27;s blocking items the name is preserved on the task rather than discarded</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document naming a reviewer is materialised</td><td>no task is assigned to an agent as a result of the name alone</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator declares that task B depends on task A</td><td>the dependency SHALL be recorded the existing gate SHALL apply to B unchanged</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a declared dependency would create a cycle</td><td>it SHALL be refused, naming the cycle</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a declared dependency names a task that does not exist</td><td>it SHALL be refused, naming which one</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an approved document declares ordering between its own tasks</td><td>the dependencies SHALL be recorded exactly as before</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator removes a declared dependency</td><td>it SHALL no longer gate the dependent task</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task starts whose prerequisite is approved and whose work did not reach the main branch</td><td>the task&#x27;s checkout contains that prerequisite&#x27;s work</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task starts whose prerequisite belongs to a loop that declared its work needs no</td><td>the task&#x27;s checkout contains that prerequisite&#x27;s work it was not required to have recorded any evidence for that to happen</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task&#x27;s checkout is created while a prerequisite of it is not yet approved</td><td>that prerequisite&#x27;s work is not brought in the turn is not refused on account of it</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task starts whose prerequisite&#x27;s work was integrated into the main branch</td><td>the task&#x27;s checkout contains that work once, not twice</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task starts whose prerequisite&#x27;s accepted evidence names paths rather than a commit</td><td>the checkout is created without refusing the turn</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>bringing a prerequisite&#x27;s work into a new task checkout conflicts</td><td>the turn does not start the reason names the prerequisite whose work could not be brought in</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/task-dependencies/spec.md (11 requirements, 40 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 38 of 40 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Task dependencies",
+  "summary": "",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-document-declares-the-order-of-its-own-tasks",
+      "statement": "A specification document's declared tasks SHALL be able to name other tasks in the same document that must finish before they may begin, referenced by the task key the document already assigns.",
+      "modal": "SHALL",
+      "rationale": "A decomposition without order is a claim that every piece of work can start at once, which is almost never true. Approving one produced a board of tasks all appearing ready, leaving the operator to hold the real order in their head and the agents to discover it by collision. Task keys are already stable handles unique within a document and are already kept across rewordings, so a dependency SHALL be expressed with them rather than with a new identifier.",
+      "party": null
+    },
+    {
+      "key": "an-unmet-dependency-prevents-starting-and-nothing-else",
+      "statement": "A task SHALL NOT be moved to in-progress while any task it depends on is not yet approved, where that move starts work. A task with unmet dependencies SHALL still be assignable, and SHALL still be rejectable.",
+      "modal": "SHALL",
+      "rationale": "Being unable to start and having stopped are different states, and the task lifecycle already distinguishes them: a task nobody has started is pending, and the status meaning \"stopped\" is reachable only from in-progress and denotes work waiting on something a person must supply. A dependency is a precondition on the act of starting, not a property the task carries. Assignability is deliberate: it is what allows an entire wave of work to be assigned in advance, with each task starting when its own prerequisites clear. **Resuming a stopped task is not starting it, and is not gated.** This reverses the resumption scenario this requirement previously carried, and the reversal follows from the paragraph above rather than from a new judgement. The waiting status is reachable only from in-progress, and the edge into in-progress is the gated one — so a task that is waiting has already passed this gate and has already begun. It follows that a prerequisite can only fail at the resume edge if it changed *after* the task started: it left approved, or it was declared while the task was already waiting. The first of those is the case the sibling requirement below already governs — a dependent that has started continues, flagged rather than stopped — so gating the resume edge contradicts it. The second is a dependency declared against work already under way, and it is likewise too late to prevent that work: the gate would not stop the work, only the record of it. The cost of gating it is not symmetrical with the cost of not gating it. A refused resumption strands the task: the operator's answer releases nothing, and an agent whose question went unanswered is refused the completion of work it has already finished, with no action available to it either way. An ungated resumption returns a task to the state the regression requirement below already describes and already requires to be surfaced.",
+      "party": null
+    },
+    {
+      "key": "a-dependency-is-met-at-approval-not-at-completion",
+      "statement": "A dependency SHALL count as met only when the task depended upon has reached approved.",
+      "modal": "SHALL",
+      "rationale": "Completion is the author's claim that work is done; approval is a second party's agreement that it is. Advancing on completion would let each wave build on work that has not been reviewed and may be sent back, and the product's review separation exists because that distinction is worth enforcing. A consequence follows and is intended: because approval is also where a task's requirement coverage is judged, a chain of dependent work cannot advance past work whose requirements are unverified. A second consequence follows and must be accommodated rather than resisted: every wave passes through review, and review requires a party other than the author.",
+      "party": null
+    },
+    {
+      "key": "a-dependency-that-regresses-after-a-dependent-has-started-do",
+      "statement": "Where a task depended upon leaves approved after a dependent has already started, the dependent SHALL continue, and the situation SHALL be surfaced.",
+      "modal": "SHALL",
+      "rationale": "The gate is a precondition evaluated when work starts, not an invariant maintained while it runs. Halting a running task would take work away from an agent mid-turn on the strength of a change to a different task, which is a larger intervention than the situation warrants and one nothing can undo cleanly.",
+      "party": null
+    },
+    {
+      "key": "a-dependency-on-rejected-work-is-surfaced-never-resolved",
+      "statement": "Where a task depends on a task that has been rejected, the Hub SHALL report that the dependent is gated on rejected work and SHALL NOT release, reject, or otherwise resolve the dependent on the operator's behalf.",
+      "modal": "SHALL",
+      "rationale": "A rejected task will never reach approved, so its dependents can never start, and the transition out of rejected is the operator's alone. That is a decision — reopen the rejected work, or change the document so the dependency no longer exists — and both answers are sometimes right. Propagating rejection to dependents is refused: one rejection would cascade through a decomposition without the operator seeing it happen. Treating rejected as met is refused: a task would become startable because its prerequisite was abandoned.",
+      "party": null
+    },
+    {
+      "key": "a-dependency-may-name-a-task-in-another-document-by-importin",
+      "statement": "A document SHALL be able to declare a task belonging to another document as an entry of its own, marked as imported, so that its local tasks may depend on it using a local key.",
+      "modal": "SHALL",
+      "rationale": "Work crosses documents. Expressing that with a qualified reference inside the dependency field would give one field two grammars; declaring the foreign task as an entry keeps dependencies a list of local keys, makes the dependency visible to a reader of the document rather than only to a screen, and keeps a per-document view able to lay itself out without consulting another document. An imported entry SHALL resolve to the existing task and SHALL NOT create one. An import whose referenced task cannot be found SHALL be preserved and reported rather than dropped.",
+      "party": null
+    },
+    {
+      "key": "an-import-may-name-only-an-approved-document",
+      "statement": "An imported entry SHALL name a document that has been approved. An import naming a document in any other phase SHALL be reported as blocking a proposal.",
+      "modal": "SHALL",
+      "rationale": "Two things follow from the restriction, and both are the reason for it. An approved document's path is permanent, so the reference cannot be broken by a rename. And an approved document has already produced its tasks, so the task being imported is guaranteed to exist. The check SHALL be reported at submission rather than refused, consistent with the standing rule that a document under discussion is incomplete by definition and that it is the transition to proposed that cares. An author must be able to write down a dependency on work that is still being explored.",
+      "party": null
+    },
+    {
+      "key": "a-task-belonging-to-no-document-cannot-be-given-a-dependency",
+      "statement": "Where a task has no owning specification document, the Hub SHALL refuse to record a dependency for it and SHALL state why.",
+      "modal": "SHALL",
+      "rationale": "A dependency is declared by a document, and a task created by hand belongs to none — so there is nothing that could declare its edges and no place the edge could be written down. The refusal exists so that this reads as a rule rather than as a feature quietly not working.",
+      "party": null
+    },
+    {
+      "key": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
+      "statement": "A document's task MAY name a reviewer, and the Hub SHALL treat that name as a hint to be resolved rather than as an agent identity. A task naming no reviewer SHALL validate and materialise exactly as one authored before this field existed.",
+      "modal": "SHALL",
+      "rationale": "A named reviewer that resolves to nothing on this machine SHALL be preserved and reported, and SHALL NOT cause the document to be refused. A document is committed and is expected to reproduce on a machine whose agent roster differs from its author's, so an unresolvable name is an ordinary condition rather than an error.",
+      "party": null
+    },
+    {
+      "key": "the-operator-can-declare-a-dependency-between-existing-tasks",
+      "statement": "An operator SHALL be able to declare that one task depends on another, for tasks they created, without authoring a specification document.",
+      "modal": "SHALL",
+      "rationale": "Today dependency rows are written in exactly one place, reached only when an approved document carries ordering keys. The task-update surface refuses the field and no dependency route exists. So an operator cannot say \"B needs A\" about two tasks they made, and the whole subsystem — the gate, the board tab, two tables, and the prerequisite and dependent fields on every task — is reachable only if an agent happens to author the right keys into a document that is then approved. In the sweep the agent authored no ordering at all, so the graph came out empty and the gate was never exercisable. Both paths SHALL write dependencies through one shared writer, so the graph cannot be built two different ways.",
+      "party": null
+    },
+    {
+      "key": "a-task-s-checkout-carries-the-work-it-depends-on",
+      "statement": "A task's isolated checkout SHALL contain the work of every prerequisite the task was permitted to start on, whether or not that work reached the project's main branch.",
+      "modal": "SHALL",
+      "rationale": "A dependency is met at `approved`, and approval attempts integration — but integration is best-effort and never blocks an approval, so a prerequisite can be `approved` with its work not on the main branch: the project may have no main branch named, the accepted evidence may name no commit at all, the operator's own checkout may be mid-edit or parked elsewhere, or the merge may have failed outright. Isolating work per task removes the accident that used to cover this, which was that a dependent held by the same agent inherited the prerequisite's commits because it was literally the same branch. The checkout SHALL be created from the branch approved work is integrated into, and each direct prerequisite's commit **that the system would integrate for that prerequisite** SHALL then be brought in where it is not already contained. A prerequisite for which no commit would be integrated contributes nothing, because there is no commit to bring; that is a supported project shape, not a failure. **This sentence named a prerequisite's accepted evidence commit until now, because evidence was the only thing that could name what a task integrates.** It no longer is: a task whose loop declared that its work needs no evidence integrates its own branch, and for such a prerequisite there is no accepted evidence commit to bring, so the unamended sentence would carry nothing while the requirement's own opening sentence says the successor's checkout must contain that work. The two are reconciled by naming the answer rather than one of its sources — the same answer approval would merge, asked one place earlier. **Only a prerequisite that is `approved` SHALL contribute.** A dependency is met at `approved` and nothing earlier, so this is what the gate already guarantees for every prerequisite a task was *permitted* to start on — but it SHALL be enforced here rather than assumed, because a task's branch can be created before the gate has fired, and bringing an unapproved prerequisite's work into a checkout an agent is about to write in would place work nobody has judged under the successor's authorship. Where a prerequisite's work is integrated from evidence, this changes nothing: evidence that has not been accepted names no commit anyway. Where a prerequisite's work cannot be brought in without conflict, the turn SHALL NOT start, and the refusal SHALL name the prerequisite. Starting an agent on a checkout that silently lacks what it was told to build on produces work against the wrong base and evidence that describes a tree nobody reviewed.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-document-declares-the-order-of-its-own-tasks",
+      "given": "",
+      "when": "a document declaring a task that depends on a sibling task is approved",
+      "then": "both tasks are created the dependency between them is recorded"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-document-declares-the-order-of-its-own-tasks",
+      "given": "",
+      "when": "a submitted document declares a dependency on a key that no task in the document defines",
+      "then": "the submission is accepted the unresolved key is reported as blocking a proposal"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-document-declares-the-order-of-its-own-tasks",
+      "given": "",
+      "when": "a submitted document declares tasks whose dependencies form a cycle",
+      "then": "the submission is accepted the cycle is reported as blocking a proposal"
+    },
+    {
+      "key": "ac4",
+      "requirement": "a-document-declares-the-order-of-its-own-tasks",
+      "given": "",
+      "when": "a document declaring tasks with no dependencies is approved",
+      "then": "the tasks are created with no dependency recorded none of them is prevented from starting"
+    },
+    {
+      "key": "ac5",
+      "requirement": "an-unmet-dependency-prevents-starting-and-nothing-else",
+      "given": "",
+      "when": "a task whose prerequisite is not approved is moved to in-progress",
+      "then": "the move is refused the refusal names the prerequisite that is not met"
+    },
+    {
+      "key": "ac6",
+      "requirement": "an-unmet-dependency-prevents-starting-and-nothing-else",
+      "given": "",
+      "when": "a task whose prerequisite is not approved is assigned to an agent",
+      "then": "the assignment succeeds"
+    },
+    {
+      "key": "ac7",
+      "requirement": "an-unmet-dependency-prevents-starting-and-nothing-else",
+      "given": "",
+      "when": "the operator rejects a task whose prerequisite is not approved",
+      "then": "the rejection succeeds"
+    },
+    {
+      "key": "ac8",
+      "requirement": "an-unmet-dependency-prevents-starting-and-nothing-else",
+      "given": "",
+      "when": "the last unapproved prerequisite of a task becomes approved",
+      "then": "that task may be moved to in-progress"
+    },
+    {
+      "key": "ac9",
+      "requirement": "an-unmet-dependency-prevents-starting-and-nothing-else",
+      "given": "a task waiting on a person, whose prerequisite is not approved",
+      "when": "the wait ends by any route",
+      "then": "the task returns to in-progress the return is not refused for the unmet prerequisite"
+    },
+    {
+      "key": "ac10",
+      "requirement": "an-unmet-dependency-prevents-starting-and-nothing-else",
+      "given": "a task waiting on a person",
+      "when": "a dependency on unapproved work is declared against it, and the wait then ends",
+      "then": "the task returns to in-progress the unmet prerequisite is reported against the task"
+    },
+    {
+      "key": "ac11",
+      "requirement": "an-unmet-dependency-prevents-starting-and-nothing-else",
+      "given": "",
+      "when": "a loop's board and the transition service are each asked whether a waiting task may",
+      "then": "neither refuses it"
+    },
+    {
+      "key": "ac12",
+      "requirement": "a-dependency-is-met-at-approval-not-at-completion",
+      "given": "",
+      "when": "a prerequisite reaches completed and has not been approved",
+      "then": "its dependent still cannot be started"
+    },
+    {
+      "key": "ac13",
+      "requirement": "a-dependency-is-met-at-approval-not-at-completion",
+      "given": "",
+      "when": "a prerequisite reaches approved",
+      "then": "its dependent may be started"
+    },
+    {
+      "key": "ac14",
+      "requirement": "a-dependency-that-regresses-after-a-dependent-has-started-do",
+      "given": "",
+      "when": "an approved prerequisite is moved back to a state needing revision, and its dependent is",
+      "then": "the dependent's status is unchanged"
+    },
+    {
+      "key": "ac15",
+      "requirement": "a-dependency-that-regresses-after-a-dependent-has-started-do",
+      "given": "",
+      "when": "a dependent is running on a prerequisite that has left approved",
+      "then": "that situation is reported against the dependent"
+    },
+    {
+      "key": "ac16",
+      "requirement": "a-dependency-on-rejected-work-is-surfaced-never-resolved",
+      "given": "",
+      "when": "a task whose prerequisite has been rejected is moved to in-progress",
+      "then": "the move is refused"
+    },
+    {
+      "key": "ac17",
+      "requirement": "a-dependency-on-rejected-work-is-surfaced-never-resolved",
+      "given": "",
+      "when": "a task is gated on a rejected prerequisite",
+      "then": "the report names the rejected task"
+    },
+    {
+      "key": "ac18",
+      "requirement": "a-dependency-on-rejected-work-is-surfaced-never-resolved",
+      "given": "",
+      "when": "a task with dependents is rejected",
+      "then": "the status of its dependents is unchanged"
+    },
+    {
+      "key": "ac19",
+      "requirement": "a-dependency-may-name-a-task-in-another-document-by-importin",
+      "given": "",
+      "when": "a document declaring an imported entry and a local task depending on it is approved",
+      "then": "the local task is created its dependency is recorded against the existing foreign task"
+    },
+    {
+      "key": "ac20",
+      "requirement": "a-dependency-may-name-a-task-in-another-document-by-importin",
+      "given": "",
+      "when": "a document declaring an imported entry is approved",
+      "then": "no new task is created for that entry"
+    },
+    {
+      "key": "ac21",
+      "requirement": "a-dependency-may-name-a-task-in-another-document-by-importin",
+      "given": "",
+      "when": "an imported entry names a task that cannot be found",
+      "then": "the reference is preserved it is reported"
+    },
+    {
+      "key": "ac22",
+      "requirement": "an-import-may-name-only-an-approved-document",
+      "given": "",
+      "when": "a document is submitted with an import naming a document that is still exploring",
+      "then": "the submission is accepted the import is reported as blocking a proposal"
+    },
+    {
+      "key": "ac23",
+      "requirement": "an-import-may-name-only-an-approved-document",
+      "given": "",
+      "when": "that document is proposed",
+      "then": "the proposal is refused"
+    },
+    {
+      "key": "ac24",
+      "requirement": "an-import-may-name-only-an-approved-document",
+      "given": "",
+      "when": "the imported document reaches approved and the importing document is proposed again",
+      "then": "the import no longer blocks"
+    },
+    {
+      "key": "ac25",
+      "requirement": "a-task-belonging-to-no-document-cannot-be-given-a-dependency",
+      "given": "",
+      "when": "a dependency is recorded for a task with no owning document",
+      "then": "it is refused the refusal states that dependencies are declared by a document"
+    },
+    {
+      "key": "ac26",
+      "requirement": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
+      "given": "",
+      "when": "a payload whose task names a reviewer is rendered and read back",
+      "then": "the recovered payload names the same reviewer"
+    },
+    {
+      "key": "ac27",
+      "requirement": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
+      "given": "",
+      "when": "a payload whose tasks name no reviewer is submitted",
+      "then": "it validates and materialises exactly as it did before this field existed"
+    },
+    {
+      "key": "ac28",
+      "requirement": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
+      "given": "",
+      "when": "a document names a reviewer matching no charter and no agent in this project",
+      "then": "the submission succeeds the unresolvable name is reported among the document's blocking items the name is preserved on the task rather than discarded"
+    },
+    {
+      "key": "ac29",
+      "requirement": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
+      "given": "",
+      "when": "a document naming a reviewer is materialised",
+      "then": "no task is assigned to an agent as a result of the name alone"
+    },
+    {
+      "key": "ac30",
+      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
+      "given": "",
+      "when": "the operator declares that task B depends on task A",
+      "then": "the dependency SHALL be recorded the existing gate SHALL apply to B unchanged"
+    },
+    {
+      "key": "ac31",
+      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
+      "given": "",
+      "when": "a declared dependency would create a cycle",
+      "then": "it SHALL be refused, naming the cycle"
+    },
+    {
+      "key": "ac32",
+      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
+      "given": "",
+      "when": "a declared dependency names a task that does not exist",
+      "then": "it SHALL be refused, naming which one"
+    },
+    {
+      "key": "ac33",
+      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
+      "given": "",
+      "when": "an approved document declares ordering between its own tasks",
+      "then": "the dependencies SHALL be recorded exactly as before"
+    },
+    {
+      "key": "ac34",
+      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
+      "given": "",
+      "when": "the operator removes a declared dependency",
+      "then": "it SHALL no longer gate the dependent task"
+    },
+    {
+      "key": "ac35",
+      "requirement": "a-task-s-checkout-carries-the-work-it-depends-on",
+      "given": "",
+      "when": "a task starts whose prerequisite is approved and whose work did not reach the main branch",
+      "then": "the task's checkout contains that prerequisite's work"
+    },
+    {
+      "key": "ac36",
+      "requirement": "a-task-s-checkout-carries-the-work-it-depends-on",
+      "given": "",
+      "when": "a task starts whose prerequisite belongs to a loop that declared its work needs no",
+      "then": "the task's checkout contains that prerequisite's work it was not required to have recorded any evidence for that to happen"
+    },
+    {
+      "key": "ac37",
+      "requirement": "a-task-s-checkout-carries-the-work-it-depends-on",
+      "given": "",
+      "when": "a task's checkout is created while a prerequisite of it is not yet approved",
+      "then": "that prerequisite's work is not brought in the turn is not refused on account of it"
+    },
+    {
+      "key": "ac38",
+      "requirement": "a-task-s-checkout-carries-the-work-it-depends-on",
+      "given": "",
+      "when": "a task starts whose prerequisite's work was integrated into the main branch",
+      "then": "the task's checkout contains that work once, not twice"
+    },
+    {
+      "key": "ac39",
+      "requirement": "a-task-s-checkout-carries-the-work-it-depends-on",
+      "given": "",
+      "when": "a task starts whose prerequisite's accepted evidence names paths rather than a commit",
+      "then": "the checkout is created without refusing the turn"
+    },
+    {
+      "key": "ac40",
+      "requirement": "a-task-s-checkout-carries-the-work-it-depends-on",
+      "given": "",
+      "when": "bringing a prerequisite's work into a new task checkout conflicts",
+      "then": "the turn does not start the reason names the prerequisite whose work could not be brought in"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/task-dependencies/spec.md (11 requirements, 40 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenarios-state-no-starting-state: 38 of 40 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-document-declares-the-order-of-its-own-tasks": "FR-1",
+      "an-unmet-dependency-prevents-starting-and-nothing-else": "FR-2",
+      "a-dependency-is-met-at-approval-not-at-completion": "FR-3",
+      "a-dependency-that-regresses-after-a-dependent-has-started-do": "FR-4",
+      "a-dependency-on-rejected-work-is-surfaced-never-resolved": "FR-5",
+      "a-dependency-may-name-a-task-in-another-document-by-importin": "FR-6",
+      "an-import-may-name-only-an-approved-document": "FR-7",
+      "a-task-belonging-to-no-document-cannot-be-given-a-dependency": "FR-8",
+      "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint": "FR-9",
+      "the-operator-can-declare-a-dependency-between-existing-tasks": "FR-10",
+      "a-task-s-checkout-carries-the-work-it-depends-on": "FR-11"
+    },
+    "high_water": 11,
+    "retired": {},
+    "digests": {
+      "FR-1": "6fd4fa0dd407c66013e4dd3104457a7bd56ff797d751808dc142231fcde7eb55",
+      "FR-2": "bc27f9a70e67504666ab33bc589cabf927fb753b2f579123f3e527af90c10b75",
+      "FR-3": "db25df5f318cc571f2b73230e621045832f6cd4801640f5e4fea5469a3f6d57b",
+      "FR-4": "0153d5cdcb4ebf7620d2be2fe71660248bbf455f03f4caed06f9b27494521305",
+      "FR-5": "e912be0c9396fc7a11a2c868fc65b0f800c166349dfe3e59c07d8c87f9195f19",
+      "FR-6": "9ca547098033decac7ed83b492d51de6246e5f1147aacc9a2b33559270aabada",
+      "FR-7": "e8669c069d73f691fa7a05bfa19f8477cfe8c99a21f9bb00ed76f777209bc2c5",
+      "FR-8": "3fb5e227f6b0c8c3520637e631466e4b82c9ad3a69b53e083617d4e45bdf346f",
+      "FR-9": "190cd181510eb41fe68e01e98a35960bd5f6ec386143e0f29311c767ca0c6337",
+      "FR-10": "02403b752e7fae40a64219273719cb6880ea3d6d4db2cfdfaf3796c36d09c826",
+      "FR-11": "32ca1c9820d03c23432c34df14ed4077b4265063db8f2c163f58b31e31b3404e"
+    }
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project checks</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Project checks</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-nav"><a href="../../agentweave.html">Home</a></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">4</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">4</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">10</span> criteria</p>
+<section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> A project SHALL carry an ordered list of checks, each with a name, a shell command and a timeout in seconds, set only through the operator&#x27;s project settings; no agent credential SHALL be able to change it through any surface.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A project with no checks configured SHALL behave exactly as before this change: no run starts and no approval is refused for checks. Names are unique within a project. A timeout is between 10 and 3600 seconds, and defaults to 900.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> When a task moves to `completed` in a project with checks, the Hub SHALL start a check run in the background, and the transition SHALL NOT wait for it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The run SHALL execute every check, in order, in a Hub-owned scratch checkout of a commit whose tree is the project&#x27;s main branch with every commit the task&#x27;s approval would merge applied (`task_integration.merge_targets`). It SHALL never use the project&#x27;s root checkout or an agent&#x27;s checkout. The run is recorded with: - the main tip it was built on; - the merged target commits; - a state: `running`, `passed`, `failed`, `error` or `interrupted`; - each check&#x27;s exit code, duration, and the last 4000 characters of its combined output. A check that exceeds its timeout SHALL have its whole process tree ended and count as failed. A project with no main branch, or a task with nothing to merge, records no run and refuses nothing.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> A Hub that restarts while a run is `running` SHALL record that run `interrupted` at startup, and a run SHALL be started again for a task whose latest result is `interrupted`, missing or stale (main tip or merge targets changed) when its approval is requested. No more than two runs SHALL execute at once per Hub. At most one run per task SHALL execute at a time; a request for a run already executing joins it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> A check SHALL run with the Hub process&#x27;s environment except variables that carry Hub or run credentials (`AW_RUN_TOKEN`, `AW_API_KEY`, `HUB_API_KEY` and any value beginning `aw_live_`). Its working directory SHALL be the scratch checkout.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator saves two checks in a project&#x27;s settings</td><td>reading the settings returns both, in order, with their timeouts</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run&#x27;s credential calls any route that would set a project&#x27;s checks</td><td>the request is refused and the checks are unchanged</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task of a project with no checks moves to `completed` and is then approved</td><td>no check run is recorded and approval behaves as it did before this change</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task whose work makes a configured check exit non-zero moves to `completed`</td><td>a run is recorded `failed`, naming that check, its exit code and the tail of its output the move to `completed` returned before the run finished</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>main has advanced since the task branched and the task&#x27;s commit merges cleanly</td><td>the files in the scratch checkout are main&#x27;s with the task&#x27;s changes applied</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a check runs past its timeout</td><td>its process tree is ended and the run is recorded `failed` naming the timeout</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a check run writes files in its checkout</td><td>the project&#x27;s root checkout has no new or changed files</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub restarts during a run and the task&#x27;s approval is then requested</td><td>the old run reads `interrupted`, a new run starts, and approval is refused as still running</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task&#x27;s checks passed and main has since advanced</td><td>requesting approval starts a new run instead of trusting the old result</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a check prints its environment</td><td>no variable named above and no value beginning `aw_live_` appears in the recorded output</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/project-checks/spec.md (4 requirements, 10 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 10 of 10 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Project checks",
+  "summary": "",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-project-s-checks-are-configured-by-the-operator-only",
+      "statement": "A project SHALL carry an ordered list of checks, each with a name, a shell command and a timeout in seconds, set only through the operator's project settings; no agent credential SHALL be able to change it through any surface.",
+      "modal": "SHALL",
+      "rationale": "A project with no checks configured SHALL behave exactly as before this change: no run starts and no approval is refused for checks. Names are unique within a project. A timeout is between 10 and 3600 seconds, and defaults to 900.",
+      "party": null
+    },
+    {
+      "key": "checks-run-in-the-background-on-the-work-approval-would-merg",
+      "statement": "When a task moves to `completed` in a project with checks, the Hub SHALL start a check run in the background, and the transition SHALL NOT wait for it.",
+      "modal": "SHALL",
+      "rationale": "The run SHALL execute every check, in order, in a Hub-owned scratch checkout of a commit whose tree is the project's main branch with every commit the task's approval would merge applied (`task_integration.merge_targets`). It SHALL never use the project's root checkout or an agent's checkout. The run is recorded with: - the main tip it was built on; - the merged target commits; - a state: `running`, `passed`, `failed`, `error` or `interrupted`; - each check's exit code, duration, and the last 4000 characters of its combined output. A check that exceeds its timeout SHALL have its whole process tree ended and count as failed. A project with no main branch, or a task with nothing to merge, records no run and refuses nothing.",
+      "party": null
+    },
+    {
+      "key": "a-check-run-is-never-lost-silently",
+      "statement": "A Hub that restarts while a run is `running` SHALL record that run `interrupted` at startup, and a run SHALL be started again for a task whose latest result is `interrupted`, missing or stale (main tip or merge targets changed) when its approval is requested. No more than two runs SHALL execute at once per Hub. At most one run per task SHALL execute at a time; a request for a run already executing joins it.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-check-runs-with-the-hub-s-environment-minus-the-hub-s-cred",
+      "statement": "A check SHALL run with the Hub process's environment except variables that carry Hub or run credentials (`AW_RUN_TOKEN`, `AW_API_KEY`, `HUB_API_KEY` and any value beginning `aw_live_`). Its working directory SHALL be the scratch checkout.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-project-s-checks-are-configured-by-the-operator-only",
+      "given": "",
+      "when": "the operator saves two checks in a project's settings",
+      "then": "reading the settings returns both, in order, with their timeouts"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-project-s-checks-are-configured-by-the-operator-only",
+      "given": "",
+      "when": "a run's credential calls any route that would set a project's checks",
+      "then": "the request is refused and the checks are unchanged"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-project-s-checks-are-configured-by-the-operator-only",
+      "given": "",
+      "when": "a task of a project with no checks moves to `completed` and is then approved",
+      "then": "no check run is recorded and approval behaves as it did before this change"
+    },
+    {
+      "key": "ac4",
+      "requirement": "checks-run-in-the-background-on-the-work-approval-would-merg",
+      "given": "",
+      "when": "a task whose work makes a configured check exit non-zero moves to `completed`",
+      "then": "a run is recorded `failed`, naming that check, its exit code and the tail of its output the move to `completed` returned before the run finished"
+    },
+    {
+      "key": "ac5",
+      "requirement": "checks-run-in-the-background-on-the-work-approval-would-merg",
+      "given": "",
+      "when": "main has advanced since the task branched and the task's commit merges cleanly",
+      "then": "the files in the scratch checkout are main's with the task's changes applied"
+    },
+    {
+      "key": "ac6",
+      "requirement": "checks-run-in-the-background-on-the-work-approval-would-merg",
+      "given": "",
+      "when": "a check runs past its timeout",
+      "then": "its process tree is ended and the run is recorded `failed` naming the timeout"
+    },
+    {
+      "key": "ac7",
+      "requirement": "checks-run-in-the-background-on-the-work-approval-would-merg",
+      "given": "",
+      "when": "a check run writes files in its checkout",
+      "then": "the project's root checkout has no new or changed files"
+    },
+    {
+      "key": "ac8",
+      "requirement": "a-check-run-is-never-lost-silently",
+      "given": "",
+      "when": "the Hub restarts during a run and the task's approval is then requested",
+      "then": "the old run reads `interrupted`, a new run starts, and approval is refused as still running"
+    },
+    {
+      "key": "ac9",
+      "requirement": "a-check-run-is-never-lost-silently",
+      "given": "",
+      "when": "a task's checks passed and main has since advanced",
+      "then": "requesting approval starts a new run instead of trusting the old result"
+    },
+    {
+      "key": "ac10",
+      "requirement": "a-check-runs-with-the-hub-s-environment-minus-the-hub-s-cred",
+      "given": "",
+      "when": "a check prints its environment",
+      "then": "no variable named above and no value beginning `aw_live_` appears in the recorded output"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/project-checks/spec.md (4 requirements, 10 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenarios-state-no-starting-state: 10 of 10 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-project-s-checks-are-configured-by-the-operator-only": "FR-1",
+      "checks-run-in-the-background-on-the-work-approval-would-merg": "FR-2",
+      "a-check-run-is-never-lost-silently": "FR-3",
+      "a-check-runs-with-the-hub-s-environment-minus-the-hub-s-cred": "FR-4"
+    },
+    "high_water": 4,
+    "retired": {},
+    "digests": {
+      "FR-1": "41e4ea1a388d56cd2cc16493feb583d596fd74bd3d457a71d96838828e92ac92",
+      "FR-2": "1f13e803039e6937af5f60d04b173b2a612eb894564b6a4951f2f4e51c2c05bc",
+      "FR-3": "f38f25c61ea6fb4c499dd123552ee2e9908ba1094f9f1f065f4e54adc0233d9b",
+      "FR-4": "e740e3456870aebf55d2bc45e597824f4b3bac0042955365900680326593e214"
+    }
+  }
+}
+</script>
+</body>
+</html>

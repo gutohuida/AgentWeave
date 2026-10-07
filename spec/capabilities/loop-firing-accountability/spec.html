@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loop firing accountability</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Loop firing accountability</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-nav"><a href="../../agentweave.html">Home</a></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">4</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">4</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">12</span> criteria</p>
+<section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL NOT report a firing as in progress once it is known that no agent was started for it. Where a firing queues its input but the turn does not begin, the firing&#x27;s record SHALL reach a terminal state carrying the stated reason, without waiting for any later sweep.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>This was measured on 2026-08-21: a firing whose agent had no runner bound left its record at `in_progress` and the loop reported itself as firing continuously, with nothing behind it. The reason existed at the moment it happened and was discarded.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL clear firings left in progress with no live run behind them without requiring a restart. A restart SHALL remain sufficient, but SHALL NOT be necessary.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An unattended loop is the case this exists for, and it is the case where nobody restarts anything. Before this, a stranded firing was reconciled only at Hub start, so the loop card stayed wrong for as long as the Hub stayed up.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> A firing refused before any agent is briefed SHALL NOT create a conversation. A refused firing already leaves no claim, queues no input, and changes no task; a conversation is the remaining artefact that implies otherwise.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Measured 2026-08-21: five firings produced five conversations and three of those firings were refused, each leaving a thread named after the job with nothing in it. On a five-minute schedule a stalled loop produces twelve an hour, none distinguishable by name from a real one until opened.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL count a job&#x27;s firings as firings: a firing that queues work for at least one agent SHALL add exactly one to the job&#x27;s firing count, whether it queues work for one agent or several. A firing that queues work for no agent SHALL NOT add to it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A firing counts where it queues its input, not where an agent&#x27;s turn begins, so a firing whose turn then fails to begin still counts once: the job did fire, and its record carries why the turn did not begin. Each agent a firing starts has its own record, because each agent&#x27;s work is correlated to its own conversation and concludes on its own. Those records are the firing&#x27;s dispatches, and they SHALL NOT each count as a firing. A job&#x27;s card SHALL name the count as firings, not as runs, because a run is one agent&#x27;s attempt at a turn and the app uses the word for that everywhere else.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a loop whose agent cannot be started</td><td>its job fires</td><td>the firing&#x27;s record does not remain in an in-progress state the loop is not reported as firing</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a firing queues its input and the turn does not begin</td><td>the firing&#x27;s record carries the stated reason it did not begin that reason is the one the queue itself would give for the same agent</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a firing queues its input and the agent&#x27;s turn begins</td><td>the firing is reported as in progress exactly as before its record reaches its terminal state when the agent&#x27;s run ends</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a firing recorded as in progress with no live run behind it</td><td>the Hub continues running without being restarted</td><td>that firing is eventually recorded as failed the loop stops being reported as firing</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a firing whose run is still running</td><td>the Hub clears stranded firings</td><td>that firing is left alone</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a loop whose queue is stalled</td><td>its job fires and the firing is refused</td><td>no conversation is created for that firing</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a loop past its stop time</td><td>its job fires and the firing is refused</td><td>no conversation is created for that firing</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a firing is not refused and briefs an agent</td><td>a conversation is created and named after the job, as before</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a flow with two independent startable tasks and two eligible agents</td><td>the flow fires once and starts both</td><td>two records are written for that firing, one per agent the job&#x27;s firing count rises by one</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a plain job or a single-agent loop fires and starts its agent</td><td>the job&#x27;s firing count rises by one</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a loop&#x27;s firing is refused because its queue is stalled</td><td>the job&#x27;s firing count does not change</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator reads a job&#x27;s card</td><td>the count is labelled as firings it is not labelled as runs</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/loop-firing-accountability/spec.md (4 requirements, 12 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 6 of 12 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Loop firing accountability",
+  "summary": "",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-firing-that-starts-no-agent-shall-not-be-reported-as-runni",
+      "statement": "The Hub SHALL NOT report a firing as in progress once it is known that no agent was started for it. Where a firing queues its input but the turn does not begin, the firing's record SHALL reach a terminal state carrying the stated reason, without waiting for any later sweep.",
+      "modal": "SHALL",
+      "rationale": "This was measured on 2026-08-21: a firing whose agent had no runner bound left its record at `in_progress` and the loop reported itself as firing continuously, with nothing behind it. The reason existed at the moment it happened and was discarded.",
+      "party": null
+    },
+    {
+      "key": "a-stranded-firing-shall-be-recoverable-without-restarting-th",
+      "statement": "The Hub SHALL clear firings left in progress with no live run behind them without requiring a restart. A restart SHALL remain sufficient, but SHALL NOT be necessary.",
+      "modal": "SHALL",
+      "rationale": "An unattended loop is the case this exists for, and it is the case where nobody restarts anything. Before this, a stranded firing was reconciled only at Hub start, so the loop card stayed wrong for as long as the Hub stayed up.",
+      "party": null
+    },
+    {
+      "key": "a-refused-firing-shall-leave-no-artefact-implying-work-happe",
+      "statement": "A firing refused before any agent is briefed SHALL NOT create a conversation. A refused firing already leaves no claim, queues no input, and changes no task; a conversation is the remaining artefact that implies otherwise.",
+      "modal": "SHALL",
+      "rationale": "Measured 2026-08-21: five firings produced five conversations and three of those firings were refused, each leaving a thread named after the job with nothing in it. On a five-minute schedule a stalled loop produces twelve an hour, none distinguishable by name from a real one until opened.",
+      "party": null
+    },
+    {
+      "key": "a-firing-shall-be-counted-once-however-many-agents-it-starts",
+      "statement": "The Hub SHALL count a job's firings as firings: a firing that queues work for at least one agent SHALL add exactly one to the job's firing count, whether it queues work for one agent or several. A firing that queues work for no agent SHALL NOT add to it.",
+      "modal": "SHALL",
+      "rationale": "A firing counts where it queues its input, not where an agent's turn begins, so a firing whose turn then fails to begin still counts once: the job did fire, and its record carries why the turn did not begin. Each agent a firing starts has its own record, because each agent's work is correlated to its own conversation and concludes on its own. Those records are the firing's dispatches, and they SHALL NOT each count as a firing. A job's card SHALL name the count as firings, not as runs, because a run is one agent's attempt at a turn and the app uses the word for that everywhere else.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-firing-that-starts-no-agent-shall-not-be-reported-as-runni",
+      "given": "a loop whose agent cannot be started",
+      "when": "its job fires",
+      "then": "the firing's record does not remain in an in-progress state the loop is not reported as firing"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-firing-that-starts-no-agent-shall-not-be-reported-as-runni",
+      "given": "",
+      "when": "a firing queues its input and the turn does not begin",
+      "then": "the firing's record carries the stated reason it did not begin that reason is the one the queue itself would give for the same agent"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-firing-that-starts-no-agent-shall-not-be-reported-as-runni",
+      "given": "",
+      "when": "a firing queues its input and the agent's turn begins",
+      "then": "the firing is reported as in progress exactly as before its record reaches its terminal state when the agent's run ends"
+    },
+    {
+      "key": "ac4",
+      "requirement": "a-stranded-firing-shall-be-recoverable-without-restarting-th",
+      "given": "a firing recorded as in progress with no live run behind it",
+      "when": "the Hub continues running without being restarted",
+      "then": "that firing is eventually recorded as failed the loop stops being reported as firing"
+    },
+    {
+      "key": "ac5",
+      "requirement": "a-stranded-firing-shall-be-recoverable-without-restarting-th",
+      "given": "a firing whose run is still running",
+      "when": "the Hub clears stranded firings",
+      "then": "that firing is left alone"
+    },
+    {
+      "key": "ac6",
+      "requirement": "a-refused-firing-shall-leave-no-artefact-implying-work-happe",
+      "given": "a loop whose queue is stalled",
+      "when": "its job fires and the firing is refused",
+      "then": "no conversation is created for that firing"
+    },
+    {
+      "key": "ac7",
+      "requirement": "a-refused-firing-shall-leave-no-artefact-implying-work-happe",
+      "given": "a loop past its stop time",
+      "when": "its job fires and the firing is refused",
+      "then": "no conversation is created for that firing"
+    },
+    {
+      "key": "ac8",
+      "requirement": "a-refused-firing-shall-leave-no-artefact-implying-work-happe",
+      "given": "",
+      "when": "a firing is not refused and briefs an agent",
+      "then": "a conversation is created and named after the job, as before"
+    },
+    {
+      "key": "ac9",
+      "requirement": "a-firing-shall-be-counted-once-however-many-agents-it-starts",
+      "given": "a flow with two independent startable tasks and two eligible agents",
+      "when": "the flow fires once and starts both",
+      "then": "two records are written for that firing, one per agent the job's firing count rises by one"
+    },
+    {
+      "key": "ac10",
+      "requirement": "a-firing-shall-be-counted-once-however-many-agents-it-starts",
+      "given": "",
+      "when": "a plain job or a single-agent loop fires and starts its agent",
+      "then": "the job's firing count rises by one"
+    },
+    {
+      "key": "ac11",
+      "requirement": "a-firing-shall-be-counted-once-however-many-agents-it-starts",
+      "given": "",
+      "when": "a loop's firing is refused because its queue is stalled",
+      "then": "the job's firing count does not change"
+    },
+    {
+      "key": "ac12",
+      "requirement": "a-firing-shall-be-counted-once-however-many-agents-it-starts",
+      "given": "",
+      "when": "the operator reads a job's card",
+      "then": "the count is labelled as firings it is not labelled as runs"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/loop-firing-accountability/spec.md (4 requirements, 12 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenarios-state-no-starting-state: 6 of 12 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-firing-that-starts-no-agent-shall-not-be-reported-as-runni": "FR-1",
+      "a-stranded-firing-shall-be-recoverable-without-restarting-th": "FR-2",
+      "a-refused-firing-shall-leave-no-artefact-implying-work-happe": "FR-3",
+      "a-firing-shall-be-counted-once-however-many-agents-it-starts": "FR-4"
+    },
+    "high_water": 4,
+    "retired": {},
+    "digests": {
+      "FR-1": "c8998db2cd17facf76a43685ead63314fc8953933d0ce7c3c25d6d566c7a8734",
+      "FR-2": "a0f8e5c4c1f1ebae8a005241607423d38b64c0280d2bb9207f5e8ae0a27a2273",
+      "FR-3": "c588fdf9e70c0c54d50a355afd2db62b13bdbdc4db0c67145d9c72963c9d1044",
+      "FR-4": "1aed04caf56dac6048df647de22293d4075e2791eff9201228ece33aa41d1ecc"
+    }
+  }
+}
+</script>
+</body>
+</html>

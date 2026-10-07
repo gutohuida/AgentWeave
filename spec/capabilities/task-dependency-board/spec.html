@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task dependency board</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Task dependency board</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-nav"><a href="../../agentweave.html">Home</a></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">8</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">8</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">19</span> criteria</p>
+<section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The dependency board SHALL position a task according to how deep it sits in the dependency graph, with work that depends on nothing at the top and work depending on it below.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Depth is chosen as the vertical axis because the two axes are not symmetric: the number of tasks that can run at once is bounded by the project&#x27;s agent budget, while the length of a dependency chain is bounded by nothing. The unbounded dimension belongs on the axis where scrolling is cheap. The layout SHALL accommodate a task depending on several others — the structure is a directed acyclic graph, not a tree, and edges converge as well as diverge.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> Each task SHALL show its own status on its card.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Position cannot encode two things. On the status board a card&#x27;s column states its status; on the dependency board the position states depth instead, so the status has to live on the card or be lost.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The dependency board SHALL NOT offer any means of creating, removing or altering a dependency.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Dependencies are declared by a specification document. An edge that existed only on a board would be a fact the document does not contain, which would make the document — the artefact that is supposed to be the record — no longer a true account of the work. Where an operator attempts to alter structure, the refusal SHALL say that dependencies are changed by changing the document.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where a task cannot start, the board SHALL distinguish between waiting on prerequisites that are progressing, waiting on prerequisites that nobody is reviewing, and waiting on prerequisites that were rejected.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>These are identical on the surface — a card that will not start — and have entirely different remedies: wait, find a reviewer, or make a decision about abandoned work. Because a dependency is met only at approval, an unattended review backlog stalls every downstream layer, and if the board cannot distinguish that from ordinary waiting then a review problem is indistinguishable from the dependency feature being broken.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The dependency board SHALL be scoped to a single specification document, chosen by the operator, and a board SHALL exist for tasks that belong to no document.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A project accumulates finished work indefinitely, so a project-wide graph grows without bound; a document&#x27;s decomposition does not. Tasks created by hand belong to no document and would otherwise appear on no board at all — the boardless case has to be reachable, not merely handled. The chooser SHALL show how much work remains in each board, so that selecting one and seeing what is left are the same act.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> A layer whose tasks have all reached a terminal state SHALL be collapsed to a single summary that the operator can expand.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Scoping to one document bounds the graph but does not stop a finished document&#x27;s board being a screen of completed cards. Collapsing keeps the graph&#x27;s shape legible — what depended on what is still visible — while hiding a task entirely would leave edges pointing at nothing and make the remaining graph look rootless.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 7 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> An imported task SHALL be drawn as a reference that names the document it belongs to, rather than as a task of this board.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The board is scoped to one document, and a foreign task is not this document&#x27;s work to act on — but the dependency is real and hiding it would make a gated task look gated by nothing. Naming the owning document is what makes the blocker reachable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 8 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The status board SHALL remain available unchanged, and the dependency board SHALL be a view the operator switches to.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The two answer different questions. A status board answers what is in flight; a dependency board answers what can start. Neither contains the other, and removing the first would take away the view that suits work already under way.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document&#x27;s tasks are laid out</td><td>tasks with no dependencies appear in the topmost layer</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task depends on tasks in different layers</td><td>it appears below the deepest of them</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>two tasks are prerequisites of one task</td><td>the layout shows both relationships</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task is drawn on the dependency board</td><td>its status is shown on the card</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator attempts to add or remove a dependency on the board</td><td>no dependency is changed</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>such an attempt is refused</td><td>the operator is told the dependency is changed by editing the document</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a layer&#x27;s prerequisites are complete and none is under review</td><td>the board reports that the layer is waiting on review</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task&#x27;s prerequisite has been rejected</td><td>the board reports the task as gated on rejected work and names it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a running task&#x27;s prerequisite has left approved</td><td>the board marks that task</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator selects a document&#x27;s board</td><td>only tasks belonging to that document are shown</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator selects the board for tasks with no document</td><td>tasks with no owning document are shown</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator opens the chooser</td><td>each board reports how many of its tasks are outstanding</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>every task in a layer has reached a terminal state</td><td>that layer is shown as a single summary</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator expands a collapsed layer</td><td>its tasks are shown</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a layer contains both finished and unfinished tasks</td><td>the layer is not collapsed</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task depends on an imported task</td><td>the board shows the dependency and names the document the task belongs to</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an imported task is shown</td><td>it is distinguishable from the document&#x27;s own tasks</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator uses the status board</td><td>it behaves as it did before this change</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator switches to the dependency board and back</td><td>both views are available</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/task-dependency-board/spec.md (8 requirements, 19 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 19 of 19 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Task dependency board",
+  "summary": "",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "the-board-lays-work-out-by-dependency-depth-downward",
+      "statement": "The dependency board SHALL position a task according to how deep it sits in the dependency graph, with work that depends on nothing at the top and work depending on it below.",
+      "modal": "SHALL",
+      "rationale": "Depth is chosen as the vertical axis because the two axes are not symmetric: the number of tasks that can run at once is bounded by the project's agent budget, while the length of a dependency chain is bounded by nothing. The unbounded dimension belongs on the axis where scrolling is cheap. The layout SHALL accommodate a task depending on several others — the structure is a directed acyclic graph, not a tree, and edges converge as well as diverge.",
+      "party": null
+    },
+    {
+      "key": "the-card-carries-the-status-the-layout-no-longer-can",
+      "statement": "Each task SHALL show its own status on its card.",
+      "modal": "SHALL",
+      "rationale": "Position cannot encode two things. On the status board a card's column states its status; on the dependency board the position states depth instead, so the status has to live on the card or be lost.",
+      "party": null
+    },
+    {
+      "key": "the-board-draws-structure-and-never-authors-it",
+      "statement": "The dependency board SHALL NOT offer any means of creating, removing or altering a dependency.",
+      "modal": "SHALL",
+      "rationale": "Dependencies are declared by a specification document. An edge that existed only on a board would be a fact the document does not contain, which would make the document — the artefact that is supposed to be the record — no longer a true account of the work. Where an operator attempts to alter structure, the refusal SHALL say that dependencies are changed by changing the document.",
+      "party": null
+    },
+    {
+      "key": "the-board-distinguishes-why-work-is-not-moving",
+      "statement": "Where a task cannot start, the board SHALL distinguish between waiting on prerequisites that are progressing, waiting on prerequisites that nobody is reviewing, and waiting on prerequisites that were rejected.",
+      "modal": "SHALL",
+      "rationale": "These are identical on the surface — a card that will not start — and have entirely different remedies: wait, find a reviewer, or make a decision about abandoned work. Because a dependency is met only at approval, an unattended review backlog stalls every downstream layer, and if the board cannot distinguish that from ordinary waiting then a review problem is indistinguishable from the dependency feature being broken.",
+      "party": null
+    },
+    {
+      "key": "one-board-covers-one-document-and-tasks-without-one-have-the",
+      "statement": "The dependency board SHALL be scoped to a single specification document, chosen by the operator, and a board SHALL exist for tasks that belong to no document.",
+      "modal": "SHALL",
+      "rationale": "A project accumulates finished work indefinitely, so a project-wide graph grows without bound; a document's decomposition does not. Tasks created by hand belong to no document and would otherwise appear on no board at all — the boardless case has to be reachable, not merely handled. The chooser SHALL show how much work remains in each board, so that selecting one and seeing what is left are the same act.",
+      "party": null
+    },
+    {
+      "key": "finished-layers-collapse-but-remain-reachable",
+      "statement": "A layer whose tasks have all reached a terminal state SHALL be collapsed to a single summary that the operator can expand.",
+      "modal": "SHALL",
+      "rationale": "Scoping to one document bounds the graph but does not stop a finished document's board being a screen of completed cards. Collapsing keeps the graph's shape legible — what depended on what is still visible — while hiding a task entirely would leave edges pointing at nothing and make the remaining graph look rootless.",
+      "party": null
+    },
+    {
+      "key": "a-dependency-on-another-document-s-task-is-shown-as-leaving-",
+      "statement": "An imported task SHALL be drawn as a reference that names the document it belongs to, rather than as a task of this board.",
+      "modal": "SHALL",
+      "rationale": "The board is scoped to one document, and a foreign task is not this document's work to act on — but the dependency is real and hiding it would make a gated task look gated by nothing. Naming the owning document is what makes the blocker reachable.",
+      "party": null
+    },
+    {
+      "key": "the-dependency-board-is-an-additional-view-not-a-replacement",
+      "statement": "The status board SHALL remain available unchanged, and the dependency board SHALL be a view the operator switches to.",
+      "modal": "SHALL",
+      "rationale": "The two answer different questions. A status board answers what is in flight; a dependency board answers what can start. Neither contains the other, and removing the first would take away the view that suits work already under way.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "the-board-lays-work-out-by-dependency-depth-downward",
+      "given": "",
+      "when": "a document's tasks are laid out",
+      "then": "tasks with no dependencies appear in the topmost layer"
+    },
+    {
+      "key": "ac2",
+      "requirement": "the-board-lays-work-out-by-dependency-depth-downward",
+      "given": "",
+      "when": "a task depends on tasks in different layers",
+      "then": "it appears below the deepest of them"
+    },
+    {
+      "key": "ac3",
+      "requirement": "the-board-lays-work-out-by-dependency-depth-downward",
+      "given": "",
+      "when": "two tasks are prerequisites of one task",
+      "then": "the layout shows both relationships"
+    },
+    {
+      "key": "ac4",
+      "requirement": "the-card-carries-the-status-the-layout-no-longer-can",
+      "given": "",
+      "when": "a task is drawn on the dependency board",
+      "then": "its status is shown on the card"
+    },
+    {
+      "key": "ac5",
+      "requirement": "the-board-draws-structure-and-never-authors-it",
+      "given": "",
+      "when": "the operator attempts to add or remove a dependency on the board",
+      "then": "no dependency is changed"
+    },
+    {
+      "key": "ac6",
+      "requirement": "the-board-draws-structure-and-never-authors-it",
+      "given": "",
+      "when": "such an attempt is refused",
+      "then": "the operator is told the dependency is changed by editing the document"
+    },
+    {
+      "key": "ac7",
+      "requirement": "the-board-distinguishes-why-work-is-not-moving",
+      "given": "",
+      "when": "a layer's prerequisites are complete and none is under review",
+      "then": "the board reports that the layer is waiting on review"
+    },
+    {
+      "key": "ac8",
+      "requirement": "the-board-distinguishes-why-work-is-not-moving",
+      "given": "",
+      "when": "a task's prerequisite has been rejected",
+      "then": "the board reports the task as gated on rejected work and names it"
+    },
+    {
+      "key": "ac9",
+      "requirement": "the-board-distinguishes-why-work-is-not-moving",
+      "given": "",
+      "when": "a running task's prerequisite has left approved",
+      "then": "the board marks that task"
+    },
+    {
+      "key": "ac10",
+      "requirement": "one-board-covers-one-document-and-tasks-without-one-have-the",
+      "given": "",
+      "when": "the operator selects a document's board",
+      "then": "only tasks belonging to that document are shown"
+    },
+    {
+      "key": "ac11",
+      "requirement": "one-board-covers-one-document-and-tasks-without-one-have-the",
+      "given": "",
+      "when": "the operator selects the board for tasks with no document",
+      "then": "tasks with no owning document are shown"
+    },
+    {
+      "key": "ac12",
+      "requirement": "one-board-covers-one-document-and-tasks-without-one-have-the",
+      "given": "",
+      "when": "the operator opens the chooser",
+      "then": "each board reports how many of its tasks are outstanding"
+    },
+    {
+      "key": "ac13",
+      "requirement": "finished-layers-collapse-but-remain-reachable",
+      "given": "",
+      "when": "every task in a layer has reached a terminal state",
+      "then": "that layer is shown as a single summary"
+    },
+    {
+      "key": "ac14",
+      "requirement": "finished-layers-collapse-but-remain-reachable",
+      "given": "",
+      "when": "the operator expands a collapsed layer",
+      "then": "its tasks are shown"
+    },
+    {
+      "key": "ac15",
+      "requirement": "finished-layers-collapse-but-remain-reachable",
+      "given": "",
+      "when": "a layer contains both finished and unfinished tasks",
+      "then": "the layer is not collapsed"
+    },
+    {
+      "key": "ac16",
+      "requirement": "a-dependency-on-another-document-s-task-is-shown-as-leaving-",
+      "given": "",
+      "when": "a task depends on an imported task",
+      "then": "the board shows the dependency and names the document the task belongs to"
+    },
+    {
+      "key": "ac17",
+      "requirement": "a-dependency-on-another-document-s-task-is-shown-as-leaving-",
+      "given": "",
+      "when": "an imported task is shown",
+      "then": "it is distinguishable from the document's own tasks"
+    },
+    {
+      "key": "ac18",
+      "requirement": "the-dependency-board-is-an-additional-view-not-a-replacement",
+      "given": "",
+      "when": "the operator uses the status board",
+      "then": "it behaves as it did before this change"
+    },
+    {
+      "key": "ac19",
+      "requirement": "the-dependency-board-is-an-additional-view-not-a-replacement",
+      "given": "",
+      "when": "the operator switches to the dependency board and back",
+      "then": "both views are available"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/task-dependency-board/spec.md (8 requirements, 19 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenarios-state-no-starting-state: 19 of 19 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "the-board-lays-work-out-by-dependency-depth-downward": "FR-1",
+      "the-card-carries-the-status-the-layout-no-longer-can": "FR-2",
+      "the-board-draws-structure-and-never-authors-it": "FR-3",
+      "the-board-distinguishes-why-work-is-not-moving": "FR-4",
+      "one-board-covers-one-document-and-tasks-without-one-have-the": "FR-5",
+      "finished-layers-collapse-but-remain-reachable": "FR-6",
+      "a-dependency-on-another-document-s-task-is-shown-as-leaving-": "FR-7",
+      "the-dependency-board-is-an-additional-view-not-a-replacement": "FR-8"
+    },
+    "high_water": 8,
+    "retired": {},
+    "digests": {
+      "FR-1": "71244eca47fde4c1ccae6c81e9a806d3ce8511a4a44255e7cd66348791617a91",
+      "FR-2": "88c1b94a340ffe7530a985562004f47959481fce318c4b41c528bb52debbc779",
+      "FR-3": "6020ab527665d086b483a63d620eb6cd499b786a012fa3ef028c2c7319e7a2f6",
+      "FR-4": "f9351ea42547c50b6af914bb6bb2b993f1fa8bbbef8ee253e82bdf9a7e5d31b1",
+      "FR-5": "bc10156cc2da1720a95f438e4a43dfa43083b9293c69fbaf8dab32121166fbf4",
+      "FR-6": "9e730e7090b7fd28b09ea1f7aa9d3277ff16d65cf09fc894402e7a2ccb3fb639",
+      "FR-7": "ae4908457afd8290aa47253bcd18b34248d6f25f0d945b80f6fff0c28a5e0bb4",
+      "FR-8": "6179f790cc869bf554b28176e145d45bb5b42182ad40e54ab2d47736700a033d"
+    }
+  }
+}
+</script>
+</body>
+</html>

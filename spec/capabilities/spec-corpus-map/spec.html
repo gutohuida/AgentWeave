@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spec corpus map</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Spec corpus map</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-nav"><a href="../../agentweave.html">Home</a></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">8</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">8</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">27</span> criteria</p>
+<section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every rendered specification document SHALL include a navigation region naming the corpus home and, where one is recorded, the document directly above it. Each SHALL be a relative link resolvable without a running Hub.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A specification corpus is read as often outside the product as inside it — in a diff, on a code host, in a browser on a machine with no Hub. A document that cannot be navigated away from is an island, and thirty-five islands are not a corpus. The navigation region SHALL depend only on the document&#x27;s own placement, and SHALL NOT enumerate its siblings. Sibling navigation is reached through the parent. This bound is deliberate: a strip that listed siblings would change for every document in a group whenever any one of them was added, turning a one-document edit into a corpus-wide rewrite.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> A document that other documents name as their parent SHALL render a map section listing each child with its title, kind, phase and one-line summary, each linked by relative path.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The map SHALL be generated from the document index on every render and SHALL NOT be assembled from content any author supplied. A map maintained by hand drifts from the corpus the moment a document is added, and the cost of that drift is paid by the reader who trusts it. The map region SHALL be visibly identified as generated, so that an operator editing the file does not lose work to the next regeneration. A document with no children SHALL render no map section.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where a child document&#x27;s payload carries no summary, or carries only placeholder text, the map SHALL say that no summary exists rather than rendering an empty cell.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An empty cell reads as a rendering fault and hides a content gap. Saying so turns an invisible omission into a visible one — the same reason an empty open-questions list states that none are outstanding instead of omitting the section.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> A document&#x27;s parent SHALL be recorded in the project&#x27;s document index, SHALL name another document in the same index, and SHALL be settable only by the operator.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Placement is an editorial judgement about what the project is. It is recorded in the index rather than in a database column because the arrangement must survive the project being copied to another machine, and it is not derived from directory nesting because a directory layout is not a statement about meaning. The Hub SHALL refuse a placement that names an unknown document, that names the document itself, or that would create a cycle.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> When the document index is rebuilt, the Hub SHALL re-render exactly those documents whose navigation region or generated map the rebuild changed, and no others.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Rendering the corpus into files buys portability at the cost of writes. The bound is what keeps that cost proportionate: adding one document must not rewrite every document.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> Re-rendering SHALL take the document&#x27;s structure from the payload embedded in its own file, and SHALL be recorded as a regeneration distinct from an authored write.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Reading the file rather than the database means a document that arrived by clone regenerates identically to one the Hub created, and means regeneration does not pass through the write path that refuses approved documents or attributes editorial change to whoever triggered a rebuild. A document whose file carries no readable payload SHALL be skipped and reported, never rendered from guessed structure.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 7 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where a re-rendered document has a stored content digest, the Hub SHALL update that digest to the content it just wrote.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Drift detection compares stored content against the file. A regeneration the Hub performed itself would otherwise be reported as drift, and a drift signal that fires on every rebuild stops being read.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 8 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The operator&#x27;s interface SHALL show whether the project&#x27;s document index is usable and what its home is, SHALL let the operator rebuild the index, and SHALL let the operator set or clear a document&#x27;s parent from that document&#x27;s view.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The index is the only record of the corpus&#x27;s home, hierarchy and ordering that travels with the project, and placement is an operator-only judgement. A judgement that can only be expressed through a direct HTTP call is not one the operator can make. Where a rebuild cannot record an index because no home is recorded and the choice is ambiguous, the interface SHALL ask the operator which document is home and SHALL rebuild with that answer. It SHALL NOT choose a home on the operator&#x27;s behalf. A rebuild SHALL be announced to every open view of the project. Where a placement is refused, the interface SHALL show the reason the Hub gave, and where the refusal is that there is no usable index, SHALL offer the rebuild in place.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document with a recorded parent is rendered</td><td>the rendered file contains a link to the corpus home and a link to the parent document</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the corpus home document is rendered</td><td>the rendered file contains no navigation link to itself</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document with no recorded parent is rendered</td><td>the rendered file contains a link to the corpus home no parent link is shown</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a rendered document is opened directly from disk with no Hub process running</td><td>its navigation links resolve to the other documents&#x27; files</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document named as parent by several others is rendered</td><td>its map section lists each of those documents with title, kind, phase and summary</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document that no other document names as parent is rendered</td><td>the rendered file contains no map section</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document&#x27;s payload contains prose resembling a list of children</td><td>the generated map is still built from the document index the authored prose is rendered as authored content, unchanged</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a map is generated for children whose recorded order differs from their alphabetical order</td><td>the map lists them in recorded order</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a map is generated for a child whose payload summary is empty</td><td>the map states that the child has no summary yet</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a map is generated for a child whose payload carries a summary</td><td>the map shows that summary</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator sets a document&#x27;s parent to another document in the index</td><td>the index records the parent the placement survives a subsequent index rebuild</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a placement names a path that is not in the index</td><td>it is refused and the index is unchanged</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a placement would make a document its own ancestor</td><td>it is refused and the index is unchanged</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator clears a document&#x27;s parent</td><td>the index records no parent for it the document renders with a home link and no parent link</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>placement is attempted by an agent</td><td>it is refused</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a new document is added under an existing parent and the index is rebuilt</td><td>the parent document is re-rendered no sibling document is re-rendered</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document&#x27;s parent changes from one document to another and the index is rebuilt</td><td>the moved document, its former parent and its new parent are re-rendered no other document is re-rendered</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the index is rebuilt with no change to any document&#x27;s title, placement or order</td><td>no document file is written</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an approved document&#x27;s generated map changes and the index is rebuilt</td><td>the document is re-rendered the regeneration is not refused as a write to an approved document</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document is re-rendered by a rebuild</td><td>the recorded event identifies it as a regeneration rather than an authored change</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a document whose file carries no readable payload block would be re-rendered</td><td>it is not written it is reported as skipped, naming the reason</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a tracked document is re-rendered by a rebuild and drift is then assessed</td><td>the document is not reported as drifted</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a regenerated document&#x27;s file is then edited outside the Hub</td><td>drift is reported for it</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator opens the document browser for a project with no usable index</td><td>the browser says the index is not usable offers to rebuild it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator rebuilds the index of a corpus with several documents and no recorded home</td><td>the interface asks which document is home no index is written until the operator answers the rebuild that follows records the document the operator chose</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator chooses a parent for the open document</td><td>the index records that parent the document&#x27;s rendered navigation names it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator chooses a parent that would create a cycle</td><td>the interface shows the Hub&#x27;s reason the index is unchanged</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/spec-corpus-map/spec.md (8 requirements, 27 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 27 of 27 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Spec corpus map",
+  "summary": "",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "statement": "Every rendered specification document SHALL include a navigation region naming the corpus home and, where one is recorded, the document directly above it. Each SHALL be a relative link resolvable without a running Hub.",
+      "modal": "SHALL",
+      "rationale": "A specification corpus is read as often outside the product as inside it — in a diff, on a code host, in a browser on a machine with no Hub. A document that cannot be navigated away from is an island, and thirty-five islands are not a corpus. The navigation region SHALL depend only on the document's own placement, and SHALL NOT enumerate its siblings. Sibling navigation is reached through the parent. This bound is deliberate: a strip that listed siblings would change for every document in a group whenever any one of them was added, turning a one-document edit into a corpus-wide rewrite.",
+      "party": null
+    },
+    {
+      "key": "a-document-with-children-renders-a-generated-map-of-them",
+      "statement": "A document that other documents name as their parent SHALL render a map section listing each child with its title, kind, phase and one-line summary, each linked by relative path.",
+      "modal": "SHALL",
+      "rationale": "The map SHALL be generated from the document index on every render and SHALL NOT be assembled from content any author supplied. A map maintained by hand drifts from the corpus the moment a document is added, and the cost of that drift is paid by the reader who trusts it. The map region SHALL be visibly identified as generated, so that an operator editing the file does not lose work to the next regeneration. A document with no children SHALL render no map section.",
+      "party": null
+    },
+    {
+      "key": "a-child-with-no-usable-summary-is-reported-as-such",
+      "statement": "Where a child document's payload carries no summary, or carries only placeholder text, the map SHALL say that no summary exists rather than rendering an empty cell.",
+      "modal": "SHALL",
+      "rationale": "An empty cell reads as a rendering fault and hides a content gap. Saying so turns an invisible omission into a visible one — the same reason an empty open-questions list states that none are outstanding instead of omitting the section.",
+      "party": null
+    },
+    {
+      "key": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "statement": "A document's parent SHALL be recorded in the project's document index, SHALL name another document in the same index, and SHALL be settable only by the operator.",
+      "modal": "SHALL",
+      "rationale": "Placement is an editorial judgement about what the project is. It is recorded in the index rather than in a database column because the arrangement must survive the project being copied to another machine, and it is not derived from directory nesting because a directory layout is not a statement about meaning. The Hub SHALL refuse a placement that names an unknown document, that names the document itself, or that would create a cycle.",
+      "party": null
+    },
+    {
+      "key": "regeneration-is-bounded-to-the-documents-the-arrangement-cha",
+      "statement": "When the document index is rebuilt, the Hub SHALL re-render exactly those documents whose navigation region or generated map the rebuild changed, and no others.",
+      "modal": "SHALL",
+      "rationale": "Rendering the corpus into files buys portability at the cost of writes. The bound is what keeps that cost proportionate: adding one document must not rewrite every document.",
+      "party": null
+    },
+    {
+      "key": "a-re-render-is-driven-from-the-file-and-is-not-an-authored-c",
+      "statement": "Re-rendering SHALL take the document's structure from the payload embedded in its own file, and SHALL be recorded as a regeneration distinct from an authored write.",
+      "modal": "SHALL",
+      "rationale": "Reading the file rather than the database means a document that arrived by clone regenerates identically to one the Hub created, and means regeneration does not pass through the write path that refuses approved documents or attributes editorial change to whoever triggered a rebuild. A document whose file carries no readable payload SHALL be skipped and reported, never rendered from guessed structure.",
+      "party": null
+    },
+    {
+      "key": "regeneration-records-the-digest-it-produced",
+      "statement": "Where a re-rendered document has a stored content digest, the Hub SHALL update that digest to the content it just wrote.",
+      "modal": "SHALL",
+      "rationale": "Drift detection compares stored content against the file. A regeneration the Hub performed itself would otherwise be reported as drift, and a drift signal that fires on every rebuild stops being read.",
+      "party": null
+    },
+    {
+      "key": "the-operator-shapes-the-corpus-from-the-app",
+      "statement": "The operator's interface SHALL show whether the project's document index is usable and what its home is, SHALL let the operator rebuild the index, and SHALL let the operator set or clear a document's parent from that document's view.",
+      "modal": "SHALL",
+      "rationale": "The index is the only record of the corpus's home, hierarchy and ordering that travels with the project, and placement is an operator-only judgement. A judgement that can only be expressed through a direct HTTP call is not one the operator can make. Where a rebuild cannot record an index because no home is recorded and the choice is ambiguous, the interface SHALL ask the operator which document is home and SHALL rebuild with that answer. It SHALL NOT choose a home on the operator's behalf. A rebuild SHALL be announced to every open view of the project. Where a placement is refused, the interface SHALL show the reason the Hub gave, and where the refusal is that there is no usable index, SHALL offer the rebuild in place.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "given": "",
+      "when": "a document with a recorded parent is rendered",
+      "then": "the rendered file contains a link to the corpus home and a link to the parent document"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "given": "",
+      "when": "the corpus home document is rendered",
+      "then": "the rendered file contains no navigation link to itself"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "given": "",
+      "when": "a document with no recorded parent is rendered",
+      "then": "the rendered file contains a link to the corpus home no parent link is shown"
+    },
+    {
+      "key": "ac4",
+      "requirement": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "given": "",
+      "when": "a rendered document is opened directly from disk with no Hub process running",
+      "then": "its navigation links resolve to the other documents' files"
+    },
+    {
+      "key": "ac5",
+      "requirement": "a-document-with-children-renders-a-generated-map-of-them",
+      "given": "",
+      "when": "a document named as parent by several others is rendered",
+      "then": "its map section lists each of those documents with title, kind, phase and summary"
+    },
+    {
+      "key": "ac6",
+      "requirement": "a-document-with-children-renders-a-generated-map-of-them",
+      "given": "",
+      "when": "a document that no other document names as parent is rendered",
+      "then": "the rendered file contains no map section"
+    },
+    {
+      "key": "ac7",
+      "requirement": "a-document-with-children-renders-a-generated-map-of-them",
+      "given": "",
+      "when": "a document's payload contains prose resembling a list of children",
+      "then": "the generated map is still built from the document index the authored prose is rendered as authored content, unchanged"
+    },
+    {
+      "key": "ac8",
+      "requirement": "a-document-with-children-renders-a-generated-map-of-them",
+      "given": "",
+      "when": "a map is generated for children whose recorded order differs from their alphabetical order",
+      "then": "the map lists them in recorded order"
+    },
+    {
+      "key": "ac9",
+      "requirement": "a-child-with-no-usable-summary-is-reported-as-such",
+      "given": "",
+      "when": "a map is generated for a child whose payload summary is empty",
+      "then": "the map states that the child has no summary yet"
+    },
+    {
+      "key": "ac10",
+      "requirement": "a-child-with-no-usable-summary-is-reported-as-such",
+      "given": "",
+      "when": "a map is generated for a child whose payload carries a summary",
+      "then": "the map shows that summary"
+    },
+    {
+      "key": "ac11",
+      "requirement": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "given": "",
+      "when": "the operator sets a document's parent to another document in the index",
+      "then": "the index records the parent the placement survives a subsequent index rebuild"
+    },
+    {
+      "key": "ac12",
+      "requirement": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "given": "",
+      "when": "a placement names a path that is not in the index",
+      "then": "it is refused and the index is unchanged"
+    },
+    {
+      "key": "ac13",
+      "requirement": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "given": "",
+      "when": "a placement would make a document its own ancestor",
+      "then": "it is refused and the index is unchanged"
+    },
+    {
+      "key": "ac14",
+      "requirement": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "given": "",
+      "when": "the operator clears a document's parent",
+      "then": "the index records no parent for it the document renders with a home link and no parent link"
+    },
+    {
+      "key": "ac15",
+      "requirement": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "given": "",
+      "when": "placement is attempted by an agent",
+      "then": "it is refused"
+    },
+    {
+      "key": "ac16",
+      "requirement": "regeneration-is-bounded-to-the-documents-the-arrangement-cha",
+      "given": "",
+      "when": "a new document is added under an existing parent and the index is rebuilt",
+      "then": "the parent document is re-rendered no sibling document is re-rendered"
+    },
+    {
+      "key": "ac17",
+      "requirement": "regeneration-is-bounded-to-the-documents-the-arrangement-cha",
+      "given": "",
+      "when": "a document's parent changes from one document to another and the index is rebuilt",
+      "then": "the moved document, its former parent and its new parent are re-rendered no other document is re-rendered"
+    },
+    {
+      "key": "ac18",
+      "requirement": "regeneration-is-bounded-to-the-documents-the-arrangement-cha",
+      "given": "",
+      "when": "the index is rebuilt with no change to any document's title, placement or order",
+      "then": "no document file is written"
+    },
+    {
+      "key": "ac19",
+      "requirement": "a-re-render-is-driven-from-the-file-and-is-not-an-authored-c",
+      "given": "",
+      "when": "an approved document's generated map changes and the index is rebuilt",
+      "then": "the document is re-rendered the regeneration is not refused as a write to an approved document"
+    },
+    {
+      "key": "ac20",
+      "requirement": "a-re-render-is-driven-from-the-file-and-is-not-an-authored-c",
+      "given": "",
+      "when": "a document is re-rendered by a rebuild",
+      "then": "the recorded event identifies it as a regeneration rather than an authored change"
+    },
+    {
+      "key": "ac21",
+      "requirement": "a-re-render-is-driven-from-the-file-and-is-not-an-authored-c",
+      "given": "",
+      "when": "a document whose file carries no readable payload block would be re-rendered",
+      "then": "it is not written it is reported as skipped, naming the reason"
+    },
+    {
+      "key": "ac22",
+      "requirement": "regeneration-records-the-digest-it-produced",
+      "given": "",
+      "when": "a tracked document is re-rendered by a rebuild and drift is then assessed",
+      "then": "the document is not reported as drifted"
+    },
+    {
+      "key": "ac23",
+      "requirement": "regeneration-records-the-digest-it-produced",
+      "given": "",
+      "when": "a regenerated document's file is then edited outside the Hub",
+      "then": "drift is reported for it"
+    },
+    {
+      "key": "ac24",
+      "requirement": "the-operator-shapes-the-corpus-from-the-app",
+      "given": "",
+      "when": "the operator opens the document browser for a project with no usable index",
+      "then": "the browser says the index is not usable offers to rebuild it"
+    },
+    {
+      "key": "ac25",
+      "requirement": "the-operator-shapes-the-corpus-from-the-app",
+      "given": "",
+      "when": "the operator rebuilds the index of a corpus with several documents and no recorded home",
+      "then": "the interface asks which document is home no index is written until the operator answers the rebuild that follows records the document the operator chose"
+    },
+    {
+      "key": "ac26",
+      "requirement": "the-operator-shapes-the-corpus-from-the-app",
+      "given": "",
+      "when": "the operator chooses a parent for the open document",
+      "then": "the index records that parent the document's rendered navigation names it"
+    },
+    {
+      "key": "ac27",
+      "requirement": "the-operator-shapes-the-corpus-from-the-app",
+      "given": "",
+      "when": "the operator chooses a parent that would create a cycle",
+      "then": "the interface shows the Hub's reason the index is unchanged"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/spec-corpus-map/spec.md (8 requirements, 27 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenarios-state-no-starting-state: 27 of 27 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-rendered-document-carries-navigation-to-its-home-and-its-p": "FR-1",
+      "a-document-with-children-renders-a-generated-map-of-them": "FR-2",
+      "a-child-with-no-usable-summary-is-reported-as-such": "FR-3",
+      "a-document-s-place-in-the-corpus-is-operator-set-and-held-in": "FR-4",
+      "regeneration-is-bounded-to-the-documents-the-arrangement-cha": "FR-5",
+      "a-re-render-is-driven-from-the-file-and-is-not-an-authored-c": "FR-6",
+      "regeneration-records-the-digest-it-produced": "FR-7",
+      "the-operator-shapes-the-corpus-from-the-app": "FR-8"
+    },
+    "high_water": 8,
+    "retired": {},
+    "digests": {
+      "FR-1": "33d2e6e0da9278737afaed762c3a7236afb06c84c403714e5bdc180875b5edc1",
+      "FR-2": "e662177e632b0da9b4cc2a1c2304415d4cbbdc68bd15fde4c91d74925c6e6036",
+      "FR-3": "0c92734a63ceae4c128a62aa95d0a8a0f286313f4ea951c598a0cb29a304e8ff",
+      "FR-4": "e5d30168847a1fc0aa05a1a6794e5b9410d30b2b6b4701648043e963d3a3bd3b",
+      "FR-5": "0de67e12d304606b5d8cd512e19fe341eea6a8bea464d0f262aa148bd9c9454f",
+      "FR-6": "864f12207e4e2750cbb7badeb34bea5fcdaa954f5e097aa1f87bf4e4d2a9cb2a",
+      "FR-7": "3f8df1033edcf9fd969ced212f0d29806f4627fd4a4b9d145f5b44ac6e2faacf",
+      "FR-8": "15316f5bdc3b9ce6095df4cd8bdb2b179d2f0ed153e249c01d7ea25fba465fe0"
+    }
+  }
+}
+</script>
+</body>
+</html>

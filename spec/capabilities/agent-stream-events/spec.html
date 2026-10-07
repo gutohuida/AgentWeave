@@ -13,6 +13,7 @@
   --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
   --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
   --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -32,6 +33,9 @@
   --surface-2: #21262d; --surface: #161b22;
 }
 * { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
 body {
   margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
   font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
@@ -43,27 +47,37 @@ h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
 p { margin: .5rem 0; }
 ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
 li { margin: .25rem 0; }
-a { color: var(--aw-accent); }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
 .aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
 .aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
-.aw-nav a { margin-right: .6rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
 .aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
 .aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
-.aw-map-item { margin: .75rem 0; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
 .aw-map-item > p { margin: .2rem 0; }
 .aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
            background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
-.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
-                  margin: 1.1rem 0; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
 .aw-requirement-must { border-left-color: var(--aw-accent); }
 .aw-requirement-should { border-left-color: var(--aw-warn); }
 .aw-requirement-may { border-left-color: var(--border); }
 .aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
          color: var(--muted); }
-.aw-modal { font-weight: 600; }
-.aw-modal-must { color: var(--aw-accent); }
-.aw-modal-should { color: var(--aw-warn); }
-.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
 .aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
 .aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
 /* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
@@ -84,16 +98,49 @@ a { color: var(--aw-accent); }
 /* The first screenful was entirely monochrome, so the document read as texty however the
    requirements below were coloured. This puts the same modal scheme where the eye lands first,
    carrying counts rather than decoration. */
-.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
 .aw-summary .aw-count { font-weight: 600; }
 .aw-summary-sep { color: var(--border); margin: 0 .45rem; }
-.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
 .aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
 .aw-note { color: var(--muted); font-style: italic; }
 .aw-empty { color: var(--muted); }
-table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
 th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
-         vertical-align: top; font-size: .92rem; }
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
 code, pre { background: var(--surface); border-radius: 4px; }
 code { padding: .1rem .3rem; font-size: .88em; }
 </style>
@@ -102,8 +149,8 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <h1>Agent stream events</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
 <p class="aw-nav"><a href="../../agentweave.html">Home</a><a href="../../areas/conversations.html">Conversations</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">19</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">19</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">40</span> criteria</p>
-<section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub&#x27;s direct-execution path SHALL normalize supported runner output into a provider-neutral parser result containing zero or more output events, an independent optional usage sample, optional session changes, and control flags.</p><p class="aw-rationale">Each output event SHALL contain a `kind`, readable `content`, and versioned structured `payload`.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Normalized output events SHALL use exactly one of `text`, `thinking`, `tool_use`, `tool_result`, `status`, `diagnostic`, or `error`.</p><p class="aw-rationale">Successful run completion SHALL be represented as `status`; failed run completion SHALL be represented as `error`; a failed tool invocation SHALL remain `tool_result` with `is_error=true`.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Every structured payload SHALL include `version=1` and satisfy the schema for its event kind.</p><p class="aw-rationale">Text and thinking payloads SHALL carry readable text. Tool-use and tool-result payloads SHALL carry correlation and summary fields. Status payloads SHALL carry a lifecycle phase. Diagnostic payloads SHALL identify stream and severity. Error payloads SHALL carry a stable code and readable message.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Tool-use and tool-result events SHALL retain the provider&#x27;s call identifier as `call_id` whenever the provider supplies one, and SHALL preserve a readable tool name and summary.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Every Hub-triggered run SHALL receive a unique `run_id`, and each emitted event within that run SHALL receive a monotonically increasing `sequence` assigned after normalization.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL normalize the installed or documented streaming formats for Claude and Codex into the canonical event contract.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Runner adapters SHALL tolerate syntactically valid provider events that they do not recognize. They SHALL either omit non-user-relevant events or emit bounded `diagnostic` events without terminating the runner stream.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL recursively redact known secret patterns before transport and SHALL NOT persist complete raw provider events, opaque reasoning blobs, or encrypted reasoning fields.</p><p class="aw-rationale">The serialized payload SHALL be at most 64 KiB, and a retained tool-result excerpt SHALL be at most 8 KiB. Truncated payloads SHALL preserve readable content and set `truncated=true`.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Agent output persistence, creation requests, responses, and SSE events SHALL support nullable `kind`, `payload`, `run_id`, and `sequence` fields in addition to existing content, session, and timestamp fields.</p><p class="aw-rationale">The Hub SHALL validate allowed kinds and payload bounds independently of upstream parser validation.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL remain compatible with existing text-only producers, text-only database rows, and clients that ignore unknown response fields. Every new structured event SHALL retain meaningful `content` as a plain-text and accessibility fallback.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> When agent output is projected into per-agent chat history, the projection SHALL retain available stream kind, payload, run identity, sequence, and timestamp rather than flattening the record back to content alone.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The default bounded output query SHALL return the newest N matching records and present those records in chronological order with deterministic tie-breaking.</p><p class="aw-rationale">Incremental queries SHALL continue from their cursor in chronological order.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub UI SHALL use one shared structured-event renderer for the agent output panel, spec chat, and agent activity views. Rendering logic SHALL use `kind` and payload fields rather than string prefix inspection when structured fields are present.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Consecutive thinking events in one run SHALL render as a grouped live section. The section SHALL automatically collapse when the first text event or terminal lifecycle event for that run arrives, and SHALL remain user-expandable with a duration summary when timestamps permit.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Correlated tool-use and tool-result events SHALL render as a compact paired activity that can expand to safe input and result details. Errors SHALL remain prominent, while diagnostics SHALL be visually distinct and hideable without hiding errors or tool failures.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The repository SHALL include representative fixtures and tests for every supported runner adapter, event persistence and delivery, legacy compatibility, payload bounds and redaction, ordering, and shared UI rendering behavior.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The canonical runner observation SHALL keep context-usage samples separate from display events. Context samples SHALL use the `agent-context-usage` contract and SHALL NOT be persisted as `AgentOutput` rows or rendered as stream event kinds.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span> <p><span class="aw-modal aw-modal-must">MUST</span> The entries of a turn SHALL be presented in the order they occurred. Tool activity MUST NOT be hoisted ahead of text that preceded it.</p><p class="aw-rationale">Consecutive tool activity SHALL be grouped into a single collapsible block positioned where that activity occurred in the turn. A turn containing several separated runs of tool activity SHALL present several such blocks, each in its own position.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span> <p><span class="aw-modal aw-modal-must">MUST</span> Every work block in a turn SHALL carry its own expansion state and its own reported duration. Expanding one block MUST NOT expand another.</p><p class="aw-rationale">A block&#x27;s reported duration SHALL span that block&#x27;s own first and last entry. Tool-use and tool-result pairing SHALL be resolved within a block. A tool result MUST NOT be paired with a tool use from a different block.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a provider line contains multiple independently displayable content blocks</td><td>the parser result SHALL preserve those blocks as ordered output events</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a provider event reports token usage but has no user-readable content</td><td>the parser result SHALL preserve the usage sample without fabricating an output event</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a runner reports successful turn completion</td><td>the Hub SHALL emit a `status` event whose payload phase is `completed`</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a tool result reports failure</td><td>the Hub SHALL emit a `tool_result` event with `is_error=true` rather than a top-level `error`</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a normalized event is sent to the Hub</td><td>its payload SHALL contain `version=1` and the fields required by its kind</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an old producer submits content without a structured payload</td><td>the Hub SHALL accept and preserve the readable content</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a provider emits a tool invocation followed by its result</td><td>both normalized events SHALL carry the same `call_id`</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a provider emits tool activity without a call identifier</td><td>the events SHALL remain renderable as unpaired tool activity without inventing a provider identifier</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>multiple output events are emitted by one runner invocation</td><td>they SHALL share a `run_id` and have strictly increasing sequence values</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the Hub starts another process attempt after a stale-session or transient failure</td><td>the new invocation SHALL receive a new `run_id`</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>Claude emits readable thinking, text, tool-use, tool-result, result, or error data</td><td>the adapter SHALL map each item to the corresponding canonical event and retain usage separately</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>Codex emits reasoning, agent-message, command, file-change, MCP-call, web-search,</td><td>the adapter SHALL map them to canonical events without exposing raw JSONL as user content</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an adapter receives a valid but unknown event type</td><td>parsing SHALL continue and later recognized events SHALL still be emitted</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a runner produces malformed structured output</td><td>the Hub SHALL preserve a bounded diagnostic or readable fallback and continue when safe</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>normalized structured input contains a recognized credential or secret</td><td>the secret SHALL be redacted before the event leaves the Hub&#x27;s direct-execution path</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a tool result is larger than 8 KiB</td><td>the stored result excerpt SHALL be bounded, the summary SHALL remain readable, and `truncated` SHALL be true</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a provider event contains encrypted or otherwise opaque reasoning data</td><td>that field SHALL NOT be copied into content or payload</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the Hub receives valid content with structured stream fields</td><td>it SHALL persist and return those fields through REST and SSE</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>an output creation request violates the event contract</td><td>the Hub SHALL reject the structured fields with a validation response and SHALL NOT persist unsafe payload data</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>an output row has null structured fields</td><td>APIs and UI SHALL treat it as ordinary plain text</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>an older Hub ignores unsupported optional structured fields</td><td>readable content SHALL still represent the event</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>chat history includes a thinking or tool event</td><td>the chat response SHALL provide the fields required by the shared renderer</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>a client requests output without a cursor and more than N matching rows exist</td><td>the response SHALL contain the newest N rows ordered oldest-to-newest</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>two matching records have equal timestamps</td><td>run sequence and record ID SHALL provide stable ordering</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a structured event is shown in agent output, spec chat, and agent activity</td><td>all surfaces SHALL use the same semantic label, severity, and content treatment</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a text-only legacy event contains an existing pre-canonical content prefix</td><td>compatibility handling SHALL preserve current visibility behavior without affecting structured events</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>a run emits thinking followed by text</td><td>the thinking group SHALL collapse and the text SHALL remain visible</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>the latest event in an active run is thinking</td><td>the current thinking group SHALL remain visibly active</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>tool-use and tool-result events share a call ID</td><td>the UI SHALL present one expandable tool activity with its completion or failure state</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>diagnostic visibility is disabled</td><td>diagnostic events SHALL be hidden while error events and failed tool results remain visible</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>the stream adapter tests execute</td><td>fixtures for Claude and Codex SHALL produce the expected canonical events</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>the Hub UI test or build verification executes</td><td>structured and legacy records SHALL type-check and render through the shared component</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>one provider event contains both readable output and token usage</td><td>the parser SHALL return output events and the usage sample in separate result fields</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>an auxiliary provider collector reports a context sample</td><td>the invocation coordinator SHALL deliver the context snapshot without fabricating a stream event</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a turn produced text, then tool activity, then further text, then further tool activity</td><td>the rendered order is that text, a work block, the further text, and a further work block</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a turn produced several tool calls with no intervening text</td><td>those calls are presented as a single work block</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a turn produced tool activity and no interleaved text</td><td>that activity is presented as one work block, as before</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>a turn presents two work blocks and the operator expands the first</td><td>the second remains collapsed</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>a work block reports a duration</td><td>that duration spans the block&#x27;s own first and last entry rather than the whole turn</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>a turn presents several work blocks</td><td>each tool result is rendered inline with the tool use it pairs with inside the same block</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-stream-events/spec.md (19 requirements, 40 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 40 of 40 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">31</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">31</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">111</span> criteria</p>
+<section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span><a class="aw-anchor-copy" href="#FR-20" aria-label="Link to FR-20" title="Link to #FR-20">#</a> <span class="aw-position">Requirement 1 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub&#x27;s direct-execution path SHALL normalize supported runner output into a provider-neutral parser result containing zero or more output events, an independent optional usage sample, optional session changes, and control flags.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Each output event SHALL contain a `kind`, readable `content`, and versioned structured `payload`.</p></div><div class="aw-requirement aw-requirement-must" id="FR-21"><span class="aw-id">FR-21</span><a class="aw-anchor-copy" href="#FR-21" aria-label="Link to FR-21" title="Link to #FR-21">#</a> <span class="aw-position">Requirement 2 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> Normalized output events SHALL use exactly one of `text`, `thinking`, `tool_use`, `tool_result`, `status`, `diagnostic`, or `error`.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Successful run completion SHALL be represented as `status`; failed run completion SHALL be represented as `error`; a failed tool invocation SHALL remain `tool_result` with `is_error=true`.</p></div><div class="aw-requirement aw-requirement-must" id="FR-22"><span class="aw-id">FR-22</span><a class="aw-anchor-copy" href="#FR-22" aria-label="Link to FR-22" title="Link to #FR-22">#</a> <span class="aw-position">Requirement 3 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every structured payload SHALL include `version=1` and satisfy the schema for its event kind.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Text and thinking payloads SHALL carry readable text. Tool-use and tool-result payloads SHALL carry correlation and summary fields. Status payloads SHALL carry a lifecycle phase. Diagnostic payloads SHALL identify stream and severity. Error payloads SHALL carry a stable code and readable message.</p></div><div class="aw-requirement aw-requirement-must" id="FR-23"><span class="aw-id">FR-23</span><a class="aw-anchor-copy" href="#FR-23" aria-label="Link to FR-23" title="Link to #FR-23">#</a> <span class="aw-position">Requirement 4 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> Tool-use and tool-result events SHALL retain the provider&#x27;s call identifier as `call_id` whenever the provider supplies one, and SHALL preserve a readable tool name and summary.</p></div><div class="aw-requirement aw-requirement-must" id="FR-24"><span class="aw-id">FR-24</span><a class="aw-anchor-copy" href="#FR-24" aria-label="Link to FR-24" title="Link to #FR-24">#</a> <span class="aw-position">Requirement 5 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every Hub-triggered run SHALL receive a unique `run_id`, and each emitted event within that run SHALL receive a monotonically increasing `sequence` assigned after normalization.</p></div><div class="aw-requirement aw-requirement-must" id="FR-25"><span class="aw-id">FR-25</span><a class="aw-anchor-copy" href="#FR-25" aria-label="Link to FR-25" title="Link to #FR-25">#</a> <span class="aw-position">Requirement 6 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL normalize the installed or documented streaming formats for Claude, Codex and Copilot into the canonical event contract.</p></div><div class="aw-requirement aw-requirement-must" id="FR-26"><span class="aw-id">FR-26</span><a class="aw-anchor-copy" href="#FR-26" aria-label="Link to FR-26" title="Link to #FR-26">#</a> <span class="aw-position">Requirement 7 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> Runner adapters SHALL tolerate syntactically valid provider events that they do not recognize. They SHALL either omit non-user-relevant events or emit bounded `diagnostic` events without terminating the runner stream.</p></div><div class="aw-requirement aw-requirement-must" id="FR-27"><span class="aw-id">FR-27</span><a class="aw-anchor-copy" href="#FR-27" aria-label="Link to FR-27" title="Link to #FR-27">#</a> <span class="aw-position">Requirement 8 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL recursively redact known secret patterns before transport and SHALL NOT persist complete raw provider events, opaque reasoning blobs, or encrypted reasoning fields.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Redaction SHALL be bounded so that it does not consume identifiers that are not secrets. In particular it SHALL NOT redact the Hub&#x27;s own vocabulary — the MCP tool names it publishes and the document slugs it mints from titles agents choose. A rule that matches any sufficiently long identifier removes precisely the identifier that tells the operator *which* document an agent read, and it does so to catch credentials the recognized-prefix rules have already caught. Nor SHALL redaction consume a file path. A run of the high-entropy rule that is made of at least three non-empty `/`-separated segments, each an ordinary lowercase, capitalised or camel-case word (empty segments are ignored), is a path and SHALL survive, except that any single segment of credential length, or of 16 or more characters holding both a letter and a digit, SHALL still be redacted, because a token inside a path is no less a token. A path with `/` separators is the commonest thing a tool input names on a Linux host. The one most reliably lost is the agent&#x27;s own checkout, which is what an operator reading a transcript is most often trying to establish. The serialized payload SHALL be at most 64 KiB, and a retained tool-result excerpt SHALL be at most 8 KiB. Truncated payloads SHALL preserve readable content and set `truncated=true`.</p></div><div class="aw-requirement aw-requirement-must" id="FR-28"><span class="aw-id">FR-28</span><a class="aw-anchor-copy" href="#FR-28" aria-label="Link to FR-28" title="Link to #FR-28">#</a> <span class="aw-position">Requirement 9 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> Agent output persistence, creation requests, responses, and SSE events SHALL support nullable `kind`, `payload`, `run_id`, and `sequence` fields in addition to existing content, session, and timestamp fields.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The Hub SHALL validate allowed kinds and payload bounds independently of upstream parser validation.</p></div><div class="aw-requirement aw-requirement-must" id="FR-29"><span class="aw-id">FR-29</span><a class="aw-anchor-copy" href="#FR-29" aria-label="Link to FR-29" title="Link to #FR-29">#</a> <span class="aw-position">Requirement 10 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL remain compatible with existing text-only producers, text-only database rows, and clients that ignore unknown response fields. Every new structured event SHALL retain meaningful `content` as a plain-text and accessibility fallback.</p></div><div class="aw-requirement aw-requirement-must" id="FR-30"><span class="aw-id">FR-30</span><a class="aw-anchor-copy" href="#FR-30" aria-label="Link to FR-30" title="Link to #FR-30">#</a> <span class="aw-position">Requirement 11 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> When agent output is projected into per-agent chat history, the projection SHALL retain available stream kind, payload, run identity, sequence, and timestamp rather than flattening the record back to content alone.</p></div><div class="aw-requirement aw-requirement-must" id="FR-31"><span class="aw-id">FR-31</span><a class="aw-anchor-copy" href="#FR-31" aria-label="Link to FR-31" title="Link to #FR-31">#</a> <span class="aw-position">Requirement 12 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The default bounded output query SHALL return the newest N matching records and present those records in chronological order with deterministic tie-breaking.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Incremental queries SHALL continue from their cursor in chronological order.</p></div><div class="aw-requirement aw-requirement-must" id="FR-32"><span class="aw-id">FR-32</span><a class="aw-anchor-copy" href="#FR-32" aria-label="Link to FR-32" title="Link to #FR-32">#</a> <span class="aw-position">Requirement 13 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub UI SHALL use one shared structured-event renderer for the agent output panel, spec chat, and agent activity views. Rendering logic SHALL use `kind` and payload fields rather than string prefix inspection when structured fields are present.</p></div><div class="aw-requirement aw-requirement-must" id="FR-33"><span class="aw-id">FR-33</span><a class="aw-anchor-copy" href="#FR-33" aria-label="Link to FR-33" title="Link to #FR-33">#</a> <span class="aw-position">Requirement 14 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> Consecutive thinking events in one run SHALL render as a grouped live section. The section SHALL automatically collapse when the first text event or terminal lifecycle event for that run arrives, and SHALL remain user-expandable with a duration summary when timestamps permit.</p></div><div class="aw-requirement aw-requirement-must" id="FR-34"><span class="aw-id">FR-34</span><a class="aw-anchor-copy" href="#FR-34" aria-label="Link to FR-34" title="Link to #FR-34">#</a> <span class="aw-position">Requirement 15 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> Correlated tool-use and tool-result events SHALL render as a compact paired activity that can expand to safe input and result details. Errors SHALL remain prominent, while diagnostics SHALL be visually distinct and hideable without hiding errors or tool failures.</p></div><div class="aw-requirement aw-requirement-must" id="FR-35"><span class="aw-id">FR-35</span><a class="aw-anchor-copy" href="#FR-35" aria-label="Link to FR-35" title="Link to #FR-35">#</a> <span class="aw-position">Requirement 16 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The repository SHALL include representative fixtures and tests for every supported runner adapter, event persistence and delivery, legacy compatibility, payload bounds and redaction, ordering, and shared UI rendering behavior.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Copilot&#x27;s fixtures SHALL be taken from captured Copilot transcripts, in the order Copilot sent them, including the prompt response arriving after the turn&#x27;s session updates.</p></div><div class="aw-requirement aw-requirement-must" id="FR-36"><span class="aw-id">FR-36</span><a class="aw-anchor-copy" href="#FR-36" aria-label="Link to FR-36" title="Link to #FR-36">#</a> <span class="aw-position">Requirement 17 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The canonical runner observation SHALL keep context-usage samples separate from display events. Context samples SHALL use the `agent-context-usage` contract and SHALL NOT be persisted as `AgentOutput` rows or rendered as stream event kinds.</p></div><div class="aw-requirement aw-requirement-must" id="FR-37"><span class="aw-id">FR-37</span><a class="aw-anchor-copy" href="#FR-37" aria-label="Link to FR-37" title="Link to #FR-37">#</a> <span class="aw-position">Requirement 18 of 31</span><p><span class="aw-modal aw-modal-must">MUST</span> The entries of a turn SHALL be presented in the order they occurred. Tool activity MUST NOT be hoisted ahead of text that preceded it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Consecutive tool activity SHALL be grouped into a single collapsible block positioned where that activity occurred in the turn. A turn containing several separated runs of tool activity SHALL present several such blocks, each in its own position.</p></div><div class="aw-requirement aw-requirement-must" id="FR-38"><span class="aw-id">FR-38</span><a class="aw-anchor-copy" href="#FR-38" aria-label="Link to FR-38" title="Link to #FR-38">#</a> <span class="aw-position">Requirement 19 of 31</span><p><span class="aw-modal aw-modal-must">MUST</span> Every work block in a turn SHALL carry its own expansion state and its own reported duration. Expanding one block MUST NOT expand another.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A block&#x27;s reported duration SHALL span that block&#x27;s own first and last entry. Tool-use and tool-result pairing SHALL be resolved within a block. A tool result MUST NOT be paired with a tool use from a different block.</p></div><div class="aw-requirement aw-requirement-must" id="FR-39"><span class="aw-id">FR-39</span><a class="aw-anchor-copy" href="#FR-39" aria-label="Link to FR-39" title="Link to #FR-39">#</a> <span class="aw-position">Requirement 20 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The conversation SHALL show, for every run that ended, whether it completed, failed, was stopped or was interrupted, and SHALL show it again after a page reload.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A run whose row genuinely cannot be found is the only case that may present no outcome. That is distinct from a run whose row exists but was omitted from the response the conversation reads, which is a defect and is forbidden by *A conversation carries the facts of the runs it renders*. That cross-reference used to name *The run facts cover every run the events name*, and naming it was itself the hole. That requirement is quantified over the runs a returned **event** names, so it cannot forbid omitting a run no returned event names — which is precisely what happens when a turn is drawn from a conversation&#x27;s entries while its outcome is sought in an agent-wide event window. The rule that forbids it has to be stated over the response the conversation actually reads.</p></div><div class="aw-requirement aw-requirement-must" id="FR-40"><span class="aw-id">FR-40</span><a class="aw-anchor-copy" href="#FR-40" aria-label="Link to FR-40" title="Link to #FR-40">#</a> <span class="aw-position">Requirement 21 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The timeline response SHALL carry each run&#x27;s recorded facts — status, exit code, start time and end time — read from the run&#x27;s own row, and clients SHALL NOT reconstruct them from event names or event timestamps.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The response is an envelope of the events and a map of run facts keyed by `run_id`. The map is keyed rather than listed because every consumer of it is a lookup or an unordered scan; a list would require the client to build the index and would reintroduce the derivation this requirement removes. The run facts are read by primary key, using the run ids the returned events name, after those events have been merged and truncated. The map therefore describes exactly the runs the response talks about: it is not scoped by project and agent, and it carries no bound that could be chosen too small.</p></div><div class="aw-requirement aw-requirement-must" id="FR-41"><span class="aw-id">FR-41</span><a class="aw-anchor-copy" href="#FR-41" aria-label="Link to FR-41" title="Link to #FR-41">#</a> <span class="aw-position">Requirement 22 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every run named by a returned event SHALL be present in the run facts map, and the map SHALL be obtained by looking those runs up by id rather than by any query whose coverage depends on an ordering or a limit.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Coverage is the property; a bound is not a way to get it. A limit decides how many rows return, not which, and no ordering available on the run row tracks the recency of the events that name it. `run_reconciliation` sweeps every still-`running` row at Hub start and writes its lifecycle event then, so an agent&#x27;s newest events routinely name its oldest runs. A query ranked by start time and capped at any number can miss exactly those. Omitting a run the events name presents that turn as having no outcome — which is the defect this change exists to remove, reintroduced by the fix for it, and blessed by *An unknown run degrades rather than fails*. That is why the requirement is on the construction of the query and not on the size of its result.</p></div><div class="aw-requirement aw-requirement-must" id="FR-42"><span class="aw-id">FR-42</span><a class="aw-anchor-copy" href="#FR-42" aria-label="Link to FR-42" title="Link to #FR-42">#</a> <span class="aw-position">Requirement 23 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL persist a run&#x27;s terminal status line as durable output, not only broadcast it, where the write can be made, and where it cannot, SHALL log the failure naming the run and SHALL leave the run&#x27;s own recorded outcome and exit code as the record of how it ended.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>This is bounded to the runs whose end the Hub observes — the two spawn paths&#x27; finalize blocks. A run reconciled as `interrupted` after a Hub restart has no terminal status line and is not required to gain one: there was no Hub process to write it. Such a run&#x27;s outcome is carried by the run facts map, under *A run&#x27;s terminal outcome is visible*. The status line is the fast signal a conversation settles on as the run ends. It is not the only record: the run&#x27;s row carries its outcome and exit code, and the conversation reads them from the run facts it is served. So a status line that could not be written costs the conversation the moment the fast signal would have given, and not the fact. A failure to write it SHALL NOT relabel a run that has already ended, and SHALL NOT go unrecorded.</p></div><div class="aw-requirement aw-requirement-must" id="FR-43"><span class="aw-id">FR-43</span><a class="aw-anchor-copy" href="#FR-43" aria-label="Link to FR-43" title="Link to #FR-43">#</a> <span class="aw-position">Requirement 24 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The run facts a conversation or an agent timeline is served SHALL include the error the run&#x27;s own row recorded, where it recorded one, and SHALL carry nothing in its place where it recorded none.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A run that failed before its process started writes no output at all, so the reason it failed is on its row and in a broadcast event, and nowhere a conversation reads. The facts are the one place the conversation reads a run&#x27;s outcome from.</p></div><div class="aw-requirement aw-requirement-must" id="FR-44"><span class="aw-id">FR-44</span><a class="aw-anchor-copy" href="#FR-44" aria-label="Link to FR-44" title="Link to #FR-44">#</a> <span class="aw-position">Requirement 25 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> A model function that consumes an API payload SHALL be tested against a fixture whose ordering is the ordering that route actually produces, and the test SHALL fail if the route&#x27;s ordering is reversed.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A fixture that asserts correct behaviour on an ordering the route never emits is not evidence. This requirement exists because such a test was green while the behaviour it covered could not fire.</p></div><div class="aw-requirement aw-requirement-must" id="FR-45"><span class="aw-id">FR-45</span><a class="aw-anchor-copy" href="#FR-45" aria-label="Link to FR-45" title="Link to #FR-45">#</a> <span class="aw-position">Requirement 26 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> A chat history response SHALL carry a map of run facts keyed by `run_id` covering every run its own returned entries name, obtained by looking those runs up by id rather than by any query whose coverage depends on an ordering, a limit, or a different response&#x27;s window.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The turns a client draws are its entries grouped by `run_id`, so the entries are what decide which runs need facts. A response that returns the entries and not the facts leaves the client to find them somewhere else, and every other place is scoped or bounded differently: an agent-wide event window is not a conversation, and a fixed number of events is not the number of turns. Coverage is therefore a property of the construction. The ids come from the entries the response is returning, after every truncation that response applies and after any still-undelivered entries are appended, and the runs are read by primary key. There is no bound that could be chosen too small and no window either side to fall out of. This holds for a response scoped to one conversation and for a response spanning an agent&#x27;s recent activity across conversations. Both draw turns; both must carry the facts of the runs those turns name. A run named by an entry whose row genuinely cannot be found is omitted from the map, and the client presents that turn exactly as it presents a run with no outcome yet.</p></div><div class="aw-requirement aw-requirement-must" id="FR-46"><span class="aw-id">FR-46</span><a class="aw-anchor-copy" href="#FR-46" aria-label="Link to FR-46" title="Link to #FR-46">#</a> <span class="aw-position">Requirement 27 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> A client displaying a conversation SHALL refresh that conversation&#x27;s run facts when a run for that agent reaches a terminal status and when the client&#x27;s event stream reconnects after an interruption, rather than only when new conversation content arrives.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A turn&#x27;s outcome is now carried by the same response as its entries, so whatever causes that response to be re-read is what causes the outcome to appear. Content arriving is not sufficient: a run whose end the Hub did not observe — one reconciled at restart, one the operator stopped — writes no output row at all, and its end is only ever announced by the run reaching a terminal status. That is why the rule is stated over the status and not over any content the run wrote. **Deliberately not stated over a run that failed before its process started.** An earlier draft of this requirement claimed that case too, and the phase-6 drive falsified it against the code: the pre-spawn failure path returns the run&#x27;s queue entries to the queue (or abandons them) and commits that **before** it broadcasts `run_failed` (`hub/hub/api/v1/agent_trigger.py:2005-2011`), and the client groups turns only from entries whose `delivery_state` is `delivered` (`hub/ui/src/lib/agentTimelineModel.ts:45-62`). So by the moment any client can hear that run ended, no entry names it as delivered and there is no turn to label. The operator is told by the abandonment banner instead, live and with no reload. Making that case present a terminal label is a change to what a turn *is*, not a refresh rule; it is tracked as **F291** and is out of scope here. Two signals, because one run-ending is not observable by the client at all. A run reconciled at Hub restart has its status decided while the client is disconnected — the process that broadcasts the event is the process the client&#x27;s stream died with — and a broadcast with no subscriber is not delivered later. The reconnect is the only moment at which such a client can learn anything, so the rule is stated over the reconnect and not over the event, and a client that listened only for the event would satisfy the letter of the terminal-status half while failing the case that motivates it. A run *beginning* is deliberately not a refresh trigger. It changes nothing in the response that the arrival of its output will not already carry, and refetching an unbounded history on that signal costs more than it states.</p></div><div class="aw-requirement aw-requirement-must" id="FR-47"><span class="aw-id">FR-47</span><a class="aw-anchor-copy" href="#FR-47" aria-label="Link to FR-47" title="Link to #FR-47">#</a> <span class="aw-position">Requirement 28 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every event the Hub persists or broadcasts SHALL use the key `run_id` only for the id of a run, one agent&#x27;s attempt at a turn. An event that refers to a job&#x27;s firing record SHALL carry that id as `job_run_id`, and SHALL NOT carry it as `run_id`. A route that answers with a firing record&#x27;s id SHALL name it the same way.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A run id and a firing record id share a prefix, so a reader cannot tell them apart by the value. A reader that collects `run_id` from a stream of events and looks each up as a run then looks up something that is not a run, and an operator reading the activity log sees a firing name a run that cannot be found. Events persisted before this requirement are not rewritten.</p></div><div class="aw-requirement aw-requirement-must" id="FR-48"><span class="aw-id">FR-48</span><a class="aw-anchor-copy" href="#FR-48" aria-label="Link to FR-48" title="Link to #FR-48">#</a> <span class="aw-position">Requirement 29 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL NOT turn the history Copilot replays when a session is loaded into new timeline events, and SHALL begin mapping a Copilot turn&#x27;s session updates only once that turn&#x27;s prompt has been sent.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A loaded Copilot session replays its earlier messages as ordinary message updates. Rendering them again would show the operator every earlier turn a second time, attributed to the new run. When a session the conversation is bound to no longer exists in Copilot, the Hub SHALL start a new session and bind the conversation to it. It SHALL say so in the run&#x27;s timeline rather than fail the turn. Any other failure to load SHALL fail the turn.</p></div><div class="aw-requirement aw-requirement-must" id="FR-49"><span class="aw-id">FR-49</span><a class="aw-anchor-copy" href="#FR-49" aria-label="Link to FR-49" title="Link to #FR-49">#</a> <span class="aw-position">Requirement 30 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL remove a value registered for a run from that run&#x27;s recorded model text when the value runs across two or more of the run&#x27;s `text` and `thinking` events, as well as when it lies inside one.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The run&#x27;s `text` and `thinking` events are joined in the order they are recorded, and other events between them, such as tool calls and their results, errors, and status cards, do not break the join, and neither does whitespace at the end of one event or the start of the next. Where a registered value crosses an event boundary, the part of it inside each event recorded after the value began SHALL be replaced with `&lt;redacted&gt;`, in the stored row and in its broadcast alike. An event that ends with the first characters of a registered value SHALL have them replaced with `&lt;redacted&gt;` when it is recorded, without waiting for the next event, once they number at least half the value&#x27;s length (rounded down) or eight, whichever is fewer. A shorter dangling start MAY be recorded as written. A registered value that itself contains whitespace MAY be recorded unredacted where an event boundary falls on that whitespace. Whitespace at the start or end of a registered value is not part of it: the value SHALL be removed both as registered and without that whitespace. No event SHALL be delayed, held back or reordered to achieve this, and an event of a run with no registered value SHALL be recorded exactly as it was emitted. A recording retried after a locked database SHALL produce the same row as one that succeeded first time.</p></div><div class="aw-requirement aw-requirement-must" id="FR-50"><span class="aw-id">FR-50</span><a class="aw-anchor-copy" href="#FR-50" aria-label="Link to FR-50" title="Link to #FR-50">#</a> <span class="aw-position">Requirement 31 of 31</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL record in a Copilot run&#x27;s stream each compaction, each error and each subagent start, completion and failure that Copilot reports, as structured events carrying the facts Copilot reported.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>These are the facts Copilot reports and the other runners do not: that the context was compacted and by how much, what category an error belongs to and what would remedy it, and which subagent ran on which model for how long. They SHALL come from Copilot&#x27;s structured session events on the connection the Hub already reads, and SHALL NOT depend on a hook process. An error Copilot reports SHALL be recorded as an error event, not as a diagnostic, so that it stays visible when diagnostics are hidden. An error SHALL be recorded as one fact, whether the main agent or one of its subagents reported it. Copilot reports an error as a structured event and then as message text derived from it, for a subagent&#x27;s error as for the main agent&#x27;s. The stream SHALL hold one error event for it and SHALL NOT also hold that message text, and any other text around it SHALL be recorded as it would be without the error. Where the structured event does not arrive, the message text SHALL be recorded as it is without this change. A compaction that Copilot reports as failed SHALL be recorded as a diagnostic, not as a compaction, because the context was not replaced. A compaction Copilot reports for one of its subagents SHALL NOT be recorded as a compaction of the run&#x27;s conversation, because that conversation&#x27;s context was not replaced. A compaction whose report was too large for Copilot to relay SHALL still be recorded as a compaction, with whatever counts Copilot reported when it began. The counts Copilot reports (tokens before and after, the window, a subagent&#x27;s tokens) SHALL be stored as the numbers reported. Redaction SHALL apply to the text an event carries, and SHALL NOT replace a count because of the name of its field. Recording an error SHALL NOT itself place or lift a hold on the agent&#x27;s queue.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-20">FR-20</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a provider line contains multiple independently displayable content blocks</td><td>the parser result SHALL preserve those blocks as ordered output events</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-20">FR-20</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a provider event reports token usage but has no user-readable content</td><td>the parser result SHALL preserve the usage sample without fabricating an output event</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-21">FR-21</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runner reports successful turn completion</td><td>the Hub SHALL emit a `status` event whose payload phase is `completed`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-21">FR-21</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a tool result reports failure</td><td>the Hub SHALL emit a `tool_result` event with `is_error=true` rather than a top-level `error`</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-22">FR-22</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a normalized event is sent to the Hub</td><td>its payload SHALL contain `version=1` and the fields required by its kind</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-22">FR-22</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an old producer submits content without a structured payload</td><td>the Hub SHALL accept and preserve the readable content</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a provider emits a tool invocation followed by its result</td><td>both normalized events SHALL carry the same `call_id`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a provider emits tool activity without a call identifier</td><td>the events SHALL remain renderable as unpaired tool activity without inventing a provider identifier</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>multiple output events are emitted by one runner invocation</td><td>they SHALL share a `run_id` and have strictly increasing sequence values</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub starts another process attempt after a stale-session or transient failure</td><td>the new invocation SHALL receive a new `run_id`</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Claude emits readable thinking, text, tool-use, tool-result, result, or error data</td><td>the adapter SHALL map each item to the corresponding canonical event and retain usage separately</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Codex emits reasoning, agent-message, command, file-change, MCP-call, web-search,</td><td>the adapter SHALL map them to canonical events without exposing raw JSONL as user content</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Copilot emits message chunks, thought chunks, tool calls and their updates, or plan updates over the Agent Client Protocol</td><td>the adapter SHALL map each contiguous run of message chunks to one `text` event and each contiguous run of thought chunks to one `thinking` event SHALL map each tool call to one `tool_use` event and its terminal update to one `tool_result` event with the same call id SHALL map a plan update to a plan `status` event, emitting an unchanged plan only once</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Copilot sends message text beginning `Error:`, `Warning:` or `Info:` that matches a session error, warning or info event of the same turn</td><td>the adapter SHALL emit an `error` event for an error and a `diagnostic` event for a warning or info, instead of a `text` event message text beginning the same way that matches no such event SHALL remain a `text` event</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot turn requested a named model and Copilot reports that it is running another</td><td>the adapter SHALL emit one `diagnostic` event naming both models and the models the plan allows</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the adapter emits any `diagnostic` event for a Copilot run</td><td>its payload SHALL carry `version` 1, the stream `copilot`, a severity and a summary</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run calls the Hub&#x27;s `create_task` tool, which Copilot classifies as an edit because of its name</td><td>the adapter SHALL emit a `tool_use` event naming `agentweave-create_task` as an MCP call, not as a file change</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an adapter receives a valid but unknown event type</td><td>parsing SHALL continue and later recognized events SHALL still be emitted</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runner produces malformed structured output</td><td>the Hub SHALL preserve a bounded diagnostic or readable fallback and continue when safe</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>normalized structured input contains a recognized credential or secret</td><td>the secret SHALL be redacted before the event leaves the Hub&#x27;s direct-execution path</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a payload contains a published MCP tool name or a Hub-minted document slug of any length</td><td>it SHALL survive redaction intact</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a payload contains a long high-entropy token with no separators</td><td>it SHALL be redacted</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a payload contains a path every segment of which is an ordinary word, such as `/Users/operator/code/agentweave/hub/main.py` or `/workspace/proj/.agentweave/worktrees/beta/src/app.py`</td><td>the path SHALL survive redaction intact</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a payload contains a URL or path one of whose segments is a 32-character or longer value of lowercase letters and digits, such as a hex token, and whose other segments are ordinary words</td><td>that segment SHALL be redacted the segments around it SHALL survive</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a payload contains a path whose other segments are ordinary words and one of whose segments is a token of 16 to 31 characters holding both letters and digits, such as `/run/secrets/postgres/password/hunter2hunter2hunter2`</td><td>that segment SHALL be redacted the segments around it SHALL survive</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a payload contains a base64 value with `/` in it whose segments are not all ordinary words, such as `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`</td><td>the whole value SHALL be redacted</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a tool result is larger than 8 KiB</td><td>the stored result excerpt SHALL be bounded, the summary SHALL remain readable, and `truncated` SHALL be true</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a provider event contains encrypted or otherwise opaque reasoning data</td><td>that field SHALL NOT be copied into content or payload</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-28">FR-28</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub receives valid content with structured stream fields</td><td>it SHALL persist and return those fields through REST and SSE</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-28">FR-28</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an output creation request violates the event contract</td><td>the Hub SHALL reject the structured fields with a validation response and SHALL NOT persist unsafe payload data</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an output row has null structured fields</td><td>APIs and UI SHALL treat it as ordinary plain text</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an older Hub ignores unsupported optional structured fields</td><td>readable content SHALL still represent the event</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-30">FR-30</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>chat history includes a thinking or tool event</td><td>the chat response SHALL provide the fields required by the shared renderer</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-31">FR-31</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a client requests output without a cursor and more than N matching rows exist</td><td>the response SHALL contain the newest N rows ordered oldest-to-newest</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-31">FR-31</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>two matching records have equal timestamps</td><td>run sequence and record ID SHALL provide stable ordering</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-32">FR-32</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a structured event is shown in agent output, spec chat, and agent activity</td><td>all surfaces SHALL use the same semantic label, severity, and content treatment</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-32">FR-32</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a text-only legacy event contains an existing pre-canonical content prefix</td><td>compatibility handling SHALL preserve current visibility behavior without affecting structured events</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-33">FR-33</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run emits thinking followed by text</td><td>the thinking group SHALL collapse and the text SHALL remain visible</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-33">FR-33</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the latest event in an active run is thinking</td><td>the current thinking group SHALL remain visibly active</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-34">FR-34</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>tool-use and tool-result events share a call ID</td><td>the UI SHALL present one expandable tool activity with its completion or failure state</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-34">FR-34</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>diagnostic visibility is disabled</td><td>diagnostic events SHALL be hidden while error events and failed tool results remain visible</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-35">FR-35</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the stream adapter tests execute</td><td>fixtures for Claude, Codex and Copilot SHALL produce the expected canonical events</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-35">FR-35</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub UI test or build verification executes</td><td>structured and legacy records SHALL type-check and render through the shared component</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-36">FR-36</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>one provider event contains both readable output and token usage</td><td>the parser SHALL return output events and the usage sample in separate result fields</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-36">FR-36</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an auxiliary provider collector reports a context sample</td><td>the invocation coordinator SHALL deliver the context snapshot without fabricating a stream event</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-37">FR-37</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn produced text, then tool activity, then further text, then further tool activity</td><td>the rendered order is that text, a work block, the further text, and a further work block</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-37">FR-37</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn produced several tool calls with no intervening text</td><td>those calls are presented as a single work block</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-37">FR-37</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn produced tool activity and no interleaved text</td><td>that activity is presented as one work block, as before</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-38">FR-38</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn presents two work blocks and the operator expands the first</td><td>the second remains collapsed</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-38">FR-38</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a work block reports a duration</td><td>that duration spans the block&#x27;s own first and last entry rather than the whole turn</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-38">FR-38</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn presents several work blocks</td><td>each tool result is rendered inline with the tool use it pairs with inside the same block</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-39">FR-39</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator stops a turn and the run&#x27;s status becomes `stopped`</td><td>the turn presents a terminal label naming the stop, rather than ending with no statement</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-39">FR-39</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a conversation containing a stopped, failed or interrupted run is loaded fresh, with no</td><td>that run&#x27;s terminal label is presented from persisted state alone</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-39">FR-39</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a conversation containing a stopped, failed or interrupted run is loaded fresh, after the</td><td>that run&#x27;s terminal label and duration are presented unchanged</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-39">FR-39</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>one run ended `failed` and another ended `completed` having produced no assistant text</td><td>the two turns present different terminal states rather than both presenting none</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-39">FR-39</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run&#x27;s status is `running`</td><td>no terminal label is presented for it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-39">FR-39</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run ended without producing any visible agent output, so the only output row its turn</td><td>the turn still presents its duration and token line, rather than losing it along with the</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-40">FR-40</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a client requests an agent&#x27;s timeline</td><td>the response contains the events and a map of run facts keyed by `run_id`</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-40">FR-40</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run&#x27;s lifecycle events and its recorded status disagree, because the status was</td><td>the response reports the recorded status</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-40">FR-40</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a returned event names a `run_id` that has no row</td><td>the map omits that key and the client presents that run exactly as it presents a run with</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-40">FR-40</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the agent has runs whose events fall entirely outside the returned event window</td><td>the map contains no entries for them</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-41">FR-41</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a returned event names a run that started long before the agent&#x27;s most recent runs,</td><td>that run&#x27;s facts are present in the map and its turn presents its terminal outcome</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-41">FR-41</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the returned events name any number of distinct runs, up to the number of events returned</td><td>every one of those runs is present in the map</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-42">FR-42</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run ends and its output is fetched after the broadcast has been missed or the page</td><td>the run&#x27;s output contains its terminal status row carrying the exit code</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-42">FR-42</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run ends on either the process path or the app-server path</td><td>the terminal status row is persisted in both cases</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-42">FR-42</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run ends on a runner whose output stream carries no completion sentinel of its own</td><td>the terminal status row is persisted for that run exactly as it is for a runner whose</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-42">FR-42</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run ends and writing its terminal status line fails</td><td>the failure is logged naming the run the run&#x27;s recorded outcome is unchanged the conversation&#x27;s run facts still carry that outcome and the exit code</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-43">FR-43</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run failed before its process spawned, and a conversation&#x27;s entries name it</td><td>that run&#x27;s facts in the conversation&#x27;s response include the error its row recorded</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-43">FR-43</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run completed</td><td>its facts carry no error</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-44">FR-44</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a model function consumes a payload from a route that returns rows in a defined order</td><td>its test fixture presents the rows in that same order</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-44">FR-44</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a payload-shaped model function is correct only for one ordering, and the fixture&#x27;s</td><td>at least one test fails</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-44">FR-44</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a model function is intended to be independent of its input&#x27;s ordering</td><td>a test asserts the same result for a shuffled input</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-45">FR-45</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a client requests a conversation&#x27;s history and the returned entries name any number of</td><td>every one of those runs whose row exists is present in the response&#x27;s run facts map</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-45">FR-45</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn in one conversation ended, and the agent afterwards runs any number of turns in</td><td>the first conversation&#x27;s response still carries that run&#x27;s facts, because what the</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-45">FR-45</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a client presents a turn&#x27;s outcome</td><td>the facts it presents come from the same response as the entries that turn was grouped</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-45">FR-45</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>one conversation holds more finished turns than any fixed event window would return</td><td>every turn the response returns presents its own outcome, including the oldest</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-45">FR-45</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a client requests an agent&#x27;s recent activity across conversations rather than one</td><td>the response carries the facts of the runs its own returned entries name</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-45">FR-45</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a returned entry names a `run_id` that has no row</td><td>the map omits that key and the client presents that run exactly as it presents a run with</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-45">FR-45</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the run facts for a response are read</td><td>the lookup is constrained to the project the response belongs to, so no run from another</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-46">FR-46</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run is recorded as interrupted at Hub restart, writing a lifecycle event and no output</td><td>the turn presents its terminal label without the operator reloading the page and without</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-46">FR-46</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run&#x27;s outcome is recorded at a moment when the client has no live event stream, so no</td><td>the conversation presents that outcome once the stream is back, without the operator</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-46">FR-46</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run that produced no agent output reaches a terminal status while an operator has that</td><td>the turn presents its terminal label as a consequence of the run reaching a terminal</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-46">FR-46</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator stops a turn</td><td>the conversation presents the terminal label as a consequence of the run reaching a</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-47">FR-47</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a job fires, is skipped, or fails to fire</td><td>the event carries the firing record&#x27;s id as `job_run_id` the event carries no `run_id`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-47">FR-47</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator fires a job through the route and the firing writes a record</td><td>the answer names that record as `job_run_id` the answer carries no `run_id`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-47">FR-47</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a job fires and its agent&#x27;s run completes</td><td>every `run_id` in the events persisted for that firing names a run that exists</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-48">FR-48</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a conversation bound to a Copilot session receives a second turn and Copilot replays the first turn while loading</td><td>the second run&#x27;s timeline contains only events produced after its prompt was sent</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-48">FR-48</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a conversation&#x27;s bound Copilot session cannot be found by Copilot</td><td>the Hub starts a new session, binds the conversation to it, and the run&#x27;s timeline says a new session was started</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-49">FR-49</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run with the registered value `plainproxykey123` records a thinking event ending in `plainproxy` and then a text event beginning with `key123`, in the order its runner emits them</td><td>the thinking row ends in `&lt;redacted&gt;` and the text row begins with `&lt;redacted&gt;` no stored row, no broadcast, and no two adjacent rows read together contain `plainproxykey123`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-49">FR-49</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run with the registered value `plainproxykey123` records a text event ending in `plainproxy`, then a tool call, then a text event beginning with `key123`</td><td>both text rows carry `&lt;redacted&gt;` where their part of the value was the tool call is recorded between them, in its original position, unchanged</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-49">FR-49</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run with the registered value `plainproxykey123` records a text event ending in `plainpro`, then an error event its runner reported between the two, then a text event beginning with `xykey123`</td><td>both text rows carry `&lt;redacted&gt;` where their part of the value was the error row is recorded between them, unchanged</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-49">FR-49</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run with the registered value `plainproxykey123` records a thinking event ending in `plainproxy` followed by a blank line, and then a text event beginning with `key123`</td><td>the thinking row carries `&lt;redacted&gt;` in place of `plainproxy` and the text row begins with `&lt;redacted&gt;`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-49">FR-49</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run with the registered value `plainproxykey123` records a text event ending in `plain` and then a thinking event beginning with `proxykey123`</td><td>the text row still ends in `plain` the thinking row begins with `&lt;redacted&gt;` and does not contain `proxykey123`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-49">FR-49</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run with the registered value `plainproxykey123` records, as its last text, an event ending in `plainproxyk`</td><td>that row ends in `&lt;redacted&gt;` and does not contain `plainproxyk`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-49">FR-49</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run with the registered value `plainproxykey123` records events whose texts are `x plain`, `proxy` and `key123 y`, in that order</td><td>the rows read `x plain`, `&lt;redacted&gt;` and `&lt;redacted&gt; y`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-49">FR-49</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run with the registered value `plainproxykey123` records a thinking event ending in `Let me explai` and then a text event `n this.`</td><td>both rows are recorded exactly as emitted</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-49">FR-49</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run with the registered value `plainproxykey123` records a text event ending in `plainpr`, then a tool call, then a text event beginning with `oxykey123`</td><td>the first text row still ends in `plainpr` and the second text row begins with `&lt;redacted&gt;` the two text rows read together do not contain `plainproxykey123`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-49">FR-49</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run registers the value `plainproxykey123` followed by a newline, and records a text event `use plainproxykey123 now`</td><td>the row reads `use &lt;redacted&gt; now`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-49">FR-49</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run that registered no value records text and thinking events</td><td>every row&#x27;s content and payload are exactly as emitted</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-49">FR-49</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the write of a split value&#x27;s second event meets a locked database once and is retried</td><td>the stored row is the same as when the write succeeds first time</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-50">FR-50</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Copilot reports a successful compaction of a run&#x27;s conversation</td><td>the run&#x27;s stream holds a status event naming the compaction it carries the context tokens before and after and the window it targeted, as numbers,</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-50">FR-50</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Copilot reports a compaction whose report was too large to relay in full</td><td>the run&#x27;s stream holds a status event naming the compaction it carries the counts Copilot reported when the compaction began, where it reported them</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-50">FR-50</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Copilot reports that one of its subagents compacted its own context</td><td>no compaction status event is recorded for the run&#x27;s conversation</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-50">FR-50</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Copilot reports a compaction that did not succeed</td><td>the stream holds a diagnostic naming the failed compaction no compaction status event is recorded</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-50">FR-50</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Copilot reports an error as a structured event and then as message text in the same turn</td><td>the stream holds exactly one error event for it, carrying its category, status code and the stream holds no text event repeating it</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-50">FR-50</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>one of Copilot&#x27;s subagents reports an error as a structured event and Copilot then</td><td>the stream holds exactly one error event for it, naming the subagent the stream holds no text event repeating it</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-50">FR-50</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the agent had written message text in the same message before Copilot reported an error</td><td>the stream holds that text as text holds the error once, as an error event</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-50">FR-50</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Copilot reports an error and the operator has hidden diagnostics</td><td>the error is still shown</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-50">FR-50</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an error reaches the Hub only as message text</td><td>it is recorded as it is without this change</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-50">FR-50</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run starts a subagent and the subagent completes or fails</td><td>the stream holds a start event and an end event carrying the parent call&#x27;s identifier the end event carries the subagent&#x27;s model, tokens and duration where reported, and the</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-50">FR-50</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an error event whose category is quota or rate limit is recorded</td><td>the recording neither places nor lifts a hold on the agent&#x27;s queue any hold is placed only where holds are already decided from the run&#x27;s allowance reading</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-stream-events/spec.md (31 requirements, 111 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 111 of 111 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
@@ -153,7 +200,7 @@ code { padding: .1rem .3rem; font-size: .88em; }
     },
     {
       "key": "supported-runner-normalization",
-      "statement": "The system SHALL normalize the installed or documented streaming formats for Claude and Codex into the canonical event contract.",
+      "statement": "The system SHALL normalize the installed or documented streaming formats for Claude, Codex and Copilot into the canonical event contract.",
       "modal": "SHALL",
       "rationale": null,
       "party": null
@@ -169,7 +216,7 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "key": "structured-payload-safety",
       "statement": "The Hub SHALL recursively redact known secret patterns before transport and SHALL NOT persist complete raw provider events, opaque reasoning blobs, or encrypted reasoning fields.",
       "modal": "SHALL",
-      "rationale": "The serialized payload SHALL be at most 64 KiB, and a retained tool-result excerpt SHALL be at most 8 KiB. Truncated payloads SHALL preserve readable content and set `truncated=true`.",
+      "rationale": "Redaction SHALL be bounded so that it does not consume identifiers that are not secrets. In particular it SHALL NOT redact the Hub's own vocabulary — the MCP tool names it publishes and the document slugs it mints from titles agents choose. A rule that matches any sufficiently long identifier removes precisely the identifier that tells the operator *which* document an agent read, and it does so to catch credentials the recognized-prefix rules have already caught. Nor SHALL redaction consume a file path. A run of the high-entropy rule that is made of at least three non-empty `/`-separated segments, each an ordinary lowercase, capitalised or camel-case word (empty segments are ignored), is a path and SHALL survive, except that any single segment of credential length, or of 16 or more characters holding both a letter and a digit, SHALL still be redacted, because a token inside a path is no less a token. A path with `/` separators is the commonest thing a tool input names on a Linux host. The one most reliably lost is the agent's own checkout, which is what an operator reading a transcript is most often trying to establish. The serialized payload SHALL be at most 64 KiB, and a retained tool-result excerpt SHALL be at most 8 KiB. Truncated payloads SHALL preserve readable content and set `truncated=true`.",
       "party": null
     },
     {
@@ -225,7 +272,7 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "key": "stream-contract-conformance-tests",
       "statement": "The repository SHALL include representative fixtures and tests for every supported runner adapter, event persistence and delivery, legacy compatibility, payload bounds and redaction, ordering, and shared UI rendering behavior.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "Copilot's fixtures SHALL be taken from captured Copilot transcripts, in the order Copilot sent them, including the prompt response arriving after the turn's session updates.",
       "party": null
     },
     {
@@ -247,6 +294,90 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "statement": "Every work block in a turn SHALL carry its own expansion state and its own reported duration. Expanding one block MUST NOT expand another.",
       "modal": "MUST",
       "rationale": "A block's reported duration SHALL span that block's own first and last entry. Tool-use and tool-result pairing SHALL be resolved within a block. A tool result MUST NOT be paired with a tool use from a different block.",
+      "party": null
+    },
+    {
+      "key": "a-run-s-terminal-outcome-is-visible",
+      "statement": "The conversation SHALL show, for every run that ended, whether it completed, failed, was stopped or was interrupted, and SHALL show it again after a page reload.",
+      "modal": "SHALL",
+      "rationale": "A run whose row genuinely cannot be found is the only case that may present no outcome. That is distinct from a run whose row exists but was omitted from the response the conversation reads, which is a defect and is forbidden by *A conversation carries the facts of the runs it renders*. That cross-reference used to name *The run facts cover every run the events name*, and naming it was itself the hole. That requirement is quantified over the runs a returned **event** names, so it cannot forbid omitting a run no returned event names — which is precisely what happens when a turn is drawn from a conversation's entries while its outcome is sought in an agent-wide event window. The rule that forbids it has to be stated over the response the conversation actually reads.",
+      "party": null
+    },
+    {
+      "key": "the-timeline-carries-each-run-s-own-facts",
+      "statement": "The timeline response SHALL carry each run's recorded facts — status, exit code, start time and end time — read from the run's own row, and clients SHALL NOT reconstruct them from event names or event timestamps.",
+      "modal": "SHALL",
+      "rationale": "The response is an envelope of the events and a map of run facts keyed by `run_id`. The map is keyed rather than listed because every consumer of it is a lookup or an unordered scan; a list would require the client to build the index and would reintroduce the derivation this requirement removes. The run facts are read by primary key, using the run ids the returned events name, after those events have been merged and truncated. The map therefore describes exactly the runs the response talks about: it is not scoped by project and agent, and it carries no bound that could be chosen too small.",
+      "party": null
+    },
+    {
+      "key": "the-run-facts-cover-every-run-the-events-name",
+      "statement": "Every run named by a returned event SHALL be present in the run facts map, and the map SHALL be obtained by looking those runs up by id rather than by any query whose coverage depends on an ordering or a limit.",
+      "modal": "SHALL",
+      "rationale": "Coverage is the property; a bound is not a way to get it. A limit decides how many rows return, not which, and no ordering available on the run row tracks the recency of the events that name it. `run_reconciliation` sweeps every still-`running` row at Hub start and writes its lifecycle event then, so an agent's newest events routinely name its oldest runs. A query ranked by start time and capped at any number can miss exactly those. Omitting a run the events name presents that turn as having no outcome — which is the defect this change exists to remove, reintroduced by the fix for it, and blessed by *An unknown run degrades rather than fails*. That is why the requirement is on the construction of the query and not on the size of its result.",
+      "party": null
+    },
+    {
+      "key": "a-run-s-terminal-status-line-is-persisted",
+      "statement": "The Hub SHALL persist a run's terminal status line as durable output, not only broadcast it, where the write can be made, and where it cannot, SHALL log the failure naming the run and SHALL leave the run's own recorded outcome and exit code as the record of how it ended.",
+      "modal": "SHALL",
+      "rationale": "This is bounded to the runs whose end the Hub observes — the two spawn paths' finalize blocks. A run reconciled as `interrupted` after a Hub restart has no terminal status line and is not required to gain one: there was no Hub process to write it. Such a run's outcome is carried by the run facts map, under *A run's terminal outcome is visible*. The status line is the fast signal a conversation settles on as the run ends. It is not the only record: the run's row carries its outcome and exit code, and the conversation reads them from the run facts it is served. So a status line that could not be written costs the conversation the moment the fast signal would have given, and not the fact. A failure to write it SHALL NOT relabel a run that has already ended, and SHALL NOT go unrecorded.",
+      "party": null
+    },
+    {
+      "key": "a-run-s-facts-shall-carry-the-error-its-row-recorded",
+      "statement": "The run facts a conversation or an agent timeline is served SHALL include the error the run's own row recorded, where it recorded one, and SHALL carry nothing in its place where it recorded none.",
+      "modal": "SHALL",
+      "rationale": "A run that failed before its process started writes no output at all, so the reason it failed is on its row and in a broadcast event, and nowhere a conversation reads. The facts are the one place the conversation reads a run's outcome from.",
+      "party": null
+    },
+    {
+      "key": "payload-shaped-model-functions-are-tested-against-real-route",
+      "statement": "A model function that consumes an API payload SHALL be tested against a fixture whose ordering is the ordering that route actually produces, and the test SHALL fail if the route's ordering is reversed.",
+      "modal": "SHALL",
+      "rationale": "A fixture that asserts correct behaviour on an ordering the route never emits is not evidence. This requirement exists because such a test was green while the behaviour it covered could not fire.",
+      "party": null
+    },
+    {
+      "key": "a-conversation-carries-the-facts-of-the-runs-it-renders",
+      "statement": "A chat history response SHALL carry a map of run facts keyed by `run_id` covering every run its own returned entries name, obtained by looking those runs up by id rather than by any query whose coverage depends on an ordering, a limit, or a different response's window.",
+      "modal": "SHALL",
+      "rationale": "The turns a client draws are its entries grouped by `run_id`, so the entries are what decide which runs need facts. A response that returns the entries and not the facts leaves the client to find them somewhere else, and every other place is scoped or bounded differently: an agent-wide event window is not a conversation, and a fixed number of events is not the number of turns. Coverage is therefore a property of the construction. The ids come from the entries the response is returning, after every truncation that response applies and after any still-undelivered entries are appended, and the runs are read by primary key. There is no bound that could be chosen too small and no window either side to fall out of. This holds for a response scoped to one conversation and for a response spanning an agent's recent activity across conversations. Both draw turns; both must carry the facts of the runs those turns name. A run named by an entry whose row genuinely cannot be found is omitted from the map, and the client presents that turn exactly as it presents a run with no outcome yet.",
+      "party": null
+    },
+    {
+      "key": "a-run-ending-refreshes-the-conversation-that-renders-it",
+      "statement": "A client displaying a conversation SHALL refresh that conversation's run facts when a run for that agent reaches a terminal status and when the client's event stream reconnects after an interruption, rather than only when new conversation content arrives.",
+      "modal": "SHALL",
+      "rationale": "A turn's outcome is now carried by the same response as its entries, so whatever causes that response to be re-read is what causes the outcome to appear. Content arriving is not sufficient: a run whose end the Hub did not observe — one reconciled at restart, one the operator stopped — writes no output row at all, and its end is only ever announced by the run reaching a terminal status. That is why the rule is stated over the status and not over any content the run wrote. **Deliberately not stated over a run that failed before its process started.** An earlier draft of this requirement claimed that case too, and the phase-6 drive falsified it against the code: the pre-spawn failure path returns the run's queue entries to the queue (or abandons them) and commits that **before** it broadcasts `run_failed` (`hub/hub/api/v1/agent_trigger.py:2005-2011`), and the client groups turns only from entries whose `delivery_state` is `delivered` (`hub/ui/src/lib/agentTimelineModel.ts:45-62`). So by the moment any client can hear that run ended, no entry names it as delivered and there is no turn to label. The operator is told by the abandonment banner instead, live and with no reload. Making that case present a terminal label is a change to what a turn *is*, not a refresh rule; it is tracked as **F291** and is out of scope here. Two signals, because one run-ending is not observable by the client at all. A run reconciled at Hub restart has its status decided while the client is disconnected — the process that broadcasts the event is the process the client's stream died with — and a broadcast with no subscriber is not delivered later. The reconnect is the only moment at which such a client can learn anything, so the rule is stated over the reconnect and not over the event, and a client that listened only for the event would satisfy the letter of the terminal-status half while failing the case that motivates it. A run *beginning* is deliberately not a refresh trigger. It changes nothing in the response that the arrival of its output will not already carry, and refetching an unbounded history on that signal costs more than it states.",
+      "party": null
+    },
+    {
+      "key": "an-event-s-run-id-shall-name-a-run-and-nothing-else",
+      "statement": "Every event the Hub persists or broadcasts SHALL use the key `run_id` only for the id of a run, one agent's attempt at a turn. An event that refers to a job's firing record SHALL carry that id as `job_run_id`, and SHALL NOT carry it as `run_id`. A route that answers with a firing record's id SHALL name it the same way.",
+      "modal": "SHALL",
+      "rationale": "A run id and a firing record id share a prefix, so a reader cannot tell them apart by the value. A reader that collects `run_id` from a stream of events and looks each up as a run then looks up something that is not a run, and an operator reading the activity log sees a firing name a run that cannot be found. Events persisted before this requirement are not rewritten.",
+      "party": null
+    },
+    {
+      "key": "a-resumed-copilot-session-s-history-is-not-rendered-again",
+      "statement": "The Hub SHALL NOT turn the history Copilot replays when a session is loaded into new timeline events, and SHALL begin mapping a Copilot turn's session updates only once that turn's prompt has been sent.",
+      "modal": "SHALL",
+      "rationale": "A loaded Copilot session replays its earlier messages as ordinary message updates. Rendering them again would show the operator every earlier turn a second time, attributed to the new run. When a session the conversation is bound to no longer exists in Copilot, the Hub SHALL start a new session and bind the conversation to it. It SHALL say so in the run's timeline rather than fail the turn. Any other failure to load SHALL fail the turn.",
+      "party": null
+    },
+    {
+      "key": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "statement": "The Hub SHALL remove a value registered for a run from that run's recorded model text when the value runs across two or more of the run's `text` and `thinking` events, as well as when it lies inside one.",
+      "modal": "SHALL",
+      "rationale": "The run's `text` and `thinking` events are joined in the order they are recorded, and other events between them, such as tool calls and their results, errors, and status cards, do not break the join, and neither does whitespace at the end of one event or the start of the next. Where a registered value crosses an event boundary, the part of it inside each event recorded after the value began SHALL be replaced with `\u003credacted>`, in the stored row and in its broadcast alike. An event that ends with the first characters of a registered value SHALL have them replaced with `\u003credacted>` when it is recorded, without waiting for the next event, once they number at least half the value's length (rounded down) or eight, whichever is fewer. A shorter dangling start MAY be recorded as written. A registered value that itself contains whitespace MAY be recorded unredacted where an event boundary falls on that whitespace. Whitespace at the start or end of a registered value is not part of it: the value SHALL be removed both as registered and without that whitespace. No event SHALL be delayed, held back or reordered to achieve this, and an event of a run with no registered value SHALL be recorded exactly as it was emitted. A recording retried after a locked database SHALL produce the same row as one that succeeded first time.",
+      "party": null
+    },
+    {
+      "key": "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st",
+      "statement": "The Hub SHALL record in a Copilot run's stream each compaction, each error and each subagent start, completion and failure that Copilot reports, as structured events carrying the facts Copilot reported.",
+      "modal": "SHALL",
+      "rationale": "These are the facts Copilot reports and the other runners do not: that the context was compacted and by how much, what category an error belongs to and what would remedy it, and which subagent ran on which model for how long. They SHALL come from Copilot's structured session events on the connection the Hub already reads, and SHALL NOT depend on a hook process. An error Copilot reports SHALL be recorded as an error event, not as a diagnostic, so that it stays visible when diagnostics are hidden. An error SHALL be recorded as one fact, whether the main agent or one of its subagents reported it. Copilot reports an error as a structured event and then as message text derived from it, for a subagent's error as for the main agent's. The stream SHALL hold one error event for it and SHALL NOT also hold that message text, and any other text around it SHALL be recorded as it would be without the error. Where the structured event does not arrive, the message text SHALL be recorded as it is without this change. A compaction that Copilot reports as failed SHALL be recorded as a diagnostic, not as a compaction, because the context was not replaced. A compaction Copilot reports for one of its subagents SHALL NOT be recorded as a compaction of the run's conversation, because that conversation's context was not replaced. A compaction whose report was too large for Copilot to relay SHALL still be recorded as a compaction, with whatever counts Copilot reported when it began. The counts Copilot reports (tokens before and after, the window, a subagent's tokens) SHALL be stored as the numbers reported. Redaction SHALL apply to the text an event carries, and SHALL NOT replace a count because of the name of its field. Recording an error SHALL NOT itself place or lift a hold on the agent's queue.",
       "party": null
     }
   ],
@@ -337,199 +468,696 @@ code { padding: .1rem .3rem; font-size: .88em; }
     },
     {
       "key": "ac13",
+      "requirement": "supported-runner-normalization",
+      "given": "",
+      "when": "Copilot emits message chunks, thought chunks, tool calls and their updates, or plan updates over the Agent Client Protocol",
+      "then": "the adapter SHALL map each contiguous run of message chunks to one `text` event and each contiguous run of thought chunks to one `thinking` event SHALL map each tool call to one `tool_use` event and its terminal update to one `tool_result` event with the same call id SHALL map a plan update to a plan `status` event, emitting an unchanged plan only once"
+    },
+    {
+      "key": "ac14",
+      "requirement": "supported-runner-normalization",
+      "given": "",
+      "when": "Copilot sends message text beginning `Error:`, `Warning:` or `Info:` that matches a session error, warning or info event of the same turn",
+      "then": "the adapter SHALL emit an `error` event for an error and a `diagnostic` event for a warning or info, instead of a `text` event message text beginning the same way that matches no such event SHALL remain a `text` event"
+    },
+    {
+      "key": "ac15",
+      "requirement": "supported-runner-normalization",
+      "given": "",
+      "when": "a Copilot turn requested a named model and Copilot reports that it is running another",
+      "then": "the adapter SHALL emit one `diagnostic` event naming both models and the models the plan allows"
+    },
+    {
+      "key": "ac16",
+      "requirement": "supported-runner-normalization",
+      "given": "",
+      "when": "the adapter emits any `diagnostic` event for a Copilot run",
+      "then": "its payload SHALL carry `version` 1, the stream `copilot`, a severity and a summary"
+    },
+    {
+      "key": "ac17",
+      "requirement": "supported-runner-normalization",
+      "given": "",
+      "when": "a Copilot run calls the Hub's `create_task` tool, which Copilot classifies as an edit because of its name",
+      "then": "the adapter SHALL emit a `tool_use` event naming `agentweave-create_task` as an MCP call, not as a file change"
+    },
+    {
+      "key": "ac18",
       "requirement": "unknown-provider-events-degrade-safely",
       "given": "",
       "when": "an adapter receives a valid but unknown event type",
       "then": "parsing SHALL continue and later recognized events SHALL still be emitted"
     },
     {
-      "key": "ac14",
+      "key": "ac19",
       "requirement": "unknown-provider-events-degrade-safely",
       "given": "",
       "when": "a runner produces malformed structured output",
       "then": "the Hub SHALL preserve a bounded diagnostic or readable fallback and continue when safe"
     },
     {
-      "key": "ac15",
+      "key": "ac20",
       "requirement": "structured-payload-safety",
       "given": "",
       "when": "normalized structured input contains a recognized credential or secret",
       "then": "the secret SHALL be redacted before the event leaves the Hub's direct-execution path"
     },
     {
-      "key": "ac16",
+      "key": "ac21",
+      "requirement": "structured-payload-safety",
+      "given": "",
+      "when": "a payload contains a published MCP tool name or a Hub-minted document slug of any length",
+      "then": "it SHALL survive redaction intact"
+    },
+    {
+      "key": "ac22",
+      "requirement": "structured-payload-safety",
+      "given": "",
+      "when": "a payload contains a long high-entropy token with no separators",
+      "then": "it SHALL be redacted"
+    },
+    {
+      "key": "ac23",
+      "requirement": "structured-payload-safety",
+      "given": "",
+      "when": "a payload contains a path every segment of which is an ordinary word, such as `/Users/operator/code/agentweave/hub/main.py` or `/workspace/proj/.agentweave/worktrees/beta/src/app.py`",
+      "then": "the path SHALL survive redaction intact"
+    },
+    {
+      "key": "ac24",
+      "requirement": "structured-payload-safety",
+      "given": "",
+      "when": "a payload contains a URL or path one of whose segments is a 32-character or longer value of lowercase letters and digits, such as a hex token, and whose other segments are ordinary words",
+      "then": "that segment SHALL be redacted the segments around it SHALL survive"
+    },
+    {
+      "key": "ac25",
+      "requirement": "structured-payload-safety",
+      "given": "",
+      "when": "a payload contains a path whose other segments are ordinary words and one of whose segments is a token of 16 to 31 characters holding both letters and digits, such as `/run/secrets/postgres/password/hunter2hunter2hunter2`",
+      "then": "that segment SHALL be redacted the segments around it SHALL survive"
+    },
+    {
+      "key": "ac26",
+      "requirement": "structured-payload-safety",
+      "given": "",
+      "when": "a payload contains a base64 value with `/` in it whose segments are not all ordinary words, such as `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`",
+      "then": "the whole value SHALL be redacted"
+    },
+    {
+      "key": "ac27",
       "requirement": "structured-payload-safety",
       "given": "",
       "when": "a tool result is larger than 8 KiB",
       "then": "the stored result excerpt SHALL be bounded, the summary SHALL remain readable, and `truncated` SHALL be true"
     },
     {
-      "key": "ac17",
+      "key": "ac28",
       "requirement": "structured-payload-safety",
       "given": "",
       "when": "a provider event contains encrypted or otherwise opaque reasoning data",
       "then": "that field SHALL NOT be copied into content or payload"
     },
     {
-      "key": "ac18",
+      "key": "ac29",
       "requirement": "additive-hub-persistence-and-transport",
       "given": "",
       "when": "the Hub receives valid content with structured stream fields",
       "then": "it SHALL persist and return those fields through REST and SSE"
     },
     {
-      "key": "ac19",
+      "key": "ac30",
       "requirement": "additive-hub-persistence-and-transport",
       "given": "",
       "when": "an output creation request violates the event contract",
       "then": "the Hub SHALL reject the structured fields with a validation response and SHALL NOT persist unsafe payload data"
     },
     {
-      "key": "ac20",
+      "key": "ac31",
       "requirement": "cross-version-compatibility",
       "given": "",
       "when": "an output row has null structured fields",
       "then": "APIs and UI SHALL treat it as ordinary plain text"
     },
     {
-      "key": "ac21",
+      "key": "ac32",
       "requirement": "cross-version-compatibility",
       "given": "",
       "when": "an older Hub ignores unsupported optional structured fields",
       "then": "readable content SHALL still represent the event"
     },
     {
-      "key": "ac22",
+      "key": "ac33",
       "requirement": "chat-history-preserves-stream-semantics",
       "given": "",
       "when": "chat history includes a thinking or tool event",
       "then": "the chat response SHALL provide the fields required by the shared renderer"
     },
     {
-      "key": "ac23",
+      "key": "ac34",
       "requirement": "recent-output-retrieval",
       "given": "",
       "when": "a client requests output without a cursor and more than N matching rows exist",
       "then": "the response SHALL contain the newest N rows ordered oldest-to-newest"
     },
     {
-      "key": "ac24",
+      "key": "ac35",
       "requirement": "recent-output-retrieval",
       "given": "",
       "when": "two matching records have equal timestamps",
       "then": "run sequence and record ID SHALL provide stable ordering"
     },
     {
-      "key": "ac25",
+      "key": "ac36",
       "requirement": "shared-stream-renderer",
       "given": "",
       "when": "a structured event is shown in agent output, spec chat, and agent activity",
       "then": "all surfaces SHALL use the same semantic label, severity, and content treatment"
     },
     {
-      "key": "ac26",
+      "key": "ac37",
       "requirement": "shared-stream-renderer",
       "given": "",
       "when": "a text-only legacy event contains an existing pre-canonical content prefix",
       "then": "compatibility handling SHALL preserve current visibility behavior without affecting structured events"
     },
     {
-      "key": "ac27",
+      "key": "ac38",
       "requirement": "thinking-presentation",
       "given": "",
       "when": "a run emits thinking followed by text",
       "then": "the thinking group SHALL collapse and the text SHALL remain visible"
     },
     {
-      "key": "ac28",
+      "key": "ac39",
       "requirement": "thinking-presentation",
       "given": "",
       "when": "the latest event in an active run is thinking",
       "then": "the current thinking group SHALL remain visibly active"
     },
     {
-      "key": "ac29",
+      "key": "ac40",
       "requirement": "tool-and-diagnostic-presentation",
       "given": "",
       "when": "tool-use and tool-result events share a call ID",
       "then": "the UI SHALL present one expandable tool activity with its completion or failure state"
     },
     {
-      "key": "ac30",
+      "key": "ac41",
       "requirement": "tool-and-diagnostic-presentation",
       "given": "",
       "when": "diagnostic visibility is disabled",
       "then": "diagnostic events SHALL be hidden while error events and failed tool results remain visible"
     },
     {
-      "key": "ac31",
+      "key": "ac42",
       "requirement": "stream-contract-conformance-tests",
       "given": "",
       "when": "the stream adapter tests execute",
-      "then": "fixtures for Claude and Codex SHALL produce the expected canonical events"
+      "then": "fixtures for Claude, Codex and Copilot SHALL produce the expected canonical events"
     },
     {
-      "key": "ac32",
+      "key": "ac43",
       "requirement": "stream-contract-conformance-tests",
       "given": "",
       "when": "the Hub UI test or build verification executes",
       "then": "structured and legacy records SHALL type-check and render through the shared component"
     },
     {
-      "key": "ac33",
+      "key": "ac44",
       "requirement": "independent-context-usage-boundary",
       "given": "",
       "when": "one provider event contains both readable output and token usage",
       "then": "the parser SHALL return output events and the usage sample in separate result fields"
     },
     {
-      "key": "ac34",
+      "key": "ac45",
       "requirement": "independent-context-usage-boundary",
       "given": "",
       "when": "an auxiliary provider collector reports a context sample",
       "then": "the invocation coordinator SHALL deliver the context snapshot without fabricating a stream event"
     },
     {
-      "key": "ac35",
+      "key": "ac46",
       "requirement": "a-turn-renders-in-execution-order",
       "given": "",
       "when": "a turn produced text, then tool activity, then further text, then further tool activity",
       "then": "the rendered order is that text, a work block, the further text, and a further work block"
     },
     {
-      "key": "ac36",
+      "key": "ac47",
       "requirement": "a-turn-renders-in-execution-order",
       "given": "",
       "when": "a turn produced several tool calls with no intervening text",
       "then": "those calls are presented as a single work block"
     },
     {
-      "key": "ac37",
+      "key": "ac48",
       "requirement": "a-turn-renders-in-execution-order",
       "given": "",
       "when": "a turn produced tool activity and no interleaved text",
       "then": "that activity is presented as one work block, as before"
     },
     {
-      "key": "ac38",
+      "key": "ac49",
       "requirement": "each-work-block-carries-independent-state",
       "given": "",
       "when": "a turn presents two work blocks and the operator expands the first",
       "then": "the second remains collapsed"
     },
     {
-      "key": "ac39",
+      "key": "ac50",
       "requirement": "each-work-block-carries-independent-state",
       "given": "",
       "when": "a work block reports a duration",
       "then": "that duration spans the block's own first and last entry rather than the whole turn"
     },
     {
-      "key": "ac40",
+      "key": "ac51",
       "requirement": "each-work-block-carries-independent-state",
       "given": "",
       "when": "a turn presents several work blocks",
       "then": "each tool result is rendered inline with the tool use it pairs with inside the same block"
+    },
+    {
+      "key": "ac52",
+      "requirement": "a-run-s-terminal-outcome-is-visible",
+      "given": "",
+      "when": "the operator stops a turn and the run's status becomes `stopped`",
+      "then": "the turn presents a terminal label naming the stop, rather than ending with no statement"
+    },
+    {
+      "key": "ac53",
+      "requirement": "a-run-s-terminal-outcome-is-visible",
+      "given": "",
+      "when": "a conversation containing a stopped, failed or interrupted run is loaded fresh, with no",
+      "then": "that run's terminal label is presented from persisted state alone"
+    },
+    {
+      "key": "ac54",
+      "requirement": "a-run-s-terminal-outcome-is-visible",
+      "given": "",
+      "when": "a conversation containing a stopped, failed or interrupted run is loaded fresh, after the",
+      "then": "that run's terminal label and duration are presented unchanged"
+    },
+    {
+      "key": "ac55",
+      "requirement": "a-run-s-terminal-outcome-is-visible",
+      "given": "",
+      "when": "one run ended `failed` and another ended `completed` having produced no assistant text",
+      "then": "the two turns present different terminal states rather than both presenting none"
+    },
+    {
+      "key": "ac56",
+      "requirement": "a-run-s-terminal-outcome-is-visible",
+      "given": "",
+      "when": "a run's status is `running`",
+      "then": "no terminal label is presented for it"
+    },
+    {
+      "key": "ac57",
+      "requirement": "a-run-s-terminal-outcome-is-visible",
+      "given": "",
+      "when": "a run ended without producing any visible agent output, so the only output row its turn",
+      "then": "the turn still presents its duration and token line, rather than losing it along with the"
+    },
+    {
+      "key": "ac58",
+      "requirement": "the-timeline-carries-each-run-s-own-facts",
+      "given": "",
+      "when": "a client requests an agent's timeline",
+      "then": "the response contains the events and a map of run facts keyed by `run_id`"
+    },
+    {
+      "key": "ac59",
+      "requirement": "the-timeline-carries-each-run-s-own-facts",
+      "given": "",
+      "when": "a run's lifecycle events and its recorded status disagree, because the status was",
+      "then": "the response reports the recorded status"
+    },
+    {
+      "key": "ac60",
+      "requirement": "the-timeline-carries-each-run-s-own-facts",
+      "given": "",
+      "when": "a returned event names a `run_id` that has no row",
+      "then": "the map omits that key and the client presents that run exactly as it presents a run with"
+    },
+    {
+      "key": "ac61",
+      "requirement": "the-timeline-carries-each-run-s-own-facts",
+      "given": "",
+      "when": "the agent has runs whose events fall entirely outside the returned event window",
+      "then": "the map contains no entries for them"
+    },
+    {
+      "key": "ac62",
+      "requirement": "the-run-facts-cover-every-run-the-events-name",
+      "given": "",
+      "when": "a returned event names a run that started long before the agent's most recent runs,",
+      "then": "that run's facts are present in the map and its turn presents its terminal outcome"
+    },
+    {
+      "key": "ac63",
+      "requirement": "the-run-facts-cover-every-run-the-events-name",
+      "given": "",
+      "when": "the returned events name any number of distinct runs, up to the number of events returned",
+      "then": "every one of those runs is present in the map"
+    },
+    {
+      "key": "ac64",
+      "requirement": "a-run-s-terminal-status-line-is-persisted",
+      "given": "",
+      "when": "a run ends and its output is fetched after the broadcast has been missed or the page",
+      "then": "the run's output contains its terminal status row carrying the exit code"
+    },
+    {
+      "key": "ac65",
+      "requirement": "a-run-s-terminal-status-line-is-persisted",
+      "given": "",
+      "when": "a run ends on either the process path or the app-server path",
+      "then": "the terminal status row is persisted in both cases"
+    },
+    {
+      "key": "ac66",
+      "requirement": "a-run-s-terminal-status-line-is-persisted",
+      "given": "",
+      "when": "a run ends on a runner whose output stream carries no completion sentinel of its own",
+      "then": "the terminal status row is persisted for that run exactly as it is for a runner whose"
+    },
+    {
+      "key": "ac67",
+      "requirement": "a-run-s-terminal-status-line-is-persisted",
+      "given": "",
+      "when": "a run ends and writing its terminal status line fails",
+      "then": "the failure is logged naming the run the run's recorded outcome is unchanged the conversation's run facts still carry that outcome and the exit code"
+    },
+    {
+      "key": "ac68",
+      "requirement": "a-run-s-facts-shall-carry-the-error-its-row-recorded",
+      "given": "",
+      "when": "a run failed before its process spawned, and a conversation's entries name it",
+      "then": "that run's facts in the conversation's response include the error its row recorded"
+    },
+    {
+      "key": "ac69",
+      "requirement": "a-run-s-facts-shall-carry-the-error-its-row-recorded",
+      "given": "",
+      "when": "a run completed",
+      "then": "its facts carry no error"
+    },
+    {
+      "key": "ac70",
+      "requirement": "payload-shaped-model-functions-are-tested-against-real-route",
+      "given": "",
+      "when": "a model function consumes a payload from a route that returns rows in a defined order",
+      "then": "its test fixture presents the rows in that same order"
+    },
+    {
+      "key": "ac71",
+      "requirement": "payload-shaped-model-functions-are-tested-against-real-route",
+      "given": "",
+      "when": "a payload-shaped model function is correct only for one ordering, and the fixture's",
+      "then": "at least one test fails"
+    },
+    {
+      "key": "ac72",
+      "requirement": "payload-shaped-model-functions-are-tested-against-real-route",
+      "given": "",
+      "when": "a model function is intended to be independent of its input's ordering",
+      "then": "a test asserts the same result for a shuffled input"
+    },
+    {
+      "key": "ac73",
+      "requirement": "a-conversation-carries-the-facts-of-the-runs-it-renders",
+      "given": "",
+      "when": "a client requests a conversation's history and the returned entries name any number of",
+      "then": "every one of those runs whose row exists is present in the response's run facts map"
+    },
+    {
+      "key": "ac74",
+      "requirement": "a-conversation-carries-the-facts-of-the-runs-it-renders",
+      "given": "",
+      "when": "a turn in one conversation ended, and the agent afterwards runs any number of turns in",
+      "then": "the first conversation's response still carries that run's facts, because what the"
+    },
+    {
+      "key": "ac75",
+      "requirement": "a-conversation-carries-the-facts-of-the-runs-it-renders",
+      "given": "",
+      "when": "a client presents a turn's outcome",
+      "then": "the facts it presents come from the same response as the entries that turn was grouped"
+    },
+    {
+      "key": "ac76",
+      "requirement": "a-conversation-carries-the-facts-of-the-runs-it-renders",
+      "given": "",
+      "when": "one conversation holds more finished turns than any fixed event window would return",
+      "then": "every turn the response returns presents its own outcome, including the oldest"
+    },
+    {
+      "key": "ac77",
+      "requirement": "a-conversation-carries-the-facts-of-the-runs-it-renders",
+      "given": "",
+      "when": "a client requests an agent's recent activity across conversations rather than one",
+      "then": "the response carries the facts of the runs its own returned entries name"
+    },
+    {
+      "key": "ac78",
+      "requirement": "a-conversation-carries-the-facts-of-the-runs-it-renders",
+      "given": "",
+      "when": "a returned entry names a `run_id` that has no row",
+      "then": "the map omits that key and the client presents that run exactly as it presents a run with"
+    },
+    {
+      "key": "ac79",
+      "requirement": "a-conversation-carries-the-facts-of-the-runs-it-renders",
+      "given": "",
+      "when": "the run facts for a response are read",
+      "then": "the lookup is constrained to the project the response belongs to, so no run from another"
+    },
+    {
+      "key": "ac80",
+      "requirement": "a-run-ending-refreshes-the-conversation-that-renders-it",
+      "given": "",
+      "when": "a run is recorded as interrupted at Hub restart, writing a lifecycle event and no output",
+      "then": "the turn presents its terminal label without the operator reloading the page and without"
+    },
+    {
+      "key": "ac81",
+      "requirement": "a-run-ending-refreshes-the-conversation-that-renders-it",
+      "given": "",
+      "when": "a run's outcome is recorded at a moment when the client has no live event stream, so no",
+      "then": "the conversation presents that outcome once the stream is back, without the operator"
+    },
+    {
+      "key": "ac82",
+      "requirement": "a-run-ending-refreshes-the-conversation-that-renders-it",
+      "given": "",
+      "when": "a run that produced no agent output reaches a terminal status while an operator has that",
+      "then": "the turn presents its terminal label as a consequence of the run reaching a terminal"
+    },
+    {
+      "key": "ac83",
+      "requirement": "a-run-ending-refreshes-the-conversation-that-renders-it",
+      "given": "",
+      "when": "the operator stops a turn",
+      "then": "the conversation presents the terminal label as a consequence of the run reaching a"
+    },
+    {
+      "key": "ac84",
+      "requirement": "an-event-s-run-id-shall-name-a-run-and-nothing-else",
+      "given": "",
+      "when": "a job fires, is skipped, or fails to fire",
+      "then": "the event carries the firing record's id as `job_run_id` the event carries no `run_id`"
+    },
+    {
+      "key": "ac85",
+      "requirement": "an-event-s-run-id-shall-name-a-run-and-nothing-else",
+      "given": "",
+      "when": "the operator fires a job through the route and the firing writes a record",
+      "then": "the answer names that record as `job_run_id` the answer carries no `run_id`"
+    },
+    {
+      "key": "ac86",
+      "requirement": "an-event-s-run-id-shall-name-a-run-and-nothing-else",
+      "given": "",
+      "when": "a job fires and its agent's run completes",
+      "then": "every `run_id` in the events persisted for that firing names a run that exists"
+    },
+    {
+      "key": "ac87",
+      "requirement": "a-resumed-copilot-session-s-history-is-not-rendered-again",
+      "given": "",
+      "when": "a conversation bound to a Copilot session receives a second turn and Copilot replays the first turn while loading",
+      "then": "the second run's timeline contains only events produced after its prompt was sent"
+    },
+    {
+      "key": "ac88",
+      "requirement": "a-resumed-copilot-session-s-history-is-not-rendered-again",
+      "given": "",
+      "when": "a conversation's bound Copilot session cannot be found by Copilot",
+      "then": "the Hub starts a new session, binds the conversation to it, and the run's timeline says a new session was started"
+    },
+    {
+      "key": "ac89",
+      "requirement": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "given": "",
+      "when": "a run with the registered value `plainproxykey123` records a thinking event ending in `plainproxy` and then a text event beginning with `key123`, in the order its runner emits them",
+      "then": "the thinking row ends in `\u003credacted>` and the text row begins with `\u003credacted>` no stored row, no broadcast, and no two adjacent rows read together contain `plainproxykey123`"
+    },
+    {
+      "key": "ac90",
+      "requirement": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "given": "",
+      "when": "a run with the registered value `plainproxykey123` records a text event ending in `plainproxy`, then a tool call, then a text event beginning with `key123`",
+      "then": "both text rows carry `\u003credacted>` where their part of the value was the tool call is recorded between them, in its original position, unchanged"
+    },
+    {
+      "key": "ac91",
+      "requirement": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "given": "",
+      "when": "a run with the registered value `plainproxykey123` records a text event ending in `plainpro`, then an error event its runner reported between the two, then a text event beginning with `xykey123`",
+      "then": "both text rows carry `\u003credacted>` where their part of the value was the error row is recorded between them, unchanged"
+    },
+    {
+      "key": "ac92",
+      "requirement": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "given": "",
+      "when": "a run with the registered value `plainproxykey123` records a thinking event ending in `plainproxy` followed by a blank line, and then a text event beginning with `key123`",
+      "then": "the thinking row carries `\u003credacted>` in place of `plainproxy` and the text row begins with `\u003credacted>`"
+    },
+    {
+      "key": "ac93",
+      "requirement": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "given": "",
+      "when": "a run with the registered value `plainproxykey123` records a text event ending in `plain` and then a thinking event beginning with `proxykey123`",
+      "then": "the text row still ends in `plain` the thinking row begins with `\u003credacted>` and does not contain `proxykey123`"
+    },
+    {
+      "key": "ac94",
+      "requirement": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "given": "",
+      "when": "a run with the registered value `plainproxykey123` records, as its last text, an event ending in `plainproxyk`",
+      "then": "that row ends in `\u003credacted>` and does not contain `plainproxyk`"
+    },
+    {
+      "key": "ac95",
+      "requirement": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "given": "",
+      "when": "a run with the registered value `plainproxykey123` records events whose texts are `x plain`, `proxy` and `key123 y`, in that order",
+      "then": "the rows read `x plain`, `\u003credacted>` and `\u003credacted> y`"
+    },
+    {
+      "key": "ac96",
+      "requirement": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "given": "",
+      "when": "a run with the registered value `plainproxykey123` records a thinking event ending in `Let me explai` and then a text event `n this.`",
+      "then": "both rows are recorded exactly as emitted"
+    },
+    {
+      "key": "ac97",
+      "requirement": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "given": "",
+      "when": "a run with the registered value `plainproxykey123` records a text event ending in `plainpr`, then a tool call, then a text event beginning with `oxykey123`",
+      "then": "the first text row still ends in `plainpr` and the second text row begins with `\u003credacted>` the two text rows read together do not contain `plainproxykey123`"
+    },
+    {
+      "key": "ac98",
+      "requirement": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "given": "",
+      "when": "a run registers the value `plainproxykey123` followed by a newline, and records a text event `use plainproxykey123 now`",
+      "then": "the row reads `use \u003credacted> now`"
+    },
+    {
+      "key": "ac99",
+      "requirement": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "given": "",
+      "when": "a run that registered no value records text and thinking events",
+      "then": "every row's content and payload are exactly as emitted"
+    },
+    {
+      "key": "ac100",
+      "requirement": "a-run-s-registered-value-is-removed-even-when-its-events-spl",
+      "given": "",
+      "when": "the write of a split value's second event meets a locked database once and is retried",
+      "then": "the stored row is the same as when the write succeeds first time"
+    },
+    {
+      "key": "ac101",
+      "requirement": "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st",
+      "given": "",
+      "when": "Copilot reports a successful compaction of a run's conversation",
+      "then": "the run's stream holds a status event naming the compaction it carries the context tokens before and after and the window it targeted, as numbers,"
+    },
+    {
+      "key": "ac102",
+      "requirement": "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st",
+      "given": "",
+      "when": "Copilot reports a compaction whose report was too large to relay in full",
+      "then": "the run's stream holds a status event naming the compaction it carries the counts Copilot reported when the compaction began, where it reported them"
+    },
+    {
+      "key": "ac103",
+      "requirement": "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st",
+      "given": "",
+      "when": "Copilot reports that one of its subagents compacted its own context",
+      "then": "no compaction status event is recorded for the run's conversation"
+    },
+    {
+      "key": "ac104",
+      "requirement": "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st",
+      "given": "",
+      "when": "Copilot reports a compaction that did not succeed",
+      "then": "the stream holds a diagnostic naming the failed compaction no compaction status event is recorded"
+    },
+    {
+      "key": "ac105",
+      "requirement": "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st",
+      "given": "",
+      "when": "Copilot reports an error as a structured event and then as message text in the same turn",
+      "then": "the stream holds exactly one error event for it, carrying its category, status code and the stream holds no text event repeating it"
+    },
+    {
+      "key": "ac106",
+      "requirement": "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st",
+      "given": "",
+      "when": "one of Copilot's subagents reports an error as a structured event and Copilot then",
+      "then": "the stream holds exactly one error event for it, naming the subagent the stream holds no text event repeating it"
+    },
+    {
+      "key": "ac107",
+      "requirement": "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st",
+      "given": "",
+      "when": "the agent had written message text in the same message before Copilot reported an error",
+      "then": "the stream holds that text as text holds the error once, as an error event"
+    },
+    {
+      "key": "ac108",
+      "requirement": "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st",
+      "given": "",
+      "when": "Copilot reports an error and the operator has hidden diagnostics",
+      "then": "the error is still shown"
+    },
+    {
+      "key": "ac109",
+      "requirement": "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st",
+      "given": "",
+      "when": "an error reaches the Hub only as message text",
+      "then": "it is recorded as it is without this change"
+    },
+    {
+      "key": "ac110",
+      "requirement": "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st",
+      "given": "",
+      "when": "a Copilot run starts a subagent and the subagent completes or fails",
+      "then": "the stream holds a start event and an end event carrying the parent call's identifier the end event carries the subagent's model, tokens and duration where reported, and the"
+    },
+    {
+      "key": "ac111",
+      "requirement": "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st",
+      "given": "",
+      "when": "an error event whose category is quota or rate limit is recorded",
+      "then": "the recording neither places nor lifts a hold on the agent's queue any hold is placed only where holds are already decided from the run's allowance reading"
     }
   ],
   "tasks": [],
@@ -537,59 +1165,83 @@ code { padding: .1rem .3rem; font-size: .88em; }
   "design": "",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/agent-stream-events/spec.md (19 requirements, 40 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "Translated from openspec/specs/agent-stream-events/spec.md (31 requirements, 111 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
     ],
     "limits": [
       "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
-      "scenarios-state-no-starting-state: 40 of 40 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "scenarios-state-no-starting-state: 111 of 111 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
     ]
   },
   "lifecycle": "",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
-      "canonical-runner-event-envelope": "FR-1",
-      "closed-event-kind-taxonomy": "FR-2",
-      "versioned-kind-specific-payloads": "FR-3",
-      "tool-call-correlation": "FR-4",
-      "run-identity-and-deterministic-ordering": "FR-5",
-      "supported-runner-normalization": "FR-6",
-      "unknown-provider-events-degrade-safely": "FR-7",
-      "structured-payload-safety": "FR-8",
-      "additive-hub-persistence-and-transport": "FR-9",
-      "cross-version-compatibility": "FR-10",
-      "chat-history-preserves-stream-semantics": "FR-11",
-      "recent-output-retrieval": "FR-12",
-      "shared-stream-renderer": "FR-13",
-      "thinking-presentation": "FR-14",
-      "tool-and-diagnostic-presentation": "FR-15",
-      "stream-contract-conformance-tests": "FR-16",
-      "independent-context-usage-boundary": "FR-17",
-      "a-turn-renders-in-execution-order": "FR-18",
-      "each-work-block-carries-independent-state": "FR-19"
+      "canonical-runner-event-envelope": "FR-20",
+      "closed-event-kind-taxonomy": "FR-21",
+      "versioned-kind-specific-payloads": "FR-22",
+      "tool-call-correlation": "FR-23",
+      "run-identity-and-deterministic-ordering": "FR-24",
+      "supported-runner-normalization": "FR-25",
+      "unknown-provider-events-degrade-safely": "FR-26",
+      "structured-payload-safety": "FR-27",
+      "additive-hub-persistence-and-transport": "FR-28",
+      "cross-version-compatibility": "FR-29",
+      "chat-history-preserves-stream-semantics": "FR-30",
+      "recent-output-retrieval": "FR-31",
+      "shared-stream-renderer": "FR-32",
+      "thinking-presentation": "FR-33",
+      "tool-and-diagnostic-presentation": "FR-34",
+      "stream-contract-conformance-tests": "FR-35",
+      "independent-context-usage-boundary": "FR-36",
+      "a-turn-renders-in-execution-order": "FR-37",
+      "each-work-block-carries-independent-state": "FR-38",
+      "a-run-s-terminal-outcome-is-visible": "FR-39",
+      "the-timeline-carries-each-run-s-own-facts": "FR-40",
+      "the-run-facts-cover-every-run-the-events-name": "FR-41",
+      "a-run-s-terminal-status-line-is-persisted": "FR-42",
+      "a-run-s-facts-shall-carry-the-error-its-row-recorded": "FR-43",
+      "payload-shaped-model-functions-are-tested-against-real-route": "FR-44",
+      "a-conversation-carries-the-facts-of-the-runs-it-renders": "FR-45",
+      "a-run-ending-refreshes-the-conversation-that-renders-it": "FR-46",
+      "an-event-s-run-id-shall-name-a-run-and-nothing-else": "FR-47",
+      "a-resumed-copilot-session-s-history-is-not-rendered-again": "FR-48",
+      "a-run-s-registered-value-is-removed-even-when-its-events-spl": "FR-49",
+      "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st": "FR-50"
     },
-    "high_water": 19,
+    "high_water": 50,
     "retired": {},
     "digests": {
-      "FR-1": "ec661e87e3a925a7f3426c3c89ee03c574cc4d93d6fd3a5f8395c98c6b303674",
-      "FR-2": "9862b45aa07cead84b6ff1f01c0f6a74c734ba97d1806fe50d50097e72603adc",
-      "FR-3": "b68890be69662c4c57cc33b362c664af2f0b7f1b1e24ccd4bcd2a3f1d65ba98c",
-      "FR-4": "8a6e9eeb9c4d4cc8a54d44921a0650021e40ddeea326bfce6647b13965542663",
-      "FR-5": "920ce71a3d337baf3b9ac5fde2b668af1e04d38fe455e9938720914336e31d2f",
-      "FR-6": "907459002490363e52d6a787bbdba14fb431b4b5000d5fd173d9e8bce29772ee",
-      "FR-7": "079d52455651f4d7b72254ad1343083f5d593db2121db34cf0cabbdf8b03c226",
-      "FR-8": "8a00557df59fa088f6f99ed421239e7644a46402dc6d8fe2962c97b5e8b8d608",
-      "FR-9": "f8498d467e06ad86e41a64358a78ff7e3a35b49519fb993f88e572641a7cb569",
-      "FR-10": "6037f8fa39c0b3d76ccbe81d040a6e677cc743bdb577360598cb05805a6cf3c9",
-      "FR-11": "19b7d7b6419eaa4fe180449ba5065e8e7f1f3087e9a15bffbca10795e11005dd",
-      "FR-12": "1a1e818f3790a39ad5895d68667c3d31ab61901df870b3fab5bd5256f0ccc0fa",
-      "FR-13": "00c3ced4ae2e82b2c7a1d3c5292281df9f6b79ba47f5d798df709810f81e6c25",
-      "FR-14": "5f02f2f7572639ffb961d81e292b3790048cc7449bc5d7a37f4962c13c0b5cb1",
-      "FR-15": "024099d8258381d0bf04a473dbd955a6b7871bd6c9a021c2b0200db1bcf3a7f9",
-      "FR-16": "e21682dc842c871e3bec2cfcadbc81d8b6c97dcb8a248f0799ed3d9a73ce0fa2",
-      "FR-17": "d03359a9c6eb539243605f0cdcb566651f6bc18328920291f29a8bddb74a548d",
-      "FR-18": "9b984d8d839a63412a457c0534469628bd2f72ee9b76d0b2d262d1cc7e1d22cb",
-      "FR-19": "c4111f8201da8ca1c004b4e3631afc5d700932b7b26bbb3bc673370031392cb3"
+      "FR-20": "ec661e87e3a925a7f3426c3c89ee03c574cc4d93d6fd3a5f8395c98c6b303674",
+      "FR-21": "9862b45aa07cead84b6ff1f01c0f6a74c734ba97d1806fe50d50097e72603adc",
+      "FR-22": "b68890be69662c4c57cc33b362c664af2f0b7f1b1e24ccd4bcd2a3f1d65ba98c",
+      "FR-23": "8a6e9eeb9c4d4cc8a54d44921a0650021e40ddeea326bfce6647b13965542663",
+      "FR-24": "920ce71a3d337baf3b9ac5fde2b668af1e04d38fe455e9938720914336e31d2f",
+      "FR-25": "d4a9004700434be9d3c5bae2ab234ef8eb7c4770272ffda006f2f7514d3df4e4",
+      "FR-26": "079d52455651f4d7b72254ad1343083f5d593db2121db34cf0cabbdf8b03c226",
+      "FR-27": "984febfc4f272cd270f7ca03049a19545cdea0a01259438ed8ac9d3172b878a2",
+      "FR-28": "f8498d467e06ad86e41a64358a78ff7e3a35b49519fb993f88e572641a7cb569",
+      "FR-29": "6037f8fa39c0b3d76ccbe81d040a6e677cc743bdb577360598cb05805a6cf3c9",
+      "FR-30": "19b7d7b6419eaa4fe180449ba5065e8e7f1f3087e9a15bffbca10795e11005dd",
+      "FR-31": "1a1e818f3790a39ad5895d68667c3d31ab61901df870b3fab5bd5256f0ccc0fa",
+      "FR-32": "00c3ced4ae2e82b2c7a1d3c5292281df9f6b79ba47f5d798df709810f81e6c25",
+      "FR-33": "5f02f2f7572639ffb961d81e292b3790048cc7449bc5d7a37f4962c13c0b5cb1",
+      "FR-34": "024099d8258381d0bf04a473dbd955a6b7871bd6c9a021c2b0200db1bcf3a7f9",
+      "FR-35": "7e838f9f14083ee57bd56c9d804070950bbc96a9317846b0051d2fa305832c59",
+      "FR-36": "d03359a9c6eb539243605f0cdcb566651f6bc18328920291f29a8bddb74a548d",
+      "FR-37": "9b984d8d839a63412a457c0534469628bd2f72ee9b76d0b2d262d1cc7e1d22cb",
+      "FR-38": "c4111f8201da8ca1c004b4e3631afc5d700932b7b26bbb3bc673370031392cb3",
+      "FR-39": "5907d76edc4b03c9b06abe346bb693cf6103f0e3f391d728993a228b03a0694b",
+      "FR-40": "1068df3aab86af293f0acee96fbca0210c656d3e427ac56198be05fd7b24d099",
+      "FR-41": "7a7fe6bf966b7cf5cb7dae70eb1de06230f25a93d1329361e6268e9132c5e2fc",
+      "FR-42": "911078e6e1f2fc82b31eb201408aee0c184210d01bf9bb03aebe7b839d2a39ad",
+      "FR-43": "acd8ae09c0e8b1617dfa8e4110178ad06d21490eab5d761f9e3672fbd844ecca",
+      "FR-44": "208be21cec3a9639490ae7c1d9e87685cee77c4eee46275f2917fb72646d0395",
+      "FR-45": "220c5f72926958ece75f0cc64204b411a5cb1a663eba9f613585c5e56806289e",
+      "FR-46": "814eb1f8dc270698b4b8bcfad369dd0870589dccee5af2e34ed5ae6c849ccbdb",
+      "FR-47": "7b90468084218b5b9e6b78d030dbde92a9030e06592f88492b56e257fd72da95",
+      "FR-48": "7e25b570b5a505d1e6cb4248c67111cd4c111b4fee1f5bd894d1f4e54333a790",
+      "FR-49": "c1f41fc076ee15de69aeab9eb4613fd09ec7f358520118dd8be6389a5530aea8",
+      "FR-50": "e7736807ac7266239b32652419e556811793fe0109ad3ce1267b7faa63ee28c5"
     }
   }
 }

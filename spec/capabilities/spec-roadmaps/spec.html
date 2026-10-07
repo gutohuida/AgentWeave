@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spec roadmaps</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Spec roadmaps</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-nav"><a href="../../agentweave.html">Home</a></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">4</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">4</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">27</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>A request too large for one change document is written as a roadmap of ordered slices plus one small change document per slice. This capability defines the roadmap and its slices, the link from a slice&#x27;s change document to its roadmap, drafting the next slice once the approved slice is built, and the authoring guidance that prefers a roadmap and a small slice over one large document. Created by `2026-10-05-a-spec-is-written-one-slice-at-a-time` (C1a, amended for F496).</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> A roadmap document SHALL carry an ordered list of slices, each with a key, a title, an intent, a done criterion, and the keys of the slices it builds after. It SHALL carry no requirements and no tasks.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A roadmap is the plan for a request too large for one change document. It says what the slices are and in what order they are built. Each slice&#x27;s requirements live in the change document that specifies it, which is written when that slice is next. Slices are accepted only on a roadmap. Completeness for a roadmap asks for at least one slice, not for requirements. Approving a roadmap creates no tasks. **A slice&#x27;s done criterion SHALL be the outcome that shows it is finished, written as a sentence, and not whether it is finished yet** (F502). Real agents read the field as a status and wrote `false`, then `&quot;no&quot;`, and the drafting turn printed &quot;Done when: false&quot;. A boolean `done` SHALL be refused at validation, naming what the field means; a `done` of fewer than three words SHALL be a completeness finding (`slice_done_empty`) naming the slice, so the roadmap cannot be proposed until it states an outcome.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> A change document SHALL be able to name the roadmap and the slice key it specifies, and moving it to proposed or approved SHALL be refused unless that roadmap exists, is approved, and holds that slice.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The link is held in the slice&#x27;s own payload, not in the corpus index. Only the operator may set a document&#x27;s place in the index, and a rename does not update it. A roadmap is approved before its first slice is proposed, and an approved document cannot be renamed. So a path that resolves at proposal still resolves later.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> Approving a change document that names a roadmap slice SHALL, when the approval request asks for it, record that request, and once every task linked to that document has reached approved or rejected the Hub SHALL queue one turn as the operator to the agent that created the document, in the conversation where it created it, asking it to draft the slice that follows in the roadmap&#x27;s order and naming each of the built slice&#x27;s tasks with its final status; the approval response SHALL say whether the turn is waiting for tasks, was queued, or cannot be queued and why.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The operator approves each slice. The agent drafts the next one with what building the last one taught it, so the turn waits for the slice&#x27;s tasks to close (F496, decided 2026-10-05). A rejected task closes too: nothing more happens to it unless the operator reopens it, and the drafting turn is told it was rejected. A task linked to the document after approval is waited for as well. The turn is the operator&#x27;s because the operator asked for it in the approval request, so no new kind of queue origin is introduced. &quot;The next slice&quot; is the one after the approved slice in the roadmap&#x27;s list. Builds-after constrains that order but does not choose it. The turn is queued at most once per request, even if a task is later reopened and closed again. **Under each task the turn SHALL state whether its work merged into the main branch, and each of its evidence the operator rejected, with the rejection&#x27;s reason** (F501). It SHALL say that work which did not reach the main branch is not done whatever its status says. A status alone hides both facts: the real drafting run read only the statuses, saw `approved` three times, and called work &quot;solid&quot; whose evidence the operator had rejected twice and which never reached the main branch.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> The guidance an agent receives for creating and submitting a specification SHALL tell it to write a request larger than one slice as a roadmap plus the first slice&#x27;s change document, to keep a slice to about a dozen requirements or fewer as a few tasks, and to record later slices in the roadmap instead of specifying them.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The guidance is in the creation and submission tool descriptions and in the specification-turn duties, so every authoring agent receives it whether or not a charter is bound. It is not enforced. The size is measured on real runs instead.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a roadmap is moved to proposed, and its payload has non-goals and two slices, each with</td><td>the move succeeds, and no finding names missing requirements</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a roadmap is submitted with a slice whose done criterion is `&quot;false&quot;` or `&quot;no&quot;`</td><td>a `slice_done_empty` finding names that slice&#x27;s done criterion, and the roadmap cannot be a slice whose done criterion is an outcome sentence draws no such finding</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a roadmap is submitted with a slice whose done criterion is a boolean</td><td>the submission is refused, saying the field is the outcome that shows the slice is</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a roadmap with no slices is moved to proposed</td><td>it is refused, and the finding names the missing slices</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a roadmap payload carrying a requirement or a task is submitted</td><td>it is refused, and the refusal says those belong in the slice&#x27;s change document</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a change-spec payload carrying slices is submitted</td><td>it is refused</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a slice names in builds-after a key that is not a slice of the same roadmap, or names</td><td>the submission is refused, naming the key</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator approves a roadmap</td><td>no task is created</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a roadmap is rendered, or read by an agent through the document read tool</td><td>each slice&#x27;s key, title, intent, done criterion and builds-after appear, in roadmap order</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a change document naming an approved roadmap and one of its slice keys is moved to</td><td>no roadmap finding blocks it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a change document names a roadmap that is still exploring</td><td>the move to proposed is refused, and the finding names the roadmap and its phase</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a change document names a slice key that the roadmap does not hold</td><td>the move to proposed is refused, and the finding names the key and the roadmap</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a change document naming a roadmap slice is rendered</td><td>it shows the slice&#x27;s key and title and the roadmap&#x27;s title</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator approves, asking for the next slice, slice S1 of a roadmap whose slices are</td><td>no turn is queued yet the approval response reports it as waiting, naming S2, planner and two open tasks</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the first of those two tasks is approved</td><td>no turn is queued **AND WHEN** the second is approved or rejected, by any surface one turn is queued from the operator to planner, in the conversation that created the planner is scheduled once that transition commits</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the drafting turn is queued for a slice one of whose tasks never merged and had evidence</td><td>that task&#x27;s line states that no merge into the main branch is recorded it names the rejected evidence&#x27;s requirement with the operator&#x27;s reason</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task of a slice whose drafting turn was already queued is reopened and approved again</td><td>no second turn is queued</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator re-approves, asking for the next slice, a reopened slice document whose</td><td>the turn is queued in the approval request, and the response reports it as queued</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the turn queued to draft the next slice starts</td><td>it has the roadmap open as its specification document, so it has no file-write tool it is told that the roadmap&#x27;s slices are specified as change documents, not implemented</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the approved document specifies the roadmap&#x27;s last slice</td><td>nothing is recorded or queued, and the response says the roadmap has no further slice</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the approved slice document was created by the operator</td><td>nothing is recorded or queued, and the response says no agent created the document</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator approves a slice document without asking for the next slice, and its tasks</td><td>no turn is queued</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator approves, asking for the next slice, a change document that names no roadmap</td><td>nothing is recorded or queued, and the approval is otherwise unchanged</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>queuing the drafting turn raises while the last task is being approved</td><td>the task is still approved, and the failure is logged</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the creation and submission tool descriptions are read</td><td>both name the roadmap-plus-slice shape and the size of a slice</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s turn context carries the specification duties</td><td>they name the roadmap-plus-slice shape and the size of a slice</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s turn has an approved roadmap open</td><td>its duties say that slices are specified one at a time as change documents naming the</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/spec-roadmaps/spec.md (4 requirements, 27 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 27 of 27 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Spec roadmaps",
+  "summary": "A request too large for one change document is written as a roadmap of ordered slices plus one small change document per slice. This capability defines the roadmap and its slices, the link from a slice's change document to its roadmap, drafting the next slice once the approved slice is built, and the authoring guidance that prefers a roadmap and a small slice over one large document. Created by `2026-10-05-a-spec-is-written-one-slice-at-a-time` (C1a, amended for F496).",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "statement": "A roadmap document SHALL carry an ordered list of slices, each with a key, a title, an intent, a done criterion, and the keys of the slices it builds after. It SHALL carry no requirements and no tasks.",
+      "modal": "SHALL",
+      "rationale": "A roadmap is the plan for a request too large for one change document. It says what the slices are and in what order they are built. Each slice's requirements live in the change document that specifies it, which is written when that slice is next. Slices are accepted only on a roadmap. Completeness for a roadmap asks for at least one slice, not for requirements. Approving a roadmap creates no tasks. **A slice's done criterion SHALL be the outcome that shows it is finished, written as a sentence, and not whether it is finished yet** (F502). Real agents read the field as a status and wrote `false`, then `\"no\"`, and the drafting turn printed \"Done when: false\". A boolean `done` SHALL be refused at validation, naming what the field means; a `done` of fewer than three words SHALL be a completeness finding (`slice_done_empty`) naming the slice, so the roadmap cannot be proposed until it states an outcome.",
+      "party": null
+    },
+    {
+      "key": "a-change-document-may-name-the-roadmap-slice-it-specifies",
+      "statement": "A change document SHALL be able to name the roadmap and the slice key it specifies, and moving it to proposed or approved SHALL be refused unless that roadmap exists, is approved, and holds that slice.",
+      "modal": "SHALL",
+      "rationale": "The link is held in the slice's own payload, not in the corpus index. Only the operator may set a document's place in the index, and a rename does not update it. A roadmap is approved before its first slice is proposed, and an approved document cannot be renamed. So a path that resolves at proposal still resolves later.",
+      "party": null
+    },
+    {
+      "key": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "statement": "Approving a change document that names a roadmap slice SHALL, when the approval request asks for it, record that request, and once every task linked to that document has reached approved or rejected the Hub SHALL queue one turn as the operator to the agent that created the document, in the conversation where it created it, asking it to draft the slice that follows in the roadmap's order and naming each of the built slice's tasks with its final status; the approval response SHALL say whether the turn is waiting for tasks, was queued, or cannot be queued and why.",
+      "modal": "SHALL",
+      "rationale": "The operator approves each slice. The agent drafts the next one with what building the last one taught it, so the turn waits for the slice's tasks to close (F496, decided 2026-10-05). A rejected task closes too: nothing more happens to it unless the operator reopens it, and the drafting turn is told it was rejected. A task linked to the document after approval is waited for as well. The turn is the operator's because the operator asked for it in the approval request, so no new kind of queue origin is introduced. \"The next slice\" is the one after the approved slice in the roadmap's list. Builds-after constrains that order but does not choose it. The turn is queued at most once per request, even if a task is later reopened and closed again. **Under each task the turn SHALL state whether its work merged into the main branch, and each of its evidence the operator rejected, with the rejection's reason** (F501). It SHALL say that work which did not reach the main branch is not done whatever its status says. A status alone hides both facts: the real drafting run read only the statuses, saw `approved` three times, and called work \"solid\" whose evidence the operator had rejected twice and which never reached the main branch.",
+      "party": null
+    },
+    {
+      "key": "authoring-guidance-prefers-a-roadmap-and-a-small-slice",
+      "statement": "The guidance an agent receives for creating and submitting a specification SHALL tell it to write a request larger than one slice as a roadmap plus the first slice's change document, to keep a slice to about a dozen requirements or fewer as a few tasks, and to record later slices in the roadmap instead of specifying them.",
+      "modal": "SHALL",
+      "rationale": "The guidance is in the creation and submission tool descriptions and in the specification-turn duties, so every authoring agent receives it whether or not a charter is bound. It is not enforced. The size is measured on real runs instead.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "given": "",
+      "when": "a roadmap is moved to proposed, and its payload has non-goals and two slices, each with",
+      "then": "the move succeeds, and no finding names missing requirements"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "given": "",
+      "when": "a roadmap is submitted with a slice whose done criterion is `\"false\"` or `\"no\"`",
+      "then": "a `slice_done_empty` finding names that slice's done criterion, and the roadmap cannot be a slice whose done criterion is an outcome sentence draws no such finding"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "given": "",
+      "when": "a roadmap is submitted with a slice whose done criterion is a boolean",
+      "then": "the submission is refused, saying the field is the outcome that shows the slice is"
+    },
+    {
+      "key": "ac4",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "given": "",
+      "when": "a roadmap with no slices is moved to proposed",
+      "then": "it is refused, and the finding names the missing slices"
+    },
+    {
+      "key": "ac5",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "given": "",
+      "when": "a roadmap payload carrying a requirement or a task is submitted",
+      "then": "it is refused, and the refusal says those belong in the slice's change document"
+    },
+    {
+      "key": "ac6",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "given": "",
+      "when": "a change-spec payload carrying slices is submitted",
+      "then": "it is refused"
+    },
+    {
+      "key": "ac7",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "given": "",
+      "when": "a slice names in builds-after a key that is not a slice of the same roadmap, or names",
+      "then": "the submission is refused, naming the key"
+    },
+    {
+      "key": "ac8",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "given": "",
+      "when": "the operator approves a roadmap",
+      "then": "no task is created"
+    },
+    {
+      "key": "ac9",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "given": "",
+      "when": "a roadmap is rendered, or read by an agent through the document read tool",
+      "then": "each slice's key, title, intent, done criterion and builds-after appear, in roadmap order"
+    },
+    {
+      "key": "ac10",
+      "requirement": "a-change-document-may-name-the-roadmap-slice-it-specifies",
+      "given": "",
+      "when": "a change document naming an approved roadmap and one of its slice keys is moved to",
+      "then": "no roadmap finding blocks it"
+    },
+    {
+      "key": "ac11",
+      "requirement": "a-change-document-may-name-the-roadmap-slice-it-specifies",
+      "given": "",
+      "when": "a change document names a roadmap that is still exploring",
+      "then": "the move to proposed is refused, and the finding names the roadmap and its phase"
+    },
+    {
+      "key": "ac12",
+      "requirement": "a-change-document-may-name-the-roadmap-slice-it-specifies",
+      "given": "",
+      "when": "a change document names a slice key that the roadmap does not hold",
+      "then": "the move to proposed is refused, and the finding names the key and the roadmap"
+    },
+    {
+      "key": "ac13",
+      "requirement": "a-change-document-may-name-the-roadmap-slice-it-specifies",
+      "given": "",
+      "when": "a change document naming a roadmap slice is rendered",
+      "then": "it shows the slice's key and title and the roadmap's title"
+    },
+    {
+      "key": "ac14",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "given": "",
+      "when": "the operator approves, asking for the next slice, slice S1 of a roadmap whose slices are",
+      "then": "no turn is queued yet the approval response reports it as waiting, naming S2, planner and two open tasks"
+    },
+    {
+      "key": "ac15",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "given": "",
+      "when": "the first of those two tasks is approved",
+      "then": "no turn is queued **AND WHEN** the second is approved or rejected, by any surface one turn is queued from the operator to planner, in the conversation that created the planner is scheduled once that transition commits"
+    },
+    {
+      "key": "ac16",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "given": "",
+      "when": "the drafting turn is queued for a slice one of whose tasks never merged and had evidence",
+      "then": "that task's line states that no merge into the main branch is recorded it names the rejected evidence's requirement with the operator's reason"
+    },
+    {
+      "key": "ac17",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "given": "",
+      "when": "a task of a slice whose drafting turn was already queued is reopened and approved again",
+      "then": "no second turn is queued"
+    },
+    {
+      "key": "ac18",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "given": "",
+      "when": "the operator re-approves, asking for the next slice, a reopened slice document whose",
+      "then": "the turn is queued in the approval request, and the response reports it as queued"
+    },
+    {
+      "key": "ac19",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "given": "",
+      "when": "the turn queued to draft the next slice starts",
+      "then": "it has the roadmap open as its specification document, so it has no file-write tool it is told that the roadmap's slices are specified as change documents, not implemented"
+    },
+    {
+      "key": "ac20",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "given": "",
+      "when": "the approved document specifies the roadmap's last slice",
+      "then": "nothing is recorded or queued, and the response says the roadmap has no further slice"
+    },
+    {
+      "key": "ac21",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "given": "",
+      "when": "the approved slice document was created by the operator",
+      "then": "nothing is recorded or queued, and the response says no agent created the document"
+    },
+    {
+      "key": "ac22",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "given": "",
+      "when": "the operator approves a slice document without asking for the next slice, and its tasks",
+      "then": "no turn is queued"
+    },
+    {
+      "key": "ac23",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "given": "",
+      "when": "the operator approves, asking for the next slice, a change document that names no roadmap",
+      "then": "nothing is recorded or queued, and the approval is otherwise unchanged"
+    },
+    {
+      "key": "ac24",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "given": "",
+      "when": "queuing the drafting turn raises while the last task is being approved",
+      "then": "the task is still approved, and the failure is logged"
+    },
+    {
+      "key": "ac25",
+      "requirement": "authoring-guidance-prefers-a-roadmap-and-a-small-slice",
+      "given": "",
+      "when": "the creation and submission tool descriptions are read",
+      "then": "both name the roadmap-plus-slice shape and the size of a slice"
+    },
+    {
+      "key": "ac26",
+      "requirement": "authoring-guidance-prefers-a-roadmap-and-a-small-slice",
+      "given": "",
+      "when": "an agent's turn context carries the specification duties",
+      "then": "they name the roadmap-plus-slice shape and the size of a slice"
+    },
+    {
+      "key": "ac27",
+      "requirement": "authoring-guidance-prefers-a-roadmap-and-a-small-slice",
+      "given": "",
+      "when": "an agent's turn has an approved roadmap open",
+      "then": "its duties say that slices are specified one at a time as change documents naming the"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/spec-roadmaps/spec.md (4 requirements, 27 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 27 of 27 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-roadmap-carries-ordered-slices-and-no-requirements-or-task": "FR-1",
+      "a-change-document-may-name-the-roadmap-slice-it-specifies": "FR-2",
+      "the-next-slice-is-drafted-once-the-approved-slice-is-built": "FR-3",
+      "authoring-guidance-prefers-a-roadmap-and-a-small-slice": "FR-4"
+    },
+    "high_water": 4,
+    "retired": {},
+    "digests": {
+      "FR-1": "71ca4f00b86da19c8c3befc1f1cbf91a11f2d248d45d7af1a0bed74003a08e74",
+      "FR-2": "d6b4d2d090aca688666faa9ead88d8d13836d8fe2989db0348d931a4d38ecb5d",
+      "FR-3": "9112a95dc0a7555af3e5e4de69665f3e86d11c5fc7865bc2d359762e4662b766",
+      "FR-4": "8316025191a4946e5c0d0080a033a49213c2e2d88ecf660a5edbdce15059c002"
+    }
+  }
+}
+</script>
+</body>
+</html>

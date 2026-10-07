@@ -13,6 +13,7 @@
   --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
   --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
   --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -32,6 +33,9 @@
   --surface-2: #21262d; --surface: #161b22;
 }
 * { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
 body {
   margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
   font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
@@ -43,27 +47,37 @@ h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
 p { margin: .5rem 0; }
 ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
 li { margin: .25rem 0; }
-a { color: var(--aw-accent); }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
 .aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
 .aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
-.aw-nav a { margin-right: .6rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
 .aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
 .aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
-.aw-map-item { margin: .75rem 0; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
 .aw-map-item > p { margin: .2rem 0; }
 .aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
            background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
-.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
-                  margin: 1.1rem 0; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
 .aw-requirement-must { border-left-color: var(--aw-accent); }
 .aw-requirement-should { border-left-color: var(--aw-warn); }
 .aw-requirement-may { border-left-color: var(--border); }
 .aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
          color: var(--muted); }
-.aw-modal { font-weight: 600; }
-.aw-modal-must { color: var(--aw-accent); }
-.aw-modal-should { color: var(--aw-warn); }
-.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
 .aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
 .aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
 /* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
@@ -84,16 +98,49 @@ a { color: var(--aw-accent); }
 /* The first screenful was entirely monochrome, so the document read as texty however the
    requirements below were coloured. This puts the same modal scheme where the eye lands first,
    carrying counts rather than decoration. */
-.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
 .aw-summary .aw-count { font-weight: 600; }
 .aw-summary-sep { color: var(--border); margin: 0 .45rem; }
-.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
 .aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
 .aw-note { color: var(--muted); font-style: italic; }
 .aw-empty { color: var(--muted); }
-table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
 th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
-         vertical-align: top; font-size: .92rem; }
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
 code, pre { background: var(--surface); border-radius: 4px; }
 code { padding: .1rem .3rem; font-size: .88em; }
 </style>
@@ -102,8 +149,8 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <h1>Runtime diagnostics</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
 <p class="aw-nav"><a href="../../agentweave.html">Home</a><a href="../../areas/the-local-instance.html">The local instance</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">12</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">12</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">38</span> criteria</p>
-<section><h2 id="summary">Summary</h2><p>TBD - created by syncing change improve-runtime-diagnostics. Update Purpose after archive.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL provide non-mutating readiness checks for the single native AgentWeave instance without starting the Hub or making external model-provider API calls.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL represent each readiness check as a structured result with a stable check identifier, target, status, severity, user-facing message, and optional remediation hint.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL detect missing required proxy provider API key variables when agent configuration is validated and before a proxy runner is spawned.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL run deterministic preflight checks before spawning an agent&#x27;s run and SHALL refuse launches that are known to be impossible.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL emit durable structured diagnostic events for runtime failures, degraded states, skipped execution, and unavailable dependencies.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL distinguish queued agent work by execution confidence based on available agent and runner state.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub Logs UI SHALL expose diagnostics in a way that reflects the current project rather than a fixed set of agents.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL make scheduled and manually fired job failures durable and visible.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL summarize readiness so users can see whether configured agents are immediately usable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL be able to report, for a project&#x27;s agents, whether agent-to-agent collaboration will actually work — not merely whether the runner CLI is installed and authorized.</p><p class="aw-rationale">The report SHALL cover whether the tool surface will be invocable by that agent&#x27;s provider, and whether the address supplied to runs is the address the Hub is serving on. Each unmet condition SHALL name what is wrong in terms an operator can act on. This check MUST NOT require starting an agent run.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A run that fails because its runtime process ended SHALL report the process&#x27;s exit status, the operation in flight when it ended, and what the process last wrote to its error stream.</p><p class="aw-rationale">&quot;The process ended&quot; is true of every such failure and distinguishes none of them. A crash, a non-existent binary, a rejected credential and an unresumable session all produce the same sentence, so diagnosing one means inferring the cause from which other agents still work. The error stream of a runtime the system starts SHALL be read. A stream that is captured and never consumed can fill, at which point the process it belongs to blocks on writing to it — so leaving it unread is not merely a lost diagnostic but a way to hang the very process being diagnosed. What is retained SHALL be bounded. These facts SHALL be carried by the failure itself, so that every existing reader of the failure reports them without being changed. Each of these facts SHALL be reported as a distinct fact and not only within a composed sentence. A fact that exists solely inside a message can be read by a person and by nothing else, and where the composed sentence is not the surface the operator is looking at, the fact does not arrive at all. Where a run ends abnormally without raising — a turn that reports its own failure rather than one whose start failed — the same facts SHALL be reported. The operator cannot see which internal path a failure took, and reporting a runtime&#x27;s death well in one case and not the other is indistinguishable from reporting it unreliably. The exit status a run reports for its turn SHALL be distinguishable from the exit status of the runtime process. Where a transport has no process exit status for a turn, the system supplies one so that success and failure read uniformly across transports; conflating that supplied value with a process&#x27;s own status gives one death two contradictory numbers and no way to tell which is which. An exit status SHALL be rendered in a form a person can act on. A platform reporting a forced termination as a large unsigned value states a fact that reads as corruption; what is displayed SHALL convey the termination, while what is recorded remains what the platform reported.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL treat the built interface artefact as current where a recorded assertion says it was built from the interface source as it now stands.</p><p class="aw-rationale">Staleness is reported today by comparing when the source was last changed against when the artefact was last changed. A source change that cannot alter the built output — a change to types, comments, or anything else erased before the output is produced — leaves the artefact byte for byte identical, so rebuilding produces nothing to record, the artefact&#x27;s timestamp never moves, and the warning stands permanently. A warning that cannot be cleared by doing the thing it asks for teaches the operator to ignore it, which costs the cases where it is right. The assertion SHALL identify the state of the source it was made against, including changes not yet committed, so that it distinguishes an artefact built from what is present from one built from something else. Where no assertion has been recorded, staleness SHALL be reported as it was before. An installation carrying no assertion is not thereby declared current. A recorded assertion SHALL take effect without restarting the system. Where the report instructs the operator to rebuild, it SHALL name a way to do so that is available to them. A warning naming a command the installation does not have is not actionable, and an unactionable warning is ignored — including on the occasions when it is right. This requirement establishes an assertion, not a proof. Only building the artefact can establish that it matches its source; what is recorded is a dated and attributable claim that someone did so.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the user runs `agentweave doctor`</td><td>the system reports Python support, native Hub installation, runner CLIs on PATH, local port availability, SQLite database accessibility, and Hub-state file permissions</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the native Hub state directory does not exist</td><td>diagnostics inspect the nearest existing parent and do not create Hub state, a project, or a database</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>readiness checks inspect environment variables, transport configuration, runner commands, or proxy settings</td><td>the system reports variable names, paths, statuses, and hints without printing API key values, bearer tokens, or other secret values</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a readiness check detects a missing proxy API key</td><td>the result includes the check identifier, affected agent, status `fail`, severity `error`, the missing environment variable name, and a hint describing how to set it</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the same readiness result is shown by `agentweave doctor` and `agentweave status`</td><td>the system uses the same status, severity, message, and hint semantics for that check</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a `claude_proxy` agent references a provider API key variable that is unavailable to the Hub process</td><td>the agent readiness response names the missing variable and explains how to provide it without exposing a secret value</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a run is requested for a proxy agent whose required provider API key variable is missing</td><td>the Hub refuses the run before spawn with an actionable typed conflict naming the missing variable</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the Hub receives a trigger for a proxy agent whose required provider API key variable is missing</td><td>it does not spawn the process, returns a typed conflict response naming the missing variable, and records a structured diagnostic event</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the Hub receives a trigger for an agent whose runner CLI is not available in PATH</td><td>it does not spawn the process, returns a typed conflict response, and records a structured launch-skip diagnostic event</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the Hub refuses a launch because a deterministic preflight check fails</td><td>the system preserves enough queued state for the user to retry after fixing the readiness issue</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a setup, synchronization, or registration step fails but the operation continues</td><td>the system emits a structured diagnostic event with the failing step, severity, message, and remediation hint when available</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>an HTTP transport operation fails because the Hub is unreachable, authentication fails, a project is missing, a request times out, or the response is invalid</td><td>the system emits or returns a classified diagnostic rather than only a generic failure</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a launched agent subprocess exits with a non-zero status</td><td>the system records a structured diagnostic event containing agent name, runner type, exit code, duration when known, and a secret-safe summary of recent stderr</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the user triggers an agent whose runner is configured as manual</td><td>the response indicates that the message was queued for manual handling and does not imply automatic execution</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the Hub Logs view is opened</td><td>the agent filter includes agents from configured session data, self-registered agents, or returned log entries, including custom agents and proxy agents</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>diagnostic events exist in the log stream</td><td>the user can filter or search common categories such as runner, proxy credentials, setup, jobs, and agent stderr</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a log entry contains diagnostic data derived from env vars, transport config, or runner commands</td><td>the UI does not display secret values</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a job run fails to start, fails to trigger an agent, or raises an internal scheduler error</td><td>the system records the run as failed with a secret-safe error summary and emits a structured diagnostic event</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a job has a recent failed run</td><td>the Hub job view exposes that failed state separately from jobs that are merely disabled, pending, or idle</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the operator inspects configured agents</td><td>the Hub exposes a compact readiness summary for each agent covering runner type, CLI availability, required environment variables, context status, and overall readiness</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>one or more readiness checks warn or fail</td><td>the Hub records structured diagnostic events and exposes remediation hints to the operator</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>collaboration readiness is reported for an agent whose provider would refuse its tool calls</td><td>the agent is reported as not collaboration-ready the reason names the refusal</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the address the Hub would supply to runs is not the address it is serving on</td><td>collaboration readiness reports the mismatch names both addresses</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>collaboration readiness is reported</td><td>no agent run is started</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a run fails because its runtime process ended</td><td>the failure names the process&#x27;s exit status it names the operation that was in flight</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a runtime writes to its error stream and then exits</td><td>the failure includes what it wrote the amount retained is bounded</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a runtime writes more to its error stream than the stream can hold</td><td>the runtime is not blocked</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a run fails because its runtime process ended</td><td>the exit status, the operation in flight, and what was written to the error stream are</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a turn ends in failure and the runtime process has exited</td><td>the failure reports that process&#x27;s exit status it reports what the process wrote to its error stream</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a run on a transport with no per-turn process exit status fails</td><td>the status reported for the turn is distinct from the status reported for the runtime neither is presented as the other</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a runtime is terminated and the platform reports the termination as a large unsigned value</td><td>what is displayed conveys the termination rather than that value</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a runtime exits with an ordinary status</td><td>that status is displayed as it is</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the artefact carries an assertion naming the interface source as it now stands</td><td>the system does not report the artefact as stale</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the interface source changes in a way that leaves the built artefact identical the artefact is rebuilt and the assertion recorded</td><td>the system does not report the artefact as stale</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the artefact carries an assertion naming source that differs from what is present</td><td>the system reports the artefact as stale</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the artefact carries no assertion</td><td>staleness is reported by comparing when source and artefact last changed</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>an assertion is recorded while the system is running</td><td>the system stops reporting the artefact as stale without being restarted</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the system reports the artefact as stale</td><td>the instruction names a way to rebuild that does not depend on tooling the installation</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/runtime-diagnostics/spec.md (12 requirements, 38 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 38 of 38 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">17</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">17</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">58</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>TBD - created by syncing change improve-runtime-diagnostics. Update Purpose after archive.</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 1 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL provide non-mutating readiness checks for the single native AgentWeave instance without starting the Hub or making external model-provider API calls.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 2 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL represent each readiness check as a structured result with a stable check identifier, target, status, severity, user-facing message, and optional remediation hint.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 3 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL detect missing required proxy provider API key variables when agent configuration is validated and before a proxy runner is spawned.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span><a class="aw-anchor-copy" href="#FR-16" aria-label="Link to FR-16" title="Link to #FR-16">#</a> <span class="aw-position">Requirement 4 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL run deterministic preflight checks before spawning an agent&#x27;s run and SHALL refuse launches that are known to be impossible.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span><a class="aw-anchor-copy" href="#FR-17" aria-label="Link to FR-17" title="Link to #FR-17">#</a> <span class="aw-position">Requirement 5 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL emit durable structured diagnostic events for runtime failures, degraded states, skipped execution, and unavailable dependencies.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span><a class="aw-anchor-copy" href="#FR-18" aria-label="Link to FR-18" title="Link to #FR-18">#</a> <span class="aw-position">Requirement 6 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL distinguish queued agent work by execution confidence based on available agent and runner state.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span><a class="aw-anchor-copy" href="#FR-19" aria-label="Link to FR-19" title="Link to #FR-19">#</a> <span class="aw-position">Requirement 7 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub Logs UI SHALL expose diagnostics in a way that reflects the current project rather than a fixed set of agents.</p></div><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span><a class="aw-anchor-copy" href="#FR-20" aria-label="Link to FR-20" title="Link to #FR-20">#</a> <span class="aw-position">Requirement 8 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL make scheduled and manually fired job failures durable and visible.</p></div><div class="aw-requirement aw-requirement-must" id="FR-21"><span class="aw-id">FR-21</span><a class="aw-anchor-copy" href="#FR-21" aria-label="Link to FR-21" title="Link to #FR-21">#</a> <span class="aw-position">Requirement 9 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL summarize readiness so users can see whether configured agents are immediately usable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-22"><span class="aw-id">FR-22</span><a class="aw-anchor-copy" href="#FR-22" aria-label="Link to FR-22" title="Link to #FR-22">#</a> <span class="aw-position">Requirement 10 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL be able to report, for a project&#x27;s agents, whether agent-to-agent collaboration will actually work — not merely whether the runner CLI is installed and authorized.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The report SHALL cover whether the tool surface will be invocable by that agent&#x27;s provider, and whether the address supplied to runs is the address the Hub is serving on. Each unmet condition SHALL name what is wrong in terms an operator can act on. This check MUST NOT require starting an agent run.</p></div><div class="aw-requirement aw-requirement-must" id="FR-23"><span class="aw-id">FR-23</span><a class="aw-anchor-copy" href="#FR-23" aria-label="Link to FR-23" title="Link to #FR-23">#</a> <span class="aw-position">Requirement 11 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> A run that fails because its runtime process ended SHALL report the process&#x27;s exit status, the operation in flight when it ended, and what the process last wrote to its error stream.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>&quot;The process ended&quot; is true of every such failure and distinguishes none of them. A crash, a non-existent binary, a rejected credential and an unresumable session all produce the same sentence, so diagnosing one means inferring the cause from which other agents still work. The error stream of a runtime the system starts SHALL be read. A stream that is captured and never consumed can fill, at which point the process it belongs to blocks on writing to it — so leaving it unread is not merely a lost diagnostic but a way to hang the very process being diagnosed. What is retained SHALL be bounded. These facts SHALL be carried by the failure itself, so that every existing reader of the failure reports them without being changed. Each of these facts SHALL be reported as a distinct fact and not only within a composed sentence. A fact that exists solely inside a message can be read by a person and by nothing else, and where the composed sentence is not the surface the operator is looking at, the fact does not arrive at all. Where a run ends abnormally without raising — a turn that reports its own failure rather than one whose start failed — the same facts SHALL be reported. The operator cannot see which internal path a failure took, and reporting a runtime&#x27;s death well in one case and not the other is indistinguishable from reporting it unreliably. The exit status a run reports for its turn SHALL be distinguishable from the exit status of the runtime process. Where a transport has no process exit status for a turn, the system supplies one so that success and failure read uniformly across transports; conflating that supplied value with a process&#x27;s own status gives one death two contradictory numbers and no way to tell which is which. An exit status SHALL be rendered in a form a person can act on. A platform reporting a forced termination as a large unsigned value states a fact that reads as corruption; what is displayed SHALL convey the termination, while what is recorded remains what the platform reported.</p></div><div class="aw-requirement aw-requirement-must" id="FR-24"><span class="aw-id">FR-24</span><a class="aw-anchor-copy" href="#FR-24" aria-label="Link to FR-24" title="Link to #FR-24">#</a> <span class="aw-position">Requirement 12 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL treat the built interface artefact as current where a recorded assertion says it was built from the interface source as it now stands.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Staleness is reported today by comparing when the source was last changed against when the artefact was last changed. A source change that cannot alter the built output — a change to types, comments, or anything else erased before the output is produced — leaves the artefact byte for byte identical, so rebuilding produces nothing to record, the artefact&#x27;s timestamp never moves, and the warning stands permanently. A warning that cannot be cleared by doing the thing it asks for teaches the operator to ignore it, which costs the cases where it is right. The assertion SHALL identify the state of the source it was made against, including changes not yet committed, so that it distinguishes an artefact built from what is present from one built from something else. Where no assertion has been recorded, staleness SHALL be reported as it was before. An installation carrying no assertion is not thereby declared current. A recorded assertion SHALL take effect without restarting the system. Where the report instructs the operator to rebuild, it SHALL name a way to do so that is available to them. A warning naming a command the installation does not have is not actionable, and an unactionable warning is ignored — including on the occasions when it is right. This requirement establishes an assertion, not a proof. Only building the artefact can establish that it matches its source; what is recorded is a dated and attributable claim that someone did so.</p></div><div class="aw-requirement aw-requirement-must" id="FR-25"><span class="aw-id">FR-25</span><a class="aw-anchor-copy" href="#FR-25" aria-label="Link to FR-25" title="Link to #FR-25">#</a> <span class="aw-position">Requirement 13 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where the command-line help documents an option before the subcommand, that form SHALL take effect. An option that is accepted and silently ignored SHALL NOT exist: either it works, or it is refused with a statement of the form that does work.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Measured 2026-08-25 against a Hub confirmed live: the documented form reported the Hub **stopped** while the undocumented form reported it running. Neither errored, so the operator had no signal that the flag went nowhere — they were simply told the service was down while it was serving requests.</p></div><div class="aw-requirement aw-requirement-must" id="FR-26"><span class="aw-id">FR-26</span><a class="aw-anchor-copy" href="#FR-26" aria-label="Link to FR-26" title="Link to #FR-26">#</a> <span class="aw-position">Requirement 14 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Diagnostics SHALL describe a running instance by how it is actually running, and SHALL examine the instance the project is bound to rather than a default.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Today a native process is reported as Docker, and `doctor`, run from inside a project bound to a non-default port, checks the default port and a database nobody serves — then returns all checks passing without having examined the running instance at all. A clean bill of health that inspected the wrong thing is worse than no report.</p></div><div class="aw-requirement aw-requirement-must" id="FR-27"><span class="aw-id">FR-27</span><a class="aw-anchor-copy" href="#FR-27" aria-label="Link to FR-27" title="Link to #FR-27">#</a> <span class="aw-position">Requirement 15 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where the Hub deliberately degrades rather than failing, `doctor` SHALL report the degraded condition, name its consequence in terms the operator will meet it in, and name the remedy.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Degrading is often correct — failing a whole turn because a shared dependency directory could not be linked into an agent&#x27;s worktree would be worse than provisioning without it. What is not correct is that nobody is told. Measured on this machine: directory symlinks cannot be created without an extra privilege, so **every** agent worktree is provisioned without the project&#x27;s installed dependencies, and no surface says so. The agent discovers it by running the suite and failing. The operator sees a checkout that looks complete. The diagnostic did not look. It stayed invisible while the fixtures were projects whose tooling was already on the path, and stops being invisible the moment a reviewer is handed a checkout *because it can run the tests* — that reviewer then reports that it could not run the suite, and is telling the truth about an environment nobody told it about.</p></div><div class="aw-requirement aw-requirement-must" id="FR-28"><span class="aw-id">FR-28</span><a class="aw-anchor-copy" href="#FR-28" aria-label="Link to FR-28" title="Link to #FR-28">#</a> <span class="aw-position">Requirement 16 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The application SHALL show, at the control where the operator binds an agent&#x27;s runner, the Hub&#x27;s collaboration-readiness reason whenever the Hub reports that agent runnable but not collaboration-ready. It SHALL show nothing for an agent reported collaboration-ready, and nothing for a report that does not apply to the agent.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The reason shown SHALL be the Hub&#x27;s own sentence, so that the condition to fix is named where it can be fixed. A remedy the reason names SHALL be named as the application labels it. Once the operator changes or removes the runner, the application SHALL show the Hub&#x27;s new report without the operator reloading, so that a warning is not left standing after its condition was fixed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-29"><span class="aw-id">FR-29</span><a class="aw-anchor-copy" href="#FR-29" aria-label="Link to FR-29" title="Link to #FR-29">#</a> <span class="aw-position">Requirement 17 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL show, for each run, which surface the run was told to reach the Hub through and whether its harness started the Hub&#x27;s tool server, and when a run given the server did not start it, SHALL say so once in that run&#x27;s own activity, naming the surface the run was actually told to use.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An operator whose machine blocks tool-protocol servers learns it today only from the harness&#x27;s own wording, if it appears at all, while the run quietly behaves differently. Stating it once, where the run&#x27;s activity is read, turns a silent degradation into a fact the operator can act on. A run is not always told its surface after its own test. Some runners are told before they start, from the agent&#x27;s history, and their own test can then come back negative. The statement names what that run was told, not what the next run will be, because a statement that the run was told the call command, made about a run told the tool-protocol surface, is the very disagreement between telling and fact this requirement exists to expose. Where the runner&#x27;s own failure message already states it, that message is the one statement, and it too names the surface the run was told: a message saying the run had no way to reach the Hub, about a run told the call command, is false in the same way. Where the operator has declared the surface the agent uses, the statement does not promise that the next run is told otherwise. Where the harness gives its own account of the server, that account SHALL be quoted verbatim beside the statement and SHALL NOT be what the system decides from.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the user runs `agentweave doctor`</td><td>the system reports Python support, native Hub installation, runner CLIs on PATH, local port availability, SQLite database accessibility, and Hub-state file permissions</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the native Hub state directory does not exist</td><td>diagnostics inspect the nearest existing parent and do not create Hub state, a project, or a database</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>readiness checks inspect environment variables, transport configuration, runner commands, or proxy settings</td><td>the system reports variable names, paths, statuses, and hints without printing API key values, bearer tokens, or other secret values</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a readiness check detects a missing proxy API key</td><td>the result includes the check identifier, affected agent, status `fail`, severity `error`, the missing environment variable name, and a hint describing how to set it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the same readiness result is shown by `agentweave doctor` and `agentweave status`</td><td>the system uses the same status, severity, message, and hint semantics for that check</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a `claude_proxy` agent references a provider API key variable that is unavailable to the Hub process</td><td>the agent readiness response names the missing variable and explains how to provide it without exposing a secret value</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run is requested for a proxy agent whose required provider API key variable is missing</td><td>the Hub refuses the run before spawn with an actionable typed conflict naming the missing variable</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub receives a trigger for a proxy agent whose required provider API key variable is missing</td><td>it does not spawn the process, returns a typed conflict response naming the missing variable, and records a structured diagnostic event</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub receives a trigger for an agent whose runner CLI is not available in PATH</td><td>it does not spawn the process, returns a typed conflict response, and records a structured launch-skip diagnostic event</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub refuses a launch because a deterministic preflight check fails</td><td>the system preserves enough queued state for the user to retry after fixing the readiness issue</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a setup, synchronization, or registration step fails but the operation continues</td><td>the system emits a structured diagnostic event with the failing step, severity, message, and remediation hint when available</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an HTTP transport operation fails because the Hub is unreachable, authentication fails, a project is missing, a request times out, or the response is invalid</td><td>the system emits or returns a classified diagnostic rather than only a generic failure</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a launched agent subprocess exits with a non-zero status</td><td>the system records a structured diagnostic event containing agent name, runner type, exit code, duration when known, and a secret-safe summary of recent stderr</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-18">FR-18</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the user triggers an agent whose runner is configured as manual</td><td>the response indicates that the message was queued for manual handling and does not imply automatic execution</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-19">FR-19</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub Logs view is opened</td><td>the agent filter includes agents from configured session data, the project&#x27;s agents, or returned log entries, including custom agents and proxy agents</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-19">FR-19</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>diagnostic events exist in the log stream</td><td>the user can filter or search common categories such as runner, proxy credentials, setup, jobs, and agent stderr</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-19">FR-19</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a log entry contains diagnostic data derived from env vars, transport config, or runner commands</td><td>the UI does not display secret values</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-20">FR-20</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a job run fails to start, fails to trigger an agent, or raises an internal scheduler error</td><td>the system records the run as failed with a secret-safe error summary and emits a structured diagnostic event</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-20">FR-20</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a job has a recent failed run</td><td>the Hub job view exposes that failed state separately from jobs that are merely disabled, pending, or idle</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-21">FR-21</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator inspects configured agents</td><td>the Hub exposes a compact readiness summary for each agent covering runner type, CLI availability, required environment variables, context status, and overall readiness</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-21">FR-21</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>one or more readiness checks warn or fail</td><td>the Hub records structured diagnostic events and exposes remediation hints to the operator</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-22">FR-22</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>collaboration readiness is reported for an agent whose provider would refuse its tool calls</td><td>the agent is reported as not collaboration-ready the reason names the refusal</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-22">FR-22</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the address the Hub would supply to runs is not the address it is serving on</td><td>collaboration readiness reports the mismatch names both addresses</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-22">FR-22</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>collaboration readiness is reported</td><td>no agent run is started</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run fails because its runtime process ended</td><td>the failure names the process&#x27;s exit status it names the operation that was in flight</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runtime writes to its error stream and then exits</td><td>the failure includes what it wrote the amount retained is bounded</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runtime writes more to its error stream than the stream can hold</td><td>the runtime is not blocked</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run fails because its runtime process ended</td><td>the exit status, the operation in flight, and what was written to the error stream are</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn ends in failure and the runtime process has exited</td><td>the failure reports that process&#x27;s exit status it reports what the process wrote to its error stream</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run on a transport with no per-turn process exit status fails</td><td>the status reported for the turn is distinct from the status reported for the runtime neither is presented as the other</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runtime is terminated and the platform reports the termination as a large unsigned value</td><td>what is displayed conveys the termination rather than that value</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runtime exits with an ordinary status</td><td>that status is displayed as it is</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the artefact carries an assertion naming the interface source as it now stands</td><td>the system does not report the artefact as stale</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the interface source changes in a way that leaves the built artefact identical the artefact is rebuilt and the assertion recorded</td><td>the system does not report the artefact as stale</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the artefact carries an assertion naming source that differs from what is present</td><td>the system reports the artefact as stale</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the artefact carries no assertion</td><td>staleness is reported by comparing when source and artefact last changed</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an assertion is recorded while the system is running</td><td>the system stops reporting the artefact as stale without being restarted</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the system reports the artefact as stale</td><td>the instruction names a way to rebuild that does not depend on tooling the installation</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator supplies the port option in the position the help documents</td><td>it SHALL take effect</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator supplies the option both before and after the subcommand</td><td>the value nearer the subcommand SHALL win</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Hub is serving requests on the named port</td><td>it SHALL be reported running</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an instance was started as a local process rather than in a container</td><td>it SHALL be reported as native</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>diagnostics run inside a project bound to a particular instance</td><td>they SHALL examine that instance&#x27;s port and database</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the bound instance cannot be reached</td><td>that SHALL be reported as a failure rather than omitted from the summary</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>diagnostics run on a machine where that facility is unavailable</td><td>the report SHALL include a warning naming the facility and what will be missing without it SHALL name the remedy</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>diagnostics run on a machine where it works</td><td>the report SHALL say so and SHALL NOT warn</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the facility is unavailable but the Hub is otherwise ready</td><td>the condition SHALL be reported as a warning and SHALL NOT be reported as a failure</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the diagnostic tests the facility</td><td>it SHALL not leave anything behind in the location it probed</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>an agent the Hub reports as runnable and not collaboration-ready, with a reason</td><td>the operator opens that agent&#x27;s execution settings</td><td>the runner control states that the agent will run but cannot collaborate the statement carries the Hub&#x27;s reason</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>an agent the Hub reports as runnable and collaboration-ready</td><td>the operator opens that agent&#x27;s execution settings</td><td>no collaboration warning is shown</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>an agent the Hub reports as not runnable</td><td>the operator opens that agent&#x27;s execution settings</td><td>only the statement that it cannot run is shown</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>an agent whose runner control states that it cannot collaborate</td><td>the operator changes the agent&#x27;s runner or permissions, or edits that runner, so the Hub reports the agent collaboration-ready</td><td>the statement is no longer shown when the operator returns to the agent&#x27;s execution settings, without reloading the application</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>a Codex agent whose runner opted out of the app-server transport and whose permissions are not Full access</td><td>the Hub reports that agent&#x27;s collaboration readiness</td><td>the reason names the runner flag to avoid and the Full access permission setting it does not name a setting the application does not show</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run&#x27;s facts are read</td><td>they state the surface the run was told and whether its harness started the server, or</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run was given the Hub&#x27;s tool server, was told the call command, and its harness did</td><td>that run&#x27;s activity holds exactly one statement saying so and naming the call command as</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run was told the tool-protocol surface from its agent&#x27;s history, and its own harness then</td><td>that run&#x27;s activity holds exactly one statement saying the server did not start although it does not say the run was told the call command</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runner reports in its own message that the Hub&#x27;s tool server failed to start, for a run</td><td>that message states that the run was told to reach the Hub through the call command it does not state that the run had no way to send messages, update tasks or ask questions</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the harness reports its own reason for not starting the server</td><td>the statement quotes it what the run is told does not depend on its wording</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/runtime-diagnostics/spec.md (17 requirements, 58 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 53 of 58 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
@@ -198,6 +245,41 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "statement": "The system SHALL treat the built interface artefact as current where a recorded assertion says it was built from the interface source as it now stands.",
       "modal": "SHALL",
       "rationale": "Staleness is reported today by comparing when the source was last changed against when the artefact was last changed. A source change that cannot alter the built output — a change to types, comments, or anything else erased before the output is produced — leaves the artefact byte for byte identical, so rebuilding produces nothing to record, the artefact's timestamp never moves, and the warning stands permanently. A warning that cannot be cleared by doing the thing it asks for teaches the operator to ignore it, which costs the cases where it is right. The assertion SHALL identify the state of the source it was made against, including changes not yet committed, so that it distinguishes an artefact built from what is present from one built from something else. Where no assertion has been recorded, staleness SHALL be reported as it was before. An installation carrying no assertion is not thereby declared current. A recorded assertion SHALL take effect without restarting the system. Where the report instructs the operator to rebuild, it SHALL name a way to do so that is available to them. A warning naming a command the installation does not have is not actionable, and an unactionable warning is ignored — including on the occasions when it is right. This requirement establishes an assertion, not a proof. Only building the artefact can establish that it matches its source; what is recorded is a dated and attributable claim that someone did so.",
+      "party": null
+    },
+    {
+      "key": "the-documented-command-form-is-the-one-that-works",
+      "statement": "Where the command-line help documents an option before the subcommand, that form SHALL take effect. An option that is accepted and silently ignored SHALL NOT exist: either it works, or it is refused with a statement of the form that does work.",
+      "modal": "SHALL",
+      "rationale": "Measured 2026-08-25 against a Hub confirmed live: the documented form reported the Hub **stopped** while the undocumented form reported it running. Neither errored, so the operator had no signal that the flag went nowhere — they were simply told the service was down while it was serving requests.",
+      "party": null
+    },
+    {
+      "key": "a-running-instance-is-described-as-what-it-actually-is",
+      "statement": "Diagnostics SHALL describe a running instance by how it is actually running, and SHALL examine the instance the project is bound to rather than a default.",
+      "modal": "SHALL",
+      "rationale": "Today a native process is reported as Docker, and `doctor`, run from inside a project bound to a non-default port, checks the default port and a database nobody serves — then returns all checks passing without having examined the running instance at all. A clean bill of health that inspected the wrong thing is worse than no report.",
+      "party": null
+    },
+    {
+      "key": "a-silently-degraded-environment-shall-be-reported-once-where",
+      "statement": "Where the Hub deliberately degrades rather than failing, `doctor` SHALL report the degraded condition, name its consequence in terms the operator will meet it in, and name the remedy.",
+      "modal": "SHALL",
+      "rationale": "Degrading is often correct — failing a whole turn because a shared dependency directory could not be linked into an agent's worktree would be worse than provisioning without it. What is not correct is that nobody is told. Measured on this machine: directory symlinks cannot be created without an extra privilege, so **every** agent worktree is provisioned without the project's installed dependencies, and no surface says so. The agent discovers it by running the suite and failing. The operator sees a checkout that looks complete. The diagnostic did not look. It stayed invisible while the fixtures were projects whose tooling was already on the path, and stops being invisible the moment a reviewer is handed a checkout *because it can run the tests* — that reviewer then reports that it could not run the suite, and is telling the truth about an environment nobody told it about.",
+      "party": null
+    },
+    {
+      "key": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
+      "statement": "The application SHALL show, at the control where the operator binds an agent's runner, the Hub's collaboration-readiness reason whenever the Hub reports that agent runnable but not collaboration-ready. It SHALL show nothing for an agent reported collaboration-ready, and nothing for a report that does not apply to the agent.",
+      "modal": "SHALL",
+      "rationale": "The reason shown SHALL be the Hub's own sentence, so that the condition to fix is named where it can be fixed. A remedy the reason names SHALL be named as the application labels it. Once the operator changes or removes the runner, the application SHALL show the Hub's new report without the operator reloading, so that a warning is not left standing after its condition was fixed.",
+      "party": null
+    },
+    {
+      "key": "a-run-states-how-it-reached-the-hub",
+      "statement": "The system SHALL show, for each run, which surface the run was told to reach the Hub through and whether its harness started the Hub's tool server, and when a run given the server did not start it, SHALL say so once in that run's own activity, naming the surface the run was actually told to use.",
+      "modal": "SHALL",
+      "rationale": "An operator whose machine blocks tool-protocol servers learns it today only from the harness's own wording, if it appears at all, while the run quietly behaves differently. Stating it once, where the run's activity is read, turns a silent degradation into a fact the operator can act on. A run is not always told its surface after its own test. Some runners are told before they start, from the agent's history, and their own test can then come back negative. The statement names what that run was told, not what the next run will be, because a statement that the run was told the call command, made about a run told the tool-protocol surface, is the very disagreement between telling and fact this requirement exists to expose. Where the runner's own failure message already states it, that message is the one statement, and it too names the surface the run was told: a message saying the run had no way to reach the Hub, about a run told the call command, is false in the same way. Where the operator has declared the surface the agent uses, the statement does not promise that the next run is told otherwise. Where the harness gives its own account of the server, that account SHALL be quoted verbatim beside the statement and SHALL NOT be what the system decides from.",
       "party": null
     }
   ],
@@ -305,7 +387,7 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "requirement": "hub-logs-usability",
       "given": "",
       "when": "the Hub Logs view is opened",
-      "then": "the agent filter includes agents from configured session data, self-registered agents, or returned log entries, including custom agents and proxy agents"
+      "then": "the agent filter includes agents from configured session data, the project's agents, or returned log entries, including custom agents and proxy agents"
     },
     {
       "key": "ac16",
@@ -467,6 +549,146 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "given": "",
       "when": "the system reports the artefact as stale",
       "then": "the instruction names a way to rebuild that does not depend on tooling the installation"
+    },
+    {
+      "key": "ac39",
+      "requirement": "the-documented-command-form-is-the-one-that-works",
+      "given": "",
+      "when": "the operator supplies the port option in the position the help documents",
+      "then": "it SHALL take effect"
+    },
+    {
+      "key": "ac40",
+      "requirement": "the-documented-command-form-is-the-one-that-works",
+      "given": "",
+      "when": "the operator supplies the option both before and after the subcommand",
+      "then": "the value nearer the subcommand SHALL win"
+    },
+    {
+      "key": "ac41",
+      "requirement": "the-documented-command-form-is-the-one-that-works",
+      "given": "",
+      "when": "a Hub is serving requests on the named port",
+      "then": "it SHALL be reported running"
+    },
+    {
+      "key": "ac42",
+      "requirement": "a-running-instance-is-described-as-what-it-actually-is",
+      "given": "",
+      "when": "an instance was started as a local process rather than in a container",
+      "then": "it SHALL be reported as native"
+    },
+    {
+      "key": "ac43",
+      "requirement": "a-running-instance-is-described-as-what-it-actually-is",
+      "given": "",
+      "when": "diagnostics run inside a project bound to a particular instance",
+      "then": "they SHALL examine that instance's port and database"
+    },
+    {
+      "key": "ac44",
+      "requirement": "a-running-instance-is-described-as-what-it-actually-is",
+      "given": "",
+      "when": "the bound instance cannot be reached",
+      "then": "that SHALL be reported as a failure rather than omitted from the summary"
+    },
+    {
+      "key": "ac45",
+      "requirement": "a-silently-degraded-environment-shall-be-reported-once-where",
+      "given": "",
+      "when": "diagnostics run on a machine where that facility is unavailable",
+      "then": "the report SHALL include a warning naming the facility and what will be missing without it SHALL name the remedy"
+    },
+    {
+      "key": "ac46",
+      "requirement": "a-silently-degraded-environment-shall-be-reported-once-where",
+      "given": "",
+      "when": "diagnostics run on a machine where it works",
+      "then": "the report SHALL say so and SHALL NOT warn"
+    },
+    {
+      "key": "ac47",
+      "requirement": "a-silently-degraded-environment-shall-be-reported-once-where",
+      "given": "",
+      "when": "the facility is unavailable but the Hub is otherwise ready",
+      "then": "the condition SHALL be reported as a warning and SHALL NOT be reported as a failure"
+    },
+    {
+      "key": "ac48",
+      "requirement": "a-silently-degraded-environment-shall-be-reported-once-where",
+      "given": "",
+      "when": "the diagnostic tests the facility",
+      "then": "it SHALL not leave anything behind in the location it probed"
+    },
+    {
+      "key": "ac49",
+      "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
+      "given": "an agent the Hub reports as runnable and not collaboration-ready, with a reason",
+      "when": "the operator opens that agent's execution settings",
+      "then": "the runner control states that the agent will run but cannot collaborate the statement carries the Hub's reason"
+    },
+    {
+      "key": "ac50",
+      "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
+      "given": "an agent the Hub reports as runnable and collaboration-ready",
+      "when": "the operator opens that agent's execution settings",
+      "then": "no collaboration warning is shown"
+    },
+    {
+      "key": "ac51",
+      "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
+      "given": "an agent the Hub reports as not runnable",
+      "when": "the operator opens that agent's execution settings",
+      "then": "only the statement that it cannot run is shown"
+    },
+    {
+      "key": "ac52",
+      "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
+      "given": "an agent whose runner control states that it cannot collaborate",
+      "when": "the operator changes the agent's runner or permissions, or edits that runner, so the Hub reports the agent collaboration-ready",
+      "then": "the statement is no longer shown when the operator returns to the agent's execution settings, without reloading the application"
+    },
+    {
+      "key": "ac53",
+      "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
+      "given": "a Codex agent whose runner opted out of the app-server transport and whose permissions are not Full access",
+      "when": "the Hub reports that agent's collaboration readiness",
+      "then": "the reason names the runner flag to avoid and the Full access permission setting it does not name a setting the application does not show"
+    },
+    {
+      "key": "ac54",
+      "requirement": "a-run-states-how-it-reached-the-hub",
+      "given": "",
+      "when": "a run's facts are read",
+      "then": "they state the surface the run was told and whether its harness started the server, or"
+    },
+    {
+      "key": "ac55",
+      "requirement": "a-run-states-how-it-reached-the-hub",
+      "given": "",
+      "when": "a run was given the Hub's tool server, was told the call command, and its harness did",
+      "then": "that run's activity holds exactly one statement saying so and naming the call command as"
+    },
+    {
+      "key": "ac56",
+      "requirement": "a-run-states-how-it-reached-the-hub",
+      "given": "",
+      "when": "a run was told the tool-protocol surface from its agent's history, and its own harness then",
+      "then": "that run's activity holds exactly one statement saying the server did not start although it does not say the run was told the call command"
+    },
+    {
+      "key": "ac57",
+      "requirement": "a-run-states-how-it-reached-the-hub",
+      "given": "",
+      "when": "a runner reports in its own message that the Hub's tool server failed to start, for a run",
+      "then": "that message states that the run was told to reach the Hub through the call command it does not state that the run had no way to send messages, update tasks or ask questions"
+    },
+    {
+      "key": "ac58",
+      "requirement": "a-run-states-how-it-reached-the-hub",
+      "given": "",
+      "when": "the harness reports its own reason for not starting the server",
+      "then": "the statement quotes it what the run is told does not depend on its wording"
     }
   ],
   "tasks": [],
@@ -474,44 +696,54 @@ code { padding: .1rem .3rem; font-size: .88em; }
   "design": "",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/runtime-diagnostics/spec.md (12 requirements, 38 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "Translated from openspec/specs/runtime-diagnostics/spec.md (17 requirements, 58 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
     ],
     "limits": [
-      "scenarios-state-no-starting-state: 38 of 38 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "scenarios-state-no-starting-state: 53 of 58 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
     ]
   },
   "lifecycle": "",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
-      "runtime-readiness-checks": "FR-1",
-      "readiness-check-result-model": "FR-2",
-      "proxy-credential-diagnostics": "FR-3",
-      "watchdog-launch-preflight": "FR-4",
-      "structured-diagnostic-events": "FR-5",
-      "hub-trigger-confidence-reporting": "FR-6",
-      "hub-logs-usability": "FR-7",
-      "job-failure-diagnostics": "FR-8",
-      "agent-readiness-summary": "FR-9",
-      "collaboration-readiness-is-checkable-before-it-is-needed": "FR-10",
-      "a-runtime-that-dies-reports-what-it-was-doing": "FR-11",
-      "the-built-interface-artefact-can-be-asserted-current": "FR-12"
+      "runtime-readiness-checks": "FR-13",
+      "readiness-check-result-model": "FR-14",
+      "proxy-credential-diagnostics": "FR-15",
+      "watchdog-launch-preflight": "FR-16",
+      "structured-diagnostic-events": "FR-17",
+      "hub-trigger-confidence-reporting": "FR-18",
+      "hub-logs-usability": "FR-19",
+      "job-failure-diagnostics": "FR-20",
+      "agent-readiness-summary": "FR-21",
+      "collaboration-readiness-is-checkable-before-it-is-needed": "FR-22",
+      "a-runtime-that-dies-reports-what-it-was-doing": "FR-23",
+      "the-built-interface-artefact-can-be-asserted-current": "FR-24",
+      "the-documented-command-form-is-the-one-that-works": "FR-25",
+      "a-running-instance-is-described-as-what-it-actually-is": "FR-26",
+      "a-silently-degraded-environment-shall-be-reported-once-where": "FR-27",
+      "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w": "FR-28",
+      "a-run-states-how-it-reached-the-hub": "FR-29"
     },
-    "high_water": 12,
+    "high_water": 29,
     "retired": {},
     "digests": {
-      "FR-1": "3e0f9964702601b6b20d6e20ce7ac5f3c5289cc5367ef4195f9feee609718664",
-      "FR-2": "1e5a5f31c81c7baa7d1f5360318a6091440abcd1e4588430c20abb4d7fd7be2c",
-      "FR-3": "225789edceca993dd60f1200760de5654dfd71bd114ecc530db3987c961302a9",
-      "FR-4": "beb4bc0d972ca04afe81357e89a7268294f177dc37d35350025bf98713b19cfc",
-      "FR-5": "3749e793ab4d8c0c974911353924e921bc4ecb2dffdde2f1253bab34db2be884",
-      "FR-6": "b1e3e25c77ec11fcbc3b57468537bd12c03b44859650aec529206077b35f3225",
-      "FR-7": "009e8f97c51cb3e1e60eb019d6546144f5b60b8d0e39d370edb5a41c150550ab",
-      "FR-8": "720ec99e215342ef57cc4d4132f013f3bc4287a7467c3f16e84bbbaf6733713f",
-      "FR-9": "c5b60676e580e854340308084f928806d2b2976c192cd86a30e51cb33cdbbb44",
-      "FR-10": "1190756e24f53f710ac79a6157aa2190cf975508e547599551be3db3c4374fa1",
-      "FR-11": "4029f7d2577af8d86f699c66051fa09237deea4003b5ce9e919415f2b0ac0cb2",
-      "FR-12": "926e4b22ef4316efbfba82879650355a032c4e45926657863a2840207c582fff"
+      "FR-13": "3e0f9964702601b6b20d6e20ce7ac5f3c5289cc5367ef4195f9feee609718664",
+      "FR-14": "1e5a5f31c81c7baa7d1f5360318a6091440abcd1e4588430c20abb4d7fd7be2c",
+      "FR-15": "225789edceca993dd60f1200760de5654dfd71bd114ecc530db3987c961302a9",
+      "FR-16": "beb4bc0d972ca04afe81357e89a7268294f177dc37d35350025bf98713b19cfc",
+      "FR-17": "3749e793ab4d8c0c974911353924e921bc4ecb2dffdde2f1253bab34db2be884",
+      "FR-18": "b1e3e25c77ec11fcbc3b57468537bd12c03b44859650aec529206077b35f3225",
+      "FR-19": "64f82de3ab05fd98825cea11784e7fd737b23062398d9f64df7de217a252920c",
+      "FR-20": "720ec99e215342ef57cc4d4132f013f3bc4287a7467c3f16e84bbbaf6733713f",
+      "FR-21": "c5b60676e580e854340308084f928806d2b2976c192cd86a30e51cb33cdbbb44",
+      "FR-22": "1190756e24f53f710ac79a6157aa2190cf975508e547599551be3db3c4374fa1",
+      "FR-23": "4029f7d2577af8d86f699c66051fa09237deea4003b5ce9e919415f2b0ac0cb2",
+      "FR-24": "926e4b22ef4316efbfba82879650355a032c4e45926657863a2840207c582fff",
+      "FR-25": "e5f844018b0766ba47072c656cdb47b57748eaaa99a33ad34594ce256cabcacd",
+      "FR-26": "6e54fdc4b920a79bf1d59b6b3ec64a6d5e39f02f36a8861c88a6ea3d49ad345a",
+      "FR-27": "4a332d4f3bd5f65a236205aa1bf9140bdebc095ff94c4bfe929d9b6f3d9ff239",
+      "FR-28": "25fd1b9997117c1a9822e823f4857c56799054e692d4915447546edb83f8d201",
+      "FR-29": "899e27851af54c5c97c1a4d81e3f2bfefa1e456012f4698d9f4ac20f4c37b134"
     }
   }
 }
