@@ -183,10 +183,14 @@ async def test_an_agent_cannot_approve_its_own_completion_over_http(app, auth_he
     task_id = (await _create(app, auth_headers, "self approval")).json()["id"]
     headers = await _active_run("run-author")
 
-    for status in ("in_progress", "completed", "under_review"):
-        assert (
-            await _patch(app, headers, task_id, status, agent_route=True)
-        ).status_code == 200, status
+    for status in ("in_progress", "completed"):
+        moved = await _patch(app, headers, task_id, status, agent_route=True)
+        assert moved.status_code == 200, (status, moved.text)
+    # Claiming the unassigned task made the author its holder (F450), so the review is handed to
+    # `reviewer` in the same move, as the flow's own staffing does; a bare `under_review` would
+    # name the author as its own reviewer, which `_guard_reviewer_is_not_the_author` refuses.
+    handed = await _patch(app, auth_headers, task_id, "under_review", assignee="reviewer")
+    assert handed.status_code == 200, handed.text
 
     response = await _patch(app, headers, task_id, "approved", agent_route=True)
     assert response.status_code == 403, response.text

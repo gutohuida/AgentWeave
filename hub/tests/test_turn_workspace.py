@@ -40,6 +40,7 @@ from hub.db.models import (
     TaskDependency,
     TaskRequirementLink,
 )
+from hub.launchability import read_only_work_sentence
 
 _REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
 _REAL_ENSURE_TASK_WORKTREE = worktrees.ensure_task_worktree
@@ -429,14 +430,15 @@ async def test_a_main_branch_that_does_not_resolve_falls_back_to_head(
 
 
 @pytest.mark.asyncio
-async def test_a_read_only_agent_shares_the_project_checkout_bound_to_a_task_or_not(
+async def test_a_read_only_agent_gets_no_checkout_bound_to_a_task_or_not(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
 ):
-    """4.7 — `is_writing_agent` keeps precedence over the binding.
+    """4.7 — `is_writing_agent` keeps precedence over the binding, and F425 closed the bound half.
 
     A read-only agent given a checkout it may not write to gains nothing and loses the project
-    directory it was reading. Asserted in both directions in one test because the point is that the
-    binding makes no difference here at all.
+    directory it was reading. Its unbound turn shares the project checkout; its task-bound work turn
+    used to as well, and since F425 is refused instead, because a read-only agent holds no task's
+    work. Either way no task or agent checkout is made for it.
     """
     repo = _init_repo(tmp_path / "repo")
     await bind_project_workspace(repo)
@@ -446,14 +448,15 @@ async def test_a_read_only_agent_shares_the_project_checkout_bound_to_a_task_or_
     unbound_conversation = await _conversation("reader")
     await _task(BOUND_TASK)
 
-    bound = await _turn(
-        async_session_factory,
-        project_id="proj-test",
-        agent="reader",
-        message="read it",
-        conversation_id=bound_conversation,
-        task_id=BOUND_TASK,
-    )
+    with pytest.raises(agent_trigger.TriggerAgentError) as refusal:
+        await _turn(
+            async_session_factory,
+            project_id="proj-test",
+            agent="reader",
+            message="read it",
+            conversation_id=bound_conversation,
+            task_id=BOUND_TASK,
+        )
     unbound = await _turn(
         async_session_factory,
         project_id="proj-test",
@@ -462,7 +465,7 @@ async def test_a_read_only_agent_shares_the_project_checkout_bound_to_a_task_or_
         conversation_id=unbound_conversation,
     )
 
-    assert Path(bound) == repo
+    assert refusal.value.detail == read_only_work_sentence("reader", BOUND_TASK)
     assert Path(unbound) == repo
     assert not worktrees.task_root(repo).exists()
     assert not worktrees.worktree_root(repo).exists()

@@ -49,6 +49,7 @@ from hub.db.models import (
     TaskRequirementLink,
 )
 from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT, new_entry
+from hub.launchability import read_only_work_sentence
 from hub.scheduler import decide_firing
 from hub.turn_scheduler import schedule_agent
 
@@ -332,14 +333,15 @@ async def test_a_review_turn_bound_to_the_held_task_is_not_refused(
     assert _git(Path(cwd), "rev-parse", "HEAD").stdout.strip() == reviewed_commit
 
 
-async def test_a_read_only_agent_is_not_refused_while_another_holds_the_task(
+async def test_a_read_only_agent_is_refused_for_holding_work_not_for_the_collision(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path
 ):
-    """4.13(b) — a read-only agent shares the project checkout and has no isolation to collide over.
+    """4.13(b), as F425 left it — a read-only agent has no isolation to collide over.
 
-    `is_writing_agent` keeps precedence over the binding (task 4.7), so this turn was never going to
-    take the task's checkout. Refusing it would stop an analyst reading a repository because
-    somebody else is writing in a different directory.
+    It used to share the project checkout and was let through. Since F425 a read-only agent holds no
+    task's work at all, so its task-bound work turn is refused before any workspace decision; what
+    this still holds is that the refusal is the read-only one, not a collision blamed on the holder,
+    and that nothing was provisioned. Its review turns are exempt (`test_a_read_only_agent_holds_no_task_work.py`).
     """
     repo = _init_repo(tmp_path / "repo")
     await bind_project_workspace(repo)
@@ -348,15 +350,21 @@ async def test_a_read_only_agent_is_not_refused_while_another_holds_the_task(
     await _task(HELD_TASK)
     await _holding_run(HOLDER, HELD_TASK)
 
-    cwd = await _spawned_cwd(
-        project_id="proj-test",
-        agent=CHALLENGER,
-        message="just reading",
-        conversation_id=conversation_id,
-        task_id=HELD_TASK,
-    )
+    async with async_session_factory() as session:
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            with pytest.raises(TriggerAgentError) as excinfo:
+                await trigger_agent_directly(
+                    project_id="proj-test",
+                    agent=CHALLENGER,
+                    message="just reading",
+                    conversation_id=conversation_id,
+                    session=session,
+                    task_id=HELD_TASK,
+                )
 
-    assert Path(cwd) == repo
+    assert excinfo.value.detail == read_only_work_sentence(CHALLENGER, HELD_TASK)
+    assert HOLDER not in excinfo.value.detail
+    assert not (repo / ".agentweave" / "tasks" / HELD_TASK).exists()
 
 
 async def test_a_grandfathered_task_is_not_refused(
