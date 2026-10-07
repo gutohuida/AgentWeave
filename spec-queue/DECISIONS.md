@@ -20,6 +20,17 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### Which corpus is the source of truth after the migration? -- 2026-10-07 interactive, DECIDED 2026-10-07
+
+- DECIDED   spec-source-after-migration  **Not yet: `openspec/specs/` stays the source of truth;
+  `spec/` is its mirror** (operator, 2026-10-07, as recommended). The migration (`b56a580`) made all
+  45 capabilities in `spec/capabilities/` match `openspec/specs/`, and the index files 58 documents.
+  The revising changes of the spec-flow plan's Phase 4 are openspec changes that archive into
+  `openspec/specs/`; switching mid-plan would mean re-importing after every archive. Revisit once
+  Phase 4 is done and the openspec change queue is empty. Until then a trial outcome is still
+  reconciled into `openspec/specs/` by hand, and `scripts/migrate_openspec_corpus.py --only <cap>`
+  refreshes a mirror copy.
+
 ### `the-corpus-is-indexed-arranged-and-adopted-from-the-app`: merge -- 2026-09-24 review, DECIDED 2026-09-24, recorded 2026-10-07
 
 - DECIDED   corpus-merge-m1  **M1: merge stays API-only in this change** (operator, approving the
