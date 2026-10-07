@@ -99,6 +99,30 @@ async def test_once_resolved_the_preview_says_it_merges_cleanly(
 
 
 @pytest.mark.asyncio
+async def test_work_already_on_main_is_not_counted_as_merging(
+    app, auth_headers, builder, tmp_path  # noqa: F811
+):
+    """F522. On `:8010` the preview said "approval will merge 2 commits into master" for two
+    commits already on master; approving then recorded `skipped`, "already in master". The preview
+    now asks the reachability question the checks gate asks (F518)."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+    commit_on_branch(tmp_path, AGENT_BRANCH, "alpha.txt", "alpha\n")
+    await accept_evidence(app, auth_headers, builder, identifier="FR-1")
+    git(tmp_path, "checkout", "-q", "main")
+    git(tmp_path, "merge", "-q", "--no-ff", "-m", "landed elsewhere", AGENT_BRANCH)
+    task = await linked_task(app, auth_headers)
+
+    answer = await preview(app, auth_headers, task)
+
+    assert answer["targets"] == []
+    assert answer["will_attempt_merge"] is False
+    assert "already in main" in answer["reason"]
+    assert "will merge" not in answer["reason"]
+
+
+@pytest.mark.asyncio
 async def test_two_clean_targets_are_counted(app, auth_headers, builder, tmp_path):  # noqa: F811
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder, requirements=(ALPHA, BETA))

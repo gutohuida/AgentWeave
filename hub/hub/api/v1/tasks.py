@@ -1117,7 +1117,7 @@ async def task_integration_preview(
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    from ... import project_workspace, requirement_gate, task_integration
+    from ... import project_checks, project_workspace, requirement_gate, task_integration
 
     project_row = await session.get(Project, project_id)
     main_branch = project_row.main_branch if project_row else None
@@ -1130,6 +1130,7 @@ async def task_integration_preview(
     # Every git call below is wrapped: `task_integration._git` raises on a timeout or a missing
     # git, and not knowing is an answer here, a 500 is not (design D1, steps 1-2 and 5).
     targets: list = []
+    already_merged: list = []
     conflicts: Optional[List[dict]] = None
     git_failed = False
     situation = None
@@ -1137,6 +1138,23 @@ async def task_integration_preview(
         situation = await requirement_gate.merge_situation(session, task)
         if situation is not None:
             targets = list(situation.will_merge)
+            # F522: a target already reachable from the main tip merges nothing (the integration
+            # records "already in <main>"), so it is not counted as what approval will merge.
+            # The same question the checks gate asks (F518); unknown reachability is kept.
+            tip = await asyncio.to_thread(
+                project_checks.main_tip, situation.root, situation.main_branch
+            )
+            if tip:
+                pending = set(
+                    await asyncio.to_thread(
+                        project_checks.unmerged,
+                        situation.root,
+                        tip,
+                        [target.commit_sha for target in targets],
+                    )
+                )
+                already_merged = [t for t in targets if t.commit_sha not in pending]
+                targets = [t for t in targets if t.commit_sha in pending]
             conflicts = []
             for target in targets:
                 paths = await asyncio.to_thread(
@@ -1173,6 +1191,9 @@ async def task_integration_preview(
         reason = task_integration.NO_MAIN_BRANCH
     elif not targets and git_failed:
         reason = task_integration.GIT_UNANSWERED
+    elif not targets and already_merged:
+        count_merged = "its commit is" if len(already_merged) == 1 else "its commits are"
+        reason = f"{count_merged} already in {main_branch}; approval merges nothing"
     elif not targets:
         # Before the conflict sentences: nothing to merge has no conflicts, and must not read as
         # "merges cleanly".

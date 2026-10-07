@@ -34752,7 +34752,7 @@ restarted, so the fix has its unit test only.
 
 ## F522 (C) — the integration preview counts commits already on the main branch as "will merge"
 
-**Status:** open (Tier 0, queued in the spec-flow plan's Phase 1)
+**Status:** fixed (Tier 0, 2026-10-07) -- the preview filters its targets through `project_checks.main_tip` + `unmerged` (F518's question), so work already on the main branch is not counted; with nothing left it says "its commit is already in <main>; approval merges nothing" and `will_attempt_merge` is false. Test: `test_the_preview_asks_the_merge_question.py::test_work_already_on_main_is_not_counted_as_merging` (listed the merged commit before).
 Found 2026-10-07 on `:8010` (`333fa9d`), task `task-acc4664bee5a`. `GET /tasks/{id}/integration-preview`
 answered `will_attempt_merge: true`, "approval will merge 2 commits into master; it merges cleanly as of now"
 for targets `252076c`/`838d833` -- both already reachable from master. Approving then recorded `skipped`,
