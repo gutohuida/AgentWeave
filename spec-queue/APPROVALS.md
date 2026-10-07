@@ -24,8 +24,11 @@ work is committed and pushed (master `1bb8538`, F462 closed) and the root is fre
 runs tonight. The operator picked these Tier-0 fixes (AskUserQuestion, 22:49); each finding
 already names its fix and its test. The three APPROVED changes below are already built.
 
-APPROVED-FIXES: F468, F464, F463, F528, F526
-ORDER: F468, F464, F463, F528, F526
+APPROVED-FIXES: F530, F468, F464, F463, F528, F526
+ORDER: F530, F468, F464, F463, F528, F526
+
+- **F530 first, and CI green before anything else (operator, 22:52: "tonight's windows should prioritize making CI good").** hub-test went red by test order under xdist on `99d9cdf`. Until
+  F530 is fixed and CI is green on the branch tip, build nothing else. Never drop `-n`.
 
 - F468: the operator's 2026-09-30 answer stands -- `send_message` to the caller returns 400 naming
   the reply, and no turn starts.

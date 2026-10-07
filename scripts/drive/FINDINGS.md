@@ -34853,3 +34853,22 @@ operator closing work after the build always does, ties the evidence to an unrel
 Harmless for integration here (already in master), but drift and "what does this evidence
 describe" read the wrong commit. Suggested: an optional `commit` on the operator's record, checked
 reachable from the main branch, defaulting to HEAD as now.
+
+## F530 (B) -- under xdist a leaked `shutil.which` patch makes `pty_runner` spawn `/usr/bin/claude`, and CI's hub-test goes red by order
+
+**Status:** open. Filed 2026-10-07 ~22:52 (interactive), the night after `741f44e` put hub-test on `-n auto --dist loadfile`.
+CI run `37683661654` (job `113005821492`, commit `99d9cdf`, a METRICS-only commit): `8 failed, 7082 passed`, all `OSError: [Errno 2]`:
+seven in `test_pty_runner.py` (`TestProcessSessionSpawn`, `TestPidAlive`, `TestTerminateProcessTree`) and
+`test_lifespan_shutdown.py::test_hub_shutdown_kills_a_real_tracked_process`, all on worker `gw1`. The run before it on the
+same test tree (`075ae20`, `37682640540`) was green, so it depends on which files share a worker. The traceback shows
+`argv = ['/usr/bin/claude', '-c', "print('hello from pty')"]` at `hub/pty_runner.py:260`: the test passed `sys.executable`,
+and `resolve_executable` (which calls `shutil.which`) returned `/usr/bin/claude`. So a `shutil.which` patch returning
+`/usr/bin/claude` was still in force. 53 test files patch it, most as `patch("hub.runner_adapters.base.shutil.which", ...)`,
+which replaces the global `shutil.which`. A likely way to leak it: two overlapping patches of the same attribute exited
+out of order (a background run outliving its `with` block), so the later one restores the earlier one's fake.
+Suspected, not proven.
+
+Fix: find the leaker. An autouse guard in `hub/tests/conftest.py` that fails the test leaving `shutil.which` different
+from the real function names it; then fix that test. Do not drop `-n`, and do not patch around it in `test_pty_runner.py`.
+Acceptance: CI green on two consecutive pushes, plus a local `-n 4 --dist loadfile` run with the guard in place.
+
