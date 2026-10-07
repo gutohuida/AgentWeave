@@ -350,6 +350,40 @@ async def test_a_later_checkpoint_covers_only_the_turns_since_the_last_one(app):
 
 
 @pytest.mark.asyncio
+async def test_an_unwritten_checkpoint_is_not_the_next_ones_anchor(app):
+    """F421. A checkpoint whose generation failed has no body; anchoring on it started the next
+    transcript at its `created_at` with nothing before it, and the failed span fell out of the
+    chain. The next one anchors on the last *written* checkpoint and covers the whole gap."""
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        await _run(db, "run-1")
+        first = await create_checkpoint(
+            db,
+            conversation,
+            trigger="operator",
+            envelope=await compute_envelope(db, conversation),
+            body="the first",
+        )
+        await _run(db, "run-2")
+        anchor = await latest_checkpoint(db, conversation.id)
+        unwritten = await create_checkpoint(
+            db,
+            conversation,
+            trigger="context_pressure",
+            envelope=await compute_envelope(db, conversation, anchor=anchor),
+            body=None,
+            anchor=anchor,
+        )
+        assert unwritten.status == "unwritten"
+        await _run(db, "run-3")
+
+        anchor = await latest_checkpoint(db, conversation.id)
+        assert anchor.id == first.id
+        covered = await runs_to_cover(db, conversation.id, anchor)
+        assert [run.id for run in covered] == ["run-2", "run-3"]
+
+
+@pytest.mark.asyncio
 async def test_a_first_checkpoint_has_no_predecessor_and_founds_its_lineage(app):
     async with async_session_factory() as db:
         conversation = await _conversation(db)

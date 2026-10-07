@@ -33068,7 +33068,7 @@ whole argv with and without a model.
 
 ## F421 (B) — an `unwritten` checkpoint becomes the next checkpoint's anchor
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final); re-checked in session. `latest_checkpoint` (`hub/hub/checkpoints.py:95-108`)
+**Status:** fixed (Tier 0, 2026-10-07) -- `latest_checkpoint` skips `unwritten` rows, so the next checkpoint anchors on the last written one and covers the failed span. `latest_checkpoint_for_loop` left unfiltered on purpose: the loop briefing renders the envelope (`render_checkpoint`), which an `unwritten` checkpoint still carries and which is the newest. Test: `test_checkpoint_record.py::test_an_unwritten_checkpoint_is_not_the_next_ones_anchor` (anchored on the unwritten one before). Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final); re-checked in session. `latest_checkpoint` (`hub/hub/checkpoints.py:95-108`)
 orders by `sequence` with no status filter, so a checkpoint whose generation failed or timed out
 (`unwritten`) anchors the next one. The next transcript starts at the unwritten checkpoint's
 `created_at` with no predecessor body, and the failed span drops out of the chain. `latest_checkpoint_for_loop`

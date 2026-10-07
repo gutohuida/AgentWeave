@@ -93,12 +93,20 @@ async def get_checkpoint_by_id(db, checkpoint_id: Optional[str]) -> Optional[Che
 
 
 async def latest_checkpoint(db, conversation_id: str) -> Optional[Checkpoint]:
-    """The checkpoint a new one anchors on, or None for a conversation's first."""
+    """The checkpoint a new one anchors on, or None for a conversation's first.
+
+    The latest *written* one (F421). An `unwritten` checkpoint has no body, so anchoring on it
+    started the next transcript at its `created_at` with nothing carried from before, and the span
+    whose generation failed fell out of the chain; skipping it makes the next checkpoint cover that
+    span too. `latest_checkpoint_for_loop` is deliberately unfiltered: a loop's briefing reads the
+    Hub-computed envelope, which an `unwritten` checkpoint still carries and which is the newest.
+    """
     return (
         (
             await db.execute(
                 select(Checkpoint)
                 .where(Checkpoint.conversation_id == conversation_id)
+                .where(Checkpoint.status != "unwritten")
                 .order_by(Checkpoint.sequence.desc())
                 .limit(1)
             )
