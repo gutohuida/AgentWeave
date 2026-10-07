@@ -205,6 +205,8 @@ context channel (`api/v1/agents.py`) is built at spawn and already reads the sta
 
 ## D8 — Existing tests that move, deliberately
 
+**Settled by running (IMPL, 2026-10-07).** The full suite on the D1 prototype failed one test, `test_reviewer_is_not_the_author.py::test_a_wedged_review_is_restaffed_to_a_real_reviewer` (the table's second row), and it passes unchanged with D5. The whole build moved five more on purpose (tasks.md, Evidence): the table's third and fourth rows, the F374 control that asserted the restaff's assignee, and two D9-wording tests whose holder was an evidence author. Every other site below held, because the real dispatch runs inside those tests and stages what the firing used to. The table is R2's reading, kept for the record.
+
 **R2's list, by reading** (the brief allowed reading instead of a full-suite prototype). Six sites
 assert what a firing or a restaff leaves before its dispatch. Whether each moves depends on whether
 the real dispatch runs inside that test (it does where `schedule_agent` reaches

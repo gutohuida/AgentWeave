@@ -600,7 +600,7 @@ async def test_the_precheck_names_the_remedy_exactly_once(app, auth_headers, bin
         db.add(task)
         await db.commit()
         await _evidence(
-            db, task.id, suffix="4b-precheck", agent=REVIEWER_A_49, document_id="doc-4b-precheck"
+            db, task.id, suffix="4b-precheck", agent="author-49", document_id="doc-4b-precheck"
         )
 
     response = await app.post(
@@ -648,7 +648,7 @@ async def test_the_dispatch_itself_names_the_remedy_exactly_once(app, auth_heade
         session.add(task)
         await session.commit()
         await _evidence(
-            session, task.id, suffix="4b-site2", agent=reviewer_a, document_id="doc-4b-site2"
+            session, task.id, suffix="4b-site2", agent="author-49b", document_id="doc-4b-site2"
         )
         conversation = new_conversation(project_id="proj-test", agent=reviewer_b, origin="operator")
         session.add(conversation)

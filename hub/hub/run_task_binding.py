@@ -319,6 +319,22 @@ class TaskAttendance:
         found = self.pairs.get((task_id, agent))
         return found is not None and found.how == ATTENDING_REFUSED and found.refused_here
 
+    def review_turns(
+        self, task_id: str, *, excluding: Optional[str] = None
+    ) -> "List[Tuple[str, Attending]]":
+        """The agents with a review turn on the task -- running, queued or refused -- and how.
+
+        Those that will reach it first, then the refused, each by name, so a caller reading the
+        first answers the same way on every firing (`a-flow-stages-its-review-in-the-dispatch`,
+        D2/D3). *excluding* drops one agent: the holder, whose own turn the caller asks about apart.
+        """
+        found = [
+            (key[1], value)
+            for key, value in self.pairs.items()
+            if key[0] == task_id and value.review and key[1] != excluding
+        ]
+        return sorted(found, key=lambda item: (item[1].how == ATTENDING_REFUSED, item[0]))
+
 
 def _is_refused(entry: InboundQueueEntry) -> bool:
     """A delivery that was refused and counted: both columns, because each alone means else.

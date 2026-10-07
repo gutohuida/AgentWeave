@@ -502,9 +502,19 @@ stops, because routing the work onward is the flow's responsibility and not the 
 
 ### Requirement: A dispatched review leaves the reviewable pool
 
-Where a flow staffs a review, the firing SHALL move the task out of the statuses a review may be
-claimed from, in the same commit that queues the review turn. A task a reviewer already holds SHALL
-NOT be offered to any agent, including the reviewer holding it.
+Where a flow staffs a review, the firing SHALL take the task out of the pool a review may be staffed from by the review turn it queues, in the same commit, and SHALL NOT move the task or record a holder for it. A task with a review turn waiting for any agent, and a task a reviewer already holds, SHALL NOT be offered to any agent, including the agent the turn waits for.
+
+The move into review and the holder are recorded by the dispatch of that turn, as
+`task-lifecycle-governance` *Dispatching a review staffs the task, whichever path dispatched it*
+requires. A firing that recorded them itself, before the dispatch, left a task held by a reviewer
+that never ran whenever the dispatch was then refused, and every other reviewer the operator sent
+was refused behind it. The waiting turn is what keeps the task out of the pool until then.
+
+Where the review turn waiting for a task was refused on its last delivery, the firing SHALL NOT
+staff another review for it, and SHALL surface the task, naming the agent and containing the
+refusal's own sentence. A second review turn would be delivered behind the refused one and meet the
+same refusal. Where that turn is given up on, or the operator withdraws it, the task SHALL return to
+the pool on the next firing.
 
 The flow SHALL NOT rely on the reviewer performing that move. A review turn that ends without
 recording a verdict SHALL leave the task visible as held by its reviewer, and SHALL NOT return it
@@ -525,6 +535,31 @@ it, for as long as it is held.
 - **WHEN** a flow has staffed a review and nothing else is ready
 - **THEN** the flow does not report itself stalled
 - **AND** the task is shown as current, naming the agent holding it
+
+#### Scenario: A waiting review turn keeps the task out of the pool
+
+- **WHEN** a flow staffs an agent to review a completed task, and that agent's review turn has not started
+- **THEN** the task is still awaiting review, with its holder unchanged
+- **AND** the next firing does not staff a review for that task
+- **AND** the task is shown as the flow's current work, naming the agent the review turn waits for
+
+#### Scenario: A refused flow review leaves the task awaiting review
+
+- **WHEN** a flow staffs a review and the dispatch of that review turn is refused
+- **THEN** the task is still awaiting review, with its holder and its transitions as they were before the firing
+- **AND** the next firing surfaces the task, naming the agent and containing the refusal's own sentence
+- **AND** the next firing does not staff another review for it
+
+#### Scenario: A refused flow review does not stop another reviewer being sent
+
+- **WHEN** a flow's review dispatch has been refused
+- **AND** the operator then requests a review of the same task naming a different reviewer
+- **THEN** that request is not refused on the ground that the task is already under review
+
+#### Scenario: A review turn given up on returns the task to the pool
+
+- **WHEN** a flow's review turn for a task is given up on after repeated refusals, or withdrawn by the operator
+- **THEN** the next firing may staff a review for that task
 
 #### Scenario: A held task is never re-staffed as ordinary work
 
@@ -1034,6 +1069,12 @@ for other agents SHALL NOT prevent it. A turn queued for a different agent SHALL
 hold its assignee. Input queued past the project's hop budget SHALL NOT count as a turn queued,
 because it is delivered only if the operator releases it.
 
+A review turn queued for an agent, within the hop budget, SHALL make that agent unavailable, whether
+or not the agent is yet named on the task and whatever the task's status. The dispatch names the
+reviewer, so until the turn starts the task names someone else; an agent the flow has already given
+a review to is not free for another, and counting it free would queue a second review behind the
+first.
+
 The firing's refusal while its job's agent is busy, the agents a firing may give new work to, and
 the agents a review may be given to SHALL all use this one definition. A firing refused because
 nobody else is free, when the walk it refuses would have staffed somebody, is two answers to one
@@ -1109,6 +1150,11 @@ assignee or its loop, and it SHALL NOT change what the roster reports an agent a
 - **AND** the loop's job fires
 - **THEN** the firing is refused as busy
 - **AND** no input is queued for the job's agent
+
+#### Scenario: A reviewer whose review turn is waiting is not free
+
+- **WHEN** a flow has staffed an agent to review a completed task, and that agent's review turn has not started
+- **THEN** that agent is not counted among the agents free for new work or for review
 
 #### Scenario: The roster still reports the task
 

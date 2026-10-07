@@ -344,7 +344,10 @@ async def test_an_availability_picked_reviewer_that_gave_no_verdict_is_replaced(
 
     async with async_session_factory() as db:
         task = await db.get(Task, "task-rev-avail")
-        assert task.assignee == "auditor"
+        # The replacement becomes the holder when its turn is dispatched, not before
+        # (`a-flow-stages-its-review-in-the-dispatch`, D5): this test's dispatch is refused (no
+        # commit to check out), so the silent reviewer is still named.
+        assert task.assignee == "critic"
         assert task.status == "under_review", "restaffing is not a verdict"
 
 

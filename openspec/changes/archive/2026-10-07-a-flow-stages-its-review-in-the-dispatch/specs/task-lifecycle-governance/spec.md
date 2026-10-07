@@ -24,13 +24,13 @@ reviewed takes that work from whoever holds it while moving it nowhere. The refu
 status the task is actually in.
 
 **A review SHALL be refused where the named reviewer is recorded as having produced evidence for
-the named task and no agent is recorded as completing it.** Such a reviewer's verdict is refused by
-the rule separating author from reviewer, so dispatching it pays for a turn whose conclusion has
-nowhere to go — and leaves the task held by an agent that no transition on it names, which this
-capability specifies SHALL be reported as a review genuinely in progress and SHALL NOT be restaffed.
-The refusal SHALL name the evidence as its reason and SHALL NOT state that any agent completed the
-task. This refusal SHALL be the same rule as the one that refuses the verdict, and SHALL NOT be a
-second statement of it that can drift.
+the named task, whether or not an agent is recorded as completing it (F505).** Such a reviewer's
+verdict is refused by the rule separating author from reviewer, so dispatching it pays for a turn
+whose conclusion has nowhere to go — and, where no agent completed the task, leaves it held by an
+agent that no transition on it names, which this capability specifies SHALL be reported as a review
+genuinely in progress and SHALL NOT be restaffed. The refusal SHALL name the evidence as its reason
+and SHALL NOT state that any agent completed the task. This refusal SHALL be the same rule as the
+one that refuses the verdict, and SHALL NOT be a second statement of it that can drift.
 
 A review SHALL be refused where the named task is already under review and held by a different
 reviewer. Replacing that holder is a handover, and a handover that travels no transition leaves the
@@ -38,8 +38,11 @@ task's recorded history unable to explain who holds it or why it changed. The re
 current holder.
 
 Two holders are not a different reviewer in that sense, and a dispatch SHALL replace them. One is an
-agent recorded as having produced the work: the agent recorded as completing it, or, where no agent
-is, an agent that moved the task or recorded evidence for it. It cannot be reviewing the task, and
+agent recorded as having produced the work: the agent recorded as completing it or an agent that
+recorded evidence for it, or, where no agent is recorded as completing it, an agent that moved the
+task. It SHALL be replaced only while no turn of its own is running on the task or queued for it: an
+author whose turn is on the task attends it, and replacing it would put a second review beside a live
+one. It cannot be reviewing the task, and
 this SHALL be the same judgement by which a flow decides that such a task needs a reviewer at all,
 so that the flow never staffs a review its own dispatch then refuses. The
 other is a reviewer whose review ended without a verdict and whom the resolution of that failed review
@@ -132,6 +135,21 @@ review a scheduled firing requested remains that firing's move when its dispatch
 - **AND** the refusal does not state that any agent completed the task
 - **AND** the task's status and holder are unchanged
 - **AND** no reviewing turn has been started and no checkout has been created
+
+#### Scenario: A reviewer that recorded evidence is refused although another agent completed the task
+
+- **WHEN** the operator dispatches a review of a task agent A completed, naming agent B, which
+  recorded evidence for that task
+- **THEN** the request is refused, naming the evidence as the reason
+- **AND** no reviewing turn has been started
+
+#### Scenario: An author whose own turn is on the task is not replaced
+
+- **WHEN** a task is under review, held by an agent that recorded evidence for it, whose turn is
+  running on the task
+- **AND** the operator dispatches a review naming a different agent
+- **THEN** the request is refused, naming the current holder
+- **AND** the holder is unchanged
 
 #### Scenario: A reviewer that recorded nothing for the task is still dispatched by hand
 

@@ -395,9 +395,23 @@ async def test_a_documentless_loops_silent_review_still_recovers_a_project_wide_
     assert await evaluate_run_end("run-f70b-critic") is not None
 
     async with async_session_factory() as db:
-        fresh_task = await _fresh_task(db, task.id)
-        assert fresh_task.assignee == "auditor", (
+        responses = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(
+                        InboundQueueEntry.origin_type == "divergence",
+                        InboundQueueEntry.review_task_id == task.id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert [entry.agent for entry in responses] == ["auditor"], (
             "the silent-review recovery must still resolve a project-wide reviewer for a "
             "documentless loop's task"
         )
+        fresh_task = await _fresh_task(db, task.id)
+        # Staffed at the response's dispatch, not by the restaff
+        # (`a-flow-stages-its-review-in-the-dispatch`, D5).
         assert fresh_task.status == "under_review"

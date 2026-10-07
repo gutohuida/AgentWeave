@@ -669,6 +669,7 @@ async def review_dispatch_refusal(
         task.status in WITH_REVIEWER_LOOP_TASK_STATUSES
         and task.assignee
         and task.assignee != reviewer
+        and not await holder_may_be_replaced(session, task, agent=reviewer)
     ):
         return (
             status.HTTP_409_CONFLICT,
@@ -692,6 +693,69 @@ async def review_dispatch_refusal(
             f"review could never end. {own_review_remedy(task)}",
         )
     return None
+
+
+async def holder_may_be_replaced(
+    session: AsyncSession,
+    task: "Task",
+    *,
+    agent: str,
+    queue_entry_ids: Optional[List[str]] = None,
+) -> bool:
+    """May *agent*'s review replace the holder of this `under_review` task? (D5 of
+    `a-flow-stages-its-review-in-the-dispatch`)
+
+    The holder check refuses a review of a task already held by a different **reviewer**, because a
+    handover that travels no transition leaves the history unable to explain who holds it. Two
+    holders are not that, and since the dispatch stages every review both reach it:
+
+    * **An author** (F70's wedge, F142, F167, F505), by the rule that sent the task to the ladder
+      (`assignee_produced_the_work`) -- and only while no turn of its own is on the task: an author
+      holder that is running or queued there is attended, and replacing it would put a second
+      review beside a live one (operator, 2026-09-24). Both sites.
+    * **A recorded restaff**, at the dispatch only: an entry being delivered is the divergence
+      response to this holder's own silent review -- `origin_type == "divergence"`, naming the task
+      and *agent*, its `divergence_source_run_id` a run of the holder's whose `RunDivergence` was
+      `review`/`restaffed` and has no response run yet. That row, the entry and the response run
+      explain the handover. A plain request is still refused (option (ii), not (iii)).
+    """
+    from sqlalchemy import select
+
+    from ...db.models import InboundQueueEntry, RunDivergence
+    from ...run_task_binding import task_attendance
+    from ...task_transition_service import assignee_produced_the_work
+
+    if await assignee_produced_the_work(session, task):
+        attendance = await task_attendance(session, task.project_id)
+        return not attendance.attends(task.id, task.assignee)
+    if not queue_entry_ids:
+        return False
+    sources = set(
+        (
+            await session.execute(
+                select(InboundQueueEntry.divergence_source_run_id).where(
+                    InboundQueueEntry.id.in_(queue_entry_ids),
+                    InboundQueueEntry.origin_type == "divergence",
+                    InboundQueueEntry.review_task_id == task.id,
+                    InboundQueueEntry.agent == agent,
+                    InboundQueueEntry.divergence_source_run_id.isnot(None),
+                )
+            )
+        ).scalars()
+    )
+    if not sources:
+        return False
+    restaff = await session.execute(
+        select(RunDivergence.id).where(
+            RunDivergence.run_id.in_(sorted(sources)),
+            RunDivergence.task_id == task.id,
+            RunDivergence.agent == task.assignee,
+            RunDivergence.policy_applied == "review",
+            RunDivergence.outcome == "restaffed",
+            RunDivergence.response_run_id.is_(None),
+        )
+    )
+    return restaff.first() is not None
 
 
 # Bounds and default of a question wait, restated from `mcp_server.py`.
@@ -1056,13 +1120,18 @@ async def _trigger_agent_directly(
         # Design D9. The `under_review` branch below is idempotent in its *status* but not in its
         # assignee, which is written unconditionally -- so dispatching a review for a task already
         # held by someone else would replace the holder and travel no transition, leaving a
-        # handover this task's append-only history could not explain. Cannot fire on the flow path:
-        # a flow writes its reviewer into `assignee` and commits before the turn is scheduled, so
-        # the holder already is the dispatched reviewer by the time this runs.
+        # handover this task's append-only history could not explain. Reached on the flow path
+        # too, since the dispatch stages a flow's review (`a-flow-stages-its-review-in-the-
+        # dispatch`, D1): its F70 recovery meets the author it replaces here, and a divergence
+        # restaff meets the silent reviewer. `holder_may_be_replaced` lets exactly those two, and
+        # is read before anything is staged.
         if (
             review_task.status in WITH_REVIEWER_LOOP_TASK_STATUSES
             and review_task.assignee
             and review_task.assignee != agent
+            and not await holder_may_be_replaced(
+                session, review_task, agent=agent, queue_entry_ids=queue_entry_ids
+            )
         ):
             raise TriggerAgentError(
                 status.HTTP_409_CONFLICT,

@@ -27686,7 +27686,7 @@ Run with no process -- a strand that predates this round.
 
 ## F327 (B) — a review a flow staffed and whose dispatch is then refused leaves the flow's reviewer holding the task, reported as in flight until the input is given up
 
-**Status:** open -- spec track S13 in `spec-queue/ROUNDS.md` (option (b), operator 2026-09-23; left Round 5 because every repair changes a main spec). Filed 2026-09-12 by R2 of `a-refused-review-leaves-nothing-behind`, measured at unit level on the unmodified tree at `75b11ac`. That change does not fix it: covering it needs a decision its verdict does not make, raised as the operator question at the top of its `proposal.md`.
+**Status:** fixed 2026-10-07 by `a-flow-stages-its-review-in-the-dispatch` (D1, D2, D5): the dispatch stages a flow's review under its rollback; a refused one leaves the task `completed` with its holder and is surfaced with the refusal; the operator's other reviewer is no longer refused. Driven on `:8010` (`d1007_review_staged_drive.py`, 6/11 before, 12/12 after).
 
 **The claim.** F319 is the dispatch's own staging committed by the scheduler. This is the same end
 state reached by a different door. A flow firing stages its review **before** the dispatch, in the
@@ -33221,7 +33221,7 @@ and passes today.
 
 ## F437 (B) — an operator's review request queued for a busy reviewer leaves a flow's completed task in the pool, so a second review can be staffed
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R1. On a documentless loop the card also says *land it* while a review is still queued. **Answered by B1's `a-flow-stages-its-review-in-the-dispatch` (S13, its D2)**, approved 2026-09-24.
+**Status:** fixed 2026-10-07 by `a-flow-stages-its-review-in-the-dispatch` (D2, D4): a waiting review turn takes the task out of the pool (in flight, on a flow and on a documentless loop) and books its reviewer. Tests 1.13, 1.14, 1.7.
 
 
 ## F438 (C) — the holder check's "Let the review in flight finish" is false for a silent holder whose review ended without a verdict

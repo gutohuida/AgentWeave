@@ -549,6 +549,13 @@ genuinely in progress.
 Recovery SHALL be a reassignment and SHALL NOT move the task to another status: the task is already
 in review, and only who holds it was wrong.
 
+**An agent counted as having produced the work SHALL be replaced as the holder only while it is not
+attending the task** — no turn of it is running on the task or about to be delivered to it. A
+reviewer staffed onto a task records evidence while it reviews, and that evidence makes it count as
+an author; replacing it then would start a second live review beside the first. The same rule
+applies wherever a holder is judged replaceable: the flow's recovery and the dispatch of a review by
+hand (`a-flow-stages-its-review-in-the-dispatch`, operator 2026-09-24).
+
 #### Scenario: A task in review held by its own author is restaffed
 
 - **WHEN** a flow fires on a queue holding such a task and an eligible reviewer exists
@@ -602,6 +609,13 @@ work's author — the agent recorded as completing it, or the agent recorded as 
 evidence — so an agent named by neither may be dispatched, and dispatching staffs the task. Treating
 every such task as unstaffable would report a real reviewer's work as nobody's — which is the same
 false statement this requirement exists to prevent, made in the opposite direction.
+
+#### Scenario: A reviewer that is reviewing is not replaced because it recorded evidence
+
+- **WHEN** a reviewer holding a task in `under_review` has a turn running on it and has recorded evidence for it
+- **AND** another reviewer is dispatched to that task
+- **THEN** the dispatch is refused as the task being already under review by the first reviewer
+- **AND** the first reviewer still holds the task
 
 ### Requirement: Governance holds identically over HTTP and MCP
 
@@ -2004,13 +2018,26 @@ verdict is refused by the rule separating author from reviewer, so dispatching i
 whose conclusion has nowhere to go — and, where no agent completed the task, leaves it held by an
 agent that no transition on it names, which this capability specifies SHALL be reported as a review
 genuinely in progress and SHALL NOT be restaffed. The refusal SHALL name the evidence as its reason
-and SHALL NOT state that any agent completed the task. This refusal SHALL be the same rule as the one that refuses the verdict, and SHALL NOT be a
-second statement of it that can drift.
+and SHALL NOT state that any agent completed the task. This refusal SHALL be the same rule as the
+one that refuses the verdict, and SHALL NOT be a second statement of it that can drift.
 
 A review SHALL be refused where the named task is already under review and held by a different
 reviewer. Replacing that holder is a handover, and a handover that travels no transition leaves the
 task's recorded history unable to explain who holds it or why it changed. The refusal SHALL name the
 current holder.
+
+Two holders are not a different reviewer in that sense, and a dispatch SHALL replace them. One is an
+agent recorded as having produced the work: the agent recorded as completing it or an agent that
+recorded evidence for it, or, where no agent is recorded as completing it, an agent that moved the
+task. It SHALL be replaced only while no turn of its own is running on the task or queued for it: an
+author whose turn is on the task attends it, and replacing it would put a second review beside a live
+one. It cannot be reviewing the task, and
+this SHALL be the same judgement by which a flow decides that such a task needs a reviewer at all,
+so that the flow never staffs a review its own dispatch then refuses. The
+other is a reviewer whose review ended without a verdict and whom the resolution of that failed review
+replaced by the reviewer being dispatched: the record of that failed review names the previous holder
+and the replacement, so the task's history explains the handover. In both cases no path records the
+new holder before the dispatch, so a refused dispatch leaves the previous holder in place.
 
 A refusal SHALL reach the requester as a refusal. Where a review is requested through an interface
 that reports success or failure, that interface SHALL report the refusal, and SHALL NOT report the
@@ -2023,7 +2050,8 @@ refusal found it.
 
 Staffing SHALL NOT be performed when the request to review is recorded. It SHALL be performed when
 the turn is dispatched, so that a request that is never delivered leaves no task held by a reviewer
-that never ran.
+that never ran. Staging at the dispatch does not change whose move the recorded transition is: a
+review a scheduled firing requested remains that firing's move when its dispatch stages it.
 
 #### Scenario: A review started by hand leaves the reviewer able to record a verdict
 
@@ -2067,6 +2095,27 @@ that never ran.
 - **THEN** the request is refused, naming the current holder
 - **AND** the task's holder is unchanged
 
+#### Scenario: A failed review's replacement is staffed at its dispatch
+
+- **WHEN** a review ends without a verdict, the resolution replaces its reviewer, and the replacement's review turn is dispatched
+- **THEN** the replacement becomes the task's holder when the turn is dispatched, not before
+- **AND** no transition is recorded for the task by the dispatch
+- **AND** if that dispatch is refused, the reviewer that gave no verdict is still the holder
+
+#### Scenario: An author left as holder is replaced by the dispatched reviewer
+
+- **WHEN** a task is under review and its holder is the agent recorded as having produced the work
+- **AND** a review naming a different agent is dispatched
+- **THEN** the dispatched reviewer becomes the holder
+- **AND** the request is not refused on the ground that the task is already under review
+
+#### Scenario: An author the operator marked finished is replaced by the dispatched reviewer
+
+- **WHEN** a task is under review, held by an agent that moved it while working it, the operator recorded its completion, and that agent recorded no evidence for it
+- **AND** a flow's review naming a different agent is dispatched
+- **THEN** the dispatched reviewer becomes the holder
+- **AND** the dispatch is not refused on the ground that the task is already under review
+
 #### Scenario: A reviewer that recorded the task's evidence is refused before any turn begins
 
 - **WHEN** the operator dispatches a review of a task the operator moved to `completed`, naming an
@@ -2082,6 +2131,14 @@ that never ran.
   recorded evidence for that task
 - **THEN** the request is refused, naming the evidence as the reason
 - **AND** no reviewing turn has been started
+
+#### Scenario: An author whose own turn is on the task is not replaced
+
+- **WHEN** a task is under review, held by an agent that recorded evidence for it, whose turn is
+  running on the task
+- **AND** the operator dispatches a review naming a different agent
+- **THEN** the request is refused, naming the current holder
+- **AND** the holder is unchanged
 
 #### Scenario: A reviewer that recorded nothing for the task is still dispatched by hand
 
@@ -2690,11 +2747,10 @@ Discarding the staffing SHALL NOT discard the explanation of why it was discarde
 Each further attempt to deliver the same refused request SHALL leave the task as it was. A refusal
 repeated on every attempt SHALL NOT accumulate a record of the task entering review.
 
-This requirement governs what the dispatch itself records. Some paths record the reviewer before
-the dispatch, in a commit of their own, as the path that queues the review turn: a flow's firing,
-and a failed review's restaffing. Such a dispatch finds the task already in review and already held
-by the reviewer it names, and it records nothing new to discard. Whether a refused dispatch should
-also undo what such a path recorded earlier is not decided by this requirement.
+No path records the reviewer before the dispatch. A flow's firing and a failed review's
+restaffing queue the review turn and leave the task's status and holder to its dispatch, so a
+refused dispatch leaves the task exactly as it was before the path that queued it, as well as before
+the dispatch.
 
 #### Scenario: A review whose commit is gone from the repository is refused and changes nothing
 
@@ -2751,6 +2807,12 @@ also undo what such a path recorded earlier is not decided by this requirement.
 - **AND** that dispatch found the task awaiting review, held by no reviewer
 - **AND** the operator then requests a review of the same task naming a different reviewer
 - **THEN** that request is not refused on the ground that the task is already under review
+
+#### Scenario: A review a flow staffed and whose dispatch is refused changes nothing
+
+- **WHEN** a flow's firing staffs a review of a completed task, and the dispatch of that review turn is refused because the commit under review is not in the repository
+- **THEN** the task is completed, with the holder it had before the firing
+- **AND** no transition is recorded for the task by the firing or by the dispatch
 
 #### Scenario: A review that starts is still staffed
 

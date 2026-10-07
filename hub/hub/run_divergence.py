@@ -506,11 +506,11 @@ async def _answer_failed_review(
         return OUTCOME_SURFACED, None, None, choice.reason
 
     previous_assignee = task.assignee
-    # Reassigned for the same reason escalation reassigns: leaving the assignee pointing at the
-    # agent that gave no verdict would make the board disagree with reality. `enter_selected_task`
-    # writes the reviewer into `assignee` on the flow path too, so this is the same statement that
-    # path makes, not a new one. The previous assignee is on the record, so it is reversible.
-    task.assignee = choice.agent
+    # **Not reassigned here** (D5 of `a-flow-stages-its-review-in-the-dispatch`). The response's
+    # dispatch stages the review, as every review is staged, and replaces the silent reviewer
+    # there -- under its rollback, so a refused replacement leaves the silent reviewer named and
+    # the refusal surfaced rather than a reviewer that never ran. The holder check lets it, for
+    # this entry only (`agent_trigger.holder_may_be_replaced`).
     await _queue_response(
         session,
         project_id=run.project_id,

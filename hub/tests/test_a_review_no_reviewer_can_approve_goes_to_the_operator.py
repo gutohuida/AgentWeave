@@ -148,9 +148,11 @@ async def test_a_reviewer_granted_the_decision_is_still_restaffed(
 
     assert await evaluate_run_end(run_id) is not None
 
+    # The response is queued and the divergence restaffed; gamma becomes the holder when that
+    # response's turn is dispatched, not before (`a-flow-stages-its-review-in-the-dispatch`, D5),
+    # so the holder here depends on whether this machine can launch a turn and is not asserted.
     assert len(await _queued_for(GAMMA)) == 1
-    async with async_session_factory() as db:
-        assert (await db.get(Task, task_id)).assignee == GAMMA
+    assert (await _diverged_payload(run_id))["outcome"] == "restaffed"
 
 
 async def test_a_declared_reviewer_is_surfaced_with_the_gate_sentence(

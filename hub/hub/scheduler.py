@@ -41,7 +41,9 @@ from .db.models import (
 from .loop_ending import QUEUE_DRAINED_REASON, end_loop
 from .provider_allowance import agents_held, hold_busy_reason, hold_coalesce_reason, provider_hold
 from .run_task_binding import (
+    ATTENDING_REFUSED,
     TERMINAL_FOR_BINDING,
+    TaskAttendance,
     task_attendance,
     tasks_held_by_a_running_turn,
 )
@@ -882,9 +884,10 @@ async def enter_selected_task(
     """Move *task* into the status its selection implies, and record who holds it.
 
     **What dispatching a review does to a task, stated once.** Three callers: this module's
-    `_do_fire_job` and `_stage_selection`, which stage a flow's own selection, and
-    `agent_trigger.trigger_agent_directly`, which staffs a review the operator started by hand
-    (finding F76). Public, and named without a leading underscore, because that third caller lives
+    `_do_fire_job` and `_stage_selection`, which stage a flow's own selection of ordinary work, and
+    `agent_trigger.trigger_agent_directly`, which stages every review -- the operator's (finding
+    F76) and, since `a-flow-stages-its-review-in-the-dispatch` (D1), the flow's own, at the dispatch
+    and under its rollback, so a refused dispatch leaves the task as it was (F327). Public, and named without a leading underscore, because that third caller lives
     in another module: a review dispatched by hand used to provision the reviewer's checkout and
     staff nothing, so the reviewer could not move the task, and the repair was to give this
     statement a third caller rather than a second copy.
@@ -930,10 +933,11 @@ async def enter_selected_task(
             # Already with a reviewer. Reachable when a firing re-stages a selection whose entry
             # was queued but whose turn never started; moving again would be an illegal edge.
             #
-            # Also how an F70-wedged row recovers: the walk below routes a task whose reviewer is
-            # its own author back through the ladder, and it arrives here already in
-            # `under_review`. The assignment above is the whole repair -- a real reviewer replaces
-            # the author, and no edge is travelled.
+            # Also how an F70-wedged row recovers: the walk routes a task whose reviewer is its own
+            # author back through the ladder, the dispatch's holder check lets the reviewer it chose
+            # replace that author (`agent_trigger.holder_may_be_replaced`), and it arrives here
+            # already in `under_review`. The assignment above is the whole repair -- a real
+            # reviewer replaces the author, and no edge is travelled.
             pass
         elif task.status in REVIEWABLE_LOOP_TASK_STATUSES:
             await apply_transition(
@@ -1214,6 +1218,36 @@ async def _roster_availability(session: AsyncSession, project_id: str) -> "list[
                 reachable=loop_id in live or attendance.has_turn(task_id, assignee),
             )
         )
+    # **A review turn waiting for an agent books it on that task** (D4 of
+    # `a-flow-stages-its-review-in-the-dispatch`). The reviewer used to hold the `under_review`
+    # task from the firing on; now it holds nothing until the dispatch stages it, and without this
+    # the next firing could give it a second review while the first waits. Only where the task is
+    # still reviewable or in review: a decided task's entry stays queued until it is given up, and
+    # must not book its reviewer on an `approved` task meanwhile.
+    review_pairs = sorted(
+        (task_id, agent) for (task_id, agent), how in attendance.pairs.items() if how.review
+    )
+    if review_pairs:
+        reviewed = (
+            await session.execute(
+                select(Task.id, Task.assignee, Task.loop_id, Task.status).where(
+                    Task.project_id == project_id,
+                    Task.id.in_(sorted({task_id for task_id, _ in review_pairs})),
+                    Task.status.in_(
+                        tuple(REVIEWABLE_LOOP_TASK_STATUSES)
+                        + tuple(WITH_REVIEWER_LOOP_TASK_STATUSES)
+                    ),
+                )
+            )
+        ).all()
+        by_id = {row[0]: row for row in reviewed}
+        for task_id, agent in review_pairs:
+            row = by_id.get(task_id)
+            if row is None or row[1] == agent:
+                continue
+            holdings_by_agent.setdefault(agent, []).append(
+                Holding(task_id=task_id, status=row[3], loop_id=row[2], reachable=True)
+            )
     roster = (
         await session.execute(
             select(Agent.name, Agent.runner_id)
@@ -1685,7 +1719,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     from .task_transition_service import (
         agents_that_may_have_authored,
         agents_that_recorded_evidence_for,
-        agents_that_worked,
+        assignee_produced_the_work,
         completion_attribution,
     )
 
@@ -1822,17 +1856,26 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             # the ladder would refuse anyway for want of evidence naming a commit: F154's sentence
             # below is that row's answer.
             if task.assignee:
-                wedged_author = (await completion_attribution(session, task.id)).agent
-                if wedged_author is not None:
-                    # F505: an evidence author holding the review cannot finish it either.
-                    wedged_review = wedged_author == task.assignee or (
-                        task.assignee in await agents_that_recorded_evidence_for(session, task.id)
-                    )
-                else:
-                    wedged_review = task.assignee in (
-                        await agents_that_worked(session, task.id)
-                        | await agents_that_recorded_evidence_for(session, task.id)
-                    )
+                # **Another agent's review turn on the task, where the holder has none** (D3 of
+                # `a-flow-stages-its-review-in-the-dispatch`). The dispatch stages a review, so a
+                # restaff leaves the silent reviewer named until its replacement's turn is
+                # dispatched, and the F70 recovery leaves the author named until its reviewer's is.
+                # That turn is the task's attendance: in flight, named for the agent it is for --
+                # not a wedge, not recovered again -- or, where its delivery was refused, surfaced
+                # with the refusal's words instead of the holder's silence.
+                if not attendance.attends(task.id, task.assignee):
+                    waiting = _waiting_review_turn(attendance, task, excluding=task.assignee)
+                    if waiting is not None:
+                        agent, sentence = waiting
+                        if sentence is None:
+                            in_flight.append((task.id, agent))
+                        else:
+                            unstaffed.append((task.id, sentence))
+                        continue
+                # F505: an evidence author holding the review cannot finish it either. One
+                # predicate with the dispatch's holder check, which must let the reviewer this
+                # recovery staffs replace that author (D5).
+                wedged_review = await assignee_produced_the_work(session, task)
                 # **Never while a turn is on the task.** A wedge is a row nobody is working; one with
                 # a turn running or queued on it is attended, whoever holds it, and restaffing it
                 # would put a second review beside a live one. The evidence term above makes that
@@ -2027,6 +2070,24 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         #
         # The operator's own dispatch is untouched: this removes a loop's *selection*, never the
         # by-hand review that `task-lifecycle-governance:1481` requires to stay staffable.
+        # **A review turn already waiting on the task takes it out of the pool** (D2 of
+        # `a-flow-stages-its-review-in-the-dispatch`). The dispatch, not the firing, stages a
+        # review now, so a review the flow queued and the reviewer has not yet started leaves the
+        # task `completed`, and only its waiting entry says somebody has it. Running or queued: in
+        # flight, the pool exclusion that keeps the ladder from staffing it twice (F45). Refused:
+        # surfaced with the refusal, and no reviewer staffed -- another would queue behind it.
+        # Before the documentless branch, deliberately: an operator's review queued for a busy
+        # reviewer on a loop's task is in flight there too, not awaiting landing.
+        if not wedged_review:
+            waiting = _waiting_review_turn(attendance, task)
+            if waiting is not None:
+                agent, sentence = waiting
+                if sentence is None:
+                    in_flight.append((task.id, agent))
+                else:
+                    unstaffed.append((task.id, sentence))
+                continue
+
         if not wedged_review and not loop.spec_document_id:
             awaiting_landing.append(task.id)
             continue
@@ -2337,6 +2398,39 @@ def _refused_review_reason(task: Task, reviewer: str, refusal: str, refused_here
         )
 
     return _fit_sentence(_sentence, task.title, refusal)
+
+
+def _refused_staffing_reason(task: Task, agent: str, refusal: str, refused_here: bool) -> str:
+    """A review turn queued for *agent* whose delivery was refused (D2 of
+    `a-flow-stages-its-review-in-the-dispatch`). No reviewer is staffed in its place: a second
+    review turn would queue behind the refused one and usually meet the same refusal."""
+
+    def _sentence(title: str, words: str) -> str:
+        middle = (
+            "was queued and delivering it was refused"
+            if refused_here
+            else f"was queued behind input for {agent} whose delivery was refused"
+        )
+        return (
+            f"{agent}'s review of {task.id} ({title!r}) {middle}: {words} Fix what it names, "
+            f"withdraw that input so the flow can staff the review again, or land it yourself."
+        )
+
+    return _fit_sentence(_sentence, task.title, refusal)
+
+
+def _waiting_review_turn(
+    attendance: "TaskAttendance", task: Task, *, excluding: Optional[str] = None
+) -> "Optional[tuple[str, Optional[str]]]":
+    """`(agent, None)` for a review turn that will reach the task, `(agent, sentence)` for one whose
+    delivery was refused, or `None` -- read once for D2 and D3 so the two cannot disagree."""
+    turns = attendance.review_turns(task.id, excluding=excluding)
+    if not turns:
+        return None
+    agent, how = turns[0]
+    if how.how != ATTENDING_REFUSED:
+        return agent, None
+    return agent, _refused_staffing_reason(task, agent, how.refusal or "", how.refused_here)
 
 
 def _refused_work_reason(task: Task, agent: str, refusal: str, refused_here: bool) -> str:
@@ -2901,7 +2995,10 @@ async def _briefing_verdict_lines(session: AsyncSession, task: Task, *, agent: s
     from .spec_lifecycle import Actor
 
     lines = [
-        f"**End the review with a verdict, using `update_task`.** The task is `{task.status}`: "
+        # `under_review`, not `task.status`: the dispatch stages the review before the turn
+        # starts, or the turn does not start (D6 of `a-flow-stages-its-review-in-the-dispatch`),
+        # and from `completed`, where the firing composes this, neither verdict is a legal edge.
+        "**End the review with a verdict, using `update_task`.** The task is `under_review`: "
         "set it to `approved` if the work is right, or `revision_needed` if it is not. Leaving "
         "it where it is ends your turn without a review having happened, and the work waits for "
         "a person.",
@@ -3669,10 +3766,14 @@ class JobScheduler:
                         )
                         logger.info(f"Job {job.id} fire skipped: {stall_reason}")
                         return False
-                if claimed_task is not None:
+                if claimed_task is not None and not selection.is_review:
                     # Entering the task is `enter_selected_task`'s single statement, shared with
-                    # `_stage_selection` (finding F45): `pending -> assigned` for ordinary work,
-                    # `completed -> under_review` for a review, and the assignee either way.
+                    # `_stage_selection` (finding F45): `pending -> assigned` for ordinary work and
+                    # the assignee. **Never a review** (D1 of
+                    # `a-flow-stages-its-review-in-the-dispatch`, F327): staging one here committed
+                    # it before the dispatch, so a dispatch refused afterwards left the reviewer
+                    # named on a review that never ran. The queued entry's `review_task_id` makes
+                    # the dispatch stage it under its own rollback instead.
                     #
                     # From group 5 the assignee write is a no-op for a resumption rather than an
                     # overwrite: `decide_firing` resolves an already-assigned task to its own
@@ -4059,11 +4160,12 @@ class JobScheduler:
         """
         from .inbound_queue import new_entry
 
-        # Shared with `_do_fire_job`'s primary path — see `enter_selected_task` for why the review
-        # half cannot live in only one of the two (finding F45).
-        await enter_selected_task(
-            session, task, agent=agent, is_review=is_review, origin=ORIGIN_JOB, job_id=job.id
-        )
+        # Shared with `_do_fire_job`'s primary path (finding F45). A review is staged by its
+        # dispatch, not here (D1 of `a-flow-stages-its-review-in-the-dispatch`).
+        if not is_review:
+            await enter_selected_task(
+                session, task, agent=agent, is_review=is_review, origin=ORIGIN_JOB, job_id=job.id
+            )
 
         conversation = new_conversation(project_id=job.project_id, agent=agent, origin="job")
         session.add(conversation)

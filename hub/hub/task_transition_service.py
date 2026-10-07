@@ -300,6 +300,33 @@ async def agents_that_recorded_evidence_for(session: AsyncSession, task_id: str)
     return {agent for agent in rows.scalars().all() if agent}
 
 
+async def assignee_produced_the_work(session: AsyncSession, task: Task) -> bool:
+    """*"Is the agent holding this task one of the agents that produced its work?"*
+
+    The wedged-review predicate (F70, F142, F167, F505), stated once for its two readers
+    (`a-flow-stages-its-review-in-the-dispatch`, D5): `decide_firing`, which routes such a row to
+    the reviewer ladder, and the dispatch's holder check, which must then let the reviewer that
+    ladder chose replace it. Two statements of "this holder is the author" would let the recovery
+    and the dispatch it depends on disagree, and the dispatch would refuse every attempt.
+
+    The recorded completer where one names an agent, plus the evidence authors (F505); else the
+    agents that moved the task, plus the evidence authors (F142, F167). Not the entry guard's rule
+    (`_guard_reviewer_is_not_the_author` reads the evidence authors **alone** where no agent
+    completed the task): that guard asks whether *this* agent may be entered as holder, where
+    refusing on `agents_that_worked` would refuse a staffed reviewer that was once assigned the
+    work. This asks whether the one already holding it is an author, and F142's measured row -- the
+    agent moved it through `in_progress`, the operator did the rest, nobody recorded evidence -- is
+    an author by this rule and not by that one.
+    """
+    if not task.assignee:
+        return False
+    completer = (await completion_attribution(session, task.id)).agent
+    authors = await agents_that_recorded_evidence_for(session, task.id)
+    if completer is not None:
+        return completer == task.assignee or task.assignee in authors
+    return task.assignee in (await agents_that_worked(session, task.id) | authors)
+
+
 async def agents_that_may_have_authored(session: AsyncSession, task: Task) -> "set[str]":
     """*"Might this agent be the author of this task's work?"* — the exclusion a reviewer ladder gets.
 
