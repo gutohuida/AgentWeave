@@ -34786,3 +34786,23 @@ had written. `Path.write_text` in text mode turns `\n` into `\r\n` on Windows. T
 `* text=auto eol=lf` normalised them, so nothing reached history; a project without that rule would see
 every Hub write as a whole-file change. The stored `content_digest` was unaffected (it is taken of the
 rendered string, and a read normalises line endings).
+
+## F525 (B) — the first Scan for drift after the legacy backfill raises a candidate for most old evidence at once
+
+**Status:** open (filed 2026-10-07 by the acceptance drive of `drift-watches-the-files-its-evidence-is-about`; a decision for the operator, not a defect in the build)
+**Source:** drive
+**Theme:** Spec & requirements
+
+On the trial Hub `:8010`, project `proj-d85a82bf4216` (this repository), 31 accepted footprints were
+legacy (`watched_from` NULL). The first `POST /spec/drift/detect` rebuilt 28 (15 from their locators,
+13 from the merge that brought them in) and then raised **19 candidates**. Every one is technically
+true -- a watched file changed on `master` after the evidence was verified -- but most are noise:
+`scripts/drive/FINDINGS.md`, `.claude/autonomous/*night-log.md`, `STATE-night.json`, openspec change
+documents since archived or moved (`now: null`), and code edited later the same day. The `["merge"]`
+rule watches everything a merge brought in, ledger and log files included, and the baseline is the
+stored commit's blob, so any file touched since raises. `:8000`'s evidence is older, so a similar
+burst is expected there on its first scan after restart.
+**Options:** (a) keep -- each is a real question, answered in bulk once 4c's drift panel exists;
+(b) rebuild a legacy row's baseline at the current main tip, so only changes from now on raise (loses
+"changed since it was verified" for old rows); (c) rebuild from the locator only, leaving merge-only
+rows unwatched (13 of 28 here); (d) (b) for merge-rebuilt rows and the stored commit for locator rows.

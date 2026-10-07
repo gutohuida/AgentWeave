@@ -1004,6 +1004,7 @@ async def record_evidence(
             task_id=body.task_id,
             workspace=workspace,
             actor=spec_lifecycle.Actor(kind="operator", name="operator"),
+            main_branch=await _main_branch(session, project_id),
         )
     except requirement_evidence.EvidenceRefusedError as exc:
         raise HTTPException(
@@ -1149,15 +1150,24 @@ async def detect_drift(
     # The operator's explicit scan is also the moment to re-answer reachability: it is what
     # eventually notices a merge they performed by hand in a terminal, which nothing else observes.
     row = await session.get(Project, project_id)
+    main_branch = row.main_branch if row else None
+    # Footprints recorded before footprints said what they watch are rebuilt here, where their
+    # merge into the main line can be found (`drift-legacy-backfill`): the operator's own act, never
+    # a restart or a migration.
+    rebuilt = await requirement_evidence.backfill_legacy_footprints(
+        session, project_id, workspace.root, main_branch=main_branch
+    )
     await requirement_evidence.refresh_reachability(
         session,
         project_id,
         workspace.root,
-        main_branch=row.main_branch if row else None,
+        main_branch=main_branch,
     )
-    raised = await requirement_evidence.detect_drift(session, project_id, workspace)
+    raised = await requirement_evidence.detect_drift(
+        session, project_id, workspace, main_branch=main_branch
+    )
     await session.commit()
-    return {"raised": [candidate.id for candidate in raised]}
+    return {"raised": [candidate.id for candidate in raised], "rebuilt": rebuilt}
 
 
 @router.get("/spec/drift")
@@ -1241,7 +1251,69 @@ async def list_drift(
             ),
         }
 
-    return {"drift": [_view(row) for row in rows]}
+    return {
+        "drift": [_view(row) for row in rows],
+        "unwatched": await _unwatched(session, project_id),
+    }
+
+
+#: Why accepted evidence is not scanned for drift (`drift-watches-the-files-its-evidence-is-about`
+#: D4): it names no file, it was recorded before footprints said what they watch and could not be
+#: rebuilt, or the workspace could not be resolved when it was recorded.
+UNWATCHED_NAMES_NO_FILE = "names_no_file"
+UNWATCHED_RECORDED_BEFORE_WATCHING = "recorded_before_watching"
+UNWATCHED_NO_FOOTPRINT = "no_footprint"
+
+
+async def _unwatched(session: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+    """Accepted, digest-current evidence drift does not watch, with the reason, ordered by when it
+    was produced and then by id (the order `for_requirement` uses; F190: callers rely on it)."""
+    rows = (
+        await session.execute(
+            select(RequirementEvidence, EvidenceFootprint, SpecRequirement)
+            .join(SpecRequirement, SpecRequirement.id == RequirementEvidence.requirement_id)
+            .outerjoin(EvidenceFootprint, EvidenceFootprint.evidence_id == RequirementEvidence.id)
+            .where(
+                RequirementEvidence.project_id == project_id,
+                RequirementEvidence.review_state == "accepted",
+                RequirementEvidence.digest == SpecRequirement.digest,
+            )
+            .order_by(RequirementEvidence.produced_at, RequirementEvidence.id)
+        )
+    ).all()
+    documents = {
+        row.id: row.path
+        for row in (
+            await session.execute(
+                select(SpecDocument).where(
+                    SpecDocument.id.in_({req.document_id for _, _, req in rows} or {""})
+                )
+            )
+        ).scalars()
+    }
+    listed: List[Dict[str, Any]] = []
+    for evidence, footprint, requirement in rows:
+        if footprint is None:
+            reason = UNWATCHED_NO_FOOTPRINT
+        elif footprint.watched_from is None:
+            reason = UNWATCHED_RECORDED_BEFORE_WATCHING
+        elif footprint.watched_from == []:
+            reason = UNWATCHED_NAMES_NO_FILE
+        else:
+            continue
+        listed.append(
+            {
+                "evidence_id": evidence.id,
+                "requirement": {
+                    "identifier": requirement.identifier,
+                    "document": documents.get(requirement.document_id),
+                },
+                "summary": evidence.summary,
+                "actor": evidence.actor,
+                "reason": reason,
+            }
+        )
+    return listed
 
 
 @router.post("/spec/drift/{drift_id}/resolve")
@@ -1333,7 +1405,13 @@ def _evidence_view(evidence, footprint=None, latest_review=None) -> dict:
     }
 
 
-def footprint_view(footprint) -> Optional[dict]:
+async def _main_branch(session: AsyncSession, project_id: str) -> Optional[str]:
+    """The project's configured main line, which footprints are measured against."""
+    row = await session.get(Project, project_id)
+    return row.main_branch if row else None
+
+
+def footprint_view(footprint, *, provisional: bool = False) -> Optional[dict]:
     """One shape for a footprint, wherever a response reports one.
 
     Extracted so the agent's own recording response and every operator-facing view report the same
@@ -1353,6 +1431,13 @@ def footprint_view(footprint) -> Optional[dict]:
         "commit_sha": footprint.commit_sha,
         "reachable_from_main": footprint.reachable_from_main,
         "outside_workspace_writes": footprint.outside_workspace_writes,
+        # What drift watches, and where it came from (`drift-watches-the-files-its-evidence-is-about`
+        # D4): `null` is a footprint recorded before this was recorded.
+        "watched_from": footprint.watched_from,
+        "watched_count": len(footprint.entries or {}),
+        # An agent's footprint taken mid-turn names the commit the turn started from; the run-end
+        # re-stamp corrects it (D7). Said, so `watched_count: 0` is not read as final.
+        "provisional": provisional,
     }
 
 

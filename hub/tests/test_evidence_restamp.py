@@ -177,8 +177,11 @@ async def test_restamp_recomputes_entries_and_reachability_for_the_new_commit(
 
     fixed = await footprints()
     assert all(f.reachable_from_main is False for f in fixed), "the True must not be carried over"
-    assert all("README.md" in (f.entries or {}) for f in fixed)
+    # Rewritten on purpose by `drift-watches-the-files-its-evidence-is-about`: the re-stamp used to
+    # record the whole tree (README.md included); it now records what the branch changed.
+    assert all("README.md" not in (f.entries or {}) for f in fixed)
     assert all("feature.py" in (f.entries or {}) for f in fixed)
+    assert all(f.watched_from == ["branch"] for f in fixed)
 
 
 @pytest.mark.asyncio

@@ -62,10 +62,13 @@ async def _document(app, auth_headers, run_headers):
     assert saved.status_code == 200, saved.text
 
 
-async def _record(app, auth_headers):
+async def _record(app, auth_headers, locator="ledger.py"):
+    # Rewritten on purpose by `drift-watches-the-files-its-evidence-is-about` (task 1.9): evidence
+    # used to watch the whole tree, so these tests recorded none and relied on it. A footprint now
+    # watches what its evidence names, so each names the file it changes.
     response = await app.post(
         f"{BASE}/spec/evidence",
-        json={"identifier": "FR-1", "kind": "test_result", "summary": "ran it"},
+        json={"identifier": "FR-1", "kind": "test_result", "summary": "ran it", "locator": locator},
         headers=auth_headers,
     )
     assert response.status_code == 201, response.text

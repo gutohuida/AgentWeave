@@ -2645,6 +2645,11 @@ class EvidenceFootprint(Base):
     # footprint is deliberately not moved to another tree and the evidence is deliberately not
     # refused (design D7); the exception is recorded where the recorder can still see it.
     outside_workspace_writes: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Where `entries` came from (`drift-watches-the-files-its-evidence-is-about`): `["locator"]`,
+    # `["commit"]`, `["branch"]` or `["merge"]` (a backfilled row), or `[]` -- watches nothing.
+    # NULL is a row recorded before footprints recorded this: its `entries` are a whole tree, it is
+    # not scanned, and Scan for drift rebuilds it where its merge into the main line can be found.
+    watched_from: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (

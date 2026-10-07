@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0119"
+HEAD_REVISION = "0120"
 
 
 # ---------------------------------------------------------------------------
@@ -4782,4 +4782,53 @@ def test_migration_0119_downgrades_cleanly(tmp_path) -> None:
         assert "checks" not in {r[1] for r in conn.execute("PRAGMA table_info(projects)")}
         assert "override_reason" not in {
             r[1] for r in conn.execute("PRAGMA table_info(task_transitions)")
+        }
+
+
+# ---------------------------------------------------------------------------------------------
+# 0120 -- drift watches the files its evidence is about: evidence_footprints.watched_from.
+# Additive only; an existing footprint stays NULL ("recorded before watching").
+# ---------------------------------------------------------------------------------------------
+
+
+def _database_at_0119(tmp_path, name: str) -> tuple:
+    """Every table from the models, minus what 0120 adds, stamped at 0119."""
+    db_file = tmp_path / name
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("ALTER TABLE evidence_footprints DROP COLUMN watched_from")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0119')")
+        conn.commit()
+    return db_file, db_url
+
+
+def test_migration_0120_adds_watched_from_and_leaves_existing_footprints_null(tmp_path) -> None:
+    db_file, db_url = _database_at_0119(tmp_path, "up_watched.db")
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute(
+            "INSERT INTO evidence_footprints (id, project_id, evidence_id, kind, entries, "
+            "observed_at) VALUES ('efp-1', 'proj-1', 'ev-1', 'git', '{}', "
+            "'2026-01-01T00:00:00Z')"
+        )
+        conn.commit()
+
+    _upgrade_to(db_url, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {r[1]: r for r in conn.execute("PRAGMA table_info(evidence_footprints)")}
+        assert columns["watched_from"][3] == 0, "watched_from must be nullable"
+        row = conn.execute("SELECT watched_from FROM evidence_footprints WHERE id='efp-1'")
+        assert row.fetchone()[0] is None
+
+
+def test_migration_0120_downgrades_cleanly(tmp_path) -> None:
+    db_file, db_url = _database_at_0119(tmp_path, "down_watched.db")
+    _upgrade_to(db_url, "head")
+    _downgrade_to(db_url, "0119")
+    with sqlite3.connect(db_file) as conn:
+        assert "watched_from" not in {
+            r[1] for r in conn.execute("PRAGMA table_info(evidence_footprints)")
         }

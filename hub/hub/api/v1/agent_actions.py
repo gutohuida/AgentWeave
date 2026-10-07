@@ -27,7 +27,7 @@ from ...checkpoint_access import (
 )
 from ...conversations import conversation_id_for_run
 from ...db.engine import get_session
-from ...db.models import Agent, CheckpointNote, Question, Run, Task
+from ...db.models import Agent, CheckpointNote, Project, Question, Run, Task
 from ...launchability import record_harness_mcp_status
 from ...run_task_binding import (
     announce_block,
@@ -1240,6 +1240,8 @@ async def record_evidence(
     requirement = await _resolve_requirement(
         session, actor.project_id, body.identifier, body.document or "", body.task_id
     )
+    # The configured main line, as the operator route passes it (review LOW: this route must too).
+    project_row = await session.get(Project, actor.project_id)
     try:
         workspace = await project_workspace.resolve_project_workspace(session, actor.project_id)
     except project_workspace.ProjectWorkspaceError:
@@ -1255,6 +1257,7 @@ async def record_evidence(
             task_id=body.task_id,
             workspace=workspace,
             actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+            main_branch=(project_row.main_branch if project_row else None),
         )
     except requirement_evidence.EvidenceRefusedError as exc:
         raise HTTPException(
@@ -1285,7 +1288,8 @@ async def record_evidence(
         "review_state": evidence.review_state,
         "digest": evidence.digest,
         "recording_run_live": bool(evidence.run_id and run_liveness.run_is_live(evidence.run_id)),
-        "footprint": footprint_view(prints.get(evidence.id)),
+        # Taken mid-turn, so provisional until the run-end re-stamp (D7).
+        "footprint": footprint_view(prints.get(evidence.id), provisional=True),
     }
     if getattr(evidence, "revised", False):
         # A re-record in the same live run revised its own undecided row: 200, not 201.

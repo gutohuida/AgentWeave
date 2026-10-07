@@ -33,7 +33,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,9 +80,12 @@ class EvidenceRefusedError(RuntimeError):  # noqa: N818 - "refused" is the outco
         super().__init__(message)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Footprint:
     kind: str
+    #: Where `entries` came from (`drift-watches-the-files-its-evidence-is-about` D7). Required, with
+    #: no default, so no constructor can write the NULL that means "recorded before watching".
+    watched_from: List[str]
     commit_sha: Optional[str] = None
     branch: Optional[str] = None
     entries: Dict[str, str] = None  # type: ignore[assignment]
@@ -127,8 +130,12 @@ async def record(
     summary: str = "",
     task_id: Optional[str] = None,
     workspace: Optional[ProjectWorkspace] = None,
+    main_branch: Optional[str] = None,
 ) -> RequirementEvidence:
     """Store one piece of evidence against the requirement's *current* digest.
+
+    *main_branch* is the project's configured main line; both recording routes pass it, so the
+    footprint's reachability and rule 3's branch diff ask the branch drift compares against.
 
     An operator recording evidence is recording their own observation, so it is
     accepted on arrival — there is nobody else for it to await. An agent's lands
@@ -164,6 +171,7 @@ async def record(
             locator,
             await recorded_workspace_dir(session, actor.run_id),
             task_id,
+            main_branch=main_branch,
         )
         own: Optional[RequirementEvidence] = None
         if actor.kind == "agent" and actor.run_id:
@@ -382,6 +390,8 @@ def _take_footprint(
     locator: str,
     recorded_dir: Optional[str] = None,
     task_id: Optional[str] = None,
+    *,
+    main_branch: Optional[str] = None,
 ) -> Footprint:
     """The footprint this evidence should carry, given who is recording it and what they named.
 
@@ -412,7 +422,14 @@ def _take_footprint(
     """
     named = locator_commit(locator) if actor.kind == "operator" else None
     return read_evidence_footprint(
-        workspace, actor.kind, actor.name or "", recorded_dir, task_id, named=named
+        workspace,
+        actor.kind,
+        actor.name or "",
+        recorded_dir,
+        task_id,
+        named=named,
+        locator=locator,
+        main_branch=main_branch,
     )
 
 
@@ -434,6 +451,8 @@ def read_evidence_footprint(
     task_id: Optional[str],
     *,
     named: Optional[str] = None,
+    locator: str = "",
+    main_branch: Optional[str] = None,
 ) -> Footprint:
     """The one place a piece of evidence's footprint is read, so record and capture cannot disagree.
 
@@ -451,7 +470,9 @@ def read_evidence_footprint(
         if tip:
             root, at = workspace.root, tip
     if named is None:
-        return read_footprint(root, at=at, task_branch=task_branch)
+        return read_footprint(
+            root, at=at, task_branch=task_branch, locator=locator, main_branch=main_branch
+        )
 
     resolved = _git(root, "rev-parse", "--verify", f"{named}^{{commit}}")
     if resolved is None:
@@ -463,7 +484,14 @@ def read_evidence_footprint(
             f"first, or name something other than a commit in the locator.",
             code="locator_commit_unknown",
         )
-    return read_footprint(root, at=resolved, task_branch=task_branch)
+    return read_footprint(
+        root,
+        at=resolved,
+        task_branch=task_branch,
+        locator=locator,
+        named=resolved,
+        main_branch=main_branch,
+    )
 
 
 def footprint_root(
@@ -596,6 +624,7 @@ def _apply_footprint(
     row.branch = taken.branch
     row.entries = taken.entries or {}
     row.reachable_from_main = taken.reachable_from_main
+    row.watched_from = list(taken.watched_from)
     row.outside_workspace_writes = outside_writes
     return row
 
@@ -606,6 +635,7 @@ async def capture_footprint(
     workspace: ProjectWorkspace,
     *,
     taken: Optional[Footprint] = None,
+    main_branch: Optional[str] = None,
 ) -> EvidenceFootprint:
     """What the implementation looked like when this evidence was produced.
 
@@ -637,6 +667,8 @@ async def capture_footprint(
             evidence.actor,
             await recorded_workspace_dir(session, evidence.run_id),
             evidence.task_id,
+            locator=evidence.locator or "",
+            main_branch=main_branch,
         )
     return _apply_footprint(session, evidence, taken, outside_writes=outside_writes)
 
@@ -678,8 +710,119 @@ def tree_entries(root: Path, ref: str) -> Optional[Dict[str, str]]:
     return entries
 
 
+#: Where a locator's words are split (D1''): whitespace and the punctuation prose wraps paths in.
+_LOCATOR_SPLIT = re.compile(r"[\s,;()\[\]{}\"'`<>|]+")
+#: A pytest node suffix or a trailing line reference: `path::test_x`, `path:12`, `path:12-30`.
+_LOCATOR_SUFFIX = re.compile(r"(::.*|:\d+(-\d+)?)$")
+
+
+def _locator_paths(locator: str, paths) -> List[str]:
+    """The paths among *paths* that *locator* names, word by word (D1'').
+
+    A word counts only when it is a path in the tree, or a directory prefix of paths in it. Nothing
+    is guessed from a word that is not there -- the refusal `_COMMIT_ISH`'s comment makes about
+    reading a path as a revision, made here about reading prose as a path.
+    """
+    known = list(paths)
+    chosen: List[str] = []
+    for raw in _LOCATOR_SPLIT.split(locator or ""):
+        token = _LOCATOR_SUFFIX.sub("", raw.strip().replace("\\", "/"))
+        while token.startswith("./"):
+            token = token[2:]
+        token = token.rstrip("/")
+        if token in ("", "."):
+            continue
+        if token in known:
+            matches = [token]
+        else:
+            prefix = token + "/"
+            matches = [path for path in known if path.startswith(prefix)]
+        for path in matches:
+            if path not in chosen:
+                chosen.append(path)
+    return chosen
+
+
+def _main_ref(root: Path, main_branch: Optional[str]) -> Optional[str]:
+    """The main line to compare against: the configured branch when it resolves, else the guess."""
+    for name in ([main_branch] if main_branch else []) + list(MAIN_BRANCH_NAMES):
+        if name and _git(root, "rev-parse", "--verify", name):
+            return name
+    return None
+
+
+def _commit_paths(root: Path, commit: str) -> List[str]:
+    """The paths *commit* changed; for a merge, against its first parent (`--no-ff` integration)."""
+    listed = _git(
+        root,
+        "diff-tree",
+        "--no-commit-id",
+        "--name-only",
+        "-r",
+        "--root",
+        "--diff-merges=first-parent",
+        commit,
+    )
+    return [line for line in (listed or "").splitlines() if line.strip()]
+
+
+def branch_paths(root: Path, commit: str, main_branch: Optional[str]) -> Optional[List[str]]:
+    """The paths changed on *commit*'s line of work since it left the main line, or None when the
+    commit is already on the main line or there is no main line to measure from (rule 3)."""
+    main = _main_ref(root, main_branch)
+    if main is None or is_reachable_from(root, commit, main) is not False:
+        return None
+    base = _git(root, "merge-base", main, commit)
+    if not base:
+        return None
+    listed = _git(root, "diff", "--name-only", base, commit)
+    return [line for line in (listed or "").splitlines() if line.strip()]
+
+
+def watched_files(
+    root: Path,
+    commit: str,
+    tree: Dict[str, str],
+    *,
+    locator: str = "",
+    named: Optional[str] = None,
+    main_branch: Optional[str] = None,
+    branch_changes: Optional[List[str]] = None,
+) -> Tuple[Dict[str, str], List[str]]:
+    """What a git footprint at *commit* watches, and where that came from (D1', D1'', D2).
+
+    The **first** source that names a file in *tree*, not their union: (1) the locator's words;
+    (2) the commit an operator's locator named, as `--diff-merges=first-parent` sees it; (3) the
+    branch's changes since it left the main line. A union made every agent row watch its task's whole
+    diff (measured on `:8000`: one shared file in 22 of 46 rows' watch sets). None -> watches nothing.
+
+    *branch_changes* lets a caller computing many rows at one commit (the run-end re-stamp) pass rule
+    3's answer once. Every git call goes through `_git`, which answers None on failure: recording is
+    never refused over what it watches.
+    """
+    chosen = _locator_paths(locator, tree)
+    if chosen:
+        return {path: tree[path] for path in chosen}, ["locator"]
+    if named:
+        changed = [path for path in _commit_paths(root, named) if path in tree]
+        if changed:
+            return {path: tree[path] for path in changed}, ["commit"]
+    if branch_changes is None:
+        branch_changes = branch_paths(root, commit, main_branch)
+    changed = [path for path in (branch_changes or []) if path in tree]
+    if changed:
+        return {path: tree[path] for path in changed}, ["branch"]
+    return {}, []
+
+
 def read_footprint(
-    root: Path, *, at: Optional[str] = None, task_branch: Optional[str] = None
+    root: Path,
+    *,
+    at: Optional[str] = None,
+    task_branch: Optional[str] = None,
+    locator: str = "",
+    named: Optional[str] = None,
+    main_branch: Optional[str] = None,
 ) -> Footprint:
     """The footprint of a workspace, by whichever of the two shapes applies.
 
@@ -688,13 +831,16 @@ def read_footprint(
     would leave every one of them permanently unverifiable — so both ship
     together rather than one now and one later.
 
-    Note `entries` is the *whole* tree, not the changed paths the model documents. That mismatch is
-    real and pre-existing: it means one unrelated commit on the compared ref drifts every requirement
-    at once. Fixing it is a separate change, deliberately, so that it cannot mask this one.
+    `entries` are the files the evidence is about (`watched_files`), not the whole tree: a whole
+    tree made one unrelated commit a drift candidate for every piece of evidence at once (F427).
 
     `at` describes a commit the caller *named* rather than the one the checkout happens to be
     sitting on (finding F71). It must already be resolved — `record` verifies it and refuses rather
-    than falling back, because a silent fallback to `HEAD` is the whole defect.
+    than falling back, because a silent fallback to `HEAD` is the whole defect. `named` is the same
+    commit when an operator's locator named it, which is what lets rule 2 watch what it changed.
+
+    `reachable_from_main` asks the configured *main_branch* when given, as the re-stamp and the
+    refresh do, so the flag and the basis drift compares against name the same branch (D3).
     """
     commit = _git(root, "rev-parse", at or "HEAD")
     if commit:
@@ -703,20 +849,40 @@ def read_footprint(
             # A named commit, or a detached checkout (`--abbrev-ref` answers the literal `HEAD`):
             # resolve the line of work rather than record git's spelling of "none" (D1, D2).
             branch = line_of_work(root, commit, task_branch=task_branch)
+        entries, watched_from = watched_files(
+            root,
+            commit,
+            tree_entries(root, commit) or {},
+            locator=locator,
+            named=named,
+            main_branch=main_branch,
+        )
         return Footprint(
             kind="git",
             commit_sha=commit,
             branch=branch,
-            entries=tree_entries(root, commit) or {},
-            reachable_from_main=is_reachable_from_main(root, commit),
+            entries=entries,
+            watched_from=watched_from,
+            reachable_from_main=(
+                is_reachable_from(root, commit, main_branch)
+                if main_branch
+                else is_reachable_from_main(root, commit)
+            ),
         )
 
     if at:
         # A named commit in a directory with no repository at all. Nothing can be said about it, and
         # a path-hash footprint of the working tree would describe something else entirely.
-        return Footprint(kind="paths", entries={}, reachable_from_main=None)
+        return Footprint(kind="paths", entries={}, watched_from=[], reachable_from_main=None)
 
-    return Footprint(kind="paths", entries=hash_tree(root), reachable_from_main=None)
+    # No repository: only the locator can name files (rule 1), hashed as `hash_tree` would.
+    hashes = hash_paths(root, _locator_paths(locator, _relative_files(root)))
+    return Footprint(
+        kind="paths",
+        entries=hashes,
+        watched_from=["locator"] if hashes else [],
+        reachable_from_main=None,
+    )
 
 
 #: A locator that is a bare git object name, and nothing else. Deliberately narrow: `locator` is a
@@ -808,6 +974,33 @@ def is_reachable_from_main(root: Path, commit: str) -> Optional[bool]:
 # turn recording one screenshot into a minutes-long stat storm.
 MAX_HASHED_FILES = 2000
 SKIP_DIRECTORIES = {".git", ".agentweave", "node_modules", "__pycache__", ".venv", "dist", "build"}
+
+
+def _relative_files(root: Path) -> List[str]:
+    """Every file under *root* a footprint could name, bounded and skipping what `hash_tree` skips."""
+    files: List[str] = []
+    for path in sorted(root.rglob("*")):
+        if len(files) >= MAX_HASHED_FILES:
+            break
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root)
+        if any(part in SKIP_DIRECTORIES for part in relative.parts):
+            continue
+        files.append(relative.as_posix())
+    return files
+
+
+def hash_paths(root: Path, paths) -> Dict[str, str]:
+    """A content hash of each of *paths* under *root*; a file that cannot be read is left out, and a
+    missing one is simply absent, which `_changed` reads as moved."""
+    hashes: Dict[str, str] = {}
+    for relative in paths:
+        try:
+            hashes[relative] = hashlib.sha256((root / relative).read_bytes()).hexdigest()
+        except OSError:
+            continue
+    return hashes
 
 
 def hash_tree(root: Path) -> Dict[str, str]:
@@ -1166,17 +1359,33 @@ async def restamp_run_footprints(
     if branch in ("", "HEAD"):
         task_id = await task_bound_to_run(session, run_id)
         branch = line_of_work(root, target, task_branch=_task_branch_of(task_id))
-    taken = Footprint(
-        kind="git",
-        commit_sha=target,
-        branch=branch,
-        entries=tree_entries(root, target) or {},
-        reachable_from_main=(
-            is_reachable_from(root, target, main_branch)
-            if main_branch
-            else is_reachable_from_main(root, target)
-        ),
+    reachable = (
+        is_reachable_from(root, target, main_branch)
+        if main_branch
+        else is_reachable_from_main(root, target)
     )
+    # Read once per run: the tree and rule 3's branch changes are facts about the one commit. What
+    # each row watches still depends on its own locator, so that part is per row (task 2.3).
+    tree = tree_entries(root, target) or {}
+    changes = branch_paths(root, target, main_branch)
+
+    def taken_for(evidence: RequirementEvidence) -> Footprint:
+        entries, watched_from = watched_files(
+            root,
+            target,
+            tree,
+            locator=evidence.locator or "",
+            main_branch=main_branch,
+            branch_changes=changes,
+        )
+        return Footprint(
+            kind="git",
+            commit_sha=target,
+            branch=branch,
+            entries=entries,
+            watched_from=watched_from,
+            reachable_from_main=reachable,
+        )
 
     # Read once per run, like the footprint above it, and for the same reason: it is one fact about
     # one run. This is the *final* value — a turn goes on writing after its evidence is recorded, so
@@ -1194,9 +1403,14 @@ async def restamp_run_footprints(
             # from the start, and would then keep whatever outside-writes record existed when its
             # evidence was recorded rather than the one the run finished with.
             and footprint.outside_workspace_writes == outside_writes
+            # ...and it already records what it watches: a row from before that did not is the
+            # whole-tree footprint this re-stamp now narrows.
+            and footprint.watched_from is not None
         ):
             continue
-        _apply_footprint(session, evidence, taken, footprint, outside_writes=outside_writes)
+        _apply_footprint(
+            session, evidence, taken_for(evidence), footprint, outside_writes=outside_writes
+        )
         updated += 1
     return updated
 
@@ -1258,6 +1472,80 @@ async def refresh_reachability(
     return updated
 
 
+def _merge_into(root: Path, commit: str, main: str) -> Optional[str]:
+    """The commit on *main*'s first-parent chain that brought *commit* in, or None if it never did.
+
+    *commit* itself when it is on that chain (a fast-forward or a commit made on the main line);
+    otherwise the oldest first-parent commit descending from it, which is the merge.
+    """
+    if is_reachable_from(root, commit, main) is not True:
+        return None
+    first_parent = (_git(root, "rev-list", "--first-parent", main) or "").split()
+    if commit in first_parent:
+        return commit
+    path = _git(root, "rev-list", "--first-parent", "--ancestry-path", f"{commit}..{main}") or ""
+    chain = path.split()
+    return chain[-1] if chain else None
+
+
+async def backfill_legacy_footprints(
+    session: AsyncSession,
+    project_id: str,
+    root: Path,
+    *,
+    main_branch: Optional[str] = None,
+) -> int:
+    """Rebuild accepted footprints recorded before footprints said what they watch (D6).
+
+    `drift-watches-the-files-its-evidence-is-about`, operator decision `drift-legacy-backfill`. Such
+    a row's `entries` are a whole tree and its `watched_from` is NULL, so it is not scanned. Where its
+    commit's merge into the main line can be found, it watches what its locator names at that commit
+    (`["locator"]`), or else the files that merge brought in (`["merge"]`). A row whose merge is not
+    found stays NULL -- listed as recorded before watching -- and is tried again at the next scan,
+    when a later merge may have brought it in. Called by Scan for drift, the operator's own act; a
+    restart or a migration never rewrites a footprint.
+    """
+    main = _main_ref(root, main_branch)
+    if main is None:
+        return 0
+    rows = (
+        await session.execute(
+            select(RequirementEvidence, EvidenceFootprint)
+            .join(EvidenceFootprint, EvidenceFootprint.evidence_id == RequirementEvidence.id)
+            .where(
+                RequirementEvidence.project_id == project_id,
+                RequirementEvidence.review_state == ACCEPTED,
+                EvidenceFootprint.kind == "git",
+                EvidenceFootprint.commit_sha.is_not(None),
+            )
+        )
+    ).all()
+    updated = 0
+    for evidence, footprint in rows:
+        # Filtered here, not in SQL: a JSON column holds "nothing" as SQL NULL (a row the migration
+        # added the column to) or as JSON `null` (an ORM write of None), and both load as None.
+        if footprint.watched_from is not None:
+            continue
+        commit = footprint.commit_sha or ""
+        tree = tree_entries(root, commit)
+        if not tree:
+            continue
+        chosen = _locator_paths(evidence.locator or "", tree)
+        watched_from = ["locator"]
+        if not chosen:
+            merge = _merge_into(root, commit, main)
+            if merge is None:
+                continue
+            chosen = [path for path in _commit_paths(root, merge) if path in tree]
+            watched_from = ["merge"]
+        if not chosen:
+            continue
+        footprint.entries = {path: tree[path] for path in chosen}
+        footprint.watched_from = watched_from
+        updated += 1
+    return updated
+
+
 # ---------------------------------------------------------------------------
 # Drift
 # ---------------------------------------------------------------------------
@@ -1277,6 +1565,8 @@ async def detect_drift(
     session: AsyncSession,
     project_id: str,
     workspace: ProjectWorkspace,
+    *,
+    main_branch: Optional[str] = None,
 ) -> List[RequirementDrift]:
     """Raise a candidate wherever a footprint's files moved and the requirement did not.
 
@@ -1292,17 +1582,21 @@ async def detect_drift(
     again here would ask the operator the same question in two vocabularies — the thing this
     function already refuses to do for rewordings.
 
-    Accepted consequence: once the work merges, this keeps watching the agent's branch, so a later
-    change to the same files *on* the main branch is not noticed. Answering that needs the changed
-    paths rather than the whole tree (see `read_footprint`), so it is deferred rather than papered
-    over by switching the basis once the work is reachable — that would make the basis depend on a
-    column `refresh_reachability` mutates, and drift would flip bases underneath an open candidate.
+    **Once the work has reached the main line, it is compared against the main line**
+    (`drift-watches-the-files-its-evidence-is-about` D3, F217). A footprint watches only the files
+    its evidence is about, so comparing a merged one against `main` no longer reports everything
+    anyone else merged; before that change this kept watching the agent's branch after the merge and
+    never noticed a later change on `main`. The basis flips at most once, one way, for one baseline
+    (`refresh_reachability` only upgrades), and an open candidate is skipped before any comparison.
+
+    A footprint that watches nothing (`watched_from` `[]`) or was recorded before footprints said
+    what they watch (NULL) is not scanned; `GET /spec/drift` lists it as unwatched instead.
     """
-    # One read per distinct ref, and `hash_tree` at most once. Also fixes a latent bug: a single
-    # observation used to be applied to both footprint kinds, so a `paths` footprint in a project
-    # that later became a repository was compared against git blob ids.
+    # One read per distinct ref. Also fixes a latent bug: a single observation used to be applied to
+    # both footprint kinds, so a `paths` footprint in a project that later became a repository was
+    # compared against git blob ids.
     trees: Dict[str, Optional[Dict[str, str]]] = {}
-    paths_tree: Optional[Dict[str, str]] = None
+    main_ref = _main_ref(workspace.root, main_branch)
 
     rows = (
         await session.execute(
@@ -1339,13 +1633,23 @@ async def detect_drift(
         # ask the operator the same question twice in two vocabularies.
         if evidence.digest != requirement.digest:
             continue
+        if not footprint.watched_from:
+            # NULL (recorded before watching) or [] (names no file): listed, never scanned.
+            continue
 
         if footprint.kind == "git":
-            ref = footprint.branch or ""
-            # A footprint taken on a detached HEAD names no line of work to re-read. Unknown is not
-            # drift, so it raises nothing rather than guessing at a branch.
-            if not ref or ref == "HEAD":
-                continue
+            if footprint.reachable_from_main is True:
+                # The work is on the main line: compare there, whatever `branch` says (D3). Unknown
+                # main line is not drift.
+                if main_ref is None:
+                    continue
+                ref = main_ref
+            else:
+                ref = footprint.branch or ""
+                # A footprint taken on a detached HEAD names no line of work to re-read. Unknown is
+                # not drift, so it raises nothing rather than guessing at a branch.
+                if not ref or ref == "HEAD":
+                    continue
             if ref not in trees:
                 trees[ref] = tree_entries(workspace.root, ref)
             observed = trees[ref]
@@ -1354,9 +1658,8 @@ async def detect_drift(
             if observed is None:
                 continue
         else:
-            if paths_tree is None:
-                paths_tree = hash_tree(workspace.root)
-            observed = paths_tree
+            # Only the watched paths are hashed; a missing one is absent and so reads as moved.
+            observed = hash_paths(workspace.root, (footprint.entries or {}).keys())
 
         moved = _changed(footprint.entries or {}, observed)
         if not moved:
