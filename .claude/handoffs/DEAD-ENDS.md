@@ -2129,3 +2129,27 @@ disappears is indistinguishable from one that was forgotten.
   and bookkeeping together, in one push, gives one run.
 - **2026-10-07 (home, night) -- a pytest log written by PowerShell `*>` here is UTF-8, not UTF-16.**
   Decoding it as UTF-16 turns it to CJK noise; plain `grep -a` reads it.
+- **2026-10-07 (home, night) -- after a CI change, read every following run, not just the first.** The
+  first `-n auto` run (`075ae20`) was green and the next one (`99d9cdf`) went red by test order (F530);
+  it went unnoticed for an hour and was reported as "CI green".
+- **2026-10-07 (home) -- `taskkill //F //IM python.exe //FI "WINDOWTITLE eq *pytest*"` is too broad**: it
+  could have killed the trial Hub (PID 20292). It matched nothing this time, so the Hub survived by luck.
+  Kill by PID, or stop the background task by its ID.
+- **2026-10-07 (home) -- `git worktree add <dir> master` fails while the root has master checked out.**
+  Use `git worktree add -b <branch> <dir> master`, then `git push origin <branch>:master` and
+  `git merge --ff-only origin/master` in the root. A failed `worktree add` followed by `mkdir`/`mv` in the
+  same command moved the file into a plain directory. Chain with `&&`.
+- **2026-10-07 (home) -- a Codex app-server dispatch test with the real `run_turn` over a fake
+  `AppServerProcess` hangs in the run's after-work.** Test the dispatch seam by patching
+  `hub.codex_appserver.run_turn`, as F99's test does (`test_agent_trigger_overrides.py`), and test
+  `run_turn` on its own with `_FakeSession` (`test_codex_appserver_run_turn.py`).
+- **2026-10-07 (home) -- the Write/Edit tools refuse a file moved with `mv` until it is Read at its
+  new path.** A refused Write silently left the old draft in place, and that draft was then run as if
+  it were the new one.
+- **2026-10-07 (home) -- `cancel-in-progress` takes about a minute.** The newer master run shows `pending`
+  until the old one turns `cancelled`; that does not mean cancellation is broken.
+- **2026-10-07 (home) -- the trial Hub writes spec documents into the root checkout** (this repo's project
+  workspace is the root): reconcile and author scripts leave `spec/...` changes in the root's
+  `git status`. While the night loop holds the root, they would dirty its tree; run them only when the
+  root is on master and free.
+
