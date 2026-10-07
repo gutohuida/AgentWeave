@@ -13,13 +13,13 @@
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "F526-impl",
-    "next_action": "CI gate first: `gh run list --branch autonomous/2026-10-07-daily`; if hub-test is red, fix it first. If green, build F526-impl (Tier 0): agentweave-mcp refuses to start without HUB_URL (never fall back to :8000, never call :8000 to test). Read F526 in scripts/drive/FINDINGS.md; test at the seam, drive without any Hub on :8000. Then the F530-drive close-out item.",
+    "next_action": "CI gate first: `gh run list --branch autonomous/2026-10-07-daily`. 8de6be7 (F464) was RED on hub-test (F530 guard named a 19th leaker, fixed in iteration 6's follow-up commit); confirm the tip is green, and if hub-test is red again, fix the named leaker the same way (usefixtures no_agent_cli_spawn) before anything else. If green, build F526-impl (Tier 0): agentweave-mcp refuses to start without HUB_URL (never fall back to :8000, never call :8000 to test). Read F526 in scripts/drive/FINDINGS.md; test at the seam, drive without any Hub on :8000. Then the F530-drive close-out item.",
     "queue": [
         {
             "id": "F530-impl",
             "status": "done",
             "title": "F530: leaked shutil.which patch turns hub-test red under xdist",
-            "detail": "See FINDINGS F530. Guard in hub/tests/conftest.py names the leaker; fix the leaker; no patching around in test_pty_runner. Accept: local -n 4 --dist loadfile green + CI green. Nothing else is built until CI is green on the tip. BUILT iteration 2: 18 leakers marked no_agent_cli_spawn + teardown guard; WSL full -n 4 green. Needs CI green on this push and the next. CI green on 8f4d508 (first green push); a second green push (this one) confirms.",
+            "detail": "See FINDINGS F530. Guard in hub/tests/conftest.py names the leaker; fix the leaker; no patching around in test_pty_runner. Accept: local -n 4 --dist loadfile green + CI green. Nothing else is built until CI is green on the tip. BUILT iteration 2: 18 leakers marked no_agent_cli_spawn + teardown guard; WSL full -n 4 green. Needs CI green on this push and the next. CI green on 8f4d508 (first green push); a second green push (this one) confirms. REOPENED iteration 6: CI on 8de6be7 red, the guard named a 19th leaker (test_a_loop_does_not_staff_its_own_review); fixed. Needs green CI on two consecutive pushes after that.",
             "model": "opus"
         },
         {
