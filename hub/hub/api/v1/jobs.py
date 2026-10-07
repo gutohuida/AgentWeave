@@ -13,7 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import refused_capability, task_attribution
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Agent, AIJob, JobRun, Loop, Project, Question, Run, Task
+from ...db.models import (
+    Agent,
+    AIJob,
+    JobRun,
+    Loop,
+    Project,
+    Question,
+    Run,
+    SpecDocument,
+    Task,
+)
 from ...loop_ending import ARCHIVED_WITH_JOB_REASON, end_loop
 from ...operator_direction import require_operator_direction
 from ...scheduler import FiringDecision, cron_day_ambiguity_reason
@@ -138,6 +148,39 @@ async def _check_initial_tasks(
             ) from refusal
         if task_body.id:
             seen[task_body.id] = index
+
+
+async def _document_id_for(
+    session: AsyncSession, project_id: str, spec_document_id: Optional[str]
+) -> Optional[str]:
+    """The document id a loop stores, given the id or the path an agent knows it by (F451).
+
+    Tasks carry `spdoc-…` ids and `_adopt_document_tasks` compares strings, so a loop that stored a
+    path adopted nothing for good and slipped past `_check_spec_document_conflict` beside a loop on
+    the same document by id. A path is resolved to its id; a `spec/` path that names no document is
+    refused. Any other value is stored as given, as before.
+    """
+    if spec_document_id is None:
+        return None
+    value = spec_document_id.strip()
+    if not value.startswith("spec/"):
+        return value
+    document_id = (
+        await session.execute(
+            select(SpecDocument.id).where(
+                SpecDocument.project_id == project_id, SpecDocument.path == value
+            )
+        )
+    ).scalar_one_or_none()
+    if document_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"spec_document_id '{value}' names no specification document in this project; "
+                "give the document's id (spdoc-…) or the path of a document the Hub knows"
+            ),
+        )
+    return document_id
 
 
 async def _check_spec_document_conflict(
@@ -669,6 +712,13 @@ async def build_flow_rows(
 
     opts_in = _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties)
     if opts_in:
+        body = body.model_copy(
+            update={
+                "spec_document_id": await _document_id_for(
+                    session, project_id, body.spec_document_id
+                )
+            }
+        )
         await _check_spec_document_conflict(session, project_id, body.spec_document_id)
 
     job_id = f"job-{short_id()}"
@@ -1115,10 +1165,11 @@ async def update_job(
             )
             session.add(loop)
         if body.spec_document_id is not None:
+            document_id = await _document_id_for(session, project_id, body.spec_document_id)
             await _check_spec_document_conflict(
-                session, project_id, body.spec_document_id, exclude_loop_id=loop.id
+                session, project_id, document_id, exclude_loop_id=loop.id
             )
-            loop.spec_document_id = body.spec_document_id
+            loop.spec_document_id = document_id
             # A claim made by editing an existing loop reaches the same F28 state as one made at
             # creation, so it adopts on the same terms. Unlike the definition edits below this is
             # applied on the spot rather than staged: the document binding is not part of the

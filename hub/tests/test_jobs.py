@@ -1340,6 +1340,83 @@ async def test_a_flow_created_after_approval_adopts_the_documents_tasks(app, aut
     assert rows["task-f28-b"].loop_id == loop_id
 
 
+async def _spec_document(document_id: str, path: str) -> None:
+    from hub.db.engine import async_session_factory
+    from hub.db.models import SpecDocument
+
+    async with async_session_factory() as session:
+        session.add(SpecDocument(id=document_id, project_id="proj-test", path=path, title="F451"))
+        await session.commit()
+
+
+def _flow_body(name: str, spec_document_id: str) -> dict:
+    return {
+        "name": name,
+        "agent": "kimi",
+        "message": "Work the queue",
+        "cron": "0 9 * * *",
+        "purpose": f"Drive {spec_document_id}",
+        "spec_document_id": spec_document_id,
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_flow_named_by_its_documents_path_adopts_the_documents_tasks(app, auth_headers):
+    """F451. Every spec tool takes the path, and a flow given it stored the path: tasks carry the
+    id, so its queue stayed `{}` for good, and a second flow on the same document by id was not a
+    conflict."""
+    path = "spec/changes/f451-by-path/spec.html"
+    await _spec_document("spdoc-f451a", path)
+    await _materialised_task("task-f451-a", "spdoc-f451a")
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs", json=_flow_body("By path", path), headers=auth_headers
+    )
+    assert resp.status_code == 201, resp.text
+    loop = resp.json()["loop"]
+    assert loop["spec_document_id"] == "spdoc-f451a"
+    assert (await _task_rows(["task-f451-a"]))["task-f451-a"].loop_id == loop["id"]
+
+    second = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json=_flow_body("Same document by id", "spdoc-f451a"),
+        headers=auth_headers,
+    )
+    assert second.status_code == 409, second.text
+
+
+@pytest.mark.asyncio
+async def test_a_path_that_names_no_document_is_refused(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json=_flow_body("Nowhere", "spec/changes/no-such-document/spec.html"),
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422, resp.text
+    assert "names no specification document" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_loop_given_its_document_by_path_later_stores_the_id(app, auth_headers):
+    path = "spec/changes/f451-patched/spec.html"
+    await _spec_document("spdoc-f451b", path)
+    created = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={**_flow_body("Declares later", "x"), "spec_document_id": None},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    job_id = created.json()["id"]
+
+    patched = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"spec_document_id": path},
+        headers=auth_headers,
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["loop"]["spec_document_id"] == "spdoc-f451b"
+
+
 @pytest.mark.asyncio
 async def test_adoption_does_not_take_a_task_another_loop_already_owns(app, auth_headers):
     """Restricted to `loop_id IS NULL`. A task another flow is already driving keeps its owner."""
