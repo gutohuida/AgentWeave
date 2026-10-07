@@ -8,25 +8,25 @@
     "parent_branch": "master",
     "parent_sha": "4055151",
     "stop_at": "2026-10-08T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-07-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F468-impl",
-    "next_action": "CI gate first: `gh run list --branch autonomous/2026-10-07-daily` for the F530 push (iteration 2). If hub-test is red, read the failure, back to F530 (guard error names the leaker; run testbed/f530/run_wsl.sh in WSL). If green, mark F530-impl done (second green push confirms it) and build F468-impl: send_message to self returns 400 naming the reply; test at the route seam first, fix, drive on :8010.",
+    "current": "F464-impl",
+    "next_action": "CI gate first: `gh run list --branch autonomous/2026-10-07-daily` for the F468 push (iteration 3). If hub-test is red, fix it before anything else (F530's guard names a which-leaker). If green, build F464-impl: read .claude/rules/ for hub/hub/mcp_server.py first, test at the seam, fix, drive on a throwaway Hub (port 8041, temp DB; see testbed/f468/drive.py).",
     "queue": [
         {
             "id": "F530-impl",
-            "status": "built-pending-ci",
+            "status": "done",
             "title": "F530: leaked shutil.which patch turns hub-test red under xdist",
-            "detail": "See FINDINGS F530. Guard in hub/tests/conftest.py names the leaker; fix the leaker; no patching around in test_pty_runner. Accept: local -n 4 --dist loadfile green + CI green. Nothing else is built until CI is green on the tip. BUILT iteration 2: 18 leakers marked no_agent_cli_spawn + teardown guard; WSL full -n 4 green. Needs CI green on this push and the next.",
+            "detail": "See FINDINGS F530. Guard in hub/tests/conftest.py names the leaker; fix the leaker; no patching around in test_pty_runner. Accept: local -n 4 --dist loadfile green + CI green. Nothing else is built until CI is green on the tip. BUILT iteration 2: 18 leakers marked no_agent_cli_spawn + teardown guard; WSL full -n 4 green. Needs CI green on this push and the next. CI green on 8f4d508 (first green push); a second green push (this one) confirms.",
             "model": "opus"
         },
         {
             "id": "F468-impl",
-            "status": "open",
+            "status": "done",
             "title": "F468: send_message to self returns 400 naming the reply; no turn starts",
-            "detail": "Tier 0; operator 2026-09-30 answer stands. Test at the route seam, fix, drive."
+            "detail": "Tier 0; operator 2026-09-30 answer stands. Test at the route seam, fix, drive. BUILT iteration 3, narrowed to F468's repro (self-send without a different named conversation); see FINDINGS F468."
         },
         {
             "id": "F464-impl",

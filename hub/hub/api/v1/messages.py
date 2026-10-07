@@ -130,6 +130,40 @@ async def create_message_for_actor(
             ),
         )
 
+    if (
+        not by_operator
+        and body.recipient == sender
+        and (not body.conversation_id or body.conversation_id == source_conversation_id)
+    ):
+        # F468: the operator is not a recipient, so a model asked to "message me" picks the nearest
+        # name it has, its own, and the Hub queued it and started a second autonomous turn that
+        # spent a model call acknowledging itself. Refused before any Message, queue entry or
+        # trigger exists (operator's answer, 2026-09-30); the 400 names where the operator reads.
+        # Narrowed to what F468 reproduced: an agent naming one of its OTHER conversations is the
+        # deliberate capability of item 10 (2026-08-20), locked by
+        # test_an_agent_can_message_its_own_other_conversation, and stays.
+        await persist_event(
+            session,
+            project_id,
+            "agent_action_rejected",
+            {
+                "endpoint": "POST /messages",
+                "reason": "message_to_self",
+                "recipient": body.recipient,
+            },
+            agent=event_agent,
+            severity="warn",
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"You cannot send a message to yourself ('{body.recipient}'): it would only start "
+                "another turn for you. To reach the operator, write it in your reply; record a "
+                "result on a task with update_task's notes; if you need their answer before you "
+                "can continue, call ask_user. To reach another agent, name that agent."
+            ),
+        )
+
     recipient_row = (
         (
             await session.execute(

@@ -400,6 +400,7 @@ async def test_a_self_send_is_bounded_by_the_hop_budget(app, auth_headers) -> No
 
     await _sync_agents(app, auth_headers, "looper")
     await _open_conversation("looper", "conv-loop")
+    await _open_conversation("looper", "conv-loop-other")
 
     async with async_session_factory() as session:
         hop_budget, _cap = await project_limits(session, "proj-test")
@@ -423,7 +424,7 @@ async def test_a_self_send_is_bounded_by_the_hop_budget(app, auth_headers) -> No
     response = await app.post(
         "/api/v1/agent-actions/messages",
         headers={"Authorization": f"Bearer {token}"},
-        json={"recipient": "looper", "content": CONTENT, "conversation_id": "conv-loop"},
+        json={"recipient": "looper", "content": CONTENT, "conversation_id": "conv-loop-other"},
     )
     # The send is accepted and the entry is durable -- refusal happens at delivery, not at send.
     assert response.status_code == 201, response.text
