@@ -34835,7 +34835,12 @@ change a capability requirement came from.
 
 ## F528 (C) -- `close-exploration` and `propose` answer 200 for a document whose content was refused
 
-**Status:** open. Filed 2026-10-07 (same authoring). A `PUT .../content` refused with 422
+**Status:** fixed (Tier 0, 2026-10-08 night), pending CI. `propose` keeps its 200 -- "not yet" is one shape, the `blocking` list (F113,
+`a-document-moves-forward-only-through-its-checks`; the UI and ~15 drive scripts read it) -- and now carries `proposed: true|false`, true only when the phase is
+`proposed`. `close-exploration`'s 200 is truthful and unchanged: it records the operator's judgement that exploration is over (`explore_closed: true`) and never
+claimed the content was usable; the mechanical half is `propose`'s to report. Driven on a throwaway Hub (:8043): refused PUT 422 -> close 200 -> propose 200
+`{phase: exploring, proposed: false}` with blockers. UI type not touched (the field is additive; a `hub/ui/src` edit would need a bundle commit that reaches :8000 live).
+Was: open. Filed 2026-10-07 (same authoring). A `PUT .../content` refused with 422
 (`modal must be one of MUST, SHOULD, MAY, SHALL` -- `MUST NOT` is not a modal) left the document
 empty; the script's following `close-exploration` and `propose` both answered **200**, `propose`
 with `phase: exploring` and a `blocking` list. A caller reading the status code believes it

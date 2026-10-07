@@ -317,8 +317,45 @@ async def test_proposing_reports_every_blocking_check_instead_of_transitioning(
     assert response.status_code == 200
     body = response.json()
     assert body["phase"] == "exploring", "a blocked proposal must not transition"
+    assert body["proposed"] is False, "F528: a refused proposal says so in a field, not by omission"
     codes = {item["code"] for item in body["blocking"]}
     assert {"non_goals_empty", "requirement_without_task"} <= codes
+
+
+@pytest.mark.asyncio
+async def test_proposing_a_document_whose_content_was_refused_says_it_did_not_propose(
+    app, auth_headers
+):
+    """F528: a content write refused with 422 left the document without a usable payload, and the
+    script's next `close-exploration` and `propose` both answered 200 -- a caller reading only the
+    status code believed it had proposed. The 200 stays (`blocking` is the one shape for "not yet",
+    F113); the body must carry the answer in a field a client checks."""
+    await _create(app, auth_headers)
+    refused = await app.put(
+        f"{BASE}/documents/{PATH}/content",
+        json={
+            "document": _document(
+                requirements=[
+                    {"key": "alpha", "statement": "It must not fail", "modal": "MUST NOT"}
+                ]
+            )
+        },
+        headers=auth_headers,
+    )
+    assert refused.status_code == 422, refused.text
+    closed = await app.post(
+        f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
+    )
+    assert closed.status_code == 200
+    assert closed.json()["explore_closed"] is True
+
+    response = await app.post(
+        f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
+    )
+
+    body = response.json()
+    assert body["proposed"] is False
+    assert body["phase"] != "proposed"
 
 
 @pytest.mark.asyncio
@@ -353,6 +390,7 @@ async def test_the_full_operator_path_reaches_approved(app, auth_headers, run_he
     )
     assert proposed.json()["blocking"] == []
     assert proposed.json()["phase"] == "proposed"
+    assert proposed.json()["proposed"] is True
 
     approved = await app.post(
         f"{BASE}/documents/phase",

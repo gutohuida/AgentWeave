@@ -1873,7 +1873,12 @@ async def propose_document(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Move a document to `proposed`, or report every check that refuses it."""
+    """Move a document to `proposed`, or report every check that refuses it.
+
+    "Not yet" is a 200 whose `blocking` list names what is missing (F113), so the status code
+    cannot say whether the document moved. `proposed` does, in one field (F528): true only when
+    the phase is now `proposed`.
+    """
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     document = await _require_document(session, project_id, path)
@@ -1893,11 +1898,11 @@ async def propose_document(
 
     await session.commit()
     if blocking:
-        return {**_document_view(document), "blocking": blocking}
+        return {**_document_view(document), "proposed": False, "blocking": blocking}
     await sse_manager.broadcast(
         project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
-    return {**_document_view(document), "blocking": []}
+    return {**_document_view(document), "proposed": True, "blocking": []}
 
 
 @router.post("/documents/phase")

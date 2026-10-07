@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4055151",
     "stop_at": "2026-10-08T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-07-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F528-impl",
-    "next_action": "CI gate first: `gh run list --branch autonomous/2026-10-07-daily` for the F464 and F463 pushes; if hub-test is red, fix it first. If green, build F528-impl (Tier 0): close-exploration and propose return 200 for refused content. Read the finding in scripts/drive/FINDINGS.md; test at the route seam asserting what the route returns when the function raises; drive on a throwaway Hub (port 8041/8042, temp DB; see testbed/f468/drive.py and testbed/f463/drive.py).",
+    "current": "F526-impl",
+    "next_action": "CI gate first: `gh run list --branch autonomous/2026-10-07-daily`; if hub-test is red, fix it first. If green, build F526-impl (Tier 0): agentweave-mcp refuses to start without HUB_URL (never fall back to :8000, never call :8000 to test). Read F526 in scripts/drive/FINDINGS.md; test at the seam, drive without any Hub on :8000. Then the F530-drive close-out item.",
     "queue": [
         {
             "id": "F530-impl",
@@ -42,9 +42,9 @@
         },
         {
             "id": "F528-impl",
-            "status": "open",
+            "status": "done",
             "title": "F528: close-exploration and propose return 200 for refused content",
-            "detail": "Tier 0; ask what the route returns when the function raises."
+            "detail": "Tier 0; ask what the route returns when the function raises. BUILT iteration 6: propose body carries proposed true/false (200 kept, F113); see FINDINGS F528."
         },
         {
             "id": "F526-impl",
