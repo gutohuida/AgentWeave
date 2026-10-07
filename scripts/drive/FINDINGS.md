@@ -33140,7 +33140,7 @@ patches `_git` to raise `TimeoutExpired` and asserts a refusal, not a 500, on ea
 
 ## F425 (B) — a read-only agent assigned a writing task writes into the operator's checkout
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B5 rounds (`spec-queue/tracks/B5.md` Final); re-checked in session. `takes_task_workspace`
+**Status:** fixed 2026-10-07 by `a-read-only-agent-holds-no-task-work` (Tier 1, authored and approved in the app on `:8010`, `spdoc-e7299e2e30ce`): one predicate (`launchability.is_read_only_agent`) at four doors -- the dispatch refuses a read-only agent's task-work turn before any workspace (409, request-level, the guarantee); task create and a PATCH outside a review status refuse it as assignee (422); its run's claim is refused (403); a flow's ordinary-work pick skips it (pool and job default), the reviewer ladder does not. Tests: `hub/tests/test_a_read_only_agent_holds_no_task_work.py` (7 of 10 failed on HEAD; 3 controls). Driven on `:8010` (`d1007_read_only_drive.py`, real Haiku): 1/6 before -- the turn started and wrote `NOTES.md` into the project's checkout -- 6/6 after. Reconciled into `run-task-binding` (`reconcile_f425.py`). Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B5 rounds (`spec-queue/tracks/B5.md` Final); re-checked in session. `takes_task_workspace`
 (`hub/hub/worktrees.py:763-773`) returns True only for a writing agent, so a `read_only` agent's turn
 on a task runs in the shared (operator's) checkout, and nothing snapshots a turn that is not isolated.
 Nothing in the app sets `read_only` today, so it is reachable through the API and `POST

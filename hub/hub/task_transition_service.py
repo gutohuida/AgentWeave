@@ -539,6 +539,7 @@ async def _guard_run_holds_the_task(
       assigned to another agent is refused with the remedy — leave it, or have the operator
       reassign it. An unassigned task claimed this way gets the claimer as its assignee, so the
       board says who is working it. A recorded takeover is the operator's to make, not a run's.
+      A read-only agent's run claims nothing (F425): it would work in the operator's checkout.
     * `-> completed` — **only the holder finishes.** `TRANSITIONS` makes `completed` reachable only
       from `in_progress`, so every legitimate completion has already passed through the claim above
       and is therefore bound. That is what makes this check safe to apply unconditionally rather
@@ -565,6 +566,12 @@ async def _guard_run_holds_the_task(
         return
 
     if to_status == "in_progress" and run.task_id is None:
+        # A read-only agent holds no task's work (F425), its own or anybody's. Imported here: the
+        # launch module reaches back into this one, also lazily.
+        from .launchability import is_read_only_agent, read_only_work_sentence
+
+        if await is_read_only_agent(task.project_id, run.agent, session):
+            raise RunNotBoundError(read_only_work_sentence(run.agent, task.id))
         if task.assignee and task.assignee != run.agent:
             raise RunNotBoundError(
                 f"This run cannot claim task {task.id}: it is assigned to {task.assignee!r}, and an "

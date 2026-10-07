@@ -41,6 +41,7 @@ from ...db.models import (
     TaskRequirementLink,
     TaskRequirementReference,
 )
+from ...launchability import is_read_only_agent, read_only_work_sentence
 from ...requirement_evidence import REJECTED as EVIDENCE_REJECTED
 from ...requirement_gate import evaluate as evaluate_approval_gate
 from ...requirement_links import LinkRefusedError, absorb_free_text, link, resolve_identifiers
@@ -74,6 +75,7 @@ from ...task_transition_service import (
 from ...task_transitions import (
     ACTOR_OPERATOR,
     STATUS_BLOCKED,
+    WITH_REVIEWER_STATUSES,
     Actor,
     allowed_map_for,
     allowed_targets,
@@ -743,6 +745,10 @@ async def check_task_create(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Task id '{body.id}' already exists",
         )
+    # A read-only agent holds no task's work (F425). The dispatch refuses its turn regardless; this
+    # says so where the task is being made, rather than at a turn nobody here started.
+    if body.assignee and await is_read_only_agent(project_id, body.assignee, session):
+        raise HTTPException(status_code=422, detail=read_only_work_sentence(body.assignee, body.id))
     return named
 
 
@@ -1478,6 +1484,17 @@ async def update_task_for_actor(
         # still leaves the holder untouched, which is the half of the old reading that was right:
         # a PATCH about the priority must not unassign anybody. `""` arrives here as `None` --
         # the schema normalises it -- so the column never grows a second spelling of "nobody".
+        #
+        # A read-only agent may hold a task only as its reviewer (F425): handing a task to one in
+        # the same PATCH that moves it to `under_review` is the review handover above, and stays.
+        if (
+            body.assignee
+            and (body.status or task.status) not in WITH_REVIEWER_STATUSES
+            and await is_read_only_agent(project_id, body.assignee, session)
+        ):
+            raise HTTPException(
+                status_code=422, detail=read_only_work_sentence(body.assignee, task.id)
+            )
         task.assignee = body.assignee
     if body.status is not None:
         if body.status == STATUS_BLOCKED and not actor.is_operator:

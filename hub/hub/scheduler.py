@@ -38,6 +38,7 @@ from .db.models import (
     TaskTransition,
     fit_error_summary,
 )
+from .launchability import is_read_only_agent
 from .loop_ending import QUEUE_DRAINED_REASON, end_loop
 from .provider_allowance import agents_held, hold_busy_reason, hold_coalesce_reason, provider_hold
 from .run_task_binding import (
@@ -1754,6 +1755,15 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     # narrows that pool to empty for a documentless loop (design D1, D2) — resumption is untouched
     # because it never reads `free` at all.
     free = await _agents_a_loop_may_staff(session, loop)
+    # Agents that hold no task's work (F425): the dispatch refuses a read-only agent's work turn,
+    # so staffing one would stage a step that cannot start. Narrows only fresh work below -- the
+    # pool and the job's own default -- never the reviewer ladder, because reviewing is what a
+    # read-only agent is for.
+    read_only = {
+        name
+        for name in {*free, default_agent}
+        if name and await is_read_only_agent(loop.project_id, name, session)
+    }
     running = await _agents_running_a_turn(session, loop.project_id)
     # The per-task counterpart of `running`, for design D8's refusal. Asked once before the walk
     # for the same two reasons the line above is: a wide firing asks it about several candidates,
@@ -2015,6 +2025,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                     continue
             elif (
                 not default_taken
+                and default_agent not in read_only
                 and default_agent not in running
                 and default_agent not in held_agents
                 and default_agent not in taken
@@ -2032,7 +2043,9 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                 agent = default_agent
                 default_taken = True
             else:
-                candidate = next((name for name in free if name not in taken), None)
+                candidate = next(
+                    (name for name in free if name not in taken and name not in read_only), None
+                )
                 if candidate is None:
                     # Width is bounded by available agents (design D5) and this is that bound
                     # being reached, not a fault. **For a documentless loop `free` is always empty**

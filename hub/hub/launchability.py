@@ -679,3 +679,29 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
             meta["runner"] = RUNNER_UNBOUND
 
     return meta
+
+
+async def is_read_only_agent(project_id: str, agent: str, db: AsyncSession) -> bool:
+    """Whether *agent* is declared `read_only`, and so holds no task's work (F425).
+
+    `read_only` is a workspace declaration, not a sandbox: such an agent gets no task checkout
+    (`worktrees.takes_task_workspace`), so a turn of it bound to a task's work ran in the project
+    directory -- the operator's own checkout -- unsnapshotted, and nothing stopped it writing. One
+    predicate, asked by every door that could give it work: the dispatch (the guarantee), task
+    create and PATCH, a run's claim, and a flow's ordinary-work pick. Reviews are not work here; a
+    review turn runs in its detached review checkout, which is the declaration's intended use.
+    """
+    from . import worktrees
+
+    return not worktrees.is_writing_agent(await get_agent_config(project_id, agent, db))
+
+
+def read_only_work_sentence(agent: str, task_id: Optional[str]) -> str:
+    """The one refusal every F425 door gives, so the operator meets the same remedy everywhere."""
+    subject = f"task {task_id}" if task_id else "a task"
+    return (
+        f"{agent} is read-only, so it cannot hold the work of {subject}: a read-only agent gets no "
+        f"checkout of its own, and its turn would write into the project directory. Give the task "
+        f"to a writing agent, or clear read_only on {agent} first. A read-only agent can still "
+        f"review."
+    )

@@ -85,6 +85,7 @@ from ...launchability import (
     latest_mcp_test,
     plane_surface_summary,
     probe_agent,
+    read_only_work_sentence,
     record_harness_mcp_status,
     resolve_agent_env,
     spec_turn_notice,
@@ -1062,6 +1063,18 @@ async def _trigger_agent_directly(
     # argument alone would be gone by the time the turn exists.
     if not review_task_id:
         review_task_id = await _review_task_from_entries(session, queue_entry_ids)
+    # A read-only agent holds no task's work (F425). Its turn bound to a task would get no checkout
+    # of its own (`takes_task_workspace` asks `is_writing_agent`), so it would run, unsnapshotted,
+    # in the project directory. This is the one place an assignment becomes writing, whichever of
+    # the doors assigned it, so it is the guarantee; the doors refuse earlier only to be legible.
+    # Above every workspace decision, and a review turn is exempt: reviewing is the intended use.
+    if binding.task is not None and not review_task_id and not worktrees.is_writing_agent(config):
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            read_only_work_sentence(agent, binding.task.id),
+            # About what was asked: no repair to the environment makes this turn safe to start.
+            request_level=True,
+        )
     review_context = None
     if review_task_id:
         if work_dir:

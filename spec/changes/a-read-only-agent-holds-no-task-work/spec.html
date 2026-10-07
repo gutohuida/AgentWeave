@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A read-only agent does not hold a task&#x27;s work</title>
+<meta name="aw-spec-kind" content="change-spec">
+<meta name="aw-spec-status" content="approved">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>A read-only agent does not hold a task&#x27;s work</h1>
+<p class="aw-meta"><span class="aw-chip">change-spec</span><span class="aw-chip aw-chip-phase-done">approved</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">3</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">3</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">6</span> criteria<span class="aw-summary-sep">·</span><span class="aw-count">3</span> tasks</p>
+<section id="summary"><h2>Summary</h2><p>An agent declared read_only is never given a task&#x27;s work: its work turn bound to a task is refused before any workspace is resolved, the operator cannot assign it a task, a run of it cannot claim one, and a flow does not select it for ordinary work. It stays a reviewer. Today such a turn runs in the operator&#x27;s own checkout and nothing snapshots it (F425).</p></section><section id="problem"><h2>Problem</h2><p>worktrees.takes_task_workspace returns True only for a writing agent, so a read_only agent&#x27;s task-bound turn resolves to the project directory -- the operator&#x27;s checkout -- and, not being isolated, is never snapshotted. read_only drives no runner flag or sandbox, so the agent can still write. Nothing in the app sets read_only, but POST /agents/register and the agent config API do.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>The dispatch of a turn bound to a task&#x27;s work (task_id, not review_task_id) for a read_only agent</li><li>The operator&#x27;s task create and PATCH naming a read_only agent as assignee</li><li>An agent run&#x27;s claim (-&gt; in_progress) by a read_only agent</li><li>A flow&#x27;s selection of an agent for ordinary work</li></ul><h3>Non-goals</h3><ul><li>Review turns: a read_only agent reviewing in its detached review checkout is the intended use</li><li>Unassigning tasks that already name a read_only agent: they stay as they are, visible; their turns are refused with the remedy</li><li>Making read_only a sandbox: it stays a workspace declaration</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 3</span><p><span class="aw-modal aw-modal-must">MUST</span> The system MUST refuse, before resolving any workspace, a turn for an agent declared read_only whose delivered input binds it to a task&#x27;s work, naming the agent, the task and the remedy (assign a writing agent, or clear read_only), and leaving nothing staged.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The harm is the turn itself; this is the one chokepoint every assigning door leads to.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 3</span><p><span class="aw-modal aw-modal-must">MUST</span> The operator&#x27;s task create and update MUST refuse to name an agent declared read_only as a task&#x27;s assignee, and an agent run of such an agent MUST NOT claim a task.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Refused where the operator is looking, rather than later at a turn they did not start.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 3</span><p><span class="aw-modal aw-modal-must">MUST</span> A flow MUST NOT select an agent declared read_only for ordinary work, and MUST still consider it as a reviewer.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Otherwise the flow stages work its own dispatch then refuses, and stalls.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a task assigned (grandfathered) to read_only agent &#x27;reader&#x27;</td><td>the operator triggers reader with that task</td><td>409 naming reader, the task and the remedy; no run, no workspace, nothing written to the project directory</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a completed task with evidence naming a commit</td><td>the operator dispatches reader&#x27;s review of it</td><td>the review starts in reader&#x27;s review checkout as today</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>on the trial Hub, a read_only agent registered through the API and a task assigned to it before this change</td><td>the operator triggers it on the task</td><td>refused with the remedy and the project directory&#x27;s git status unchanged; on the pre-fix Hub the turn runs in the project directory</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>reader is read_only</td><td>the operator creates a task with assignee reader, or PATCHes one to reader</td><td>422 naming reader as read-only; nothing created or changed</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>an unassigned task</td><td>a run of reader moves it to in_progress</td><td>403; the task is unchanged</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a flow whose roster has reader and writer free and one pending task and one completed task</td><td>it fires</td><td>the pending task goes to writer, never reader; reader may be selected as the completed task&#x27;s reviewer</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>Tier 1. The finding&#x27;s suggestion was to refuse at assignment in one service function; reading the code, six places write an assignee (task create, PATCH, bind_run_to_task, enter_selected_task, the divergence escalation, the revision return) and only one place turns an assignment into writing -- the dispatch&#x27;s workspace resolution. So the turn refusal is the guarantee and the assignment refusals are the early, legible feedback at the doors the operator and agents use. Tasks already assigned to a read_only agent are not rewritten (no migration); their turns are refused with the remedy. The divergence escalation and revision return name agents that already wrote, so they are not doors for this.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>worktrees.takes_task_workspace: task_id is not None and is_writing_agent(config) and is_git_repo(repo_root)</li><li>agent_trigger resolves the workspace via resolve_turn_workspace after takes_task_workspace (~1233-1275)</li><li>read_only is a key in the agent&#x27;s config (worktrees.is_writing_agent), set only through the API</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>one-off</p></section><section id="tasks"><h2>Tasks</h2><ul class="aw-task-list"><li class="aw-task"><strong>Failing tests for the read-only boundary</strong> — hub/tests/test_a_read_only_agent_holds_no_task_work.py: refused-turn, review-ok, create-refused, claim-refused, flow.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-2">FR-2</a><a class="aw-chip-ref" href="#FR-3">FR-3</a></span></li><li class="aw-task"><strong>One predicate, four doors</strong> — worktrees.is_writing_agent is the predicate. agent_trigger: refuse a work-bound turn for a non-writing agent ahead of the workspace (beside takes_task_workspace&#x27;s use). tasks.py create/PATCH: refuse a read_only assignee. task_transition_service._guard_run_holds_the_task: refuse a read_only claimant. scheduler: exclude non-writing agents from the ordinary-work pool, not from resolve_reviewer.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-2">FR-2</a><a class="aw-chip-ref" href="#FR-3">FR-3</a></span></li><li class="aw-task"><strong>Acceptance drive on :8010</strong> — scripts/drive/d1007_read_only_drive.py, failing on the pre-fix Hub.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a></span></li></ul></section><section id="delivery"><h2>Delivery</h2><p>No flow. The tasks go on the board and are started by hand.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "change-spec",
+  "title": "A read-only agent does not hold a task's work",
+  "summary": "An agent declared read_only is never given a task's work: its work turn bound to a task is refused before any workspace is resolved, the operator cannot assign it a task, a run of it cannot claim one, and a flow does not select it for ordinary work. It stays a reviewer. Today such a turn runs in the operator's own checkout and nothing snapshots it (F425).",
+  "problem": "worktrees.takes_task_workspace returns True only for a writing agent, so a read_only agent's task-bound turn resolves to the project directory -- the operator's checkout -- and, not being isolated, is never snapshotted. read_only drives no runner flag or sandbox, so the agent can still write. Nothing in the app sets read_only, but POST /agents/register and the agent config API do.",
+  "scope": {
+    "in_scope": [
+      "The dispatch of a turn bound to a task's work (task_id, not review_task_id) for a read_only agent",
+      "The operator's task create and PATCH naming a read_only agent as assignee",
+      "An agent run's claim (-> in_progress) by a read_only agent",
+      "A flow's selection of an agent for ordinary work"
+    ],
+    "non_goals": [
+      "Review turns: a read_only agent reviewing in its detached review checkout is the intended use",
+      "Unassigning tasks that already name a read_only agent: they stay as they are, visible; their turns are refused with the remedy",
+      "Making read_only a sandbox: it stays a workspace declaration"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "turn-refused",
+      "statement": "The system MUST refuse, before resolving any workspace, a turn for an agent declared read_only whose delivered input binds it to a task's work, naming the agent, the task and the remedy (assign a writing agent, or clear read_only), and leaving nothing staged.",
+      "modal": "MUST",
+      "rationale": "The harm is the turn itself; this is the one chokepoint every assigning door leads to.",
+      "party": null
+    },
+    {
+      "key": "assignment-refused",
+      "statement": "The operator's task create and update MUST refuse to name an agent declared read_only as a task's assignee, and an agent run of such an agent MUST NOT claim a task.",
+      "modal": "MUST",
+      "rationale": "Refused where the operator is looking, rather than later at a turn they did not start.",
+      "party": null
+    },
+    {
+      "key": "flow-excludes",
+      "statement": "A flow MUST NOT select an agent declared read_only for ordinary work, and MUST still consider it as a reviewer.",
+      "modal": "MUST",
+      "rationale": "Otherwise the flow stages work its own dispatch then refuses, and stalls.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "refused-turn",
+      "requirement": "turn-refused",
+      "given": "a task assigned (grandfathered) to read_only agent 'reader'",
+      "when": "the operator triggers reader with that task",
+      "then": "409 naming reader, the task and the remedy; no run, no workspace, nothing written to the project directory"
+    },
+    {
+      "key": "review-ok",
+      "requirement": "turn-refused",
+      "given": "a completed task with evidence naming a commit",
+      "when": "the operator dispatches reader's review of it",
+      "then": "the review starts in reader's review checkout as today"
+    },
+    {
+      "key": "create-refused",
+      "requirement": "assignment-refused",
+      "given": "reader is read_only",
+      "when": "the operator creates a task with assignee reader, or PATCHes one to reader",
+      "then": "422 naming reader as read-only; nothing created or changed"
+    },
+    {
+      "key": "claim-refused",
+      "requirement": "assignment-refused",
+      "given": "an unassigned task",
+      "when": "a run of reader moves it to in_progress",
+      "then": "403; the task is unchanged"
+    },
+    {
+      "key": "flow",
+      "requirement": "flow-excludes",
+      "given": "a flow whose roster has reader and writer free and one pending task and one completed task",
+      "when": "it fires",
+      "then": "the pending task goes to writer, never reader; reader may be selected as the completed task's reviewer"
+    },
+    {
+      "key": "drive",
+      "requirement": "turn-refused",
+      "given": "on the trial Hub, a read_only agent registered through the API and a task assigned to it before this change",
+      "when": "the operator triggers it on the task",
+      "then": "refused with the remedy and the project directory's git status unchanged; on the pre-fix Hub the turn runs in the project directory"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "tests",
+      "title": "Failing tests for the read-only boundary",
+      "description": "hub/tests/test_a_read_only_agent_holds_no_task_work.py: refused-turn, review-ok, create-refused, claim-refused, flow.",
+      "requirements": [
+        "turn-refused",
+        "assignment-refused",
+        "flow-excludes"
+      ],
+      "depends_on": [],
+      "files": [
+        "hub/tests/test_a_read_only_agent_holds_no_task_work.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "build",
+      "title": "One predicate, four doors",
+      "description": "worktrees.is_writing_agent is the predicate. agent_trigger: refuse a work-bound turn for a non-writing agent ahead of the workspace (beside takes_task_workspace's use). tasks.py create/PATCH: refuse a read_only assignee. task_transition_service._guard_run_holds_the_task: refuse a read_only claimant. scheduler: exclude non-writing agents from the ordinary-work pool, not from resolve_reviewer.",
+      "requirements": [
+        "turn-refused",
+        "assignment-refused",
+        "flow-excludes"
+      ],
+      "depends_on": [
+        "tests"
+      ],
+      "files": [
+        "hub/hub/api/v1/agent_trigger.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/scheduler.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "drive",
+      "title": "Acceptance drive on :8010",
+      "description": "scripts/drive/d1007_read_only_drive.py, failing on the pre-fix Hub.",
+      "requirements": [
+        "turn-refused"
+      ],
+      "depends_on": [
+        "build"
+      ],
+      "files": [
+        "scripts/drive/d1007_read_only_drive.py"
+      ],
+      "from": null,
+      "reviewer": null
+    }
+  ],
+  "algorithms": [],
+  "design": "Tier 1. The finding's suggestion was to refuse at assignment in one service function; reading the code, six places write an assignee (task create, PATCH, bind_run_to_task, enter_selected_task, the divergence escalation, the revision return) and only one place turns an assignment into writing -- the dispatch's workspace resolution. So the turn refusal is the guarantee and the assignment refusals are the early, legible feedback at the doors the operator and agents use. Tasks already assigned to a read_only agent are not rewritten (no migration); their turns are refused with the remedy. The divergence escalation and revision return name agents that already wrote, so they are not doors for this.",
+  "evidence": {
+    "checked": [
+      "worktrees.takes_task_workspace: task_id is not None and is_writing_agent(config) and is_git_repo(repo_root)",
+      "agent_trigger resolves the workspace via resolve_turn_workspace after takes_task_workspace (~1233-1275)",
+      "read_only is a key in the agent's config (worktrees.is_writing_agent), set only through the API"
+    ],
+    "limits": []
+  },
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "delivery": {
+    "mode": "none",
+    "agent": null,
+    "stop_when_queue_empties": false,
+    "stop_at": null,
+    "cron": "*/5 * * * *"
+  },
+  "aw_identity": {
+    "requirements": {
+      "turn-refused": "FR-1",
+      "assignment-refused": "FR-2",
+      "flow-excludes": "FR-3"
+    },
+    "high_water": 3,
+    "retired": {},
+    "digests": {
+      "FR-1": "3c268eee128b8510fb3c785e5ccde4e48be7ab55b6231c013af866b475a3972e",
+      "FR-2": "b07ee27dec6f759bc5c57333ddc8e8364f8e2f998be52dc7aaba2c462b025c1c",
+      "FR-3": "10c32c812b8ca7291d93d4e6c79c18138c1de54173a1819e5458258e3698ec5b"
+    }
+  }
+}
+</script>
+</body>
+</html>
