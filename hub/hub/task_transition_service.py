@@ -533,6 +533,12 @@ async def _guard_run_holds_the_task(
       keeps the charter's "call `list_tasks` to see what is waiting" a real behaviour rather than a
       dead end. A run already holding a *different* task is refused, which is the existing
       `run-task-binding` invariant that a run carries at most one binding.
+
+      It claims only work that is its agent's or nobody's (F450, found live 2026-10-07: Haiku
+      beta, holding nothing, claimed alpha's assigned task and took it to `completed`). A task
+      assigned to another agent is refused with the remedy — leave it, or have the operator
+      reassign it. An unassigned task claimed this way gets the claimer as its assignee, so the
+      board says who is working it. A recorded takeover is the operator's to make, not a run's.
     * `-> completed` — **only the holder finishes.** `TRANSITIONS` makes `completed` reachable only
       from `in_progress`, so every legitimate completion has already passed through the claim above
       and is therefore bound. That is what makes this check safe to apply unconditionally rather
@@ -559,7 +565,15 @@ async def _guard_run_holds_the_task(
         return
 
     if to_status == "in_progress" and run.task_id is None:
+        if task.assignee and task.assignee != run.agent:
+            raise RunNotBoundError(
+                f"This run cannot claim task {task.id}: it is assigned to {task.assignee!r}, and an "
+                f"agent claims only the tasks assigned to it or to nobody. Leave it to "
+                f"{task.assignee!r}; the operator can reassign it if it should be yours."
+            )
         run.task_id = task.id
+        if not task.assignee:
+            task.assignee = run.agent
         return
 
     held = (

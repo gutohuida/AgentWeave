@@ -492,8 +492,12 @@ async def test_a_reviewer_approves_from_inside_its_own_review_turn(
         assert moved.status_code == 200, moved.text
     end_the_turn(turn)
 
+    # The claim made builder the holder (F450), so the operator hands the review to the reviewer
+    # in the same move; naming nobody would name the author as its own reviewer.
     entered = await app.patch(
-        f"{TASKS}/{task}", json={"status": "under_review"}, headers=auth_headers
+        f"{TASKS}/{task}",
+        json={"status": "under_review", "assignee": "reviewer"},
+        headers=auth_headers,
     )
     assert entered.status_code == 200, entered.text
 

@@ -120,7 +120,8 @@ async def test_agent_task_crud_retains_create_and_latest_update_runs(app):
     created = await app.post(
         "/api/v1/agent-actions/tasks",
         headers=creator_headers,
-        json={"title": "Shared work", "assignee": "worker", "priority": "high"},
+        # Assigned to the updater: since F450 a run claims only its own agent's or nobody's task.
+        json={"title": "Shared work", "assignee": "updater", "priority": "high"},
     )
     assert created.status_code == 201
     task_id = created.json()["id"]

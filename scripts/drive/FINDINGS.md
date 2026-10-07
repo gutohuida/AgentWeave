@@ -33352,7 +33352,7 @@ Nineteen coverage rows driven by five parallel operators plus row 19 by the orch
 
 ## F450 (B) — an agent can claim and finish a task assigned to a different agent; `assignee` is not an authorization boundary
 
-**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 7.
+**Status:** fixed 2026-10-07 by `a-run-claims-only-its-agents-or-nobodys-work` (Tier 2, authored and approved in the app on `:8010`, `spdoc-02d1259eea94`): `_guard_run_holds_the_task` refuses an unbound run's claim of a task assigned to another agent (403 naming the assignee and the operator's remedy), and a claim of an unassigned task makes the claimer its assignee. Tests: `hub/tests/test_a_run_claims_only_its_agents_or_nobodys_work.py` (2 of 5 failed on HEAD; 3 controls). Driven on `:8010` (`d1007_claim_boundary_drive.py`, real Haiku beta): 0/3 before (beta took alpha's task to completed), 3/3 after. Reconciled into `run-task-binding` (`reconcile_f450.py`). Was: open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 7.
 **Source:** drive
 **Theme:** Task ledger
 
