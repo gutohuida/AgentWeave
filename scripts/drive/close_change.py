@@ -17,6 +17,7 @@ from aw import P, api  # noqa: E402
 
 TESTS = "hub/tests/test_a_decided_task_withdraws_its_waiting_reviews.py"
 CLAIM_TESTS = "hub/tests/test_a_run_claims_only_its_agents_or_nobodys_work.py"
+READ_ONLY_TESTS = "hub/tests/test_a_read_only_agent_holds_no_task_work.py"
 
 CHANGES = {
     "f440": {
@@ -55,6 +56,25 @@ CHANGES = {
             ("FR-3", "task-e13de03d6ec0", "test_result", CLAIM_TESTS,
              "Own-task claim, bound run and operator move behave as before (3 control tests), and "
              "test_run_task_binding.py stays green."),
+        ],
+    },
+    "f425": {
+        "document": "spec/changes/a-read-only-agent-holds-no-task-work/spec.html",
+        "tasks": ["task-e12f21e11f3b", "task-e1bf77c9375a", "task-707ba7cd531f"],
+        "evidence": [
+            ("FR-1", "task-e1bf77c9375a", "test_result", READ_ONLY_TESTS,
+             "A read-only agent's task-work turn is refused 409 before any workspace, naming the "
+             "agent, task and remedy; no run; a review turn and a writing agent's turn are unchanged."),
+            ("FR-1", "task-707ba7cd531f", "manual_observation",
+             "scripts/drive/d1007_read_only_drive.py",
+             "Driven on :8010 with real Haiku: 1/6 before (the turn wrote NOTES.md into the project "
+             "checkout), 6/6 after."),
+            ("FR-2", "task-e1bf77c9375a", "test_result", READ_ONLY_TESTS,
+             "Create and PATCH naming a read-only assignee answer 422 (the under_review handover "
+             "stays allowed); its run's claim answers 403; nothing changes."),
+            ("FR-3", "task-e1bf77c9375a", "test_result", READ_ONLY_TESTS,
+             "A flow gives the pending task to the writing agent, both when the read-only agent is "
+             "free in the pool and when it is the job's own agent."),
         ],
     },
 }
