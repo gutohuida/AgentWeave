@@ -25,6 +25,12 @@ not free for a cycle branch tonight.
 
 NOTHING TONIGHT
 
+Re-approved in session after the fold-ins of `09f6a49` (built interactively, not by the window):
+
+- APPROVED  a-task-checkout-catches-up-with-its-approved-prerequisites   B1 (F158). Q-F158 (B) with D2; the refusal names prerequisite, commit, checkout and merge command; timeout aborts; workspace-isolation delta. Tier 2.
+- APPROVED  drift-watches-the-files-its-evidence-is-about   B6 (F217, F427, F432). Rules in order, locator tokens against the tree, legacy footprints backfilled at Scan for drift, the requirement-traceability delta. Tier 2: migration; the first scan after `:8000`'s restart rewrites up to 46 footprints.
+- APPROVED  a-flow-stages-its-review-in-the-dispatch   B1 (F327, F437). As one change (not split). An author holder is replaced only where it is not attending; the governance delta. Tier 2.
+
 ---
 
 ## 2026-10-06
