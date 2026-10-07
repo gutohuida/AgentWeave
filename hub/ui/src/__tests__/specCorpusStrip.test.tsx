@@ -193,6 +193,34 @@ describe('the corpus strip', () => {
     expect(result).toContain('discovery_truncated — spec/')
   })
 
+  it('counts documents already tracked and agreeing, and lists only the rest', () => {
+    state.answers.adoptAll.push({
+      ok: {
+        documents: {
+          'spec/a.html': { adopted: false, path: 'spec/a.html', code: 'document_exists', message: 'already tracked', differences: [] },
+          'spec/b.html': {
+            adopted: false,
+            path: 'spec/b.html',
+            code: 'document_exists',
+            message: 'already tracked, and it disagrees',
+            differences: [{ field: 'title', file: 'B', row: 'Bee' }],
+          },
+          'spec/c.html': { adopted: false, path: 'spec/c.html', code: 'payload_absent', message: 'no payload block' },
+        },
+        adopted: [],
+        skipped: ['spec/a.html', 'spec/b.html', 'spec/c.html'],
+        diagnostics: [],
+      },
+    })
+    strip()
+    fireEvent.click(screen.getByTestId('spec-corpus-adopt-all'))
+    const text = screen.getByTestId('spec-corpus-adopt-result').textContent ?? ''
+    expect(text).toContain('Adopted 0; 1 already tracked; skipped 2.')
+    expect(text).not.toContain('spec/a.html')
+    expect(text).toContain('spec/b.html: already tracked, and it disagrees')
+    expect(text).toContain('spec/c.html: no payload block')
+  })
+
   it('a rebuild after adopting clears "rebuild the index to file them"', () => {
     state.answers.adoptAll.push({
       ok: { documents: {}, adopted: ['spec/loose.html'], skipped: [], diagnostics: [] },

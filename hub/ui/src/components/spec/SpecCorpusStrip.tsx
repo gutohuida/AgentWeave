@@ -93,6 +93,14 @@ export function SpecCorpusStrip({ specList, adoptedSinceRebuild = false, onRebui
   const otherDiagnostics = diagnostics.filter(
     (d) => !HOME_CODES.has(d.code) && d.code !== 'index_write_failed',
   )
+  // In a sweep, a document already tracked whose record agrees with its file is not news: counted,
+  // not listed (Phase 3 drive on the real corpus listed 43 such lines). One that disagrees, or was
+  // refused for any other reason, is still listed with the Hub's sentence.
+  const agreeing = (adopted?.skipped ?? []).filter((path) => {
+    const outcome = adopted?.documents[path]
+    return outcome?.code === 'document_exists' && !(outcome.differences ?? []).length
+  })
+  const listedSkips = (adopted?.skipped ?? []).filter((path) => !agreeing.includes(path))
   const rebuildPrimary = !valid || adoptedSinceRebuild || askHome || !!writeFailed
   const busy = reindex.isPending || adoptAll.isPending
 
@@ -158,10 +166,11 @@ export function SpecCorpusStrip({ specList, adoptedSinceRebuild = false, onRebui
         <div data-testid="spec-corpus-adopt-result" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <p style={lineStyle}>
             Adopted {adopted.adopted.length}
-            {adopted.skipped.length > 0 ? `, skipped ${adopted.skipped.length}` : ''}.
+            {agreeing.length > 0 ? `; ${agreeing.length} already tracked` : ''}
+            {listedSkips.length > 0 ? `; skipped ${listedSkips.length}` : ''}.
             {adopted.adopted.length > 0 ? ' Rebuild the index to file them.' : ''}
           </p>
-          {adopted.skipped.map((path) => (
+          {listedSkips.map((path) => (
             <p key={path} style={quietStyle}>
               {path}: {adopted.documents[path]?.message ?? 'not adopted'}
             </p>
