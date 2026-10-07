@@ -19,11 +19,19 @@ Newest day first. Days below the newest are history and are not read.
 
 ## 2026-10-07
 
-Written in an interactive session with the operator present. The spec-flow plan (operator-approved
-2026-10-07) is being built interactively in the repository root, change by change, so the root is
-not free for a cycle branch tonight.
+Written in an interactive session with the operator present. Rewritten ~22:50: the interactive
+work is committed and pushed (master `1bb8538`, F462 closed) and the root is free, so the window
+runs tonight. The operator picked these Tier-0 fixes (AskUserQuestion, 22:49); each finding
+already names its fix and its test. The three APPROVED changes below are already built.
 
-NOTHING TONIGHT
+APPROVED-FIXES: F468, F464, F463, F528, F526
+ORDER: F468, F464, F463, F528, F526
+
+- F468: the operator's 2026-09-30 answer stands -- `send_message` to the caller returns 400 naming
+  the reply, and no turn starts.
+- F526: refuse to start without `HUB_URL`; never fall back to `:8000`, and never call `:8000` to
+  test it.
+- F464 edits `hub/hub/mcp_server.py`: read `.claude/rules/` for it first.
 
 Re-approved in session after the fold-ins of `09f6a49` (built interactively, not by the window):
 
