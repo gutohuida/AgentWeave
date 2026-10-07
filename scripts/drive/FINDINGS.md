@@ -33580,7 +33580,7 @@ Fix: carry `restrict_spec_writes` on the RPC turn request and apply it in the ap
 
 ## F463 (C) — the provider quota hold picks the "newest" usage reading by wall clock, so a clock step back picks an old reading
 
-**Status:** open, filed 2026-09-28 from code. Found while applying the Opus review of `a-copilot-run-shows-its-credits` (review finding 3, `spec-queue/tracks/reviews/ghcp-s4-2026-09-28.md`), which fixed the same pattern in its own credit baseline.
+**Status:** fixed 2026-10-08 (night window, Tier 0). `provider_allowance._newest_informative` now orders by `turn_usage.rowid DESC` (insertion), `observed_at` stays display only; tests `test_the_later_inserted_reading_wins_when_the_clock_stepped_back` and `test_a_refusal_inserted_after_a_clock_step_back_holds` (both red before). Driven on a migrated throwaway DB through the real writer `record_turn_usage` with a 2h clock step back: before the fix `provider_hold` still held the agent after an allowed reading, after it returns None. Filed 2026-09-28 from code. Found while applying the Opus review of `a-copilot-run-shows-its-credits` (review finding 3, `spec-queue/tracks/reviews/ghcp-s4-2026-09-28.md`), which fixed the same pattern in its own credit baseline.
 
 `provider_allowance._newest_informative` orders `TurnUsage` by `observed_at DESC` (`hub/hub/provider_allowance.py:122-131`). `observed_at` is the Hub's wall clock at write time. After the clock steps back (NTP correction, DST misconfiguration, a VM restore), a newer reading sorts below an older one, so the Claude allowance hold and `last_refusal` can read a stale allowance: hold an agent that is no longer refused, or release one that is. The credits change orders its baseline by `rowid DESC`, as `api/v1/spec.py` already does.
 

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4055151",
     "stop_at": "2026-10-08T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-10-07-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F463-impl",
-    "next_action": "CI gate first: `gh run list --branch autonomous/2026-10-07-daily` for the F468 and F464 pushes (a second green push confirms F530). If hub-test is red, fix it first. If green, build F463-impl (Tier 0): provider_allowance._newest_informative orders TurnUsage by observed_at DESC (hub/hub/provider_allowance.py:122-131); order by insertion (rowid) instead; test: two readings, later-inserted carries earlier observed_at. Drive on a throwaway Hub (port 8041, temp DB; see testbed/f468/drive.py).",
+    "current": "F528-impl",
+    "next_action": "CI gate first: `gh run list --branch autonomous/2026-10-07-daily` for the F464 and F463 pushes; if hub-test is red, fix it first. If green, build F528-impl (Tier 0): close-exploration and propose return 200 for refused content. Read the finding in scripts/drive/FINDINGS.md; test at the route seam asserting what the route returns when the function raises; drive on a throwaway Hub (port 8041/8042, temp DB; see testbed/f468/drive.py and testbed/f463/drive.py).",
     "queue": [
         {
             "id": "F530-impl",
@@ -36,9 +36,9 @@
         },
         {
             "id": "F463-impl",
-            "status": "open",
+            "status": "done",
             "title": "F463: quota hold picks newest usage reading by wall clock",
-            "detail": "Tier 0; clock step back picks stale reading. Test at the seam, fix."
+            "detail": "Tier 0; clock step back picks stale reading. Test at the seam, fix. BUILT iteration 5; see FINDINGS F463."
         },
         {
             "id": "F528-impl",
