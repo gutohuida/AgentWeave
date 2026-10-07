@@ -34840,3 +34840,15 @@ empty; the script's following `close-exploration` and `propose` both answered **
 with `phase: exploring` and a `blocking` list. A caller reading the status code believes it
 proposed. A refused proposal should be a 4xx naming the blockers (or the 200 body should say
 `proposed: false` in a field a client checks).
+
+## F529 (C) -- operator evidence always pins the HEAD it was recorded at, never the commit that did the work
+
+**Status:** open. Filed 2026-10-07, closing F440, F450 and F425's change tasks on `:8010`
+(`scripts/drive/close_change.py`). All twelve operator evidence rows carry footprint commit
+`0300f0f` (HEAD at recording, a one-line script commit), not the commits that built each change
+(`49dedde`, `3212bee`, `546fa92`). `EvidenceRecord` (`hub/hub/api/v1/spec.py:451`) has no commit
+field, so the operator cannot say which commit demonstrates the requirement; recording late, as an
+operator closing work after the build always does, ties the evidence to an unrelated commit.
+Harmless for integration here (already in master), but drift and "what does this evidence
+describe" read the wrong commit. Suggested: an optional `commit` on the operator's record, checked
+reachable from the main branch, defaulting to HEAD as now.
