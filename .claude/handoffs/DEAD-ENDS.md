@@ -2118,3 +2118,6 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-10-07 (home) -- operator evidence footprints pin HEAD at recording time** (F529):
   `POST .../project/spec/evidence` has no commit field, so record it right after the build commit,
   not after later commits, if the footprint should name the work.
+- **2026-10-07 (home) -- CORRECTION to the gh entry above: `--branch master` is unreliable too.** It
+  showed today's runs once and September's runs four minutes later. Unfiltered
+  `gh run list --limit 8` and `gh run list --commit <full sha>` both showed the live runs; use those.
