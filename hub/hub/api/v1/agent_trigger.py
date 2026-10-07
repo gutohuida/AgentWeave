@@ -1728,6 +1728,9 @@ async def _trigger_agent_directly(
             # A run told the MCP form by declaration keeps being told it; D12's event says so.
             declared_mcp=hub_client == "mcp",
             told_access_path=described_path,
+            # The stream transports carry it in `cmd`; an RPC transport reads no argv, so the
+            # restriction has to arrive by its own parameter or it reaches nothing (F462).
+            restrict_spec_writes=bool(spec_document),
             cli=probe["cli"],
             prompt=prompt,
             yolo=yolo,
@@ -2640,6 +2643,7 @@ async def _execute_run(
     transport: Optional[StreamTransport | RpcTransport] = None,
     declared_mcp: bool = False,
     told_access_path: Optional[str] = None,
+    restrict_spec_writes: bool = False,
 ) -> None:
     """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE.
 
@@ -2715,6 +2719,7 @@ async def _execute_run(
             permission_mode=permission_mode,
             config_overrides=config_overrides,
             told_access_path=told_access_path,
+            restrict_spec_writes=restrict_spec_writes,
         )
         return
 

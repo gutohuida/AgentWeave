@@ -23,7 +23,7 @@ def main(name, payload_file):
     base = f"/projects/{P}/project"
     path = f"spec/changes/{name}/spec.html"
     code, doc = api("POST", f"{base}/documents", {"title": payload["title"], "kind": "change-spec", "path": path})
-    print("create", code, (doc.get("id") if isinstance(doc, dict) else doc)[:200] if doc else "")
+    print("create", code, str(doc.get("id") or doc.get("detail") if isinstance(doc, dict) else doc)[:200])
     code, res = api("PUT", f"{base}/documents/{path}/content", {"document": payload})
     print("write", code, json.dumps(res)[:400])
     if code != 200:

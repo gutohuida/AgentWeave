@@ -201,7 +201,9 @@ def _within(path: Optional[str], workspace: Optional[str]) -> bool:
     return os.path.normcase(shared) == os.path.normcase(root)
 
 
-def _thread_policy(*, yolo: bool, posture: Optional[str]) -> "tuple[str, str]":
+def _thread_policy(
+    *, yolo: bool, posture: Optional[str], restrict_spec_writes: bool = False
+) -> "tuple[str, str]":
     """The `sandbox` / `approvalPolicy` a thread starts under, for a given posture.
 
     This is what decides whether Codex asks at all. `decide_approval` only ever sees requests the
@@ -220,7 +222,15 @@ def _thread_policy(*, yolo: bool, posture: Optional[str]) -> "tuple[str, str]":
     setting that reconciles the legacy flag — so the same choice behaved one way from the agent
     dialog and the opposite way from the composer. `yolo` is now the older spelling of this
     posture rather than the only one that works.
+
+    A turn opened on a specification document (`restrict_spec_writes`, F4) starts `read-only` in
+    every posture, as `codex exec` does for it (F462). Its approval policy is never `never`: under
+    `never` Codex refuses an out-of-sandbox action silently instead of asking, and the one write
+    such a turn keeps -- the Hub's own arguments file -- has to be asked for to be accepted
+    (`decide_approval`). "Ask me" keeps `untrusted`.
     """
+    if restrict_spec_writes:
+        return "read-only", ("untrusted" if posture == OPERATOR_POSTURE else "on-request")
     if yolo and posture is None:
         return "danger-full-access", "never"
     if posture == OPERATOR_POSTURE:
@@ -259,6 +269,8 @@ def decide_approval(
     own_server_name: str,
     posture: Optional[str] = None,
     workspace: Optional[str] = None,
+    restrict_spec_writes: bool = False,
+    item: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Decide the Hub's answer to one server->client request.
 
@@ -271,6 +283,12 @@ def decide_approval(
     and the Hub's own registered server name — never either alone (implications.md §3): a
     request naming a different MCP server than the one the Hub installed must never be
     approved just because it *looks* like a tool call.
+
+    On a turn opened on a specification document (`restrict_spec_writes`, F462) a sandbox approval
+    is a request to leave a `read-only` sandbox, so it is not answered by the posture: the Hub's
+    own call is accepted, any other file change is declined with no card, and any other command
+    is declined except under "Ask me", whose operator still answers it. *item* is the thread item
+    the approval names, which is where a file change's paths are (F107).
     """
     if method == ELICITATION_METHOD:
         meta = params.get("_meta") or {}
@@ -279,6 +297,13 @@ def decide_approval(
         if is_tool_call and is_own_server:
             return {"action": "accept"}
         return {"action": "decline"}
+
+    if method in _SANDBOX_APPROVAL_METHODS and restrict_spec_writes:
+        if _is_hub_own_call(method, approval_subject(method, params, item), workspace):
+            return {"decision": "accept"}
+        if method == COMMAND_APPROVAL_METHOD and posture == OPERATOR_POSTURE:
+            return dict(ASK_OPERATOR)
+        return {"decision": "decline"}
 
     if method in _SANDBOX_APPROVAL_METHODS:
         # Command/file-change approvals are not tool-surface concerns (implications.md §3):
@@ -300,13 +325,44 @@ def decide_approval(
         return {"decision": "accept"} if yolo else {"decision": "decline"}
 
     if method == PERMISSIONS_APPROVAL_METHOD:
-        if yolo or posture == FULL_ACCESS_PERMISSION_MODE:
+        if (yolo or posture == FULL_ACCESS_PERMISSION_MODE) and not restrict_spec_writes:
             return {"permissions": dict(_YOLO_PERMISSIONS_GRANT)}
         return {"permissions": {}}
 
     # Unrecognised server->client request: deny-and-continue rather than hang or approve
     # something this Hub has never seen the shape of.
     return {"decision": "decline"}
+
+
+def _is_hub_own_call(method: str, subject: Dict[str, Any], workspace: Optional[str]) -> bool:
+    """A spec turn's one kept write (`a-run-reaches-the-hub-without-mcp` D16), by the rule Claude's
+    and Copilot's runs are judged by (`mcp_server._hub_own_call`): a command that is exactly one
+    `aw-tool` invocation, or a file change whose every path is a `.json` file in the calls root.
+
+    A file change naming no path is not one -- its item was not seen -- and Codex runs its shell
+    commands in the platform's shell, so that is the dialect the command is read in. Total: any
+    failure is False, which declines.
+    """
+    if not workspace:
+        return False
+    try:
+        # Function-local, as `copilot_acp` does: importing `mcp_server` builds its FastMCP instance.
+        from . import mcp_server
+
+        if method == COMMAND_APPROVAL_METHOD:
+            command = subject.get("command")
+            shell = "PowerShell" if os.name == "nt" else "Bash"
+            return isinstance(command, str) and bool(
+                mcp_server._hub_own_call(shell, {"command": command}, workspace=workspace)
+            )
+        paths = subject.get("paths") or []
+        return bool(paths) and all(
+            mcp_server._hub_own_call("Write", {"file_path": path}, workspace=workspace)
+            for path in paths
+        )
+    except Exception:  # noqa: BLE001 -- total: a failed check declines, it never raises
+        logger.warning("the Hub's own call check failed", exc_info=True)
+        return False
 
 
 def _codex_usage_sample_from_token_usage(
@@ -943,6 +999,7 @@ async def run_turn(
     on_refusal: "Optional[Callable[[str, Dict[str, Any]], Awaitable[None]]]" = None,
     told_access_path: Optional[str] = None,
     on_mcp_status: "Optional[Callable[[str], Awaitable[Any]]]" = None,
+    restrict_spec_writes: bool = False,
 ) -> TurnOutcome:
     """Drive one Codex turn over `app-server`: spawn, initialize, start-or-resume a thread,
     start a turn, answer every server request, map every item/usage notification to the
@@ -972,7 +1029,9 @@ async def run_turn(
         )
         await session.notify("initialized", {})
 
-        sandbox_mode, approval_policy = _thread_policy(yolo=yolo, posture=posture)
+        sandbox_mode, approval_policy = _thread_policy(
+            yolo=yolo, posture=posture, restrict_spec_writes=restrict_spec_writes
+        )
         thread_params: Dict[str, Any] = {
             "cwd": cwd,
             "sandbox": sandbox_mode,
@@ -1079,6 +1138,8 @@ async def run_turn(
                     own_server_name=own_server_name,
                     posture=posture,
                     workspace=workspace,
+                    restrict_spec_writes=restrict_spec_writes,
+                    item=items_by_id.get(str((msg.get("params") or {}).get("itemId") or "")),
                 )
                 asked_operator = decision == ASK_OPERATOR
                 if asked_operator:
