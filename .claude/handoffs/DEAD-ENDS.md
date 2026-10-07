@@ -109,8 +109,9 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   is not byte-identical: `git status` then shows a file the change never edited as modified (it was
   `agents.py`, mutated and restored by M12), and `file` reports *with CRLF line terminators*. Git
   normalises at commit, so nothing reaches history, but the tree lies about what changed. Write with
-  `write_text(..., newline="\n")` (or `write_bytes`). If it happens anyway: `git checkout -- <file>`
-  for a file with no real edit, `sed -i 's/\r$//' <file>` for one with.
+  `write_text(..., newline="\n")` (or `write_bytes`). If it happens anyway: `sed -i 's/\r$//' <file>`.
+  **`git checkout -- <file>` does not fix it** *(corrected 2026-10-07)*: under `eol=lf` git sees
+  the CRLF file as unchanged and skips the rewrite; `rm <file> && git checkout -- <file>` does.
 - **`py -3.11` cannot open a Git Bash `/tmp/...` path.** Use a Windows path.
 - **`py -3.11 -c "import hub.main"` from the repo root fails** with an ImportError — this repo's
   `hub/` directory shadows the installed `hub` package. See the Hub section.
