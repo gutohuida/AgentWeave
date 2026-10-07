@@ -20,6 +20,10 @@ interface SpecTreeProps {
   /** Row height and type scale. `dialog` is the Ctrl+K picker; `rail` is the navigation rail,
    *  which matches the density of the project tree it stands in for. */
   density?: 'dialog' | 'rail'
+  /** Something to offer beside a document's row, or null for none -- the browser's **Adopt** on a
+   *  document the Hub does not track (`the-corpus-is-indexed-arranged-and-adopted-from-the-app`
+   *  D3). A sibling of the row's button, never inside it. */
+  rowAction?: (node: SpecNode) => React.ReactNode
 }
 
 /**
@@ -33,7 +37,13 @@ interface SpecTreeProps {
  * Folders collapse, and the collapsed set is shared between both homes and persisted: a tree that
  * forgets what you folded away is a tree you fold away again every time.
  */
-export function SpecTree({ inventory, currentPath = null, onSelect, density = 'dialog' }: SpecTreeProps) {
+export function SpecTree({
+  inventory,
+  currentPath = null,
+  onSelect,
+  density = 'dialog',
+  rowAction,
+}: SpecTreeProps) {
   const rows = useMemo(() => buildPathTree(inventory.nodes), [inventory])
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed)
   const indent = density === 'rail' ? 12 : 14
@@ -137,6 +147,9 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
             {row.label}
           </button>
         ) : (
+          withAction(
+            row.node && rowAction ? rowAction(row.node) : null,
+            row.path,
           <button
             key={`doc:${row.path}`}
             type="button"
@@ -178,10 +191,22 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
             <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)' }}>
               {trailingLabel(row.label, row.path, row.node)}
             </span>
-          </button>
+          </button>,
+          )
         ),
       )}
     </>
+  )
+}
+
+/** A document row with an action beside it, or the row alone. */
+function withAction(action: React.ReactNode, path: string, row: React.ReactElement): React.ReactElement {
+  if (!action) return row
+  return (
+    <div key={`doc:${path}`} style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 6 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>{row}</div>
+      {action}
+    </div>
   )
 }
 

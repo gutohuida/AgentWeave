@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getJson, postJson } from './client'
+import { ApiError, getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
 
@@ -737,4 +737,137 @@ export function useWithdrawSpecProposal() {
         { note: note ?? '' },
       ),
   )
+}
+
+// --------------------------------------------------------------------------- the corpus, from the app
+// `the-corpus-is-indexed-arranged-and-adopted-from-the-app` (F206): reindex, adopt one, adopt all,
+// and arrange had no caller here. Each reads the route's own answer; nothing is computed in the UI.
+
+export interface ReindexDocumentCounts {
+  created: string[]
+  reworded: string[]
+  retired: string[]
+  restored: string[]
+  unchanged: string[]
+}
+
+export interface CorpusSkip {
+  path: string
+  /** `file_missing`, `no_readable_payload`, or `write_failed` (F434), with the OS reason. */
+  reason: string
+  message?: string
+}
+
+export interface ReindexResult {
+  documents: Record<string, ReindexDocumentCounts | null>
+  index: {
+    written: { path: string; documents: number; home: string | null } | null
+    diagnostics: SpecDiagnostic[]
+  }
+  corpus: { rerendered: string[]; skipped: CorpusSkip[] }
+}
+
+export interface AdoptionDifference {
+  field: string
+  file: string | null
+  row: string | null
+}
+
+/** One path's outcome in an adopt-all sweep, in the route's own shape. */
+export interface CorpusAdoptOutcome {
+  adopted: boolean
+  path: string
+  code?: string
+  message?: string
+  differences?: AdoptionDifference[]
+}
+
+export interface CorpusAdoptResult {
+  documents: Record<string, CorpusAdoptOutcome>
+  adopted: string[]
+  skipped: string[]
+  diagnostics: SpecDiagnostic[]
+}
+
+export interface ArrangeResult {
+  path: string
+  parent: string | null
+  corpus: { rerendered: string[]; skipped: CorpusSkip[] }
+}
+
+/** Like `useSpecMutation`, and also drops every open document's content: reindex and arrange
+ *  re-render files, so a page already loaded would show the navigation it had before. */
+function useCorpusMutation<TArgs, TResult>(
+  call: (projectId: string, args: TArgs) => Promise<TResult>,
+) {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (args: TArgs) => call(projectId ?? '', args),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'spec'] })
+    },
+  })
+}
+
+/** Rebuild the requirement index and `spec/index.json`. With no `home`, the Hub answers
+ *  `index_home_required` when it will not guess one; the strip then asks the operator. */
+export function useReindexSpec() {
+  return useCorpusMutation<{ home?: string }, ReindexResult>((projectId, { home }) =>
+    postJson(`/api/v1/projects/${projectId}/project/spec/reindex`, home ? { home } : {}),
+  )
+}
+
+/** Place a document under another in the corpus hierarchy, or at the top with `parent: null`. */
+export function useArrangeSpecDocument() {
+  return useCorpusMutation<{ path: string; parent: string | null }, ArrangeResult>(
+    (projectId, body) =>
+      postJson(`/api/v1/projects/${projectId}/project/spec/documents/arrange`, body),
+  )
+}
+
+/** Adopt one document found on disk that the Hub has no record of. */
+export function useAdoptSpecDocument() {
+  return useSpecMutation<{ path: string }, SpecDocumentRecord>((projectId, { path }) =>
+    postJson(`/api/v1/projects/${projectId}/project/documents/adopt`, { path }),
+  )
+}
+
+/** Adopt every adoptable document beneath `spec/`. Never fails as a whole. */
+export function useAdoptSpecCorpus() {
+  return useSpecMutation<void, CorpusAdoptResult>((projectId) =>
+    postJson(`/api/v1/projects/${projectId}/project/spec/adopt`),
+  )
+}
+
+/** The body of a refused corpus call, as the Hub sent it: `{detail: {message, code, ...}}` or a
+ *  plain `{detail: "..."}`. Null when the error is not an API error with a JSON body. */
+export function corpusRefusal(error: unknown): {
+  status: number
+  message: string
+  code?: string
+  differences?: AdoptionDifference[]
+  diagnostics?: SpecDiagnostic[]
+} | null {
+  if (!(error instanceof ApiError)) return null
+  try {
+    const body = JSON.parse(error.message) as { detail?: unknown }
+    const detail = body.detail
+    if (typeof detail === 'string') return { status: error.status, message: detail }
+    if (detail && typeof detail === 'object') {
+      const d = detail as Record<string, unknown>
+      return {
+        status: error.status,
+        message: typeof d.message === 'string' ? d.message : error.message,
+        code: typeof d.code === 'string' ? d.code : undefined,
+        differences: Array.isArray(d.differences) ? (d.differences as AdoptionDifference[]) : undefined,
+        diagnostics: Array.isArray(d.diagnostics) ? (d.diagnostics as SpecDiagnostic[]) : undefined,
+      }
+    }
+  } catch {
+    // Not JSON: fall through to the raw text.
+  }
+  return { status: error.status, message: error.message }
 }

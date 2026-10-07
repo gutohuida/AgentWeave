@@ -143,6 +143,7 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
         inventory={inventory}
         restoreFocusTo={() => searchOriginRef.current}
         currentPath={openDocument}
+        specList={specList}
         onSelect={(node) => onOpenDocument(node.path)}
       />
     </div>

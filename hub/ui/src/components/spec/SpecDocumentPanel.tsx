@@ -6,6 +6,7 @@ import { SpecCoverageBar } from './SpecCoverageBar'
 import { SpecRetiredRequirements } from './SpecRetiredRequirements'
 import { SpecProposalsPanel } from './SpecProposalsPanel'
 import { SpecDocumentTasksLink } from './SpecDocumentTasksLink'
+import { SpecPlaceUnder } from './SpecPlaceUnder'
 import { Button } from '@/components/ui/button'
 import { useSpec, type SpecDiagnostic, type SpecListResponse } from '@/api/spec'
 import { useConfigStore } from '@/store/configStore'
@@ -195,6 +196,11 @@ export function SpecDocumentPanel({
           >
             Archived{node.archiveDate ? ` · ${node.archiveDate}` : ''}
           </span>
+        )}
+
+        {/* D4 (F206): a filed document, under a valid index, can be placed in the hierarchy. */}
+        {node?.state === 'filed' && specList?.manifest?.state === 'valid' && (
+          <SpecPlaceUnder path={path} parent={node.parent} specList={specList} />
         )}
 
         <div className="flex-1" />

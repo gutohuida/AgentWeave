@@ -1,3 +1,4 @@
+import type { SpecListResponse } from '@/api/spec'
 import { SpecDocumentBrowser } from './SpecDocumentBrowser'
 import { tabKeyForNode, type SpecInventory, type SpecNode } from './specNavigation'
 import { specTabId, usePanelTabsStore } from '@/store/panelTabsStore'
@@ -9,6 +10,8 @@ interface SpecIndexTabProps {
    *  Ctrl/Cmd+K picker marks it, so the index tab and the picker never disagree about "where the
    *  operator is". */
   attachedPath: string | null
+  /** Passed through so the index tab shows the corpus strip and **Adopt** (F206). */
+  specList?: SpecListResponse
 }
 
 /**
@@ -20,7 +23,7 @@ interface SpecIndexTabProps {
  * index tab that also attached would be a second way to change what an agent writes into, which is
  * the fusion D9 exists to end.
  */
-export function SpecIndexTab({ projectId, inventory, attachedPath }: SpecIndexTabProps) {
+export function SpecIndexTab({ projectId, inventory, attachedPath, specList }: SpecIndexTabProps) {
   const openTab = usePanelTabsStore((state) => state.openTab)
 
   const openForReading = (node: SpecNode) => {
@@ -32,6 +35,7 @@ export function SpecIndexTab({ projectId, inventory, attachedPath }: SpecIndexTa
       inventory={inventory}
       currentPath={attachedPath}
       onSelect={openForReading}
+      specList={specList}
     />
   )
 }

@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
+import type { SpecListResponse } from '@/api/spec'
 import { searchDocuments, type SpecInventory, type SpecNode } from './specNavigation'
+import { SpecAdoptButton } from './SpecAdoptButton'
+import { SpecCorpusStrip } from './SpecCorpusStrip'
 import { SpecTree } from './SpecTree'
 
 interface SpecDocumentBrowserProps {
@@ -15,6 +18,11 @@ interface SpecDocumentBrowserProps {
    */
   onCreate?: (title: string) => void
   autoFocus?: boolean
+  /** The corpus as `GET /specs` answered it. Given, the browser shows the corpus strip (index
+   *  state, untracked documents, rebuild and adopt) and **Adopt** beside each untracked document
+   *  (`the-corpus-is-indexed-arranged-and-adopted-from-the-app`, D1-D3). Omitted, it is search and
+   *  browse only. */
+  specList?: SpecListResponse
 }
 
 const rowStyle: React.CSSProperties = {
@@ -61,8 +69,16 @@ export function SpecDocumentBrowser({
   onSelect,
   onCreate,
   autoFocus = false,
+  specList,
 }: SpecDocumentBrowserProps) {
   const [query, setQuery] = useState('')
+  const [adoptedSinceRebuild, setAdoptedSinceRebuild] = useState(false)
+  const adoptAction = specList
+    ? (node: SpecNode) =>
+        !node.documentId && !node.missing ? (
+          <SpecAdoptButton path={node.path} onAdopted={() => setAdoptedSinceRebuild(true)} />
+        ) : null
+    : undefined
 
   const results = useMemo(() => searchDocuments(inventory, query), [inventory, query])
   const empty =
@@ -83,6 +99,13 @@ export function SpecDocumentBrowser({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col" data-testid="spec-document-browser">
+      {specList && (
+        <SpecCorpusStrip
+          specList={specList}
+          adoptedSinceRebuild={adoptedSinceRebuild}
+          onRebuilt={() => setAdoptedSinceRebuild(false)}
+        />
+      )}
       <div className="panel-search shrink-0">
         <Icon name="search" size={14} />
         <input
@@ -117,7 +140,12 @@ export function SpecDocumentBrowser({
           </button>
         )}
         {browsing ? (
-          <SpecTree inventory={inventory} currentPath={currentPath} onSelect={onSelect} />
+          <SpecTree
+            inventory={inventory}
+            currentPath={currentPath}
+            onSelect={onSelect}
+            rowAction={adoptAction}
+          />
         ) : (
           <>
             {empty && (

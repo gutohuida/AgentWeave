@@ -336,7 +336,14 @@ export function ConversationView({
   const renderPanelTabContent = useCallback(
     (tab: PanelTab) => {
       if (tab.id === 'specs') {
-        return <SpecIndexTab projectId={projectId} inventory={inventory} attachedPath={document} />
+        return (
+          <SpecIndexTab
+            projectId={projectId}
+            inventory={inventory}
+            attachedPath={document}
+            specList={specList}
+          />
+        )
       }
       if (tab.id === 'files') {
         return (
@@ -579,6 +586,7 @@ export function ConversationView({
         inventory={inventory}
         restoreFocusTo={() => searchOriginRef.current}
         currentPath={document}
+        specList={specList}
         onSelect={(node) => onOpenDocument(node.path)}
         /* Starting an exploration opens the document it just created: the point of creating
          * it here is that the conversation now has a subject, and leaving the operator to go

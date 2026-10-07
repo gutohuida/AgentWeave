@@ -1,4 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
+import type { SpecListResponse } from '@/api/spec'
 import { SpecDocumentBrowser } from './SpecDocumentBrowser'
 import type { SpecInventory, SpecNode } from './specNavigation'
 
@@ -21,6 +22,8 @@ interface SpecDocumentPickerProps {
    * where "there isn't one yet" is the answer.
    */
   onCreate?: (title: string) => void
+  /** Passed through so the browser shows the corpus strip and **Adopt** (F206). */
+  specList?: SpecListResponse
 }
 
 /**
@@ -41,6 +44,7 @@ export function SpecDocumentPicker({
   restoreFocusTo,
   currentPath = null,
   onCreate,
+  specList,
 }: SpecDocumentPickerProps) {
   const choose = (node: SpecNode) => {
     onSelect(node)
@@ -99,6 +103,7 @@ export function SpecDocumentPicker({
             onSelect={choose}
             onCreate={startExploration}
             autoFocus
+            specList={specList}
           />
         </Dialog.Content>
       </Dialog.Portal>
