@@ -433,11 +433,13 @@ async def _answer_failed_review(
 
     # A refused approval is not "no verdict" (`F374-fix`): where the gate refuses for a reason only
     # the operator can remove, a second reviewer would meet the same refusal, so nobody is asked.
-    held_any = await approval_held_for_operator(session, task, candidate=None)
+    held_any = await approval_held_for_operator(session, task, candidate=None, acting_run_id=run.id)
 
     if await _review_was_declared(session, run, task):
         if held_any is not None:
-            held_declared = await approval_held_for_operator(session, task, candidate=run.agent)
+            held_declared = await approval_held_for_operator(
+                session, task, candidate=run.agent, acting_run_id=run.id
+            )
             if held_declared is not None:
                 return (
                     OUTCOME_SURFACED,
@@ -488,7 +490,9 @@ async def _answer_failed_review(
     if held_any is not None:
         # Restaff only where the chosen agent can itself decide the evidence.
         held_chosen = (
-            await approval_held_for_operator(session, task, candidate=choice.agent)
+            await approval_held_for_operator(
+                session, task, candidate=choice.agent, acting_run_id=run.id
+            )
             if choice.agent is not None
             else held_any
         )

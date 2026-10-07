@@ -1019,9 +1019,17 @@ def _operator_only_remedy(refusal: GateRefusal, *, may_accept: bool) -> Optional
 
 
 async def approval_held_for_operator(
-    session: AsyncSession, task: Task, *, candidate: Optional[str]
+    session: AsyncSession,
+    task: Task,
+    *,
+    candidate: Optional[str],
+    acting_run_id: Optional[str] = None,
 ) -> Optional[ApprovalHold]:
     """A hold where approval of *task* is refused for a reason only the operator can remove.
+
+    *acting_run_id* is the run whose end is being judged, if any (F458): it is still in the live set
+    when its end is evaluated, and counting it would add "still running the turn ... this clears
+    itself" to the reason for a turn that has just ended.
 
     Asks `evaluate`, the function the transition asks, so the two cannot disagree. Read-only, run
     inside a savepoint, and bounded: each git spawn on its path is capped at
@@ -1046,7 +1054,7 @@ async def approval_held_for_operator(
         )
         try:
             async with session.begin_nested():
-                refusal, _ = await evaluate(session, task, acting_run_id=None)
+                refusal, _ = await evaluate(session, task, acting_run_id=acting_run_id)
         finally:
             task_integration.GIT_TIMEOUT_SECONDS.reset(token)
     except (subprocess.TimeoutExpired, OSError) as exc:

@@ -120,6 +120,24 @@ async def test_an_availability_picked_reviewer_is_not_restaffed_past_a_hold(
     assert "no agent is free" not in payload["reason"]
 
 
+async def test_the_hold_reason_does_not_count_the_ending_review_as_a_live_turn(
+    app, auth_headers, builder, bind_runner, tmp_path
+):
+    """F458. `evaluate_run_end` runs while the ending run is still in the live set, and the hold
+    asked the gate with no acting run -- so the reason said "beta is still running the turn ...
+    this clears itself" about the very turn that had just ended without a verdict."""
+    _task_id, run_id = await _held_review(app, auth_headers, builder, bind_runner, tmp_path)
+
+    with patch("hub.run_liveness.live_run_ids", return_value={run_id}):
+        assert await evaluate_run_end(run_id) is not None
+
+    payload = await _diverged_payload(run_id)
+    assert payload["outcome"] == "surfaced"
+    assert GATE_SENTENCE in payload["reason"]
+    assert "still running the turn" not in payload["reason"]
+    assert "clears itself" not in payload["reason"]
+
+
 async def test_a_reviewer_granted_the_decision_is_still_restaffed(
     app, auth_headers, builder, bind_runner, tmp_path
 ):
