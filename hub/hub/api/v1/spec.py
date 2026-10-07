@@ -1167,23 +1167,38 @@ async def detect_drift(
         session, project_id, workspace, main_branch=main_branch
     )
     await session.commit()
+    # D5: always -- the reachability refresh can move an integration answer when nothing is raised.
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": None, "drift": True})
     return {"raised": [candidate.id for candidate in raised], "rebuilt": rebuilt}
 
 
 @router.get("/spec/drift")
 async def list_drift(
+    document: Optional[str] = Query(default=None, max_length=255),
+    state: Optional[str] = Query(default=None),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
+    """Drift candidates, oldest first with ties broken by id (D9: one scan adds its candidates in one
+    transaction, so `created_at` ties), optionally for one document and one state (D1)."""
     project_id, _ = project
+    if state is not None and state not in ("candidate", "resolved"):
+        raise HTTPException(status_code=422, detail="state must be 'candidate' or 'resolved'")
+    document_id: Optional[str] = None
+    if document is not None:
+        found = await spec_lifecycle.get_document(session, project_id, document)
+        if found is None:
+            raise HTTPException(status_code=404, detail=f"no specification document at {document}")
+        document_id = found.id
+    query = select(RequirementDrift).where(RequirementDrift.project_id == project_id)
+    if state is not None:
+        query = query.where(RequirementDrift.state == state)
+    if document_id is not None:
+        query = query.join(
+            SpecRequirement, SpecRequirement.id == RequirementDrift.requirement_id
+        ).where(SpecRequirement.document_id == document_id)
     rows = list(
-        (
-            await session.execute(
-                select(RequirementDrift)
-                .where(RequirementDrift.project_id == project_id)
-                .order_by(RequirementDrift.created_at)
-            )
-        )
+        (await session.execute(query.order_by(RequirementDrift.created_at, RequirementDrift.id)))
         .scalars()
         .all()
     )
@@ -1253,7 +1268,7 @@ async def list_drift(
 
     return {
         "drift": [_view(row) for row in rows],
-        "unwatched": await _unwatched(session, project_id),
+        "unwatched": await _unwatched(session, project_id, document_id),
     }
 
 
@@ -1265,7 +1280,9 @@ UNWATCHED_RECORDED_BEFORE_WATCHING = "recorded_before_watching"
 UNWATCHED_NO_FOOTPRINT = "no_footprint"
 
 
-async def _unwatched(session: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+async def _unwatched(
+    session: AsyncSession, project_id: str, document_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """Accepted, digest-current evidence drift does not watch, with the reason, ordered by when it
     was produced and then by id (the order `for_requirement` uses; F190: callers rely on it)."""
     rows = (
@@ -1277,6 +1294,7 @@ async def _unwatched(session: AsyncSession, project_id: str) -> List[Dict[str, A
                 RequirementEvidence.project_id == project_id,
                 RequirementEvidence.review_state == "accepted",
                 RequirementEvidence.digest == SpecRequirement.digest,
+                *([SpecRequirement.document_id == document_id] if document_id else []),
             )
             .order_by(RequirementEvidence.produced_at, RequirementEvidence.id)
         )
@@ -1336,9 +1354,10 @@ async def resolve_drift(
         )
     except requirement_evidence.EvidenceRefusedError as exc:
         raise HTTPException(
-            status_code=422, detail={"message": str(exc), "code": exc.code}
+            status_code=exc.http_status or 422, detail={"message": str(exc), "code": exc.code}
         ) from exc
     await session.commit()
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": None, "drift": True})
     return {"id": candidate.id, "state": candidate.state, "resolution": candidate.resolution}
 
 

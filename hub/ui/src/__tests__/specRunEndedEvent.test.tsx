@@ -40,3 +40,24 @@ describe('spec_updated with only run_ended', () => {
     expect(keys).toContain(JSON.stringify(['project', 'proj-a', 'specEvidence']))
   })
 })
+
+describe('spec_updated from a drift scan or answer', () => {
+  beforeEach(() => {
+    handler = null
+    useConfigStore.setState({ selectedProjectId: 'proj-a', isConfigured: true })
+  })
+
+  it('1.12 invalidates the drift strip (`drift-is-scanned-and-answered-on-the-document` D5)', () => {
+    const client = new QueryClient()
+    const spy = vi.spyOn(client, 'invalidateQueries')
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    )
+    renderHook(() => useSpecEvents(), { wrapper })
+    handler!({ type: 'spec_updated', data: { path: null, drift: true, project_id: 'proj-a' } })
+    const keys = spy.mock.calls.map((c) =>
+      JSON.stringify((c[0] as { queryKey: unknown[] }).queryKey),
+    )
+    expect(keys).toContain(JSON.stringify(['project', 'proj-a', 'specDrift']))
+  })
+})

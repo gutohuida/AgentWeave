@@ -1714,6 +1714,12 @@ async def resolve_drift(
     Recording the digest and fingerprint at resolution is what stops the same
     change being reported twice — and a resolution that did not would make the
     feature a nuisance within a day.
+
+    **Answered once** (`drift-is-scanned-and-answered-on-the-document` D4, F430): a second answer is
+    refused 409 rather than overwriting the first. **Code corrected stores no fingerprint** (D8,
+    F436): its claim is that the code went back, so if the change is still there the next scan asks
+    again; the other two answers keep theirs, because "this change is fine" must stay silent and a
+    specification update is followed by a rewording, which drift already skips.
     """
     if actor.kind != "operator":
         raise EvidenceRefusedError(
@@ -1726,6 +1732,13 @@ async def resolve_drift(
         "no_change_required",
     ):
         raise EvidenceRefusedError(f"unknown resolution {resolution!r}", code="unknown_resolution")
+    if candidate.state != "candidate":
+        raise EvidenceRefusedError(
+            f"this candidate was already answered: {candidate.resolution}, by "
+            f"{candidate.resolved_by or 'the operator'}",
+            code="drift_not_open",
+            http_status=409,
+        )
 
     requirement = await session.get(SpecRequirement, candidate.requirement_id)
     candidate.state = "resolved"
@@ -1733,7 +1746,9 @@ async def resolve_drift(
     candidate.resolved_by = actor.name or "operator"
     candidate.resolved_at = datetime.now(timezone.utc)
     candidate.resolved_digest = requirement.digest if requirement else candidate.digest
-    candidate.resolved_fingerprint = candidate.observed
+    candidate.resolved_fingerprint = (
+        None if resolution == "implementation_corrected" else candidate.observed
+    )
     return candidate
 
 

@@ -353,6 +353,8 @@ export function useSpecEvents() {
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRigorHistory'] })
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRequirements'] })
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRequirement'] })
+      // A scan or an answer (`{path: null, drift: true}`) moves this document's drift strip.
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDrift'] })
       if (d?.path) {
         queryClient.invalidateQueries({ queryKey: ['project', projectId, 'spec', d.path] })
       }
@@ -870,4 +872,80 @@ export function corpusRefusal(error: unknown): {
     // Not JSON: fall through to the raw text.
   }
   return { status: error.status, message: error.message }
+}
+
+// --------------------------------------------------------------------------- drift, on the document
+// `drift-is-scanned-and-answered-on-the-document` (F129): detect and resolve had no caller here.
+
+export interface DriftCandidate {
+  id: string
+  requirement_id: string
+  evidence_id: string
+  state: 'candidate' | 'resolved'
+  /** `{path: {was, now}}`; `now: null` means the file was removed. */
+  observed: Record<string, { was: string | null; now: string | null }>
+  resolution: string | null
+  created_at: string | null
+  requirement: { identifier: string; document: string | null } | null
+  evidence: { summary: string; locator: string | null; actor: string; actor_kind: string } | null
+}
+
+export interface UnwatchedEvidence {
+  evidence_id: string
+  requirement: { identifier: string; document: string | null }
+  summary: string
+  actor: string
+  reason: 'names_no_file' | 'recorded_before_watching' | 'no_footprint'
+}
+
+export interface DriftListResponse {
+  /** In the route's order: oldest first, ties by id. The panel does not re-sort (F190). */
+  drift: DriftCandidate[]
+  unwatched: UnwatchedEvidence[]
+}
+
+export type DriftResolution = 'specification_updated' | 'implementation_corrected' | 'no_change_required'
+
+/** This document's open candidates and its unwatched evidence. */
+export function useSpecDrift(path: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<DriftListResponse>({
+    queryKey: ['project', projectId, 'specDrift', path],
+    queryFn: () =>
+      getJson<DriftListResponse>(
+        `/api/v1/projects/${projectId}/project/spec/drift?state=candidate${
+          path ? `&document=${encodeURIComponent(path)}` : ''
+        }`,
+      ),
+    enabled: isConfigured && !!projectId && !!path,
+  })
+}
+
+/** A drift write moves the strip and the coverage bar; both are dropped on success so the pressing
+ *  tab does not wait for the SSE round-trip. */
+function useDriftMutation<TArgs, TResult>(call: (projectId: string, args: TArgs) => Promise<TResult>) {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (args: TArgs) => call(projectId ?? '', args),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDrift'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specCoverage'] })
+    },
+  })
+}
+
+/** Scan the whole project for drift (the route is project-wide). Answers the ids it raised. */
+export function useDetectDrift() {
+  return useDriftMutation<void, { raised: string[]; rebuilt?: number }>((projectId) =>
+    postJson(`/api/v1/projects/${projectId}/project/spec/drift/detect`),
+  )
+}
+
+/** The operator's answer to one candidate. A candidate is answered once (409 `drift_not_open`). */
+export function useResolveDrift() {
+  return useDriftMutation<{ id: string; resolution: DriftResolution }, DriftCandidate>(
+    (projectId, { id, resolution }) =>
+      postJson(`/api/v1/projects/${projectId}/project/spec/drift/${id}/resolve`, { resolution }),
+  )
 }

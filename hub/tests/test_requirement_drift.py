@@ -330,3 +330,219 @@ async def test_a_changed_blob_in_a_repository_raises_a_candidate(
     raised = await _detect(app, auth_headers)
 
     assert len(raised) == 1
+
+
+# ---------------------------------------------------------------------------
+# `drift-is-scanned-and-answered-on-the-document` (F129, F430, F436): the routes the panel uses.
+# ---------------------------------------------------------------------------
+
+SECOND = "spec/changes/drift-second/spec.html"
+
+
+async def _second_document(app, auth_headers, run_headers):
+    created = await app.post(
+        f"{BASE}/documents", json={"path": SECOND, "title": "Second"}, headers=auth_headers
+    )
+    assert created.status_code == 201, created.text
+    saved = await app.post(
+        SUBMIT,
+        json={
+            "path": SECOND,
+            "document": {
+                "schema_version": SCHEMA_VERSION,
+                "kind": "change-spec",
+                "title": "Second",
+                "requirements": [
+                    {"key": "beta", "statement": "It does another thing", "modal": "MUST"}
+                ],
+            },
+        },
+        headers=run_headers,
+    )
+    assert saved.status_code == 200, saved.text
+
+
+async def _candidate(drift_id, path, *, state="candidate", created_at=None):
+    from datetime import datetime, timezone
+
+    from hub.db.models import SpecDocument, SpecRequirement
+
+    async with async_session_factory() as session:
+        document = (
+            await session.execute(select(SpecDocument).where(SpecDocument.path == path))
+        ).scalar_one()
+        requirement = (
+            (
+                await session.execute(
+                    select(SpecRequirement).where(SpecRequirement.document_id == document.id)
+                )
+            )
+            .scalars()
+            .first()
+        )
+        session.add(
+            RequirementDrift(
+                id=drift_id,
+                project_id="proj-test",
+                requirement_id=requirement.id,
+                evidence_id=f"ev-{drift_id}",
+                state=state,
+                digest=requirement.digest,
+                observed={"ledger.py": {"was": "a", "now": "b"}},
+                created_at=created_at or datetime.now(timezone.utc),
+            )
+        )
+        await session.commit()
+
+
+async def _listed(app, auth_headers, **params):
+    response = await app.get(f"{BASE}/spec/drift", params=params, headers=auth_headers)
+    return response
+
+
+@pytest.mark.asyncio
+async def test_drift_is_listed_for_one_document_and_one_state(app, auth_headers, builder):
+    """1.1, 1.2 (D1). FAILS before: the filters were ignored and both documents' came back."""
+    await _document(app, auth_headers, builder)
+    await _second_document(app, auth_headers, builder)
+    await _candidate("drift-one", PATH)
+    await _candidate("drift-two", SECOND)
+    await _candidate("drift-done", PATH, state="resolved")
+
+    only = await _listed(app, auth_headers, document=PATH, state="candidate")
+    assert only.status_code == 200, only.text
+    assert [row["id"] for row in only.json()["drift"]] == ["drift-one"]
+
+    assert (await _listed(app, auth_headers, state="bogus")).status_code == 422
+    unknown = await _listed(app, auth_headers, document="spec/changes/nothing/spec.html")
+    assert unknown.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_the_route_order_breaks_a_created_at_tie_by_id(app, auth_headers, builder):
+    """1.15 (D9, F190): one scan adds candidates in one transaction, so `created_at` ties."""
+    from datetime import datetime, timedelta, timezone
+
+    await _document(app, auth_headers, builder)
+    tie = datetime(2026, 10, 7, 12, 0, tzinfo=timezone.utc)
+    await _candidate("drift-b", PATH, created_at=tie)
+    await _candidate("drift-a", PATH, created_at=tie)
+    await _candidate("drift-early", PATH, created_at=tie - timedelta(minutes=5))
+
+    listed = (await _listed(app, auth_headers)).json()["drift"]
+    assert [row["id"] for row in listed] == ["drift-early", "drift-a", "drift-b"]
+
+
+@pytest.mark.asyncio
+async def test_a_candidate_is_answered_once(app, auth_headers, builder, tmp_path):
+    """1.3 (D4, F430). FAILS before: the second answer overwrote the first."""
+    await _document(app, auth_headers, builder)
+    (tmp_path / "ledger.py").write_text("one\n", encoding="utf-8")
+    await _record(app, auth_headers)
+    (tmp_path / "ledger.py").write_text("two\n", encoding="utf-8")
+    (raised,) = await _detect(app, auth_headers)
+
+    first = await app.post(
+        f"{BASE}/spec/drift/{raised}/resolve",
+        json={"resolution": "no_change_required"},
+        headers=auth_headers,
+    )
+    assert first.status_code == 200, first.text
+    second = await app.post(
+        f"{BASE}/spec/drift/{raised}/resolve",
+        json={"resolution": "specification_updated"},
+        headers=auth_headers,
+    )
+    assert second.status_code == 409, second.text
+    assert second.json()["detail"]["code"] == "drift_not_open"
+    assert "no_change_required" in second.json()["detail"]["message"]
+    listed = (await _listed(app, auth_headers)).json()["drift"]
+    assert listed[0]["resolution"] == "no_change_required"
+
+
+@pytest.mark.asyncio
+async def test_a_scan_and_an_answer_are_broadcast(app, auth_headers, builder, tmp_path):
+    """1.4 (D5): a scan broadcasts even when it raises nothing; an answer broadcasts once."""
+    from unittest.mock import AsyncMock, patch
+
+    await _document(app, auth_headers, builder)
+    (tmp_path / "ledger.py").write_text("one\n", encoding="utf-8")
+    await _record(app, auth_headers)
+    broadcast = AsyncMock()
+    with patch("hub.api.v1.spec.sse_manager.broadcast", broadcast):
+        assert await _detect(app, auth_headers) == []
+        assert broadcast.await_args_list[-1].args[1:] == (
+            "spec_updated",
+            {"path": None, "drift": True},
+        )
+        (tmp_path / "ledger.py").write_text("two\n", encoding="utf-8")
+        (raised,) = await _detect(app, auth_headers)
+        before = broadcast.await_count
+        resolved = await app.post(
+            f"{BASE}/spec/drift/{raised}/resolve",
+            json={"resolution": "no_change_required"},
+            headers=auth_headers,
+        )
+        assert resolved.status_code == 200, resolved.text
+        assert broadcast.await_count == before + 1
+
+
+def test_the_gate_remedy_for_drift_names_who_answers_it():
+    """1.5 (D6): the remedy is performable where it is shown."""
+    from hub import requirement_coverage, requirement_gate
+
+    remedy = requirement_gate.REMEDY[requirement_coverage.DRIFTING]
+    assert "the operator answers the drift candidate" in remedy
+    assert "an agent cannot" in remedy
+
+
+@pytest.mark.asyncio
+async def test_code_corrected_without_a_revert_asks_again(app, auth_headers, builder, tmp_path):
+    """1.13 (D8, F436). FAILS before: the answer's fingerprint silenced the same change for good."""
+    await _document(app, auth_headers, builder)
+    (tmp_path / "ledger.py").write_text("one\n", encoding="utf-8")
+    await _record(app, auth_headers)
+    (tmp_path / "ledger.py").write_text("two\n", encoding="utf-8")
+    (raised,) = await _detect(app, auth_headers)
+    await app.post(
+        f"{BASE}/spec/drift/{raised}/resolve",
+        json={"resolution": "implementation_corrected"},
+        headers=auth_headers,
+    )
+    async with async_session_factory() as session:
+        assert (await session.get(RequirementDrift, raised)).resolved_fingerprint is None
+
+    (again,) = await _detect(app, auth_headers)
+    assert again != raised
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resolution", ["no_change_required", "specification_updated"])
+async def test_the_other_answers_stay_answered(app, auth_headers, builder, tmp_path, resolution):
+    """1.14 (D8) control: *No change* and *Spec updated* keep their fingerprint."""
+    await _document(app, auth_headers, builder)
+    (tmp_path / "ledger.py").write_text("one\n", encoding="utf-8")
+    await _record(app, auth_headers)
+    (tmp_path / "ledger.py").write_text("two\n", encoding="utf-8")
+    (raised,) = await _detect(app, auth_headers)
+    await app.post(
+        f"{BASE}/spec/drift/{raised}/resolve", json={"resolution": resolution}, headers=auth_headers
+    )
+    assert await _detect(app, auth_headers) == []
+
+
+@pytest.mark.asyncio
+async def test_code_corrected_and_reverted_raises_nothing(app, auth_headers, builder, tmp_path):
+    """1.14 (D8): *Code corrected* that really went back raises nothing."""
+    await _document(app, auth_headers, builder)
+    (tmp_path / "ledger.py").write_text("one\n", encoding="utf-8")
+    await _record(app, auth_headers)
+    (tmp_path / "ledger.py").write_text("two\n", encoding="utf-8")
+    (raised,) = await _detect(app, auth_headers)
+    await app.post(
+        f"{BASE}/spec/drift/{raised}/resolve",
+        json={"resolution": "implementation_corrected"},
+        headers=auth_headers,
+    )
+    (tmp_path / "ledger.py").write_text("one\n", encoding="utf-8")
+    assert await _detect(app, auth_headers) == []

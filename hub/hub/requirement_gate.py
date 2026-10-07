@@ -62,7 +62,9 @@ REMEDY = {
         "says now"
     ),
     requirement_coverage.DRIFTING: (
-        "the implementation changed after it was verified — resolve the drift candidate"
+        "the implementation changed after it was verified — the operator answers the drift "
+        "candidate on the document, saying whether the specification or the implementation was "
+        "wrong; an agent cannot answer it, so ask"
     ),
 }
 

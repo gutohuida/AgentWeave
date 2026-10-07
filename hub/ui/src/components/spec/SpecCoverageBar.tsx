@@ -11,7 +11,7 @@ const STATES: Array<{ key: CoverageEntry['state']; label: string; tone: string; 
     key: 'drifting',
     label: 'Drifting',
     tone: 'var(--amber)',
-    why: 'The implementation changed after this was verified. Someone needs to say which one was wrong.',
+    why: 'The implementation changed after this was verified. Say which one was wrong — answer it under Drifting, below.',
   },
   {
     key: 'stale',
