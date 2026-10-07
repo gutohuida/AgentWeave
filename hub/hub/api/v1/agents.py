@@ -1286,10 +1286,10 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="read_spec_document",
-            args="path, include=requirements",
+            args="path, include=requirements, identifiers",
             method="GET",
             path="/spec/documents",
-            fields=("path", "include"),
+            fields=("path", "include", "identifiers"),
             required=("path",),
             text=(
                 "read a specification document. **Use this before writing code against one.** The "
@@ -1298,7 +1298,13 @@ def _operations() -> List[_Operation]:
                 "an implementation stops matching what was approved. Each requirement comes back "
                 "with the `FR-n` identifier the Hub minted, its statement, and its own acceptance "
                 "criteria — quote those identifiers, because tasks, evidence and completion gates "
-                "all refer to them. Readable at any phase, and `phase` tells you how settled it is."
+                "all refer to them. Readable at any phase, and `phase` tells you how settled it is. "
+                "`path` may also be the document's id. A read too large for one result is "
+                "written into your workspace: the answer's `written_to` names the file, which you "
+                "open with your file-reading tool. Where it says `truncated` instead, follow "
+                "`continue_with` (read again with `identifiers=FR-3,FR-7`, or `include=<section>` "
+                "for an omitted section); `include=outline` returns only each requirement's "
+                "identifier, key, modal, statement and state."
             ),
         ),
         _Operation(

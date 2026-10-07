@@ -335,3 +335,15 @@ def test_submit_spec_document_takes_slices_and_the_roadmap_link():
     properties = _schemas()["submit_spec_document"]["properties"]
     assert "slices" in properties
     assert "roadmap" in properties
+
+
+def test_read_spec_document_include_agrees_with_the_route_and_defaults_to_requirements():
+    """`a-specification-is-read-in-results-that-fit` 1.11. The tool restates the route's accepted
+    `include` values; nothing checked they agree. The default stays `requirements`, so a new tool
+    never sends a value an old Hub refuses by default (design D5)."""
+    from hub.api.v1.agent_actions import READ_INCLUDE_VALUES
+
+    schema = _schemas()["read_spec_document"]
+    assert sorted(_enum_for(schema, "include")) == sorted(READ_INCLUDE_VALUES)
+    assert schema["properties"]["include"]["default"] == "requirements"
+    assert "identifiers" in schema["properties"]

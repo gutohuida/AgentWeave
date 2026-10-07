@@ -61,6 +61,29 @@ size requires.
 - **THEN** the design section SHALL be named as omitted
 - **AND** reading that section alone SHALL return it
 
+### Requirement: A read too large for one result is written into the agent's workspace
+The Hub SHALL write a read that does not fit within the bound into the reading agent's own workspace, as text whose every line a file-reading tool shows whole, and SHALL answer with that file's path and the identifiers of the requirements it holds.
+
+The bound has to fit the smallest result any access path accepts, and a shell tool spills above
+30,000 characters, which is how a run without MCP reaches the same read (drive, 2026-10-07: a
+37.6 KB read through `aw-tool` spilled). A file in the agent's own workspace is read with the
+agent's ordinary file tool, a part at a time, on every access path, with no continuation to follow.
+Where the run has no workspace, or the place to write is not a plain directory, the bounded read
+above SHALL be returned instead. The file SHALL be kept out of every commit.
+
+#### Scenario: A large document read by an agent with a workspace
+- **WHEN** an agent whose run has a workspace reads a document whose content exceeds the bound
+- **THEN** the answer SHALL be within the bound and SHALL name a file under `.agentweave/reads/` in that workspace
+- **AND** that file SHALL hold every requirement with its acceptance criteria
+
+#### Scenario: A read that fits stays inline
+- **WHEN** the content of a read is within the bound
+- **THEN** it SHALL be returned in the answer and no file SHALL be written
+
+#### Scenario: Nowhere safe to write
+- **WHEN** the place the file would go is not a plain directory
+- **THEN** the bounded read SHALL be returned instead
+
 ### Requirement: A specification document is readable by the id tasks carry
 The Hub SHALL accept a specification document's id wherever an agent's read of a document accepts its path, resolving it only within the agent's own project.
 

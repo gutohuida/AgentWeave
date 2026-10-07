@@ -4,7 +4,10 @@ Capability routers are added here phase-by-phase. Keeping a distinct namespace m
 impossible to accidentally apply the project-key dependency to an agent operation.
 """
 
+import asyncio
+import json
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -1448,10 +1451,35 @@ class SpecDocumentRename(RequestModel):
     subject: str = Field(max_length=512)
 
 
+#: What `read_spec_document`'s `include` accepts (`a-specification-is-read-in-results-that-fit` D2):
+#: the default view, the outline, everything, or one section by name -- every name a truncated read
+#: can put in `omitted_sections` is requestable. The MCP tool restates these and a test holds them
+#: equal (`test_mcp_tool_schemas.py`).
+READ_INCLUDE_VALUES = (
+    "requirements",
+    "outline",
+    "full",
+    "design",
+    "tasks",
+    "algorithms",
+    "evidence",
+    "lifecycle",
+    "summary",
+    "problem",
+    "scope",
+    "open_questions",
+)
+_READ_SECTIONS = ("design", "tasks", "algorithms", "evidence", "lifecycle")
+_READ_PREAMBLE = ("summary", "problem", "scope", "open_questions")
+_DOCUMENT_ID_RE = re.compile(r"spdoc-[0-9a-f]+")
+_OUTLINE_KEYS = ("identifier", "key", "modal", "statement", "state")
+
+
 @router.get("/spec/documents")
 async def read_spec_document(
     path: str = Query(..., max_length=255),
-    include: str = Query("requirements", pattern="^(requirements|full)$"),
+    include: str = Query("requirements", pattern="^(" + "|".join(READ_INCLUDE_VALUES) + ")$"),
+    identifiers: str = Query("", max_length=8000),
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -1469,30 +1497,61 @@ async def read_spec_document(
     Readable in **every phase**. Reading is not authoring, and every gate in this area governs
     writing or approving. A reviewer needs a proposed document and a builder needs an approved one;
     a refusal that depends on state is one an agent concludes it does not have at all.
+
+    **Bounded** (`a-specification-is-read-in-results-that-fit`, F363): the whole response is fitted
+    to `spec_reading.READ_BUDGET_CHARS`, and what was left out is named with the call that reads it
+    (`identifiers=`, `include=<section>`). A read naming `identifiers` leaves the preamble out. A
+    document id (`spdoc-…`) is accepted where the path goes.
     """
-    from ... import project_workspace, spec_lifecycle, spec_payload, spec_reading
-    from ...db.models import SpecRequirement
-    from ...spec_documents import read_document
+    from ... import project_workspace, spec_documents, spec_lifecycle, spec_payload, spec_reading
+    from ...db.models import SpecDocument, SpecRequirement
     from ...spec_manifest import SpecPathError, validate_spec_path
 
-    try:
-        resolved = validate_spec_path(path)
-    except SpecPathError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    by_id = _DOCUMENT_ID_RE.fullmatch(path) is not None
+    if not by_id:
+        try:
+            resolved = validate_spec_path(path)
+        except SpecPathError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     try:
         workspace = await project_workspace.resolve_project_workspace(session, actor.project_id)
     except project_workspace.ProjectWorkspaceError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
-    document = await spec_lifecycle.get_document(session, actor.project_id, resolved)
-    if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"no specification document at {resolved}.",
-        )
+    if by_id:
+        # Scoped to the caller's project, and an id from elsewhere reads exactly like an unknown
+        # one, so this does not say which ids exist in other projects (D4).
+        document = (
+            await session.execute(
+                select(SpecDocument).where(
+                    SpecDocument.id == path, SpecDocument.project_id == actor.project_id
+                )
+            )
+        ).scalar_one_or_none()
+        if document is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no specification document {path}.",
+            )
+        resolved = document.path
+    else:
+        document = await spec_lifecycle.get_document(session, actor.project_id, resolved)
+        if document is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no specification document at {resolved}.",
+            )
 
-    content = read_document(workspace, document.path)
+    # D6: the path is the stored row's, not the caller's, so a file that cannot be read is a state
+    # conflict, never a 500 (the operator's `GET /project/spec` answers `OSError` the same way).
+    try:
+        content = spec_documents.read_document(workspace, document.path)
+    except (OSError, UnicodeDecodeError, project_workspace.ProjectPathError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"the document's file could not be read: {exc}",
+        ) from exc
     if content is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1511,7 +1570,23 @@ async def read_spec_document(
     )
     requirements, diagnostics = spec_reading.requirement_view(payload, list(rows))
 
+    named = [name.strip() for name in identifiers.split(",") if name.strip()]
+    if named:
+        # D3: an identifier, or the key of a requirement that has none; route order is kept.
+        wanted = set(named)
+        requirements = [
+            row
+            for row in requirements
+            if row.get("identifier") in wanted or (row.get("key") in wanted)
+        ]
+        found = {row.get("identifier") for row in requirements} | {
+            row.get("key") for row in requirements
+        }
+    if include == "outline":
+        requirements = [{key: row.get(key) for key in _OUTLINE_KEYS} for row in requirements]
+
     view = {
+        "id": document.id,
         "path": document.path,
         "title": document.title,
         "kind": document.kind,
@@ -1557,10 +1632,40 @@ async def read_spec_document(
         }
     else:
         view["diverged"] = False
-    if include == "full":
-        for extra in ("design", "tasks", "algorithms", "evidence", "lifecycle"):
+    section = include if include in _READ_SECTIONS or include in _READ_PREAMBLE else None
+    if named:
+        # A continuation or a targeted read: the preamble was offered by the first read, and
+        # re-sending it on every continuation is what would make the read count unbounded.
+        for name in _READ_PREAMBLE:
+            view.pop(name, None)
+        view["unknown_identifiers"] = [name for name in named if name not in found]
+    elif section is not None:
+        # One section read on its own, the way `omitted_sections` says to read it.
+        for name in _READ_PREAMBLE:
+            if name != section:
+                view.pop(name, None)
+        view.pop("requirements", None)
+        view[section] = (payload or {}).get(section)
+    elif include == "full":
+        for extra in _READ_SECTIONS:
             view[extra] = (payload or {}).get(extra)
-    return view
+    if len(json.dumps(view)) <= spec_reading.READ_BUDGET_CHARS:
+        return view
+    # D7: too large for one tool result on any access path (the shell spills at 30,000), so the
+    # whole read goes into a file in the agent's own workspace, which its file-reading tool pages
+    # through. The bounded inline read (D2) remains where there is no workspace to write into.
+    run = await session.get(Run, actor.run_id)
+    if run is not None and run.workspace_dir:
+        suffix = "selection" if named else include
+        written = await asyncio.to_thread(
+            spec_reading.write_read, view, run.workspace_dir, name=f"{document.id}.{suffix}.md"
+        )
+        if written is not None:
+            relative, absolute, lines, chars = written
+            return spec_reading.written_answer(
+                view, relative=relative, absolute=absolute, lines=lines, chars=chars
+            )
+    return spec_reading.fit_view(view, named=section)
 
 
 # The kinds an agent may begin (C1a D5, `agent-document-creation`). A capability document is created

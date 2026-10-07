@@ -3947,7 +3947,22 @@ def rename_spec_document(path: str, subject: str) -> Dict[str, Any]:
 
 @_tool()
 def read_spec_document(
-    path: str, include: Literal["requirements", "full"] = "requirements"
+    path: str,
+    include: Literal[
+        "requirements",
+        "outline",
+        "full",
+        "design",
+        "tasks",
+        "algorithms",
+        "evidence",
+        "lifecycle",
+        "summary",
+        "problem",
+        "scope",
+        "open_questions",
+    ] = "requirements",
+    identifiers: str = "",
 ) -> Dict[str, Any]:
     """Read the specification document you were told to implement.
 
@@ -3957,14 +3972,31 @@ def read_spec_document(
     stops matching what was approved.
 
     Args:
-        path: The document's path, as given in your turn context.
-        include: `requirements` (the default) returns the problem, scope and every requirement.
-            `full` adds the design, declared tasks, algorithms and evidence sections.
+        path: The document's path, as given in your turn context, or its id (`spdoc-…`).
+        include: `requirements` (the default) returns the problem, scope and the requirements.
+            `outline` returns each requirement's identifier, key, modal, statement and state only.
+            `full` adds the design, declared tasks, algorithms and evidence sections where they
+            fit. A section's name (`design`, `problem`, …) reads that one section on its own.
+        identifiers: Comma-separated requirement identifiers (`FR-3,FR-7`) to read only those.
+            A requirement with no identifier is named by its key.
+
+    **A large read comes back as a file.** When the document is too large for one tool result, the
+    Hub writes all of it, as wrapped text, into your own workspace and answers with `written_to`
+    (for example `.agentweave/reads/spdoc-….requirements.md`), `requirement_identifiers` and
+    `read_with`: open that file with your file-reading tool, a part at a time if it is long. Where
+    there is no workspace to write into, the answer is bounded instead: `truncated: true`, the
+    requirements left out in `remaining_identifiers`, sections left out in `omitted_sections`, and
+    `continue_with`, which says the call to make next. A read by `identifiers` does not repeat the
+    summary, problem, scope or open questions.
 
     Each requirement carries the `identifier` the Hub minted for it — `FR-1`, `FR-2` — along with
     its `statement`, its `modal` (MUST/SHOULD/MAY/SHALL) and its own `acceptance_criteria`. **Quote
     those identifiers**: they are what tasks, evidence and completion gates refer to, so naming them
     is how your work is traceable to what it satisfies.
+
+    **This view is not the shape `submit_spec_document` takes.** To resubmit, put acceptance
+    criteria in the top-level `acceptance_criteria` list, each naming its requirement's `key`, and
+    leave out the Hub's `identifier`, `state` and `anchor` (F452).
 
     Also returns `phase` and `rigor`, which say how settled this document is. Readable at any phase
     — an unapproved document is still worth reading, and its phase tells you not to build on it yet.
@@ -3972,7 +4004,11 @@ def read_spec_document(
     A `diagnostics` entry appears where the document and the Hub's index disagree, or where the
     document carries no structured content at all.
     """
-    return _hub_request("GET", "/spec/documents", params={"path": path, "include": include})
+    params = {"path": path, "include": include}
+    if identifiers:
+        # Sent only when given, so this tool works unchanged against a Hub that predates it (D5).
+        params["identifiers"] = identifiers
+    return _hub_request("GET", "/spec/documents", params=params)
 
 
 @_tool()

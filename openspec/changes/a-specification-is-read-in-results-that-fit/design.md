@@ -1,5 +1,25 @@
 # Design — a specification is read in results that fit
 
+## D7 — a read too large for one result is written to a file (operator, 2026-10-07)
+
+**Found by the acceptance drive, before 3.1 closed.** A Haiku agent on `:8010` read
+`agent-conversation-workspace` (47 requirements) through `aw-tool` in PowerShell, not the MCP tool.
+A shell tool's output spills above 30,000 characters (`BASH_MAX_OUTPUT_LENGTH`, Claude Code docs),
+so the first 37.6 KB read spilled to `tool-results/` even under the 40,000 budget. The agent
+recovered by reading the spill, which is exactly what the workspace guard refused in F363.
+
+**Decided:** a read whose answer would exceed the bound is written, as text wrapped to 100
+columns (the Read tool cuts a line over 2,000), to `<run workspace>/.agentweave/reads/<doc-id>.
+<include|selection>.md`. The answer carries `written_to`, `requirement_identifiers` and `read_with`.
+The agent's own file tool pages through it on every access path, with no continuation protocol.
+`.agentweave/reads/` joins `repo_hygiene.EXCLUDE_PATTERNS`. Written only into a plain directory
+(`reads_directory` refuses a link or a file, like `prepare_calls_dir`).
+
+**The bounded read (D1-D3) stays** as the inline form and the fallback where the run has no
+workspace, with `READ_BUDGET_CHARS` lowered from 40,000 to **25,000** so the fallback fits the shell
+threshold too. Rejected: 25,000 alone (the operator asked whether the path could be sent instead,
+and a file read needs no continuation); a smaller limit for `aw-tool` only (two code paths).
+
 ## Operator review, 2026-09-24
 
 The operator approved the Hub-enforced 40,000-character budget (D-B12-3) and decided that a

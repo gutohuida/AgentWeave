@@ -74,6 +74,9 @@ EXCLUDE_PATTERNS = [
     # The call command's arguments files (`a-run-reaches-the-hub-without-mcp`, D14): the agent's
     # scratch, rewritten call after call, and never part of its work.
     ".agentweave/calls/",
+    # A specification read too large for one tool result, written for the agent to page through
+    # (`a-specification-is-read-in-results-that-fit` D7): rewritten on every read, never work.
+    ".agentweave/reads/",
     # The one entry the rule above does not reach: no worktree holds a marker, so the Hub's own
     # commit never sweeps it in. It is here because the operator's `git add -A` in their primary
     # checkout would, and because `workspace_paths` offered it in the `@path` picker (F170). It binds
