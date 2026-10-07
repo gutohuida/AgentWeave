@@ -1413,6 +1413,7 @@ def _call_tool_over_stdio(
     env = dict(os.environ)
     env["AW_WORKSPACE_DIR"] = workspace_dir
     env.pop("AW_RUN_TOKEN", None)
+    env.setdefault("HUB_URL", _HUB)  # the server refuses to start with no Hub address (F526)
     env.update(env_overrides or {})
     proc = subprocess.Popen(
         [sys.executable, str(MCP_SERVER)],

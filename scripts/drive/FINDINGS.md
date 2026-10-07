@@ -34811,7 +34811,8 @@ rows unwatched (13 of 28 here); (d) (b) for merge-rebuilt rows and the stored co
 
 ## F526 (B) -- an `agentweave-mcp` started with no `HUB_URL` silently targets the operator's real Hub on `:8000`
 
-**Status:** open. Filed 2026-10-07 (interactive, while choosing how to author in the app). This repo's
+**Status:** fixed (Tier 0, 2026-10-08 night), pending CI. `main()` exits 1 naming `HUB_URL` when it is unset or blank, and `_hub_request` raises `UnboundIdentityError` (call mode: kind `unbound`, exit 2) before any connection; the `:8000` default is gone. The run token is deliberately not checked at start: the permission approver runs without one (its wire tests pop it) and every effect already refuses in `_bound_token`. Driven: the file spawned with no environment exits 1 with the message; `--call list_tasks` without `HUB_URL` returns the `unbound` envelope. Five wire tests and two unit tests relied on the default and now set `HUB_URL`.
+Was: open. Filed 2026-10-07 (interactive, while choosing how to author in the app). This repo's
 Claude Code config (`~/.claude.json`, project `AgentWeave`) starts `agentweave-mcp` with no
 environment, and `hub/hub/mcp_server.py:221` falls back to `http://127.0.0.1:8000`. Any MCP tool an
 interactive session called would have gone to the operator's live instance -- the one CLAUDE.md

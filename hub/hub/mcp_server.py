@@ -127,6 +127,18 @@ def _bound_token() -> str:
     return token
 
 
+def _hub_address() -> str:
+    """This process's `HUB_URL`, or a refusal. There is no default: the one address a guess would
+    land on is the operator's own instance (F526), under no run credential."""
+    url = os.environ.get("HUB_URL", "").strip().rstrip("/")
+    if not url:
+        raise UnboundIdentityError(
+            "No Hub address (HUB_URL is unset); the Hub must start this tool connection. "
+            "Nothing was sent."
+        )
+    return url
+
+
 class HubAPIError(RuntimeError):
     """The Hub was reached and rejected this request — a validation or policy failure,
     not a connectivity problem. Distinct from `HubUnreachableError` (task 5.2): a rejected
@@ -218,7 +230,7 @@ def _hub_request(
     params: Optional[Dict[str, Any]] = None,
 ) -> Any:
     """Make one authenticated request to the Hub API with bound run attribution."""
-    base_url = os.environ.get("HUB_URL", "http://127.0.0.1:8000").rstrip("/")
+    base_url = _hub_address()
     token = _bound_token()
     url = f"{base_url}/api/v1/agent-actions{path}"
     if params:
@@ -4159,7 +4171,17 @@ def _announce_adapter_online() -> None:
 
 
 def main() -> None:
-    """Run the canonical Hub-owned surface over stdio."""
+    """Run the canonical Hub-owned surface over stdio.
+
+    Refuses to start unbound: a client that launched this with no environment would otherwise
+    serve a full tool list whose every call fails, or (before F526) reached for `:8000`. A missing
+    run token is not checked here: the permission approver legitimately runs without one, and
+    every effect that needs it already refuses (`_bound_token`).
+    """
+    try:
+        _hub_address()
+    except UnboundIdentityError as exc:
+        sys.exit(f"agentweave MCP server not started: {exc}")
     _announce_adapter_online()
     mcp.run(transport="stdio", show_banner=False)
 
