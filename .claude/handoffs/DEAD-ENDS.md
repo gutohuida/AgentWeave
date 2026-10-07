@@ -2079,3 +2079,23 @@ disappears is indistinguishable from one that was forgotten.
   says "no accepted evidence names a commit"), so it offers no commit to dependents either. A drive that needs
   a task's work to flow needs accepted evidence or an evidence-free loop (`work_needs_evidence: false`, whose
   work is the branch tip).
+- **2026-10-07 (home) — `utils.persist_event` commits by default.** Called inside a route's or
+  `apply_transition`'s uncommitted move it lands the move early; pass `commit=False` there.
+- **2026-10-07 (home) — this repo's interactive `agentweave-mcp` targets `:8000`.** `~/.claude.json`
+  starts it with no env and `mcp_server.py:221` defaults `HUB_URL` to `http://127.0.0.1:8000`, with no
+  run token. Never call the `mcp__agentweave__*` tools from an interactive session here (F526); author
+  as the operator through `:8010`'s routes (`scripts/drive/author_change.py`).
+- **2026-10-07 (home) — spec payload `modal` accepts only MUST, SHOULD, MAY, SHALL.** `MUST NOT` is a
+  422; put the negation in the statement. A refused content `PUT` still lets `close-exploration` and
+  `propose` answer 200 (F528) — check `phase == "proposed"`, not the status code.
+- **2026-10-07 (home) — Hub test seams that look like they would hold and don't.** `evaluate_run_end`
+  dispatches a restaff's response itself (`run_divergence.py:921`), so the state between restaff and
+  dispatch is only visible with `hub.turn_scheduler.schedule_agent` patched out. A reviewer with a
+  running `Run` is never chosen by the ladder, so a *deferred* review dispatch needs the turn to start
+  between the firing's decision and its dispatch (wrap `schedule_agent`). Patch
+  `hub.api.v1.agent_trigger._execute_run` to a no-op to read what a successful dispatch committed.
+- **2026-10-07 (home) — drive setup facts.** A task created with an assignee starts `pending`, not
+  `assigned`. `POST /agent/trigger` with `review_task_id` is refused (409) unless evidence names a
+  commit. A flow's width is bounded by free agents, not a setting: two reviewable tasks and two free
+  agents fire together. `spec/capabilities/*.html` payloads: read them with
+  `hub.spec_payload.extract_payload` (run from `hub/`), not a hand-written regex.

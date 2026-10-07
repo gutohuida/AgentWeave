@@ -33236,7 +33236,7 @@ and passes today.
 
 ## F440 (B) — a decided task's queued review entry is never released; it is refused up to three times, then withdrawn
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R2. `_release_queued_entries_bound_to` keeps entries carrying `review_task_id`, so a review queued for a task that has since been decided is delivered, refused (up to `DELIVERY_ATTEMPT_LIMIT = 3`), then withdrawn. S13 widens the window. Repair shape: release review entries for a task when it leaves `under_review`.
+**Status:** fixed 2026-10-07 by `a-decided-task-withdraws-its-waiting-reviews` (authored and approved in the app on `:8010`, `spdoc-3b1585810681`): a verdict (approved, rejected, revision_needed; PATCH or land) withdraws the task's queued review entries in its own transaction and announces them. Driven on `:8010` (`d1007_verdict_withdraws_review.py`): 4/8 before (the entry stayed queued and was delivered into a refusal at the reviewer's run end), 8/8 after. Reconciled into `run-task-binding`.
 
 
 ## F441 (C) — after the attended change, Run can say "already being worked" for an idle assignee whose queued turn cannot start
@@ -34806,3 +34806,37 @@ burst is expected there on its first scan after restart.
 (b) rebuild a legacy row's baseline at the current main tip, so only changes from now on raise (loses
 "changed since it was verified" for old rows); (c) rebuild from the locator only, leaving merge-only
 rows unwatched (13 of 28 here); (d) (b) for merge-rebuilt rows and the stored commit for locator rows.
+
+
+## F526 (B) -- an `agentweave-mcp` started with no `HUB_URL` silently targets the operator's real Hub on `:8000`
+
+**Status:** open. Filed 2026-10-07 (interactive, while choosing how to author in the app). This repo's
+Claude Code config (`~/.claude.json`, project `AgentWeave`) starts `agentweave-mcp` with no
+environment, and `hub/hub/mcp_server.py:221` falls back to `http://127.0.0.1:8000`. Any MCP tool an
+interactive session called would have gone to the operator's live instance -- the one CLAUDE.md
+says never to call -- with no run credential (`AW_RUN_TOKEN`) to act under. Nothing broke because
+the session never called it. Repair shape: refuse to start (or answer every tool with a refusal
+naming the missing variable) when `HUB_URL` or the run token is absent, as the Hub itself now
+refuses to open an unnamed database.
+
+
+## F527 (C) -- a change document names no capability, so reconciling an archived change into the corpus is a hand-written script
+
+**Status:** open. Filed 2026-10-07 (first change authored in the app after the switch,
+`a-decided-task-withdraws-its-waiting-reviews`). The change-spec payload has no field for the
+capability document(s) it amends, and the app offers no step that carries an approved change's
+requirements into them. Reconciling F440 into `spec/capabilities/run-task-binding/spec.html` meant
+`extract_payload` on the file, appending a requirement and three criteria in Python, and a `PUT` of
+the whole payload (`scripts/drive/reconcile_f440.py`). openspec's delta-and-archive did this as one
+step; here it is invisible to the flow, so nothing reminds the author and coverage cannot say which
+change a capability requirement came from.
+
+
+## F528 (C) -- `close-exploration` and `propose` answer 200 for a document whose content was refused
+
+**Status:** open. Filed 2026-10-07 (same authoring). A `PUT .../content` refused with 422
+(`modal must be one of MUST, SHOULD, MAY, SHALL` -- `MUST NOT` is not a modal) left the document
+empty; the script's following `close-exploration` and `propose` both answered **200**, `propose`
+with `phase: exploring` and a `blocking` list. A caller reading the status code believes it
+proposed. A refused proposal should be a 4xx naming the blockers (or the 200 body should say
+`proposed: false` in a field a client checks).

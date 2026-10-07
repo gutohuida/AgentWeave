@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A decided task withdraws its waiting reviews</title>
+<meta name="aw-spec-kind" content="change-spec">
+<meta name="aw-spec-status" content="approved">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>A decided task withdraws its waiting reviews</h1>
+<p class="aw-meta"><span class="aw-chip">change-spec</span><span class="aw-chip aw-chip-phase-done">approved</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">3</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">3</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">6</span> criteria<span class="aw-summary-sep">·</span><span class="aw-count">3</span> tasks</p>
+<section id="summary"><h2>Summary</h2><p>When a task is given a verdict (approved, rejected, or sent back with revision_needed), every review turn still queued for it is withdrawn in the same transaction and announced, instead of being delivered, refused up to three times and then given up (F440).</p></section><section id="problem"><h2>Problem</h2><p>`run_task_binding._release_queued_entries_bound_to` clears `task_id` on a decided task&#x27;s queued entries but keeps `review_task_id` on purpose, so a review queued for a task that is decided meanwhile stays `queued`. Its dispatch is refused (`agent_trigger`: &quot;not a status a review starts from&quot;), counted to `DELIVERY_ATTEMPT_LIMIT` (3), then withdrawn with a `queue_entry_abandoned` warning. Since `a-flow-stages-its-review-in-the-dispatch` a flow&#x27;s own review waits as such an entry, so the window is wider; the refusal re-delivery was seen live on 2026-10-07 (attempts 1 -&gt; 2 on the drive&#x27;s task A). Each attempt is a refusal the operator reads as a fault, and until it is given up the entry books its reviewer.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>Queued entries whose review_task_id names a task that reaches approved, rejected or revision_needed, on the task PATCH route and on land_task</li></ul><h3>Non-goals</h3><ul><li>Delivered entries (the record of a turn that happened)</li><li>Work entries (task_id only), which keep today&#x27;s release: task_id cleared, still queued</li><li>A review queued for a task that is still reviewable or in review (in flight, D2 of the dispatch change)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 3</span><p><span class="aw-modal aw-modal-must">MUST</span> When a task moves to approved, rejected or revision_needed, every queued inbound entry whose review_task_id names that task MUST be withdrawn in the same transaction as the move, recording the verdict as the reason.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A review of a decided task can only be refused; delivering it is noise.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 3</span><p><span class="aw-modal aw-modal-must">MUST</span> Each entry withdrawn this way MUST be announced as queue_entry_withdrawn, naming the entry, its agent, the task and the verdict, so the queue the operator watches updates without a reload.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 3</span><p><span class="aw-modal aw-modal-must">MUST</span> A verdict MUST NOT change a delivered entry, an entry naming another task, or a work entry&#x27;s queued state.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a completed task with a review entry queued for a busy reviewer</td><td>the operator approves the task with PATCH</td><td>the entry is withdrawn, carries the verdict as its reason, and no delivery is attempted</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>the same queued review entry</td><td>the operator lands the task</td><td>the entry is withdrawn in the landing&#x27;s transaction</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a task under review with a second reviewer&#x27;s review entry queued</td><td>the reviewer sends it back with revision_needed</td><td>the second entry is withdrawn</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>on the trial Hub, a review requested by hand for a reviewer mid-turn on a slow Haiku turn</td><td>the operator approves the task before that turn ends</td><td>the entry reads withdrawn with the verdict, and after the turn ends no review turn for the task starts and no refusal is recorded</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a queued review entry</td><td>its task is approved</td><td>a queue_entry_withdrawn event names the entry, agent, task and verdict</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a delivered review entry for the task, a queued review entry for another task, and a queued work entry for the task</td><td>the task is approved</td><td>the delivered entry and the other task&#x27;s entry are unchanged; the work entry stays queued with task_id cleared, as today</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>Tier 1. Withdrawn, not merely unbound: the entry&#x27;s only purpose was a review of work that is now decided, and an unbound review entry has no task to review. revision_needed is included because a review queued against the pre-revision work would be refused the same way, and the next review is staffed for the revised work. The withdrawal reuses the abandoned_reason column the refused-request path writes, so the queue route already shows it.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>run_task_binding._release_queued_entries_bound_to keeps review_task_id (docstring, D3 of every-run-knows-its-task)</li><li>Only tasks.py&#x27;s PATCH and land_task decide a review (every apply_transition caller read)</li><li>inbound_queue._withdraw_if_queued commits on both branches, so it cannot run inside the move</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>one-off</p></section><section id="tasks"><h2>Tasks</h2><ul class="aw-task-list"><li class="aw-task"><strong>Failing tests for the verdict withdrawal</strong> — hub/tests/test_a_decided_task_withdraws_its_waiting_reviews.py: criteria approve, land, revise, event, others; each fails on HEAD except the controls.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-2">FR-2</a><a class="aw-chip-ref" href="#FR-3">FR-3</a></span></li><li class="aw-task"><strong>Withdraw review entries at the verdict</strong> — run_task_binding: withdraw_review_entries_for(session, task, verdict) — a conditional UPDATE in the caller&#x27;s transaction (not _withdraw_if_queued, which commits); called from the PATCH route for the three verdicts and from land_task; events persisted with the move, broadcast after its commit.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-2">FR-2</a><a class="aw-chip-ref" href="#FR-3">FR-3</a></span></li><li class="aw-task"><strong>Acceptance drive on :8010</strong> — scripts/drive/d1007_verdict_withdraws_review.py, failing on the pre-fix Hub and passing after.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a></span></li></ul></section><section id="delivery"><h2>Delivery</h2><p>No flow. The tasks go on the board and are started by hand.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "change-spec",
+  "title": "A decided task withdraws its waiting reviews",
+  "summary": "When a task is given a verdict (approved, rejected, or sent back with revision_needed), every review turn still queued for it is withdrawn in the same transaction and announced, instead of being delivered, refused up to three times and then given up (F440).",
+  "problem": "`run_task_binding._release_queued_entries_bound_to` clears `task_id` on a decided task's queued entries but keeps `review_task_id` on purpose, so a review queued for a task that is decided meanwhile stays `queued`. Its dispatch is refused (`agent_trigger`: \"not a status a review starts from\"), counted to `DELIVERY_ATTEMPT_LIMIT` (3), then withdrawn with a `queue_entry_abandoned` warning. Since `a-flow-stages-its-review-in-the-dispatch` a flow's own review waits as such an entry, so the window is wider; the refusal re-delivery was seen live on 2026-10-07 (attempts 1 -> 2 on the drive's task A). Each attempt is a refusal the operator reads as a fault, and until it is given up the entry books its reviewer.",
+  "scope": {
+    "in_scope": [
+      "Queued entries whose review_task_id names a task that reaches approved, rejected or revision_needed, on the task PATCH route and on land_task"
+    ],
+    "non_goals": [
+      "Delivered entries (the record of a turn that happened)",
+      "Work entries (task_id only), which keep today's release: task_id cleared, still queued",
+      "A review queued for a task that is still reviewable or in review (in flight, D2 of the dispatch change)"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "withdrawn",
+      "statement": "When a task moves to approved, rejected or revision_needed, every queued inbound entry whose review_task_id names that task MUST be withdrawn in the same transaction as the move, recording the verdict as the reason.",
+      "modal": "MUST",
+      "rationale": "A review of a decided task can only be refused; delivering it is noise.",
+      "party": null
+    },
+    {
+      "key": "announced",
+      "statement": "Each entry withdrawn this way MUST be announced as queue_entry_withdrawn, naming the entry, its agent, the task and the verdict, so the queue the operator watches updates without a reload.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "untouched",
+      "statement": "A verdict MUST NOT change a delivered entry, an entry naming another task, or a work entry's queued state.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "approve",
+      "requirement": "withdrawn",
+      "given": "a completed task with a review entry queued for a busy reviewer",
+      "when": "the operator approves the task with PATCH",
+      "then": "the entry is withdrawn, carries the verdict as its reason, and no delivery is attempted"
+    },
+    {
+      "key": "land",
+      "requirement": "withdrawn",
+      "given": "the same queued review entry",
+      "when": "the operator lands the task",
+      "then": "the entry is withdrawn in the landing's transaction"
+    },
+    {
+      "key": "revise",
+      "requirement": "withdrawn",
+      "given": "a task under review with a second reviewer's review entry queued",
+      "when": "the reviewer sends it back with revision_needed",
+      "then": "the second entry is withdrawn"
+    },
+    {
+      "key": "event",
+      "requirement": "announced",
+      "given": "a queued review entry",
+      "when": "its task is approved",
+      "then": "a queue_entry_withdrawn event names the entry, agent, task and verdict"
+    },
+    {
+      "key": "others",
+      "requirement": "untouched",
+      "given": "a delivered review entry for the task, a queued review entry for another task, and a queued work entry for the task",
+      "when": "the task is approved",
+      "then": "the delivered entry and the other task's entry are unchanged; the work entry stays queued with task_id cleared, as today"
+    },
+    {
+      "key": "drive",
+      "requirement": "withdrawn",
+      "given": "on the trial Hub, a review requested by hand for a reviewer mid-turn on a slow Haiku turn",
+      "when": "the operator approves the task before that turn ends",
+      "then": "the entry reads withdrawn with the verdict, and after the turn ends no review turn for the task starts and no refusal is recorded"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "tests",
+      "title": "Failing tests for the verdict withdrawal",
+      "description": "hub/tests/test_a_decided_task_withdraws_its_waiting_reviews.py: criteria approve, land, revise, event, others; each fails on HEAD except the controls.",
+      "requirements": [
+        "withdrawn",
+        "announced",
+        "untouched"
+      ],
+      "depends_on": [],
+      "files": [
+        "hub/tests/test_a_decided_task_withdraws_its_waiting_reviews.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "build",
+      "title": "Withdraw review entries at the verdict",
+      "description": "run_task_binding: withdraw_review_entries_for(session, task, verdict) — a conditional UPDATE in the caller's transaction (not _withdraw_if_queued, which commits); called from the PATCH route for the three verdicts and from land_task; events persisted with the move, broadcast after its commit.",
+      "requirements": [
+        "withdrawn",
+        "announced",
+        "untouched"
+      ],
+      "depends_on": [
+        "tests"
+      ],
+      "files": [
+        "hub/hub/run_task_binding.py",
+        "hub/hub/api/v1/tasks.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "drive",
+      "title": "Acceptance drive on :8010",
+      "description": "scripts/drive/d1007_verdict_withdraws_review.py, failing on the pre-fix Hub and passing after.",
+      "requirements": [
+        "withdrawn"
+      ],
+      "depends_on": [
+        "build"
+      ],
+      "files": [
+        "scripts/drive/d1007_verdict_withdraws_review.py"
+      ],
+      "from": null,
+      "reviewer": null
+    }
+  ],
+  "algorithms": [],
+  "design": "Tier 1. Withdrawn, not merely unbound: the entry's only purpose was a review of work that is now decided, and an unbound review entry has no task to review. revision_needed is included because a review queued against the pre-revision work would be refused the same way, and the next review is staffed for the revised work. The withdrawal reuses the abandoned_reason column the refused-request path writes, so the queue route already shows it.",
+  "evidence": {
+    "checked": [
+      "run_task_binding._release_queued_entries_bound_to keeps review_task_id (docstring, D3 of every-run-knows-its-task)",
+      "Only tasks.py's PATCH and land_task decide a review (every apply_transition caller read)",
+      "inbound_queue._withdraw_if_queued commits on both branches, so it cannot run inside the move"
+    ],
+    "limits": []
+  },
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "delivery": {
+    "mode": "none",
+    "agent": null,
+    "stop_when_queue_empties": false,
+    "stop_at": null,
+    "cron": "*/5 * * * *"
+  },
+  "aw_identity": {
+    "requirements": {
+      "withdrawn": "FR-1",
+      "announced": "FR-2",
+      "untouched": "FR-3"
+    },
+    "high_water": 3,
+    "retired": {},
+    "digests": {
+      "FR-1": "96945da31c30a2ca7c8f02149fa601e56207f45f08aef0af121fb007226bb99c",
+      "FR-2": "e4ead0cfae3997ed682eeef784c87f42e958e311e09f55ad0b759664f6ab4ae7",
+      "FR-3": "b3d517b334e12090b9d4ad716ac4a7c24d9207a734aafd7d27b62dc6d1f765c0"
+    }
+  }
+}
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 import asyncio
 import re
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
@@ -50,6 +50,7 @@ from ...run_task_binding import (
     reason_from_question,
     release_bindings_to,
     release_reason,
+    withdraw_review_entries_for,
 )
 from ...schemas.common import RequestModel
 from ...schemas.tasks import (
@@ -1459,6 +1460,7 @@ async def update_task_for_actor(
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.
     approval_report: List[Any] = []
+    withdrawn_reviews: List[Dict[str, str]] = []
     # **Before the transition, not after it** (finding F70). `_guard_reviewer_is_not_the_author`
     # refuses `-> under_review` while the task still names the agent that completed it, and
     # reassigning to a different reviewer in the same PATCH is the most natural way past it.
@@ -1572,7 +1574,11 @@ async def update_task_for_actor(
         # claim and was not covered, so approving a task did not stop the turn queued against it
         # from arriving afterwards (F79).
         if body.status in TERMINAL_FOR_BINDING:
-            await release_bindings_to(session, task)
+            withdrawn_reviews = await release_bindings_to(session, task)
+        elif body.status == "revision_needed":
+            # A review queued against the work being sent back would be refused the same way a
+            # decided task's is; the next review is staffed for the revised work (F440).
+            withdrawn_reviews = await withdraw_review_entries_for(session, task)
     if body.priority is not None:
         task.priority = body.priority
     if body.description is not None:
@@ -1621,7 +1627,11 @@ async def update_task_for_actor(
     # append-only history instead; this stays for existing consumers and is not what governs.
     task.updated_by_run_id = actor.run_id
     return await _commit_and_render(
-        session, task, project_id=project_id, approval_report=approval_report
+        session,
+        task,
+        project_id=project_id,
+        approval_report=approval_report,
+        withdrawn_reviews=withdrawn_reviews,
     )
 
 
@@ -1631,8 +1641,12 @@ async def _commit_and_render(
     *,
     project_id: str,
     approval_report: List[Any],
+    withdrawn_reviews: Optional[List[Dict[str, str]]] = None,
 ) -> TaskResponse:
     """Commit what the caller staged, announce it, and render the task.
+
+    `withdrawn_reviews`: the review entries the verdict withdrew (F440), persisted with it and
+    broadcast here, once it has committed, so the queue never shows a withdrawal that rolled back.
 
     Extracted so the landing action below shares it rather than growing a second copy — and the
     sharing is load-bearing rather than tidy: `apply_transition` does not commit, so this call
@@ -1642,6 +1656,8 @@ async def _commit_and_render(
     await session.commit()
     await session.refresh(task)
     await sse_manager.broadcast(project_id, "task_updated", {"id": task.id, "status": task.status})
+    for payload in withdrawn_reviews or ():
+        await sse_manager.broadcast(project_id, "queue_entry_withdrawn", payload)
     await persist_event(
         session,
         project_id,
@@ -1779,11 +1795,15 @@ async def land_task(
     # that outlived its block describes something that already arrived, and anything still bound
     # would keep attributing turns to a task the operator has decided about (F79).
     release_reason(task)
-    await release_bindings_to(session, task)
+    withdrawn_reviews = await release_bindings_to(session, task)
     task.updated = datetime.now(timezone.utc)
     task.updated_by_run_id = actor.run_id
     return await _commit_and_render(
-        session, task, project_id=project_id, approval_report=approval_report
+        session,
+        task,
+        project_id=project_id,
+        approval_report=approval_report,
+        withdrawn_reviews=withdrawn_reviews,
     )
 
 

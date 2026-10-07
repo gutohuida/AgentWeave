@@ -674,7 +674,7 @@ async def release_conversations_bound_to(session: AsyncSession, task: Task) -> i
     return len(conversations)
 
 
-async def release_bindings_to(session: AsyncSession, task: Task) -> None:
+async def release_bindings_to(session: AsyncSession, task: Task) -> "List[Dict[str, str]]":
     """Release everything still claiming to be work on `task`, at the moment it is decided.
 
     Two surfaces can carry that claim into a *future* run and both have to let go together, or the
@@ -684,9 +684,64 @@ async def release_bindings_to(session: AsyncSession, task: Task) -> None:
 
     Called from the one place a task reaches a terminal status, so a third surface acquiring a
     binding has one function to be added to rather than a call site to be remembered at.
+
+    Returns what `withdraw_review_entries_for` withdrew, for the caller to announce once its
+    transaction commits (F440).
     """
     await release_conversations_bound_to(session, task)
     await _release_queued_entries_bound_to(session, task)
+    return await withdraw_review_entries_for(session, task)
+
+
+async def withdraw_review_entries_for(session: AsyncSession, task: Task) -> "List[Dict[str, str]]":
+    """Withdraw the review turns still queued for `task`, which has just been given a verdict (F440,
+    `a-decided-task-withdraws-its-waiting-reviews`).
+
+    `_release_queued_entries_bound_to` keeps `review_task_id` on purpose, so before this a review
+    queued for a task decided meanwhile stayed `queued`: delivered, refused ("not a status a review
+    starts from"), counted to the delivery limit, and only then given up. Since the dispatch stages
+    a flow's review, the flow's own review waits as exactly such an entry.
+
+    **In the caller's transaction**, not through `inbound_queue._withdraw_if_queued`, which commits:
+    the withdrawal is part of the verdict and must not land without it. Each `UPDATE` still asks
+    whether the entry is queued (F328's rule), so an entry a dispatch delivered first is left alone.
+    `review_task_id` is kept: it is the record of what the entry was for. The verdict is the task's
+    status at the call, written as the reason the queue route already shows (`abandoned_reason`).
+
+    Returns one payload per entry withdrawn, each already persisted as `queue_entry_withdrawn`;
+    the caller broadcasts them after its commit.
+    """
+    verdict = task.status
+    rows = await session.execute(
+        select(InboundQueueEntry.id, InboundQueueEntry.agent).where(
+            InboundQueueEntry.project_id == task.project_id,
+            InboundQueueEntry.review_task_id == task.id,
+            InboundQueueEntry.state == "queued",
+        )
+    )
+    withdrawn: "List[Dict[str, str]]" = []
+    for entry_id, agent in rows.all():
+        result = await session.execute(
+            update(InboundQueueEntry)
+            .where(InboundQueueEntry.id == entry_id, InboundQueueEntry.state == "queued")
+            .values(
+                state="withdrawn",
+                withdrawn_at=datetime.now(timezone.utc),
+                abandoned_reason=(
+                    f"Withdrawn: task {task.id} was {verdict}, so there is no longer a review of "
+                    f"it to start."
+                ),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if not result.rowcount:
+            continue
+        payload = {"entry_id": entry_id, "agent": agent, "task_id": task.id, "verdict": verdict}
+        await persist_event(
+            session, task.project_id, "queue_entry_withdrawn", payload, agent=agent, commit=False
+        )
+        withdrawn.append(payload)
+    return withdrawn
 
 
 async def _release_queued_entries_bound_to(session: AsyncSession, task: Task) -> int:
