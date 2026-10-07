@@ -6,7 +6,7 @@ change), adopted into the Hub. A Haiku agent is told to read every requirement w
 `read_spec_document`. Its Claude transcript is then read for the number of read calls, and for a
 `tool-results/` spill, which is F363's signature.
 
-Usage: py -3.11 scripts/drive/d1007_read_budget_drive.py
+Usage: py -3.11 scripts/drive/d1007_read_budget_drive.py [--aw-tool]
 """
 
 import json
@@ -74,7 +74,12 @@ def main():
     code, agent = api("POST", f"{A}/agents", {"name": "reader", "runner_id": runner["id"]})
     print("agent", code)
 
-    message = (
+    via = (
+        "Call it through the `aw-tool` command in your shell, not as an MCP tool. "
+        if "--aw-tool" in sys.argv
+        else ""
+    )
+    message = via + (
         f"Use the read_spec_document tool to read `{DOC}`. Read every requirement: if a result "
         "says it is truncated, follow its continue_with until nothing remains. Do not open the "
         "file any other way. Then reply with two numbers: how many distinct requirement "

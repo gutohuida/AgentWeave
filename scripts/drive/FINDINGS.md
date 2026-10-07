@@ -29820,7 +29820,7 @@ were refused. **Not built on 2026-09-14**, because the repair is in `mcp_server.
 
 ## F363 (B) — `read_spec_document` cannot return a real specification in one tool result, and it refuses the document id the other tools take
 
-**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+**Status:** fixed (Tier 1, `a-specification-is-read-in-results-that-fit`, `f30326a`, 2026-10-07) -- a read is answered inline only within 25,000 characters; a larger one is written to `<run workspace>/.agentweave/reads/` and answered with `written_to` (D7); the bounded read with continuation remains the fallback; an `spdoc-` id is accepted. Driven on `:8010` with real Haiku turns on `agent-conversation-workspace` (47 requirements): over MCP, 1 call, 0 spills; over `aw-tool` in PowerShell, 1 call, 0 spills, the file read with one Read. The first drive, on the 40,000 bound, spilled on the `aw-tool` path (shell output spills above 30,000), which is what D7 answers. `list_tasks`' spill filed as F523. Was: open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
 
 **Measured.** Every one of the project's 57 `read_spec_document` results, across all four agents,
 was too large for the harness. Each was saved to a `tool-results/` file of 80–180 KB on a single
@@ -34760,3 +34760,17 @@ for targets `252076c`/`838d833` -- both already reachable from master. Approving
 never asks reachability; `project_checks.unmerged` (F518) already does, so the drawer and the merge give two
 answers to one question. **Direction:** filter the preview's targets through the same reachability test and
 say "already in master; approval merges nothing".
+
+## F523 (B) — `list_tasks` returns every task in one result, and a real board spills it to `tool-results/`
+
+**Status:** open (filed 2026-10-07 from F363's measurements; not driven on its own)
+**Source:** drive (F363, LoopEngine on `:8000`, read-only)
+**Theme:** Agent tool surface
+
+F363 measured `list_tasks` spilling 24 times on LoopEngine alongside `read_spec_document`'s 57: the
+whole board in one tool result, over Claude Code's spill threshold (50,000 for an MCP result, 30,000
+for `aw-tool` through a shell). The spill file lies outside the workspace, and the guard refuses it.
+**Direction:** the same answer `read_spec_document` took (D7 of
+`a-specification-is-read-in-results-that-fit`): inline within 25,000 characters, otherwise written
+to `.agentweave/reads/` in the run's workspace with the path in the answer; or filters that keep a
+board's read small.

@@ -104,9 +104,9 @@ copy of a real spec.
 
 ## 3. Verify
 
-- [ ] 3.1 Trial Hub `:8010`: register a project holding a copy of
+- [x] 3.1 Trial Hub `:8010`: register a project holding a copy of *(2026-10-07, `scripts/drive/d1007_read_budget_drive.py`: MCP 1 call, aw-tool 1 call, 0 spills on the D7 build; the 40,000 build spilled on aw-tool)*
   `spec/capabilities/agent-conversation-workspace/spec.html` (in `testbed/`), start a Haiku agent
   turn that is told to read it, and record that no `tool-results/` spill happens. Also record the
   number of calls it took to read every requirement.
-- [ ] 3.2 Close F363 in `FINDINGS.md` and regenerate the backlog. File `list_tasks`' spill as its
+- [x] 3.2 Close F363 in `FINDINGS.md` and regenerate the backlog. File `list_tasks`' spill as its
   own finding if it has none.
