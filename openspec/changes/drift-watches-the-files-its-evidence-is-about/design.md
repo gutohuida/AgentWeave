@@ -1,5 +1,48 @@
 # Design — drift watches the files its evidence is about
 
+## Fold-in of the operator's answers (2026-10-07, for re-approval) — supersedes D1's union and Open Question 1
+
+From `APPROVALS.md` 2026-09-24 (REVISING) and the Opus review
+(`spec-queue/tracks/reviews/B6-2026-09-24.md` §1). F217's basis is **C** (`f217-basis-c`) and legacy
+footprints are **backfilled** (`drift-legacy-backfill`), both recorded in `DECISIONS.md`.
+
+- **D1' — the rules apply in order.** `watched_files` returns the first source that contributes a
+  path: (1) locator tokens, (2) the operator-named commit, (3) the branch diff. `watched_from` names
+  that one source. The union made every agent row watch its task's whole diff (22 of 46 accepted
+  rows on `:8000` watched `src/engine.js`).
+- **D1'' — a locator is read as tokens.** Split on whitespace, `,`, `;`, `(`, `)` and quotes; each
+  token is normalised as rule 1 already does (`./`, backslashes, `::…`, `:<n>`); a token counts only
+  when it is a path in the footprinted tree or a directory prefix of paths in it. Measured: 3 of 46
+  rows recognised as a single path, 32 of 46 by tokens. Not the guess `_COMMIT_ISH` refuses: only
+  paths present in the tree count.
+- **D6 — legacy footprints are rebuilt where their merge is found.** In `POST /spec/drift/detect`,
+  before `refresh_reachability`, `backfill_legacy_footprints` takes each accepted git footprint with
+  `watched_from IS NULL`, finds the merge that brought its commit into the main line (the oldest
+  commit of `git rev-list --first-parent --ancestry-path <commit>..<main>`, or the commit itself when
+  it is on the first-parent chain), and rebuilds `entries` from D1' at the stored commit, falling back
+  to that merge's first-parent diff; `watched_from` becomes `["locator"]` or `["merge"]`. A row whose
+  merge is not found stays `NULL`, is listed as `recorded_before_watching`, and is retried at the next
+  scan (cheap: one `rev-list` per legacy row). Measured: 42 of 46 rebuildable.
+- **D7 — the production path is tested and cannot write NULL by accident.** `Footprint.watched_from`
+  becomes a required field (no default), so no constructor silently means "legacy". A test records
+  agent evidence mid-turn, ends the run, and asserts the restamped row's `watched_from` and narrowed
+  `entries`. `footprint_view` adds `provisional: true` for an agent row not yet restamped.
+- **D8 — the contradicted SHALL gets its delta.** MODIFIED `requirement-traceability` *A changed
+  implementation raises a candidate, never an edit*: a change to a *watched* file raises; an
+  unwatched footprint is listed, not scanned; "its tree" becomes "the files it watches"; the
+  provisional marker. `drift-is-scanned-and-answered-on-the-document` restates it again over this
+  one when it archives (its task 0.4).
+
+**Tier 2** (migration on live data, a cross-cutting contract). **Hazard:** the migration adds a
+nullable column, a no-op for existing rows; the first Scan for drift on `:8000` after its restart
+rewrites `entries`/`watched_from` of up to 46 accepted footprints. **Rollback:** `UPDATE
+evidence_footprints SET watched_from = NULL` returns them to unwatched (whole-tree `entries` are not
+restored, and nothing scans a `NULL` row). **Acceptance first:** task 0.5 runs drive 3.1 on today's
+code and records it failing before group 2 starts.
+Risks (review LOW): a squash or rebase merged by hand in a terminal never becomes reachable, so F217
+persists for that evidence; it is listed under its branch basis as today.
+
+
 **Built on the recommended answer to F217's decision (bundle B6, "drift branch basis", moved out of
 D13): narrow the footprint, then compare against the main line once the work has reached it
 (option C below).** If the operator answers A (state the asymmetry and keep the basis), drop D3 and

@@ -1,5 +1,26 @@
 # Design — a flow stages its review in the dispatch
 
+## Fold-in of the operator's answers (2026-10-07, for re-approval)
+
+From `APPROVALS.md` 2026-09-24 (REVISING) and the Opus review
+(`spec-queue/tracks/reviews/B1-2026-09-24.md` §3):
+
+- **D5 gains an attendance guard.** The shared `assignee_produced_the_work` predicate was lifted
+  without `decide_firing`'s "never while a turn is on the task" guard, so a running reviewer that had
+  recorded evidence counted as an author and could be replaced mid-review: two live reviews. An
+  author holder is now replaceable only where `not task_attendance.attends(task, holder)`, at both
+  `agent_trigger` sites (operator: "and not attending"). Test 1.11c, task 2.4a.
+- **The governance delta.** MODIFIED `task-lifecycle-governance` *A review a flow cannot staff is not
+  reported as staffed*: restated from the current main spec, which already carries F505's evidence
+  term (it shipped after the review), with the attendance rule and its scenario added.
+
+**Tier 2** (the scheduler's staging contract). Its predecessors (`a-task-is-attended-only-by-a-turn-
+that-will-reach-it`, the gate change, `a-flows-own-moves-are-recorded-as-the-flows`) are archived, so
+the D8 table of moved tests must be re-derived by running the D1 prototype on current code before
+group 2 (task 0.2's brief, re-run). **Split proposed, not done:** core (D1–D4, D6) and D5 (restaff
+and holder check) can ship as two changes; whether to split is the operator's call at re-approval.
+
+
 **Built on the operator's answer of 2026-09-23 to `F327-scope`: option (b).** The flow stops
 staging `under_review` before the dispatch; the dispatch stages it; the reviewable pool excludes the
 task by its pending entry. `DECISIONS.md` `F327-scope` (2026-09-12) had chosen (a) and recorded (b)

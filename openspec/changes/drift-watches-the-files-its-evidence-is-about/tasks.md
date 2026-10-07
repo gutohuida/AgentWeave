@@ -2,7 +2,8 @@
 
 - [x] 0.1 R2: an independent re-derivation of this proposal against `hub/hub/requirement_evidence.py` (`read_footprint`, `_take_footprint`, `restamp_run_footprints`, `refresh_reachability`, `detect_drift`, `_changed`, `resolve_drift`), `hub/hub/api/v1/spec.py` (`detect_drift`, `list_drift`, `footprint_view`, `record_evidence`), `hub/hub/api/v1/agent_actions.py:1230-1245`, `hub/hub/api/v1/agent_trigger.py:1775-1800`, and both specs. Check in particular the three reasons design gives for the basis flip being safe, and whether any reader of `entries` other than `detect_drift` exists
 - [x] 0.2 R3: a second independent re-derivation, not starting from R2's notes (design round log). `openspec validate drift-watches-the-files-its-evidence-is-about --strict` passes
-- [ ] 0.3 The operator answers F217's basis decision (recommended C) and Open Question 1 (legacy footprints: recommended not scanned, listed); record in `spec-queue/DECISIONS.md`
+- [ ] 0.3 The operator answers F217's basis decision (recommended C) and Open Question 1 (legacy footprints: recommended not scanned, listed); record in `spec-queue/DECISIONS.md` *(answered 2026-09-24: C, and backfill; recorded 2026-10-07 as `f217-basis-c`, `drift-legacy-backfill`; fold-in written 2026-10-07; re-approval pending)*
+- [ ] 0.5 (Tier 2, acceptance first) Run drive 3.1's harnesses on today's code and record them failing in the defect's direction (leg 3's agent row raises nothing; an unrelated commit raises a candidate) before group 2 starts
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
 
@@ -22,6 +23,12 @@ Extend `hub/tests/test_requirement_drift.py` (its `_git`, `_document`, `_detect`
 - [ ] 1.13 (D3, R3) A repo with `main` and `develop`, `Project.main_branch = "develop"`; operator evidence naming a commit that is on `main` only → the footprint's `reachable_from_main is False` (asked of `develop`, as restamp and refresh ask). FAILS today (`True`: record-time asks the guessed `main`)
 - [ ] 1.14 (D1 rule 2, R3) Operator evidence whose locator is the sha of a `merge --no-ff` commit on `main` that brought in `a.py` → `entries` keys == `{"a.py"}`, `watched_from == ["commit"]`. FAILS without `--diff-merges=first-parent` (plain `diff-tree` prints nothing for a merge; R3 measured on git 2.49)
 - [ ] 1.15 (D1 rule 1, R3) Locators `ledger.py::test_x` and `ledger.py:12` each watch `{"ledger.py"}`; `.` and `pytest ledger.py -q` each watch nothing (`names_no_file`). FAILS today (whole tree)
+- [ ] 1.16 (D1') An agent branch that changes `a.py` and `b.py`; agent evidence with `locator: "a.py"` → `entries` keys == `{"a.py"}`, `watched_from == ["locator"]` (not the branch diff). FAILS today
+- [ ] 1.17 (D1'') Locator `"src/engine.js (Engine.currentRun); test/engine.test.js"` on a tree holding both files and `README.md` → `entries` keys == both files, `watched_from == ["locator"]`; a locator of words none of which is in the tree falls through to rule 2/3. FAILS today
+- [ ] 1.18 (D6) A legacy row (`watched_from` NULL, whole-tree `entries`) whose commit was merged into `main` with `--no-ff`; detect → the row now has `watched_from == ["merge"]` and `entries` == the merge's files; a commit to an unrelated file then raises nothing. A legacy row whose commit is on no line into `main` stays NULL and is listed `recorded_before_watching`. FAILS today
+- [ ] 1.19 (D7) Agent records evidence with its change uncommitted; the run ends and `restamp_run_footprints` runs → the row's `watched_from` is not NULL and `entries` is narrowed. FAILS today (no column)
+- [ ] 1.20 (D7) `Footprint(...)` without `watched_from` raises `TypeError`; the agent's recording response carries `provisional: true` before the restamp and the restamped view does not. FAILS today
+- [ ] 1.21 (review LOW) The agent route passes `main_branch` (a project with `main_branch = "develop"`, agent evidence at a commit on `main` only → `reachable_from_main is False`); `unwatched` is ordered `produced_at, id` and a test fails if that order is reversed (F190). FAILS today
 - [ ] 1.10 `hub/tests/test_evidence_footprint_root.py` — run before group 2 and record the count; it pins which *root* is read, which this change does not move
 
 ## 2. The fix
@@ -31,6 +38,9 @@ Extend `hub/tests/test_requirement_drift.py` (its `_git`, `_document`, `_detect`
 - [ ] 2.3 (D1) `restamp_run_footprints` builds `taken` through `watched_files` with the run's evidence locators. Rows of one run can have different locators, so compute the branch-diff set once per run and the locator set per row
 - [ ] 2.4 (D3) `detect_drift(..., *, main_branch=None)`, passed by the detect route from the `Project` row it already reads (`spec.py:965`): skip `watched_from` NULL or `[]`; git basis = main branch when `reachable_from_main is True` (checked before the empty-branch skip), else `footprint.branch` as today; paths kind observes only baseline paths. Rewrite the docstring's "Accepted consequence" paragraph to name this change; delete `read_footprint`'s "whole tree … separate change" paragraph
 - [ ] 2.5 (D4) `footprint_view` adds `watched_from`, `watched_count`; `list_drift` adds `unwatched` with its three reasons (ordered `produced_at, id`)
+- [ ] 2.5a (D1', D1'') `watched_files` applies its sources in order, rule 1 reading locator tokens against the tree
+- [ ] 2.5b (D6) `backfill_legacy_footprints`, called by the detect route before `refresh_reachability`
+- [ ] 2.5c (D7, D8) `Footprint.watched_from` required; `footprint_view.provisional`; the MODIFIED `requirement-traceability` delta (written 2026-10-07)
 - [ ] 2.6 Run group 1 and record counts; run `py -3.11 -m pytest hub/tests/ -q` and record the full count inline, naming every moved assertion (only 1.9's are expected)
 - [ ] 2.7 `ruff check hub/`, `black --check --target-version py311 hub/hub/ hub/tests/`, clean
 

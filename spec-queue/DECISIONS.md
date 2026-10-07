@@ -20,6 +20,20 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### Phase 4 fold-ins: the decisions the REVISING rows of 2026-09-24 carried -- recorded 2026-10-07
+
+- DECIDED   q-f158  **(B) top up, with D2: refuse on conflict** (operator, `APPROVALS.md` 2026-09-24,
+  `a-task-checkout-catches-up-with-its-approved-prerequisites`). The refused work head is surfaced as
+  unstaffed naming the prerequisite, the checkout and the merge command, so it stalls visibly instead
+  of churning. Not D2' (start anyway and name the merge in the turn context).
+- DECIDED   f217-basis-c  **C: narrow the footprint, then compare against the main line once the work
+  has reached it** (operator, 2026-09-24, `drift-watches-the-files-its-evidence-is-about`), with the
+  rules applied in order and locator tokens matched against the tree.
+- DECIDED   drift-legacy-backfill  **Legacy footprints are backfilled** from the stored commit and the
+  first-parent merge that brought it into the main line (42 of 46 rebuildable on `:8000`), rather than
+  left unscanned (operator, 2026-09-24). Those that cannot be rebuilt are listed as
+  `recorded_before_watching`.
+
 ### Which corpus is the source of truth after the migration? -- 2026-10-07 interactive, DECIDED 2026-10-07
 
 - DECIDED   spec-source-after-migration  **Not yet: `openspec/specs/` stays the source of truth;

@@ -1,5 +1,34 @@
 # Design — a task checkout catches up with its approved prerequisites
 
+## Fold-in of the operator's answers (2026-10-07, for re-approval)
+
+Q-F158 = **(B) top up, with D2** (refuse on conflict), recorded as `q-f158` in `DECISIONS.md`. The
+Opus review (`spec-queue/tracks/reviews/B1-2026-09-24.md` §5) and the operator's answer in
+`APPROVALS.md` 2026-09-24 add four things, each now in the delta or the tasks:
+
+- **D4 — the contradicted SHALL gets its delta.** `workspace-isolation` *Provisioning a task checkout
+  is idempotent* said prerequisite work is merged "only at branch creation" and that a second turn
+  re-merges nothing. MODIFIED in `specs/workspace-isolation/spec.md`: an existing branch takes the
+  missing commits of **approved** prerequisites, non-destructively, and the reuse scenario now holds
+  when nothing is missing.
+- **D5 — the refusal names what clears it.** `approved` carries `(prerequisite_task_id, sha)` pairs,
+  not bare SHAs. The existing-branch sentence (not "conflicts with its base", which is false there)
+  names the prerequisite task, the commit, the checkout path and `git -C <checkout> merge --no-ff
+  <sha>`. It reaches the operator through the refused-work surfacing that shipped with
+  `a-task-is-attended-only-by-a-turn-that-will-reach-it` (`scheduler._refused_work_reason`), so it
+  stalls visibly as unstaffed instead of churning to abandonment.
+- **D6 — a git timeout leaves nothing half-done.** `_catch_up_prerequisites` catches
+  `subprocess.TimeoutExpired` and `OSError` around each merge, runs `git merge --abort`, and raises
+  `IsolationUnavailableError`.
+- **Control (review LOW):** a dirty checkout whose approved prerequisite is already an ancestor still
+  starts (the `--is-ancestor` path runs before the dirty check).
+
+**Tier 2** (it mutates a checkout an agent works in). Hazard: a merge commit lands on an agent's task
+branch between its turns; the rollback is reverting that merge commit, which the agent's own later
+commits do not depend on unless they touch the same lines (then the conflict path refuses instead).
+Acceptance first: 1.1 and 1.7 fail on today's code before any implementation.
+
+
 **Built on the recommended answer to one open question (Q-F158 below): option (B), top-up.** F158's
 own entry says *"the candidate repair is still the open decision"*, and the change it was raised
 against left it open (`openspec/changes/archive/*a-loop-declares-whether-it-needs-evidence/design.md`,
