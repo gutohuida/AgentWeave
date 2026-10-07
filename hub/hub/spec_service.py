@@ -1156,7 +1156,13 @@ async def rerender_corpus(
         if rendered == current:
             continue
 
-        spec_documents.write_document(workspace, entry.path, rendered)
+        try:
+            spec_documents.write_document(workspace, entry.path, rendered)
+        except OSError as exc:
+            # F434 (D6): one file that cannot be written is reported and the rest go on. Its
+            # digest does not advance and no event is recorded, because nothing new was written.
+            skipped.append({"path": entry.path, "reason": "write_failed", "message": str(exc)})
+            continue
         rerendered.append(entry.path)
 
         # A document with no row has no digest to update and nothing to attribute the event

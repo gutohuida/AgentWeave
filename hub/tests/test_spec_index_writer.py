@@ -790,3 +790,193 @@ class TestArrangeRoute:
         manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
         area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.html")
         assert area_entry["parent"] == "spec/home.html"
+
+
+# --------------------------------------------------------------------------- the corpus from the app
+#
+# `the-corpus-is-indexed-arranged-and-adopted-from-the-app`: D5 (reindex broadcasts) and D6 (F434:
+# a failed file write is reported, never a bare 500 that rolls the requirement index back).
+
+
+async def _three_filed(app, auth_headers, tmp_path):
+    """home, area and other, filed with `home` as the corpus's home."""
+    for name in ("home", "area", "other"):
+        _write(tmp_path, f"spec/{name}.html")
+        created = await app.post(
+            f"{BASE}/documents",
+            json={"path": f"spec/{name}.html", "title": name.upper(), "kind": "capability"},
+            headers=auth_headers,
+        )
+        assert created.status_code == 201, created.text
+    first = await app.post(
+        f"{BASE}/spec/reindex", json={"home": "spec/home.html"}, headers=auth_headers
+    )
+    assert first.status_code == 200, first.text
+
+
+def _failing_write_text(monkeypatch, should_fail):
+    import pathlib
+
+    real = pathlib.Path.write_text
+
+    def write_text(self, *args, **kwargs):
+        if should_fail(self):
+            raise OSError(28, "No space left on device")
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "write_text", write_text)
+
+
+def _is_the_index(path) -> bool:
+    return path.parent.name == "spec" and path.name.startswith("index.json")
+
+
+@pytest.mark.asyncio
+async def test_reindex_broadcasts_after_the_index_is_written(app, auth_headers, tmp_path):
+    """1.1 (D5). An open tab could not learn that a rebuild happened."""
+    from unittest.mock import AsyncMock, patch
+
+    _write(tmp_path, "spec/spec.html")
+    await app.post(
+        f"{BASE}/documents",
+        json={"path": "spec/spec.html", "title": "Only", "kind": "capability"},
+        headers=auth_headers,
+    )
+    seen = []
+
+    async def broadcast(project_id, event, payload):
+        seen.append((event, payload, (tmp_path / "spec" / "index.json").exists()))
+
+    with patch("hub.api.v1.spec.sse_manager.broadcast", AsyncMock(side_effect=broadcast)):
+        response = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    assert seen == [("spec_updated", {"path": None}, True)]
+
+
+@pytest.mark.asyncio
+async def test_an_index_that_cannot_be_written_still_rebuilds_the_requirements(
+    app, auth_headers, run_headers, tmp_path, monkeypatch
+):
+    """1.12 (D6, F434). The existing SHALL -- a failure to write the index does not abandon the
+    requirement index -- held only for a missing home. A full disk gave a 500 and rolled it back.
+
+    The change on disk is a reworded requirement: one added by hand has no identity the Hub minted,
+    and reindexing from a file does not mint one."""
+    from sqlalchemy import select
+
+    from hub.db.models import SpecRequirement
+    from hub.spec_payload import extract_payload
+
+    path = "spec/changes/f434/spec.html"
+    created = await app.post(
+        f"{BASE}/documents", json={"path": path, "title": "F434"}, headers=auth_headers
+    )
+    assert created.status_code == 201, created.text
+    saved = await app.post(
+        AGENT, json={"path": path, "document": _full_document()}, headers=run_headers
+    )
+    assert saved.status_code == 200, saved.text
+    assert (await app.post(f"{BASE}/spec/reindex", headers=auth_headers)).status_code == 200
+    index = tmp_path / "spec" / "index.json"
+    before = index.read_bytes()
+
+    async def alpha_digest():
+        async with async_session_factory() as session:
+            return (
+                await session.execute(
+                    select(SpecRequirement.digest).where(SpecRequirement.key == "alpha")
+                )
+            ).scalar_one()
+
+    digest_before = await alpha_digest()
+    target = tmp_path / path
+    content = target.read_text(encoding="utf-8")
+    payload = extract_payload(content)
+    payload["requirements"][0]["statement"] = "It responds within 100ms"
+    start = content.index('id="aw-spec-payload">') + len('id="aw-spec-payload">')
+    end = content.index("</script>", start)
+    target.write_text(
+        content[:start] + json.dumps(payload).replace("<", "\\u003c") + content[end:],
+        encoding="utf-8",
+    )
+
+    _failing_write_text(monkeypatch, _is_the_index)
+    response = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["documents"][path]["reworded"] == ["FR-1"]
+    assert body["index"]["written"] is None
+    last = body["index"]["diagnostics"][-1]
+    assert last["code"] == "index_write_failed"
+    assert "No space left on device" in last["actual"]
+    assert body["corpus"]["rerendered"] == []
+    assert index.read_bytes() == before
+    assert not (tmp_path / "spec" / "index.json.tmp").exists()
+    # Committed: a fresh session reads the reworded requirement.
+    assert await alpha_digest() != digest_before
+
+
+@pytest.mark.asyncio
+async def test_a_document_that_cannot_be_rewritten_is_skipped_not_fatal(
+    app, auth_headers, tmp_path, monkeypatch
+):
+    """1.13 (D6, F434). One document's write fails; the other is re-rendered and its digest kept
+    true, and the failed one's digest does not advance."""
+    from sqlalchemy import select
+
+    from hub import spec_lifecycle
+    from hub.db.models import SpecDocument
+
+    await _three_filed(app, auth_headers, tmp_path)
+    index_path = tmp_path / "spec" / "index.json"
+    manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
+    for doc in manifest_data["documents"]:
+        if doc["path"] == "spec/area.html":
+            doc["parent"] = "spec/home.html"
+    index_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
+
+    async def digests():
+        async with async_session_factory() as session:
+            rows = (await session.execute(select(SpecDocument))).scalars().all()
+            return {row.path: row.content_digest for row in rows}
+
+    before = await digests()
+    _failing_write_text(monkeypatch, lambda p: p.name == "area.html")
+    response = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    corpus = response.json()["corpus"]
+    (skipped,) = corpus["skipped"]
+    assert skipped["path"] == "spec/area.html"
+    assert skipped["reason"] == "write_failed"
+    assert "No space left on device" in skipped["message"]
+    assert corpus["rerendered"] == ["spec/home.html"]
+    after = await digests()
+    assert after["spec/area.html"] == before["spec/area.html"]
+    home_text = (tmp_path / "spec" / "home.html").read_text(encoding="utf-8")
+    assert after["spec/home.html"] == spec_lifecycle.digest(home_text)
+
+
+@pytest.mark.asyncio
+async def test_an_arrangement_whose_index_cannot_be_written_says_so(
+    app, auth_headers, tmp_path, monkeypatch
+):
+    """1.14 (D6, F434). A sentence, not a bare 500; nothing placed, nothing re-rendered."""
+    await _three_filed(app, auth_headers, tmp_path)
+    files = {p: p.read_bytes() for p in (tmp_path / "spec").glob("*.html")}
+    index_before = (tmp_path / "spec" / "index.json").read_bytes()
+
+    _failing_write_text(monkeypatch, _is_the_index)
+    response = await app.post(
+        f"{BASE}/spec/documents/arrange",
+        json={"path": "spec/area.html", "parent": "spec/home.html"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 500, response.text
+    detail = response.json()["detail"]
+    assert detail["code"] == "index_write_failed"
+    assert "No space left on device" in detail["message"]
+    assert (tmp_path / "spec" / "index.json").read_bytes() == index_before
+    assert {p: p.read_bytes() for p in files} == files

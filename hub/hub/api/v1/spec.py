@@ -1440,8 +1440,21 @@ async def reindex(
     written = None
     rerendered: List[str] = []
     rerender_skipped: List[Dict[str, Any]] = []
+    index_diagnostics = list(index_diagnostics)
+    try:
+        if manifest is not None:
+            spec_documents.write_index(workspace, manifest)
+    except OSError as exc:
+        # F434 (D6): the requirement index is still rebuilt and committed; the index file keeps
+        # its previous bytes (`write_index` is atomic), and nothing is re-rendered from a manifest
+        # that is not on disk -- the same as when no home is recorded.
+        index_diagnostics.append(
+            spec_documents._diag(
+                "index_write_failed", path=spec_documents.INDEX_RELATIVE, actual=str(exc)
+            )
+        )
+        manifest = None
     if manifest is not None:
-        spec_documents.write_index(workspace, manifest)
         written = {
             "path": spec_documents.INDEX_RELATIVE,
             "documents": len(manifest.documents),
@@ -1456,6 +1469,8 @@ async def reindex(
         )
 
     await session.commit()
+    # D5: an open tab learns the corpus changed, as it does after arrange and adopt.
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": None})
     return {
         "documents": {
             path: (
@@ -1561,7 +1576,17 @@ async def arrange_document(
             },
         )
 
-    spec_documents.write_index(workspace, revalidated)
+    try:
+        spec_documents.write_index(workspace, revalidated)
+    except OSError as exc:
+        # F434 (D6): before any re-render or database change, and the previous index stays.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "message": f"the index could not be written: {exc}; nothing was placed",
+                "code": "index_write_failed",
+            },
+        ) from exc
 
     rows = await spec_lifecycle.list_documents(session, project_id)
     rerendered, skipped = await spec_service.rerender_corpus(session, workspace, revalidated, rows)

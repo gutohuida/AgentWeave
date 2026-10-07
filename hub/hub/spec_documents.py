@@ -17,6 +17,7 @@ written.
 
 from __future__ import annotations
 
+import contextlib
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -339,10 +340,23 @@ def build_index(
 
 
 def write_index(workspace: ProjectWorkspace, manifest: Manifest) -> Path:
-    """Write `spec/index.json`. The only thing here that puts a manifest on disk."""
+    """Write `spec/index.json`. The only thing here that puts a manifest on disk.
+
+    Atomic (F434, `the-corpus-is-indexed-arranged-and-adopted-from-the-app` D6): written to
+    `index.json.tmp` beside it and moved over it, so a write that fails (a full disk, a locked
+    file) leaves the previous index exactly as it was. The temporary file is removed, and the
+    `OSError` re-raised for the caller to report.
+    """
     resolved = workspace.resolve_relative(INDEX_RELATIVE)
     resolved.parent.mkdir(parents=True, exist_ok=True)
-    resolved.write_text(dump_manifest(manifest), encoding="utf-8")
+    temporary = resolved.with_name(resolved.name + ".tmp")
+    try:
+        temporary.write_text(dump_manifest(manifest), encoding="utf-8")
+        os.replace(temporary, resolved)
+    except OSError:
+        with contextlib.suppress(OSError):
+            temporary.unlink()
+        raise
     return resolved
 
 
