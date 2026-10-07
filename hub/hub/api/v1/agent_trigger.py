@@ -2726,11 +2726,17 @@ async def _execute_run(
         project_root=repo_root,
     )
     try:
-        async with async_session_factory() as db:
+
+        async def _write_pid(db):  # noqa: ANN001, ANN202
             run = await db.get(Run, run_id)
             if run:
                 run.pid = pty.pid
                 await db.commit()
+
+        # F517: the process is already running, so a lock here must not fail the run; the pid is
+        # what stop and liveness read, so a lock that outlasts the retries still raises.
+        await _record_observation(_write_pid, run_id=run_id, what="pid", drop=False)
+        async with async_session_factory() as db:
             await _broadcast_run_lifecycle(
                 db,
                 project_id,

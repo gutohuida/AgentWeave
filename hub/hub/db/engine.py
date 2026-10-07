@@ -33,10 +33,24 @@ logger = logging.getLogger(__name__)
 # The placeholder value from .env.example that triggers auto-generation
 _PLACEHOLDER_API_KEY = "aw_live_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
 
+#: How long a SQLite connection waits out another writer's lock before `database is locked` (F517).
+#: Production runs a rollback journal, so one writer's commit blocks every other connection; the
+#: driver's own 5s default failed a reviewer's spawn on `:8010`. The migration engine has waited 30s
+#: since F292 (`migrations/env.py`), and so does the suite (`hub/tests/conftest.py`).
+SQLITE_BUSY_TIMEOUT_SECONDS = 30.0
+
+
+def connect_args_for(database_url: str) -> dict:
+    """The driver arguments the Hub opens *database_url* with (`timeout` sets `busy_timeout`)."""
+    if "sqlite" not in database_url:
+        return {}
+    return {"check_same_thread": False, "timeout": SQLITE_BUSY_TIMEOUT_SECONDS}
+
+
 engine = create_async_engine(
     settings.database_url,
     echo=False,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
+    connect_args=connect_args_for(settings.database_url),
 )
 
 # ---------------------------------------------------------------------------

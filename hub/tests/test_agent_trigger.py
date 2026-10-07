@@ -3220,6 +3220,46 @@ async def test_a_lock_that_clears_on_retry_still_records_the_row(app, auth_heade
 
 
 @pytest.mark.asyncio
+async def test_a_locked_pid_write_does_not_fail_a_spawned_run(app, auth_headers, bind_runner):
+    """F517 -- `run.pid = pty.pid` was committed unguarded just after the spawn. On `:8010` it met
+    `database is locked [SQL: UPDATE runs SET pid=?]` and failed a reviewer run whose process had
+    already started. The pid is what stop and liveness read, so it is retried like the provider
+    session binding (`drop=False`), not dropped."""
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session, attributes
+
+    from hub.db.models import Run
+
+    locked_once = []
+
+    def _lock_the_first_pid_flush(session, flush_context, instances):  # noqa: ANN001
+        for obj in list(session.dirty):
+            if not isinstance(obj, Run):
+                continue
+            history = attributes.get_history(obj, "pid", passive=attributes.PASSIVE_NO_INITIALIZE)
+            if history.added and not locked_once:
+                locked_once.append(obj.id)
+                raise _locked()
+
+    real_record = agent_trigger.record_agent_output
+
+    async def _record(db, project_id, agent, **kwargs):
+        return await real_record(db, project_id, agent, **kwargs)
+
+    event.listen(Session, "before_flush", _lock_the_first_pid_flush)
+    try:
+        run = await _f359_trigger(
+            app, auth_headers, bind_runner, "f517-pid", _fake_pty(_F359_LINES, pid=5170), _record
+        )
+    finally:
+        event.remove(Session, "before_flush", _lock_the_first_pid_flush)
+
+    assert locked_once, "the pid write was never attempted"
+    assert run.status == "completed", run.error
+    assert run.pid == 5170
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "thought, reply, expected",
     [

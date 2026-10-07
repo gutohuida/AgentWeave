@@ -34686,7 +34686,14 @@ nothing had judged the work.
 
 ## F517 (C) — a reviewer run failed at spawn with `database is locked`
 
-**Status:** noted (not diagnosed)
+**Status:** fixed (Tier 0, 2026-10-07) -- diagnosed from code: production SQLite ran a rollback journal
+(`journal_mode=delete` on the trial DB) with the driver's 5s `busy_timeout`, while the migration engine (F292)
+and the suite's pragma listener wait 30s -- so no test could see it. `db/engine.py` now opens connections with
+`connect_args_for(url)` (`timeout=30`), and the `Run.pid` write goes through `_record_observation(drop=False)`
+like the provider session binding. Tests: `test_engine_waits_out_a_lock.py` (a fresh engine's
+`busy_timeout` is 30000; a write lands through a 6s-held lock) and
+`test_agent_trigger.py::test_a_locked_pid_write_does_not_fail_a_spawned_run` (failed as `database is locked`
+before). The other writer that held the lock 14s is still unidentified. Reaches `:8000` on its next restart.
 Found 2026-10-06 on `:8010` (`run-09cdbc599c3f`, aw-reviewer, 19:55:21-19:55:35Z): `(sqlite3.OperationalError)
 database is locked [SQL: UPDATE runs SET pid=?]`. The flow staffed a second reviewer run at once
 (`run-6e866403a514`), which completed. Coincided with a check run's 60s `git worktree add` (F516), but
