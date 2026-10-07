@@ -34715,7 +34715,7 @@ meet it. **Direction:** the review briefing names each `depends_on` task, its st
 
 ## F520 (A) — accepting one task's evidence merges it into main through another approved task that serves the same requirement
 
-**Status:** open (in-session; fenced from the night window in APPROVALS 2026-10-06)
+**Status:** fixed (Tier 2, `a-siblings-evidence-lands-through-its-own-task`, `554f303`..) -- `task_integration._targets` counts another task's evidence only once that task is approved; `tasks_awaiting_this_commit` re-integrates no sibling for it. Acceptance: `test_sibling_evidence_waits_for_its_task.py` (failed on master, passes). The trigger was `integrate_what_was_waiting_for_this_evidence` (the decision route).
 Found 2026-10-06 on `:8010`, F510 trial slice. Driven, not read. Area: **Evidence & integration**.
 
 Task 1 (`task-f5698f83dfc3`) was approved and merged at ~19:2xZ. Task 2 (`task-acc4664bee5a`) serves the same
@@ -34731,7 +34731,7 @@ approved); never a sibling still under review.
 
 ## F521 (B) — a half-made check worktree stays `locked` and refuses every later run
 
-**Status:** open (in-session)
+**Status:** fixed (Tier 0, `d61c2b7`) -- `_remove_checkout` unlocks before a double-forced remove. Test: `test_project_checks_run.py::test_a_locked_leftover_checkout_does_not_refuse_the_next_run`.
 Found 2026-10-06 on `:8010`, task 2. After F516's timeout the scratch worktree
 `.agentweave/checks/task-acc4664bee5a` was left registered and `locked` (`git worktree list`), and both later
 runs (20:16Z, 21:11Z) recorded `error`: "fatal: '...' is a missing but locked worktree; use 'add -f -f' to

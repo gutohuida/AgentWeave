@@ -627,7 +627,8 @@ async def test_a_commit_another_task_recorded_is_attributed_to_it(
 
     The population is what is in doubt, not the boolean. `_targets` reaches evidence through
     `TaskRequirementLink` (`task_integration.py:244`), so a requirement served by two tasks puts one
-    task's footprint into the other's targets — and this task's approval is what would merge it.
+    task's footprint into the other's targets — and, once the other task is approved (F520: not
+    before), this task's approval is what would merge it.
     """
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
@@ -650,6 +651,11 @@ async def test_a_commit_another_task_recorded_is_attributed_to_it(
     (tmp_path / "shared.txt").write_text("from the operator\n", encoding="utf-8")
     git(tmp_path, "add", "shared.txt")
     git(tmp_path, "commit", "-q", "-m", "the operator's own change")
+    async with async_session_factory() as session:
+        # Approved with its commit still unmerged, constructed directly: only an approved
+        # recorder's evidence is this task's to merge (F520), and so this task's to refuse on.
+        (await session.get(Task, other)).status = "approved"
+        await session.commit()
 
     mine = await linked_task(app, auth_headers, title="My task")
     refused = await approve(app, auth_headers, mine)
