@@ -18,6 +18,7 @@ from aw import P, api  # noqa: E402
 TESTS = "hub/tests/test_a_decided_task_withdraws_its_waiting_reviews.py"
 CLAIM_TESTS = "hub/tests/test_a_run_claims_only_its_agents_or_nobodys_work.py"
 READ_ONLY_TESTS = "hub/tests/test_a_read_only_agent_holds_no_task_work.py"
+CODEX_SPEC_TESTS = "hub/tests/test_a_codex_app_server_spec_turn_keeps_no_write_tools.py"
 
 CHANGES = {
     "f440": {
@@ -75,6 +76,26 @@ CHANGES = {
             ("FR-3", "task-e1bf77c9375a", "test_result", READ_ONLY_TESTS,
              "A flow gives the pending task to the writing agent, both when the read-only agent is "
              "free in the pool and when it is the job's own agent."),
+        ],
+    },
+    "f462": {
+        "document": "spec/changes/a-codex-app-server-spec-turn-keeps-no-write-tools/spec.html",
+        "tasks": ["task-a329084987ed", "task-c5e910f735b3", "task-b263ff986238"],
+        "evidence": [
+            ("FR-1", "task-c5e910f735b3", "test_result", CODEX_SPEC_TESTS,
+             "The dispatch hands restrict_spec_writes to run_turn (it reached it as False before); "
+             "a spec turn's thread starts read-only, on-request or untrusted, in every posture "
+             "(20 of 20 failed before the build; Codex is not drivable here)."),
+            ("FR-2", "task-c5e910f735b3", "test_result", CODEX_SPEC_TESTS,
+             "A file change and a command the posture would allow are declined on a spec turn; "
+             "under Ask me a file change shows no card and a command still asks; Full access "
+             "grants no permissions."),
+            ("FR-3", "task-c5e910f735b3", "test_result", CODEX_SPEC_TESTS,
+             "A calls-root .json file change and one aw-tool invocation are accepted in every "
+             "posture; a change mixing a calls file with a workspace file is declined."),
+            ("FR-4", "task-b263ff986238", "test_result", CODEX_SPEC_TESTS,
+             "With no document open Full access starts danger-full-access/never and Workspace only "
+             "accepts the command (the controls); MCP elicitation is accepted on a spec turn."),
         ],
     },
 }
