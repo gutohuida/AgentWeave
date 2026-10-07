@@ -980,3 +980,32 @@ async def test_an_arrangement_whose_index_cannot_be_written_says_so(
     assert "No space left on device" in detail["message"]
     assert (tmp_path / "spec" / "index.json").read_bytes() == index_before
     assert {p: p.read_bytes() for p in files} == files
+
+
+def test_the_hub_writes_documents_and_the_index_with_lf_line_endings(tmp_path):
+    """F524. `Path.write_text` in text mode writes `\r\n` on Windows, so every document and index
+    the Hub wrote into a project was CRLF there: a whole-file change in a repository that does not
+    normalise line endings. The bytes on disk are the bytes rendered."""
+    from hub.project_workspace import ProjectWorkspace
+    from hub.spec_manifest import Manifest, ManifestDocument
+
+    workspace = ProjectWorkspace(project_id="proj-test", root=tmp_path, path_key="test:proj-test")
+    spec_documents.write_document(workspace, "spec/a.html", "<html>\n<body>a</body>\n</html>\n")
+    manifest = Manifest(
+        version=1,
+        home="spec/a.html",
+        documents=(
+            ManifestDocument(
+                path="spec/a.html",
+                title="A",
+                kind="capability",
+                status="current",
+                parent=None,
+                order=10,
+            ),
+        ),
+    )
+    spec_documents.write_index(workspace, manifest)
+
+    assert b"\r\n" not in (tmp_path / "spec" / "a.html").read_bytes()
+    assert b"\r\n" not in (tmp_path / "spec" / "index.json").read_bytes()

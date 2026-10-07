@@ -162,7 +162,8 @@ def write_document(workspace: ProjectWorkspace, path: str, content: str) -> Path
     validate_spec_path(path)
     resolved = workspace.resolve_relative(path)
     resolved.parent.mkdir(parents=True, exist_ok=True)
-    resolved.write_text(content, encoding="utf-8")
+    # `newline`: text mode writes CRLF on Windows, a whole-file change in a project (F524).
+    resolved.write_text(content, encoding="utf-8", newline="\n")
     return resolved
 
 
@@ -351,7 +352,7 @@ def write_index(workspace: ProjectWorkspace, manifest: Manifest) -> Path:
     resolved.parent.mkdir(parents=True, exist_ok=True)
     temporary = resolved.with_name(resolved.name + ".tmp")
     try:
-        temporary.write_text(dump_manifest(manifest), encoding="utf-8")
+        temporary.write_text(dump_manifest(manifest), encoding="utf-8", newline="\n")
         os.replace(temporary, resolved)
     except OSError:
         with contextlib.suppress(OSError):

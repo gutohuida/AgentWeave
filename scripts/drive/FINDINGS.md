@@ -34774,3 +34774,15 @@ for `aw-tool` through a shell). The spill file lies outside the workspace, and t
 `a-specification-is-read-in-results-that-fit`): inline within 25,000 characters, otherwise written
 to `.agentweave/reads/` in the run's workspace with the path in the answer; or filters that keep a
 board's read small.
+
+## F524 (C) — on Windows the Hub wrote every specification document and the index with CRLF line endings
+
+**Status:** fixed (Tier 0, 2026-10-07) -- `spec_documents.write_document` and `write_index` pass `newline="\n"`. Test: `test_spec_index_writer.py::test_the_hub_writes_documents_and_the_index_with_lf_line_endings` (read `\r\n` back before). The Hub's other text-mode writes land in git-excluded or Hub-private files (`.agentweave/context/`, `.agentweave/project.json`, `.git/info/exclude`, the instance id) and were left.
+**Source:** drive (Phase 3 migration, 2026-10-07)
+**Theme:** Spec & requirements
+
+Found committing the migration: git warned "CRLF will be replaced by LF" for all 59 files the trial Hub
+had written. `Path.write_text` in text mode turns `\n` into `\r\n` on Windows. This repository's
+`* text=auto eol=lf` normalised them, so nothing reached history; a project without that rule would see
+every Hub write as a whole-file change. The stored `content_digest` was unaffected (it is taken of the
+rendered string, and a read normalises line endings).
