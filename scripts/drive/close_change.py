@@ -32,8 +32,35 @@ STRICT_MCP_TESTS = "hub/tests/test_a_hub_run_gets_only_the_hubs_tool_server.py"
 FOLD_TESTS = "hub/tests/test_a_finished_change_is_folded_into_its_capability.py"
 DELETE_TESTS = "hub/tests/test_the_operator_can_delete_a_document_a_task_or_an_archived_agent.py"
 REFRESH_TESTS = "hub/tests/test_re_approving_refreshes_open_tasks.py"
+RETIRE_TESTS = "hub/tests/test_a_capability_can_be_retired.py"
+RETIRE_DRIVE = "scripts/drive/d1008_retire_capability_drive.py"
 
 CHANGES = {
+    "f536": {
+        "document": "spec/changes/a-capability-can-be-retired/spec.html",
+        "commit": "14695f6",
+        "tasks": ["task-9695e6dc92b4", "task-5a7592c5b666", "task-40cef1d4fea7"],
+        "evidence": [
+            ("FR-1", "task-5a7592c5b666", "test_result", RETIRE_TESTS,
+             "Retiring archives a capability with a reason and optional absorber; refused without a "
+             "reason, with a bad absorber, by an agent, and while open work links a requirement "
+             "(13 tests red before the build)."),
+            ("FR-2", "task-5a7592c5b666", "test_result", RETIRE_TESTS,
+             "Its requirements are retired, leave coverage, and stay retired through a reindex."),
+            ("FR-3", "task-5a7592c5b666", "test_result", RETIRE_TESTS,
+             "A merge into a retired capability is refused 409 capability_retired; its file is "
+             "unchanged."),
+            ("FR-4", "task-5a7592c5b666", "test_result", RETIRE_TESTS,
+             "The phase event carries reason and absorbed_by, GET /spec returns them, the index "
+             "lists it archived and still loads as valid."),
+            ("FR-5", "task-40cef1d4fea7", "manual_observation", RETIRE_DRIVE,
+             "In Chromium on :8010: Retire with a reason and New as absorber; 0/7 before the "
+             "build, 8/8 after on a restarted Hub (the index-validity check found the manifest "
+             "rule). vitest specRetireCapability 4/4 red before."),
+            ("FR-5", "task-9695e6dc92b4", "manual_observation", RETIRE_DRIVE,
+             "The acceptance drive, written and run before the build: 0/7 on the unbuilt Hub."),
+        ],
+    },
     "f440": {
         "document": "spec/changes/a-decided-task-withdraws-its-waiting-reviews/spec.html",
         "tasks": ["task-3c0c22f24a44", "task-93f9df045c6a", "task-2035432af11f"],

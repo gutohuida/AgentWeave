@@ -34980,7 +34980,7 @@ silently drop) links to retired requirements.
 
 ## F536 (C) -- a capability can be neither deleted nor retired, so the corpus cannot lose one
 
-**Status:** open. Filed 2026-10-08 (interactive, spec overhaul).
+**Status:** fixed 14695f6 (Tier 2, 2026-10-08, authored in the app: `spec/changes/a-capability-can-be-retired`, folded into `spec-document-authority` and archived): the operator retires a capability to `archived` with a reason and optional absorbing capability (migration 0121); its requirements are retired on every reindex, merge/fold into it is refused, `GET /spec` says why. Drive `d1008_retire_capability_drive.py` 0/7 -> 8/8. Was: open (filed 2026-10-08, interactive, spec overhaul).
 
 `spec/capabilities/quiet-hours/` describes a feature nothing implements (no match for quiet hours anywhere in `hub/`
 or `src/`, absent from `openspec/specs/`); it entered the trial corpus on 2026-08-18 as a sample and was adopted as
