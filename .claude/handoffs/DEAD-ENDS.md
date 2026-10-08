@@ -2187,3 +2187,18 @@ disappears is indistinguishable from one that was forgotten.
   set. Found while probing F21 (F531).
 - **2026-10-08 (home) -- `pathlib.Path.write_text` on Windows writes CRLF** (text mode); git's `eol=lf` hides it in the
   diff but leaves a CRLF working copy. Write with `newline="\n"` or bytes when editing tracked files from Python.
+- **2026-10-08 (home) -- `hub/tests/fixtures/runner_adapters/capture_goldens.py` is stale**: it imports
+  `build_command` from `hub.runner_commands`, which moved to `hub.runner_adapters` in the adapter refactor
+  (ImportError), and importing it needs `DATABASE_URL` set. Re-pin `argv_golden.json` with a guarded script
+  that computes the new argv and refuses any diff but the intended one (F531 did: 52 Claude cases, one flag).
+- **2026-10-08 (home) -- FINDINGS status lines from one daily-review bundle share a long prefix** (three B11
+  findings start `**Status:** open — **Decided 2026-09-24 (operator, daily review, bundle B11; ...`); a scripted
+  replace must anchor on the finding's own words, or its uniqueness assert fails.
+- **2026-10-08 (home) -- a change document reconciled before 2026-10-07 may be in no capability at all.**
+  F509's three slices shipped 2026-10-06 and were reconciled into neither openspec nor `spec/`. Before archiving
+  an old change, check its requirement is in `spec/capabilities` (grep its key or statement), not just that its
+  tasks are approved. `close_change.py --archive` now refuses without both.
+- **2026-10-08 (home) -- 16 randomly named `approved` change documents** (`crimson-yeti`, `maroon-kirin`,
+  `umber-yeti`, ...) sit in this repo's trial project `proj-d85a82bf4216` with no file under `spec/changes/`;
+  some have pending tasks. Unexplained (likely early drive leftovers); not archived, operator not yet asked to
+  confirm.
