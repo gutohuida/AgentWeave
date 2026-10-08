@@ -75,8 +75,10 @@ documents only in the app, beside the composer (`SpecFrame` renders the file's H
 
 - DECIDED   structure-format  **The payload is the source; HTML is a view.** Each document is stored as
   `spec.json` (the payload plus `step` and `size`); the Hub renders HTML with `render_document` when the
-  app opens it, so the page beside the composer is unchanged. One-time conversion of the corpus. Tier 2:
-  `:8000` serves 2 live spec documents (LoopEngine, LoopEngine_2), so a legacy `.html` must still read.
+  app opens it, so the page beside the composer is unchanged. One-time, reversible conversion of the
+  corpus. Tier 2. `:8000`'s 2 spec documents (LoopEngine, LoopEngine_2) are test data (operator,
+  2026-10-08: "you can ignore both"), so legacy `.html` is reported and converted, not read in place.
+  Change: `spec/changes/a-spec-document-is-stored-as-its-payload` (`spdoc-06fd85087a9f`).
   Built before roadmap slice 2, so the amendment marks and review diffs build on the new format once.
 - DECIDED   structure-archive  Archived change documents move to `spec/changes/archive/`.
 - DECIDED   structure-steps  Project-defined steps (slice 2) live in a tracked file under `spec/`
