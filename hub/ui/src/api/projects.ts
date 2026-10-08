@@ -112,7 +112,10 @@ export interface ProjectCheck {
   timeout_seconds: number
 }
 
-export type ProjectSettingsInput = ProjectSettings
+/** The server merges a partial body onto what is stored (`projects.py`), so a caller sends only
+ *  what it changes: the Overview's switch sends `allow_agent_jobs` alone, and the panel never sends
+ *  `token_budget`, whose one editor is Budgets. */
+export type ProjectSettingsInput = Partial<ProjectSettings>
 
 /** The stored settings, which is what the panel edits. `useProjects()` cannot serve this: its
  *  summary omits every field added since it was written. */

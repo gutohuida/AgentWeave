@@ -251,6 +251,9 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'accounting'] })
     )
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['projects'] })
+    // The Overview's Collaboration block reads the stored settings, not the project summary
+    // (the-settings-that-gate-collaboration-are-on-the-project-page FR-10).
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'settings'] })
   })
 
   it('refetches the worktrees panel when a run or a task moves a checkout (F250)', async () => {

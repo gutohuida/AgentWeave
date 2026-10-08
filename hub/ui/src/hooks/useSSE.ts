@@ -614,6 +614,9 @@ export function useSSE(onEvent?: SSEListener) {
           // the status bar's exhaustion notice among them — kept the old allowance.
           queryClient.invalidateQueries({ queryKey: ['projects'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'accounting'] })
+          // The stored settings, which the Overview's Collaboration block reads: a change made from
+          // any other surface would otherwise leave it showing the old value until a reload.
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'settings'] })
           break
       }
       onEventRef.current?.(event)

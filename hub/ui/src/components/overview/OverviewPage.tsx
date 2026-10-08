@@ -8,6 +8,8 @@ import { getBufferedEvents } from '@/hooks/useSSE'
 import { QuestionInterruptCard } from '@/components/questions/QuestionInterruptCard'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 import { OverviewBudgetSummary } from './OverviewBudgetSummary'
+import { CollaborationSummary } from './CollaborationSummary'
+import { AgentPostureChips } from './AgentPostureChips'
 import { Icon } from '@/components/common/Icon'
 import { getStatusConfig } from '@/lib/agentStatusConfig'
 import { agentColorVars } from '@/lib/agentColors'
@@ -19,16 +21,20 @@ interface OverviewPageProps {
   onNavigate: (page: string) => void
 }
 
-function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () => void }) {
+function AgentHealthCard({ agent, onNavigate }: { agent: AgentSummary; onNavigate: (page: string) => void }) {
   // Deliberately not <StatusDot /> — this card uses a static 8x8 dot with a glow
   // shadow instead of StatusDot's animate-ping halo (see lib/agentStatus.tsx).
   const statusCfg = getStatusConfig(agent.status)
   const statusColor = statusCfg.dotColor
 
+  // The card is a container, not one button: its posture chips are controls of their own, and a
+  // button may not hold another. The open button keeps the card's accessible name.
   return (
+    <div className="overview-agent-card" data-testid={`agent-card-${agent.name}`}>
     <button
-      onClick={onClick}
-      className="overview-agent-card"
+      type="button"
+      onClick={() => onNavigate(`agent:${agent.name}`)}
+      className="overview-agent-card-open"
       aria-label={`Open ${agent.name}, ${statusCfg.label}`}
     >
       <div className="mb-2 flex items-center gap-2">
@@ -72,6 +78,8 @@ function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () 
         </p>
       )}
     </button>
+    <AgentPostureChips agent={agent} onNavigate={onNavigate} />
+    </div>
   )
 }
 
@@ -126,6 +134,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
           {status?.project_name ? ` · ${status.project_name}` : ''}
         </p>
         <div className="mt-5"><OverviewBudgetSummary /></div>
+        <div className="mt-3"><CollaborationSummary onNavigate={onNavigate} /></div>
       </section>
 
       <section className="overview-group" aria-labelledby="overview-attention">
@@ -141,7 +150,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
         {agents.length > 0 ? (
           <div className="overview-agent-grid">
             {agents.map((agent) => (
-              <AgentHealthCard key={agent.name} agent={agent} onClick={() => onNavigate(`agent:${agent.name}`)} />
+              <AgentHealthCard key={agent.name} agent={agent} onNavigate={onNavigate} />
             ))}
           </div>
         ) : (

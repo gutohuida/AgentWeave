@@ -47,7 +47,16 @@ const MODE_DESCRIPTION: Record<string, string> = {
     'At the threshold the Hub writes a checkpoint, opens a successor with it, and archives this conversation.',
 }
 
-export function ProjectSettingsPanel() {
+/** A heading inside the one settings form: the rows stay one resource saved together, but read as
+ *  groups, so the controls that gate collaboration stop sitting at the weight of a title-style picker
+ *  (F379). */
+function GroupHeading({ children }: { children: string }) {
+  return (
+    <h3 data-testid="settings-group-heading" className="settings-group-heading">{children}</h3>
+  )
+}
+
+export function ProjectSettingsPanel({ onNavigate }: { onNavigate?: (page: string) => void } = {}) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { data: projects = [] } = useProjects()
   const project = projects.find((item) => item.id === projectId)
@@ -110,8 +119,12 @@ export function ProjectSettingsPanel() {
     const notes = toCanonical(thresholdMode, notesEntry)
     // A threshold is a mode and a value together, or neither — never half, which would read as a
     // number in a unit nobody chose.
+    // Everything it was given except `token_budget`: Budgets is that field's one editor, and a copy
+    // this form loaded earlier would overwrite a limit set there since.
+    const { token_budget: _tokenBudget, ...rest } = form
+    void _tokenBudget
     update.mutate({
-      ...form,
+      ...rest,
       name: form.name.trim(),
       checkpoint_threshold_mode: value === null ? null : (thresholdMode as 'percent' | 'tokens'),
       checkpoint_threshold_value: value,
@@ -122,7 +135,7 @@ export function ProjectSettingsPanel() {
   return (
     <SettingsSection
       title="Settings"
-      description="Identity, collaboration limits, checkpointing, and where this project lives on disk."
+      description="Collaboration limits, integration, checkpointing, and where this project lives on disk."
       actions={(
         <Button
           type="submit"
@@ -136,8 +149,9 @@ export function ProjectSettingsPanel() {
       )}
     >
       <form id="project-settings-form" onSubmit={handleSave}>
-      <SettingsRow label="Project name" description="The name used throughout the Hub to identify this project.">
-        <input aria-label="Project name" value={form.name} onChange={(event) => set('name', event.target.value)} className={inputClass} />
+      <GroupHeading>Collaboration</GroupHeading>
+      <SettingsRow label="Allow agent jobs" description="Agents may create flows and loops (create_flow, create_loop). Off, an agent asking for one is refused and you are asked.">
+        <input className="control-choice" aria-label="Allow agent jobs" type="checkbox" checked={form.allow_agent_jobs} onChange={(event) => set('allow_agent_jobs', event.target.checked)} />
       </SettingsRow>
       <SettingsRow label="Hop budget" description="How many agent-to-agent hops a chain may take before it pauses for you.">
         <input aria-label="Hop budget" type="number" min={1} required value={form.hop_budget} onChange={(event) => set('hop_budget', Number(event.target.value))} className={inputClass} />
@@ -145,42 +159,16 @@ export function ProjectSettingsPanel() {
       <SettingsRow label="Per-turn delivery cap" description="The maximum number of queued deliveries processed during one agent turn.">
         <input aria-label="Per-turn delivery cap" type="number" min={1} required value={form.turn_delivery_cap} onChange={(event) => set('turn_delivery_cap', Number(event.target.value))} className={inputClass} />
       </SettingsRow>
-      <SettingsRow label="Agent budget" description="The maximum number of agents this project may run at the same time.">
+      <SettingsRow label="Agent budget" description="How many agents the project may hold before an agent staffing a new one (request_agent) is refused. Creating an agent yourself is not limited by it.">
         <input aria-label="Agent budget" type="number" min={1} required value={form.agent_budget} onChange={(event) => set('agent_budget', Number(event.target.value))} className={inputClass} />
       </SettingsRow>
-      <SettingsRow label="Token budget" description="An optional project-wide token allowance; leave blank for no limit.">
-        <input aria-label="Token budget" type="number" min={1} placeholder="No limit" value={form.token_budget ?? ''} onChange={(event) => set('token_budget', event.target.value ? Number(event.target.value) : null)} className={inputClass} />
-      </SettingsRow>
-      <SettingsRow label="Allow agent jobs" description="Agents may create and run scheduled jobs for this project.">
-        <input className="control-choice" aria-label="Allow agent jobs" type="checkbox" checked={form.allow_agent_jobs} onChange={(event) => set('allow_agent_jobs', event.target.checked)} />
-      </SettingsRow>
-      <SettingsRow label="Conversation titles" description="Truncate the first message, or have a runner generate a short title.">
-        <Select
-          aria-label="Conversation titles"
-          value={form.conversation_title_mode}
-          onChange={(event) => set('conversation_title_mode', event.target.value as ProjectSettings['conversation_title_mode'])}
-          wrapperClassName="w-48"
-          className="px-2 py-1.5 text-xs"
-        >
-          <option value="truncate">Truncate the first message</option>
-          <option value="generate">Generate one</option>
-        </Select>
-      </SettingsRow>
-      <SettingsRow label="Conversation title runner" description="Which runner generates a title. None falls back to the conversation's own agent's bound runner.">
-        <Select
-          aria-label="Conversation title runner"
-          value={form.conversation_title_runner_id ?? ''}
-          onChange={(event) => set('conversation_title_runner_id', event.target.value || null)}
-          wrapperClassName="w-48"
-          className="px-2 py-1.5 text-xs"
-        >
-          <option value="">None</option>
-          {runners.map((runner) => (
-            <option key={runner.id} value={runner.id}>{runnerOptionLabel(runner, catalog)}</option>
-          ))}
-        </Select>
+      <SettingsRow label="Token budget" description="Set in Budgets, beside the usage it limits, so one editor owns it.">
+        <Button type="button" variant="outline" size="sm" onClick={() => onNavigate?.('budgets')}>
+          Set in Budgets
+        </Button>
       </SettingsRow>
 
+      <GroupHeading>Integration</GroupHeading>
       {/* Approving a task merges the agent's work into this branch. Until one is chosen nothing
           merges, and the note on an unmerged task sends the operator here to choose — so this is
           the control that message is pointing at. */}
@@ -226,6 +214,7 @@ export function ProjectSettingsPanel() {
         />
       </SettingsRow>
 
+      <GroupHeading>Checkpointing</GroupHeading>
       <SettingsRow label="Automatic checkpointing" description={MODE_DESCRIPTION[form.checkpoint_mode]}>
         <Select
           aria-label="Automatic checkpointing"
@@ -340,6 +329,38 @@ export function ProjectSettingsPanel() {
         </Select>
       </SettingsRow>
 
+      <GroupHeading>Conversations</GroupHeading>
+      <SettingsRow label="Conversation titles" description="Truncate the first message, or have a runner generate a short title.">
+        <Select
+          aria-label="Conversation titles"
+          value={form.conversation_title_mode}
+          onChange={(event) => set('conversation_title_mode', event.target.value as ProjectSettings['conversation_title_mode'])}
+          wrapperClassName="w-48"
+          className="px-2 py-1.5 text-xs"
+        >
+          <option value="truncate">Truncate the first message</option>
+          <option value="generate">Generate one</option>
+        </Select>
+      </SettingsRow>
+      <SettingsRow label="Conversation title runner" description="Which runner generates a title. None falls back to the conversation's own agent's bound runner.">
+        <Select
+          aria-label="Conversation title runner"
+          value={form.conversation_title_runner_id ?? ''}
+          onChange={(event) => set('conversation_title_runner_id', event.target.value || null)}
+          wrapperClassName="w-48"
+          className="px-2 py-1.5 text-xs"
+        >
+          <option value="">None</option>
+          {runners.map((runner) => (
+            <option key={runner.id} value={runner.id}>{runnerOptionLabel(runner, catalog)}</option>
+          ))}
+        </Select>
+      </SettingsRow>
+
+      <GroupHeading>Project</GroupHeading>
+      <SettingsRow label="Project name" description="The name used throughout the Hub to identify this project.">
+        <input aria-label="Project name" value={form.name} onChange={(event) => set('name', event.target.value)} className={inputClass} />
+      </SettingsRow>
       <SettingsRow label="Directory" description={project.path_display ?? project.working_directory ?? 'No directory bound'}>
         {project.directory_state === 'available' ? (
           <span className="text-xs" style={{ color: 'var(--green)' }}>Available</span>

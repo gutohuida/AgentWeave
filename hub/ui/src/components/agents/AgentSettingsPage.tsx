@@ -20,6 +20,7 @@ import {
 } from './AgentSettingsControls'
 import type { AgentSettingsSection } from '@/lib/navigation'
 import { hubDate } from '@/lib/hubTime'
+import { PERMISSION_WAIT_FALLBACK_SECONDS, QUESTION_WAIT_FALLBACK_SECONDS } from '@/lib/agentWaits'
 
 interface AgentSettingsPageProps {
   agent: string
@@ -164,14 +165,14 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
             agent={agent}
             field="permission_timeout_seconds"
             label="Permission decision"
-            fallback={120}
+            fallback={PERMISSION_WAIT_FALLBACK_SECONDS}
             description="How long a run waits for you to allow or refuse an action under “Ask me”. Running out refuses it. Measured: the provider held a permission prompt open for at least 150s."
           />
           <WaitingSetting
             agent={agent}
             field="question_timeout_seconds"
             label="Answer to a question"
-            fallback={240}
+            fallback={QUESTION_WAIT_FALLBACK_SECONDS}
             description="How long a run waits for you to answer a question it asked. Longer than a permission decision, because you have to read it and choose. Measured: an ordinary tool call was held open for at least 240s."
           />
         </SettingsSection>

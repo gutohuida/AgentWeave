@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { OverviewPage } from '@/components/overview/OverviewPage'
 import type { AgentSummary } from '@/api/agents'
 
@@ -17,6 +17,12 @@ vi.mock('@/api/tasks', () => ({ useTasks: () => ({ data: [] }) }))
 vi.mock('@/api/status', () => ({ useStatus: () => ({ data: { project_name: 'AgentWeave' } }) }))
 vi.mock('@/hooks/useSSE', () => ({ getBufferedEvents: () => [] }))
 vi.mock('@/components/overview/OverviewBudgetSummary', () => ({ OverviewBudgetSummary: () => null }))
+vi.mock('@/components/overview/CollaborationSummary', () => ({
+  CollaborationSummary: () => <div data-testid="collab-summary-stub" />,
+}))
+vi.mock('@/components/overview/AgentPostureChips', () => ({
+  AgentPostureChips: ({ agent }: { agent: AgentSummary }) => <div data-testid={`posture-${agent.name}`} />,
+}))
 
 describe('Gap 6 — OverviewPage agent health grid', () => {
   it('colors a stalled agent the same amber as waiting, not the same gray as idle', () => {
@@ -57,5 +63,23 @@ describe('Gap 6 — OverviewPage agent health grid', () => {
     render(<OverviewPage onNavigate={vi.fn()} />)
     expect(document.querySelector('button[aria-label="Open claude-stalled, Stalled"]')).not.toBeNull()
     expect(document.querySelector('button[aria-label="Open claude-running, Running"]')).not.toBeNull()
+  })
+
+  // the-settings-that-gate-collaboration-are-on-the-project-page FR-1, FR-4.
+  it('mounts the Collaboration block above Attention', () => {
+    render(<OverviewPage onNavigate={vi.fn()} />)
+    const block = screen.getByTestId('collab-summary-stub')
+    const attention = screen.getByRole('heading', { name: 'Attention' })
+    expect(block.compareDocumentPosition(attention) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it("puts each agent's posture on its card, outside the button that opens the agent", () => {
+    const onNavigate = vi.fn()
+    render(<OverviewPage onNavigate={onNavigate} />)
+    const posture = screen.getByTestId('posture-claude-idle')
+    expect(posture.closest('button')).toBeNull()
+    expect(posture.closest('[data-testid="agent-card-claude-idle"]')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open claude-idle, Idle' }))
+    expect(onNavigate).toHaveBeenCalledWith('agent:claude-idle')
   })
 })

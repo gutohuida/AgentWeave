@@ -264,6 +264,15 @@ export default function App() {
     destination.kind === 'conversation' ? destination.document : rememberedDocument
 
   const navigate = (value: string) => {
+    // `agent-settings:<name>:<section>` -- the Overview's agent cards link a flag to the section that
+    // fixes it (a missing charter to Charter). Agent names cannot hold a colon (AGENT_NAME_RE).
+    if (value.startsWith('agent-settings:')) {
+      const [, agentName, section] = value.split(':')
+      navigateTo(agentSettingsDestination(
+        currentProjectId, agentName, section as Parameters<typeof agentSettingsDestination>[2],
+      ))
+      return
+    }
     if (value.startsWith('agent:')) {
       navigateTo(agentDestination(currentProjectId, value.slice('agent:'.length), null, openDocument))
       return
@@ -504,7 +513,7 @@ export default function App() {
         worktrees: <WorktreesPanel />,
         diagnostics: <DiagnosticsPanel />,
         budgets: <AccountingPanel />,
-        settings: <ProjectSettingsPanel />,
+        settings: <ProjectSettingsPanel onNavigate={navigate} />,
       }
       projectContent = <div className="min-w-0 h-full overflow-auto">{environmentPages[section]}</div>
     }

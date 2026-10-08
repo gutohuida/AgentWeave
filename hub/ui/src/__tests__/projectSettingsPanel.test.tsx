@@ -190,8 +190,38 @@ describe('phase 5 project settings and locate repair', () => {
     fireEvent.click(screen.getByText('Save settings'))
     expect(update).toHaveBeenCalledWith(expect.objectContaining({
       name: 'Storefront', hop_budget: 15, turn_delivery_cap: 8, agent_budget: 4,
-      token_budget: 10000, allow_agent_jobs: true,
+      allow_agent_jobs: true,
     }))
+  })
+
+  // the-settings-that-gate-collaboration-are-on-the-project-page FR-6, FR-7, FR-8.
+  it('groups its rows under headings, Collaboration first and Project last', () => {
+    render(<ProjectSettingsPanel />)
+    expect(screen.getAllByTestId('settings-group-heading').map((h) => h.textContent)).toEqual([
+      'Collaboration', 'Integration', 'Checkpointing', 'Conversations', 'Project',
+    ])
+    const rows = Array.from(document.querySelectorAll('.settings-row'))
+    expect(rows[rows.length - 1]).toHaveTextContent('Delete project')
+  })
+
+  it('leaves the token budget to Budgets: no input, and never sent in a save', () => {
+    const onNavigate = vi.fn()
+    render(<ProjectSettingsPanel onNavigate={onNavigate} />)
+    expect(screen.queryByLabelText('Token budget')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Hop budget'), { target: { value: '9' } })
+    fireEvent.click(screen.getByText('Save settings'))
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(update.mock.calls[0][0]).not.toHaveProperty('token_budget')
+    expect(update.mock.calls[0][0]).toMatchObject({ hop_budget: 9 })
+    fireEvent.click(screen.getByRole('button', { name: /set in budgets/i }))
+    expect(onNavigate).toHaveBeenCalledWith('budgets')
+  })
+
+  it('says agent budget caps agents an agent staffs, not agents running at once', () => {
+    render(<ProjectSettingsPanel />)
+    const row = screen.getByLabelText('Agent budget').closest('.settings-row') as HTMLElement
+    expect(row.textContent).toMatch(/staff/i)
+    expect(row.textContent).not.toMatch(/at the same time/i)
   })
 
   it('keeps directory repair as a distinct Locate action', () => {

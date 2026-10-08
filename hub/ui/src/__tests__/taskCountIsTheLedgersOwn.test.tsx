@@ -43,6 +43,9 @@ vi.mock('@/hooks/useSSE', () => ({ getBufferedEvents: () => [] }))
 vi.mock('@/components/overview/OverviewBudgetSummary', () => ({
   OverviewBudgetSummary: () => null,
 }))
+// Not this test's subject; each reads hooks the mocks above do not provide.
+vi.mock('@/components/overview/CollaborationSummary', () => ({ CollaborationSummary: () => null }))
+vi.mock('@/components/overview/AgentPostureChips', () => ({ AgentPostureChips: () => null }))
 vi.mock('@/api/spec', () => ({
   useSpecDocuments: () => ({ data: { documents: [] } }),
   useSpecCoverageMany: (paths: string[]) => paths.map(() => ({ data: undefined })),

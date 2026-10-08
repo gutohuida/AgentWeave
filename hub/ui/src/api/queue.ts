@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, fetchWithAuth } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
@@ -68,6 +68,21 @@ export function useQueueStatus(agent: string | null) {
     queryKey: ['project', projectId, 'queue', agent, 'status'],
     queryFn: () => getJson<QueueStatus>(`/api/v1/projects/${projectId}/queue/${agent}/status`),
     enabled: isConfigured && !!projectId && !!agent,
+  })
+}
+
+/** Every listed agent's queue status at once, under the same keys `useQueueStatus` uses, so the two
+ *  share one cache entry per agent. This hook does not subscribe to the stream itself: it is read
+ *  beside the Overview's agent cards, each of which mounts `useQueueStatus` and invalidates its key. */
+export function useQueueStatuses(agents: string[]): QueueStatus[] {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQueries({
+    queries: agents.map((agent) => ({
+      queryKey: ['project', projectId, 'queue', agent, 'status'],
+      queryFn: () => getJson<QueueStatus>(`/api/v1/projects/${projectId}/queue/${agent}/status`),
+      enabled: isConfigured && !!projectId,
+    })),
+    combine: (results) => results.flatMap((result) => (result.data ? [result.data] : [])),
   })
 }
 

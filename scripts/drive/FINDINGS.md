@@ -30479,7 +30479,7 @@ one is a working tool whose only input has no producer.
 
 ## F379 (B) — the five settings that decide whether a collaboration can run are indistinguishable from the ones that pick a title style
 
-**Status:** open. Filed 2026-09-17 by an interactive session, from `LoopEngine_2` on `:8000`.
+**Status:** fixed (this commit) by `the-settings-that-gate-collaboration-are-on-the-project-page` (R2, 2026-10-08, interactive with the operator): the Overview gains a Collaboration block (live values, the flows switch in place) and per-agent grant chips, flags and collapsed details; Settings is grouped. Acceptance drive `scripts/drive/d1008_project_page_settings.py` 10/10 on the built bundle. Two side findings filed: F557 (agent budget label), F558 (evidence retention applies nothing). Was: open. Filed 2026-09-17 by an interactive session, from `LoopEngine_2` on `:8000`.
 
 **Source:** operator — the operator asked for this in session; it is a requested improvement, not a defect found by driving.
 **Theme:** Operator surfaces
@@ -35156,3 +35156,25 @@ When a loop's queue empties, the outstanding-request check treats the creator as
 (`scheduler.py:487-493`); everywhere else the creator is the agent the job names (`api/v1/tasks.py:683-692`). A loop
 the operator created has no creating run, so it never reports an outstanding message. Operator question in
 DECISIONS.md (`overhaul-loop-creator`).
+
+## F557 (C) -- agent budget is labelled a concurrency limit, and the Hub enforces it only when an agent staffs an agent
+
+**Status:** open. Filed 2026-10-08 (interactive, reading code while inventorying the project's settings for R2/F379).
+
+Settings says agent budget is "The maximum number of agents this project may run at the same time"
+(`ProjectSettingsPanel.tsx:148`); the 2026-09-17 Buried Controls audit repeated it. The Hub reads `agent_budget` in one
+place that refuses: `request_agent` (`api/v1/agents.py:2556`), which counts the project's agents and refuses a new one
+at the budget. Operator agent creation does not check it, and nothing limits concurrent runs by it. The label is
+corrected by `the-settings-that-gate-collaboration-are-on-the-project-page` (FR-8); what the budget *should* cap is
+an operator question, left open.
+
+## F558 (C) -- evidence retention is a stored policy nothing applies
+
+**Status:** open. Filed 2026-10-08 (interactive, reading code for R2/F379).
+
+`projects.evidence_retention` (`db/models.py:124`, default `never`) is written only by `PUT
+/project/spec/evidence-retention` (`api/v1/spec.py:1468-1486`) and read by nothing: no sweeper deletes an artifact under
+`on_acceptance`, `daily`, `monthly` or `manual`, and `mark_artifact_removed` has no production caller (its own DEAD note,
+`requirement_evidence.py`). The 2026-10-08 overhaul already dropped the retention clauses from `requirement-traceability`
+as unbuilt. A setting with a writer and no effect: build the cleanup, or remove the column and the route. Kept off the
+Settings page by operator decision (2026-10-08) rather than surfacing a choice that does nothing.
