@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A spec is written one step at a time, and a tester keeps it true</title>
+<meta name="aw-spec-kind" content="roadmap">
+<meta name="aw-spec-status" content="proposed">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>A spec is written one step at a time, and a tester keeps it true</h1>
+<p class="aw-meta"><span class="aw-chip">roadmap</span><span class="aw-chip aw-chip-phase-waiting">proposed</span><span class="aw-chip">sketch</span></p>
+
+<section id="summary"><h2>Summary</h2><p>Writing a specification becomes a journey of short steps, each given only its own instructions and each saving its result into the document, sized at intake and customisable per project; approval warns instead of refusing; and a tester in the flow drives the built product and amends the spec, visibly and without lowering the bar it is judged by.</p></section><section id="problem"><h2>Problem</h2><p>Today the spec agent receives one flat exploring duty of about 7-8k characters on every turn (hub/hub/api/v1/agents.py:1720-2284), whatever the conversation is doing, and the only marker inside exploration is the operator&#x27;s &#x27;exploration is complete&#x27; boolean. Instruction adherence drops as instructions grow (IFScale, arXiv 2507.11538), long contexts degrade (Chroma, Context Rot) and early wrong turns in multi-turn work are not recovered (arXiv 2505.06120), so steps get dropped in long explorations. Nothing sizes the work, so a small fix gets the same ceremony as a hazard, the field&#x27;s main reported failure (Bockeler, martinfowler.com; Scott Logic: 10x slower). Approval only refuses or passes; it cannot say what is missing. After approval a flow&#x27;s reviewer reads code and evidence but never drives the product, and what it finds never reaches the spec, which then drifts from what was built. Research and decisions: testbed/research/reports/Spec driven development with agents.md (2026-10-08, operator approved its recommendations).</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>A document-held current step, the Hub briefing only that step, the agent proposing to advance and the operator choosing continue here, a fresh conversation, or stop</li><li>Sizing at intake (small or large, announced and overridable); a small fix leaves the journey; small work merges Requirements with Acceptance; an optional Approach step for large or hazardous work</li><li>Acceptance agreed with the operator: per criterion, how to check it and whether an agent or only the operator can; task 1 of every change is the acceptance drive, recorded failing</li><li>A project setting listing the steps in order, where the operator adds a step (pasted Markdown) at any position and appends an instruction to any step</li><li>Approval warnings computed by the Hub, with approve anyway, the overridden warnings recorded</li><li>A tester in a flow&#x27;s delivery that drives the running product, reviews code and evidence, and amends the spec; amendments marked not reviewed by the operator, per item and per document</li><li>Criteria protection: the builder never edits criteria; a tester amendment that relaxes or removes a criterion cannot count as passing it until reviewed; an explicit cannot-satisfy exit</li><li>A reconcile step before fold, and recording which step caught each defect</li></ul><h3>Non-goals</h3><ul><li>Hard gates between steps, or an operator approval per step (approvals are scarce: operator, 2026-10-08)</li><li>Persona casts (analyst, PM, architect) or spec-as-source regeneration (the field retreated from both: Agent OS v3, Tessl)</li><li>Mandatory criteria for every SHOULD or MAY requirement</li><li>Per-project journeys before the default has been used; projects customise the default, they do not start from nothing</li></ul></section><section id="slices"><h2>Slices</h2><ol><li id="slice-step-journey"><strong>step-journey</strong> — The spec is written one step at a time<br>A document carries its current step and size; the spec agent is briefed with only that step&#x27;s instructions, proposes advancing, and the operator continues here, starts fresh, or stops; small work takes the short path.<br><span class="aw-note">Done when: In a real Haiku exploration on a scratch Hub, each turn&#x27;s briefing holds only the current step&#x27;s instructions, a fresh conversation resumes at the recorded step with nothing lost, and a small change reaches Approve without the steps it skipped.</span></li><li id="slice-project-steps"><strong>project-steps</strong> — A project orders its steps, adds its own and appends instructions<br>Project settings list the journey&#x27;s steps; the operator adds a pasted-Markdown step at any position and appends an instruction to any step, each reaching only its own step.<br><span class="aw-note">Done when: A custom step inserted after Requirements runs in that position, and an instruction appended to Intake appears in Intake&#x27;s briefing and in no other.</span><br><span class="aw-note">Builds after: step-journey</span></li><li id="slice-approval-warnings"><strong>approval-warnings</strong> — Approve lists what is missing and lets the operator approve anyway<br>Clicking Approve shows the Hub&#x27;s warnings for the document; the operator approves or approves anyway, and the overridden warnings stay on record.<br><span class="aw-note">Done when: Approving a document with a requirement lacking criteria shows that warning, approve anyway approves it, and the document then reads approved with that gap recorded.</span><br><span class="aw-note">Builds after: step-journey</span></li><li id="slice-tester-amends"><strong>tester-amends</strong> — A tester drives the built product and keeps the spec true<br>A flow&#x27;s tester drives the running product and reviews code and evidence; what it finds becomes amendments to the spec, marked not reviewed, which become tasks the implementer picks up; criteria cannot be lowered to pass.<br><span class="aw-note">Done when: In a real Haiku flow with a planted bug, the tester finds it by driving, adds a task to the spec marked not reviewed, the implementer fixes it, and a relaxing amendment is refused as passing evidence until the operator reviews it.</span><br><span class="aw-note">Builds after: approval-warnings</span></li><li id="slice-reconcile-and-measure"><strong>reconcile-and-measure</strong> — A change is reconciled with its code before it is folded, and each defect names the step that caught it<br>Before fold, the gaps between code and spec are classed missing, partial, contradicts or unrequested; each defect records which step caught it, so the journey can be tuned from data.<br><span class="aw-note">Done when: Folding a change shows its reconcile result, and the project can report per change which step caught each defect.</span><br><span class="aw-note">Builds after: tester-amends</span></li></ol></section><section id="requirements"><h2>Requirements</h2><p class="aw-empty">No requirements yet.</p></section><section id="design"><h2>Design</h2><p>D1 Steps live in the document, not the conversation. The document records its current step; each step must write its decisions into the document before it may propose advancing, so a fresh conversation, another day or another agent loses nothing. Rejected: steps as conversation state (dies with the context).
+D2 The agent proposes advancing; the operator answers continue here / fresh conversation / stop (operator, 2026-10-08). Replaces the operator-set &#x27;exploration is complete&#x27; boolean. Steps are skippable and revisitable; a skipped step becomes an approval warning, never a refusal.
+D3 Default journey: Intake (problem, size and its reason, non-goals, files touched, open questions; one question at a time, multiple choice where possible) -&gt; Requirements (MUST/SHOULD/MAY, stable keys) -&gt; Acceptance (never skipped; how to check, agent or operator, the acceptance drive) -&gt; Approach (optional, on for large or hazardous work: 2-3 options, the choice, hazard and rollback) -&gt; Tasks (task 1 is the acceptance drive, recorded failing) -&gt; Delivery (implementer, tester on by default, schedule, stop) -&gt; Approve. Small work merges Requirements and Acceptance; a small fix leaves at Intake as one task with one failing check.
+D4 Project customisation (operator, 2026-10-08): one strong default, then a project setting holding the ordered steps, where the operator adds a step by pasting Markdown at any position and appends an instruction to any step. Each instruction reaches only its own step and has a size cap. An instruction states where its output goes (a section of the document, a file); when it does not, the agent decides (operator, 2026-10-08).
+D5 Approval warns, it does not refuse (operator: approvals are a scarce resource). Warnings: a MUST with no criterion, a criterion with no how-to-check, an operator-only check with no owner, no acceptance drive, a requirement with no task or a task with no requirement, unresolved questions, unreviewed amendments. Approve anyway records which were overridden. Keep the list short; a long list is clicked through.
+D6 The tester amends freely and visibly (operator, 2026-10-08). Each amendment records its author and run and is marked not reviewed by the operator, per item, with how to check it; the operator marks reviewed per item or per document, each mark recorded. Additions take effect at once. A change that relaxes or removes a criterion cannot count as passing that criterion until reviewed, the builder never edits criteria, and cannot-satisfy is a first-class outcome (ImpossibleBench: models cheat about half the time where spec and tests conflict, mostly by editing tests; an abort option cut one model from 54% to 9%). Tester findings stay within the stated criteria; side findings go to the backlog.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/hub/api/v1/agents.py:1720-2284: SPEC_PHASE_DUTIES and the open-document block, rebuilt per turn by agent_trigger.py:1344-1394</li><li>hub/hub/spec_lifecycle.py:41-60, 286-400: transitions; only the operator approves or archives; explore_closed_at gates proposal (spec_service.py:1283)</li><li>hub/hub/spec_service.py:195: an approved document is frozen until reopened</li><li>spec/capabilities/agent-flows: a flow&#x27;s review turn reads code and evidence against criteria; revision_needed never touches the document</li><li>spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks: re-approval already refreshes and creates a flow&#x27;s tasks</li></ul><h3 class="aw-limits">Limits</h3><ul><li>No controlled study supports per-step instruction delivery, interview-first elicitation or warnings over gates; they rest on general degradation studies and practitioner convergence (research report, evidence note)</li><li>What a running flow does while its document is reopened and amended has not been driven</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "roadmap",
+  "title": "A spec is written one step at a time, and a tester keeps it true",
+  "summary": "Writing a specification becomes a journey of short steps, each given only its own instructions and each saving its result into the document, sized at intake and customisable per project; approval warns instead of refusing; and a tester in the flow drives the built product and amends the spec, visibly and without lowering the bar it is judged by.",
+  "problem": "Today the spec agent receives one flat exploring duty of about 7-8k characters on every turn (hub/hub/api/v1/agents.py:1720-2284), whatever the conversation is doing, and the only marker inside exploration is the operator's 'exploration is complete' boolean. Instruction adherence drops as instructions grow (IFScale, arXiv 2507.11538), long contexts degrade (Chroma, Context Rot) and early wrong turns in multi-turn work are not recovered (arXiv 2505.06120), so steps get dropped in long explorations. Nothing sizes the work, so a small fix gets the same ceremony as a hazard, the field's main reported failure (Bockeler, martinfowler.com; Scott Logic: 10x slower). Approval only refuses or passes; it cannot say what is missing. After approval a flow's reviewer reads code and evidence but never drives the product, and what it finds never reaches the spec, which then drifts from what was built. Research and decisions: testbed/research/reports/Spec driven development with agents.md (2026-10-08, operator approved its recommendations).",
+  "scope": {
+    "in_scope": [
+      "A document-held current step, the Hub briefing only that step, the agent proposing to advance and the operator choosing continue here, a fresh conversation, or stop",
+      "Sizing at intake (small or large, announced and overridable); a small fix leaves the journey; small work merges Requirements with Acceptance; an optional Approach step for large or hazardous work",
+      "Acceptance agreed with the operator: per criterion, how to check it and whether an agent or only the operator can; task 1 of every change is the acceptance drive, recorded failing",
+      "A project setting listing the steps in order, where the operator adds a step (pasted Markdown) at any position and appends an instruction to any step",
+      "Approval warnings computed by the Hub, with approve anyway, the overridden warnings recorded",
+      "A tester in a flow's delivery that drives the running product, reviews code and evidence, and amends the spec; amendments marked not reviewed by the operator, per item and per document",
+      "Criteria protection: the builder never edits criteria; a tester amendment that relaxes or removes a criterion cannot count as passing it until reviewed; an explicit cannot-satisfy exit",
+      "A reconcile step before fold, and recording which step caught each defect"
+    ],
+    "non_goals": [
+      "Hard gates between steps, or an operator approval per step (approvals are scarce: operator, 2026-10-08)",
+      "Persona casts (analyst, PM, architect) or spec-as-source regeneration (the field retreated from both: Agent OS v3, Tessl)",
+      "Mandatory criteria for every SHOULD or MAY requirement",
+      "Per-project journeys before the default has been used; projects customise the default, they do not start from nothing"
+    ]
+  },
+  "requirements": [],
+  "acceptance_criteria": [],
+  "tasks": [],
+  "algorithms": [],
+  "design": "D1 Steps live in the document, not the conversation. The document records its current step; each step must write its decisions into the document before it may propose advancing, so a fresh conversation, another day or another agent loses nothing. Rejected: steps as conversation state (dies with the context).\nD2 The agent proposes advancing; the operator answers continue here / fresh conversation / stop (operator, 2026-10-08). Replaces the operator-set 'exploration is complete' boolean. Steps are skippable and revisitable; a skipped step becomes an approval warning, never a refusal.\nD3 Default journey: Intake (problem, size and its reason, non-goals, files touched, open questions; one question at a time, multiple choice where possible) -> Requirements (MUST/SHOULD/MAY, stable keys) -> Acceptance (never skipped; how to check, agent or operator, the acceptance drive) -> Approach (optional, on for large or hazardous work: 2-3 options, the choice, hazard and rollback) -> Tasks (task 1 is the acceptance drive, recorded failing) -> Delivery (implementer, tester on by default, schedule, stop) -> Approve. Small work merges Requirements and Acceptance; a small fix leaves at Intake as one task with one failing check.\nD4 Project customisation (operator, 2026-10-08): one strong default, then a project setting holding the ordered steps, where the operator adds a step by pasting Markdown at any position and appends an instruction to any step. Each instruction reaches only its own step and has a size cap. An instruction states where its output goes (a section of the document, a file); when it does not, the agent decides (operator, 2026-10-08).\nD5 Approval warns, it does not refuse (operator: approvals are a scarce resource). Warnings: a MUST with no criterion, a criterion with no how-to-check, an operator-only check with no owner, no acceptance drive, a requirement with no task or a task with no requirement, unresolved questions, unreviewed amendments. Approve anyway records which were overridden. Keep the list short; a long list is clicked through.\nD6 The tester amends freely and visibly (operator, 2026-10-08). Each amendment records its author and run and is marked not reviewed by the operator, per item, with how to check it; the operator marks reviewed per item or per document, each mark recorded. Additions take effect at once. A change that relaxes or removes a criterion cannot count as passing that criterion until reviewed, the builder never edits criteria, and cannot-satisfy is a first-class outcome (ImpossibleBench: models cheat about half the time where spec and tests conflict, mostly by editing tests; an abort option cut one model from 54% to 9%). Tester findings stay within the stated criteria; side findings go to the backlog.",
+  "evidence": {
+    "checked": [
+      "hub/hub/api/v1/agents.py:1720-2284: SPEC_PHASE_DUTIES and the open-document block, rebuilt per turn by agent_trigger.py:1344-1394",
+      "hub/hub/spec_lifecycle.py:41-60, 286-400: transitions; only the operator approves or archives; explore_closed_at gates proposal (spec_service.py:1283)",
+      "hub/hub/spec_service.py:195: an approved document is frozen until reopened",
+      "spec/capabilities/agent-flows: a flow's review turn reads code and evidence against criteria; revision_needed never touches the document",
+      "spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks: re-approval already refreshes and creates a flow's tasks"
+    ],
+    "limits": [
+      "No controlled study supports per-step instruction delivery, interview-first elicitation or warnings over gates; they rest on general degradation studies and practitioner convergence (research report, evidence note)",
+      "What a running flow does while its document is reopened and amended has not been driven"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "slices": [
+    {
+      "key": "step-journey",
+      "title": "The spec is written one step at a time",
+      "intent": "A document carries its current step and size; the spec agent is briefed with only that step's instructions, proposes advancing, and the operator continues here, starts fresh, or stops; small work takes the short path.",
+      "done": "In a real Haiku exploration on a scratch Hub, each turn's briefing holds only the current step's instructions, a fresh conversation resumes at the recorded step with nothing lost, and a small change reaches Approve without the steps it skipped.",
+      "builds_after": []
+    },
+    {
+      "key": "project-steps",
+      "title": "A project orders its steps, adds its own and appends instructions",
+      "intent": "Project settings list the journey's steps; the operator adds a pasted-Markdown step at any position and appends an instruction to any step, each reaching only its own step.",
+      "done": "A custom step inserted after Requirements runs in that position, and an instruction appended to Intake appears in Intake's briefing and in no other.",
+      "builds_after": [
+        "step-journey"
+      ]
+    },
+    {
+      "key": "approval-warnings",
+      "title": "Approve lists what is missing and lets the operator approve anyway",
+      "intent": "Clicking Approve shows the Hub's warnings for the document; the operator approves or approves anyway, and the overridden warnings stay on record.",
+      "done": "Approving a document with a requirement lacking criteria shows that warning, approve anyway approves it, and the document then reads approved with that gap recorded.",
+      "builds_after": [
+        "step-journey"
+      ]
+    },
+    {
+      "key": "tester-amends",
+      "title": "A tester drives the built product and keeps the spec true",
+      "intent": "A flow's tester drives the running product and reviews code and evidence; what it finds becomes amendments to the spec, marked not reviewed, which become tasks the implementer picks up; criteria cannot be lowered to pass.",
+      "done": "In a real Haiku flow with a planted bug, the tester finds it by driving, adds a task to the spec marked not reviewed, the implementer fixes it, and a relaxing amendment is refused as passing evidence until the operator reviews it.",
+      "builds_after": [
+        "approval-warnings"
+      ]
+    },
+    {
+      "key": "reconcile-and-measure",
+      "title": "A change is reconciled with its code before it is folded, and each defect names the step that caught it",
+      "intent": "Before fold, the gaps between code and spec are classed missing, partial, contradicts or unrequested; each defect records which step caught it, so the journey can be tuned from data.",
+      "done": "Folding a change shows its reconcile result, and the project can report per change which step caught each defect.",
+      "builds_after": [
+        "tester-amends"
+      ]
+    }
+  ],
+  "aw_identity": {
+    "requirements": {},
+    "high_water": 0,
+    "retired": {},
+    "digests": {}
+  }
+}
+</script>
+</body>
+</html>
