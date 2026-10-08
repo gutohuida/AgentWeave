@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "4055151",
     "stop_at": "2026-10-08T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-07-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F530-drive",
-    "next_action": "CI gate first: `gh run list --branch autonomous/2026-10-07-daily`. 5cf29c3 was green (first green after the F530 reopen); the iteration-7 F526 push is the second -- if red, read the failed job and fix it before anything else. If green, do the F530-drive close-out: run usage_report --windows --since 2026-10-07, write the ending log entry (state F530 has its two consecutive green pushes only if both are green), then set next_action to null.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "F530-impl",
@@ -54,7 +54,7 @@
         },
         {
             "id": "F530-drive",
-            "status": "open",
+            "status": "done",
             "title": "Close-out: usage report and final log",
             "detail": "Run usage_report --windows --since 2026-10-07; write ending entry; next_action null."
         }
