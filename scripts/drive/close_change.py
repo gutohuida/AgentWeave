@@ -39,7 +39,74 @@ CHIP_TESTS = "hub/ui/src/__tests__/agentPostureChips.test.tsx"
 SETTINGS_TESTS = "hub/ui/src/__tests__/projectSettingsPanel.test.tsx"
 PROJECT_PAGE_DRIVE = "scripts/drive/d1008_project_page_settings.py"
 
+JOURNEY_TESTS = "hub/tests/test_spec_journey.py"
+BRIEFING_TESTS = "hub/tests/test_spec_journey_briefing.py"
+JOURNEY_DRIVE = "scripts/drive/d1009_step_journey.py"
+JOURNEY_MIGRATION_TESTS = "hub/tests/test_migrations.py"
+BAR_TESTS = "hub/ui/src/__tests__/specPhaseBar.test.tsx"
+
+# Folded by owner (operator, 2026-10-08): what the Hub holds on a document goes to
+# spec-document-authority, what a turn is told goes to spec-chat-session.
+JOURNEY_FOLD = {
+    "spec/capabilities/spec-document-authority/spec.html": [
+        "step-recorded", "default-journey", "advance-tool", "criterion-check-fields",
+        "operator-moves-journey", "propose-without-close", "existing-documents",
+    ],
+    "spec/capabilities/spec-chat-session/spec.html": [
+        "one-step-briefing", "step-asks-to-advance", "resume-anywhere", "intake-sizes",
+        "acceptance-step", "context-preview",
+    ],
+}
+
 CHANGES = {
+    "fjourney": {
+        "document": "spec/changes/a-spec-is-written-one-step-at-a-time/spec.html",
+        "commit": "90e8273",
+        "tasks": ["task-c92b4f2b2e36", "task-d1486fcad84e", "task-92e550885015", "task-c04af8b96474"],
+        "evidence": [
+            ("FR-1", "task-d1486fcad84e", "test_result", JOURNEY_TESTS,
+             "A new change document starts at intake with no size (route and list view); a roadmap "
+             "has no step. Red before the build."),
+            ("FR-2", "task-d1486fcad84e", "test_result", JOURNEY_TESTS,
+             "The journey per size (none/large, small, fix) is exactly the listed steps in order; "
+             "next_step walks it and moves forward from a step the size no longer holds."),
+            ("FR-3", "task-92e550885015", "manual_observation", JOURNEY_DRIVE,
+             "Scratch Hub, real Haiku: the intake preview held only [step: intake] and the journey "
+             "line; after the move only [step: requirements-and-acceptance]. 0/1 before the build, "
+             "10/10 after. Unit: every step's briefing holds its own marker and no other."),
+            ("FR-4", "task-92e550885015", "test_result", BRIEFING_TESTS,
+             "Every step's duty (but delivery's) names what it writes and the three choices through "
+             "ask_user; in the drive the agent asked 'continue here / fresh / stop' at each step end."),
+            ("FR-5", "task-92e550885015", "test_result", BRIEFING_TESTS,
+             "advance_spec_step at requirements with nothing written moves to acceptance, answers "
+             "missing=['requirements'] and the next duty, and records a journey event with the run."),
+            ("FR-6", "task-92e550885015", "manual_observation", JOURNEY_DRIVE,
+             "A turn in a new conversation was briefed at requirements-and-acceptance and wrote "
+             "requirements with a criterion for every MUST. Unit: another agent is briefed at tasks."),
+            ("FR-7", "task-92e550885015", "manual_observation", JOURNEY_DRIVE,
+             "Haiku asked one question per ask_user ([1,1,1,1,1,1]) and asked the size as a "
+             "question; the first drive found batches of 3 (the tool text said ask all at once)."),
+            ("FR-8", "task-92e550885015", "test_result", BRIEFING_TESTS,
+             "The acceptance duties ask how_to_check, checked_by and the drive per MUST; the tasks "
+             "duty makes task 1 the failing acceptance drive."),
+            ("FR-9", "task-d1486fcad84e", "test_result", JOURNEY_TESTS,
+             "how_to_check/checked_by round-trip through render and extract; a criterion without "
+             "them stores as before; checked_by='robot' is refused naming the field."),
+            ("FR-10", "task-c04af8b96474", "manual_observation", JOURNEY_DRIVE,
+             "In Chromium the bar showed the small journey with the recorded step current. vitest: "
+             "moves any step, changes the size, says a refusal; the journey route moves back and "
+             "sizes (test_spec_journey)."),
+            ("FR-11", "task-d1486fcad84e", "test_result", JOURNEY_TESTS,
+             "A complete document never marked complete proposes; vitest: no Exploration is "
+             "complete control, Propose shown while exploring."),
+            ("FR-12", "task-d1486fcad84e", "test_result", JOURNEY_MIGRATION_TESTS,
+             "0122 places empty exploring changes at intake, written ones at requirements, others "
+             "null, and downgrades to the prior schema; a trial-DB copy went up and down (77 rows)."),
+            ("FR-13", "task-92e550885015", "test_result", BRIEFING_TESTS,
+             "GET /agents/agent-context?spec_document= returns the same open-document block a turn "
+             "on that document is rendered with."),
+        ],
+    },
     "f379": {
         "document": "spec/changes/the-settings-that-gate-collaboration-are-on-the-project-page/spec.html",
         "commit": "e38f017",
@@ -373,8 +440,26 @@ def fold(name: str, capability: str) -> None:
     print(name, "fold", code, res.get("phase") if code == 200 else json.dumps(res)[:400])
 
 
+def fold_split(name: str, split: dict) -> None:
+    """Fold each capability's share of the change's requirements; the last fold archives it."""
+    path = CHANGES[name]["document"]
+    targets = list(split.items())
+    for index, (capability, keys) in enumerate(targets):
+        body = {
+            "into": capability,
+            "requirements": [{"key": key} for key in keys],
+            "archive": index == len(targets) - 1,
+        }
+        code, res = api("POST", f"/projects/{P}/project/documents/{path}/fold", body)
+        print(name, "fold", capability, code, res.get("phase") if code == 200 else json.dumps(res)[:400])
+        if code != 200:
+            raise SystemExit(1)
+
+
 if sys.argv[1:2] == ["--fold"]:
     fold(sys.argv[2], sys.argv[3])
+elif sys.argv[1:] == ["--fold-journey"]:
+    fold_split("fjourney", JOURNEY_FOLD)
 else:
     for arg in sys.argv[1:]:
         close(arg)
