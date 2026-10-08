@@ -188,7 +188,9 @@ Only the first firing of the window does this.
       tonight's `APPROVED-FIXES:` line names are work: one item each, suffix `-impl`, built as Tier 0.
       Any other finding with no proposal needs the day window first: queue it as a note to
       tomorrow, not as work.
-   3. **`APPROVED` rows**, via `openspec-apply-change`.
+   3. **`APPROVED` rows naming an `openspec/changes/` change are not built here** (operator,
+      2026-10-08: openspec changes are moved into the app, not finished in openspec). Note the row
+      for tomorrow's interactive session instead; the night has no operator to approve the app copy.
 
    Size each item to finish inside one firing. If an item ends without a commit, it was too big;
    split it in the log so the next firing inherits the split. **Split by task, never below one.**

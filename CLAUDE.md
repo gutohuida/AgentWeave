@@ -55,10 +55,11 @@ capabilities (requirement counts verified equal to openspec's).
   are the map. `openspec/specs/` is frozen (see its `README.md`); do not edit or re-sync it.
 - **New changes** are authored in the app as `spec/changes/<name>/` documents, one at a time — prefer
   a self-contained slice with no Hub-restart hazard.
-- **The changes already in `openspec/changes/`** finish there (`openspec-apply-change`,
-  `openspec-archive-change --skip-specs`), and their deltas are applied to the `spec/` capability
-  document through the Hub instead of to `openspec/specs/`. Never carry one change in both.
-- **Which one?** New work → ask the operator; do not silently pick.
+- **The changes still in `openspec/changes/` are moved across, not finished there** (operator,
+  2026-10-08). When one comes up, re-author it as a short app change (tier rules below), then archive
+  the openspec copy (`openspec archive <name> --skip-specs --yes`) with a note naming its successor.
+  Before fixing any finding, grep `openspec/changes/` for it: an F330 fix landed beside its own
+  unbuilt openspec change on 2026-10-08. Never carry one change in both.
 - **Never mark a task complete on the strength of a plan existing.** Only real, verified
   implementation closes a task.
 - The spec flow is both the thing you use and the thing you build: **when it frustrates you, record

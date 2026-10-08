@@ -1,3 +1,9 @@
+> **Superseded 2026-10-08 (operator: "keep today's fix"), archived unbuilt.** F330 was fixed as a Tier 0 in
+> `bd32b9b`: the composer deletes the document it created when the trigger is refused or fails, through
+> F532's guarded `DELETE /project/documents/{path}` (row, file, index entry). This reverses D-B12-1
+> (archive, never delete), decided 2026-09-24 when the product had no document delete; the operator
+> kept the delete on 2026-10-08. The server-side `start_exploration` design below was never built.
+
 # A refused first send leaves no exploration behind
 
 ## Why

@@ -1,3 +1,9 @@
+> **Superseded 2026-10-08 (operator: "keep today's fix"), archived unbuilt.** F330 was fixed as a Tier 0 in
+> `bd32b9b`: the composer deletes the document it created when the trigger is refused or fails, through
+> F532's guarded `DELETE /project/documents/{path}` (row, file, index entry). This reverses D-B12-1
+> (archive, never delete), decided 2026-09-24 when the product had no document delete; the operator
+> kept the delete on 2026-10-08. The server-side `start_exploration` design below was never built.
+
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
 - [x] 0.1 R2 (2026-09-24, recorded in design.md's round log and `spec-queue/tracks/B12.md`): re-derive the proposal against `hub/ui/src/components/agents/NewConversationSurface.tsx:62-121`,
