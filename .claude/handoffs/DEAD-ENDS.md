@@ -2153,3 +2153,28 @@ disappears is indistinguishable from one that was forgotten.
   `git status`. While the night loop holds the root, they would dirty its tree; run them only when the
   root is on master and free.
 
+- **2026-10-08 (home) -- Git Bash rewrites a `/mnt/c/...` argument to `wsl`** into
+  `C:/Program Files/Git/mnt/c/...` ("No such file or directory", exit 127). Prefix `MSYS_NO_PATHCONV=1`.
+- **2026-10-08 (home) -- a placement-independent sweep for F530-style leakers exists:**
+  `testbed/f530/spawn_recorder.py` (untracked) wraps `PtySession.spawn` and logs each spawn's test and
+  whether `shutil.which` was faked at that moment. Run serially (`-n0 -p spawn_recorder`, `PYTHONPATH`
+  to the plugin) over the which-patching files: 7 min on Windows, found 3 leakers CI had not reached. The
+  guard alone finds them one CI run at a time.
+- **2026-10-08 (home) -- the night window's close-out pushed without reading its own CI run** and wrote
+  "F530 closed"; that run was red (a 20th leaker). Read the tip's run, the close-out's included, before
+  writing any "CI green" claim.
+- **2026-10-08 (home) -- `gh run list` filtered by headSha alone can return the `Publish Hub Docker
+  image` run** for a master push (1 min, success) instead of CI. Add `--workflow ci.yml`.
+- **2026-10-08 (home) -- the operator's `PUT .../documents/{path}/content` returns no `warnings`**; only
+  the agent submit route (`/agent-actions/spec/documents`) does. A drive asserting "no warning" on the PUT
+  passes vacuously: test warnings at the agent route.
+- **2026-10-08 (home) -- an approval's flow is at `approval_outcome.flow`** in the phase response, not
+  at a top-level `flow`. A drive that asserted on the wrong key crashed before its `try/finally` and left
+  the flow enabled (yearly cron, so it never fired). Put job cleanup around everything after approval.
+- **2026-10-08 (home) -- `~/.agentweave/hub/hub-trial-8010.pid` is stale** (said 1062; the Hub was 20292).
+  Find the trial Hub by port: `Get-NetTCPConnection -LocalPort 8010 -State Listen`, then its `py.exe` and
+  `cmd.exe` parents; stop all three by PID.
+- **2026-10-08 (home) -- `black`/`ruff` are not on Git Bash's PATH here**; use `py -3.11 -m black` /
+  `py -3.11 -m ruff`.
+- **2026-10-08 (home) -- auto mode refused `git merge` of the cycle branch into master** as "Production
+  Deploy" (`:8000` runs this checkout) until the operator said "merge" explicitly in the conversation.
