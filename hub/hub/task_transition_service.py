@@ -18,6 +18,7 @@ reaches the row a different way.
 from __future__ import annotations
 
 import logging
+import subprocess
 from dataclasses import dataclass
 from typing import Optional
 
@@ -45,6 +46,33 @@ class TransitionRefusedError(Exception):
     def __init__(self, detail: str) -> None:
         super().__init__(detail)
         self.detail = detail
+
+
+class GitUnavailableError(TransitionRefusedError):
+    """The approval gate could not ask git whether the work would merge (F424).
+
+    Refused rather than raised: the gate exists so that nothing is approved that might not merge,
+    and a timeout or a missing git leaves that unanswered. The operator can retry once git answers.
+    """
+
+    http_status = 409
+
+
+async def evaluate_approval(session: AsyncSession, task: Task, **kwargs):
+    """`requirement_gate.evaluate` for a move to `approved`, with a git that cannot be asked turned
+    into a stated refusal (F424). Every approving surface asks through this: the transition (operator
+    PATCH, the agent plane, MCP) and the land route. Looked up at call time, as the transition always
+    did, so a test patching `requirement_gate.evaluate` still reaches it."""
+    from . import requirement_gate
+
+    try:
+        return await requirement_gate.evaluate(session, task, **kwargs)
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        raise GitUnavailableError(
+            "The Hub could not ask git whether this task's work would merge "
+            f"({type(exc).__name__}: {exc}), so it was not approved. Check the project's "
+            "repository and try again."
+        ) from exc
 
 
 class IllegalTransitionError(TransitionRefusedError):
@@ -726,8 +754,6 @@ async def apply_transition(
     reported: list = []
     overridden: Optional[str] = None
     if to_status == "approved":
-        from .requirement_gate import evaluate
-
         # The acting run, excluded from the gate's liveness check: a turn is never blocked by
         # itself (design D10). `None` for the operator, which excludes nothing.
         # Only the operator may approve over failing checks, and only with a reason
@@ -738,7 +764,7 @@ async def apply_transition(
                 "Only the operator can approve over failing checks; send the task back to its "
                 "author with revision_needed instead."
             )
-        refusal, policy = await evaluate(
+        refusal, policy = await evaluate_approval(
             session,
             task,
             acting_run_id=actor.run_id,

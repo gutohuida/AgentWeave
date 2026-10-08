@@ -44,7 +44,6 @@ from ...db.models import (
 )
 from ...launchability import is_read_only_agent, read_only_work_sentence
 from ...requirement_evidence import REJECTED as EVIDENCE_REJECTED
-from ...requirement_gate import evaluate as evaluate_approval_gate
 from ...requirement_links import LinkRefusedError, absorb_free_text, link, resolve_identifiers
 from ...run_task_binding import (
     TERMINAL_FOR_BINDING,
@@ -69,6 +68,7 @@ from ...task_transition_service import (
     GateUnsatisfiedError,
     TransitionRefusedError,
     apply_transition,
+    evaluate_approval,
     guard_entry_status,
     history_for,
     retry_integration,
@@ -1829,9 +1829,7 @@ async def land_task(
     # `test_the_gate_is_decided_before_anything_is_attempted`, which observes the call sequence,
     # fails. What is bought is ordering, which matters the moment a fourth step or a non-gate
     # refusal joins the sequence — not the response, which the transaction already covers.
-    refusal, _policy = await evaluate_approval_gate(
-        session, task, acting_run_id=None, start_checks=True
-    )
+    refusal, _policy = await evaluate_approval(session, task, acting_run_id=None, start_checks=True)
     if refusal.refuses:
         raise GateUnsatisfiedError(refusal)
     # Step one: the author's hold. `None` rather than the operator's name — the operator is not an
