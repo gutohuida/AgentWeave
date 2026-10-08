@@ -558,7 +558,7 @@
       "path": "spec/changes/a-spec-is-written-one-step-at-a-time/spec.html",
       "title": "A spec is written one step at a time",
       "kind": "change-spec",
-      "status": "approved",
+      "status": "archived",
       "parent": null,
       "order": 770
     },

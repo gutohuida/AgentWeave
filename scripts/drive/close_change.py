@@ -424,7 +424,8 @@ def close(name: str) -> None:
             print(name, task_id, "already approved")
             continue
         for step in ("in_progress", "completed"):
-            if task["status"] == step:
+            # A task already completed goes straight to landing; walking it back is refused.
+            if task["status"] in (step, "completed"):
                 continue
             code, task = api("PATCH", f"/projects/{P}/tasks/{task_id}", {"status": step})
             if code != 200:
