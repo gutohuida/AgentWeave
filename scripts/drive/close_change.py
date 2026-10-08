@@ -7,9 +7,10 @@ already on the main branch lands as `already integrated`; nothing is merged.
   AW_HUB=http://127.0.0.1:8010 AW_KEY=... AW_PROJECT=proj-d85a82bf4216 \
       MSYS_NO_PATHCONV=1 py -3.11 scripts/drive/close_change.py f440 f450
 
-Then reconcile the change into its capability, commit that, and finish the lifecycle with
-`close_change.py --archive f440 f450` (see ARCHIVE: it refuses unless every task is approved and
-the reconciled requirement is in the capability).
+Then fold the change into the capability it changes, which archives it, through the Hub's fold
+route (`a-finished-change-is-folded-into-its-capability`; the app's "Fold into capability" does the
+same):  close_change.py --fold fold spec/capabilities/spec-document-authority/spec.html
+The Hub refuses the fold while a task is open and on a key collision; nothing is written then.
 """
 
 import json
@@ -27,6 +28,7 @@ READ_ONLY_TESTS = "hub/tests/test_a_read_only_agent_holds_no_task_work.py"
 CODEX_SPEC_TESTS = "hub/tests/test_a_codex_app_server_spec_turn_keeps_no_write_tools.py"
 DEFAULT_REVIEWER_TESTS = "hub/tests/test_a_document_names_its_default_reviewer.py"
 STRICT_MCP_TESTS = "hub/tests/test_a_hub_run_gets_only_the_hubs_tool_server.py"
+FOLD_TESTS = "hub/tests/test_a_finished_change_is_folded_into_its_capability.py"
 
 CHANGES = {
     "f440": {
@@ -155,6 +157,35 @@ CHANGES = {
              "reviewer_undeclared is quiet when it is set and names it otherwise."),
         ],
     },
+    "fold": {
+        "document": "spec/changes/a-finished-change-is-folded-into-its-capability/spec.html",
+        "tasks": ["task-e7c8a583c45c", "task-8a9f0b76ae27", "task-880b8e79d65a"],
+        "evidence": [
+            ("FR-1", "task-8a9f0b76ae27", "test_result", FOLD_TESTS,
+             "The draft appends the change's requirements and criteria under <slug>-<key> (<= 64, "
+             "valid keys), reports a key the capability holds as a collision and leaves its text "
+             "and the file untouched (red before the build)."),
+            ("FR-2", "task-8a9f0b76ae27", "test_result", FOLD_TESTS,
+             "A fold writes edited and replacing requirements through the merge (one row, one "
+             "merged event) and archives; folded twice across two capabilities it archives on the "
+             "second; seven refusals each write nothing (red before the build)."),
+            ("FR-3", "task-8a9f0b76ae27", "test_result", FOLD_TESTS,
+             "Archiving an approved change with an open task is refused naming it; unfolded it is "
+             "refused until no_capability_change comes with a non-blank reason; folded it archives."),
+            ("FR-4", "task-8a9f0b76ae27", "test_result", FOLD_TESTS,
+             "PUT .../content on a capability is 409 capability_written_through_merge naming the "
+             "merge route; a merge naming no change writes it and records an edit event."),
+            ("FR-5", "task-880b8e79d65a", "manual_observation",
+             "scripts/drive/d1008_fold_change_drive.py",
+             "In Chromium on :8010's served bundle: 0/4 before the build (no fold action), 6/6 "
+             "after: the bar reads shipped-but-not-in-a-capability, the dialog drafts "
+             "widgets-glow-glow, confirm leaves the key in the capability file, one merge row, and "
+             "the change archived. vitest specFold 8/8."),
+            ("FR-5", "task-e7c8a583c45c", "manual_observation",
+             "scripts/drive/d1008_fold_change_drive.py",
+             "The acceptance drive, written and run before the build: 0/4 on today's Hub."),
+        ],
+    },
 }
 
 
@@ -183,55 +214,15 @@ def close(name: str) -> None:
         print(name, task_id, "land", code, task.get("status") if code == 200 else json.dumps(task)[:400])
 
 
-#: The last step of a close-out, run after the change is reconciled: the document id, and one
-#: (capability, requirement key) the change was reconciled under. A change is archived only when
-#: every task of its document is approved and that key is in the capability, because `archived` has
-#: no way back and a shipped change whose requirements live nowhere else must not become history.
-#: F509's slices and F510 shipped before `spec/` owned the corpus and are archived from here too.
-ARCHIVE = {
-    "f440": ("spec/changes/a-decided-task-withdraws-its-waiting-reviews/spec.html", "spdoc-3b1585810681",
-             "run-task-binding", "a-decided-task-withdraws-its-waiting-reviews"),
-    "f450": ("spec/changes/a-run-claims-only-its-agents-or-nobodys-work/spec.html", "spdoc-02d1259eea94",
-             "run-task-binding", "a-run-claims-only-its-agents-or-nobodys-work"),
-    "f425": ("spec/changes/a-read-only-agent-holds-no-task-work/spec.html", "spdoc-e7299e2e30ce",
-             "run-task-binding", "a-read-only-agent-holds-no-task-work"),
-    "f462": ("spec/changes/a-codex-app-server-spec-turn-keeps-no-write-tools/spec.html", "spdoc-4e84aebf7712",
-             "spec-document-authority", "a-codex-app-server-spec-turn-keeps-no-write-tools"),
-    "f508": ("spec/changes/a-document-names-its-default-reviewer/spec.html", "spdoc-54a29332c4a2",
-             "agent-flows", "a-document-names-its-default-reviewer"),
-    "f531": ("spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server/spec.html", "spdoc-721c3e827237",
-             "agent-run-sandboxing", "a-hub-claude-run-gets-only-the-hubs-tool-server"),
-    "f510": ("spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/"
-             "spec.html", "spdoc-eeaf6a633f2d",
-             "agent-conversation-workspace", "where-evidence-does-not-govern-the-merge-a-review-turn-revie"),
-    "f509-1": ("spec/changes/same-file-tasks-build-in-order/spec.html", "spdoc-2b89ed059860",
-               "spec-document-authority", "unordered-tasks-sharing-a-file-are-warned"),
-    "f509-1b": ("spec/changes/same-file-tasks-build-in-order-the-shim-planner-is-told/spec.html",
-                "spdoc-4503a507472f", "agent-tool-surface", "aw-tool-help-prints-a-tools-whole-description"),
-    "f509-1c": ("spec/changes/submission-warns-when-a-multi-task-planner-declares-no-files/spec.html",
-                "spdoc-1612097b4bc3", "spec-document-authority", "a-multi-task-document-without-files-is-warned"),
-}
+def fold(name: str, capability: str) -> None:
+    """Fold the change into `capability` through the Hub, archiving it (the close-out's last step)."""
+    path = CHANGES[name]["document"]
+    code, res = api("POST", f"/projects/{P}/project/documents/{path}/fold", {"into": capability})
+    print(name, "fold", code, res.get("phase") if code == 200 else json.dumps(res)[:400])
 
 
-def archive(name: str) -> None:
-    path, doc_id, capability, key = ARCHIVE[name]
-    _, tasks = api("GET", f"/projects/{P}/tasks")
-    rows = tasks if isinstance(tasks, list) else tasks.get("tasks", tasks.get("items", []))
-    open_tasks = [(t["id"], t["status"]) for t in rows
-                  if t.get("spec_document_id") == doc_id and t["status"] != "approved"]
-    if open_tasks or not any(t.get("spec_document_id") == doc_id for t in rows):
-        raise SystemExit(f"{name}: not archived, tasks not all approved: {open_tasks or 'none found'}")
-    corpus = (REPO / "spec/capabilities" / capability / "spec.html").read_text(encoding="utf-8")
-    if f'"key": "{key}"' not in corpus:
-        raise SystemExit(f"{name}: not archived, {capability} has no requirement {key}: reconcile first")
-    code, res = api("POST", f"/projects/{P}/project/documents/phase?path={path}&to=archived",
-                    {"reason": f"shipped; reconciled into {capability} ({key})"})
-    print(name, "archive", code, res.get("phase") if code == 200 else json.dumps(res)[:400])
-
-
-if sys.argv[1:2] == ["--archive"]:
-    for arg in sys.argv[2:]:
-        archive(arg)
+if sys.argv[1:2] == ["--fold"]:
+    fold(sys.argv[2], sys.argv[3])
 else:
     for arg in sys.argv[1:]:
         close(arg)
