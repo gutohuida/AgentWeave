@@ -34968,7 +34968,7 @@ reading `blocking` sees a document that is wrong in 77 ways. Likely fix: skip th
 
 ## F535 (C) -- re-approving an amended document leaves its tasks as the first approval made them
 
-**Status:** open (filed 2026-10-08, interactive, from amending F532's document after the operator kept agent archival).
+**Status:** fixed (Tier 1, 2026-10-08, `spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks`, `spdoc-7f722adeb750`, folded into `task-lifecycle-governance` and archived): operator chose "Refresh open tasks". Re-approval refreshes an open declared task's title, description, criteria and same-document links (status, assignee, priority, other documents' links untouched); approved/rejected tasks stay frozen; `approval_outcome` lists `refreshed`, `closed_linking_retired`, `no_longer_declared`, shown in the app's report (`hub/tests/test_re_approving_refreshes_open_tasks.py`; drive `d1008_reapproval_refresh_drive.py` 4/10 -> 10/10). Was: open (filed 2026-10-08, interactive, from amending F532's document after the operator kept agent archival).
 
 Reopening an approved change, replacing a requirement (`agent` FR-3 retired, `runner` FR-5 minted) and approving again
 created no task and changed none: the `backend` task kept its first title and its link to the retired FR-3, and FR-5 was
