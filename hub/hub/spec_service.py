@@ -1007,6 +1007,9 @@ async def fold(
         workspace=workspace,
         reason=f"folded into {capability.path}",
     )
+    # The file's status line is a copy for its reader; the phase route refreshes it after every
+    # transition, and a fold that archives must too.
+    await rerender_phase(session, workspace, change)
     return result, True
 
 

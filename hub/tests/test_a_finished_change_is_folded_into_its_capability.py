@@ -255,6 +255,23 @@ async def test_a_fold_writes_edits_and_replacements_merges_once_and_archives(
 
 
 @pytest.mark.asyncio
+async def test_the_folded_change_s_file_states_it_is_archived(app, auth_headers, tmp_path):
+    """The file's status is a copy for its reader; a fold that archives rewrites it as the phase
+    route does, or the document reads `approved` on disk while the Hub has it archived."""
+    await _create_capability(app, auth_headers)
+    await _approved_change(app, auth_headers)
+    await _finish_tasks()
+
+    response = await app.post(
+        f"{BASE}/documents/{CHANGE}/fold", json={"into": CAP}, headers=auth_headers
+    )
+
+    assert response.status_code == 200, response.text
+    content = (tmp_path / CHANGE).read_text(encoding="utf-8")
+    assert '<meta name="aw-spec-status" content="archived">' in content
+
+
+@pytest.mark.asyncio
 async def test_a_change_touching_two_capabilities_is_folded_twice_archiving_on_the_second(
     app, auth_headers, tmp_path
 ):

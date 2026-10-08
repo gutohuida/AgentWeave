@@ -157,6 +157,9 @@ def main():
         "select phase from spec_documents where project_id = ? and path = ?", (pid, CHANGE)
     ).fetchone()[0]
     check("the change is archived", phase == "archived", phase)
+    status_line = '<meta name="aw-spec-status" content="archived">'
+    check("the change's own file states it is archived",
+          status_line in (root / CHANGE).read_text(encoding="utf-8"))
 
     failed = [n for n, ok in results if not ok]
     print(f"{len(results) - len(failed)}/{len(results)} passed; shots in {OUT}")
