@@ -127,7 +127,7 @@
       "title": "Agent document creation",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/specification.html",
       "order": 420
     },
     {
@@ -135,7 +135,7 @@
       "title": "Agent flows",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/work-and-traceability.html",
       "order": 430
     },
     {
@@ -179,6 +179,14 @@
       "order": 140
     },
     {
+      "path": "spec/capabilities/approval-integration/spec.html",
+      "title": "Approval integration",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/work-and-traceability.html",
+      "order": 700
+    },
+    {
       "path": "spec/capabilities/conversation-checkpoint/spec.html",
       "title": "Conversation checkpoint",
       "kind": "capability",
@@ -195,6 +203,14 @@
       "order": 160
     },
     {
+      "path": "spec/capabilities/conversation-navigation/spec.html",
+      "title": "Conversation navigation",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/conversations.html",
+      "order": 710
+    },
+    {
       "path": "spec/capabilities/conversation-side-panel/spec.html",
       "title": "Conversation side panel",
       "kind": "capability",
@@ -207,7 +223,7 @@
       "title": "Hub API request contract",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/the-local-instance.html",
       "order": 440
     },
     {
@@ -227,6 +243,14 @@
       "order": 190
     },
     {
+      "path": "spec/capabilities/inbound-queue-delivery/spec.html",
+      "title": "Inbound queue delivery",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/conversations.html",
+      "order": 720
+    },
+    {
       "path": "spec/capabilities/local-project-workspace/spec.html",
       "title": "Local project workspace",
       "kind": "capability",
@@ -239,7 +263,7 @@
       "title": "Loop firing accountability",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/work-and-traceability.html",
       "order": 450
     },
     {
@@ -255,7 +279,7 @@
       "title": "Opencode config",
       "kind": "capability",
       "status": "archived",
-      "parent": "spec/areas/the-local-instance.html",
+      "parent": null,
       "order": 220
     },
     {
@@ -267,11 +291,19 @@
       "order": 230
     },
     {
+      "path": "spec/capabilities/peer-message-routing/spec.html",
+      "title": "Peer message routing",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/conversations.html",
+      "order": 730
+    },
+    {
       "path": "spec/capabilities/project-checks/spec.html",
       "title": "Project checks",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/work-and-traceability.html",
       "order": 460
     },
     {
@@ -291,11 +323,19 @@
       "order": 340
     },
     {
+      "path": "spec/capabilities/provider-allowance-holds/spec.html",
+      "title": "Provider allowance holds",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/agents-and-execution.html",
+      "order": 740
+    },
+    {
       "path": "spec/capabilities/quiet-hours/spec.html",
       "title": "Quiet hours",
       "kind": "capability",
       "status": "archived",
-      "parent": "spec/areas/the-local-instance.html",
+      "parent": null,
       "order": 350
     },
     {
@@ -343,7 +383,7 @@
       "title": "Spec corpus map",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/specification.html",
       "order": 470
     },
     {
@@ -351,7 +391,7 @@
       "title": "Spec document adoption",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/specification.html",
       "order": 480
     },
     {
@@ -367,7 +407,7 @@
       "title": "Spec roadmaps",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/specification.html",
       "order": 490
     },
     {
@@ -375,7 +415,7 @@
       "title": "Task dependencies",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/work-and-traceability.html",
       "order": 500
     },
     {
@@ -383,7 +423,7 @@
       "title": "Task dependency board",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/work-and-traceability.html",
       "order": 510
     },
     {
@@ -399,7 +439,7 @@
       "title": "Trace timeline",
       "kind": "capability",
       "status": "archived",
-      "parent": "spec/areas/work-and-traceability.html",
+      "parent": null,
       "order": 320
     },
     {
@@ -407,7 +447,7 @@
       "title": "Turn outcome visibility",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/conversations.html",
       "order": 520
     },
     {
@@ -423,7 +463,7 @@
       "title": "Workspace isolation",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/agents-and-execution.html",
       "order": 530
     },
     {
