@@ -464,8 +464,16 @@ export interface SpecDocumentRecord {
    *  document edited underneath the operator who read it. */
   content_digest: string | null
   explore_closed: boolean
+  /** Where a change being explored stands on its journey, and how big the work is
+   *  (`a-spec-is-written-one-step-at-a-time`). Null on every other document; `journey` is the
+   *  ordered steps the size gives (no size is briefed as large). Absent from a Hub before 0122. */
+  step?: string | null
+  size?: SpecSize | null
+  journey?: string[] | null
   updated_at: string
 }
+
+export type SpecSize = 'fix' | 'small' | 'large'
 
 /** One reason a document cannot be proposed yet, and where to look. */
 export interface SpecBlockingFinding {
@@ -513,14 +521,15 @@ export function useCreateSpecDocument() {
   )
 }
 
-/** The operator declaring exploration finished. Not a computation — whether an
- *  exploration is complete enough to propose from is a judgement, and putting a
- *  model in that path would make the gate theatre. */
-export function useCloseExploration() {
-  return useSpecMutation<{ path: string }, SpecDocumentRecord>((projectId, { path }) =>
-    postJson(
-      `/api/v1/projects/${projectId}/project/documents/close-exploration?path=${encodeURIComponent(path)}`,
-    ),
+/** The operator moving a change to any step of its journey, or changing its size. Takes effect
+ *  from the next turn on the document (FR-10). */
+export function useSetSpecJourney() {
+  return useSpecMutation<{ path: string; step?: string; size?: SpecSize }, SpecDocumentRecord>(
+    (projectId, { path, ...body }) =>
+      postJson(
+        `/api/v1/projects/${projectId}/project/documents/journey?path=${encodeURIComponent(path)}`,
+        body,
+      ),
   )
 }
 

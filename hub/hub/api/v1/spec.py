@@ -1953,6 +1953,58 @@ async def adopt_document(
     return {**_document_view(outcome.document), **outcome.to_dict()}
 
 
+class JourneyChange(RequestModel):
+    """Move an exploring change to a step, change its size, or both."""
+
+    step: Optional[str] = Field(default=None, max_length=48)
+    size: Optional[str] = Field(default=None, max_length=16)
+    reason: str = Field(default="", max_length=2000)
+
+
+@router.post("/documents/journey")
+async def set_journey(
+    body: JourneyChange,
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator moving a change to any step, back or forward, or changing its size (FR-10).
+
+    Takes effect from the next turn on the document: every turn is briefed from these columns.
+    """
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    if body.step is None and body.size is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": "name a step, a size, or both", "code": "nothing_to_change"},
+        )
+    if not spec_journey.has_journey(document) or document.phase != spec_lifecycle.EXPLORING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": f"this {document.kind} is {document.phase}; only an exploring change "
+                "document has a journey to move",
+                "code": "no_journey",
+            },
+        )
+    try:
+        if body.size is not None:
+            await spec_journey.set_size(
+                session, document, body.size, actor=_operator(), reason=body.reason
+            )
+        if body.step is not None:
+            await spec_journey.set_step(session, document, body.step, actor=_operator())
+    except spec_journey.JourneyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code},
+        ) from exc
+    await session.commit()
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": path, "phase": document.phase})
+    return _document_view(document)
+
+
 @router.post("/documents/close-exploration")
 async def close_exploration(
     path: str = Query(...),

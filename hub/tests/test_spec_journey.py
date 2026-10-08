@@ -176,3 +176,44 @@ def test_checked_by_other_than_agent_or_operator_is_refused_naming_the_field():
         validate_payload(_with_criterion(checked_by="robot"))
 
     assert "checked_by" in refused.value.field
+
+
+# operator-moves-journey (FR-10): the route behind the phase bar.
+@pytest.mark.asyncio
+async def test_the_operator_moves_the_journey_back_and_changes_the_size(
+    app, auth_headers, tmp_path
+):
+    await _create(app, auth_headers)
+    route = f"{BASE}/documents/journey"
+
+    forward = await app.post(
+        route, params={"path": PATH}, json={"step": "tasks"}, headers=auth_headers
+    )
+    sized = await app.post(
+        route, params={"path": PATH}, json={"size": "small"}, headers=auth_headers
+    )
+    back = await app.post(
+        route, params={"path": PATH}, json={"step": "intake"}, headers=auth_headers
+    )
+
+    assert forward.status_code == sized.status_code == back.status_code == 200, back.text
+    assert back.json()["step"] == "intake"
+    assert back.json()["journey"] == ["intake", "requirements-and-acceptance", "tasks", "delivery"]
+    row = await _row()
+    assert (row.step, row.size) == ("intake", "small")
+
+
+@pytest.mark.asyncio
+async def test_the_journey_route_refuses_what_has_no_journey_saying_why(
+    app, auth_headers, tmp_path
+):
+    await _create(app, auth_headers)
+    route = f"{BASE}/documents/journey"
+
+    unknown = await app.post(
+        route, params={"path": PATH}, json={"step": "design"}, headers=auth_headers
+    )
+    empty = await app.post(route, params={"path": PATH}, json={}, headers=auth_headers)
+
+    assert unknown.status_code == 422 and "intake" in unknown.text
+    assert empty.status_code == 422

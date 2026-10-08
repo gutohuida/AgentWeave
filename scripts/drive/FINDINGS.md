@@ -35190,3 +35190,13 @@ and the drive but not the Hub suite, and the ratchet lives there.
 a word; a failed launch check or queue removed the "can't run"/"held" flags, so the card said nothing was wrong. Each
 read now says it failed (alert, flagged value or flag chip); five vitest cases failed before the fix. Lesson for UI-only
 changes: `hub/tests/test_surface_ceilings.py` gates `hub/ui/src`, so run it before pushing a component that queries.
+
+## F560 (C) -- the close-exploration route outlived the gate it served
+
+**Status:** open 2026-10-08. Found while building step-journey (`a-spec-is-written-one-step-at-a-time`, FR-11).
+
+Proposing no longer needs exploration closed, and the app no longer offers the control, but
+`POST /project/documents/close-exploration` and `spec_lifecycle.close_exploration` still exist: about 70 Hub test files
+call the route as setup before proposing. It decides nothing now and has no client. Remove the route, the function and
+the `explore_closed` view field together with those calls (a mechanical sweep), or keep it as a no-op deliberately.
+`explore_closed_at` stays either way, for rollback.

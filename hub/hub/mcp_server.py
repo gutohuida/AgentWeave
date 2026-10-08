@@ -450,7 +450,8 @@ def ask_user(
 
     Ask everything you need in a single call. The operator steps through them in one sitting,
     which is one interruption instead of several, and your turn waits once instead of once per
-    question.
+    question. **Except when your turn's instructions say one question per call** (writing a
+    specification step by step does): then pass exactly one question each time.
 
     Args:
         questions: Between 1 and 4 questions, each a dict with:
@@ -3726,6 +3727,8 @@ SpecKind = Literal["baseline", "system-map", "roadmap", "change-spec", "capabili
 # The kinds an agent may begin. Restated from `api/v1/agent_actions.py` `AGENT_CREATABLE_KINDS`
 # (this module imports nothing from the Hub); `test_mcp_tool_schemas.py` asserts the two agree.
 CreatableSpecKind = Literal["change-spec", "roadmap"]
+# Restated from `spec_journey.SIZES` (this module imports only stdlib + fastmcp); a test asserts they agree.
+SpecSize = Literal["fix", "small", "large"]
 SPEC_SCHEMA_VERSION = 1
 
 # The one closed vocabulary in the evidence surface, restated for the same reason as the rest.
@@ -3969,6 +3972,37 @@ def rename_spec_document(path: str, subject: str) -> Dict[str, Any]:
     another document already occupies the name.
     """
     return _hub_request("POST", "/spec/documents/rename", {"path": path, "subject": subject})
+
+
+@_tool()
+def set_spec_size(path: str, size: SpecSize, reason: str) -> Dict[str, Any]:
+    """Record how big the work in a change document is, and why. Do this at intake, after telling
+    the operator the size and your reason; they can overrule it.
+
+    `size` is `fix` (a defect with a repro, or a change you can say in one sentence), `small` (one
+    demonstrable outcome, a few requirements) or `large` (several outcomes, a migration, security,
+    or a contract other parts rely on). The size decides the document's journey of steps.
+
+    Returns the size, the current step and the journey.
+    """
+    return _hub_request(
+        "POST", "/spec/documents/size", {"path": path, "size": size, "reason": reason}
+    )
+
+
+@_tool()
+def advance_spec_step(path: str, to: str = "") -> Dict[str, Any]:
+    """Move a change document to its next step, or to the step named in `to`. Call it only after
+    the operator chose to continue (here, or in a fresh conversation) through `ask_user`.
+
+    Never refused for something the step left unwritten: the answer's `missing` lists it, so say
+    so to the operator. The answer's `instructions` are the new step's: follow them now if the
+    operator chose to continue here, otherwise end your turn.
+    """
+    body: Dict[str, Any] = {"path": path}
+    if to:
+        body["to"] = to
+    return _hub_request("POST", "/spec/documents/advance", body)
 
 
 @_tool()

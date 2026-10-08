@@ -12,9 +12,9 @@ import { useAgents } from '@/api/agents'
 import { Button } from '@/components/ui/button'
 import { hubDate } from '@/lib/hubTime'
 import {
-  useCloseExploration,
   useDeleteSpecDocument,
   useProposeSpecDocument,
+  useSetSpecJourney,
   useSetSpecPhase,
   useSetSpecRigor,
   useSpec,
@@ -24,6 +24,7 @@ import {
   type SpecDeliveryStatus,
   type SpecDocumentRecord,
   type SpecNextSliceOutcome,
+  type SpecSize,
 } from '@/api/spec'
 
 type Rigor = SpecDocumentRecord['rigor']
@@ -78,8 +79,8 @@ function findingsFromRefusal(error: unknown, fallback: string): SpecBlockingFind
  * The phase of the open document, and the decisions only the operator can take.
  *
  * Every control here is deliberately absent from the agent's tool surface. An
- * agent can write the document and can see what is blocking it; it cannot close
- * exploration, propose, approve, or reopen. That asymmetry is the feature — the
+ * agent can write the document and can see what is blocking it; it cannot propose,
+ * approve, or reopen. That asymmetry is the feature — the
  * gate it replaced was a skill instructing the agent to read the document's own
  * status and stop, which is the agent checking its own permission slip.
  */
@@ -98,7 +99,8 @@ export function SpecPhaseBar({
   // `SpecApprovalReport` already hold — one cache entry, not a second fetch.
   const { data: specDoc, isError: specDocError } = useSpec(path)
   const { data: openAgentsData, isError: agentsError } = useAgents()
-  const closeExploration = useCloseExploration()
+  const setJourney = useSetSpecJourney()
+  const [journeyRefusal, setJourneyRefusal] = useState<string | null>(null)
   const propose = useProposeSpecDocument()
   const setPhase = useSetSpecPhase()
   const setRigor = useSetSpecRigor()
@@ -149,7 +151,22 @@ export function SpecPhaseBar({
     foldState.state !== 'folded'
   const openAgents = agentsError ? [] : (openAgentsData ?? [])
 
-  const busy = closeExploration.isPending || propose.isPending || setPhase.isPending
+  const busy = setJourney.isPending || propose.isPending || setPhase.isPending
+
+  // A change being explored is written one step at a time; the operator can move it to any step and
+  // change its size, each taking effect from the next turn (FR-10).
+  const onJourney =
+    document.kind === 'change-spec' && document.phase === 'exploring' && !!document.step
+  function moveJourney(change: { step?: string; size?: SpecSize }) {
+    setJourneyRefusal(null)
+    setJourney.mutate(
+      { path, ...change },
+      {
+        onError: (error: unknown) =>
+          setJourneyRefusal(readableApiError(error, 'The Hub refused to change the journey.')),
+      },
+    )
+  }
 
   async function onPropose() {
     setBlocking([])
@@ -372,6 +389,63 @@ export function SpecPhaseBar({
         <ReviewerLine status={deliveryStatus} />
       )}
 
+      {onJourney && (
+        <div className="flex flex-wrap items-center gap-1" style={{ color: 'var(--text-2)' }}>
+          <nav aria-label="Journey" data-testid="spec-journey" className="flex flex-wrap items-center gap-1">
+            {(document.journey ?? []).map((step, index) => {
+              const current = step === document.step
+              return (
+                <span key={step} className="flex items-center gap-1">
+                  {index > 0 && <Icon name="chevron_right" size={11} />}
+                  <button
+                    type="button"
+                    data-testid={`spec-journey-step-${step}`}
+                    aria-current={current ? 'step' : undefined}
+                    disabled={busy || current}
+                    title={current ? 'The step the next turn is briefed with' : `Move to ${step}`}
+                    onClick={() => moveJourney({ step })}
+                    className="rounded-[var(--radius-sm)] px-1.5 py-0.5 hover:bg-[var(--row-hover)]"
+                    style={
+                      current
+                        ? { background: 'var(--surface-2)', color: 'var(--text-1)', fontWeight: 600 }
+                        : undefined
+                    }
+                  >
+                    {step}
+                  </button>
+                </span>
+              )
+            })}
+          </nav>
+          <select
+            data-testid="spec-journey-size"
+            aria-label="Size"
+            value={document.size ?? ''}
+            disabled={busy}
+            onChange={(event) => moveJourney({ size: event.target.value as SpecSize })}
+            className="ml-auto rounded-[var(--radius-sm)] px-1.5 py-0.5"
+            style={{
+              background: 'var(--surface-2)',
+              color: 'var(--text-2)',
+              border: '1px solid var(--border)',
+              fontSize: 11,
+            }}
+          >
+            <option value="" disabled>
+              Not sized
+            </option>
+            <option value="fix">Fix</option>
+            <option value="small">Small</option>
+            <option value="large">Large</option>
+          </select>
+        </div>
+      )}
+      {journeyRefusal && (
+        <p data-testid="spec-journey-refusal" role="alert" style={{ color: 'var(--red)' }}>
+          {journeyRefusal}
+        </p>
+      )}
+
       <div className="flex items-center gap-2">
         <span
           className="rounded-full px-2 py-0.5"
@@ -389,18 +463,7 @@ export function SpecPhaseBar({
           {document.phase}
         </span>
 
-        {document.phase === 'exploring' && !document.explore_closed && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => closeExploration.mutate({ path })}
-            className="rounded-[var(--radius-sm)] px-2 py-1 hover:bg-[var(--row-hover)]"
-          >
-            Exploration is complete
-          </button>
-        )}
-
-        {document.phase === 'exploring' && document.explore_closed && (
+        {document.phase === 'exploring' && (
           <button
             type="button"
             disabled={busy}

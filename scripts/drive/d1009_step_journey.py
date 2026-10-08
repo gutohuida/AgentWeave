@@ -12,7 +12,7 @@ new change document, and checks, in order:
   4. after that turn the document records size small and step requirements-and-acceptance;
   5. the preview now holds that step's duty and not intake's;
   6. a turn in a new conversation writes requirements, each MUST with a criterion;
-  7. in Chromium, the phase bar shows the small journey with requirements-and-acceptance current.
+  7. in Chromium, the phase bar shows the small journey with the recorded step current.
 
 The contract it fixes for the build: each step's duty carries the marker `[step: <name>]`; the
 briefing carries one line beginning `- Journey` naming the steps in order; the document view
@@ -288,10 +288,13 @@ def drive():
                  for s in page.locator("[data-testid^=spec-journey-step-]").all()]
         current = page.locator("[data-testid^=spec-journey-step-][aria-current=step]")
         page.screenshot(path=str(SHOT) + "_bar.png", full_page=True)
-        check("7 the phase bar shows the small journey with requirements-and-acceptance current",
-              steps == SMALL and current.count() == 1
-              and current.get_attribute("data-testid") == "spec-journey-step-requirements-and-acceptance",
-              f"steps={steps}")
+        # The second turn may have moved on (the operator's answers decide), so the bar is checked
+        # against the step the document records, not a fixed one.
+        recorded = document(base).get("step")
+        marked = current.get_attribute("data-testid") if current.count() == 1 else None
+        check("7 the phase bar shows the small journey with the recorded step current",
+              steps == SMALL and marked == f"spec-journey-step-{recorded}",
+              f"steps={steps} current={marked} recorded={recorded}")
         browser.close()
 
 

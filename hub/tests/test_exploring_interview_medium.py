@@ -12,11 +12,11 @@ interviews conversationally *because* of it is human-only verification.
 """
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from hub.api.v1.agents import SPEC_PHASE_DUTIES, _render_hub_agent_context, _tool_surface_lines
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent
+from hub.db.models import Agent, SpecDocument
 
 BASE = "/api/v1/projects/proj-test/project"
 PATH = "spec/changes/interview/spec.html"
@@ -103,9 +103,12 @@ def test_ask_user_is_described_as_a_decision_tool():
 @pytest.mark.asyncio
 async def test_a_charterless_exploring_turn_gets_all_of_it(app, auth_headers, tmp_path, add_agent):
     """The floor is what always ships. Everything load-bearing has to survive here or it is
-    load-bearing only when someone remembers to bind a charter."""
+    load-bearing only when someone remembers to bind a charter.
+
+    A roadmap: since step-journey a change document is briefed one step at a time instead
+    (`test_spec_journey_briefing.py`), and the roadmap keeps this floor."""
     await add_agent("uncharted")
-    await _create_document(app, auth_headers)
+    await _create_roadmap_document(app, auth_headers, PATH)
 
     context = await _render("uncharted")
 
@@ -157,14 +160,22 @@ async def _render_at(agent_name, path):
 
 @pytest.mark.asyncio
 async def test_change_spec_exploring_is_asked_how_it_will_be_built(app, auth_headers, add_agent):
-    """D2, Opus notes 5 and 7: the interview line, and the two phrases the review added."""
+    """D2, Opus notes 5 and 7: the interview line, and the two phrases the review added.
+
+    Since step-journey the question is the delivery step's, so the document is placed there."""
     await add_agent("solo")
     await _create_document(app, auth_headers)
+    async with async_session_factory() as db:
+        await db.execute(
+            update(SpecDocument).where(SpecDocument.path == PATH).values(step="delivery")
+        )
+        await db.commit()
 
     context = await _render("solo")
     block = context.split("### Open specification document", 1)[1]
 
-    assert "ask how it will be built" in block
+    assert "[step: delivery]" in block
+    assert "say how it will be built" in block
     assert "when there is another agent" in block
     assert "every later submission" in block
     assert "'No flow' is a valid answer" in block

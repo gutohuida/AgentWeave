@@ -347,3 +347,9 @@ def test_read_spec_document_include_agrees_with_the_route_and_defaults_to_requir
     assert sorted(_enum_for(schema, "include")) == sorted(READ_INCLUDE_VALUES)
     assert schema["properties"]["include"]["default"] == "requirements"
     assert "identifiers" in schema["properties"]
+
+
+def test_spec_size_agrees_with_the_journey():
+    from hub.spec_journey import SIZES
+
+    assert set(typing.get_args(mcp_server.SpecSize)) == set(SIZES)

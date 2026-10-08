@@ -12,7 +12,7 @@ import { ApiError } from '@/api/client'
  * whole api module with a bare object — a partial mock keeps the rest of the
  * module's exports real, so a rename elsewhere fails loudly here.
  */
-const closeExploration = vi.fn()
+const setJourney = vi.fn()
 const propose = vi.fn()
 const setPhase = vi.fn()
 const setRigor = vi.fn()
@@ -28,7 +28,7 @@ vi.mock('@/api/spec', async (importOriginal) => {
   return {
     ...actual,
     useSpecDocuments: () => ({ data: { documents } }),
-    useCloseExploration: () => ({ mutate: closeExploration, isPending: false }),
+    useSetSpecJourney: () => ({ mutate: setJourney, isPending: false }),
     useProposeSpecDocument: () => ({ mutateAsync: propose, isPending: false }),
     useSetSpecPhase: () => ({ mutate: setPhase, isPending: false }),
     useSetSpecRigor: () => ({ mutateAsync: setRigor, isPending: false }),
@@ -85,17 +85,73 @@ describe('SpecPhaseBar', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('offers closing exploration while exploring, and not proposing yet', () => {
-    renderBar()
-    expect(screen.getByText('Exploration is complete')).toBeInTheDocument()
-    expect(screen.queryByText('Propose')).not.toBeInTheDocument()
-  })
-
-  it('offers proposing only once exploration has been closed', () => {
-    documents = [doc({ explore_closed: true })]
+  it('offers proposing while exploring, with no Exploration is complete control (FR-11)', () => {
     renderBar()
     expect(screen.getByText('Propose')).toBeInTheDocument()
     expect(screen.queryByText('Exploration is complete')).not.toBeInTheDocument()
+  })
+
+  describe('the journey (step-journey FR-10)', () => {
+    const SMALL = ['intake', 'requirements-and-acceptance', 'tasks', 'delivery']
+    const exploring = () =>
+      doc({ step: 'requirements-and-acceptance', size: 'small', journey: SMALL })
+
+    it('shows the journey in order with the current step marked, and the size', () => {
+      documents = [exploring()]
+      renderBar()
+      const steps = within(screen.getByTestId('spec-journey'))
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('data-testid'))
+      expect(steps).toEqual(SMALL.map((s) => `spec-journey-step-${s}`))
+      expect(screen.getByTestId('spec-journey-step-requirements-and-acceptance')).toHaveAttribute(
+        'aria-current',
+        'step',
+      )
+      expect(screen.getByTestId('spec-journey-step-intake')).not.toHaveAttribute('aria-current')
+      expect(screen.getByTestId('spec-journey-size')).toHaveValue('small')
+    })
+
+    it('moves the document to any step, back or forward', async () => {
+      documents = [exploring()]
+      renderBar()
+      await userEvent.click(screen.getByTestId('spec-journey-step-intake'))
+      expect(setJourney).toHaveBeenCalledWith(
+        { path: 'spec/changes/demo/spec.html', step: 'intake' },
+        expect.anything(),
+      )
+    })
+
+    it('changes the size', async () => {
+      documents = [exploring()]
+      renderBar()
+      await userEvent.selectOptions(screen.getByTestId('spec-journey-size'), 'large')
+      expect(setJourney).toHaveBeenCalledWith(
+        { path: 'spec/changes/demo/spec.html', size: 'large' },
+        expect.anything(),
+      )
+    })
+
+    it('says so when a move is refused', async () => {
+      documents = [exploring()]
+      setJourney.mockImplementation((_args, opts: { onError: (e: unknown) => void }) =>
+        opts.onError(new ApiError(409, '{"detail": "only an exploring change has a journey"}')),
+      )
+      renderBar()
+      await userEvent.click(screen.getByTestId('spec-journey-step-tasks'))
+      expect(await screen.findByTestId('spec-journey-refusal')).toHaveTextContent(
+        'only an exploring change has a journey',
+      )
+    })
+
+    it('is absent once the document is proposed, and on a roadmap', () => {
+      documents = [doc({ phase: 'proposed', step: 'delivery', size: 'small', journey: SMALL })]
+      const { unmount } = renderBar()
+      expect(screen.queryByTestId('spec-journey')).not.toBeInTheDocument()
+      unmount()
+      documents = [doc({ kind: 'roadmap', step: null, size: null, journey: null })]
+      renderBar()
+      expect(screen.queryByTestId('spec-journey')).not.toBeInTheDocument()
+    })
   })
 
   it('lists every blocking finding rather than the first', async () => {

@@ -12,7 +12,14 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import bound_address, project_workspace, spec_documents, spec_lifecycle, worktrees
+from ... import (
+    bound_address,
+    project_workspace,
+    spec_documents,
+    spec_journey,
+    spec_lifecycle,
+    worktrees,
+)
 from ...agent_activity import latest_activity_by_agent
 from ...agent_colors import next_color_index
 from ...agent_lifecycle import archivable as agent_archivable
@@ -1170,7 +1177,9 @@ def _operations() -> List[_Operation]:
             detail=(
                 "`questions` is a list of 1 to 4. Ask everything you need in one call: the "
                 "operator steps through them in a single sitting, which interrupts them once "
-                "instead of once per question. Each entry needs `question`, `header`, `options` "
+                "instead of once per question — **except when your turn's instructions say one "
+                "question per call** (writing a specification step by step does), and then pass "
+                "exactly one. Each entry needs `question`, `header`, `options` "
                 "and `multi_select`, all required. `header` is two or three words naming the "
                 'decision. `options` is 2 to 8 entries of `{"label", "description"}` — the label '
                 "comes back to you, and the description is what lets the operator choose without "
@@ -1282,6 +1291,31 @@ def _operations() -> List[_Operation]:
                 "meaningless placeholder name. `subject` is plain words describing what it turned "
                 "out to cover; the Hub derives the path. Returns the new path, which is the one "
                 "to use for the rest of the turn."
+            ),
+        ),
+        _Operation(
+            tool="set_spec_size",
+            args="path, size, reason",
+            method="POST",
+            path="/spec/documents/size",
+            fields=("path", "size", "reason"),
+            required=("path", "size"),
+            text=(
+                "record how big a change document's work is (`fix`, `small`, `large`) and why, at "
+                "intake, after telling the operator. The size decides the document's steps."
+            ),
+        ),
+        _Operation(
+            tool="advance_spec_step",
+            args="path, to=None",
+            method="POST",
+            path="/spec/documents/advance",
+            fields=("path", "to"),
+            required=("path",),
+            text=(
+                "move a change document to its next step (or the step in `to`), once the operator "
+                "chose to continue. Never refused: `missing` names what the step left empty, and "
+                "`instructions` are the new step's."
             ),
         ),
         _Operation(
@@ -2217,12 +2251,20 @@ async def _render_hub_agent_context(
             # a charter makes the work better and must never be what makes it valid.
             if phase:
                 lines.append(f"- Phase: **{phase}**.")
-                lines.append(_phase_duty(phase, row.kind if row is not None else None))
                 is_change_spec = row is not None and row.kind == "change-spec"
+                # A change being explored is written one step at a time (`spec_journey`): the turn
+                # is told the journey and its current step's duty, and no other step's (FR-3). The
+                # step is read from the document, so any conversation resumes it (FR-6).
+                on_journey = is_change_spec and phase == "exploring" and row.step is not None
+                if on_journey:
+                    lines.append(spec_journey.journey_line(row.size, row.step))
+                    lines.append(spec_journey.duty(row.step))
+                else:
+                    lines.append(_phase_duty(phase, row.kind if row is not None else None))
                 if is_change_spec and phase in ("exploring", "proposed"):
                     open_names = ", ".join(peer.name for peer in roster)
                     lines.append(f"- Open agents on this project: {open_names}.")
-                if is_change_spec and phase == "exploring":
+                if is_change_spec and phase == "exploring" and not on_journey:
                     lines.append(
                         "- Before the document is ready to propose, ask how it will be built. "
                         "Recommend a flow when the work splits into tasks: a flow starts every "
@@ -3066,10 +3108,15 @@ async def get_charter_context(
 @router.get("/agent-context")
 async def get_agent_runtime_context(
     agent: str = Query(..., min_length=1, max_length=32),
+    spec_document: Optional[str] = Query(None, max_length=512),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Get full runtime or onboarding context for an agent name."""
+    """Get full runtime or onboarding context for an agent name.
+
+    With `spec_document`, the briefing a turn on that document receives (FR-13), so what an agent
+    is told about a document is observable before any turn runs.
+    """
     if not _AGENT_NAME_RE.match(agent):
         raise HTTPException(status_code=400, detail="Invalid agent name")
 
@@ -3085,6 +3132,7 @@ async def get_agent_runtime_context(
         db=session,
         session_data=session_data,
         agent_row=agent_row,
+        spec_document=spec_document,
     )
 
 

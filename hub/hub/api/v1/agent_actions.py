@@ -1815,6 +1815,142 @@ async def rename_spec_document(
     return {"path": result.path, "previous_path": result.previous_path}
 
 
+class SpecStepAdvance(RequestModel):
+    """Move the document on its journey: to the next step, or to a named one."""
+
+    path: str = Field(max_length=255)
+    to: Optional[str] = Field(default=None, max_length=48)
+
+
+class SpecSizeRecord(RequestModel):
+    """The work's size, and why."""
+
+    path: str = Field(max_length=255)
+    size: str = Field(max_length=16)
+    reason: str = Field(default="", max_length=2000)
+
+
+async def _journey_document(session: AsyncSession, project_id: str, raw_path: str):
+    """The change document a journey call names, with its payload, or the refusal that says why."""
+    from ... import project_workspace, spec_documents, spec_journey, spec_lifecycle
+    from ...spec_manifest import SpecPathError, validate_spec_path
+    from ...spec_payload import extract_payload
+
+    try:
+        path = validate_spec_path(raw_path)
+    except SpecPathError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    document = await spec_lifecycle.get_document(session, project_id, path)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"no specification document at {path}."
+        )
+    if not spec_journey.has_journey(document) or document.phase != spec_lifecycle.EXPLORING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{path} is a {document.kind} in {document.phase}; only an exploring change "
+            "document is written step by step.",
+        )
+    payload = None
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, project_id)
+        text = spec_documents.read_document(workspace, path)
+        payload = extract_payload(text) if text else None
+    except (project_workspace.ProjectWorkspaceError, OSError, ValueError):
+        payload = None
+    return document, payload
+
+
+@router.post("/spec/documents/advance")
+async def advance_spec_step(
+    body: SpecStepAdvance,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Move the document to its next step, or a named one. Never refused for a missing output (D3):
+    the answer names what the step left empty, and carries the new step's instructions."""
+    from ... import spec_journey, spec_lifecycle
+
+    document, payload = await _journey_document(session, actor.project_id, body.path)
+    left = document.step
+    target = body.to or spec_journey.next_step(document.size, left)
+    gaps = spec_journey.missing(left, payload, document.size)
+    if target is None:
+        return {
+            "path": document.path,
+            "step": left,
+            "previous_step": left,
+            "size": document.size,
+            "journey": spec_journey.journey(document.size),
+            "missing": gaps,
+            "instructions": "",
+            "message": f"{left} is the last step of this journey; the document is ready for the "
+            "operator to propose.",
+        }
+    try:
+        await spec_journey.set_step(
+            session,
+            document,
+            target,
+            actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+        )
+    except spec_journey.JourneyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code, "field": "to"},
+        ) from exc
+    await session.commit()
+    await sse_manager.broadcast(
+        actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    return {
+        "path": document.path,
+        "step": target,
+        "previous_step": left,
+        "size": document.size,
+        "journey": spec_journey.journey(document.size),
+        "missing": gaps,
+        "instructions": spec_journey.duty(target),
+        "message": f"moved from {left} to {target}"
+        + (f"; {left} left empty: {', '.join(gaps)}" if gaps else ""),
+    }
+
+
+@router.post("/spec/documents/size")
+async def set_spec_size(
+    body: SpecSizeRecord,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Record the work's size and why; the journey follows it from the next step on."""
+    from ... import spec_journey, spec_lifecycle
+
+    document, _ = await _journey_document(session, actor.project_id, body.path)
+    try:
+        await spec_journey.set_size(
+            session,
+            document,
+            body.size,
+            actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+            reason=body.reason,
+        )
+    except spec_journey.JourneyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code, "field": "size"},
+        ) from exc
+    await session.commit()
+    await sse_manager.broadcast(
+        actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    return {
+        "path": document.path,
+        "size": document.size,
+        "step": document.step,
+        "journey": spec_journey.journey(document.size),
+    }
+
+
 class SpecDocumentSubmission(RequestModel):
     """A payload plus the document it belongs to.
 

@@ -210,6 +210,7 @@ _ALWAYS_REMOVED_FLAGS = ("--config-dir",)
 #: counts as the Hub's own only for one of these names (review, finding 5).
 HUB_MCP_TOOLS = frozenset(
     {
+        "advance_spec_step",
         "approve_tool_call",
         "archive_job",
         "ask_user",
@@ -231,6 +232,7 @@ HUB_MCP_TOOLS = frozenset(
         "rename_spec_document",
         "request_agent",
         "run_job",
+        "set_spec_size",
         "send_message",
         "submit_checkpoint_notes",
         "submit_spec_document",
