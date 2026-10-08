@@ -311,3 +311,49 @@ describe('the panel has exactly one Start a flow… control', () => {
     expect(screen.getByTestId('approval-start-flow-pointer').querySelector('button')).toBeNull()
   })
 })
+
+describe('who reviews (F508)', () => {
+  it('says any free agent reviews when the document names no reviewer', async () => {
+    specDelivery = { state: 'ok', agent: 'dev' }
+    renderPhaseBar()
+    const line = await screen.findByTestId('delivery-reviewer')
+    expect(line).toHaveTextContent('Reviewed by any free agent')
+    expect(line).toHaveAttribute('data-stale', 'false')
+  })
+
+  it('names the default reviewer', async () => {
+    specDelivery = { state: 'ok', agent: 'dev', reviewer: 'critic', reviewer_state: 'ok' }
+    renderPhaseBar()
+    const line = await screen.findByTestId('delivery-reviewer')
+    expect(line).toHaveTextContent('Reviewed by @critic')
+    expect(line).toHaveAttribute('data-stale', 'false')
+  })
+
+  it.each<['archived' | 'unknown', string]>([
+    ['archived', 'which is archived'],
+    ['unknown', 'which is not an agent on this project'],
+  ])('flags a %s default reviewer and says the reviews come to the operator', async (state, words) => {
+    specDelivery = { state: 'ok', agent: 'dev', reviewer: 'critic', reviewer_state: state }
+    renderPhaseBar()
+    const line = await screen.findByTestId('delivery-reviewer')
+    expect(line).toHaveTextContent(`Reviewed by @critic, ${words}`)
+    expect(line).toHaveTextContent('reviews will come to you')
+    expect(line).toHaveAttribute('data-stale', 'true')
+  })
+
+  it('still says who reviews beside a stale builder', async () => {
+    specDelivery = { state: 'stale', agent: 'dev2', reason: 'archived', reviewer: 'critic', reviewer_state: 'ok' }
+    renderPhaseBar()
+    expect(await screen.findByTestId('delivery-reviewer')).toHaveTextContent('Reviewed by @critic')
+  })
+
+  it.each<SpecDeliveryStatus['state']>(['none', 'absent'])(
+    'says nothing about reviewers when no flow is declared (%s)',
+    async (state) => {
+      specDelivery = { state }
+      renderPhaseBar()
+      await screen.findByTestId('spec-phase')
+      expect(screen.queryByTestId('delivery-reviewer')).not.toBeInTheDocument()
+    },
+  )
+})

@@ -36,6 +36,12 @@ export interface SpecDeliveryStatus {
   state: 'ok' | 'stale' | 'none' | 'absent'
   agent?: string
   reason?: 'archived' | 'unknown'
+  /** `delivery.reviewer`, the default reviewer of every task naming none (F508). Absent when the
+   *  document names none: any free agent reviews. */
+  reviewer?: string
+  /** Whether `reviewer` is an open agent. A review never moves from a stale default to someone
+   *  else; it comes to the operator. */
+  reviewer_state?: 'ok' | 'archived' | 'unknown'
 }
 
 /** One task the board created for this approval. */

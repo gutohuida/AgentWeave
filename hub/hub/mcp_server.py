@@ -874,9 +874,10 @@ def create_flow(
     except its author, which is how work gets reviewed without anyone being asked to hand it over.
 
     `agent` is the default, not the mandate — the agent a firing uses when nothing else has said
-    otherwise. Reviewers are resolved per task: the document's declared reviewer if it names one
-    and that name resolves, otherwise any agent that is idle and holding no work. A step nobody can
-    review is surfaced to the operator; the rest of the queue carries on.
+    otherwise. Reviewers are resolved per task: the task's `reviewer`, else its document's
+    `delivery.reviewer`; a named reviewer that does not resolve is surfaced, never replaced; with
+    no name, any agent that is idle and holding no work. A step nobody can review is surfaced to
+    the operator; the rest of the queue carries on.
 
     Everything else is a loop's: one stop condition is required, continuity across firings is by
     checkpoint rather than a resumed session, and the checkpoint is the flow's rather than any one
@@ -3889,10 +3890,12 @@ def submit_spec_document(
       decision.
 
     `delivery` — how the work gets built, for a change-spec document only. Either
-      `{"mode": "flow", "agent": "<name>", "stop_when_queue_empties": true, "stop_at": None,
-      "cron": "*/5 * * * *"}` (a flow: at least one of `stop_when_queue_empties`/`stop_at` must be
-      set, `agent` is the default agent's name from the open roster, and `stop_at` is an ISO-8601
-      timestamp carrying a timezone) or `{"mode": "none"}` (no flow: the tasks go on the board and
+      `{"mode": "flow", "agent": "<name>", "reviewer": "<name>", "stop_when_queue_empties": true,
+      "stop_at": None, "cron": "*/5 * * * *"}` (a flow: at least one of
+      `stop_when_queue_empties`/`stop_at` must be set, `agent` is the default agent's name from the
+      open roster, `reviewer` is the agent that reviews every task whose own `reviewer` is empty --
+      leave it out and any free agent reviews -- and `stop_at` is an ISO-8601 timestamp carrying a
+      timezone) or `{"mode": "none"}` (no flow: the tasks go on the board and
       are started by hand). **Include `delivery` in every later submission of this document**, not
       only the first one that answers it: a submission replaces the whole document, so one without
       it drops the answer and proposing is refused again.

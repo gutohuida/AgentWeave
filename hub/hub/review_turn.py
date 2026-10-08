@@ -23,7 +23,7 @@ import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -118,9 +118,12 @@ async def resolve_declared_reviewer(
     archived agent is treated as unresolved for the same reason `trigger_agent_directly` refuses
     one: nothing runs an archived agent.
     """
-    declared = await _declared_reviewer_name(session, task)
+    declared, named_by = await _declared_reviewer_name(session, task)
     if not declared:
         return ReviewerResolution()
+    # The task's own field, or its document's `delivery.reviewer` standing in for it (F508). Both
+    # are declarations and get the same never-substitute rule; only the sentence says which.
+    whose = "this task's reviewer" if named_by == "task" else "this document's default reviewer"
 
     row = (
         (
@@ -135,7 +138,7 @@ async def resolve_declared_reviewer(
         return ReviewerResolution(
             declared=declared,
             unresolved=(
-                f"the specification names {declared!r} as this task's reviewer, but no agent by "
+                f"the specification names {declared!r} as {whose}, but no agent by "
                 "that name is on this project's roster. Review falls back to you."
             ),
         )
@@ -143,24 +146,29 @@ async def resolve_declared_reviewer(
         return ReviewerResolution(
             declared=declared,
             unresolved=(
-                f"the specification names {declared!r} as this task's reviewer, but that agent is "
+                f"the specification names {declared!r} as {whose}, but that agent is "
                 "archived and nothing runs an archived agent. Review falls back to you."
             ),
         )
     return ReviewerResolution(declared=declared, agent=declared)
 
 
-async def _declared_reviewer_name(session: AsyncSession, task: Task) -> Optional[str]:
-    """The `reviewer` field of *task*'s entry in the document that declared it.
+async def _declared_reviewer_name(
+    session: AsyncSession, task: Task
+) -> Tuple[Optional[str], Optional[str]]:
+    """The reviewer *task*'s document declares for it, and who declared it: `task` or `document`.
 
-    Returns None for a hand-made task, a task whose document is gone, or a document whose payload
-    no longer carries the entry — all ordinary states, none of them worth an error.
+    The task entry's own `reviewer` first; failing that, the document's `delivery.reviewer`, its
+    default for every task that names none (F508). `(None, None)` for a hand-made task, a task
+    whose document is gone, or a document whose payload no longer carries the entry — all
+    ordinary states, none of them worth an error.
     """
+    nobody: Tuple[Optional[str], Optional[str]] = (None, None)
     if not task.spec_document_id or not task.spec_task_key:
-        return None
+        return nobody
     document = await session.get(SpecDocument, task.spec_document_id)
     if document is None:
-        return None
+        return nobody
 
     try:
         workspace = await resolve_project_workspace(session, task.project_id)
@@ -169,21 +177,29 @@ async def _declared_reviewer_name(session: AsyncSession, task: Task) -> Optional
         # Named rather than a blanket `except Exception`, which swallowed a `SpecPathError` during
         # development and turned "this document path is invalid" into "no reviewer was declared".
         # A declaration that cannot be read is reported as absent; a bug here should still surface.
-        return None
+        return nobody
     if content is None:
-        return None
+        return nobody
     payload = extract_payload(content)
     if not isinstance(payload, dict):
-        return None
+        return nobody
 
     for entry in payload.get("tasks") or []:
         if not isinstance(entry, dict):
             continue
         if entry.get("key") != task.spec_task_key:
             continue
-        reviewer = entry.get("reviewer")
-        return reviewer.strip() if isinstance(reviewer, str) and reviewer.strip() else None
-    return None
+        reviewer = _name(entry.get("reviewer"))
+        if reviewer:
+            return reviewer, "task"
+        delivery = payload.get("delivery")
+        default = _name(delivery.get("reviewer")) if isinstance(delivery, dict) else None
+        return (default, "document") if default else nobody
+    return nobody
+
+
+def _name(value: object) -> Optional[str]:
+    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 async def verdict_evidence_sentence(

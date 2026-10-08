@@ -1746,8 +1746,9 @@ SPEC_PHASE_DUTIES = {
         "test first and then make it pass; never write a task whose work is a test that stays "
         "red until a later task lands.\n"
         "- **Name the reviewer in the field, not the prose.** A flow gives each review to the "
-        "agent in the task's `reviewer`, and to any free agent when it is empty; saying who "
-        "reviews in the design text sets nothing."
+        "agent in the task's `reviewer`, else to the document's `delivery.reviewer`, else to any "
+        "free agent. Set `delivery.reviewer` for who reviews the document's work, and a task's "
+        "`reviewer` only where it differs; saying who reviews in the design text sets nothing."
     ),
     "proposed": (
         "- This document is proposed and awaiting the operator's decision. Do not implement it, "

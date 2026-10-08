@@ -188,6 +188,11 @@ class Delivery(_Part):
         max_length=32,
         description="Default agent for the flow, by name. The operator can also choose one at approval, or replace a stale name.",
     )
+    reviewer: Optional[str] = Field(
+        default=None,
+        max_length=32,
+        description="The agent that reviews every task whose own `reviewer` is empty, by name. A name that is not an open agent stops the review rather than giving it to someone else. Empty: any free agent reviews.",
+    )
     stop_when_queue_empties: bool = Field(
         default=False,
         description="Stop the flow once its queue has nothing left to work.",

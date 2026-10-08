@@ -162,6 +162,7 @@ def test_payload_to_dict_keeps_a_present_delivery():
     assert data["delivery"] == {
         "mode": "none",
         "agent": None,
+        "reviewer": None,
         "stop_when_queue_empties": False,
         "stop_at": None,
         "cron": "*/5 * * * *",
@@ -1060,6 +1061,7 @@ async def test_1_12_submit_spec_document_round_trips_delivery_through_mcp(
     assert stored["delivery"] == {
         "mode": "flow",
         "agent": "dev",
+        "reviewer": None,
         "stop_when_queue_empties": True,
         "stop_at": None,
         "cron": "*/5 * * * *",
@@ -1081,6 +1083,7 @@ async def test_1_12_submit_spec_document_round_trips_delivery_through_the_http_r
     assert stored["delivery"] == {
         "mode": "none",
         "agent": None,
+        "reviewer": None,
         "stop_when_queue_empties": False,
         "stop_at": None,
         "cron": "*/5 * * * *",

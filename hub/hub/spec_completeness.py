@@ -436,14 +436,14 @@ def test_only_task_warnings(payload: SpecPayload) -> List[Finding]:
 
 
 def reviewer_undeclared_warnings(payload: SpecPayload) -> List[Finding]:
-    """A flow-delivered document none of whose tasks names a `reviewer` (F508).
+    """A flow-delivered document that names no reviewer, by default or on any task (F508).
 
     A flow staffs a review from the task's declared reviewer, and failing that from whichever agent
     is free (`scheduler.resolve_reviewer`). A planner on the trial Hub promised a reviewer in the
     design prose and left the field empty, and a leftover stub agent got the review. The Hub cannot
     read the prose, so it says what the fields will do. Advisory, like `overlap_warnings`.
     """
-    if payload.delivery is None or payload.delivery.mode != "flow":
+    if payload.delivery is None or payload.delivery.mode != "flow" or payload.delivery.reviewer:
         return []
     local = [t for t in payload.tasks if t.from_ is None]
     if not local or any(t.reviewer for t in local):
@@ -452,8 +452,9 @@ def reviewer_undeclared_warnings(payload: SpecPayload) -> List[Finding]:
         Finding(
             "reviewer_undeclared",
             "tasks",
-            "no task names a `reviewer`, so the flow will give each review to any free agent; "
-            "if a particular agent should review, set `reviewer` on the tasks it reviews",
+            "neither `delivery.reviewer` nor any task's `reviewer` is set, so the flow will give "
+            "each review to any free agent; if a particular agent should review, set "
+            "`delivery.reviewer` (or `reviewer` on a task that needs a different one)",
         )
     ]
 

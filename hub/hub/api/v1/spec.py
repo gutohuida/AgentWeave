@@ -253,11 +253,23 @@ async def _delivery_status(
     if delivery.mode != "flow":
         return {"state": "none"}
     if not delivery.agent:
-        return {"state": "stale", "agent": "", "reason": "unknown"}
-    state = await delivery_agent_state(session, project_id, delivery.agent)
-    if state == "ok":
-        return {"state": "ok", "agent": delivery.agent}
-    return {"state": "stale", "agent": delivery.agent, "reason": state}
+        status: Dict[str, Any] = {"state": "stale", "agent": "", "reason": "unknown"}
+    else:
+        state = await delivery_agent_state(session, project_id, delivery.agent)
+        status = (
+            {"state": "ok", "agent": delivery.agent}
+            if state == "ok"
+            else {"state": "stale", "agent": delivery.agent, "reason": state}
+        )
+    # Who reviews (F508): the default by name with the same usability test as the builder, or no
+    # key at all, which the approval bar reads as "any free agent". A review never falls back from
+    # a stale default to someone else (`review_turn.resolve_declared_reviewer`), so it is flagged.
+    if delivery.reviewer:
+        status["reviewer"] = delivery.reviewer
+        status["reviewer_state"] = await delivery_agent_state(
+            session, project_id, delivery.reviewer
+        )
+    return status
 
 
 async def _approval_outcome(session: AsyncSession, document) -> Optional[Dict[str, Any]]:

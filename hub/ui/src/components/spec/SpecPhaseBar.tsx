@@ -17,6 +17,7 @@ import {
   useSpecDocuments,
   useSpecRigorHistory,
   type SpecBlockingFinding,
+  type SpecDeliveryStatus,
   type SpecDocumentRecord,
   type SpecNextSliceOutcome,
 } from '@/api/spec'
@@ -280,6 +281,12 @@ export function SpecPhaseBar({
             <option value="">No flow</option>
           </select>
         </div>
+      )}
+
+      {/* Who reviews (F508): always said for a flow-delivered document, so the operator approves
+          the staffing they were told about rather than learning it from a task's assignee. */}
+      {(deliveryStatus?.state === 'ok' || deliveryStatus?.state === 'stale') && (
+        <ReviewerLine status={deliveryStatus} />
       )}
 
       <div className="flex items-center gap-2">
@@ -575,5 +582,28 @@ export function SpecPhaseBar({
         />
       )}
     </div>
+  )
+}
+
+function ReviewerLine({ status }: { status: SpecDeliveryStatus }) {
+  const stale = Boolean(status.reviewer) && status.reviewer_state !== 'ok'
+  return (
+    <p
+      data-testid="delivery-reviewer"
+      data-stale={stale ? 'true' : 'false'}
+      className="flex items-center gap-1.5"
+      style={{ color: stale ? 'var(--amber)' : 'var(--text-3)' }}
+    >
+      {stale && <Icon name="warning" size={13} />}
+      {!status.reviewer
+        ? 'Reviewed by any free agent: the document names no reviewer.'
+        : stale
+          ? `Reviewed by @${status.reviewer}, ${
+              status.reviewer_state === 'archived'
+                ? 'which is archived'
+                : 'which is not an agent on this project'
+            }: its reviews will come to you.`
+          : `Reviewed by @${status.reviewer}.`}
+    </p>
   )
 }
