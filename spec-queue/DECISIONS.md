@@ -20,6 +20,51 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+### Spec overhaul 2026-10-08: product questions the audit could not settle from the code -- interactive
+
+The specs now describe what the code does; each row asks whether that is what is wanted. Filed, not
+decided (operator, 2026-10-08: "File them, decide later"). Detail per capability in the overhaul commits.
+
+- OPEN      overhaul-agent-loop-rules  Should the HTTP plane refuse an agent-created loop with no stop condition, and turn
+  a loop naming a document into a flow, as the MCP adapter does (F543)? Or is an unstoppable loop acceptable from an agent?
+- OPEN      overhaul-exploring-interview  In an exploring spec turn, should the agent interview in prose and stop, or ask
+  through `ask_user` (F545)? Both instructions ship today.
+- OPEN      overhaul-loop-history  A loop's own history records edits, control changes, stops, archiving, adoption and
+  stalls, but not its creation, queue additions or ordinary firings. Add them, or accept the spec as written?
+- OPEN      overhaul-job-history-cap  Job run history keeps only the newest 100 records per job (`scheduler.py:3383-3407`);
+  the old spec said none is ever removed. Is the cap intended?
+- OPEN      overhaul-loop-creator  Should "creator" mean one agent everywhere (F556)?
+- OPEN      overhaul-trace-timeline  `trace-timeline` was retired as never built. Re-author it as a change, or drop the idea?
+- OPEN      overhaul-thinking-ui  Are an auto-collapsing live thinking section and hideable diagnostics still wanted
+  (neither is built; the specs now say so)?
+- OPEN      overhaul-dead-renderers  Delete or remount `SharedStreamRenderer` and `AgentActivityTab` (F553)?
+- OPEN      overhaul-token-threshold-window  Which model's window should a checkpoint token threshold be checked against (F541)?
+- OPEN      overhaul-failed-checkpoint  Should a failed automatic checkpoint be shown in its conversation (F540)?
+- OPEN      overhaul-participants  `checkpoint_access.participants()` is called only from tests. Give it a surface or drop it?
+- OPEN      overhaul-task-delete-divergence  Should deleting a task also delete its divergence history (F532)?
+- OPEN      overhaul-dependency-ui  Should task dependencies be declarable from the app (today: REST route only, no UI or
+  MCP tool)? And what should the "No document" board's hint say (F552)?
+- OPEN      overhaul-evidence-retention  Evidence retention is stored but never enforced. Build it, or remove the setting?
+- OPEN      overhaul-chip-integration  Should a task card show the integration answer beside each requirement chip?
+- OPEN      overhaul-codex-spec  Keep the Codex requirements (sandbox postures, catalog, default runner seeded in every
+  project) while Codex is undrivable? Keep seeding a Codex runner in new projects?
+- OPEN      overhaul-symlink-failure  A failed symlink of a shared dependency directory into a checkout is only logged.
+  Show it to the operator?
+- OPEN      overhaul-launch-skipped  Is a persisted "launch skipped" event still wanted (dropped from runtime-diagnostics as
+  never built)?
+- OPEN      overhaul-create-name-check  The single-segment name check on Create project is UI-only. Enforce it on the Hub too?
+- OPEN      overhaul-model-command  Should `/model` open the model picker, or be removed (F553)?
+- OPEN      overhaul-header-rules  Keep the faint rules under the project header and tabs (and change two requirements), or
+  remove them (F554)?
+- OPEN      overhaul-route-shadow-names  F248's creation-only refusal of route-shadowing agent names (`conflicts`, `settings`,
+  ...) is decided but unbuilt (openspec `a-name-a-caller-chooses-reaches-its-own-resource`). Still wanted?
+- OPEN      overhaul-context-diagnostic  Is a Hub-side context diagnostic still wanted, now that `context-diagnostics` is
+  dropped from `agent-context-onboarding` as never built?
+- OPEN      overhaul-unused-context-routes  `GET /agents/context?charter=` and `POST /agents/{name}/context-usage` have no
+  in-repo callers. Keep or retire them?
+- OPEN      overhaul-refusal-length  `task-lifecycle-governance` dropped "a refusal SHALL fit the shortest surface that records
+  it at the longest task id and agent name" (no test names it). Was it a real rule?
+
 ### F525: how a legacy footprint is rebuilt -- 2026-10-07 interactive, DECIDED 2026-10-07
 
 - DECIDED   drift-legacy-baseline  **(d): a row rebuilt from its merge watches from today's main; a

@@ -34991,3 +34991,168 @@ then stays listed in the map and the index as an empty `current` capability. The
 merging two overlapping capabilities: the absorbed one is left behind as a shell. Likely fix: a `retired` end state for
 a capability (operator-only, recorded with a reason and, when merged away, the capability that absorbed it), its
 requirements retired with it, dropped from `spec/index.json` and coverage, the file kept as history.
+
+## F537 (C) -- the openspec corpus importer dropped every wrapped line of a scenario clause
+
+**Status:** open; corpus repaired. Filed 2026-10-08 (interactive, spec overhaul). The 2026-10-08 overhaul restored 117 cut clauses from `openspec/specs/` in the capabilities it rewrote; the converter itself is unchanged.
+
+`scripts/migrate_openspec_corpus.py:147-153` (`parse_scenario`) keeps a GIVEN/WHEN/THEN/AND bullet's first physical line and
+skips any continuation line that does not start with `-`, so a clause wrapped in the source markdown was imported cut
+mid-phrase: `agent-capability-plane` ac3 read "a run credential is presented to an" (source lines 33-34 continue
+"operator API"). At least 261 of 9,174 imported clauses ended on a dangling word; requirement statements and
+rationales were unaffected (0 of 1,542). Fix if the converter is ever run again: join indented continuation lines.
+
+## F538 (C) -- a checkpoint can fire on a context window that was never measured
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit; found by running `output_recording.resolve_usage_limit`).
+
+`output_recording.resolve_usage_limit` fills the catalog's window into any usage sample, including one marked
+`unavailable`: a Copilot `usage_update` with no `size` on `claude-sonnet-5` came back with a 1,000,000 limit and 1.22%.
+`checkpoint_trigger` reads `percent` without checking `status`, so a threshold can be crossed (or never crossed) on a
+window nobody measured.
+
+## F539 (C) -- the checkpoint a successor receives drops the wait-ended mark on open questions
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+`checkpoints.py:355` sets the flag that a question's wait ended, but `render_checkpoint`
+(`checkpoint_generation.py:323`) does not render it, and the rendered text is what the successor is given
+(`checkpoint_cutover.py:109`). The successor cannot tell a question still open from one whose wait expired.
+
+## F540 (C) -- a failed automatic checkpoint is invisible to the operator
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+`checkpoint_trigger.py:403` records the failure, but the conversation's banner renders only a `ready` checkpoint
+(`AgentOutputPanel.tsx:613-616`); nothing in the conversation says the automatic checkpoint was attempted and failed.
+
+## F541 (C) -- checkpoint token thresholds are checked against the wrong window, or not at all
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+A project's token threshold is validated against the checkpoint worker model's window (`api/v1/projects.py:171`),
+not the window of the agents it applies to; an agent-level token threshold is not validated at all
+(`api/v1/agents.py:2703`).
+
+## F542 (C) -- a spent checkpoint is still offered for cutover on the archived predecessor
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+The offer banner ignores `cut_over_to_conversation_id` (`AgentOutputPanel.tsx:613-615`), so the predecessor still
+offers a checkpoint already used; pressing it earns the Hub's 409, which the UI replaces with a generic "finish or stop
+the run" instead of the Hub's sentence naming the successor (`:626-630`).
+
+## F543 (C) -- an agent's loop and flow rules exist only in the MCP adapter
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+`create_loop`/`create_flow` refuse a loop without a stop condition, make a loop naming a document a flow, and refuse
+`work_needs_evidence` on a flow only in `mcp_server.py:822-940`. `POST /agent-actions/jobs` passes straight to
+`jobs.py:722`, which builds a loop from `purpose` alone, so an agent reaching the HTTP plane directly gets none of
+them, against the plane's equal-capability rule. Operator question recorded in DECISIONS.md (`overhaul-agent-loop-rules`).
+
+## F544 (C) -- an explicit "Workspace only" Claude run without the tool server denies every prompted call
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+On a Claude run with no MCP server, an explicitly chosen Workspace-only posture yields `--permission-mode manual` with
+no `--permission-prompt-tool` (`runner_commands.py:247-263`), so every call that would prompt is refused. The built-in
+default falls back to `acceptEdits` in that case; the explicit choice does not.
+
+## F545 (C) -- an exploring spec turn is told two contradictory ways to ask its questions
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+The turn notice says "Interview in THIS REPLY, in prose … Then stop" (`launchability.py:380`); the turn context
+says ending a turn without submitting or calling `ask_user` "is not a way to finish. Questions written as ordinary
+reply text reach nobody" (`api/v1/agents.py:2254`). Both reach the same turn. Operator question in DECISIONS.md
+(`overhaul-exploring-interview`).
+
+## F546 (C) -- a declared task title is cut to 80 characters mid-word
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+The payload allows a declared task `title` of 200 characters (`spec_payload.py:116-120`); materialisation cuts it to
+80 with no word boundary (`spec_tasks.py:186`), the failure the derived-title rule exists to prevent.
+
+## F547 (C) -- the fold draft is served for a change that is not approved
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code). Minor: the fold itself refuses.
+
+`GET …/fold-draft` has no phase check (`spec_service.py:877-900`), so the app can show a draft for an exploring change.
+
+## F548 (C) -- a divergence recorded for a run whose task someone else decides never closes
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+A run bound to a task that another actor approves still has a divergence recorded that nothing resolves
+(`run_divergence.py:762-816`).
+
+## F549 (C) -- a multi-line prompt through a .cmd shim that adds its own arguments is cut, yet marked delivered
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+`pty_runner.py:57-102` unwraps npm `.cmd` shims but deliberately leaves one that adds its own arguments
+(`node script %*`) to cmd.exe (`test_pty_runner.py:111` asserts it). cmd.exe cuts a multi-line prompt at its first
+newline, and the input is still marked delivered, against `agent-conversation-workspace`'s "a delivered turn reaches the
+model intact". Related: F439, F349.
+
+## F550 (C) -- an ordinary save strips corpus navigation and the map from a document's file
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+`spec_service.py:256` and `:1340` re-render without the corpus navigation and map that `rerender_corpus` adds, so a
+document saved after placement loses them until the next corpus re-render.
+
+## F551 (C) -- three small requirement-traceability defects
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code; see the audit report for
+`requirement-traceability`). The Hub accepts an empty reason when rejecting evidence; the `provisional` flag on evidence
+is never cleared; requirement identifiers sort as text (`FR-10` before `FR-2`).
+
+## F552 (C) -- operator- and agent-facing text that describes things that no longer exist
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code). Each is a sentence to correct:
+- the dependency board's hint says a hand-made task "can never have a dependency", false since F36
+  (`DependencyBoardView.tsx:37`, `tasks.py:957`);
+- `diagnostics.py:269` tells the operator to run `agentweave --port N hub-start`; there is no `hub-start`
+  (`cli.py:1524-1590`);
+- the Logs view still offers `watchdog` and `transport` categories (`LogsView.tsx:24`);
+- the agent briefing describes a peer-checkpoint sharing restriction that no longer exists (`api/v1/agents.py:2386`;
+  migration 0111);
+- `send_message`'s description omits that a checkpoint cutover starts a new thread (`mcp_server.py:288-295`);
+- the slice guidance says the next slice is drafted once a slice is approved; drafting waits until it is built;
+- a comment at `api/v1/agent_actions.py:81-83` says an omitted `conversation_id` means the most recent open one; it
+  resolves by binding.
+
+## F553 (C) -- dead UI and parser code, and a built-in command that does nothing
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+`SharedStreamRenderer.tsx`, `streamModel.ts` and `AgentActivityTab.tsx` are mounted nowhere (only tests import them);
+`parse_opencode_line` (`runner_parsing.py:644`) parses for a runner nothing launches; `panelTabsStore.reconcile` has no
+production caller, so dangling file and document tabs are never dropped on load; the composer's only built-in command
+`/model` (`composerTriggerSources.ts:16`) inserts the text and nothing acts on it. Operator questions in DECISIONS.md.
+
+## F554 (C) -- the project header draws the rules two requirements say it must not, and the tests cannot see it
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+`index.css:812` and `:831` draw a `--border-region` rule under `.project-header` and `.project-tabs` (b92d7de), against
+`hub-workspace-shell`'s `the-project-header-is-not-a-box` and `the-project-view-switcher-is-separated-by-its-plane-alone`.
+The tests asserting "no rule" scan only TSX. Operator question in DECISIONS.md (`overhaul-header-rules`).
+
+## F555 (C) -- the app-server path writes a run's closing status row outside `_record_observation`, untested
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+`agent_trigger.py:4201` writes the terminal status row directly; the process path goes through `_record_observation`
+(locked-database retry, F359) and is the only one tested (`test_a_turn_says_how_it_ended.py:729,776`).
+
+## F556 (C) -- "creator" names two different agents, so an operator-created loop never reports an outstanding message
+
+**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+
+When a loop's queue empties, the outstanding-request check treats the creator as the agent whose run created the loop
+(`scheduler.py:487-493`); everywhere else the creator is the agent the job names (`api/v1/tasks.py:683-692`). A loop
+the operator created has no creating run, so it never reports an outstanding message. Operator question in
+DECISIONS.md (`overhaul-loop-creator`).
