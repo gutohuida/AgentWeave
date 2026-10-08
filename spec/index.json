@@ -593,6 +593,14 @@
       "status": "archived",
       "parent": null,
       "order": 690
+    },
+    {
+      "path": "spec/changes/the-settings-that-gate-collaboration-are-on-the-project-page/spec.html",
+      "title": "The settings that gate collaboration are on the project page",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 750
     }
   ]
 }
