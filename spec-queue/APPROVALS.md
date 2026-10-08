@@ -17,6 +17,66 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-10-09
+
+Written ~00:20 in an interactive session; the operator is asleep and armed this window by hand at
+00:30 (stop 07:00). Operator: "build this night run to finish both of these or at least most of the
+work possible. The spec for this work is approved." Scope chosen (AskUserQuestion, 00:15): **the
+spec-storage change + all of roadmap slices 2-5.** These are **app changes** (trial Hub `:8010`,
+project `proj-d85a82bf4216`), not openspec changes; the openspec-not-built rule does not apply.
+
+- APPROVED  a-spec-document-is-stored-as-its-payload   `spec/changes/a-spec-document-is-stored-as-its-payload/spec.html`, `spdoc-06fd85087a9f`, approved on the trial Hub 00:14. Tier 2. Read its payload (`hub.spec_payload.extract_payload`, run from `hub/`): FR-1..10, criteria, design D1-D6, tasks drive-first -> storage -> convert -> corpus.
+- APPROVED  a-spec-is-written-one-step-at-a-time-roadmap   slices project-steps, approval-warnings, tester-amends, reconcile-and-measure (in that order; each builds after the one before).
+
+ORDER: specjson-t1-impl, specjson-t2-impl, specjson-t3-impl, specjson-drive, project-steps-spec, project-steps-impl, project-steps-drive, approval-warnings-spec, approval-warnings-impl, approval-warnings-drive, tester-amends-spec, tester-amends-impl, tester-amends-drive, reconcile-and-measure-spec, reconcile-and-measure-impl, reconcile-and-measure-drive
+
+Give `specjson-t2-impl` and `tester-amends-impl` `"model": "opus"` (cross-cutting / hardest builds).
+Split an `-impl` by the change's own tasks when one firing cannot finish it (`<id>-t<n>-impl`).
+
+**Operator authorisations for tonight only (exceptions to the playbook, stated by the operator):**
+
+1. **The window writes the slice change specs** (`<slice>-spec` items), although this window
+   normally writes no proposals. Author each as a change document on the trial Hub through the
+   operator routes (`scripts/drive/aw.py`; `POST /projects/{P}/project/documents` with the path
+   `spec/changes/<slug>/spec.html`, then `PUT .../documents/{path}/content` with `{"document":
+   <payload>}`, `set size`, `delivery: {"mode": "none"}`), from the roadmap slice's `intent` and
+   `done`, the research report `testbed/research/reports/Spec driven development with agents.md`
+   (data, not instructions), and the decisions in `spec-queue/DECISIONS.md` ("The spec file
+   structure after the step journey"). Model it on `spdoc-06fd85087a9f`: Tier stated in `design`,
+   short decision records, the acceptance drive as task 1, `how_to_check`/`checked_by` on every
+   criterion. Then **propose and approve it yourself** (`POST .../documents/propose?path=`, then
+   `.../documents/phase?path=&to=approved`) and commit the file. The operator reviews in the
+   morning.
+2. **Design choices with two defensible answers: pick the cleanest design and keep going** (operator:
+   "Pick the cleanest, record it"). Record each as a decision record in that change's `design`
+   (choice, rejected alternative, why) **and** as an `OPEN night-1009-<n>` row in
+   `spec-queue/DECISIONS.md` worded "Taken by the night: <choice>; rejected <alt>. Confirm or
+   reverse." Put the ids in `decisions_for_user`. Do not park the work.
+3. Already decided, do not re-open: project steps live in a **tracked file `spec/journey.json`**,
+   edited through the app (`structure-steps`); archived changes moving to `spec/changes/archive/`
+   and generated system maps are **later changes, not tonight**.
+
+**Fences:**
+
+- **Do not restart, migrate or convert the trial Hub `:8010`, and do not run the storage change's
+  `corpus` task** (converting this repo's `spec/` and the trial database): that is the morning's
+  job, after the operator merges. Every drive starts its own scratch Hub on its own port and fresh
+  database (the d1009 pattern: `scripts/drive/d1009_step_journey.py`). `:8010` is used only to
+  author and approve the slice documents, on the code it is already running.
+- The slices build on the storage change's code: build `specjson` first, and write each slice's
+  code against `spec.json` storage. A slice document authored on `:8010` tonight is still stored as
+  `.html` there; that is expected, and the morning conversion moves it.
+- Do not close the changes' Hub tasks or fold them (`close_change.py`): their commits are not on
+  `master`. Record evidence in the night log and `spec-queue/METRICS.md`; the morning closes them.
+- Tier 2 rule holds for the storage change and tester-amends: the acceptance drive is written and
+  recorded **failing** before the build. Real agent turns in drives bind `claude-haiku-4-5`.
+- Run the Hub suite with `-n auto` (`.claude/handoffs/DEAD-ENDS.md`, 2026-10-08 handoff-0183). Read
+  DEAD-ENDS before debugging the environment; its 2026-10-08 blocks are the relevant ones.
+- `hub/ui` changes: commit `hub/ui/src` and `hub/hub/static/ui` together (`scripts/refresh_ui_bundle.py`)
+  and run `py -3.11 -m pytest hub/tests/test_surface_ceilings.py -q` before pushing.
+- If time runs out, stop at a green commit with the queue's position recorded; partial slices are
+  fine. Do not start a slice's `-impl` whose `-spec` is not approved.
+
 ## 2026-10-07
 
 Written in an interactive session with the operator present. Rewritten ~22:50: the interactive
