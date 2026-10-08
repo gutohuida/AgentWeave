@@ -33580,7 +33580,7 @@ Fix: carry `restrict_spec_writes` on the RPC turn request and apply it in the ap
 
 ## F463 (C) — the provider quota hold picks the "newest" usage reading by wall clock, so a clock step back picks an old reading
 
-**Status:** open, filed 2026-09-28 from code. Found while applying the Opus review of `a-copilot-run-shows-its-credits` (review finding 3, `spec-queue/tracks/reviews/ghcp-s4-2026-09-28.md`), which fixed the same pattern in its own credit baseline.
+**Status:** fixed 2026-10-08 (night window, Tier 0). `provider_allowance._newest_informative` now orders by `turn_usage.rowid DESC` (insertion), `observed_at` stays display only; tests `test_the_later_inserted_reading_wins_when_the_clock_stepped_back` and `test_a_refusal_inserted_after_a_clock_step_back_holds` (both red before). Driven on a migrated throwaway DB through the real writer `record_turn_usage` with a 2h clock step back: before the fix `provider_hold` still held the agent after an allowed reading, after it returns None. Filed 2026-09-28 from code. Found while applying the Opus review of `a-copilot-run-shows-its-credits` (review finding 3, `spec-queue/tracks/reviews/ghcp-s4-2026-09-28.md`), which fixed the same pattern in its own credit baseline.
 
 `provider_allowance._newest_informative` orders `TurnUsage` by `observed_at DESC` (`hub/hub/provider_allowance.py:122-131`). `observed_at` is the Hub's wall clock at write time. After the clock steps back (NTP correction, DST misconfiguration, a VM restore), a newer reading sorts below an older one, so the Claude allowance hold and `last_refusal` can read a stale allowance: hold an agent that is no longer refused, or release one that is. The credits change orders its baseline by `rowid DESC`, as `api/v1/spec.py` already does.
 
@@ -33588,7 +33588,7 @@ Fix: order by insertion (`rowid`/id sequence), with `observed_at` only as displa
 
 ## F464 (C) — `_where` resolves a UNC path over the network before deciding, stalling the deciding process ~21 s per path word
 
-**Status:** open, filed 2026-09-28. Measured by the Opus review of `a-copilot-agent-runs-over-acp` (`spec-queue/tracks/reviews/ghcp-s2-2026-09-28.md`, finding 7): `os.path.realpath(r"\10.255.255.1\share\x")` took 21.06 s on this machine.
+**Status:** fixed 2026-10-08 (night window, Tier 0). `_where`, `_inside_hub_calls_root` and `_read_call_args` refuse a doubled-separator (UNC / `\?\` / `\.\`) path on a drive-letter host before any `realpath` (`hub/hub/mcp_server.py`, `_names_a_network_path`; tests `test_a_network_path_is_refused_before_it_is_resolved.py`, 16 of 18 red before). The first fix, in `_where` alone, did NOT fire: driven through `_decide`, an Edit of an unreachable UNC path still took 21.03 s because `_hub_own_call` -> `_inside_hub_calls_root` resolves the path first; after guarding it, 0.0 s (fresh unreachable IPs each run, Windows caches the failure). A UNC workspace root is left to the old route. Filed 2026-09-28. Measured by the Opus review of `a-copilot-agent-runs-over-acp` (`spec-queue/tracks/reviews/ghcp-s2-2026-09-28.md`, finding 7): `os.path.realpath(r"\10.255.255.1\share\x")` took 21.06 s on this machine.
 
 `mcp_server._where` calls `os.path.realpath` on every path and path-like shell word before comparing it to the workspace (`hub/hub/mcp_server.py:1113-1133`). A model-written permission request naming an unreachable UNC path (an edit path, a `path` input, or one word of a command) blocks for ~21 s per word and opens an SMB connection to that host. Today this runs in the per-run MCP tool server, so the stall is per run; slice 2 moves `_decide` into the Hub process, where it would freeze every project (slice 2 now runs it via `asyncio.to_thread`). The path is refused in the end anyway, as outside the workspace.
 
@@ -33623,7 +33623,7 @@ What would close it: a deciding `preToolUse` hook, which slice 5 declines. Test 
 
 ## F468 (C) — an agent can message itself, and the message starts a new autonomous turn
 
-**Status:** open, filed 2026-09-30. Found by driving `a-copilot-agent-runs-over-acp` 11.2 on a drive Hub (`:8031`, `drive0930`). Not Copilot-specific: the path is the Hub's `send_message`.
+**Status:** fixed 2026-10-08 (night window, Tier 0), narrowed: `POST /agent-actions/messages` refuses a self-send that names no conversation, or names the sender's own current one, with a 400 naming the reply, `update_task` notes and `ask_user`, before any Message, queue entry or run exists (`hub/hub/api/v1/messages.py`; tests `test_a_message_to_oneself.py`, red before the fix). A self-send naming a DIFFERENT conversation of the agent still goes through: item 10 of the operator's twelve (2026-08-20) asked for it and `test_an_agent_can_message_its_own_other_conversation` locks it; `test_a_self_send_is_bounded_by_the_hop_budget` now sends to a second conversation. Driven over real HTTP on a throwaway Hub (`testbed/f468/drive.py`): self-send 400, no message, no new run; peer send 201. Not driven with a real agent turn. Filed 2026-09-30. Found by driving `a-copilot-agent-runs-over-acp` 11.2 on a drive Hub (`:8031`, `drive0930`). Not Copilot-specific: the path is the Hub's `send_message`.
 
 Asked to "send me a one-line message with agentweave-send_message", a Copilot agent called `send_message(to_agent="cop-1", …)`, addressing itself. The operator is not a message recipient (the tool's own docstring says so), so the model picked the nearest name it had. The Hub accepted it: the message was queued as input to `cop-1` (`origin_type='agent'`, `origin_agent='cop-1'`) and immediately started a second turn, `initiator='autonomous'`, in a new conversation. That turn spent one more model call (a Free-plan premium request) acknowledging its own message. The hop budget bounds a chain, so this is not unbounded, but every self-message costs a turn and splits the work across conversations.
 
@@ -34811,7 +34811,8 @@ rows unwatched (13 of 28 here); (d) (b) for merge-rebuilt rows and the stored co
 
 ## F526 (B) -- an `agentweave-mcp` started with no `HUB_URL` silently targets the operator's real Hub on `:8000`
 
-**Status:** open. Filed 2026-10-07 (interactive, while choosing how to author in the app). This repo's
+**Status:** fixed (Tier 0, 2026-10-08 night), pending CI. `main()` exits 1 naming `HUB_URL` when it is unset or blank, and `_hub_request` raises `UnboundIdentityError` (call mode: kind `unbound`, exit 2) before any connection; the `:8000` default is gone. The run token is deliberately not checked at start: the permission approver runs without one (its wire tests pop it) and every effect already refuses in `_bound_token`. Driven: the file spawned with no environment exits 1 with the message; `--call list_tasks` without `HUB_URL` returns the `unbound` envelope. Five wire tests and two unit tests relied on the default and now set `HUB_URL`.
+Was: open. Filed 2026-10-07 (interactive, while choosing how to author in the app). This repo's
 Claude Code config (`~/.claude.json`, project `AgentWeave`) starts `agentweave-mcp` with no
 environment, and `hub/hub/mcp_server.py:221` falls back to `http://127.0.0.1:8000`. Any MCP tool an
 interactive session called would have gone to the operator's live instance -- the one CLAUDE.md
@@ -34835,7 +34836,12 @@ change a capability requirement came from.
 
 ## F528 (C) -- `close-exploration` and `propose` answer 200 for a document whose content was refused
 
-**Status:** open. Filed 2026-10-07 (same authoring). A `PUT .../content` refused with 422
+**Status:** fixed (Tier 0, 2026-10-08 night), pending CI. `propose` keeps its 200 -- "not yet" is one shape, the `blocking` list (F113,
+`a-document-moves-forward-only-through-its-checks`; the UI and ~15 drive scripts read it) -- and now carries `proposed: true|false`, true only when the phase is
+`proposed`. `close-exploration`'s 200 is truthful and unchanged: it records the operator's judgement that exploration is over (`explore_closed: true`) and never
+claimed the content was usable; the mechanical half is `propose`'s to report. Driven on a throwaway Hub (:8043): refused PUT 422 -> close 200 -> propose 200
+`{phase: exploring, proposed: false}` with blockers. UI type not touched (the field is additive; a `hub/ui/src` edit would need a bundle commit that reaches :8000 live).
+Was: open. Filed 2026-10-07 (same authoring). A `PUT .../content` refused with 422
 (`modal must be one of MUST, SHOULD, MAY, SHALL` -- `MUST NOT` is not a modal) left the document
 empty; the script's following `close-exploration` and `propose` both answered **200**, `propose`
 with `phase: exploring` and a `blocking` list. A caller reading the status code believes it
@@ -34856,7 +34862,8 @@ reachable from the main branch, defaulting to HEAD as now.
 
 ## F530 (B) -- under xdist a leaked `shutil.which` patch makes `pty_runner` spawn `/usr/bin/claude`, and CI's hub-test goes red by order
 
-**Status:** open. Filed 2026-10-07 ~22:52 (interactive), the night after `741f44e` put hub-test on `-n auto --dist loadfile`.
+**Status:** fixed (Tier 0, 2026-10-07 night), pending CI on two consecutive pushes -- the leak was not `shutil.which` itself: `ptyprocess.util` / `winpty.ptyprocess` do `from shutil import which` at first import, and `PtySession.spawn` imports them lazily, so the first real pty spawn in a worker made under a faked `which` pinned the fake for the worker's life (an absolute `sys.executable` never reaches `resolve_executable`'s lookup; ptyprocess re-resolves argv[0] itself). 18 tests in 8 files fired a real trigger under `patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude")` with no spawn stub; they now use the conftest fixture `no_agent_cli_spawn` (spawn fails as the fake path did, no backend import). Guard: `pytest_runtest_teardown` in `hub/tests/conftest.py` fails the test that leaves `which` changed in `shutil` or a pty backend. Found on Linux (WSL) only: on Windows no leaker is first to spawn. All 18 named by running the which-patching files with a diagnostic plugin that forgets ptyprocess before every test (`testbed/f530/fresh_pty.py`, untracked): 17 errors before, 0 after; the 18th was named by the guard's first plain run and missed by the diagnostic one, because the spawn runs in a background task that races the `with patch` exit. A 19th, `test_a_loop_does_not_staff_its_own_review.py::test_the_operator_can_still_review_a_loops_completed_task_by_hand`, was named by the guard in CI on 8de6be7 (hub-test red; the guard worked as designed) and got the same fixture on 2026-10-08; WSL full `-n 4 --dist loadfile` with the guard and the diagnostic plugin: 7135 passed, 0 failed. Lesson: the F530 sweep was by local worker placement, so a leaker can survive it. A 20th, `test_a_flows_moves_are_the_flows.py::test_an_operators_by_hand_review_is_the_operators`, was named by the guard in CI on 9c6a73f (the night's close-out, whose run it never read). 2026-10-08 (interactive) the sweep was made deterministic instead of placement-dependent: a recorder plugin wrapping `PtySession.spawn` (`testbed/f530/spawn_recorder.py`, untracked) logs, for every spawn, the running test and whether `shutil.which` is faked at that moment. Over all 53 which-patching files it named exactly three more, all through `_dispatch_review` in `test_review_dispatch_staffs_the_task.py` (by-hand review, already-staffed review, binding order); every other spawn under a faked `which` was already stubbed. All four took `no_agent_cli_spawn`; the recorder then logs 0 spawns under a fake.
+Was: open. Filed 2026-10-07 ~22:52 (interactive), the night after `741f44e` put hub-test on `-n auto --dist loadfile`.
 CI run `37683661654` (job `113005821492`, commit `99d9cdf`, a METRICS-only commit): `8 failed, 7082 passed`, all `OSError: [Errno 2]`:
 seven in `test_pty_runner.py` (`TestProcessSessionSpawn`, `TestPidAlive`, `TestTerminateProcessTree`) and
 `test_lifespan_shutdown.py::test_hub_shutdown_kills_a_real_tracked_process`, all on worker `gw1`. The run before it on the

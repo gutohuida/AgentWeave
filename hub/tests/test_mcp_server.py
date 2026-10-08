@@ -616,6 +616,7 @@ def test_hub_request_timeout_is_ten_seconds(monkeypatch):
 
     monkeypatch.setattr("urllib.request.urlopen", urlopen)
     monkeypatch.setenv("AW_RUN_TOKEN", "aw_run_test")
+    monkeypatch.setenv("HUB_URL", "http://127.0.0.1:1")
     _hub_request("GET", "/tasks")
     assert captured["timeout"] == 10
 

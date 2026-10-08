@@ -291,6 +291,7 @@ async def test_a_flows_review_leg_is_unaffected(app, auth_headers, bind_runner):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_the_operator_can_still_review_a_loops_completed_task_by_hand(
     app, auth_headers, bind_runner, tmp_path
 ):

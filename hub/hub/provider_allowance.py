@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Optional, Set
 
-from sqlalchemy import select
+from sqlalchemy import literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import TurnUsage
@@ -127,6 +127,13 @@ def _is_informative(row: TurnUsage) -> bool:
 
 
 async def _newest_informative(db: AsyncSession, project_id: str, agent: str) -> Optional[TurnUsage]:
+    """The most recently *written* informative row, not the one with the latest `observed_at`.
+
+    `observed_at` is the Hub's wall clock, so after a step back (NTP, a VM restore) a newer reading
+    carries the earlier stamp and would sort below an older one (F463). `turn_usage` has a `String`
+    primary key, so it is a rowid table and the rowid is the insertion order; `observed_at` stays
+    the displayed time.
+    """
     offset = 0
     while True:
         rows = (
@@ -134,7 +141,7 @@ async def _newest_informative(db: AsyncSession, project_id: str, agent: str) -> 
                 await db.execute(
                     select(TurnUsage)
                     .where(TurnUsage.project_id == project_id, TurnUsage.agent == agent)
-                    .order_by(TurnUsage.observed_at.desc())
+                    .order_by(literal_column("turn_usage.rowid").desc())
                     .offset(offset)
                     .limit(_PAGE)
                 )

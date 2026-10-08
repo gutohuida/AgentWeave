@@ -2644,6 +2644,7 @@ async def test_a_primary_firing_that_claims_work_stages_task_id_not_review_task_
         assert entry.review_task_id is None
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 @pytest.mark.asyncio
 async def test_a_firing_that_staffs_a_review_stages_review_task_id_not_task_id(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path

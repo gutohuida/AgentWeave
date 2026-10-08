@@ -22,6 +22,7 @@ from hub.provider_allowance import (
     hold_coalesce_reason,
     hold_for_reading,
     hold_sentence,
+    last_refusal,
     provider_hold,
 )
 from hub.runner_events import AccountingSample
@@ -157,6 +158,37 @@ async def test_a_later_measured_turn_with_no_reading_releases(app):
         await _refused(db, "dev")
         await _row(db, "dev", observed_at=NOW + timedelta(seconds=30), measured=True)
         assert await provider_hold(db, PROJECT, "dev", now=NOW + timedelta(minutes=5)) is None
+
+
+async def test_the_later_inserted_reading_wins_when_the_clock_stepped_back(app):
+    """F463: `observed_at` is the Hub's wall clock, so after a step back the newer reading is the
+    one carrying the EARLIER stamp. The hold follows insertion order, not the stamp."""
+    async with async_session_factory() as db:
+        await _refused(db, "dev", observed_at=NOW)
+        await _row(
+            db,
+            "dev",
+            observed_at=NOW - timedelta(hours=2),
+            allowance=_reading(NOW + timedelta(hours=5), status="allowed"),
+            measured=True,
+        )
+        assert await provider_hold(db, PROJECT, "dev", now=NOW + timedelta(minutes=5)) is None
+        assert await last_refusal(db, PROJECT, "dev") is None
+
+
+async def test_a_refusal_inserted_after_a_clock_step_back_holds(app):
+    async with async_session_factory() as db:
+        await _row(
+            db,
+            "dev",
+            observed_at=NOW,
+            allowance=_reading(NOW + timedelta(hours=5), status="allowed"),
+            measured=True,
+        )
+        run_id = await _refused(db, "dev", observed_at=NOW - timedelta(hours=2))
+        hold = await provider_hold(db, PROJECT, "dev", now=NOW - timedelta(hours=1, minutes=55))
+    assert hold is not None
+    assert hold.run_id == run_id
 
 
 async def test_a_later_unavailable_row_with_no_reading_does_not_release(app):

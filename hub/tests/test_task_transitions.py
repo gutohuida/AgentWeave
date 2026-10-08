@@ -409,6 +409,7 @@ def test_mcp_reports_a_refusal_as_a_failure_carrying_the_reachable_set():
 
     with (
         patch("hub.mcp_server._bound_token", return_value="aw_run_x"),
+        patch("hub.mcp_server._hub_address", return_value="http://hub"),
         patch("urllib.request.urlopen", side_effect=error),
     ):
         with pytest.raises(HubAPIError) as excinfo:

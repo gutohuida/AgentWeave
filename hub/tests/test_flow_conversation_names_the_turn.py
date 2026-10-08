@@ -46,6 +46,7 @@ async def _fire(job_id):
             await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_review_turn_is_titled_as_the_reviewers_review(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path
 ):
@@ -63,6 +64,7 @@ async def test_a_review_turn_is_titled_as_the_reviewers_review(
     assert await _conversation_title_for(REVIEWER) == "critic · review: Balance the ledger"
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_work_turn_is_titled_as_the_authors_work(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path
 ):
@@ -86,6 +88,7 @@ async def test_a_work_turn_is_titled_as_the_authors_work(
     assert await _conversation_title_for(AUTHOR) == "builder · work: Balance the ledger"
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_plain_job_is_still_titled_by_its_name(app, auth_headers, bind_runner):
     await _roster(app, auth_headers, bind_runner, "plain-agent")
     async with async_session_factory() as db:

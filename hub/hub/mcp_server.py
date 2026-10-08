@@ -127,6 +127,18 @@ def _bound_token() -> str:
     return token
 
 
+def _hub_address() -> str:
+    """This process's `HUB_URL`, or a refusal. There is no default: the one address a guess would
+    land on is the operator's own instance (F526), under no run credential."""
+    url = os.environ.get("HUB_URL", "").strip().rstrip("/")
+    if not url:
+        raise UnboundIdentityError(
+            "No Hub address (HUB_URL is unset); the Hub must start this tool connection. "
+            "Nothing was sent."
+        )
+    return url
+
+
 class HubAPIError(RuntimeError):
     """The Hub was reached and rejected this request — a validation or policy failure,
     not a connectivity problem. Distinct from `HubUnreachableError` (task 5.2): a rejected
@@ -218,7 +230,7 @@ def _hub_request(
     params: Optional[Dict[str, Any]] = None,
 ) -> Any:
     """Make one authenticated request to the Hub API with bound run attribution."""
-    base_url = os.environ.get("HUB_URL", "http://127.0.0.1:8000").rstrip("/")
+    base_url = _hub_address()
     token = _bound_token()
     url = f"{base_url}/api/v1/agent-actions{path}"
     if params:
@@ -1426,6 +1438,13 @@ def _judge_resolved(absolute: str, resolved: str, root: str) -> Optional[str]:
     return None
 
 
+def _names_a_network_path(path: str) -> bool:
+    """F464: whether `path` opens with two separators -- a UNC (`\\\\host\\share`, `//host/share`)
+    or device (`\\\\?\\`, `\\\\.\\`) spelling. Resolving one makes the platform contact the host
+    (21 s for an unreachable one), so `_where` decides on the spelling, before any `realpath`."""
+    return len(path) >= 2 and path[0] in "/\\" and path[1] in "/\\"
+
+
 def _where(path: str, root: str) -> Optional[str]:
     """Why `path` is not inside the workspace, or None when it is.
 
@@ -1437,6 +1456,8 @@ def _where(path: str, root: str) -> Optional[str]:
     word reaches a native program (which resolves `..` lexically) or msys (which resolves it
     physically, the way `_physical` does).
     """
+    if _DRIVE_LETTERS and _names_a_network_path(path) and not _names_a_network_path(root):
+        return _OUTSIDE
     absolute = path if os.path.isabs(path) else os.path.join(root, path)
     try:
         resolved = os.path.realpath(absolute)
@@ -3219,6 +3240,8 @@ def _hub_calls_root(workspace: str) -> Optional[str]:
 def _inside_hub_calls_root(path: str, workspace: str) -> bool:
     """A `.json` file whose real path is inside the calls root (the calls-root rule). A relative
     path resolves against the workspace; a file-level link out, `..` and another drive fail."""
+    if _DRIVE_LETTERS and _names_a_network_path(path):
+        return False
     root = _hub_calls_root(workspace)
     if root is None:
         return False
@@ -4148,7 +4171,17 @@ def _announce_adapter_online() -> None:
 
 
 def main() -> None:
-    """Run the canonical Hub-owned surface over stdio."""
+    """Run the canonical Hub-owned surface over stdio.
+
+    Refuses to start unbound: a client that launched this with no environment would otherwise
+    serve a full tool list whose every call fails, or (before F526) reached for `:8000`. A missing
+    run token is not checked here: the permission approver legitimately runs without one, and
+    every effect that needs it already refuses (`_bound_token`).
+    """
+    try:
+        _hub_address()
+    except UnboundIdentityError as exc:
+        sys.exit(f"agentweave MCP server not started: {exc}")
     _announce_adapter_online()
     mcp.run(transport="stdio", show_banner=False)
 
@@ -4233,6 +4266,8 @@ def _read_call_args(arg: str) -> Dict[str, Any]:
         normal_root = os.path.normcase(root)
         if os.path.normcase(os.path.realpath(root)) != normal_root:
             raise _CallUsageError(f"{where} .agentweave/calls is a link, not that directory.")
+        if _DRIVE_LETTERS and _names_a_network_path(arg):
+            raise _CallUsageError(f"{where} {arg!r} is not.")
         real = os.path.realpath(os.path.abspath(arg))
         normal_real = os.path.normcase(real)
         inside = (

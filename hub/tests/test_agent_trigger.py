@@ -565,6 +565,7 @@ async def test_writing_agent_cannot_bypass_isolation_with_work_dir(
     assert "isolation" in response.json()["detail"].lower()
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 @pytest.mark.asyncio
 async def test_writing_agent_runs_in_place_when_the_project_is_not_a_repository(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
@@ -627,6 +628,7 @@ async def test_writing_agent_is_not_spawned_when_a_real_repository_cannot_be_pre
     assert "wrong ref" in response.json()["waiting_reason"]
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 @pytest.mark.asyncio
 async def test_work_dir_is_accepted_for_a_writer_when_there_is_no_isolation_to_override(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch

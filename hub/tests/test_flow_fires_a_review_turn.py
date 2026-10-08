@@ -121,6 +121,7 @@ async def _queued_entry_for(agent):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_flow_staffing_a_completed_task_queues_a_review(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path
 ):
@@ -148,6 +149,7 @@ async def test_a_flow_staffing_a_completed_task_queues_a_review(
     assert await _queued_entry_for(AUTHOR) is None
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_flow_review_briefing_reads_the_reviewers_own_grant(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path
 ):
@@ -239,6 +241,7 @@ async def test_a_flow_fired_reviewer_reads_a_file_that_is_not_on_main(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_firing_that_staffs_ordinary_work_carries_no_review_task_id(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path
 ):
@@ -273,6 +276,7 @@ async def test_a_firing_that_staffs_ordinary_work_carries_no_review_task_id(
     assert entry.review_task_id is None
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_plain_job_with_no_loop_still_fires(app, auth_headers, bind_runner):
     """A job without a loop makes no selection at all, and the review argument must not turn that
     into a failure. `selection` is bound before the loop branch precisely for this path — it was
@@ -411,6 +415,7 @@ async def test_an_unstaffable_review_is_surfaced_and_the_job_stays_scheduled(
     assert await _queued_entry_for(AUTHOR) is None
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_an_unstaffable_review_does_not_stop_the_flow_doing_other_work(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path
 ):

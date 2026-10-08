@@ -1018,6 +1018,7 @@ async def test_the_operator_is_told_through_the_event_and_the_stream_not_only_th
     assert "no recorded completion" in unstaffed[0]["reason"]
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_the_event_fires_before_the_refusal_decides_anything(app, auth_headers, bind_runner):
     """6.3. The emit loop runs over `decision.unstaffed` **whatever the decision kind is** — above
     the branch that returns a refusal and above the one that proceeds on an empty queue.

@@ -4,46 +4,59 @@
     "runner": "claude",
     "model": "opus",
     "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-06-daily",
+    "branch": "autonomous/2026-10-07-daily",
     "parent_branch": "master",
-    "parent_sha": "4f2face",
-    "stop_at": "2026-10-07T07:00:00+01:00",
-    "iteration": 6,
-    "log_file": ".claude/autonomous/2026-10-06-night-log.md",
+    "parent_sha": "4055151",
+    "stop_at": "2026-10-08T07:00:00+01:00",
+    "iteration": 8,
+    "log_file": ".claude/autonomous/2026-10-07-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": null,
     "next_action": null,
     "queue": [
         {
-            "id": "a-drive-or-a-home-variable-impl-1",
+            "id": "F530-impl",
             "status": "done",
-            "title": "B4 change 2 (F401/F402, approved B4-approve): group 1 tests 1.1-1.3 with the code they need",
-            "detail": "Done iter 2: tasks 1.1, 1.3, 2.1 (+2.2 drive check) built, mutation-checked, driven via stdio server."
+            "title": "F530: leaked shutil.which patch turns hub-test red under xdist",
+            "detail": "See FINDINGS F530. Guard in hub/tests/conftest.py names the leaker; fix the leaker; no patching around in test_pty_runner. Accept: local -n 4 --dist loadfile green + CI green. Nothing else is built until CI is green on the tip. BUILT iteration 2: 18 leakers marked no_agent_cli_spawn + teardown guard; WSL full -n 4 green. Needs CI green on this push and the next. CI green on 8f4d508 (first green push); a second green push (this one) confirms. REOPENED iteration 6: CI on 8de6be7 red, the guard named a 19th leaker (test_a_loop_does_not_staff_its_own_review); fixed. Needs green CI on two consecutive pushes after that.",
+            "model": "opus"
         },
         {
-            "id": "a-drive-or-a-home-variable-impl-2",
+            "id": "F468-impl",
             "status": "done",
-            "title": "Same change: tasks 1.4b-1.4f with rule-4 code (2.1-2.3)",
-            "detail": "Done iter 3: 1.4b-1.4f + 2.2 (D2 spellings, D3 remainder, D10 link check); red 45, union 1025 passed, driven via stdio server with junctions."
+            "title": "F468: send_message to self returns 400 naming the reply; no turn starts",
+            "detail": "Tier 0; operator 2026-09-30 answer stands. Test at the route seam, fix, drive. BUILT iteration 3, narrowed to F468's repro (self-send without a different named conversation); see FINDINGS F468."
         },
         {
-            "id": "a-drive-or-a-home-variable-impl-3",
+            "id": "F464-impl",
             "status": "done",
-            "title": "Same change: 2.3 (docstring), 1.5b, 1.5c, 1.6, 2.4 (full suite with claude off PATH, counts inline), 2.5",
-            "detail": "Done iter 4: 2.3, 1.5b, 1.5c, 1.6, 2.5 ticked; 2.4 counts written (6997 passed, 21 skipped, 1 known order-dependent failure), tick pending hub-judge-windows on the iter-4 commit."
+            "title": "F464: _where resolves UNC path over network",
+            "detail": "Edits hub/hub/mcp_server.py: read .claude/rules/ for it first (stdlib+fastmcp only). BUILT iteration 4; see FINDINGS F464."
         },
         {
-            "id": "a-drive-or-a-home-variable-drive",
+            "id": "F463-impl",
             "status": "done",
-            "title": "Drive the judge change in testbed/scratch (3.1) on a fresh drive profile and port",
-            "detail": "Done iter 5: 3.1 driven in real PowerShell 5.1 + Git Bash; 2.4 tick still pending CI."
+            "title": "F463: quota hold picks newest usage reading by wall clock",
+            "detail": "Tier 0; clock step back picks stale reading. Test at the seam, fix. BUILT iteration 5; see FINDINGS F463."
         },
         {
-            "id": "a-drive-or-a-home-variable-archive",
+            "id": "F528-impl",
             "status": "done",
-            "title": "Archive it; F401/F402 -> fixed <sha>; METRICS row (4.1)",
-            "detail": "Done iter 6: 2.4 ticked (run 37545991226), F401/F402 fixed, METRICS row, archived. BACKLOG.html regeneration left to the day window."
+            "title": "F528: close-exploration and propose return 200 for refused content",
+            "detail": "Tier 0; ask what the route returns when the function raises. BUILT iteration 6: propose body carries proposed true/false (200 kept, F113); see FINDINGS F528."
+        },
+        {
+            "id": "F526-impl",
+            "status": "done",
+            "title": "F526: agentweave-mcp refuses to start without HUB_URL",
+            "detail": "Never fall back to :8000; never call :8000 to test. BUILT iteration 7; see FINDINGS F526."
+        },
+        {
+            "id": "F530-drive",
+            "status": "done",
+            "title": "Close-out: usage report and final log",
+            "detail": "Run usage_report --windows --since 2026-10-07; write ending entry; next_action null."
         }
     ],
     "decisions_for_user": [],
