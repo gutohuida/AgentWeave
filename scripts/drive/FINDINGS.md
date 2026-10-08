@@ -34948,8 +34948,7 @@ for an archived agent with its history -- each refusing what has evidence or a m
 
 ## F533 (C) -- a fold cannot amend or retire what a capability already says
 
-**Status:** open (filed 2026-10-08, interactive, closing `a-finished-change-is-folded-into-its-capability` with its own
-fold). A non-goal of that change, now with a concrete case.
+**Status:** fixed 407e9fc (Tier 1, 2026-10-08, authored in the app: `spec/changes/a-fold-can-retire-what-the-change-supersedes`): a fold takes `retire` and `retire_criteria`, applied in the same merge; the dialog offers the capability's requirements and criteria. Drive 2/7 -> 7/7; folded into `spec-document-authority` and archived. Was: open (filed 2026-10-08, interactive, closing `a-finished-change-is-folded-into-its-capability` with its own fold).
 
 The fold appends a change's requirements and criteria and can replace a whole requirement (`replaces`), but cannot edit
 or remove an existing acceptance criterion or retire a requirement. Restating `spec-document-authority`'s `ac136` (which
