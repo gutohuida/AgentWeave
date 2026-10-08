@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "specjson-t2-impl",
-    "next_action": "Do queue item specjson-t2-impl: spec.json storage seam in hub/hub/spec_documents.py (read_payload/write_payload, deterministic JSON + hub block), move every reader onto it, GET /spec renders HTML from spec.json, path rules/discovery/naming/index on spec.json, .html create refused (400 naming the .json path), legacy_html_document diagnostic, journey moves write the hub block. Failing Hub tests first (guarded with xfail strict/importorskip so CI stays green); run hub suite with -n auto. Split into sub-units if one firing cannot finish.",
+    "current": "specjson-t2b-impl",
+    "next_action": "Do queue item specjson-t2b-impl: flip spec-document storage to spec.json behind the seam landed in iteration 3 (spec_documents.parse_stored/read_payload). Plan and decisions in the night log, iteration 3. Lands green in one commit: product flip + test-suite fallout together; run hub suite with -n auto and the CLI suite before committing.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -23,9 +23,16 @@
         },
         {
             "id": "specjson-t2-impl",
+            "status": "done",
+            "title": "spec-storage task storage, part a: the read seam (parse_stored/read_payload), every reader on it, CLI twin deleted",
+            "detail": "done 2026-10-09 iteration 3: seam + FR-4 guard test; no format change; suites green.",
+            "model": "opus"
+        },
+        {
+            "id": "specjson-t2b-impl",
             "status": "open",
-            "title": "spec-storage task storage: spec.json storage seam, render on open, json paths",
-            "detail": "storage payload change a-spec-document-is-stored-as-its-payload, payload keys tasks: drive-first, storage, convert, corpus (corpus FENCED, not tonight). Failing Hub tests first; run hub suite with -n auto.",
+            "title": "spec-storage task storage, part b: flip to spec.json (writes, paths, discovery, GET /spec renders, journey hub block)",
+            "detail": "parse_stored reads JSON (pops 'hub'); new write_payload (sort_keys, indent 2, LF, trailing NL, hub={phase,rigor,step,size}) replaces every write of rendered HTML; GET /spec renders with corpus ctx; validate_spec_path/discovery/spec_naming on .json (index.json reserved), .html create 400, legacy_html_document diag; conflicts from hub block; journey writes hub. Tests: sed spec/*.html->.json, then ~33 files build HTML and ~74 read file text. Must land green in one commit; plan in log iteration 3.",
             "model": "opus"
         },
         {

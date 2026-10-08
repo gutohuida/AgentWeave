@@ -239,8 +239,7 @@ def _delivery_of(payload: Optional[Dict[str, Any]]) -> Optional[spec_payload_mod
 
 
 def _read_payload(workspace, path: str) -> Optional[Dict[str, Any]]:
-    content = spec_documents.read_document(workspace, path)
-    return spec_payload_module.extract_payload(content) if content else None
+    return spec_documents.read_payload(workspace, path)
 
 
 async def _delivery_status(
@@ -354,7 +353,7 @@ async def get_spec(
     document = await spec_lifecycle.get_document(session, project_id, path)
     if document is not None:
         status_now = await _delivery_status(
-            session, project_id, document, spec_payload_module.extract_payload(content)
+            session, project_id, document, spec_documents.parse_stored(content)
         )
         if status_now is not None:
             payload["delivery_status"] = status_now
@@ -365,7 +364,7 @@ async def get_spec(
             payload["retired"] = await _retirement(session, document)
         # The roadmap slice this document specifies, so the app can offer "Draft the next slice"
         # beside Approve (C1a D7). Absent on every other document.
-        link = (spec_payload_module.extract_payload(content) or {}).get("roadmap")
+        link = (spec_documents.parse_stored(content) or {}).get("roadmap")
         if document.kind == "change-spec" and isinstance(link, dict):
             payload["roadmap_slice"] = {
                 "document": link.get("document"),

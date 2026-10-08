@@ -29,7 +29,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import spec_documents, spec_identity, spec_payload
+from . import spec_documents, spec_identity
 from .db.models import SpecDocument, SpecRequirement
 from .project_workspace import ProjectWorkspace
 
@@ -63,7 +63,7 @@ async def payloads_for_documents(
             # A path that no longer resolves, a directory that moved, a permission problem. The
             # wording is unavailable; that is all this means.
             content = None
-        payloads[row.id] = spec_payload.extract_payload(content) if content else None
+        payloads[row.id] = spec_documents.parse_stored(content)
     return payloads
 
 

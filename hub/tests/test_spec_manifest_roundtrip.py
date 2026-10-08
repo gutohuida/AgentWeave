@@ -1,17 +1,14 @@
-"""The index must be writable, and the two implementations must agree on what it may say.
+"""The index must be writable, and say only what the product can produce.
 
-Two properties are asserted here that nothing asserted before:
+Asserted here:
 
 1. **Round trip.** `load_manifest(dump_manifest(m))` returns `m`. Before this change there was no
    writer at all — every reference to `index.json` in the repository was a read — so a format the
    product could parse but never produce went unnoticed for three weeks.
 
-2. **Twin agreement.** `hub/hub/spec_manifest.py` and `src/agentweave/spec_manifest.py` are kept in
-   sync by hand and deliberately have no import relationship (CLAUDE.md). That rule had no test,
-   and the cost was concrete: *both* twins carried the identical `VALID_KINDS` omission that made
-   every capability document unindexable. A test is the only thing that can hold two copies
-   together, and importing both is legitimate here precisely because observing both sides is the
-   job.
+The CLI twin (`src/agentweave/spec_manifest.py`) had no importer and was deleted with its
+agreement tests (`a-spec-document-is-stored-as-its-payload` D6); the vocabulary check against the
+lifecycle stays.
 """
 
 from __future__ import annotations
@@ -20,12 +17,10 @@ import json
 
 import pytest
 
-from agentweave import spec_manifest as cli_manifest
 from hub import spec_manifest as hub_manifest
 
 MODULES = [
     pytest.param(hub_manifest, id="hub"),
-    pytest.param(cli_manifest, id="cli"),
 ]
 
 
@@ -49,17 +44,7 @@ def _legal_pairs(module):
     ]
 
 
-class TestTwinAgreement:
-    def test_the_two_implementations_accept_the_same_kinds(self):
-        assert hub_manifest.VALID_KINDS == cli_manifest.VALID_KINDS
-
-    def test_the_two_implementations_accept_the_same_phases(self):
-        assert hub_manifest.VALID_PHASES == cli_manifest.VALID_PHASES
-
-    def test_the_two_implementations_pair_kinds_and_phases_identically(self):
-        for kind in sorted(hub_manifest.VALID_KINDS):
-            assert hub_manifest.permitted_phases(kind) == cli_manifest.permitted_phases(kind), kind
-
+class TestVocabulary:
     def test_the_vocabulary_matches_the_hubs_lifecycle(self):
         """The phases are restated in both twins rather than imported, so they can drift from the
         lifecycle itself. This is the assertion that catches that — if a future change lets a
@@ -135,19 +120,3 @@ class TestRoundTrip:
 
     def test_build_manifest_refuses_an_empty_corpus(self, module):
         assert module.build_manifest([], home=None) is None
-
-
-@pytest.mark.parametrize("module", MODULES)
-def test_a_manifest_written_by_one_twin_parses_in_the_other(module):
-    """The round trip must cross the module boundary, not just close within one twin."""
-    other = cli_manifest if module is hub_manifest else hub_manifest
-    documents = [
-        _document(module, f"spec/doc-{index}.html", kind, phase, order=index * 10)
-        for index, (kind, phase) in enumerate(_legal_pairs(module))
-    ]
-    text = module.dump_manifest(module.build_manifest(documents, home=documents[0].path))
-
-    parsed, diagnostics = other.load_manifest(text)
-    assert diagnostics == []
-    assert parsed is not None
-    assert len(parsed.documents) == len(documents)

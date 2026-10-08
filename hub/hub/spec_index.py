@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import spec_digest, spec_identity, spec_lifecycle
 from .db.models import RequirementDrift, SpecDocument, SpecRequirement, SpecRequirementRevision
 from .project_workspace import ProjectWorkspace
-from .spec_payload import PayloadError, extract_payload, validate_payload
+from .spec_payload import PayloadError, validate_payload
 from .spec_render import requirement_anchor
 from .utils import short_id
 
@@ -335,7 +335,7 @@ async def reindex_from_file(
     content = spec_documents.read_document(workspace, document.path)
     if content is None:
         return None
-    requirements = requirements_from_payload(extract_payload(content))
+    requirements = requirements_from_payload(spec_documents.parse_stored(content))
     if requirements is None:
         return None
     return await reindex_document(session, document, requirements, actor=actor, source=source)

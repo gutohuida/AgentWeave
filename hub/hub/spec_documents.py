@@ -143,6 +143,26 @@ def read_document(workspace: ProjectWorkspace, path: str) -> Optional[str]:
     return resolved.read_text(encoding="utf-8")
 
 
+def parse_stored(content: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The payload a stored document file holds, or ``None`` when it holds none.
+
+    The one interpretation of a stored file (`a-spec-document-is-stored-as-its-payload` FR-4):
+    every Hub reader of a document's payload gets it here or through `read_payload`, and none
+    parses file content itself, so changing what a stored file is changes this function alone.
+    """
+    if not content:
+        return None
+    return extract_payload(content)
+
+
+def read_payload(workspace: ProjectWorkspace, path: str) -> Optional[Dict[str, Any]]:
+    """The payload of the document at `path`, or ``None`` when there is no file or no payload.
+
+    Raises what `read_document` raises: a caller decides what an unreadable file means to it.
+    """
+    return parse_stored(read_document(workspace, path))
+
+
 def document_updated_at(workspace: ProjectWorkspace, path: str) -> str:
     """When the document was last written, as an ISO timestamp."""
     validate_spec_path(path)
@@ -385,10 +405,7 @@ def corpus_summaries(workspace: ProjectWorkspace, manifest: Manifest) -> Dict[st
     """
     summaries: Dict[str, str] = {}
     for document in manifest.documents:
-        content = read_document(workspace, document.path)
-        if content is None:
-            continue
-        stored = extract_payload(content)
+        stored = read_payload(workspace, document.path)
         if stored is None:
             continue
         summary = stored.get("summary")

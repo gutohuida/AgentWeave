@@ -7,7 +7,7 @@ clone, a migration, a restored machine — is readable and inert.
 
 **This module never writes to disk, and that is structural rather than a
 convention.** It imports nothing that writes: `read_document` and
-`parse_html_head` read, `extract_payload` parses a string. The one function here
+`parse_html_head` read, `spec_documents.parse_stored` parses a string. The one function here
 that reaches the database (`adopt`) calls `spec_lifecycle.create_document`, which
 takes no workspace and therefore *cannot* touch the filesystem. A reviewer
 checking that adoption is read-only does not have to read the whole call tree —
@@ -36,7 +36,7 @@ from . import spec_documents, spec_index, spec_lifecycle
 from .db.models import SpecDocument
 from .project_workspace import ProjectPathError, ProjectWorkspace
 from .spec_manifest import SpecPathError, parse_html_head, validate_spec_path
-from .spec_payload import KINDS, extract_payload, has_payload_block
+from .spec_payload import KINDS, has_payload_block
 
 #: Every phase a row may hold. `current` is included and `transition()` never
 #: accepts it — a capability document reaches it through creation only, which is
@@ -188,7 +188,7 @@ def identity_from_content(path: str, content: str) -> Adoptable:
     string without a workspace, and so corpus-wide adoption can read each file
     once rather than once per concern.
     """
-    payload = extract_payload(content)
+    payload = spec_documents.parse_stored(content)
     if payload is None:
         # The two ways a payload can be missing need different remedies — write
         # the document through the Hub, versus repair a block that is already

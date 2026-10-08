@@ -32,9 +32,8 @@ from . import requirement_evidence, worktrees
 from .db.models import Agent, Project, SpecDocument, Task
 from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 from .repo_hygiene import seed_repo_excludes
-from .spec_documents import read_document
+from .spec_documents import parse_stored, read_document
 from .spec_manifest import SpecPathError
-from .spec_payload import extract_payload
 from .subprocess_windows import no_console_kwargs
 
 logger = logging.getLogger(__name__)
@@ -180,7 +179,7 @@ async def _declared_reviewer_name(
         return nobody
     if content is None:
         return nobody
-    payload = extract_payload(content)
+    payload = parse_stored(content)
     if not isinstance(payload, dict):
         return nobody
 

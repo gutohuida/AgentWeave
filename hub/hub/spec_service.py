@@ -33,7 +33,6 @@ from .spec_payload import (
     KEY_RE,
     PayloadError,
     SpecPayload,
-    extract_payload,
     payload_to_dict,
     validate_payload,
 )
@@ -203,7 +202,7 @@ async def save_document(
     # has no identity block, and every key is then new — which is why the
     # divergence below is reported rather than swallowed.
     existing_content = spec_documents.read_document(workspace, document.path)
-    stored_before = extract_payload(existing_content) if existing_content else None
+    stored_before = spec_documents.parse_stored(existing_content)
 
     if document.rigor in (spec_rigor.CONTRACT, spec_rigor.GATE):
         return await propose_edit(session, document, payload, stored_before, actor=actor)
@@ -675,7 +674,7 @@ async def accept_proposal(
         )
 
     existing_content = spec_documents.read_document(workspace, document.path)
-    stored_before = extract_payload(existing_content) if existing_content else {}
+    stored_before = spec_documents.parse_stored(existing_content) or {}
     merged = _apply_unit(stored_before or {}, proposal)
     try:
         payload = validate_payload(merged)
@@ -867,8 +866,7 @@ def fold_key(change_path: str, key: str) -> str:
 
 
 def _read(workspace: ProjectWorkspace, document: SpecDocument) -> Dict[str, Any]:
-    content = spec_documents.read_document(workspace, document.path)
-    payload = extract_payload(content) if content else None
+    payload = spec_documents.read_payload(workspace, document.path)
     if payload is None:
         raise FoldRefusedError(f"{document.path} has no readable content", code="fold_unreadable")
     return payload
@@ -1167,7 +1165,7 @@ def roadmap_slices(workspace: ProjectWorkspace, path: str) -> List[Dict[str, Any
         content = spec_documents.read_document(workspace, path)
     except Exception:  # noqa: BLE001 -- an unreadable roadmap holds no slice, which is the finding
         return []
-    stored = extract_payload(content) if content else None
+    stored = spec_documents.parse_stored(content)
     slices = (stored or {}).get("slices") or []
     return [item for item in slices if isinstance(item, dict) and item.get("key")]
 
@@ -1185,7 +1183,7 @@ def slice_of(workspace: ProjectWorkspace, payload: SpecPayload) -> Optional[Slic
         content = spec_documents.read_document(workspace, path)
     except Exception:  # noqa: BLE001 -- the line degrades to the key and the path
         content = None
-    stored = (extract_payload(content) if content else None) or {}
+    stored = spec_documents.parse_stored(content) or {}
     named = next(
         (
             item
@@ -1239,8 +1237,7 @@ async def phase_blockers(
     if to_phase not in (spec_lifecycle.PROPOSED, spec_lifecycle.APPROVED):
         return []
 
-    content = spec_documents.read_document(workspace, document.path)
-    stored = extract_payload(content) if content else None
+    stored = spec_documents.read_payload(workspace, document.path)
     if stored is None:
         raise SaveRefusedError(
             "this document carries no payload to check; it has not been written by the Hub",
@@ -1320,8 +1317,7 @@ async def rerender_phase(
     operator — but if this fails, the phase in the database is still what
     counts.
     """
-    content = spec_documents.read_document(workspace, document.path)
-    stored = extract_payload(content) if content else None
+    stored = spec_documents.read_payload(workspace, document.path)
     if stored is None:
         return
     try:
@@ -1376,7 +1372,7 @@ async def rerender_corpus(
         if current is None:
             skipped.append({"path": entry.path, "reason": "file_missing"})
             continue
-        stored = extract_payload(current)
+        stored = spec_documents.parse_stored(current)
         if stored is None:
             skipped.append({"path": entry.path, "reason": "no_readable_payload"})
             continue

@@ -1,12 +1,8 @@
 """Spec manifest: safe path validation, manifest structural validation, and
-HTML `<head>` metadata parsing — the Hub's own copy.
+HTML `<head>` metadata parsing.
 
-The Hub is a separate deployable from the CLI and is the actual security
-boundary for spec sync, so it repeats this validation independently rather
-than importing `agentweave.spec_manifest`. Keep the two in sync by hand;
-they intentionally have no import relationship. See
-`src/agentweave/spec_manifest.py` for the CLI-side twin (used for local
-discovery, which the Hub does not do — it only ever sees uploaded content).
+The CLI-side twin had no importer and was deleted (`a-spec-document-is-stored-as-its-payload`
+D6); this is the only implementation.
 """
 
 from __future__ import annotations

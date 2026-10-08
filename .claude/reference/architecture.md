@@ -23,7 +23,6 @@ src/agentweave/
 ├── eventlog.py         # Read-path utilities for events.jsonl
 ├── stream_events.py    # Canonical run-event kinds shared with the Hub's parsers
 ├── tool_surface.py     # The agent capability surface description
-├── spec_manifest.py    # Spec manifest read/write
 ├── logging_handlers.py # JSONRotatingFileHandler + HubHandler
 ├── constants.py        # All valid values, regex patterns, directory paths
 ├── utils.py            # load_json, save_json, generate_id, now_iso, print_* helpers

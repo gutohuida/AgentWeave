@@ -1507,7 +1507,7 @@ async def read_spec_document(
     (`identifiers=`, `include=<section>`). A read naming `identifiers` leaves the preamble out. A
     document id (`spdoc-…`) is accepted where the path goes.
     """
-    from ... import project_workspace, spec_documents, spec_lifecycle, spec_payload, spec_reading
+    from ... import project_workspace, spec_documents, spec_lifecycle, spec_reading
     from ...db.models import SpecDocument, SpecRequirement
     from ...spec_manifest import SpecPathError, validate_spec_path
 
@@ -1562,7 +1562,7 @@ async def read_spec_document(
             detail=f"the document at {resolved} is registered but its file is missing.",
         )
 
-    payload = spec_payload.extract_payload(content)
+    payload = spec_documents.parse_stored(content)
     rows = (
         (
             await session.execute(
@@ -1834,7 +1834,6 @@ async def _journey_document(session: AsyncSession, project_id: str, raw_path: st
     """The change document a journey call names, with its payload, or the refusal that says why."""
     from ... import project_workspace, spec_documents, spec_journey, spec_lifecycle
     from ...spec_manifest import SpecPathError, validate_spec_path
-    from ...spec_payload import extract_payload
 
     try:
         path = validate_spec_path(raw_path)
@@ -1854,8 +1853,7 @@ async def _journey_document(session: AsyncSession, project_id: str, raw_path: st
     payload = None
     try:
         workspace = await project_workspace.resolve_project_workspace(session, project_id)
-        text = spec_documents.read_document(workspace, path)
-        payload = extract_payload(text) if text else None
+        payload = spec_documents.read_payload(workspace, path)
     except (project_workspace.ProjectWorkspaceError, OSError, ValueError):
         payload = None
     return document, payload

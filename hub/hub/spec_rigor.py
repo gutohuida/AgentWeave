@@ -137,13 +137,14 @@ def promotion_blockers(content: Optional[str]) -> List[str]:
     Demotion never consults this: a document that has stopped parsing is exactly
     the one an operator most needs to be able to stop enforcing.
     """
+    from .spec_documents import parse_stored
     from .spec_identity import read_identity
-    from .spec_payload import PayloadError, extract_payload, validate_payload
+    from .spec_payload import PayloadError, validate_payload
 
     if content is None:
         return ["the document has no content the Hub can read"]
 
-    stored = extract_payload(content)
+    stored = parse_stored(content)
     if stored is None:
         return ["the document carries no payload; it was not written by the Hub"]
 
