@@ -34,8 +34,51 @@ DELETE_TESTS = "hub/tests/test_the_operator_can_delete_a_document_a_task_or_an_a
 REFRESH_TESTS = "hub/tests/test_re_approving_refreshes_open_tasks.py"
 RETIRE_TESTS = "hub/tests/test_a_capability_can_be_retired.py"
 RETIRE_DRIVE = "scripts/drive/d1008_retire_capability_drive.py"
+COLLAB_TESTS = "hub/ui/src/__tests__/collaborationSummary.test.tsx"
+CHIP_TESTS = "hub/ui/src/__tests__/agentPostureChips.test.tsx"
+SETTINGS_TESTS = "hub/ui/src/__tests__/projectSettingsPanel.test.tsx"
+PROJECT_PAGE_DRIVE = "scripts/drive/d1008_project_page_settings.py"
 
 CHANGES = {
+    "f379": {
+        "document": "spec/changes/the-settings-that-gate-collaboration-are-on-the-project-page/spec.html",
+        "commit": "e38f017",
+        "tasks": ["task-cb35c27ccb6e", "task-c8730b35bd7a"],
+        "evidence": [
+            ("FR-1", "task-c8730b35bd7a", "test_result", COLLAB_TESTS,
+             "The Overview's Collaboration block, mounted above Attention, reads flows, hop budget, "
+             "token budget, merge branch, checks and limits as live values, each linked to where it "
+             "is edited; no limit and no branch are flagged."),
+            ("FR-1", "task-cb35c27ccb6e", "manual_observation", PROJECT_PAGE_DRIVE,
+             "The acceptance drive, written and run before the build: 0/1 on today's bundle (no "
+             "Collaboration block on a loaded Overview)."),
+            ("FR-2", "task-c8730b35bd7a", "test_result", COLLAB_TESTS,
+             "Switching agents may start flows sends {allow_agent_jobs} alone; a refused save is "
+             "shown and the stored value kept."),
+            ("FR-3", "task-c8730b35bd7a", "test_result", CHIP_TESTS,
+             "An agent whose queue is held past the hop budget is flagged on its card, and the block "
+             "counts the held agents (collaborationSummary FR-3). Unit-tested only; not seen live."),
+            ("FR-4", "task-c8730b35bd7a", "manual_observation", PROJECT_PAGE_DRIVE,
+             "In Chromium on a scratch Hub: beta's evidence chip off, alpha's on; clicking beta's "
+             "grants beta evidence only. vitest agentPostureChips: pressed chips, one-agent switch."),
+            ("FR-5", "task-c8730b35bd7a", "manual_observation", PROJECT_PAGE_DRIVE,
+             "Details start collapsed; expanded they show the built-in posture, the bound runner and "
+             "the 120 s/240 s wait fallbacks, while the other agent's stay collapsed."),
+            ("FR-6", "task-c8730b35bd7a", "manual_observation", PROJECT_PAGE_DRIVE,
+             "Settings group headings read Collaboration, Integration, Checkpointing, Conversations, "
+             "Project in Chromium; vitest projectSettingsPanel 'groups its rows under headings'."),
+            ("FR-7", "task-c8730b35bd7a", "manual_observation", PROJECT_PAGE_DRIVE,
+             "Settings renders no token budget input and its save sends no token_budget while the "
+             "hop budget lands; vitest 'leaves the token budget to Budgets'."),
+            ("FR-8", "task-c8730b35bd7a", "test_result", SETTINGS_TESTS,
+             "Settings and the Overview say agent budget caps agents an agent staffs, not agents "
+             "running at once (both components' FR-8 cases)."),
+            ("FR-10", "task-c8730b35bd7a", "manual_observation", PROJECT_PAGE_DRIVE,
+             "A settings change from another surface flips the Overview's flows value to On without "
+             "a reload (project_settings_updated invalidates the settings query); 10/10 after the "
+             "build, vitest 1953/1953."),
+        ],
+    },
     "f536": {
         "document": "spec/changes/a-capability-can-be-retired/spec.html",
         "commit": "14695f6",
