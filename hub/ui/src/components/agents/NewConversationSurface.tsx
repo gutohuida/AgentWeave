@@ -5,7 +5,7 @@ import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
 import { useWorkspacePaths } from '@/api/workspace'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
-import { ApiError, postJson, readableRefusal } from '@/api/client'
+import { ApiError, deleteJson, postJson, readableRefusal } from '@/api/client'
 import { agentColorVars } from '@/lib/agentColors'
 import { useConfigStore } from '@/store/configStore'
 import { Composer } from './Composer'
@@ -97,17 +97,33 @@ export function NewConversationSurface({
       }
     }
 
-    const response = await fetch(`/api/v1/projects/${projectId}/agent/trigger`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        agent,
-        message,
-        spec_document: specDocument ?? undefined,
-        overrides: Object.keys(sentOverrides).length > 0 ? sentOverrides : undefined,
-      }),
-    })
+    /* A turn that never starts must not leave its document behind (F330): each refused retry used
+     * to mint another empty `exploring` placeholder. Withdrawn through the Hub's own delete, which
+     * removes the row, the file and its index entry; best effort, since the refusal is what the
+     * operator needs to read, and an orphan is the lesser loss. */
+    const withdraw = () => {
+      if (!specDocument) return
+      void deleteJson(`/api/v1/projects/${projectId}/project/documents/${specDocument}`).catch(() => undefined)
+    }
+
+    let response: Response
+    try {
+      response = await fetch(`/api/v1/projects/${projectId}/agent/trigger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          agent,
+          message,
+          spec_document: specDocument ?? undefined,
+          overrides: Object.keys(sentOverrides).length > 0 ? sentOverrides : undefined,
+        }),
+      })
+    } catch (failure) {
+      withdraw()
+      throw failure
+    }
     if (!response.ok) {
+      withdraw()
       // The Hub's own sentence, where it has one (F108). It refuses a request it will never
       // honour and says why; 'Could not start the conversation' throws that away and leaves the
       // operator with a dead composer and no remedy.

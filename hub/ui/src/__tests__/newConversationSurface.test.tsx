@@ -346,6 +346,74 @@ describe('declaring an exploration before the first message', () => {
   })
 })
 
+describe('a refused exploring first message leaves no document behind (F330)', () => {
+  const minted = 'spec/changes/emerald-fenrir/spec.html'
+
+  beforeEach(() => {
+    cleanup()
+    localStorage.clear()
+    fetchMock.mockReset()
+    useConfigStore.setState({
+      apiKey: 'aw_live_TESTKEY',
+      hubUrl: 'http://hub.test',
+      selectedProjectId: 'proj-a',
+      isConfigured: true,
+      bootstrapState: 'ready',
+    })
+  })
+
+  function answer(trigger: () => Promise<Response>) {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      const u = String(url)
+      if (u.includes('/agent/trigger')) return trigger()
+      if (init?.method === 'DELETE')
+        return Promise.resolve(new Response(JSON.stringify({ path: minted, deleted: true }), { status: 200 }))
+      return Promise.resolve(new Response(JSON.stringify({ id: 'spdoc-1', path: minted }), { status: 201 }))
+    })
+  }
+
+  function deletes() {
+    return fetchMock.mock.calls
+      .filter(([, init]) => (init as RequestInit | undefined)?.method === 'DELETE')
+      .map(([url]) => String(url))
+  }
+
+  async function sendExploring() {
+    renderSurface('claude')
+    fireEvent.click(screen.getByTestId('composer-start-exploration'))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'An idea' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+  }
+
+  it('withdraws the document it created when the Hub refuses the turn, and still says why', async () => {
+    answer(() => Promise.resolve(new Response(JSON.stringify({ detail: 'claude is busy' }), { status: 409 })))
+    await sendExploring()
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('claude is busy'))
+    await waitFor(() => expect(deletes()).toEqual([`http://hub.test/api/v1/projects/proj-a/project/documents/${minted}`]))
+  })
+
+  it('withdraws it when the turn never reaches the Hub', async () => {
+    answer(() => Promise.reject(new TypeError('Failed to fetch')))
+    await sendExploring()
+
+    await waitFor(() => expect(deletes()).toEqual([`http://hub.test/api/v1/projects/proj-a/project/documents/${minted}`]))
+  })
+
+  it('deletes nothing when the turn starts', async () => {
+    answer(() =>
+      Promise.resolve(new Response(JSON.stringify({ status: 'started', conversation_id: 'c' }), { status: 200 })),
+    )
+    const { onStarted } = renderSurface('claude')
+    fireEvent.click(screen.getByTestId('composer-start-exploration'))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'An idea' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    await waitFor(() => expect(onStarted).toHaveBeenCalled())
+    expect(deletes()).toEqual([])
+  })
+})
+
 describe('a refused first message (F108)', () => {
   beforeEach(() => {
     cleanup()
