@@ -363,6 +363,85 @@ def _check_kind_shape(payload: SpecPayload) -> None:
                 )
 
 
+#: Fields `spec_reading.requirement_view` adds to a requirement. The Hub owns them (identity lives in
+#: `aw_identity`), so a submission carrying them back is a read being resubmitted, never an edit.
+READ_VIEW_FIELDS = ("identifier", "state", "anchor")
+
+
+def _is_criterion(value: Any) -> bool:
+    return isinstance(value, dict) and all(
+        isinstance(value.get(part), str) for part in ("key", "given", "when", "then")
+    )
+
+
+def _lift_read_view(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Accept what `read_spec_document` returns as a submission, without losing anything (F452).
+
+    The read nests each requirement's criteria under it, adds the Hub's identifier, state and
+    anchor, and lists retired requirements (no statement). Resubmitted as-is, the nested criteria
+    were kept as unknown extras and the flat list was empty, so every criterion was deleted.
+
+    Here nested criteria join the flat list under their requirement's key, the read-only fields are
+    dropped, and a retired requirement is left out, since the document no longer declares it. A
+    nested criterion that disagrees with a flat one of the same key, or names another requirement,
+    is refused; so is a truncated read, whose cut criteria would be saved as deleted.
+    """
+    requirements = raw.get("requirements")
+    if not isinstance(requirements, list) or not any(
+        isinstance(r, dict) and ("acceptance_criteria" in r or "identifier" in r)
+        for r in requirements
+    ):
+        return raw
+
+    flat = raw.get("acceptance_criteria")
+    criteria: List[Any] = list(flat) if isinstance(flat, list) else []
+    by_key = {c.get("key"): c for c in criteria if isinstance(c, dict)}
+    kept: List[Any] = []
+    for index, requirement in enumerate(requirements):
+        if not isinstance(requirement, dict):
+            kept.append(requirement)
+            continue
+        where = f"requirements[{index}]"
+        if requirement.get("section_truncated"):
+            raise PayloadError(
+                "this requirement comes from a truncated read; resubmitting it would delete what "
+                "the read cut. Read it whole (read_spec_document with identifiers=) and submit that",
+                field=f"{where}.section_truncated",
+            )
+        if requirement.get("state") == "retired":
+            continue
+        requirement = {k: v for k, v in requirement.items() if k not in READ_VIEW_FIELDS}
+        nested = requirement.get("acceptance_criteria")
+        if not isinstance(nested, list) or not all(_is_criterion(c) for c in nested):
+            # Not the read's shape (F502: an agent invented its own). Left where it is, so the
+            # completeness check can say the field is not read and where criteria go.
+            kept.append(requirement)
+            continue
+        del requirement["acceptance_criteria"]
+        for criterion in nested:
+            criterion = {**criterion}
+            named = criterion.setdefault("requirement", requirement.get("key"))
+            if named != requirement.get("key"):
+                raise PayloadError(
+                    f"criterion {criterion.get('key')!r} is nested under {requirement.get('key')!r} "
+                    f"but names requirement {named!r}",
+                    field=f"{where}.acceptance_criteria",
+                )
+            existing = by_key.get(criterion.get("key"))
+            if existing is None:
+                by_key[criterion.get("key")] = criterion
+                criteria.append(criterion)
+            elif existing != criterion:
+                raise PayloadError(
+                    f"criterion {criterion.get('key')!r} appears nested under "
+                    f"{requirement.get('key')!r} and in acceptance_criteria with different content; "
+                    "give it once",
+                    field=f"{where}.acceptance_criteria",
+                )
+        kept.append(requirement)
+    return {**raw, "requirements": kept, "acceptance_criteria": criteria}
+
+
 def validate_payload(raw: Any) -> SpecPayload:
     """Parse and check a submitted payload, or raise `PayloadError` naming the field.
 
@@ -371,6 +450,7 @@ def validate_payload(raw: Any) -> SpecPayload:
     """
     if not isinstance(raw, dict):
         raise PayloadError("payload must be an object", field="")
+    raw = _lift_read_view(raw)
 
     # Stated before anything else, and by name. A missing version reported as a
     # downstream type error sends the author to fix the wrong thing.

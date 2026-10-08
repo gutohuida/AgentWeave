@@ -4020,9 +4020,11 @@ def read_spec_document(
     those identifiers**: they are what tasks, evidence and completion gates refer to, so naming them
     is how your work is traceable to what it satisfies.
 
-    **This view is not the shape `submit_spec_document` takes.** To resubmit, put acceptance
-    criteria in the top-level `acceptance_criteria` list, each naming its requirement's `key`, and
-    leave out the Hub's `identifier`, `state` and `anchor` (F452).
+    **You can pass these `requirements` back to `submit_spec_document` as they are** (F452): the
+    Hub lifts each nested criterion into the top-level list under its requirement's key, drops its
+    own `identifier`, `state` and `anchor`, and leaves out retired requirements. A requirement
+    marked `section_truncated` is refused, because resubmitting it would delete what the read cut:
+    read it whole first.
 
     Also returns `phase` and `rigor`, which say how settled this document is. Readable at any phase
     — an unapproved document is still worth reading, and its phase tells you not to build on it yet.
