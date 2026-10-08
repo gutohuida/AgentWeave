@@ -547,6 +547,22 @@
       "order": 650
     },
     {
+      "path": "spec/changes/a-spec-is-written-one-step-at-a-time-roadmap/spec.html",
+      "title": "A spec is written one step at a time, and a tester keeps it true",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 760
+    },
+    {
+      "path": "spec/changes/a-spec-is-written-one-step-at-a-time/spec.html",
+      "title": "A spec is written one step at a time",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 770
+    },
+    {
       "path": "spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks/spec.html",
       "title": "Re-approving an amended document refreshes its open tasks",
       "kind": "change-spec",
