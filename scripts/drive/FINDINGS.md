@@ -34934,3 +34934,35 @@ Hub already applies the remedy elsewhere: `conversation_titles.py:82` passes `--
 Likely fix: `--strict-mcp-config` whenever `_claude_mcp_args` injects the Hub's server (and decide what a run with no
 server gets). Acceptance drive: a Hub run's tool list on `:8010` names no `claude_ai_*` server.
 
+## F532 (C) -- the Hub cannot delete a specification document, a task or an agent
+
+**Status:** open (filed 2026-10-08, interactive, from cleaning the trial project `proj-d85a82bf4216`).
+
+The operator API deletes projects, runners, jobs and charters (`@router.delete` in `projects.py`, `runners.py`,
+`jobs.py`, `charters.py`) and nothing else. Clearing drive residue out of this repo's own trial project (26 documents
+with no file, 28 tasks, 20 archived agents and their 168 runs) therefore took a hand-written cascade over 30 tables
+against the database with the Hub stopped (4,793 rows; backup `agentweave.db.bak-20261008-cleanup`). An archived agent
+also still blocks deleting its runner (`runners.py:238`), so archive is not a way out. Likely shape: delete for an
+exploring/proposed document that produced nothing (the archive edge F37 already allows), for a task nobody worked, and
+for an archived agent with its history -- each refusing what has evidence or a merge behind it.
+
+## F533 (C) -- a fold cannot amend or retire what a capability already says
+
+**Status:** open (filed 2026-10-08, interactive, closing `a-finished-change-is-folded-into-its-capability` with its own
+fold). A non-goal of that change, now with a concrete case.
+
+The fold appends a change's requirements and criteria and can replace a whole requirement (`replaces`), but cannot edit
+or remove an existing acceptance criterion or retire a requirement. Restating `spec-document-authority`'s `ac136` (which
+the change contradicts) took a second, hand-built merge naming no change (`a504858`). A change that narrows or retires
+behaviour has no fold path at all. Likely shape: the change payload states what it modifies or removes in the capability
+(by key), and the fold draft shows those edits beside the appended text.
+
+## F534 (C) -- a merge into a capability answers with change-spec completeness findings
+
+**Status:** open (filed 2026-10-08, interactive, from the `ac136` merge edit).
+
+`POST .../documents/{capability}/merge` returned 200 with `blocking` holding `non_goals_empty` and 76
+`requirement_without_task` entries for `spec-document-authority`: the completeness checks for a change document run
+against a capability, which by design has no tasks and no non-goals. Nothing is blocked (the merge wrote), but a caller
+reading `blocking` sees a document that is wrong in 77 ways. Likely fix: skip the task and scope rules for
+`kind == "capability"` in the completeness check, or omit `blocking` from the merge response.
