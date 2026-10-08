@@ -2262,3 +2262,13 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-10-08 (home) -- a scratch Hub for a UI drive**: `AW_BOOTSTRAP_API_KEY=aw_live_<32 hex>` plus a fresh
   `DATABASE_URL` gives a usable key with no setup; `scripts/drive/d1008_project_page_settings.py` starts and kills its
   own on :8097 and serves the committed bundle (run `scripts/refresh_ui_bundle.py` first).
+- **2026-10-08 (home) -- a UI-only change still needs the Hub suite**: `hub/tests/test_surface_ceilings.py` measures
+  `hub/ui/src` (n11: every query call site must bind and use its `error`, or be classified). R2/F379 pushed with vitest and
+  a drive green and failed CI on it (F559). Run `py -3.11 -m pytest hub/tests/test_surface_ceilings.py -q` before
+  pushing any component that calls a query hook.
+- **2026-10-08 (home) -- operator document routes take the path as a query string**: `POST
+  /project/documents/close-exploration?path=`, `/documents/propose?path=`, `/documents/phase?path=&to=` (a JSON
+  `{"path":...}` body answers 422 `query.path missing`). Create is `POST /project/documents` with a JSON body; content
+  is `PUT /project/documents/{path}/content` with `{"document": <payload>}`.
+- **2026-10-08 (home) -- `pathlib.write_text` on Windows writes CRLF**; git warns and stores LF, so the commit is
+  clean, but a byte comparison against the working copy differs. Pass `newline="\n"` when it matters.
