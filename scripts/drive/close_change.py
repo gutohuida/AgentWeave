@@ -30,6 +30,7 @@ DEFAULT_REVIEWER_TESTS = "hub/tests/test_a_document_names_its_default_reviewer.p
 STRICT_MCP_TESTS = "hub/tests/test_a_hub_run_gets_only_the_hubs_tool_server.py"
 FOLD_TESTS = "hub/tests/test_a_finished_change_is_folded_into_its_capability.py"
 DELETE_TESTS = "hub/tests/test_the_operator_can_delete_a_document_a_task_or_an_archived_agent.py"
+REFRESH_TESTS = "hub/tests/test_re_approving_refreshes_open_tasks.py"
 
 CHANGES = {
     "f440": {
@@ -208,6 +209,32 @@ CHANGES = {
             ("FR-3", "task-85b425296f6f", "manual_observation",
              "scripts/drive/d1008_fold_retire_drive.py",
              "The acceptance drive, written and run before the build: 2/7 on today's Hub."),
+        ],
+    },
+    "f535": {
+        "document": "spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks/spec.html",
+        "tasks": ["task-d89b47b08bed", "task-eb792ba57e58", "task-c0ebc563e02d"],
+        "evidence": [
+            ("FR-1", "task-eb792ba57e58", "test_result", REFRESH_TESTS,
+             "An open, assigned, in-progress task follows the amended document: title, description, "
+             "criteria, and its links to this document's requirements (retired one unlinked, new "
+             "ones linked); status, assignee, priority and another document's link unchanged (red "
+             "before the build)."),
+            ("FR-2", "task-eb792ba57e58", "test_result", REFRESH_TESTS,
+             "An approved and a rejected task keep title, description, criteria, status and links "
+             "when their entries change."),
+            ("FR-3", "task-eb792ba57e58", "test_result", REFRESH_TESTS,
+             "approval_outcome lists refreshed (fields, linked, unlinked), closed_linking_retired "
+             "and no_longer_declared, an unchanged open task is not listed, and GET /spec serves "
+             "the same stored report (red before the build)."),
+            ("FR-4", "task-c0ebc563e02d", "manual_observation",
+             "scripts/drive/d1008_reapproval_refresh_drive.py",
+             "In Chromium on :8010: 4/10 before (t1 kept 'Old title' and its link to retired FR-1; "
+             "no report lines), 10/10 after on a restarted Hub. vitest: the new report case red "
+             "before, 25/25 after."),
+            ("FR-4", "task-d89b47b08bed", "manual_observation",
+             "scripts/drive/d1008_reapproval_refresh_drive.py",
+             "The acceptance drive, written and run before the build: 4/10 on today's Hub."),
         ],
     },
     "f532": {
