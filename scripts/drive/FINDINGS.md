@@ -34536,8 +34536,11 @@ Two seams: (1) what the planner tells the operator about staffing is not what th
 checks one against the other; (2) rung 2 picks any free agent in the roster, so a project with old or broken
 agents gets reviews from them silently. The operator learns who reviews only from the task's assignee.
 
-**Direction (not decided):** a document-level default reviewer the flow form and the planner both set, shown at
-approval ("reviewed by: X" or "reviewed by: any free agent"), so the operator approves the staffing they were told.
+**Direction (decided by the operator, 2026-10-08):** a `reviewer` field in the document's `delivery` section,
+beside `delivery.agent`, written by the planner. Ladder: the task's `reviewer`, then `delivery.reviewer`, then any free
+agent; a default that does not resolve is rung 1b (surfaced, never substituted). No-name fallback stays "any free agent",
+but the approval bar always says who reviews ("reviewed by @X" or "reviewed by any free agent"). Not chosen: a project-level
+default, requiring a name, a reviewer picker at approval.
 
 **Recurred 2026-10-06** in slice 1c: the operator's request said "name `aw-reviewer` as reviewer"; the
 planner wrote "Reviewer: aw-reviewer." in the design and left the task's `reviewer` field null (slice 1b,
