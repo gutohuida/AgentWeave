@@ -27880,7 +27880,7 @@ blast radius. F326 was the other candidate and was not taken, because its three 
 
 ## F330 (C) — every refused send from the exploring composer leaves an empty specification document behind
 
-**Status:** open. Filed 2026-09-12 alongside F329, which produced eight of these in `LoopEngine/spec/changes/`.
+**Status:** fixed (Tier 0, 2026-10-08, `bd32b9b`): the composer deletes the document it created through F532's `DELETE /project/documents/{path}` when the trigger is refused or never reaches the Hub (`newConversationSurface.test.tsx`, 2 red before). Drive `scripts/drive/d1008_findings_drive.py f330`: in Chromium on `:8010` the Hub log shows the document created (201), the trigger refused (409), the document deleted (200); none left in the list or on disk. Was: open. Filed 2026-09-12 alongside F329, which produced eight of these in `LoopEngine/spec/changes/`.
 
 **The claim.** `NewConversationSurface.tsx` creates the exploring document *before* it posts the turn. That order is deliberate: the first turn has to carry the document. But when `/agent/trigger` then refuses, nothing removes the document, so each retry mints another placeholder (`emerald-fenrir`, `silver-thunderbird`, …), each an empty `exploring` change spec. The operator is left with one orphan per attempt, in the repository and in the spec list, for turns that never ran.
 
@@ -33163,7 +33163,7 @@ key the pending note to its task and deliver it with that task's review briefing
 
 ## F424 (B) — when the approval gate's git calls raise, every approval surface answers a bare 500
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B5 rounds (`spec-queue/tracks/B5.md` Final); re-checked in session. `task_integration._git`
+**Status:** fixed (Tier 0, 2026-10-08, `e152b0c`): `task_transition_service.evaluate_approval` turns `TimeoutExpired`/`OSError` from the gate into `GitUnavailableError` (409, "The Hub could not ask git whether this task's work would merge (...), so it was not approved"); the transition and the land route (which called `evaluate` directly) both ask through it (`hub/tests/test_a_git_that_cannot_be_asked_refuses_approval.py`, 3 red before). Not driven: a missing project directory makes the gate skip git rather than raise, so only fault injection at `_git` reaches it. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B5 rounds (`spec-queue/tracks/B5.md` Final); re-checked in session. `task_integration._git`
 (`hub/hub/task_integration.py:136-145`) is a bare `subprocess.run(..., timeout=60, check=False)`, and
 `is_repository`, `branch_exists`, `task_branch_tip` and `would_conflict` all call it from the gate's
 `evaluate`. A `TimeoutExpired` or `OSError` is not a `TransitionRefusedError` or `TaskBindingError`,
@@ -33247,7 +33247,7 @@ and passes today.
 
 ## F435 (C) — a drift candidate is never superseded when its requirement is reworded, although the model says it is
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 7). `models.py:2643-2644` documents supersession that no code performs. Not carried.
+**Status:** fixed (Tier 0, 2026-10-08, `d801def`): `spec_index.reindex_document` sets open drift candidates of a reworded or retired requirement to `superseded`; `GET /spec/drift` accepts that state (`hub/tests/test_a_reworded_requirement_supersedes_its_drift.py`, 2 red before). Drive `scripts/drive/d1008_findings_drive.py f435`: `['candidate']` before, `['superseded']` after on `:8010`. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 7). `models.py:2643-2644` documents supersession that no code performs. Not carried.
 
 
 ## F436 (B) — any drift answer silences that exact change forever, whether or not the answer was true
@@ -33407,7 +33407,7 @@ Nineteen coverage rows driven by five parallel operators plus row 19 by the orch
 
 ## F452 (B) — `read_spec_document` returns acceptance criteria nested per requirement, `submit_spec_document` takes them flat: an agent's read-then-resubmit silently deletes every criterion
 
-**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 9.
+**Status:** fixed (Tier 0, 2026-10-08, `ebec9e8`): `validate_payload` lifts the read view's nested criteria into the flat list under their requirement's key, drops the Hub's `identifier`/`state`/`anchor` and retired requirements, refuses a contradicting nested criterion and a `section_truncated` requirement; items not shaped like criteria stay nested so F502's explanation still fires (`hub/tests/test_a_read_document_resubmits_without_loss.py`, 4 red before). Drive `scripts/drive/d1008_findings_drive.py f452`: a real Haiku read-then-resubmit on `:8010` stored 0 criteria plus the Hub's read fields before, both criteria and no read fields after. Was: open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 9.
 **Source:** drive
 **Theme:** Spec & requirements
 
@@ -34862,7 +34862,7 @@ refuses to open an unnamed database.
 
 ## F527 (C) -- a change document names no capability, so reconciling an archived change into the corpus is a hand-written script
 
-**Status:** open. Filed 2026-10-07 (first change authored in the app after the switch,
+**Status:** fixed in substance (2026-10-08) by `a-finished-change-is-folded-into-its-capability`: the fold route and the app's **Fold into capability…** carry an approved change's requirements into a capability in one audited merge, and archiving an unfolded change asks for a reason. Not done: the change-spec payload still names no capability; the operator picks it at fold time. Was: open. Filed 2026-10-07 (first change authored in the app after the switch,
 `a-decided-task-withdraws-its-waiting-reviews`). The change-spec payload has no field for the
 capability document(s) it amends, and the app offers no step that carries an approved change's
 requirements into them. Reconciling F440 into `spec/capabilities/run-task-binding/spec.html` meant
@@ -34888,7 +34888,7 @@ proposed. A refused proposal should be a 4xx naming the blockers (or the 200 bod
 
 ## F529 (C) -- operator evidence always pins the HEAD it was recorded at, never the commit that did the work
 
-**Status:** open. Filed 2026-10-07, closing F440, F450 and F425's change tasks on `:8010`
+**Status:** fixed (Tier 0, 2026-10-08, `55be440`): operator evidence takes an optional `commit`, verified like F71's locator commit and footprinted there; `close_change.py` sends a change's `commit` (`hub/tests/test_operator_evidence_names_the_commit_that_did_the_work.py`, 2 red before). Not checked reachable from main (the footprint records `reachable_from_main`, which drift and integration read). Drive `scripts/drive/d1008_findings_drive.py f529`: 422 before, footprint at the named commit after. Was: open. Filed 2026-10-07, closing F440, F450 and F425's change tasks on `:8010`
 (`scripts/drive/close_change.py`). All twelve operator evidence rows carry footprint commit
 `0300f0f` (HEAD at recording, a one-line script commit), not the commits that built each change
 (`49dedde`, `3212bee`, `546fa92`). `EvidenceRecord` (`hub/hub/api/v1/spec.py:451`) has no commit
