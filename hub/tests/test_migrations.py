@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0121"
+HEAD_REVISION = "0122"
 
 
 # ---------------------------------------------------------------------------
@@ -4885,3 +4885,71 @@ def test_migration_0121_lets_a_capability_be_archived_and_downgrades_it_to_curre
                 "'change-spec', 'current', 'sketch', '2026-01-01T00:00:00Z', "
                 "'2026-01-01T00:00:00Z')"
             )
+
+
+# ---------------------------------------------------------------------------------------------
+# 0122 -- a spec is written one step at a time: spec_documents.step and .size. An exploring change
+# with no requirements starts at intake, one with requirements at requirements; every other
+# document has no step. Size starts unknown everywhere.
+# ---------------------------------------------------------------------------------------------
+
+
+def _database_at_0121(tmp_path, name: str) -> tuple:
+    """Every table from the models, minus what 0122 adds, stamped at 0121."""
+    db_file = tmp_path / name
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("ALTER TABLE spec_documents DROP COLUMN step")
+        conn.execute("ALTER TABLE spec_documents DROP COLUMN size")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0121')")
+        conn.commit()
+    return db_file, db_url
+
+
+def _insert_document(conn, doc_id: str, kind: str, phase: str, digests) -> None:
+    conn.execute(
+        "INSERT INTO spec_documents (id, project_id, path, title, kind, phase, rigor, "
+        "requirement_digests, created_at, updated_at) VALUES (?, 'proj-1', ?, 't', ?, ?, 'sketch', "
+        "?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        (doc_id, f"spec/changes/{doc_id}/spec.html", kind, phase, digests),
+    )
+
+
+def test_migration_0122_places_every_document_on_its_journey(tmp_path) -> None:
+    db_file, db_url = _database_at_0121(tmp_path, "journey.db")
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        _insert_document(conn, "empty", "change-spec", "exploring", None)
+        _insert_document(conn, "blank", "change-spec", "exploring", "{}")
+        _insert_document(conn, "written", "change-spec", "exploring", '{"FR-1": "d"}')
+        _insert_document(conn, "shipped", "change-spec", "approved", '{"FR-1": "d"}')
+        _insert_document(conn, "plan", "roadmap", "exploring", None)
+        conn.commit()
+
+    _upgrade_to(db_url, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        placed = {
+            row[0]: row[1:] for row in conn.execute("SELECT id, step, size FROM spec_documents")
+        }
+    assert placed == {
+        "empty": ("intake", None),
+        "blank": ("intake", None),
+        "written": ("requirements", None),
+        "shipped": (None, None),
+        "plan": (None, None),
+    }
+
+
+def test_migration_0122_downgrades_to_the_schema_before_it(tmp_path) -> None:
+    db_file, db_url = _database_at_0121(tmp_path, "journey_down.db")
+    with sqlite3.connect(db_file) as conn:
+        before = [r[1] for r in conn.execute("PRAGMA table_info(spec_documents)")]
+
+    _upgrade_to(db_url, "head")
+    _downgrade_to(db_url, "0121")
+
+    with sqlite3.connect(db_file) as conn:
+        assert [r[1] for r in conn.execute("PRAGMA table_info(spec_documents)")] == before

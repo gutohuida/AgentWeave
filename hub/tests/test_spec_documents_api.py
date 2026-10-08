@@ -359,25 +359,6 @@ async def test_proposing_a_document_whose_content_was_refused_says_it_did_not_pr
 
 
 @pytest.mark.asyncio
-async def test_a_document_cannot_be_proposed_before_exploration_is_closed(
-    app, auth_headers, run_headers, tmp_path
-):
-    await _create(app, auth_headers)
-    await _submit(app, run_headers, _document())
-
-    response = await app.post(
-        f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
-    )
-
-    # F113: "not yet" arrives in one shape. The open exploration is the first entry of the 200
-    # `blocking` list (`a-document-moves-forward-only-through-its-checks`), not a 409.
-    assert response.status_code == 200
-    body = response.json()
-    assert body["phase"] == "exploring"
-    assert body["blocking"][0]["code"] == "explore_not_closed"
-
-
-@pytest.mark.asyncio
 async def test_the_full_operator_path_reaches_approved(app, auth_headers, run_headers, tmp_path):
     await _create(app, auth_headers)
     await _submit(app, run_headers, _document())
@@ -432,7 +413,7 @@ async def test_an_approved_document_refuses_further_submissions(
 
 
 @pytest.mark.asyncio
-async def test_reopening_an_approved_document_requires_closing_exploration_again(
+async def test_a_reopened_approved_document_proposes_again_without_closing_exploration(
     app, auth_headers, run_headers, tmp_path
 ):
     await _create(app, auth_headers)
@@ -457,12 +438,11 @@ async def test_reopening_an_approved_document_requires_closing_exploration_again
     assert reopened.json()["phase"] == "exploring"
     assert reopened.json()["explore_closed"] is False
 
-    blocked = await app.post(
-        f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
-    )
-    assert blocked.status_code == 200
-    assert blocked.json()["blocking"][0]["code"] == "explore_not_closed"
-    assert blocked.json()["phase"] == "exploring"
+    # The journey step replaced the "exploration is complete" gate (step-journey FR-11).
+    again = await app.post(f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers)
+    assert again.status_code == 200
+    assert again.json()["blocking"] == []
+    assert again.json()["phase"] == "proposed"
 
 
 @pytest.mark.asyncio

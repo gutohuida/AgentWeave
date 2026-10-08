@@ -100,6 +100,14 @@ class AcceptanceCriterion(_Part):
     then: str = Field(
         description="The observable outcome. Binary — it either happened or it did not."
     )
+    how_to_check: Optional[str] = Field(
+        default=None,
+        description="How to check it: the command, test, drive step or manual action that shows the outcome.",
+    )
+    checked_by: Optional[Literal["agent", "operator"]] = Field(
+        default=None,
+        description="'agent' when an agent can check it unaided, 'operator' when only the operator can.",
+    )
 
 
 class ImportedFrom(_Part):
@@ -596,6 +604,11 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
     for task in data.get("tasks") or []:
         if not task.get("files"):
             task.pop("files", None)
+    # And the criterion check fields: optional (FR-9), so a criterion without them stores as before.
+    for criterion in data.get("acceptance_criteria") or []:
+        for key in ("how_to_check", "checked_by"):
+            if criterion.get(key) is None:
+                criterion.pop(key, None)
     return data
 
 

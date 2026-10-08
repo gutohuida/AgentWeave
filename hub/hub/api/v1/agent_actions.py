@@ -1599,6 +1599,8 @@ async def read_spec_document(
         "phase": document.phase,
         "rigor": document.rigor,
         "explore_closed": document.explore_closed_at is not None,
+        "step": document.step,
+        "size": document.size,
         "updated_at": document.updated_at.isoformat() if document.updated_at else None,
         "summary": (payload or {}).get("summary"),
         "problem": (payload or {}).get("problem"),

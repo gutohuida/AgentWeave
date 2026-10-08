@@ -110,14 +110,18 @@ def criteria_by_requirement_key(
         owner = entry.get("requirement")
         if not isinstance(owner, str) or not owner:
             continue
-        grouped.setdefault(owner, []).append(
-            {
-                "key": entry.get("key"),
-                "given": entry.get("given"),
-                "when": entry.get("when"),
-                "then": entry.get("then"),
-            }
-        )
+        criterion = {
+            "key": entry.get("key"),
+            "given": entry.get("given"),
+            "when": entry.get("when"),
+            "then": entry.get("then"),
+        }
+        # Only when set, so a read of a document without them is unchanged, and a resubmitted read
+        # keeps them (F452's shape).
+        for key in ("how_to_check", "checked_by"):
+            if entry.get(key) is not None:
+                criterion[key] = entry[key]
+        grouped.setdefault(owner, []).append(criterion)
     return grouped
 
 
@@ -441,6 +445,9 @@ def render_read(view: Dict[str, Any]) -> str:
                 for part in ("given", "when", "then"):
                     if criterion.get(part):
                         lines.extend(_wrapped(f"{part.capitalize()} {criterion[part]}", "    "))
+                if criterion.get("how_to_check"):
+                    who = f" ({criterion['checked_by']})" if criterion.get("checked_by") else ""
+                    lines.extend(_wrapped(f"Check{who}: {criterion['how_to_check']}", "    "))
     for name in OPTIONAL_SECTIONS:
         value = view.get(name)
         if value in (None, "", [], {}):

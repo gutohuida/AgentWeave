@@ -1222,11 +1222,6 @@ async def roadmap_states(
     return {row.path: spec_completeness.RoadmapState(row.phase, row.title, keys)}
 
 
-EXPLORE_NOT_CLOSED_MESSAGE = (
-    "exploration has not been closed; the operator decides when it is complete"
-)
-
-
 async def phase_blockers(
     session: AsyncSession,
     workspace: ProjectWorkspace,
@@ -1279,17 +1274,9 @@ async def phase_blockers(
         }
         findings = [f for f in findings if f.code not in excluded_at_approval]
 
-    blocking = [finding.to_dict() for finding in findings]
-    if to_phase == spec_lifecycle.PROPOSED and document.explore_closed_at is None:
-        blocking.insert(
-            0,
-            {
-                "code": "explore_not_closed",
-                "where": "exploration",
-                "message": EXPLORE_NOT_CLOSED_MESSAGE,
-            },
-        )
-    return blocking
+    # No `explore_not_closed` here any more: the journey step replaced the operator's "exploration
+    # is complete" boolean (`a-spec-is-written-one-step-at-a-time` FR-11).
+    return [finding.to_dict() for finding in findings]
 
 
 async def propose(

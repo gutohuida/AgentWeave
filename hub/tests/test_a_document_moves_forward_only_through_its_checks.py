@@ -95,7 +95,7 @@ async def test_1_2_an_edit_after_proposing_is_checked_again_at_approval(
 
 
 @pytest.mark.asyncio
-async def test_1_3_propose_lists_the_open_exploration_with_every_other_blocker(
+async def test_1_3_propose_lists_every_blocker_and_no_longer_an_open_exploration(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
 ):
     await _create(app, auth_headers)
@@ -109,7 +109,8 @@ async def test_1_3_propose_lists_the_open_exploration_with_every_other_blocker(
     body = response.json()
     assert body["phase"] == "exploring"
     codes = [b["code"] for b in body["blocking"]]
-    assert codes[0] == "explore_not_closed"
+    # The operator's "exploration is complete" step is retired (step-journey FR-11).
+    assert "explore_not_closed" not in codes
     assert {"non_goals_empty", "requirement_without_task"} <= set(codes)
 
 

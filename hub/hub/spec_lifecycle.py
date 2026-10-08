@@ -35,6 +35,9 @@ ARCHIVED = "archived"
 # A capability document's phase, and the only phase `transition()` never accepts as a `to_phase` —
 # the one door into `current` is document creation (`create_document`, below), not this function.
 CURRENT = "current"
+# The first step of every change document's journey. Named here rather than imported, because
+# `spec_journey` imports this module; its own `INTAKE` is the same string.
+INTAKE_STEP = "intake"
 
 # Every legal move. A transition not in this table does not happen, including
 # any that would move a document backwards without an explicit decision.
@@ -224,13 +227,16 @@ async def create_document(
     if existing is not None:
         raise PhaseError(f"a document already exists at {path}", code="document_exists")
 
+    phase = phase or (CURRENT if kind == "capability" else EXPLORING)
     document = SpecDocument(
         id=f"spdoc-{short_id()}",
         project_id=project_id,
         path=path,
         title=title,
         kind=kind,
-        phase=phase or (CURRENT if kind == "capability" else EXPLORING),
+        phase=phase,
+        # A new change starts its journey at intake, size unknown (`spec_journey`, FR-1).
+        step=INTAKE_STEP if kind == "change-spec" and phase == EXPLORING else None,
     )
     session.add(document)
     await session.flush()

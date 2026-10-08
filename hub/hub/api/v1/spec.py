@@ -37,6 +37,7 @@ from ... import (
     spec_adoption,
     spec_documents,
     spec_index,
+    spec_journey,
     spec_lifecycle,
     spec_naming,
     spec_rigor,
@@ -461,6 +462,12 @@ def _document_view(document) -> dict:
         "rigor": document.rigor or spec_rigor.SKETCH,
         "content_digest": document.content_digest,
         "explore_closed": document.explore_closed_at is not None,
+        # Where a change's authoring stands (`spec_journey`): null on any other document.
+        "step": document.step,
+        "size": document.size,
+        "journey": (
+            spec_journey.journey(document.size) if spec_journey.has_journey(document) else None
+        ),
         "updated_at": document.updated_at.isoformat(),
     }
 

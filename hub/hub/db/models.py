@@ -2014,6 +2014,12 @@ class SpecDocument(Base):
     # document that archives or reopens still must not have its path pulled out from under a task
     # elsewhere that imported from it while it was approved.
     first_approved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    # Where a change document's authoring stands, and how big the work is (`spec_journey`, `0122`).
+    # Held here, not in a conversation, so any conversation resumes it. Null on every document that
+    # is not a change; a null size is briefed as large. Validated in `spec_journey`, not by a CHECK,
+    # so a project-defined journey needs no table recreate.
+    step: Mapped[Optional[str]] = mapped_column(String(48), nullable=True)
+    size: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
