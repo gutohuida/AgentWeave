@@ -1011,7 +1011,8 @@ export interface DriftCandidate {
   id: string
   requirement_id: string
   evidence_id: string
-  state: 'candidate' | 'resolved'
+  /** `superseded`: its requirement was reworded or retired while it was open (F435). */
+  state: 'candidate' | 'resolved' | 'superseded'
   /** `{path: {was, now}}`; `now: null` means the file was removed. */
   observed: Record<string, { was: string | null; now: string | null }>
   resolution: string | null
