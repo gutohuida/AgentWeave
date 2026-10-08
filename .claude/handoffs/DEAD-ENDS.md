@@ -2178,3 +2178,12 @@ disappears is indistinguishable from one that was forgotten.
   `py -3.11 -m ruff`.
 - **2026-10-08 (home) -- auto mode refused `git merge` of the cycle branch into master** as "Production
   Deploy" (`:8000` runs this checkout) until the operator said "merge" explicitly in the conversation.
+- **2026-10-08 (home) -- a drive measuring an agent's MCP path must use the agent's SECOND run.** A new agent is
+  told the `aw-tool` call command, not MCP (`launchability.described_access_path`: MCP only on `hub_client: "mcp"` or
+  a latest tested run `connected`), so a first-turn drive measures the shim. Read `runs.plane_surface` to see what a
+  run was told. The F21 probe lost one round to this.
+- **2026-10-08 (home) -- `system/init` does not list claude.ai connectors** even when a run gets them: they attach
+  after init. Put `"alwaysLoad": true` on a server in `--mcp-config` (startup then waits for servers) to see the full
+  set. Found while probing F21 (F531).
+- **2026-10-08 (home) -- `pathlib.Path.write_text` on Windows writes CRLF** (text mode); git's `eol=lf` hides it in the
+  diff but leaves a CRLF working copy. Write with `newline="\n"` or bytes when editing tracked files from Python.

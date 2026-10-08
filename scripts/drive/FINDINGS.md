@@ -1268,7 +1268,7 @@ together via `py -3.11 -m pytest tests/test_cli.py tests/test_hub_commands.py -v
 
 ## F21 (B) — A Haiku agent cannot reach `record_evidence`, and burns a whole turn trying
 
-**Status:** open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** **not retired yet: run one probe first.** Six Haiku turns on a trial Hub (never `:8000`), with three arms: today's argv, `--strict-mcp-config`, and `ENABLE_TOOL_SEARCH=false`. Decision rule and read-outs are in `B11.md` "F21's probe". Was: open — investigated 2026-08-25, the proposed remedy was already shipped and the cause is not here; left open with the cause named
+**Status:** open, probe run 2026-10-08: **does not reproduce, 12/12 Haiku turns reached `record_evidence`; retirement is the operator's call** (see "Probe 2026-10-08" below). Was: open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** **not retired yet: run one probe first.** Six Haiku turns on a trial Hub (never `:8000`), with three arms: today's argv, `--strict-mcp-config`, and `ENABLE_TOOL_SEARCH=false`. Decision rule and read-outs are in `B11.md` "F21's probe". Was: open — investigated 2026-08-25, the proposed remedy was already shipped and the cause is not here; left open with the cause named
 
 **Observed live 2026-08-24**, during the review-checkout drive (`run-1515a942defc`), not while
 looking for it.
@@ -1334,6 +1334,41 @@ Two things that *are* actionable were separated out rather than left inside this
 surface below whatever threshold triggers deferral would work and is a product decision, not a bug
 fix — 24 tools is the surface the product deliberately has. Left open, with the cause named, rather
 than closed with a change that would not have prevented it.
+
+### Probe 2026-10-08 (B11's decision) — F21 does not reproduce
+
+`scripts/drive/d1008_f21_probe.py` on `:8010` (project `proj-4e1d8186f6b7`): six Haiku agents, two per arm, each on its
+own spec task (implement a one-line function, test it, commit, record evidence), the shape F21 was seen in. Arms are the
+runner's flags: arm1 none; arm2 `--strict-mcp-config`; arm3 `--settings {"env":{"ENABLE_TOOL_SEARCH":"false"}}`
+(same effect as the variable, checked by `system/init`). Every turn under `bypassPermissions`.
+
+**The Hub now tells a new agent the call command, not MCP.** `launchability.described_access_path` tells MCP only on
+`hub_client: "mcp"` or when the agent's latest tested run reported `connected`. So round 1 (each agent's first run)
+was told `aw-tool`, and round 2 (same agents, a second task) was told MCP. Round 2 is the path F21 is about.
+
+| Round | Told | Reached `record_evidence` | How |
+|---|---|---|---|
+| 1 | shim | 6/6 | 5 by `aw-tool record_evidence`, 1 (arm1x) by MCP anyway |
+| 2 | mcp | 6/6 | all by `mcp__agentweave__record_evidence` |
+
+Every ToolSearch call in arms 1 and 2 was a single `select:mcp__agentweave__<tool>` load, then the call: no loop,
+no repeated search (0–2 per turn). Arm 3 never used it. Claude Code is 2.1.291 now (2.1.280 at R1, older in August).
+
+**Mechanism, read from `system/init`** (direct `claude -p`, Haiku, the Hub's `--mcp-config`; scratch scripts, not kept):
+
+| Configuration | `record_evidence` listed | ToolSearch | Input context |
+|---|---|---|---|
+| today's argv | yes | yes (deferred) | 26.5k |
+| `--strict-mcp-config` | yes | yes | 26.5k |
+| `ENABLE_TOOL_SEARCH=false` | yes | no | 52.8k (Claude's own deferred built-ins ~15k + the Hub's 27 tools ~12k) |
+| `"alwaysLoad": true` on the `agentweave` server entry, plus strict | yes | yes, built-ins only | 37.4k |
+
+`alwaysLoad` (a per-server field of `--mcp-config`; a tool can also opt in by `_meta` `anthropic/alwaysLoad`) is a
+fourth option R1 did not know about: only the Hub's tools load eagerly. At ~11k tokens a turn to save one or two
+`select:` calls, it is not worth it while the deferred path works.
+
+**Recommendation: retire F21.** The baseline reaches the tool 12/12, so B11's rule lands on no argv change.
+Separately, the probe confirmed R1's side suspicion as a real defect: **F531**.
 
 ## F22 (B) — Shared dependencies are not symlinked on this machine, and nothing says so
 
@@ -34881,4 +34916,22 @@ Suspected, not proven.
 Fix: find the leaker. An autouse guard in `hub/tests/conftest.py` that fails the test leaving `shutil.which` different
 from the real function names it; then fix that test. Do not drop `-n`, and do not patch around it in `test_pty_runner.py`.
 Acceptance: CI green on two consecutive pushes, plus a local `-n 4 --dist loadfile` run with the guard in place.
+
+## F531 (B) -- a Hub Claude run loads the operator's own claude.ai connectors (Gmail, Drive, Calendar, Docs)
+
+**Status:** open (filed 2026-10-08, interactive, from the F21 probe). Tier is the operator's call: it changes every
+Claude run's argv and is a containment question, so CLAUDE.md's table puts it at Tier 2.
+
+`runner_commands._build_claude_command` passes `--mcp-config` without `--strict-mcp-config`, so a Hub run also gets
+whatever MCP servers the operator's own Claude Code configuration and account carry. Read from `system/init` of a
+Hub-shaped `claude -p` (Haiku, the Hub's `--mcp-config` with `"alwaysLoad": true`, which makes startup wait for servers):
+`mcp_servers` held `claude.ai Claude Docs` (connected, its tools in the run's tool list) and `claude.ai Google Drive`,
+`Google Calendar`, `Gmail` (needs-auth). Without `alwaysLoad` the connectors are absent from `system/init` only because
+they attach after it, so a plain init read-out (R1's method) reports them missing.
+
+Why it matters: an agent run can reach the operator's account tools that no Hub surface granted, describes, or records;
+under `bypassPermissions`/yolo they are callable with no prompt. It also adds their schemas to every run's context. The
+Hub already applies the remedy elsewhere: `conversation_titles.py:82` passes `--strict-mcp-config` for exactly this reason.
+Likely fix: `--strict-mcp-config` whenever `_claude_mcp_args` injects the Hub's server (and decide what a run with no
+server gets). Acceptance drive: a Hub run's tool list on `:8010` names no `claude_ai_*` server.
 
