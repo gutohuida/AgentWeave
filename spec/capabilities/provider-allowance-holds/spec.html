@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Provider allowance holds</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Provider allowance holds</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">7</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">7</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">33</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>What happens when a provider refuses a turn for its usage allowance or plan quota: the agent&#x27;s queue is held, input returns uncounted, one operator turn may pass, the queue retries at the reset, job firings wait, and the operator is told when the hold ends and the way out.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>Holding an agent&#x27;s queue on an allowance or quota refusal, and recognising a Copilot quota refusal</li><li>Returning held input uncounted, letting one operator turn through, retrying at the reset</li><li>Job firings waiting on a hold; the hold notice</li></ul><h3>Non-goals</h3><ul><li>Ordinary delivery failures, retries and give-up (inbound-queue-delivery)</li><li>Token budgets and accounting (usage-accounting)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL hold an agent&#x27;s queue, starting no turn for agent or job input, while the provider&#x27;s most recent word about that agent (the newest turn outcome carrying an allowance reading or served tokens) is a refusal of its usage allowance, until the later of the stated reset time and one minute after the refusal; the hold SHALL be derived from recorded outcomes, not stored.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Every turn before the reset would be refused the same way; the one-minute floor stops a reset already in the past from becoming a cycle of refused turns, and deriving it lets a served turn end it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL treat a Copilot turn as refused by its usage allowance only when Copilot reports a structured error with `errorType` `quota` and `errorCode` `quota_exceeded` (as a session event or prompt error response), taking the reset from the run&#x27;s own quota reading or else the project&#x27;s newest Copilot reading whose reset is still ahead; with no reset known the refusal SHALL be recorded as an exhausted allowance and SHALL NOT hold the queue.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The quota belongs to the account, so another agent&#x27;s reading states the same reset; recognising refusals from message wording, session caps, billing errors or rate limits would hold queues nobody decided to hold.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> A run that failed because the provider refused the agent&#x27;s usage allowance with a reset time later than the run&#x27;s end SHALL return its input counting an allowance refusal instead of a failed delivery, and SHALL keep the conversation&#x27;s provider session; a refusal whose reset is not later than the run&#x27;s end SHALL count as a failed delivery.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The session and the input are both sound and the provider has said when it will serve them; a reset already past states no wait with an end, so the limits must still bound it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> While an agent&#x27;s queue is held, operator input that arrived after the refusal SHALL let one turn start; if the provider refuses it too, the renewed hold SHALL stop input that arrived before it from starting another.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Only the operator can change the allowance (overage, credit, another runner), and a hold derived from the provider&#x27;s last word cannot see that they did.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> When a hold&#x27;s end passes, the system SHALL attempt the agent&#x27;s queue again without operator action, including a hold whose end passed while the Hub was stopped, and SHALL record an operator-visible event each time a refusal starts or renews a hold.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Nothing re-evaluates a queue on a timer, so the hold arms its own wake and startup re-arms every held queue.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> A job firing whose input waits on a held queue, including the firing whose own turn was refused and one held across a Hub restart, SHALL be reported as in progress, not failed, and SHALL take the outcome of the turn that finally delivers it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Its input is waiting for a stated time, not refused.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 7 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> While a Copilot quota refusal holds an agent&#x27;s queue, the hold notice SHALL state the date and time it ends and the way out — bind the agent to another runner and then send it a message, since rebinding alone does not end the hold and its loops and jobs stay blocked — and the notices given to blocked loops and jobs SHALL state the date, not only the time.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A Copilot plan quota resets monthly, so a time of day alone is ambiguous, and rebinding without a served turn changes nothing the hold can see.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s turn is refused by the allowance with a reset time an hour away another agent sends it a message</td><td>no turn starts for the agent before the reset time the message is still queued</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn is refused by the allowance with a reset time already past</td><td>no turn starts for the agent for at least one minute after the refusal</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s queue is held and the Hub records a run for it that never started its runtime</td><td>the queue is still held</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s queue is held and a turn for it is served by the provider</td><td>the queue is no longer held</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s queue is held</td><td>the agent&#x27;s queue status names the hold as the reason it is waiting, and the time the hold ends an event recording the hold was persisted when the refusal arrived</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn completes but the provider&#x27;s reading for it says the allowance is refused, with a reset time</td><td>the agent&#x27;s queue is held a turn starts for the agent at the reset without any operator action</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s hold has ended and input the refusal returned is still queued</td><td>the agent&#x27;s queue status does not name the hold as the reason it is waiting</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s turn is refused by the allowance with a reset an hour away and another agent sends it a message</td><td>no turn starts for the agent before the reset; the message stays queued</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot turn fails with a quota error whose code says the quota is exceeded Copilot&#x27;s latest quota reading for the agent resets at the start of next month</td><td>the agent&#x27;s queue is held until that time the hold is reported with its end the refused input is queued again, not counted as a delivery attempt, even when Copilot ended the turn with an ordinary stop reason</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Copilot answers a turn&#x27;s prompt with an error response whose structured fields say the Copilot&#x27;s latest quota reading for the agent resets at a future time</td><td>the turn ends failed, its input is queued again uncounted, and the queue is held until that time</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot turn fails with a quota-exceeded error no quota reading with a future reset date is known for the project</td><td>the allowance is shown as exhausted the queue is not held the input is returned counted as a delivery attempt, like any failed turn&#x27;s input</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot agent&#x27;s turn is refused on its first model call, so it reported no quota another Copilot agent of the same project recorded a reading whose reset is ahead</td><td>the refused agent&#x27;s queue is held until that reset</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s queue was held by a Copilot quota refusal a later Copilot turn of that agent fails for a reason other than the quota, reporting no quota reading</td><td>that turn records no refusal and does not renew the hold</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot turn fails with an error whose message mentions a quota but whose category is not quota</td><td>no refusal is recorded and the queue is not held</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot turn fails because its session&#x27;s own credit cap was reached</td><td>the queue is not held</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s queue is held by a Copilot refusal and a later Copilot turn for it is served</td><td>the queue is no longer held</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot turn fails with `errorType: quota` and `errorCode: quota_exceeded` and the run reported a quota reset next month</td><td>the agent&#x27;s queue is held until that reset and the input is requeued uncounted</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run fails and the provider&#x27;s reading for that turn says the allowance is refused, with a reset time</td><td>its input returns to the queue the input&#x27;s failed-delivery count is unchanged the input records one more allowance refusal</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an input&#x27;s delivery is refused by the allowance three times in a row</td><td>the conversation&#x27;s provider session is still bound the input is still queued</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run fails and the provider&#x27;s reading says the allowance is refused but states no reset time</td><td>the input records that a delivery attempt failed</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run fails and the provider&#x27;s reading says the allowance is refused with a reset time no later than the refusal</td><td>the input records that a delivery attempt failed repeated such refusals give up the input as any repeated failure does</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the same input&#x27;s delivery is refused by the allowance with a reset ahead three times</td><td>its failed-delivery count is still 0, its provider session is still bound, and it is still queued</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s queue is held and the operator sends it a message</td><td>one turn starts for the agent if the provider refuses that turn, no further turn starts before the new reset time</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s queue is held and the reset time passes</td><td>a turn starts for the agent without any operator action</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s queue is held, the Hub stops, and it starts again after the reset time</td><td>a turn starts for the agent once the Hub is serving requests</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a refusal starts a hold</td><td>an operator-visible hold event is recorded naming its end</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a job&#x27;s firing queues input for an agent whose queue is held</td><td>the firing is recorded as in progress, not failed</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a job&#x27;s firing starts a turn and the provider&#x27;s allowance refuses it</td><td>the firing is recorded as in progress, not failed when its input is delivered after the reset, the firing takes that turn&#x27;s outcome</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a job&#x27;s firing is waiting on a held queue and the Hub restarts</td><td>the firing is still recorded as in progress</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s queue is held by a Copilot refusal whose reset is 00:00 UTC on 2026-10-01</td><td>the reason the agent is not running names 2026-10-01 and 00:00 UTC it says to bind the agent to another runner and then send it a message it says that rebinding alone does not end the hold, and that its loops and jobs stay blocked until then</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s queue is held by a Copilot refusal the agent is bound to another runner and no message is sent to it</td><td>the queue is still held and its loops and jobs stay blocked</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s queue is held by a refusal from a provider other than Copilot</td><td>the reason the agent is not running reads exactly as it did before this change</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent is held by a Copilot quota refusal</td><td>the hold notice states the date and time it ends and says to bind another runner and then send a message</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>D1. Allowance holds are their own capability rather than part of usage-accounting: they govern the delivery queue, not measurement, and their trigger is a provider&#x27;s word, not a Hub budget.</p><p>D2. Split from agent-conversation-workspace with the rest of the queue; kept apart from inbound-queue-delivery because a hold suspends the attempt counting that capability defines.</p></section><section id="lifecycle"><h2>Lifecycle</h2><p>Split out of agent-conversation-workspace in the 2026-10-08 spec overhaul.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Provider allowance holds",
+  "summary": "What happens when a provider refuses a turn for its usage allowance or plan quota: the agent's queue is held, input returns uncounted, one operator turn may pass, the queue retries at the reset, job firings wait, and the operator is told when the hold ends and the way out.",
+  "problem": "",
+  "scope": {
+    "in_scope": [
+      "Holding an agent's queue on an allowance or quota refusal, and recognising a Copilot quota refusal",
+      "Returning held input uncounted, letting one operator turn through, retrying at the reset",
+      "Job firings waiting on a hold; the hold notice"
+    ],
+    "non_goals": [
+      "Ordinary delivery failures, retries and give-up (inbound-queue-delivery)",
+      "Token budgets and accounting (usage-accounting)"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "statement": "The system SHALL hold an agent's queue, starting no turn for agent or job input, while the provider's most recent word about that agent (the newest turn outcome carrying an allowance reading or served tokens) is a refusal of its usage allowance, until the later of the stated reset time and one minute after the refusal; the hold SHALL be derived from recorded outcomes, not stored.",
+      "modal": "SHALL",
+      "rationale": "Every turn before the reset would be refused the same way; the one-minute floor stops a reset already in the past from becoming a cycle of refused turns, and deriving it lets a served turn end it.",
+      "party": null
+    },
+    {
+      "key": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "statement": "The system SHALL treat a Copilot turn as refused by its usage allowance only when Copilot reports a structured error with `errorType` `quota` and `errorCode` `quota_exceeded` (as a session event or prompt error response), taking the reset from the run's own quota reading or else the project's newest Copilot reading whose reset is still ahead; with no reset known the refusal SHALL be recorded as an exhausted allowance and SHALL NOT hold the queue.",
+      "modal": "SHALL",
+      "rationale": "The quota belongs to the account, so another agent's reading states the same reset; recognising refusals from message wording, session caps, billing errors or rate limits would hold queues nobody decided to hold.",
+      "party": null
+    },
+    {
+      "key": "an-allowance-refusal-returns-input-uncounted",
+      "statement": "A run that failed because the provider refused the agent's usage allowance with a reset time later than the run's end SHALL return its input counting an allowance refusal instead of a failed delivery, and SHALL keep the conversation's provider session; a refusal whose reset is not later than the run's end SHALL count as a failed delivery.",
+      "modal": "SHALL",
+      "rationale": "The session and the input are both sound and the provider has said when it will serve them; a reset already past states no wait with an end, so the limits must still bound it.",
+      "party": null
+    },
+    {
+      "key": "a-held-queue-lets-one-operator-turn-through",
+      "statement": "While an agent's queue is held, operator input that arrived after the refusal SHALL let one turn start; if the provider refuses it too, the renewed hold SHALL stop input that arrived before it from starting another.",
+      "modal": "SHALL",
+      "rationale": "Only the operator can change the allowance (overage, credit, another runner), and a hold derived from the provider's last word cannot see that they did.",
+      "party": null
+    },
+    {
+      "key": "a-held-queue-is-retried-at-the-reset",
+      "statement": "When a hold's end passes, the system SHALL attempt the agent's queue again without operator action, including a hold whose end passed while the Hub was stopped, and SHALL record an operator-visible event each time a refusal starts or renews a hold.",
+      "modal": "SHALL",
+      "rationale": "Nothing re-evaluates a queue on a timer, so the hold arms its own wake and startup re-arms every held queue.",
+      "party": null
+    },
+    {
+      "key": "a-job-firing-waiting-on-a-hold-stays-in-progress",
+      "statement": "A job firing whose input waits on a held queue, including the firing whose own turn was refused and one held across a Hub restart, SHALL be reported as in progress, not failed, and SHALL take the outcome of the turn that finally delivers it.",
+      "modal": "SHALL",
+      "rationale": "Its input is waiting for a stated time, not refused.",
+      "party": null
+    },
+    {
+      "key": "a-copilot-hold-notice-states-its-end-and-the-way-out",
+      "statement": "While a Copilot quota refusal holds an agent's queue, the hold notice SHALL state the date and time it ends and the way out — bind the agent to another runner and then send it a message, since rebinding alone does not end the hold and its loops and jobs stay blocked — and the notices given to blocked loops and jobs SHALL state the date, not only the time.",
+      "modal": "SHALL",
+      "rationale": "A Copilot plan quota resets monthly, so a time of day alone is ambiguous, and rebinding without a served turn changes nothing the hold can see.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac254",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "given": "",
+      "when": "an agent's turn is refused by the allowance with a reset time an hour away another agent sends it a message",
+      "then": "no turn starts for the agent before the reset time the message is still queued"
+    },
+    {
+      "key": "ac257",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "given": "",
+      "when": "a turn is refused by the allowance with a reset time already past",
+      "then": "no turn starts for the agent for at least one minute after the refusal"
+    },
+    {
+      "key": "ac258",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "given": "",
+      "when": "an agent's queue is held and the Hub records a run for it that never started its runtime",
+      "then": "the queue is still held"
+    },
+    {
+      "key": "ac259",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "given": "",
+      "when": "an agent's queue is held and a turn for it is served by the provider",
+      "then": "the queue is no longer held"
+    },
+    {
+      "key": "ac261",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "given": "",
+      "when": "an agent's queue is held",
+      "then": "the agent's queue status names the hold as the reason it is waiting, and the time the hold ends an event recording the hold was persisted when the refusal arrived"
+    },
+    {
+      "key": "ac265",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "given": "",
+      "when": "a turn completes but the provider's reading for it says the allowance is refused, with a reset time",
+      "then": "the agent's queue is held a turn starts for the agent at the reset without any operator action"
+    },
+    {
+      "key": "ac266",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "given": "",
+      "when": "an agent's hold has ended and input the refusal returned is still queued",
+      "then": "the agent's queue status does not name the hold as the reason it is waiting"
+    },
+    {
+      "key": "acn15",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "given": "",
+      "when": "an agent's turn is refused by the allowance with a reset an hour away and another agent sends it a message",
+      "then": "no turn starts for the agent before the reset; the message stays queued"
+    },
+    {
+      "key": "ac275",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "given": "",
+      "when": "a Copilot turn fails with a quota error whose code says the quota is exceeded Copilot's latest quota reading for the agent resets at the start of next month",
+      "then": "the agent's queue is held until that time the hold is reported with its end the refused input is queued again, not counted as a delivery attempt, even when Copilot ended the turn with an ordinary stop reason"
+    },
+    {
+      "key": "ac276",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "given": "",
+      "when": "Copilot answers a turn's prompt with an error response whose structured fields say the Copilot's latest quota reading for the agent resets at a future time",
+      "then": "the turn ends failed, its input is queued again uncounted, and the queue is held until that time"
+    },
+    {
+      "key": "ac277",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "given": "",
+      "when": "a Copilot turn fails with a quota-exceeded error no quota reading with a future reset date is known for the project",
+      "then": "the allowance is shown as exhausted the queue is not held the input is returned counted as a delivery attempt, like any failed turn's input"
+    },
+    {
+      "key": "ac278",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "given": "",
+      "when": "a Copilot agent's turn is refused on its first model call, so it reported no quota another Copilot agent of the same project recorded a reading whose reset is ahead",
+      "then": "the refused agent's queue is held until that reset"
+    },
+    {
+      "key": "ac279",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "given": "",
+      "when": "an agent's queue was held by a Copilot quota refusal a later Copilot turn of that agent fails for a reason other than the quota, reporting no quota reading",
+      "then": "that turn records no refusal and does not renew the hold"
+    },
+    {
+      "key": "ac280",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "given": "",
+      "when": "a Copilot turn fails with an error whose message mentions a quota but whose category is not quota",
+      "then": "no refusal is recorded and the queue is not held"
+    },
+    {
+      "key": "ac281",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "given": "",
+      "when": "a Copilot turn fails because its session's own credit cap was reached",
+      "then": "the queue is not held"
+    },
+    {
+      "key": "ac285",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "given": "",
+      "when": "an agent's queue is held by a Copilot refusal and a later Copilot turn for it is served",
+      "then": "the queue is no longer held"
+    },
+    {
+      "key": "acn16",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "given": "",
+      "when": "a Copilot turn fails with `errorType: quota` and `errorCode: quota_exceeded` and the run reported a quota reset next month",
+      "then": "the agent's queue is held until that reset and the input is requeued uncounted"
+    },
+    {
+      "key": "ac144",
+      "requirement": "an-allowance-refusal-returns-input-uncounted",
+      "given": "",
+      "when": "a run fails and the provider's reading for that turn says the allowance is refused, with a reset time",
+      "then": "its input returns to the queue the input's failed-delivery count is unchanged the input records one more allowance refusal"
+    },
+    {
+      "key": "ac145",
+      "requirement": "an-allowance-refusal-returns-input-uncounted",
+      "given": "",
+      "when": "an input's delivery is refused by the allowance three times in a row",
+      "then": "the conversation's provider session is still bound the input is still queued"
+    },
+    {
+      "key": "ac146",
+      "requirement": "an-allowance-refusal-returns-input-uncounted",
+      "given": "",
+      "when": "a run fails and the provider's reading says the allowance is refused but states no reset time",
+      "then": "the input records that a delivery attempt failed"
+    },
+    {
+      "key": "ac147",
+      "requirement": "an-allowance-refusal-returns-input-uncounted",
+      "given": "",
+      "when": "a run fails and the provider's reading says the allowance is refused with a reset time no later than the refusal",
+      "then": "the input records that a delivery attempt failed repeated such refusals give up the input as any repeated failure does"
+    },
+    {
+      "key": "acn28",
+      "requirement": "an-allowance-refusal-returns-input-uncounted",
+      "given": "",
+      "when": "the same input's delivery is refused by the allowance with a reset ahead three times",
+      "then": "its failed-delivery count is still 0, its provider session is still bound, and it is still queued"
+    },
+    {
+      "key": "ac260",
+      "requirement": "a-held-queue-lets-one-operator-turn-through",
+      "given": "",
+      "when": "an agent's queue is held and the operator sends it a message",
+      "then": "one turn starts for the agent if the provider refuses that turn, no further turn starts before the new reset time"
+    },
+    {
+      "key": "ac255",
+      "requirement": "a-held-queue-is-retried-at-the-reset",
+      "given": "",
+      "when": "an agent's queue is held and the reset time passes",
+      "then": "a turn starts for the agent without any operator action"
+    },
+    {
+      "key": "ac256",
+      "requirement": "a-held-queue-is-retried-at-the-reset",
+      "given": "",
+      "when": "an agent's queue is held, the Hub stops, and it starts again after the reset time",
+      "then": "a turn starts for the agent once the Hub is serving requests"
+    },
+    {
+      "key": "acn29",
+      "requirement": "a-held-queue-is-retried-at-the-reset",
+      "given": "",
+      "when": "a refusal starts a hold",
+      "then": "an operator-visible hold event is recorded naming its end"
+    },
+    {
+      "key": "ac262",
+      "requirement": "a-job-firing-waiting-on-a-hold-stays-in-progress",
+      "given": "",
+      "when": "a job's firing queues input for an agent whose queue is held",
+      "then": "the firing is recorded as in progress, not failed"
+    },
+    {
+      "key": "ac263",
+      "requirement": "a-job-firing-waiting-on-a-hold-stays-in-progress",
+      "given": "",
+      "when": "a job's firing starts a turn and the provider's allowance refuses it",
+      "then": "the firing is recorded as in progress, not failed when its input is delivered after the reset, the firing takes that turn's outcome"
+    },
+    {
+      "key": "ac264",
+      "requirement": "a-job-firing-waiting-on-a-hold-stays-in-progress",
+      "given": "",
+      "when": "a job's firing is waiting on a held queue and the Hub restarts",
+      "then": "the firing is still recorded as in progress"
+    },
+    {
+      "key": "ac282",
+      "requirement": "a-copilot-hold-notice-states-its-end-and-the-way-out",
+      "given": "",
+      "when": "an agent's queue is held by a Copilot refusal whose reset is 00:00 UTC on 2026-10-01",
+      "then": "the reason the agent is not running names 2026-10-01 and 00:00 UTC it says to bind the agent to another runner and then send it a message it says that rebinding alone does not end the hold, and that its loops and jobs stay blocked until then"
+    },
+    {
+      "key": "ac283",
+      "requirement": "a-copilot-hold-notice-states-its-end-and-the-way-out",
+      "given": "",
+      "when": "an agent's queue is held by a Copilot refusal the agent is bound to another runner and no message is sent to it",
+      "then": "the queue is still held and its loops and jobs stay blocked"
+    },
+    {
+      "key": "ac284",
+      "requirement": "a-copilot-hold-notice-states-its-end-and-the-way-out",
+      "given": "",
+      "when": "an agent's queue is held by a refusal from a provider other than Copilot",
+      "then": "the reason the agent is not running reads exactly as it did before this change"
+    },
+    {
+      "key": "acn30",
+      "requirement": "a-copilot-hold-notice-states-its-end-and-the-way-out",
+      "given": "",
+      "when": "an agent is held by a Copilot quota refusal",
+      "then": "the hold notice states the date and time it ends and says to bind another runner and then send a message"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "D1. Allowance holds are their own capability rather than part of usage-accounting: they govern the delivery queue, not measurement, and their trigger is a provider's word, not a Hub budget.\n\nD2. Split from agent-conversation-workspace with the rest of the queue; kept apart from inbound-queue-delivery because a hold suspends the attempt counting that capability defines.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "lifecycle": "Split out of agent-conversation-workspace in the 2026-10-08 spec overhaul.",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu": "FR-1",
+      "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it": "FR-2",
+      "an-allowance-refusal-returns-input-uncounted": "FR-3",
+      "a-held-queue-lets-one-operator-turn-through": "FR-4",
+      "a-held-queue-is-retried-at-the-reset": "FR-5",
+      "a-job-firing-waiting-on-a-hold-stays-in-progress": "FR-6",
+      "a-copilot-hold-notice-states-its-end-and-the-way-out": "FR-7"
+    },
+    "high_water": 7,
+    "retired": {},
+    "digests": {
+      "FR-1": "0a7b5c2b6021964690fd22da8159e12292b37b7af32af86f57fb99b1fbf24078",
+      "FR-2": "74ef377f3147639ba2dc5173e3350f97de04c4c3ba5bdbff1ebc26ce3069cd5d",
+      "FR-3": "90a40f79b082487ee9facb46eadf37afcd2183d8fb4ed58d1cd3f8c00c67bd9e",
+      "FR-4": "e07518d5e50f0d7fb5add7f3c091b002b08ab5523cc030659d694ee7c561d0ab",
+      "FR-5": "3339d79350a5b751939507e13bd7de5dbb6affe77dbe1953ad26ccb40495954f",
+      "FR-6": "f92520773aac2481c8af793080c68bc5dc05f61f8b3eaf6cc7a7b72d80281d17",
+      "FR-7": "4c4cf724f5a1a3b2716fded7dea63d35abd810b4863529e23bd728e6697fbbdf"
+    }
+  }
+}
+</script>
+</body>
+</html>
