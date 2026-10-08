@@ -34919,7 +34919,7 @@ Acceptance: CI green on two consecutive pushes, plus a local `-n 4 --dist loadfi
 
 ## F531 (B) -- a Hub Claude run loads the operator's own claude.ai connectors (Gmail, Drive, Calendar, Docs)
 
-**Status:** proposed, Tier 2 (operator, 2026-10-08: "fix now"): `spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server` (`spdoc-721c3e827237`, trial project `proj-d85a82bf4216`). Acceptance drive `scripts/drive/d1008_f531_no_connectors_drive.py` 1/3 on today's code (no flag in the argv; the agent named 8 `mcp__claude_ai_Claude_Docs__*` tools). Was: open (filed 2026-10-08, interactive, from the F21 probe).
+**Status:** fixed 594f477 (Tier 2, 2026-10-08): `--strict-mcp-config` on every Claude agent turn; acceptance drive 1/3 -> 3/3 on `:8010`; reconciled into `agent-run-sandboxing`. Reaches `:8000` at its next restart, after which project `.mcp.json` and user-scope servers no longer load in agent runs (a runner `--mcp-config` flag brings one back). Codex runs still read `~/.codex/config.toml` servers: not checked (Codex undrivable). Was: proposed, Tier 2 (operator, 2026-10-08: "fix now"): `spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server` (`spdoc-721c3e827237`, trial project `proj-d85a82bf4216`). Acceptance drive `scripts/drive/d1008_f531_no_connectors_drive.py` 1/3 on today's code (no flag in the argv; the agent named 8 `mcp__claude_ai_Claude_Docs__*` tools). Was: open (filed 2026-10-08, interactive, from the F21 probe).
 
 `runner_commands._build_claude_command` passes `--mcp-config` without `--strict-mcp-config`, so a Hub run also gets
 whatever MCP servers the operator's own Claude Code configuration and account carry. Read from `system/init` of a
