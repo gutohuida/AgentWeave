@@ -8,18 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "specjson-t1-impl",
-    "next_action": "Do queue item specjson-t1-impl: write the acceptance drive scripts/drive/d1010_spec_json.py and record it failing on today's Hub (see the change payload task drive-first). Read the payload via hub.spec_payload.extract_payload from hub/.",
+    "current": "specjson-t2-impl",
+    "next_action": "Do queue item specjson-t2-impl: spec.json storage seam in hub/hub/spec_documents.py (read_payload/write_payload, deterministic JSON + hub block), move every reader onto it, GET /spec renders HTML from spec.json, path rules/discovery/naming/index on spec.json, .html create refused (400 naming the .json path), legacy_html_document diagnostic, journey moves write the hub block. Failing Hub tests first (guarded with xfail strict/importorskip so CI stays green); run hub suite with -n auto. Split into sub-units if one firing cannot finish.",
     "queue": [
         {
             "id": "specjson-t1-impl",
-            "status": "open",
+            "status": "done",
             "title": "spec-storage task drive-first: write scripts/drive/d1010_spec_json.py, record it FAILING on today's Hub",
-            "detail": "storage payload change a-spec-document-is-stored-as-its-payload, payload keys tasks: drive-first, storage, convert, corpus (corpus FENCED, not tonight). Scratch Hub own port + fresh db (pattern scripts/drive/d1009_step_journey.py). Log the failing output."
+            "detail": "done 2026-10-09: scripts/drive/d1010_spec_json.py recorded failing at check 1 (405, no route)."
         },
         {
             "id": "specjson-t2-impl",
