@@ -136,6 +136,9 @@ def check(
     absent from it is a roadmap that does not exist.
     """
     findings: List[Finding] = []
+    # A capability states what the system does; the changes folded into it carry the tasks and the
+    # non-goals, so neither is asked of it (F534).
+    capability = payload.kind == "capability"
     served = board_served or frozenset()
     approved = approved_document_paths or frozenset()
 
@@ -196,7 +199,7 @@ def check(
             )
         )
 
-    if not payload.scope.non_goals:
+    if not payload.scope.non_goals and not capability:
         findings.append(
             Finding(
                 "non_goals_empty",
@@ -218,7 +221,7 @@ def check(
                     f"{requirement.key!r} has no acceptance criterion, so nothing demonstrates it",
                 )
             )
-        if requirement.key not in tasked and requirement.key not in served:
+        if not capability and requirement.key not in tasked and requirement.key not in served:
             findings.append(
                 Finding(
                     "requirement_without_task",

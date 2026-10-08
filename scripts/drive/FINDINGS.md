@@ -34959,7 +34959,7 @@ behaviour has no fold path at all. Likely shape: the change payload states what 
 
 ## F534 (C) -- a merge into a capability answers with change-spec completeness findings
 
-**Status:** open (filed 2026-10-08, interactive, from the `ac136` merge edit).
+**Status:** fixed (Tier 0, 2026-10-08): `spec_completeness.check` asks a capability for neither tasks nor non-goals; criteria and clarification rules still apply (`hub/tests/test_a_capability_is_not_held_to_change_rules.py`, 2 of 4 red before). Was: open (filed 2026-10-08, interactive, from the `ac136` merge edit).
 
 `POST .../documents/{capability}/merge` returned 200 with `blocking` holding `non_goals_empty` and 76
 `requirement_without_task` entries for `spec-document-authority`: the completeness checks for a change document run
