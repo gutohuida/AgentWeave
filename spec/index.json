@@ -427,18 +427,74 @@
       "order": 530
     },
     {
+      "path": "spec/changes/a-codex-app-server-spec-turn-keeps-no-write-tools/spec.html",
+      "title": "A Codex app-server specification turn keeps no write tools",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 590
+    },
+    {
+      "path": "spec/changes/a-decided-task-withdraws-its-waiting-reviews/spec.html",
+      "title": "A decided task withdraws its waiting reviews",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 600
+    },
+    {
+      "path": "spec/changes/a-document-names-its-default-reviewer/spec.html",
+      "title": "A document names its default reviewer, and approval says who reviews",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 610
+    },
+    {
+      "path": "spec/changes/a-finished-change-is-folded-into-its-capability/spec.html",
+      "title": "A finished change is folded into its capability, then archived",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 620
+    },
+    {
+      "path": "spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server/spec.html",
+      "title": "A Hub Claude run gets the Hub's tool server and no other",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 630
+    },
+    {
+      "path": "spec/changes/a-read-only-agent-holds-no-task-work/spec.html",
+      "title": "A read-only agent does not hold a task's work",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 640
+    },
+    {
       "path": "spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/spec.html",
       "title": "A review turn reviews the branch tip where evidence does not govern the merge",
       "kind": "change-spec",
-      "status": "approved",
+      "status": "archived",
       "parent": null,
       "order": 540
+    },
+    {
+      "path": "spec/changes/a-run-claims-only-its-agents-or-nobodys-work/spec.html",
+      "title": "A run claims only work that is its agent's or nobody's",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 650
     },
     {
       "path": "spec/changes/same-file-tasks-build-in-order-the-shim-planner-is-told/spec.html",
       "title": "Slice 1b: a planner on the aw-tool path is told about files and same-file ordering",
       "kind": "change-spec",
-      "status": "approved",
+      "status": "archived",
       "parent": null,
       "order": 550
     },
@@ -446,7 +502,7 @@
       "path": "spec/changes/same-file-tasks-build-in-order/spec.html",
       "title": "Tasks of one slice that edit the same files build in order",
       "kind": "change-spec",
-      "status": "approved",
+      "status": "archived",
       "parent": null,
       "order": 560
     },
@@ -462,7 +518,7 @@
       "path": "spec/changes/submission-warns-when-a-multi-task-planner-declares-no-files/spec.html",
       "title": "Submission warns when a multi-task planner declares no files",
       "kind": "change-spec",
-      "status": "approved",
+      "status": "archived",
       "parent": null,
       "order": 580
     }
