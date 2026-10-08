@@ -2210,3 +2210,8 @@ disappears is indistinguishable from one that was forgotten.
   creates its agent that way passes here and 409s on CI. Use the `add_agent` fixture plus `PATCH /agents/{name}`
   `runner_id` (as `test_runners_api._make_runner_bound_agent` does); reproduce CI by stripping
   `/c/Users/huida/AppData/Roaming/npm` from PATH.
+- **2026-10-08 (home) -- inline Python passed through the Bash tool fails to parse when its body is quote-heavy.**
+  Twice a heredoc carrying a long edit script (triple quotes, JSX, template literals) died with `unexpected EOF
+  while looking for matching`, and once a `py -c "..."` with nested triple quotes died the same way; nothing ran,
+  so the tree was untouched each time. Write the script to the session scratchpad with the Write tool and run
+  `py -3.11 <path>`.
