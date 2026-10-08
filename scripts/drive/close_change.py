@@ -29,6 +29,7 @@ CODEX_SPEC_TESTS = "hub/tests/test_a_codex_app_server_spec_turn_keeps_no_write_t
 DEFAULT_REVIEWER_TESTS = "hub/tests/test_a_document_names_its_default_reviewer.py"
 STRICT_MCP_TESTS = "hub/tests/test_a_hub_run_gets_only_the_hubs_tool_server.py"
 FOLD_TESTS = "hub/tests/test_a_finished_change_is_folded_into_its_capability.py"
+DELETE_TESTS = "hub/tests/test_the_operator_can_delete_a_document_a_task_or_an_archived_agent.py"
 
 CHANGES = {
     "f440": {
@@ -207,6 +208,32 @@ CHANGES = {
             ("FR-3", "task-85b425296f6f", "manual_observation",
              "scripts/drive/d1008_fold_retire_drive.py",
              "The acceptance drive, written and run before the build: 2/7 on today's Hub."),
+        ],
+    },
+    "f532": {
+        "document": "spec/changes/the-operator-can-delete-a-document-a-task-or-an-archived-agent/spec.html",
+        "tasks": ["task-590f10b700ce", "task-2b6be2d03939", "task-f383ec86c0dc"],
+        "evidence": [
+            ("FR-1", "task-2b6be2d03939", "test_result", DELETE_TESTS,
+             "A document delete leaves no row naming it, its requirements, tasks, evidence, loop "
+             "or job; runs, conversations and delivered entries keep their row with the pointer "
+             "cleared; the file and its spec/index.json entry are gone; capability, archived, "
+             "folded, running-flow and active-run cases are refused unchanged."),
+            ("FR-2", "task-2b6be2d03939", "test_result", DELETE_TESTS,
+             "A task delete takes its dependency, transition, evidence, footprint and queued "
+             "entry, clears the run and the delivered entry, keeps the dependent task; a task with "
+             "a running run is refused; the reference-coverage guard passes."),
+            ("FR-5", "task-2b6be2d03939", "test_result", DELETE_TESTS,
+             "A runner held only by an archived agent deletes, the agent stays archived with no "
+             "runner and its run intact; an open holder is still refused by name (and "
+             "hub/tests/test_runners_api.py's two archived-holder tests, moved to this rule)."),
+            ("FR-4", "task-f383ec86c0dc", "manual_observation", "scripts/drive/d1008_delete_drive.py",
+             "In Chromium on :8010: 1/9 before (neither Delete control existed, the runner was "
+             "refused), 9/9 after: the task deleted from its drawer, the change from its phase bar "
+             "with its file and task, the runner deleted and the archived agent kept. vitest: the "
+             "four new delete cases red before; 1920/1920 after."),
+            ("FR-4", "task-590f10b700ce", "manual_observation", "scripts/drive/d1008_delete_drive.py",
+             "The acceptance drive, written and run before the build: 1/9 on today's Hub."),
         ],
     },
 }
