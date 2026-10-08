@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A finished change is folded into its capability, then archived</title>
+<meta name="aw-spec-kind" content="change-spec">
+<meta name="aw-spec-status" content="approved">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>A finished change is folded into its capability, then archived</h1>
+<p class="aw-meta"><span class="aw-chip">change-spec</span><span class="aw-chip aw-chip-phase-done">approved</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">5</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">5</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">7</span> criteria<span class="aw-summary-sep">·</span><span class="aw-count">3</span> tasks</p>
+<section id="summary"><h2>Summary</h2><p>The operator closes a finished change from the app: the Hub drafts the capability&#x27;s new content by copying the change&#x27;s requirements and criteria in, the operator may edit the draft, and one confirm merges it (audited) and archives the change. Archiving a change is refused until its tasks are done and it was folded somewhere, or the operator says it changes no capability. A capability&#x27;s content changes only through a merge.</p></section><section id="problem"><h2>Problem</h2><p>Closing a change has needed a hand-written script per change. The merge route (spec.py:2260) exists but takes the capability&#x27;s whole new payload and has no app screen (the-corpus-keeps-what-shipped design D7), so every reconcile so far went through PUT .../content instead (scripts/drive/reconcile_f4xx.py, reconcile_f509.py, reconcile_f531.py): spec_document_merges holds 0 rows on :8010. Archive checks only that the actor is the operator (spec_lifecycle.py:319), so nothing stopped a shipped change being archived unfolded, and nothing noticed F509&#x27;s three slices sat in no capability for two days (DEAD-ENDS 2026-10-08).</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>A fold draft and a fold route for an approved change-spec, built on spec_service.merge_document</li><li>The archive transition&#x27;s guard for change-spec documents</li><li>Capability content writes outside a merge (PUT .../content) refused; a merge naming no change allowed as an audited edit</li><li>fold_state on the document view, and the phase bar&#x27;s fold dialog in the app</li><li>spec-document-authority: ac136 now reads that the operator&#x27;s capability write succeeds through a merge</li></ul><h3>Non-goals</h3><ul><li>Removing a capability requirement through a fold (a change that retires one is folded by an edited merge): backlog</li><li>Agents folding changes: merge stays operator-only</li><li>Back-filling merge rows for the ten changes archived before this change</li><li>Closing a change&#x27;s tasks and evidence for operator-built work (close_change.py&#x27;s first half)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 5</span><p><span class="aw-modal aw-modal-must">MUST</span> For an approved change-spec and a named capability document, the Hub MUST return a fold draft: the capability&#x27;s current payload with each of the change&#x27;s requirements appended verbatim under the key &lt;change-slug&gt;-&lt;key&gt; (the change&#x27;s folder name, trimmed so the key is at most 64 characters), each acceptance criterion of those requirements appended with its requirement re-pointed at the new key, and every draft key that already exists in the capability reported as a collision rather than overwritten.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The operator reviews text instead of writing it; most reconciles so far copied the change&#x27;s statements unchanged.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 5</span><p><span class="aw-modal aw-modal-must">MUST</span> The operator MUST be able to fold an approved change-spec into a capability document in one request, choosing which of the change&#x27;s requirements to fold (default all), each optionally with an edited key, statement or modal, or naming an existing capability requirement it replaces; the fold MUST write through the merge (one spec_document_merges row naming the change and one merged event) and, unless told not to, move the change to archived in the same transaction. It MUST be refused before anything is written when the change is not approved, a task of it is still open, a named requirement is not the change&#x27;s, a key collides without naming what it replaces, a replaced key is not the capability&#x27;s, or the target is not a capability document.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Replaces the per-change reconcile scripts with one audited operator action; a change touching two capabilities is folded twice, archiving on the second.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 5</span><p><span class="aw-modal aw-modal-must">MUST</span> Archiving an approved change-spec MUST be refused, naming what is missing, unless every task the document declared is approved or rejected and either a merge names the change or the operator states no_capability_change with a non-empty reason. Other kinds and the existing exploring/proposed archive rule are unchanged.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>archived has no way back; a shipped change whose requirements live nowhere else must not become history (F509).</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 5</span><p><span class="aw-modal aw-modal-must">MUST</span> A capability document&#x27;s content MUST change only through a merge: a direct content write to a capability document is refused with a code naming the merge route, and a merge naming no change is accepted as an operator edit and recorded as one. Creating a capability document is unchanged.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Every capability change then has an audit row saying which change it came from, or that it was an edit; the original design said capability documents are written only by merge.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 5</span><p><span class="aw-modal aw-modal-must">MUST</span> The document view of an approved change-spec MUST carry fold_state (tasks_open, ready, or folded with the capability paths it was folded into), and the app&#x27;s phase bar MUST show a ready change as shipped but not yet in a capability, with a Fold into capability action (capability picker, the draft&#x27;s requirements with editable key and statement, an archive option on by default, confirm) and an Archive without a capability change action that asks for a reason.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The close-out becomes something the operator does in the app, and an unfolded shipped change is visible where the operator already looks.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>an approved change with two requirements and three criteria, and a capability already holding one of the draft keys</td><td>the draft is requested</td><td>the payload appends both requirements and all three criteria under prefixed keys at most 64 characters long, and the existing key is listed as a collision with the capability&#x27;s text untouched</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>an approved change whose tasks are all approved</td><td>it is folded with one requirement&#x27;s statement edited and another replacing an existing capability key</td><td>the capability holds the edited statement and the replaced requirement&#x27;s new text under its old key, one merge row and one merged event exist, and the change is archived</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a proposed change; an approved change with a task in_progress; an unknown requirement key; an unhandled collision; a replaces naming no capability key; a change-spec as target</td><td>each is folded</td><td>each is refused with its own code and nothing is written: no merge row, the capability&#x27;s content digest unchanged, the change still approved</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>an approved change with an open task; one with all tasks approved and no merge; the same with no_capability_change and a reason; a folded one</td><td>each is archived through the phase route</td><td>the first two are refused naming the open task and the missing fold; the last two are archived</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a capability document</td><td>the operator PUTs its content, and then merges the same payload naming no change</td><td>the PUT is refused naming the merge route; the merge writes it and records an edit</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>the trial Hub on :8010, a fresh project with a capability document and an approved change whose one task is approved</td><td>the operator, in Chromium on the served bundle, opens the change, presses Fold into capability, picks the capability and confirms (scripts/drive/d1008_fold_change_drive.py)</td><td>the capability&#x27;s file carries the change&#x27;s requirement under &lt;slug&gt;-&lt;key&gt;, one merge row names the change, and the change is archived; on today&#x27;s Hub the action does not exist</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>approved changes with an open task, with every task approved, and folded</td><td>each document is read</td><td>fold_state is tasks_open, ready, and folded naming the capability path</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>Tier 1, no migration (spec_document_merges exists since 0074). The fold is spec_service.merge_document with a payload the Hub builds, so validation, identity minting, rendering and the audit row are the merge&#x27;s own. Key rule: &lt;change-slug&gt;-&lt;key&gt;, the slug trimmed from the right so the whole key is at most 64 characters (KEY_RE, spec_payload.py:42); the dialog lets the operator rename. The archive guard lives in spec_lifecycle.transition beside the operator check, so every archive path meets it; no_capability_change rides PhaseRequest. HAZARDS: the UI bundle reaches :8000&#x27;s app at its next reload, and from :8000&#x27;s next restart a direct capability content write is refused there too (the operator&#x27;s app never makes one; only scripts did). Rollback: revert the commits; no data changes shape.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>spec.py:2260 merge_document route: operator-only, full payload, from_changes min_length 1 (spec.py:387)</li><li>spec_service.py:741 merge_document writes through save_document and records SpecDocumentMerge plus a merged event</li><li>spec_lifecycle.py:319-345: archive checks only the operator and the exploring/proposed orphan rule</li><li>spec.py:606 PUT .../content: the operator&#x27;s direct write; spec-document-authority ac136 requires it to succeed for a capability</li><li>spec_document_merges on :8010: 0 rows; seven reconcile scripts used PUT .../content</li><li>D7 of the-corpus-keeps-what-shipped: no merge UI was built</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>one-off</p></section><section id="tasks"><h2>Tasks</h2><ul class="aw-task-list"><li class="aw-task"><strong>Acceptance drive, failing on today&#x27;s Hub</strong> — scripts/drive/d1008_fold_change_drive.py against :8010 in a fresh testbed project: the &#x27;drive&#x27; criterion. Run before the build; it must fail because the fold action does not exist.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-5">FR-5</a></span></li><li class="aw-task"><strong>Fold draft, fold, archive guard and capability write lock</strong> — Failing tests first in hub/tests/test_a_finished_change_is_folded_into_its_capability.py (draft-shape, fold-writes, fold-refusals, guard, lock, state). spec_service gains fold_draft and fold on top of merge_document; spec_lifecycle.transition gains the change-spec archive guard; save_document refuses a capability write that is not a merge; MergeRequest.from_changes may be empty; the document view gains fold_state. Existing tests that PUT a capability are moved to merge.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-2">FR-2</a><a class="aw-chip-ref" href="#FR-3">FR-3</a><a class="aw-chip-ref" href="#FR-4">FR-4</a><a class="aw-chip-ref" href="#FR-5">FR-5</a></span></li><li class="aw-task"><strong>Fold dialog on the phase bar</strong> — SpecPhaseBar shows a ready change as shipped but not in a capability, with Fold into capability (dialog: capability picker, draft requirements with editable key and statement, archive on by default) and Archive without a capability change (reason). Vitest first; bundle refreshed with scripts/refresh_ui_bundle.py and committed with hub/ui/src. Then the drive passes on a restarted :8010.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-5">FR-5</a></span></li></ul></section><section id="delivery"><h2>Delivery</h2><p>No flow. The tasks go on the board and are started by hand.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "change-spec",
+  "title": "A finished change is folded into its capability, then archived",
+  "summary": "The operator closes a finished change from the app: the Hub drafts the capability's new content by copying the change's requirements and criteria in, the operator may edit the draft, and one confirm merges it (audited) and archives the change. Archiving a change is refused until its tasks are done and it was folded somewhere, or the operator says it changes no capability. A capability's content changes only through a merge.",
+  "problem": "Closing a change has needed a hand-written script per change. The merge route (spec.py:2260) exists but takes the capability's whole new payload and has no app screen (the-corpus-keeps-what-shipped design D7), so every reconcile so far went through PUT .../content instead (scripts/drive/reconcile_f4xx.py, reconcile_f509.py, reconcile_f531.py): spec_document_merges holds 0 rows on :8010. Archive checks only that the actor is the operator (spec_lifecycle.py:319), so nothing stopped a shipped change being archived unfolded, and nothing noticed F509's three slices sat in no capability for two days (DEAD-ENDS 2026-10-08).",
+  "scope": {
+    "in_scope": [
+      "A fold draft and a fold route for an approved change-spec, built on spec_service.merge_document",
+      "The archive transition's guard for change-spec documents",
+      "Capability content writes outside a merge (PUT .../content) refused; a merge naming no change allowed as an audited edit",
+      "fold_state on the document view, and the phase bar's fold dialog in the app",
+      "spec-document-authority: ac136 now reads that the operator's capability write succeeds through a merge"
+    ],
+    "non_goals": [
+      "Removing a capability requirement through a fold (a change that retires one is folded by an edited merge): backlog",
+      "Agents folding changes: merge stays operator-only",
+      "Back-filling merge rows for the ten changes archived before this change",
+      "Closing a change's tasks and evidence for operator-built work (close_change.py's first half)"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "draft",
+      "statement": "For an approved change-spec and a named capability document, the Hub MUST return a fold draft: the capability's current payload with each of the change's requirements appended verbatim under the key \u003cchange-slug>-\u003ckey> (the change's folder name, trimmed so the key is at most 64 characters), each acceptance criterion of those requirements appended with its requirement re-pointed at the new key, and every draft key that already exists in the capability reported as a collision rather than overwritten.",
+      "modal": "MUST",
+      "rationale": "The operator reviews text instead of writing it; most reconciles so far copied the change's statements unchanged.",
+      "party": null
+    },
+    {
+      "key": "fold",
+      "statement": "The operator MUST be able to fold an approved change-spec into a capability document in one request, choosing which of the change's requirements to fold (default all), each optionally with an edited key, statement or modal, or naming an existing capability requirement it replaces; the fold MUST write through the merge (one spec_document_merges row naming the change and one merged event) and, unless told not to, move the change to archived in the same transaction. It MUST be refused before anything is written when the change is not approved, a task of it is still open, a named requirement is not the change's, a key collides without naming what it replaces, a replaced key is not the capability's, or the target is not a capability document.",
+      "modal": "MUST",
+      "rationale": "Replaces the per-change reconcile scripts with one audited operator action; a change touching two capabilities is folded twice, archiving on the second.",
+      "party": null
+    },
+    {
+      "key": "archive-guard",
+      "statement": "Archiving an approved change-spec MUST be refused, naming what is missing, unless every task the document declared is approved or rejected and either a merge names the change or the operator states no_capability_change with a non-empty reason. Other kinds and the existing exploring/proposed archive rule are unchanged.",
+      "modal": "MUST",
+      "rationale": "archived has no way back; a shipped change whose requirements live nowhere else must not become history (F509).",
+      "party": null
+    },
+    {
+      "key": "write-via-merge",
+      "statement": "A capability document's content MUST change only through a merge: a direct content write to a capability document is refused with a code naming the merge route, and a merge naming no change is accepted as an operator edit and recorded as one. Creating a capability document is unchanged.",
+      "modal": "MUST",
+      "rationale": "Every capability change then has an audit row saying which change it came from, or that it was an edit; the original design said capability documents are written only by merge.",
+      "party": null
+    },
+    {
+      "key": "app",
+      "statement": "The document view of an approved change-spec MUST carry fold_state (tasks_open, ready, or folded with the capability paths it was folded into), and the app's phase bar MUST show a ready change as shipped but not yet in a capability, with a Fold into capability action (capability picker, the draft's requirements with editable key and statement, an archive option on by default, confirm) and an Archive without a capability change action that asks for a reason.",
+      "modal": "MUST",
+      "rationale": "The close-out becomes something the operator does in the app, and an unfolded shipped change is visible where the operator already looks.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "drive",
+      "requirement": "app",
+      "given": "the trial Hub on :8010, a fresh project with a capability document and an approved change whose one task is approved",
+      "when": "the operator, in Chromium on the served bundle, opens the change, presses Fold into capability, picks the capability and confirms (scripts/drive/d1008_fold_change_drive.py)",
+      "then": "the capability's file carries the change's requirement under \u003cslug>-\u003ckey>, one merge row names the change, and the change is archived; on today's Hub the action does not exist"
+    },
+    {
+      "key": "draft-shape",
+      "requirement": "draft",
+      "given": "an approved change with two requirements and three criteria, and a capability already holding one of the draft keys",
+      "when": "the draft is requested",
+      "then": "the payload appends both requirements and all three criteria under prefixed keys at most 64 characters long, and the existing key is listed as a collision with the capability's text untouched"
+    },
+    {
+      "key": "fold-writes",
+      "requirement": "fold",
+      "given": "an approved change whose tasks are all approved",
+      "when": "it is folded with one requirement's statement edited and another replacing an existing capability key",
+      "then": "the capability holds the edited statement and the replaced requirement's new text under its old key, one merge row and one merged event exist, and the change is archived"
+    },
+    {
+      "key": "fold-refusals",
+      "requirement": "fold",
+      "given": "a proposed change; an approved change with a task in_progress; an unknown requirement key; an unhandled collision; a replaces naming no capability key; a change-spec as target",
+      "when": "each is folded",
+      "then": "each is refused with its own code and nothing is written: no merge row, the capability's content digest unchanged, the change still approved"
+    },
+    {
+      "key": "guard",
+      "requirement": "archive-guard",
+      "given": "an approved change with an open task; one with all tasks approved and no merge; the same with no_capability_change and a reason; a folded one",
+      "when": "each is archived through the phase route",
+      "then": "the first two are refused naming the open task and the missing fold; the last two are archived"
+    },
+    {
+      "key": "lock",
+      "requirement": "write-via-merge",
+      "given": "a capability document",
+      "when": "the operator PUTs its content, and then merges the same payload naming no change",
+      "then": "the PUT is refused naming the merge route; the merge writes it and records an edit"
+    },
+    {
+      "key": "state",
+      "requirement": "app",
+      "given": "approved changes with an open task, with every task approved, and folded",
+      "when": "each document is read",
+      "then": "fold_state is tasks_open, ready, and folded naming the capability path"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "drive-first",
+      "title": "Acceptance drive, failing on today's Hub",
+      "description": "scripts/drive/d1008_fold_change_drive.py against :8010 in a fresh testbed project: the 'drive' criterion. Run before the build; it must fail because the fold action does not exist.",
+      "requirements": [
+        "app"
+      ],
+      "depends_on": [],
+      "files": [
+        "scripts/drive/d1008_fold_change_drive.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "backend",
+      "title": "Fold draft, fold, archive guard and capability write lock",
+      "description": "Failing tests first in hub/tests/test_a_finished_change_is_folded_into_its_capability.py (draft-shape, fold-writes, fold-refusals, guard, lock, state). spec_service gains fold_draft and fold on top of merge_document; spec_lifecycle.transition gains the change-spec archive guard; save_document refuses a capability write that is not a merge; MergeRequest.from_changes may be empty; the document view gains fold_state. Existing tests that PUT a capability are moved to merge.",
+      "requirements": [
+        "draft",
+        "fold",
+        "archive-guard",
+        "write-via-merge",
+        "app"
+      ],
+      "depends_on": [
+        "drive-first"
+      ],
+      "files": [
+        "hub/hub/spec_service.py",
+        "hub/hub/spec_lifecycle.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests/test_a_finished_change_is_folded_into_its_capability.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "ui",
+      "title": "Fold dialog on the phase bar",
+      "description": "SpecPhaseBar shows a ready change as shipped but not in a capability, with Fold into capability (dialog: capability picker, draft requirements with editable key and statement, archive on by default) and Archive without a capability change (reason). Vitest first; bundle refreshed with scripts/refresh_ui_bundle.py and committed with hub/ui/src. Then the drive passes on a restarted :8010.",
+      "requirements": [
+        "app"
+      ],
+      "depends_on": [
+        "backend"
+      ],
+      "files": [
+        "hub/ui/src/components/spec/SpecPhaseBar.tsx",
+        "hub/ui/src/api/spec.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "reviewer": null
+    }
+  ],
+  "algorithms": [],
+  "design": "Tier 1, no migration (spec_document_merges exists since 0074). The fold is spec_service.merge_document with a payload the Hub builds, so validation, identity minting, rendering and the audit row are the merge's own. Key rule: \u003cchange-slug>-\u003ckey>, the slug trimmed from the right so the whole key is at most 64 characters (KEY_RE, spec_payload.py:42); the dialog lets the operator rename. The archive guard lives in spec_lifecycle.transition beside the operator check, so every archive path meets it; no_capability_change rides PhaseRequest. HAZARDS: the UI bundle reaches :8000's app at its next reload, and from :8000's next restart a direct capability content write is refused there too (the operator's app never makes one; only scripts did). Rollback: revert the commits; no data changes shape.",
+  "evidence": {
+    "checked": [
+      "spec.py:2260 merge_document route: operator-only, full payload, from_changes min_length 1 (spec.py:387)",
+      "spec_service.py:741 merge_document writes through save_document and records SpecDocumentMerge plus a merged event",
+      "spec_lifecycle.py:319-345: archive checks only the operator and the exploring/proposed orphan rule",
+      "spec.py:606 PUT .../content: the operator's direct write; spec-document-authority ac136 requires it to succeed for a capability",
+      "spec_document_merges on :8010: 0 rows; seven reconcile scripts used PUT .../content",
+      "D7 of the-corpus-keeps-what-shipped: no merge UI was built"
+    ],
+    "limits": []
+  },
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "delivery": {
+    "mode": "none",
+    "agent": null,
+    "reviewer": null,
+    "stop_when_queue_empties": false,
+    "stop_at": null,
+    "cron": "*/5 * * * *"
+  },
+  "aw_identity": {
+    "requirements": {
+      "draft": "FR-1",
+      "fold": "FR-2",
+      "archive-guard": "FR-3",
+      "write-via-merge": "FR-4",
+      "app": "FR-5"
+    },
+    "high_water": 5,
+    "retired": {},
+    "digests": {
+      "FR-1": "1a16d37cb7fd8dfaa9e31f524b8e43a28ed1871737287a1110e0059ec7b786d6",
+      "FR-2": "6e4e1e0be625a20c6084beeffe826d2925165e144303c6183122fd8db68c66b3",
+      "FR-3": "8711893631542d409cc7236d939a9ca777a63f8c778b717b73f12a5470fef6dd",
+      "FR-4": "8ddeb3faca5e6395c869df7c251c60c22d6c8ce0d29accae5b663ded1fd9dd45",
+      "FR-5": "0d8b7138aa1115d1730eb391db2f91f41b74c9ff9175121c4be1c1fe0c420b5f"
+    }
+  }
+}
+</script>
+</body>
+</html>
