@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A fold can retire what the change supersedes in the capability</title>
+<meta name="aw-spec-kind" content="change-spec">
+<meta name="aw-spec-status" content="approved">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>A fold can retire what the change supersedes in the capability</h1>
+<p class="aw-meta"><span class="aw-chip">change-spec</span><span class="aw-chip aw-chip-phase-done">approved</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">3</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">3</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">4</span> criteria<span class="aw-summary-sep">·</span><span class="aw-count">3</span> tasks</p>
+<section id="summary"><h2>Summary</h2><p>Folding a change can also remove capability requirements (with their criteria) and individual criteria that the change supersedes, in the same audited merge. Amending a criterion is retiring the old one and folding the new. The fold dialog lists the capability&#x27;s requirements and criteria to retire.</p></section><section id="problem"><h2>Problem</h2><p>F533: the fold appends and can replace a whole requirement, but cannot remove a requirement or touch an existing criterion. Restating spec-document-authority&#x27;s ac136, which a-finished-change-is-folded-into-its-capability contradicts, took a second hand-built merge naming no change (a504858), and a change that narrows or retires behaviour has no fold path at all.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>retire and retire_criteria on the fold request, applied in the same merge</li><li>The fold draft listing the capability&#x27;s requirements and criteria</li><li>The fold dialog&#x27;s retire section</li></ul><h3>Non-goals</h3><ul><li>A change document declaring what it retires in its own payload: the fold is where the operator reconciles a change with the capability</li><li>Retiring through an agent: folds stay operator-only</li><li>Editing an existing criterion&#x27;s text in place: retire it and fold the new one</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 3</span><p><span class="aw-modal aw-modal-must">MUST</span> A fold MUST accept capability requirement keys to retire and capability criterion keys to retire, and write the capability without them in the same merge as the folded requirements: a retired requirement takes its criteria with it. A key the capability does not hold, or a requirement both replaced and retired, MUST be refused before anything is written.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A change that narrows or supersedes behaviour must be able to say so in the corpus through the same audited step that adds what it brings.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 3</span><p><span class="aw-modal aw-modal-must">MUST</span> The fold draft MUST list the capability&#x27;s current requirements (key and statement) and criteria (key, requirement and then), so the operator can choose what to retire.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The operator retires by key; the keys have to be in front of them.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 3</span><p><span class="aw-modal aw-modal-must">MUST</span> The fold dialog MUST offer the capability&#x27;s requirements and criteria for retirement, filterable by text, and send the chosen keys with the fold.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The close-out stays something the operator does in the app.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a capability with two requirements, one with two criteria</td><td>a fold retires one requirement and one criterion of the other</td><td>the retired requirement and its criteria are gone, the other criterion stays, one merge row names the change</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>an unknown requirement key, an unknown criterion key, a requirement both replaced and retired</td><td>each is folded</td><td>each is refused with its own code and the capability&#x27;s digest is unchanged</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a capability with requirements and criteria</td><td>the draft is requested</td><td>it lists every requirement with its statement and every criterion with its requirement, in the capability&#x27;s order</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>the trial Hub on :8010, a capability holding old-rule and widgets-exist with criterion widgets-exist-c, and an approved change whose task is approved</td><td>the operator folds it in Chromium, retiring old-rule and widgets-exist-c (scripts/drive/d1008_fold_retire_drive.py)</td><td>the capability&#x27;s file holds the folded requirement and widgets-exist, and neither old-rule nor widgets-exist-c; on today&#x27;s Hub the retire section does not exist</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>Tier 1, no migration. Retirement is applied to the draft&#x27;s payload before the merge, so the merge&#x27;s validation (a criterion naming a missing requirement is refused) and its audit row cover it. Retiring a requirement drops its criteria; retiring a criterion leaves its requirement. HAZARD: the UI bundle reaches :8000&#x27;s app at its next reload. Rollback: revert.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>spec_service.fold_draft (a-finished-change-is-folded-into-its-capability) appends and replaces only</li><li>a504858: ac136 restated by a separate merge naming no change</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>one-off</p></section><section id="tasks"><h2>Tasks</h2><ul class="aw-task-list"><li class="aw-task"><strong>Acceptance drive, failing on today&#x27;s Hub</strong> — scripts/drive/d1008_fold_retire_drive.py against :8010: the &#x27;drive&#x27; criterion, run before the build.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-3">FR-3</a></span></li><li class="aw-task"><strong>retire and retire_criteria on the fold; the draft lists the capability</strong> — Failing tests first in hub/tests/test_a_fold_can_retire_what_the_change_supersedes.py. spec_service.fold_draft takes the retirements and lists the capability&#x27;s requirements and criteria; the fold route accepts them.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-2">FR-2</a></span></li><li class="aw-task"><strong>Retire section in the fold dialog</strong> — Vitest first in specFold.test.tsx; bundle refreshed; the drive passes on a restarted :8010.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-3">FR-3</a></span></li></ul></section><section id="delivery"><h2>Delivery</h2><p>No flow. The tasks go on the board and are started by hand.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "change-spec",
+  "title": "A fold can retire what the change supersedes in the capability",
+  "summary": "Folding a change can also remove capability requirements (with their criteria) and individual criteria that the change supersedes, in the same audited merge. Amending a criterion is retiring the old one and folding the new. The fold dialog lists the capability's requirements and criteria to retire.",
+  "problem": "F533: the fold appends and can replace a whole requirement, but cannot remove a requirement or touch an existing criterion. Restating spec-document-authority's ac136, which a-finished-change-is-folded-into-its-capability contradicts, took a second hand-built merge naming no change (a504858), and a change that narrows or retires behaviour has no fold path at all.",
+  "scope": {
+    "in_scope": [
+      "retire and retire_criteria on the fold request, applied in the same merge",
+      "The fold draft listing the capability's requirements and criteria",
+      "The fold dialog's retire section"
+    ],
+    "non_goals": [
+      "A change document declaring what it retires in its own payload: the fold is where the operator reconciles a change with the capability",
+      "Retiring through an agent: folds stay operator-only",
+      "Editing an existing criterion's text in place: retire it and fold the new one"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "retire",
+      "statement": "A fold MUST accept capability requirement keys to retire and capability criterion keys to retire, and write the capability without them in the same merge as the folded requirements: a retired requirement takes its criteria with it. A key the capability does not hold, or a requirement both replaced and retired, MUST be refused before anything is written.",
+      "modal": "MUST",
+      "rationale": "A change that narrows or supersedes behaviour must be able to say so in the corpus through the same audited step that adds what it brings.",
+      "party": null
+    },
+    {
+      "key": "draft-lists",
+      "statement": "The fold draft MUST list the capability's current requirements (key and statement) and criteria (key, requirement and then), so the operator can choose what to retire.",
+      "modal": "MUST",
+      "rationale": "The operator retires by key; the keys have to be in front of them.",
+      "party": null
+    },
+    {
+      "key": "app",
+      "statement": "The fold dialog MUST offer the capability's requirements and criteria for retirement, filterable by text, and send the chosen keys with the fold.",
+      "modal": "MUST",
+      "rationale": "The close-out stays something the operator does in the app.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "drive",
+      "requirement": "app",
+      "given": "the trial Hub on :8010, a capability holding old-rule and widgets-exist with criterion widgets-exist-c, and an approved change whose task is approved",
+      "when": "the operator folds it in Chromium, retiring old-rule and widgets-exist-c (scripts/drive/d1008_fold_retire_drive.py)",
+      "then": "the capability's file holds the folded requirement and widgets-exist, and neither old-rule nor widgets-exist-c; on today's Hub the retire section does not exist"
+    },
+    {
+      "key": "retire-writes",
+      "requirement": "retire",
+      "given": "a capability with two requirements, one with two criteria",
+      "when": "a fold retires one requirement and one criterion of the other",
+      "then": "the retired requirement and its criteria are gone, the other criterion stays, one merge row names the change"
+    },
+    {
+      "key": "retire-refusals",
+      "requirement": "retire",
+      "given": "an unknown requirement key, an unknown criterion key, a requirement both replaced and retired",
+      "when": "each is folded",
+      "then": "each is refused with its own code and the capability's digest is unchanged"
+    },
+    {
+      "key": "lists",
+      "requirement": "draft-lists",
+      "given": "a capability with requirements and criteria",
+      "when": "the draft is requested",
+      "then": "it lists every requirement with its statement and every criterion with its requirement, in the capability's order"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "drive-first",
+      "title": "Acceptance drive, failing on today's Hub",
+      "description": "scripts/drive/d1008_fold_retire_drive.py against :8010: the 'drive' criterion, run before the build.",
+      "requirements": [
+        "app"
+      ],
+      "depends_on": [],
+      "files": [
+        "scripts/drive/d1008_fold_retire_drive.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "backend",
+      "title": "retire and retire_criteria on the fold; the draft lists the capability",
+      "description": "Failing tests first in hub/tests/test_a_fold_can_retire_what_the_change_supersedes.py. spec_service.fold_draft takes the retirements and lists the capability's requirements and criteria; the fold route accepts them.",
+      "requirements": [
+        "retire",
+        "draft-lists"
+      ],
+      "depends_on": [
+        "drive-first"
+      ],
+      "files": [
+        "hub/hub/spec_service.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests/test_a_fold_can_retire_what_the_change_supersedes.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "ui",
+      "title": "Retire section in the fold dialog",
+      "description": "Vitest first in specFold.test.tsx; bundle refreshed; the drive passes on a restarted :8010.",
+      "requirements": [
+        "app"
+      ],
+      "depends_on": [
+        "backend"
+      ],
+      "files": [
+        "hub/ui/src/components/spec/FoldIntoCapabilityDialog.tsx",
+        "hub/ui/src/api/spec.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "reviewer": null
+    }
+  ],
+  "algorithms": [],
+  "design": "Tier 1, no migration. Retirement is applied to the draft's payload before the merge, so the merge's validation (a criterion naming a missing requirement is refused) and its audit row cover it. Retiring a requirement drops its criteria; retiring a criterion leaves its requirement. HAZARD: the UI bundle reaches :8000's app at its next reload. Rollback: revert.",
+  "evidence": {
+    "checked": [
+      "spec_service.fold_draft (a-finished-change-is-folded-into-its-capability) appends and replaces only",
+      "a504858: ac136 restated by a separate merge naming no change"
+    ],
+    "limits": []
+  },
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "delivery": {
+    "mode": "none",
+    "agent": null,
+    "reviewer": null,
+    "stop_when_queue_empties": false,
+    "stop_at": null,
+    "cron": "*/5 * * * *"
+  },
+  "aw_identity": {
+    "requirements": {
+      "retire": "FR-1",
+      "draft-lists": "FR-2",
+      "app": "FR-3"
+    },
+    "high_water": 3,
+    "retired": {},
+    "digests": {
+      "FR-1": "8391cf867d4cc4e603306eb0458bcf42b7d8f1f4fea4251aee369b55b24b93b0",
+      "FR-2": "9d0ace041394dc73bbe8e522f1efff17fd7d6365581a6a4db7074b42e2088746",
+      "FR-3": "9953a9bc47db23090eb2e9ad8ef9f3cc236b11d73229d9bf4d8ac7f7eda643f4"
+    }
+  }
+}
+</script>
+</body>
+</html>
