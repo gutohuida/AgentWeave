@@ -2215,3 +2215,23 @@ disappears is indistinguishable from one that was forgotten.
   while looking for matching`, and once a `py -c "..."` with nested triple quotes died the same way; nothing ran,
   so the tree was untouched each time. Write the script to the session scratchpad with the Write tool and run
   `py -3.11 <path>`.
+- **2026-10-08 (home) -- the FINDINGS shared-prefix trap, hit again.** A batch status update asserted
+  uniqueness on F424's `**Status:** open. Filed 2026-09-24 (daily review, ...` and stopped before
+  writing anything, yet the `git commit` chained after it with `;`-style flow still ran and pushed a
+  commit whose message claimed the ledger update (`7b23dd1`, corrected by `cd0e6ee`). Anchor each
+  replace on the finding's own `## F<n> (` heading and replace inside that block; chain the commit
+  with `&&` after the script so a failed assert stops it.
+- **2026-10-08 (home) -- a run's tool calls are in `agent_outputs` (`run_id`, `content`, `payload`),
+  not `conversations`** (which has no `run_id`). A drive counting a run's calls must query
+  `agent_outputs`.
+- **2026-10-08 (home) -- the operator's document list is `GET /projects/{id}/project/documents`**, not
+  `/project/spec/documents` (that path does not exist).
+- **2026-10-08 (home) -- a moved/missing project directory does not make the approval gate raise**:
+  `merge_situation` answers None, approval proceeds, integration is recorded skipped. F424's
+  `TimeoutExpired`/`OSError` path is reachable only by fault injection at `task_integration._git`.
+- **2026-10-08 (home) -- CI on master cancels a run when a newer push lands** (concurrency group):
+  `gh run list --limit 1` then shows only the newest; earlier pushes read `cancelled`, not failed.
+  Read the newest run's result as the result for the whole range.
+- **2026-10-08 (home) -- `openspec archive <name> --skip-specs --yes` archives a change with open
+  tasks** (warns, continues). Used to retire a superseded change; prepend a superseded note to its
+  proposal.md and tasks.md first so the archive says why.
