@@ -34977,3 +34977,16 @@ since an identifier like FR-5 exists in many documents). Coverage would otherwis
 a task still claims a retired one. Likely fix: at re-approval, reconcile the board with the document's declared tasks
 by key -- refresh title, description and requirement links of a task the document still declares, and report (not
 silently drop) links to retired requirements.
+
+## F536 (C) -- a capability can be neither deleted nor retired, so the corpus cannot lose one
+
+**Status:** open. Filed 2026-10-08 (interactive, spec overhaul).
+
+`spec/capabilities/quiet-hours/` describes a feature nothing implements (no match for quiet hours anywhere in `hub/`
+or `src/`, absent from `openspec/specs/`); it entered the trial corpus on 2026-08-18 as a sample and was adopted as
+`current` on 2026-10-07. There is no way out: `DELETE /documents/{path}` refuses with `delete_capability` ("a capability
+is the corpus; change it through a merge instead", `hub/hub/deletion.py:201`), `current` has no transition in
+`spec_lifecycle.TRANSITIONS`, and a merge must keep a non-empty requirement list. The same wall stops the overhaul from
+merging two overlapping capabilities: the absorbed one is left behind as a shell. Likely fix: a `retired` end state for
+a capability (operator-only, recorded with a reason and, when merged away, the capability that absorbed it), its
+requirements retired with it, dropped from `spec/index.json` and coverage, the file kept as history.
