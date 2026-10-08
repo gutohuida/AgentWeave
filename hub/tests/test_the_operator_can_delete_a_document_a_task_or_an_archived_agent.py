@@ -343,16 +343,18 @@ async def test_a_missing_task_or_document_is_a_404(app, auth_headers, tmp_path):
     assert missing.status_code == 404
 
 
-async def _runner_with(app, auth_headers, name, *, archive):
+async def _runner_with(app, auth_headers, add_agent, name, *, archive):
+    """A runner and an agent bound to it, the way `test_runners_api` builds one: `add_agent` plus a
+    PATCH, because creating an agent on a `claude` runner checks the CLI is on PATH and CI has none.
+    """
     runner = await app.post(
         RUNNERS, json={"name": f"r-{name}", "cli": "claude"}, headers=auth_headers
     )
     assert runner.status_code in (200, 201), runner.text
     runner_id = runner.json()["id"]
-    agent = await app.post(
-        AGENTS, json={"name": name, "runner_id": runner_id}, headers=auth_headers
-    )
-    assert agent.status_code in (200, 201), agent.text
+    await add_agent(name)
+    bound = await app.patch(f"{AGENTS}/{name}", json={"runner_id": runner_id}, headers=auth_headers)
+    assert bound.status_code == 200, bound.text
     if archive:
         archived = await app.post(f"{AGENTS}/{name}/archive", json={}, headers=auth_headers)
         assert archived.status_code == 200, archived.text
@@ -361,9 +363,9 @@ async def _runner_with(app, auth_headers, name, *, archive):
 
 @pytest.mark.asyncio
 async def test_a_runner_only_archived_agents_hold_deletes_and_keeps_them(
-    app, auth_headers, tmp_path
+    app, auth_headers, add_agent, tmp_path
 ):
-    runner_id = await _runner_with(app, auth_headers, "retiree", archive=True)
+    runner_id = await _runner_with(app, auth_headers, add_agent, "retiree", archive=True)
     async with async_session_factory() as session:
         session.add(
             Run(
@@ -386,8 +388,10 @@ async def test_a_runner_only_archived_agents_hold_deletes_and_keeps_them(
 
 
 @pytest.mark.asyncio
-async def test_a_runner_an_open_agent_holds_is_still_refused(app, auth_headers, tmp_path):
-    runner_id = await _runner_with(app, auth_headers, "worker", archive=False)
+async def test_a_runner_an_open_agent_holds_is_still_refused(
+    app, auth_headers, add_agent, tmp_path
+):
+    runner_id = await _runner_with(app, auth_headers, add_agent, "worker", archive=False)
 
     response = await app.delete(f"{RUNNERS}/{runner_id}", headers=auth_headers)
 
