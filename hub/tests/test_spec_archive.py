@@ -8,12 +8,12 @@ directly here, the same way design D1 states the rule exists "here as well as at
 """
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from hub import project_workspace, spec_lifecycle
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Run, SpecDocument
+from hub.db.models import Run, SpecDocument, Task
 from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -75,18 +75,38 @@ async def _approved_document(app, auth_headers, run_headers, path=PATH):
     )
 
 
+async def _decide_tasks(path=PATH):
+    """Approve every task the document declared: an approved change archives only once its work is
+    decided (`a-finished-change-is-folded-into-its-capability`)."""
+    async with async_session_factory() as session:
+        document = (
+            await session.execute(select(SpecDocument).where(SpecDocument.path == path))
+        ).scalar_one()
+        await session.execute(
+            update(Task).where(Task.spec_document_id == document.id).values(status="approved")
+        )
+        await session.commit()
+
+
+async def _archive(app, auth_headers, path=PATH):
+    """A close-out of a change that touches no capability: tasks decided, the reason stated."""
+    await _decide_tasks(path)
+    response = await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": path, "to": "archived"},
+        json={"reason": "shipped; changes no capability", "no_capability_change": True},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+    return response
+
+
 @pytest.mark.asyncio
 async def test_an_approved_document_archives(app, auth_headers, run_headers, tmp_path):
     await _approved_document(app, auth_headers, run_headers)
 
-    response = await app.post(
-        f"{BASE}/documents/phase",
-        params={"path": PATH, "to": "archived"},
-        json={"reason": "shipped"},
-        headers=auth_headers,
-    )
+    response = await _archive(app, auth_headers)
 
-    assert response.status_code == 200
     assert response.json()["phase"] == "archived"
 
 
@@ -105,12 +125,7 @@ async def test_the_specs_tree_reports_phase_for_a_document_that_never_moved(
     before = {s["path"]: s.get("phase") for s in listed.json()["specs"]}
     assert before[PATH] == "approved"
 
-    await app.post(
-        f"{BASE}/documents/phase",
-        params={"path": PATH, "to": "archived"},
-        json={"reason": "shipped"},
-        headers=auth_headers,
-    )
+    await _archive(app, auth_headers)
 
     listed = await app.get(f"{BASE}/specs", headers=auth_headers)
     after = {s["path"]: s.get("phase") for s in listed.json()["specs"]}
@@ -137,16 +152,12 @@ async def test_the_specs_tree_carries_the_document_id_the_panel_shell_keys_tabs_
 @pytest.mark.asyncio
 async def test_archiving_does_not_touch_tasks(app, auth_headers, run_headers, tmp_path):
     await _approved_document(app, auth_headers, run_headers)
+    await _decide_tasks()
     tasks_before = await app.get("/api/v1/projects/proj-test/tasks", headers=auth_headers)
     before = {task["id"]: task["status"] for task in tasks_before.json()["tasks"]}
     assert before, "approval should have materialised at least one task"
 
-    await app.post(
-        f"{BASE}/documents/phase",
-        params={"path": PATH, "to": "archived"},
-        json={"reason": "shipped"},
-        headers=auth_headers,
-    )
+    await _archive(app, auth_headers)
 
     tasks_after = await app.get("/api/v1/projects/proj-test/tasks", headers=auth_headers)
     after = {task["id"]: task["status"] for task in tasks_after.json()["tasks"]}
@@ -217,12 +228,7 @@ async def test_an_archived_document_has_no_legal_outgoing_transition(
     app, auth_headers, run_headers, tmp_path
 ):
     await _approved_document(app, auth_headers, run_headers)
-    await app.post(
-        f"{BASE}/documents/phase",
-        params={"path": PATH, "to": "archived"},
-        json={"reason": "shipped"},
-        headers=auth_headers,
-    )
+    await _archive(app, auth_headers)
 
     response = await app.post(
         f"{BASE}/documents/phase",

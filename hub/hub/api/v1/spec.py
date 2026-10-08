@@ -331,6 +331,9 @@ async def get_spec(
         )
         if status_now is not None:
             payload["delivery_status"] = status_now
+        fold_state = await _fold_state(session, document)
+        if fold_state is not None:
+            payload["fold_state"] = fold_state
         # The roadmap slice this document specifies, so the app can offer "Draft the next slice"
         # beside Approve (C1a D7). Absent on every other document.
         link = (spec_payload_module.extract_payload(content) or {}).get("roadmap")
@@ -374,17 +377,40 @@ class PhaseRequest(RequestModel):
     # (C1a D4). Honoured only with to=approved; on any other document the response says why nothing
     # was queued.
     draft_next_slice: bool = False
+    # Archiving an approved change that was folded into no capability, with `reason` saying why
+    # (the archive guard in `spec_lifecycle.transition`).
+    no_capability_change: bool = False
 
 
 class MergeRequest(RequestModel):
     """The operator folding a finished change's content into a capability document.
 
     `from_changes` names sources by path, like every other document-scoped route in this file —
-    the operator, in the UI, is looking at paths, not database ids.
+    the operator, in the UI, is looking at paths, not database ids. Empty is the operator editing
+    the capability, recorded as an edit: a capability's content changes only through a merge
+    (`a-finished-change-is-folded-into-its-capability`).
     """
 
     payload: dict = Field(description="Same shape submit_spec_document accepts.")
-    from_changes: list[str] = Field(min_length=1, max_length=16)
+    from_changes: list[str] = Field(default_factory=list, max_length=16)
+    note: str = Field(default="", max_length=2000)
+
+
+class FoldItemRequest(RequestModel):
+    key: str = Field(max_length=64, description="The change's requirement key.")
+    as_key: Optional[str] = Field(default=None, max_length=64)
+    statement: Optional[str] = Field(default=None, max_length=4000)
+    modal: Optional[str] = Field(default=None, max_length=16)
+    replaces: Optional[str] = Field(default=None, max_length=64)
+
+
+class FoldRequest(RequestModel):
+    """The operator folding an approved change into a capability document, then archiving it."""
+
+    into: str = Field(max_length=512, description="The capability document's path.")
+    # None folds every requirement verbatim under its drafted key.
+    requirements: Optional[list[FoldItemRequest]] = Field(default=None, max_length=64)
+    archive: bool = True
     note: str = Field(default="", max_length=2000)
 
 
@@ -402,6 +428,25 @@ def _document_view(document) -> dict:
         "explore_closed": document.explore_closed_at is not None,
         "updated_at": document.updated_at.isoformat(),
     }
+
+
+async def _fold_state(session: AsyncSession, document) -> Optional[Dict[str, Any]]:
+    """Where an approved or archived change stands on its way into the corpus, computed per read.
+
+    `folded` once any merge names it; otherwise `tasks_open` while a task it declared is undecided,
+    and `ready` when it is shipped but in no capability yet.
+    """
+    if document.kind != "change-spec" or document.phase not in ("approved", "archived"):
+        return None
+    capabilities = await spec_lifecycle.merged_into(session, document)
+    open_tasks = await spec_lifecycle.open_task_ids(session, document)
+    if capabilities:
+        state = "folded"
+    elif open_tasks:
+        state = "tasks_open"
+    else:
+        state = "ready"
+    return {"state": state, "open_tasks": open_tasks, "capabilities": capabilities}
 
 
 def _operator() -> spec_lifecycle.Actor:
@@ -642,7 +687,13 @@ async def write_document_content(
         )
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            # A capability written outside a merge is refused for what the document is, not for a
+            # malformed body.
+            status_code=(
+                status.HTTP_409_CONFLICT
+                if exc.code == "capability_written_through_merge"
+                else status.HTTP_422_UNPROCESSABLE_ENTITY
+            ),
             detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
         ) from exc
 
@@ -1791,7 +1842,7 @@ async def create_document(
         "title": body.title or UNTITLED,
     }
     result = await spec_service.save_document(
-        session, workspace, document, payload, actor=_operator()
+        session, workspace, document, payload, actor=_operator(), via="create"
     )
     await session.commit()
     await sse_manager.broadcast(project_id, "spec_updated", {"path": path, "phase": document.phase})
@@ -1976,6 +2027,7 @@ async def set_phase(
             actor=_operator(),
             workspace=workspace,
             reason=body.reason,
+            no_capability_change=body.no_capability_change,
         )
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
@@ -2327,10 +2379,103 @@ async def merge_document(
             "merged": 0,
         }
     else:
-        response = {**_document_view(document), "blocking": result.blocking, "merged": len(sources)}
+        response = {
+            **_document_view(document),
+            "blocking": result.blocking,
+            "divergence": result.divergence,
+            "merged": len(sources),
+        }
 
     await session.commit()
     await sse_manager.broadcast(
         project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
+    return response
+
+
+def _fold_refused(exc: Exception) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"message": str(exc), "code": getattr(exc, "code", "fold_refused")},
+    )
+
+
+@router.get("/documents/{path:path}/fold-draft")
+async def fold_draft(
+    path: str,
+    into: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """What folding this change into `into` would write: the capability's payload with the change's
+    requirements appended under drafted keys, and the keys that collide. Writes nothing."""
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    change = await _require_document(session, project_id, path)
+    capability = await _require_document(session, project_id, into)
+    try:
+        draft = spec_service.fold_draft(workspace, change, capability)
+    except spec_service.FoldRefusedError as exc:
+        raise _fold_refused(exc) from exc
+    return {
+        "into": capability.path,
+        "payload": draft.payload,
+        "requirements": draft.requirements,
+        "collisions": draft.collisions,
+    }
+
+
+@router.post("/documents/{path:path}/fold")
+async def fold_document(
+    path: str,
+    body: FoldRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator closing a finished change: fold it into a capability through the merge (one
+    `spec_document_merges` row, one `merged` event) and, unless `archive` is false, archive it in
+    the same transaction. Every refusal happens before anything is written."""
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    change = await _require_document(session, project_id, path)
+    capability = await _require_document(session, project_id, body.into)
+    items = (
+        None
+        if body.requirements is None
+        else [spec_service.FoldItem(**item.model_dump()) for item in body.requirements]
+    )
+    try:
+        result, archived = await spec_service.fold(
+            session,
+            workspace,
+            change,
+            capability,
+            items,
+            actor=_operator(),
+            archive=body.archive,
+            note=body.note,
+        )
+    except (spec_service.FoldRefusedError, spec_lifecycle.PhaseError) as exc:
+        raise _fold_refused(exc) from exc
+    except spec_service.SaveRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
+        ) from exc
+
+    response: Dict[str, Any] = {
+        **_document_view(change),
+        "capability": _document_view(capability),
+        "archived": archived,
+        "fold_state": await _fold_state(session, change),
+    }
+    if isinstance(result, spec_service.ProposeResult):
+        response.update(merged=0, proposals=result.proposals)
+    else:
+        response.update(merged=1, blocking=result.blocking)
+    await session.commit()
+    for document in (capability, change):
+        await sse_manager.broadcast(
+            project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+        )
     return response

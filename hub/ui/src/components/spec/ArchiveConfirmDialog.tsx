@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 
@@ -14,18 +14,25 @@ export function ArchiveConfirmDialog({
   title,
   isPending,
   error = null,
+  reasonPrompt = null,
   onCancel,
   onConfirm,
 }: {
   title: string
   isPending: boolean
+  /** Set for an approved change folded into no capability: the archive then needs a reason saying
+   *  why it changes none (`a-finished-change-is-folded-into-its-capability`), and Archive waits
+   *  for one. */
+  reasonPrompt?: string | null
   /** The Hub's refusal, shown in the dialog that asked for the archive (F205: archiving an
    *  exploring or proposed document is refused once it has produced work). */
   error?: string | null
   onCancel: () => void
-  onConfirm: () => void
+  onConfirm: (reason: string) => void
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const [reason, setReason] = useState('')
+  const reasonMissing = reasonPrompt !== null && reason.trim() === ''
   useDialogFocus(true, panelRef, onCancel)
 
   // D6: Cancel and Archive both disable while pending, so the Archive button the operator just
@@ -56,6 +63,21 @@ export function ArchiveConfirmDialog({
           This cannot be undone. Once archived, there is no control in AgentWeave that reopens it.
         </p>
 
+        {reasonPrompt !== null && (
+          <label className="mt-3 flex flex-col gap-1 text-xs" style={{ color: 'var(--text-2)' }}>
+            <span>{reasonPrompt}</span>
+            <input
+              type="text"
+              data-testid="archive-reason"
+              value={reason}
+              maxLength={2000}
+              onChange={(event) => setReason(event.target.value)}
+              className="rounded-[var(--radius-sm)] px-1.5 py-1"
+              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)' }}
+            />
+          </label>
+        )}
+
         {error && (
           <p role="alert" className="mt-3 text-xs" style={{ color: 'var(--amber)' }}>
             {error}
@@ -66,7 +88,13 @@ export function ArchiveConfirmDialog({
           <Button variant="ghost" size="sm" onClick={onCancel} disabled={isPending} data-dialog-initial-focus>
             Cancel
           </Button>
-          <Button variant="destructive" size="sm" onClick={onConfirm} disabled={isPending}>
+          <Button
+            variant="destructive"
+            size="sm"
+            data-testid="archive-confirm"
+            onClick={() => onConfirm(reason.trim())}
+            disabled={isPending || reasonMissing}
+          >
             {isPending ? 'Archiving…' : 'Archive'}
           </Button>
         </div>

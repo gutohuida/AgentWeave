@@ -118,11 +118,22 @@ export interface SpecNextSliceOutcome {
   open_tasks?: number
 }
 
+/** Where an approved or archived change stands on its way into the corpus, computed per read
+ *  (`a-finished-change-is-folded-into-its-capability`). `ready`: every task is approved or
+ *  rejected and no merge names it yet. Absent for other kinds and phases, and from a Hub that
+ *  predates the change. */
+export interface SpecFoldState {
+  state: 'tasks_open' | 'ready' | 'folded'
+  open_tasks: string[]
+  capabilities: string[]
+}
+
 export interface SpecDocument {
   path: string
   content: string
   updated_at?: string
   delivery_status?: SpecDeliveryStatus
+  fold_state?: SpecFoldState
   approval_outcome?: SpecApprovalOutcome
   roadmap_slice?: SpecRoadmapSlice
 }
@@ -616,10 +627,14 @@ export function useSetSpecPhase() {
       reason,
       delivery_agent,
       draft_next_slice,
+      no_capability_change,
     }: {
       path: string
       to: string
       reason?: string
+      /** Archiving an approved change folded into no capability; `reason` says why. Sent only when
+       *  true, so a Hub without the archive guard never receives it. */
+      no_capability_change?: boolean
       /** Sent only for a document whose `GET /spec` named a `roadmap_slice`: a Hub that returns
        *  that field also accepts this one, and no other Hub is ever sent it (it would 422). */
       draft_next_slice?: boolean
@@ -640,6 +655,7 @@ export function useSetSpecPhase() {
           reason: reason ?? '',
           ...(delivery_agent !== undefined ? { delivery_agent } : {}),
           ...(draft_next_slice !== undefined ? { draft_next_slice } : {}),
+          ...(no_capability_change ? { no_capability_change } : {}),
         },
       ),
     onSuccess: () => {
@@ -818,6 +834,60 @@ function useCorpusMutation<TArgs, TResult>(
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'spec'] })
     },
   })
+}
+
+/** One change requirement as a fold would write it: `from` is the change's key, `key` the
+ *  capability's (`<change-slug>-<key>` unless edited). */
+export interface SpecFoldDraftRequirement {
+  from: string
+  key: string
+  statement: string
+  modal: string | null
+  replaces: string | null
+}
+
+export interface SpecFoldDraft {
+  into: string
+  requirements: SpecFoldDraftRequirement[]
+  /** Draft keys the capability already holds; folding them as they are is refused. */
+  collisions: string[]
+}
+
+/** What folding `path` into the capability `into` would write. Writes nothing. */
+export function useFoldDraft(path: string, into: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<SpecFoldDraft>({
+    queryKey: ['project', projectId, 'foldDraft', path, into],
+    queryFn: () =>
+      getJson<SpecFoldDraft>(
+        `/api/v1/projects/${projectId}/project/documents/${path}/fold-draft?into=${encodeURIComponent(into ?? '')}`,
+      ),
+    enabled: isConfigured && !!projectId && !!into,
+  })
+}
+
+export interface SpecFoldItem {
+  key: string
+  as_key?: string
+  statement?: string
+}
+
+/** Fold an approved change into a capability through the merge and, unless `archive` is false,
+ *  archive it — the operator's close-out of a finished change. Re-renders both documents. */
+export function useFoldDocument() {
+  return useCorpusMutation(
+    (
+      projectId,
+      {
+        path,
+        ...body
+      }: { path: string; into: string; requirements: SpecFoldItem[]; archive: boolean; note?: string },
+    ) =>
+      postJson<SpecDocumentRecord & { archived: boolean; merged: number }>(
+        `/api/v1/projects/${projectId}/project/documents/${path}/fold`,
+        body,
+      ),
+  )
 }
 
 /** Rebuild the requirement index and `spec/index.json`. With no `home`, the Hub answers

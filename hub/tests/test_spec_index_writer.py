@@ -574,7 +574,8 @@ class TestReindexCorpusRerender:
     ):
         """`/spec/drift/detect` is requirement-evidence drift, unrelated to a document's own
         content digest — that divergence is reported inline on the next write attempt
-        (`spec_lifecycle.divergence`, surfaced as `result["divergence"]` by `PUT .../content`).
+        (`spec_lifecycle.divergence`, surfaced as `result["divergence"]` by the merge, the only way a
+        capability is written).
         Design D7's promise is exercised here at that boundary: a rerender updates the digest, so
         the very next write reports no divergence; an edit made outside the Hub after that does.
         """
@@ -600,14 +601,15 @@ class TestReindexCorpusRerender:
         rerendered = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
         assert child_path in rerendered.json()["corpus"]["rerendered"]
 
-        clean_write = await app.put(
-            f"{BASE}/documents/{child_path}/content",
+        clean_write = await app.post(
+            f"{BASE}/documents/{child_path}/merge",
             json={
-                "document": {
+                "payload": {
                     "schema_version": SCHEMA_VERSION,
                     "kind": "capability",
                     "title": "Child",
-                }
+                },
+                "from_changes": [],
             },
             headers=auth_headers,
         )
@@ -619,14 +621,15 @@ class TestReindexCorpusRerender:
             child_file.read_text(encoding="utf-8") + "<!-- edited outside -->", encoding="utf-8"
         )
 
-        dirty_write = await app.put(
-            f"{BASE}/documents/{child_path}/content",
+        dirty_write = await app.post(
+            f"{BASE}/documents/{child_path}/merge",
             json={
-                "document": {
+                "payload": {
                     "schema_version": SCHEMA_VERSION,
                     "kind": "capability",
                     "title": "Child",
-                }
+                },
+                "from_changes": [],
             },
             headers=auth_headers,
         )

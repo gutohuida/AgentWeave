@@ -30,6 +30,7 @@ from .db.models import InboundQueueEntry, SpecDocument, SpecDocumentMerge, SpecE
 from .project_workspace import ProjectWorkspace
 from .spec_manifest import Manifest
 from .spec_payload import (
+    KEY_RE,
     PayloadError,
     SpecPayload,
     extract_payload,
@@ -124,8 +125,14 @@ async def save_document(
     raw_payload: Any,
     *,
     actor: spec_lifecycle.Actor,
+    via: str = "write",
 ) -> Any:
     """Store a submission against an existing document — or, at `contract`/`gate` rigor, propose it.
+
+    `via` names the path a capability write came by: `"merge"` (`merge_document`) or `"create"`
+    (the creation scaffold). A capability's content changes only through a merge, so a direct
+    operator write (`"write"`, the default) to one is refused, naming the merge route
+    (`a-finished-change-is-folded-into-its-capability`); every other kind is unaffected.
 
     Incompleteness is reported, not refused: a document under discussion is
     incomplete by definition, and it is the transition to `proposed` that cares.
@@ -175,6 +182,14 @@ async def save_document(
         raise SaveRefusedError(
             "capability documents are written by the operator",
             code="capability_write_is_the_operators",
+        )
+
+    if document.kind == "capability" and via == "write":
+        raise SaveRefusedError(
+            "a capability document's content changes only through a merge: POST "
+            f"/project/documents/{document.path}/merge, naming the finished changes it folds in "
+            "(or none, for an edit)",
+            code="capability_written_through_merge",
         )
 
     if document.phase == spec_lifecycle.APPROVED:
@@ -772,9 +787,21 @@ async def merge_document(
     Committing and broadcasting `spec_updated` is the caller's job too, the same way it is for
     every other route in `spec.py` — this function only prepares the session.
     """
-    result = await save_document(session, workspace, capability_document, raw_payload, actor=actor)
+    result = await save_document(
+        session, workspace, capability_document, raw_payload, actor=actor, via="merge"
+    )
     if isinstance(result, ProposeResult):
         return result
+    if not source_documents:
+        # A merge naming no change is the operator editing the capability: recorded as one, so
+        # every change to a capability's content has a history entry saying where it came from.
+        await spec_lifecycle.record_event(
+            session,
+            capability_document,
+            kind="merged",
+            actor=actor,
+            detail={"change_document_id": None, "edit": True, "note": note},
+        )
     for source in source_documents:
         session.add(
             SpecDocumentMerge(
@@ -796,6 +823,191 @@ async def merge_document(
             detail={"change_document_id": source.id, "note": note},
         )
     return result
+
+
+class FoldRefusedError(Exception):
+    """A fold the Hub will not perform; raised before anything is written."""
+
+    def __init__(self, message: str, *, code: str):
+        super().__init__(message)
+        self.code = code
+
+
+@dataclass
+class FoldItem:
+    """One change requirement to fold, and what the operator changed about it on the way in."""
+
+    key: str
+    as_key: Optional[str] = None
+    statement: Optional[str] = None
+    modal: Optional[str] = None
+    replaces: Optional[str] = None
+
+
+@dataclass
+class FoldDraft:
+    payload: Dict[str, Any]
+    #: One entry per folded requirement: `from` (the change's key), `key` (the capability's), the
+    #: text it lands with, and `replaces` when it overwrites an existing capability requirement.
+    requirements: List[Dict[str, Any]]
+    collisions: List[str]
+
+
+def fold_key(change_path: str, key: str) -> str:
+    """`<change-slug>-<key>`, the slug trimmed from the right so the whole is a valid payload key."""
+    slug = change_path.rstrip("/").split("/")[-2]
+    room = 64 - len(key) - 1
+    if room < 1:
+        return key
+    return f"{slug[:room].rstrip('-')}-{key}"
+
+
+def _read(workspace: ProjectWorkspace, document: SpecDocument) -> Dict[str, Any]:
+    content = spec_documents.read_document(workspace, document.path)
+    payload = extract_payload(content) if content else None
+    if payload is None:
+        raise FoldRefusedError(f"{document.path} has no readable content", code="fold_unreadable")
+    return payload
+
+
+def fold_draft(
+    workspace: ProjectWorkspace,
+    change: SpecDocument,
+    capability: SpecDocument,
+    items: Optional[List[FoldItem]] = None,
+) -> FoldDraft:
+    """The capability's payload with the change's requirements appended, and what collides.
+
+    Pure: reads both files and writes nothing. `items` chooses and edits what is folded; `None`
+    folds every requirement verbatim under `fold_key`. A draft key the capability already holds is
+    a collision, reported and left out of the payload, unless the item names it in `replaces`.
+    Criteria follow their requirement, re-pointed at its new key.
+    """
+    if capability.kind != "capability":
+        raise FoldRefusedError(
+            f"{capability.path} is not a capability document", code="fold_target_not_capability"
+        )
+    source = _read(workspace, change)
+    target = _read(workspace, capability)
+    by_key = {r["key"]: r for r in source.get("requirements") or []}
+    if items is None:
+        items = [FoldItem(key=key) for key in by_key]
+    existing = {r["key"] for r in target.get("requirements") or []}
+    existing_criteria = {c["key"] for c in target.get("acceptance_criteria") or []}
+
+    requirements = [dict(r) for r in target.get("requirements") or []]
+    criteria = [dict(c) for c in target.get("acceptance_criteria") or []]
+    folded: List[Dict[str, Any]] = []
+    collisions: List[str] = []
+    renamed: Dict[str, str] = {}
+    for item in items:
+        original = by_key.get(item.key)
+        if original is None:
+            raise FoldRefusedError(
+                f"{change.path} has no requirement {item.key!r}", code="fold_unknown_requirement"
+            )
+        if item.replaces is not None and item.replaces not in existing:
+            raise FoldRefusedError(
+                f"{capability.path} has no requirement {item.replaces!r} to replace",
+                code="fold_replaces_unknown",
+            )
+        key = item.replaces or item.as_key or fold_key(change.path, item.key)
+        if not KEY_RE.match(key):
+            raise FoldRefusedError(
+                f"{key!r} is not a valid requirement key (lowercase letters, digits and hyphens, "
+                "at most 64)",
+                code="fold_key_invalid",
+            )
+        entry = {**original, "key": key}
+        if item.statement is not None:
+            entry["statement"] = item.statement
+        if item.modal is not None:
+            entry["modal"] = item.modal
+        folded.append(
+            {
+                "from": item.key,
+                "key": key,
+                "statement": entry["statement"],
+                "modal": entry.get("modal"),
+                "replaces": item.replaces,
+            }
+        )
+        if item.replaces is not None:
+            requirements = [entry if r["key"] == key else r for r in requirements]
+        elif key in existing or key in renamed.values():
+            collisions.append(key)
+            continue
+        else:
+            requirements.append(entry)
+        renamed[item.key] = key
+
+    for criterion in source.get("acceptance_criteria") or []:
+        new_requirement = renamed.get(criterion.get("requirement"))
+        if new_requirement is None:
+            continue
+        key = fold_key(change.path, criterion["key"])
+        if key in existing_criteria:
+            collisions.append(key)
+            continue
+        criteria.append({**criterion, "key": key, "requirement": new_requirement})
+
+    return FoldDraft(
+        payload={**target, "requirements": requirements, "acceptance_criteria": criteria},
+        requirements=folded,
+        collisions=collisions,
+    )
+
+
+async def fold(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    change: SpecDocument,
+    capability: SpecDocument,
+    items: Optional[List[FoldItem]],
+    *,
+    actor: spec_lifecycle.Actor,
+    archive: bool = True,
+    note: str = "",
+) -> Tuple[SaveResult | ProposeResult, bool]:
+    """Fold a finished change into a capability through the merge, then archive the change.
+
+    Every refusal is decided before the merge writes anything. Returns the merge's result and
+    whether the change was archived: at `contract`/`gate` rigor the merge only proposes, nothing
+    was folded yet, and the change stays approved for the archive guard to keep honest.
+    """
+    if change.kind != "change-spec" or change.phase != spec_lifecycle.APPROVED:
+        raise FoldRefusedError(
+            f"{change.path} is {change.phase!r}; only an approved change is folded",
+            code="fold_change_not_approved",
+        )
+    open_tasks = await spec_lifecycle.open_task_ids(session, change)
+    if open_tasks:
+        raise FoldRefusedError(
+            "this change still has open tasks (" + ", ".join(open_tasks) + "); a change is "
+            "folded once its work is decided",
+            code="fold_tasks_open",
+        )
+    draft = fold_draft(workspace, change, capability, items)
+    if draft.collisions:
+        raise FoldRefusedError(
+            f"{capability.path} already has " + ", ".join(draft.collisions) + "; rename the folded "
+            "requirement, or name the one it replaces",
+            code="fold_key_collision",
+        )
+    result = await merge_document(
+        session, workspace, capability, [change], draft.payload, actor=actor, note=note
+    )
+    if isinstance(result, ProposeResult) or not archive:
+        return result, False
+    await spec_lifecycle.transition(
+        session,
+        change,
+        to_phase=spec_lifecycle.ARCHIVED,
+        actor=actor,
+        workspace=workspace,
+        reason=f"folded into {capability.path}",
+    )
+    return result, True
 
 
 async def rename_document(

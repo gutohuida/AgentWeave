@@ -132,9 +132,21 @@ async def test_save_document_accepts_an_operator_actor_against_a_capability_docu
             document,
             _payload("capability"),
             actor=spec_lifecycle.Actor(kind="operator", name="operator"),
+            via="merge",
         )
         await session.commit()
+        # Not through a merge: refused, whoever the actor (a-finished-change-is-folded-into-its-
+        # capability, write-via-merge).
+        with pytest.raises(spec_service.SaveRefusedError) as refused:
+            await spec_service.save_document(
+                session,
+                workspace,
+                document,
+                _payload("capability"),
+                actor=spec_lifecycle.Actor(kind="operator", name="operator"),
+            )
     assert result.phase == "current"
+    assert refused.value.code == "capability_written_through_merge"
 
 
 @pytest.mark.asyncio

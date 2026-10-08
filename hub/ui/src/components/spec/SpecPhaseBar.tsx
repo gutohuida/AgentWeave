@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { ArchiveConfirmDialog } from '@/components/spec/ArchiveConfirmDialog'
+import { FoldIntoCapabilityDialog } from '@/components/spec/FoldIntoCapabilityDialog'
 import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
 import { useDocumentFlow, type LoopSummary } from '@/api/loops'
 import { readableApiError } from '@/api/client'
@@ -103,6 +104,7 @@ export function SpecPhaseBar({
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [archiveRefusal, setArchiveRefusal] = useState<string | null>(null)
   const [startingFlow, setStartingFlow] = useState(false)
+  const [folding, setFolding] = useState(false)
   const [deliveryAgentChoice, setDeliveryAgentChoice] = useState(NO_CHOICE)
   // On by default (C1a D4): approving a slice usually means "and now the next one".
   const [draftNextSlice, setDraftNextSlice] = useState(true)
@@ -123,6 +125,14 @@ export function SpecPhaseBar({
   // follows for a document the Hub does not track.
   const deliveryStatus = specDocError ? undefined : specDoc?.delivery_status
   const roadmapSlice = specDocError ? undefined : specDoc?.roadmap_slice
+  const foldState = specDocError ? undefined : specDoc?.fold_state
+  // An approved change that no merge names archives only with a reason saying it changes no
+  // capability (the Hub's archive guard). A Hub without `fold_state` never asks.
+  const archiveNeedsReason =
+    document.kind === 'change-spec' &&
+    document.phase === 'approved' &&
+    foldState !== undefined &&
+    foldState.state !== 'folded'
   const openAgents = agentsError ? [] : (openAgentsData ?? [])
 
   const busy = closeExploration.isPending || propose.isPending || setPhase.isPending
@@ -164,10 +174,12 @@ export function SpecPhaseBar({
     )
   }
 
-  function onConfirmArchive() {
+  function onConfirmArchive(reason: string) {
     setArchiveRefusal(null)
     setPhase.mutate(
-      { path, to: 'archived' },
+      archiveNeedsReason
+        ? { path, to: 'archived', reason, no_capability_change: true }
+        : { path, to: 'archived' },
       {
         onSuccess: () => setConfirmingArchive(false),
         // It used to drop this, and the dialog simply stayed open. Archiving from `exploring` or
@@ -281,6 +293,32 @@ export function SpecPhaseBar({
             <option value="">No flow</option>
           </select>
         </div>
+      )}
+
+      {/* A finished change on its way into the corpus (`a-finished-change-is-folded-into-its-
+          capability`): every task decided and no merge names it yet. Folding is the close-out;
+          the archive control beside the phase asks why when a change changes no capability. */}
+      {document.phase === 'approved' && foldState?.state === 'ready' && (
+        <div
+          data-testid="fold-state"
+          data-state="ready"
+          className="flex flex-wrap items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5"
+          style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+        >
+          <Icon name="task_alt" size={13} />
+          <span className="flex-1">
+            Shipped, not yet in a capability: every task is decided. Fold its requirements into the
+            capability they change.
+          </span>
+          <Button variant="primary" size="xs" data-testid="fold-open" onClick={() => setFolding(true)}>
+            Fold into capability…
+          </Button>
+        </div>
+      )}
+      {foldState?.state === 'folded' && (
+        <p data-testid="fold-state" data-state="folded" style={{ color: 'var(--text-3)' }}>
+          Folded into {foldState.capabilities.join(', ')}.
+        </p>
       )}
 
       {/* Who reviews (F508): always said for a flow-delivered document, so the operator approves
@@ -572,11 +610,24 @@ export function SpecPhaseBar({
         />
       )}
 
+      {folding && (
+        <FoldIntoCapabilityDialog
+          path={document.path}
+          title={document.title}
+          onClose={() => setFolding(false)}
+        />
+      )}
+
       {confirmingArchive && (
         <ArchiveConfirmDialog
           title={document.title}
           isPending={setPhase.isPending}
           error={archiveRefusal}
+          reasonPrompt={
+            archiveNeedsReason
+              ? 'This change is in no capability. Why does it change none? (Fold it instead if it does.)'
+              : null
+          }
           onCancel={() => setConfirmingArchive(false)}
           onConfirm={onConfirmArchive}
         />

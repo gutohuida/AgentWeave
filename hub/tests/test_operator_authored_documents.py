@@ -101,6 +101,15 @@ async def _create(app, headers, path, kind, title="Demo"):
     return response
 
 
+async def _merge(app, headers, path, payload):
+    """A capability's content changes only through a merge; naming no change is an edit."""
+    return await app.post(
+        f"{BASE}/documents/{path}/merge",
+        json={"payload": payload, "from_changes": []},
+        headers=headers,
+    )
+
+
 async def _write(app, headers, path, payload):
     return await app.put(
         f"{BASE}/documents/{path}/content", json={"document": payload}, headers=headers
@@ -109,23 +118,27 @@ async def _write(app, headers, path, payload):
 
 @pytest.mark.asyncio
 class TestTheOperatorCanWrite:
-    async def test_the_operator_writes_a_capability_document(self, app, auth_headers, tmp_path):
-        """The requirement that existed and could not be satisfied over the API."""
+    async def test_the_operator_writes_a_capability_document_through_a_merge(
+        self, app, auth_headers, tmp_path
+    ):
+        """`ac136`, as `a-finished-change-is-folded-into-its-capability` restated it: the operator's
+        capability write succeeds through a merge, and the direct write is refused naming it."""
         await _create(app, auth_headers, CAP_PATH, "capability")
 
-        response = await _write(app, auth_headers, CAP_PATH, _payload("capability"))
+        direct = await _write(app, auth_headers, CAP_PATH, _payload("capability"))
+        response = await _merge(app, auth_headers, CAP_PATH, _payload("capability"))
 
+        assert direct.status_code == 409, direct.text
+        assert direct.json()["detail"]["code"] == "capability_written_through_merge"
         assert response.status_code == 200, response.text
-        body = response.json()
-        assert body["phase"] == "current"
-        assert body["identifiers"]
-        assert (tmp_path / CAP_PATH).is_file()
+        assert response.json()["phase"] == "current"
+        assert "It responds within 200ms" in (tmp_path / CAP_PATH).read_text(encoding="utf-8")
 
     async def test_the_written_document_reads_back_with_its_requirement(
         self, app, auth_headers, tmp_path
     ):
         await _create(app, auth_headers, CAP_PATH, "capability")
-        await _write(app, auth_headers, CAP_PATH, _payload("capability"))
+        await _merge(app, auth_headers, CAP_PATH, _payload("capability"))
 
         content = (tmp_path / CAP_PATH).read_text(encoding="utf-8")
         assert "It responds within 200ms" in content
@@ -144,13 +157,13 @@ class TestTheOperatorCanWrite:
     async def test_writing_the_same_payload_twice_leaves_the_same_content(
         self, app, auth_headers, tmp_path
     ):
-        """`PUT`'s promise, and what makes an interrupted 33-document import safe to re-run."""
-        await _create(app, auth_headers, CAP_PATH, "capability")
-        await _write(app, auth_headers, CAP_PATH, _payload("capability"))
-        first = (tmp_path / CAP_PATH).read_text(encoding="utf-8")
+        """`PUT`'s promise, and what makes an interrupted import safe to re-run."""
+        await _create(app, auth_headers, CHANGE_PATH, "change-spec")
+        await _write(app, auth_headers, CHANGE_PATH, _payload("change-spec"))
+        first = (tmp_path / CHANGE_PATH).read_text(encoding="utf-8")
 
-        await _write(app, auth_headers, CAP_PATH, _payload("capability"))
-        assert (tmp_path / CAP_PATH).read_text(encoding="utf-8") == first
+        await _write(app, auth_headers, CHANGE_PATH, _payload("change-spec"))
+        assert (tmp_path / CHANGE_PATH).read_text(encoding="utf-8") == first
 
     async def test_a_missing_document_is_a_404_not_a_create(self, app, auth_headers):
         """The operator starts an exploration explicitly; this route never creates one."""
@@ -164,7 +177,7 @@ class TestNoRuleIsRelaxedForTheOperator:
         self, app, auth_headers, run_headers, tmp_path
     ):
         await _create(app, auth_headers, CAP_PATH, "capability")
-        await _write(app, auth_headers, CAP_PATH, _payload("capability", title="Operator's"))
+        await _merge(app, auth_headers, CAP_PATH, _payload("capability", title="Operator's"))
         before = (tmp_path / CAP_PATH).read_text(encoding="utf-8")
 
         response = await app.post(

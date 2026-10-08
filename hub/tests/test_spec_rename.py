@@ -10,11 +10,11 @@ the move takes identity with it.
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import InboundQueueEntry, Run, SpecDocument, SpecDocumentEvent
+from hub.db.models import InboundQueueEntry, Run, SpecDocument, SpecDocumentEvent, Task
 from hub.spec_payload import SCHEMA_VERSION, extract_payload
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -290,10 +290,16 @@ async def test_a_document_that_was_approved_and_then_archived_is_still_not_renam
     (design D6) — archiving is not a way to launder a path free."""
     await _create(app, auth_headers)
     await _approve(app, auth_headers, run_headers)
+    async with async_session_factory() as session:
+        document = await _row(PLACEHOLDER)
+        await session.execute(
+            update(Task).where(Task.spec_document_id == document.id).values(status="approved")
+        )
+        await session.commit()
     archived = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PLACEHOLDER, "to": "archived"},
-        json={"reason": "done"},
+        json={"reason": "done; changes no capability", "no_capability_change": True},
         headers=auth_headers,
     )
     assert archived.status_code == 200, archived.text

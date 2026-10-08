@@ -286,8 +286,14 @@ async def transition(
     actor: Actor,
     workspace: ProjectWorkspace,
     reason: str = "",
+    no_capability_change: bool = False,
 ) -> SpecDocumentEvent:
     """Move a document between phases, or refuse and say why.
+
+    **Archiving an approved change is a close-out.** It is refused while a task the document
+    declared is still open, and until a merge names the change or the operator states, with a
+    reason, that it changes no capability (`no_capability_change`): `archived` has no way back, and
+    a shipped change whose requirements live in no capability must not become history (F509).
 
     **Approval is an operator act.** An agent reaching this function with
     `to_phase="approved"` is refused here as well as at the API boundary,
@@ -341,6 +347,23 @@ async def transition(
                 code="archive_would_orphan_work",
             )
 
+    if to_phase == ARCHIVED and document.phase == APPROVED and document.kind == "change-spec":
+        open_tasks = await open_task_ids(session, document)
+        if open_tasks:
+            raise PhaseError(
+                "this change still has open tasks (" + ", ".join(open_tasks) + "); approve or "
+                "reject each before archiving it",
+                code="archive_tasks_open",
+            )
+        if not await merged_into(session, document) and not (
+            no_capability_change and reason.strip()
+        ):
+            raise PhaseError(
+                "this change has not been folded into a capability. Fold it, or archive it "
+                "stating no_capability_change with a reason",
+                code="archive_not_folded",
+            )
+
     if to_phase in (PROPOSED, APPROVED):
         # Required `workspace`: a caller with none cannot move a document at all, rather than
         # moving it unchecked (F207). Imported here because `spec_service` imports this module.
@@ -374,6 +397,35 @@ async def transition(
         actor=actor,
         detail={"from": previous, "to": to_phase, "reason": reason},
     )
+
+
+#: Task statuses after which a task asks nothing more of anyone.
+_TASK_DONE = ("approved", "rejected")
+
+
+async def open_task_ids(session: AsyncSession, document: SpecDocument) -> List[str]:
+    """The tasks a document declared that are neither approved nor rejected, oldest first."""
+    from .db.models import Task
+
+    rows = await session.execute(
+        select(Task.id)
+        .where(Task.spec_document_id == document.id, Task.status.notin_(_TASK_DONE))
+        .order_by(Task.created_at, Task.id)
+    )
+    return list(rows.scalars())
+
+
+async def merged_into(session: AsyncSession, document: SpecDocument) -> List[str]:
+    """Paths of the capability documents a merge has folded this change into, in merge order."""
+    from .db.models import SpecDocumentMerge
+
+    rows = await session.execute(
+        select(SpecDocument.path, SpecDocumentMerge.created_at)
+        .join(SpecDocumentMerge, SpecDocumentMerge.capability_document_id == SpecDocument.id)
+        .where(SpecDocumentMerge.change_document_id == document.id)
+        .order_by(SpecDocumentMerge.created_at)
+    )
+    return list(dict.fromkeys(path for path, _ in rows))
 
 
 async def close_exploration(session: AsyncSession, document: SpecDocument, *, actor: Actor) -> None:
