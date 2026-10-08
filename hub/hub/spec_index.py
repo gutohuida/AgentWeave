@@ -23,11 +23,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import spec_digest, spec_identity, spec_lifecycle
-from .db.models import SpecDocument, SpecRequirement, SpecRequirementRevision
+from .db.models import RequirementDrift, SpecDocument, SpecRequirement, SpecRequirementRevision
 from .project_workspace import ProjectWorkspace
 from .spec_payload import PayloadError, extract_payload, validate_payload
 from .spec_render import requirement_anchor
@@ -286,7 +286,29 @@ async def reindex_document(
         )
         result.retired.append(identifier)
 
+    await _supersede_drift(
+        session, [existing[i].id for i in (*result.reworded, *result.retired) if i in existing]
+    )
     return result
+
+
+async def _supersede_drift(session: AsyncSession, requirement_ids: List[str]) -> None:
+    """A rewording or a retirement moves the question an open drift candidate asked (F435).
+
+    The candidate measured an implementation against words the document no longer has, so it is
+    superseded rather than left open for the operator to answer about a requirement that has gone.
+    Resolved candidates keep their answer.
+    """
+    if not requirement_ids:
+        return
+    await session.execute(
+        update(RequirementDrift)
+        .where(
+            RequirementDrift.requirement_id.in_(requirement_ids),
+            RequirementDrift.state == "candidate",
+        )
+        .values(state="superseded")
+    )
 
 
 async def reindex_from_file(

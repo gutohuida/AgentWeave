@@ -51,6 +51,7 @@ from ... import (
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
+    DRIFT_STATES,
     EVIDENCE_RETENTION_POLICIES,
     Agent,
     AIJob,
@@ -1250,8 +1251,10 @@ async def list_drift(
     """Drift candidates, oldest first with ties broken by id (D9: one scan adds its candidates in one
     transaction, so `created_at` ties), optionally for one document and one state (D1)."""
     project_id, _ = project
-    if state is not None and state not in ("candidate", "resolved"):
-        raise HTTPException(status_code=422, detail="state must be 'candidate' or 'resolved'")
+    if state is not None and state not in DRIFT_STATES:
+        raise HTTPException(
+            status_code=422, detail="state must be 'candidate', 'resolved' or 'superseded'"
+        )
     document_id: Optional[str] = None
     if document is not None:
         found = await spec_lifecycle.get_document(session, project_id, document)

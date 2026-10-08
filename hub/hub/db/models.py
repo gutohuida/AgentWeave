@@ -2486,16 +2486,8 @@ EVIDENCE_DECISIONS = ("accepted", "rejected")
 # How long an artifact is kept. `never` means never delete it.
 EVIDENCE_RETENTION_POLICIES = ("on_acceptance", "daily", "monthly", "manual", "never")
 
-# DEAD (2026-09-20): "superseded" has no writer — a drift row can only be candidate or resolved.
-# Why: the only RequirementDrift(...) construction is requirement_evidence.py:1154 with
-#   state="candidate"; the only assignment anywhere is requirement_evidence.py:1205
-#   (`candidate.state = "resolved"`); the column default is "candidate" (models.py:2638); and no
-#   bulk UPDATE touches this table. The literal "superseded" appears nowhere else in the product
-#   but the mirrored CHECK tuple in migrations/versions/0068_add_requirement_evidence.py:30.
-# Live equivalent: none — the superseding behaviour the comment at models.py:2643 describes was
-#   never implemented, so a reworded requirement leaves its drift candidate open.
-# Removal: the CHECK constraint ck_requirement_drift_state (models.py:2657) and 0068 must change
-#   together, which is a table rebuild on SQLite — a new migration, not an edit to 0068.
+# `superseded`: the requirement was reworded or retired while the candidate was open
+# (`spec_index._supersede_drift`, F435).
 DRIFT_STATES = ("candidate", "resolved", "superseded")
 DRIFT_RESOLUTIONS = ("specification_updated", "implementation_corrected", "no_change_required")
 
