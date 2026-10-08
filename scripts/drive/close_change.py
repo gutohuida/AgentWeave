@@ -186,6 +186,29 @@ CHANGES = {
              "The acceptance drive, written and run before the build: 0/4 on today's Hub."),
         ],
     },
+    "f533": {
+        "document": "spec/changes/a-fold-can-retire-what-the-change-supersedes/spec.html",
+        "tasks": ["task-85b425296f6f", "task-036912f44f18", "task-e103703a8f9a"],
+        "evidence": [
+            ("FR-1", "task-036912f44f18", "test_result",
+             "hub/tests/test_a_fold_can_retire_what_the_change_supersedes.py",
+             "A fold retiring a requirement drops it with its criteria and a retired criterion "
+             "alone, in one merge; an unknown key and a requirement both replaced and retired are "
+             "refused with the capability's digest unchanged (all red before the build)."),
+            ("FR-2", "task-036912f44f18", "test_result",
+             "hub/tests/test_a_fold_can_retire_what_the_change_supersedes.py",
+             "The draft lists the capability's requirements (key, statement) and criteria (key, "
+             "requirement, then) in the capability's order."),
+            ("FR-3", "task-e103703a8f9a", "manual_observation",
+             "scripts/drive/d1008_fold_retire_drive.py",
+             "In Chromium on :8010: 2/7 before (no retire section), 7/7 after: old-rule, its "
+             "criterion and widgets-exist-c gone, the folded requirement and widgets-exist-d kept. "
+             "vitest specFold: retire and filter cases red before, 10/10 after."),
+            ("FR-3", "task-85b425296f6f", "manual_observation",
+             "scripts/drive/d1008_fold_retire_drive.py",
+             "The acceptance drive, written and run before the build: 2/7 on today's Hub."),
+        ],
+    },
 }
 
 
