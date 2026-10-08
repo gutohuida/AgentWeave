@@ -72,6 +72,48 @@ export function SpecApprovalReport({ path }: { path: string }) {
         </div>
       )}
 
+      {(outcome.refreshed ?? []).map((task) => (
+        <div key={task.id} className="flex items-start gap-1.5" data-testid="approval-refreshed">
+          <Icon name="info" size={13} />
+          <span>
+            <code>{task.key}</code> refreshed to {task.title}
+            {task.fields.length > 0 && <>: {task.fields.map((f) => f.replace(/_/g, ' ')).join(', ')}</>}
+            {task.linked.length > 0 && <>; linked {task.linked.join(', ')}</>}
+            {task.unlinked.length > 0 && <>; unlinked {task.unlinked.join(', ')}</>}.
+          </span>
+        </div>
+      ))}
+
+      {(outcome.closed_linking_retired ?? []).map((task) => (
+        <div
+          key={task.id}
+          className="flex items-start gap-1.5"
+          data-testid="approval-closed-retired"
+          style={{ color: 'var(--amber)' }}
+        >
+          <Icon name="warning" size={13} />
+          <span>
+            <code>{task.key}</code> is {task.status} and left as delivered, but still links retired{' '}
+            {task.requirements.join(', ')}.
+          </span>
+        </div>
+      ))}
+
+      {(outcome.no_longer_declared ?? []).map((task) => (
+        <div
+          key={task.id}
+          className="flex items-start gap-1.5"
+          data-testid="approval-no-longer-declared"
+          style={{ color: 'var(--amber)' }}
+        >
+          <Icon name="warning" size={13} />
+          <span>
+            <code>{task.key}</code> ({task.status}) is no longer declared by this document; it was left
+            on the board.
+          </span>
+        </div>
+      ))}
+
       {outcome.dependencies_not_honoured.map((dep, i) => (
         <div
           key={`${dep.task_id}:${dep.reference}:${i}`}

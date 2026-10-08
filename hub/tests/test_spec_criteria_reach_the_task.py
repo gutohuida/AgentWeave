@@ -665,9 +665,9 @@ def test_3_25_requirement_view_survives_a_scalar_requirements_block():
 
 
 @pytest.mark.asyncio
-async def test_3_9_re_approval_does_not_revisit_or_duplicate_criteria(app):
-    """Design D5: write-once. A task that already exists is never touched, so a revision that
-    reworded its criteria does not reach it — and does not create a second task either."""
+async def test_3_9_re_approval_refreshes_an_open_tasks_criteria_without_duplicating_it(app):
+    """Design D5 was write-once; F535 replaced it. A revision that rewords the criteria reaches the
+    open task it already created — and still does not create a second task."""
     first_payload = {
         "requirements": [ALPHA],
         "acceptance_criteria": [AC_ALPHA],
@@ -695,7 +695,9 @@ async def test_3_9_re_approval_does_not_revisit_or_duplicate_criteria(app):
             .all()
         )
     assert len(rows) == 1
-    assert rows[0].acceptance_criteria == [RENDERED_ALPHA]
+    assert rows[0].acceptance_criteria == [
+        "ac-alpha-v2: Given two plants are due, when the list is shown, then only the overdue appear"
+    ]
 
 
 @pytest.mark.asyncio

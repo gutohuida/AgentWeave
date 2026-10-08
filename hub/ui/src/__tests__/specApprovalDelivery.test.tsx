@@ -266,6 +266,48 @@ describe('SpecApprovalReport', () => {
     expect(iFlow).toBeGreaterThan(iDep2)
   })
 
+  it('shows refreshed, closed-linking-retired and no-longer-declared tasks between failed and dependencies (F535)', async () => {
+    documents = [doc({ phase: 'approved' })]
+    loops = [loop()]
+    // The route's own key order: ..., failed, refreshed, closed_linking_retired, no_longer_declared,
+    // dependencies_not_honoured, flow.
+    specOutcome = outcome({
+      failed: 'RuntimeError: partial',
+      refreshed: [
+        { id: 't-1', key: 'K-1', title: 'New title', fields: ['title', 'acceptance_criteria'], linked: ['FR-2', 'FR-3'], unlinked: ['FR-1'] },
+      ],
+      closed_linking_retired: [{ id: 't-2', key: 'K-2', status: 'approved', requirements: ['FR-1'] }],
+      no_longer_declared: [{ id: 't-3', key: 'K-3', status: 'pending' }],
+      dependencies_not_honoured: [{ task_id: 't-4', task_key: 'K-4', reference: 'K-9', reason: 'not_declared' }],
+    })
+    renderReport()
+
+    const refreshed = await screen.findByTestId('approval-refreshed')
+    expect(refreshed.textContent).toContain('K-1')
+    expect(refreshed.textContent).toContain('New title')
+    expect(refreshed.textContent).toContain('title, acceptance criteria')
+    expect(refreshed.textContent).toContain('linked FR-2, FR-3')
+    expect(refreshed.textContent).toContain('unlinked FR-1')
+    const closed = screen.getByTestId('approval-closed-retired')
+    expect(closed.textContent).toContain('K-2')
+    expect(closed.textContent).toContain('FR-1')
+    expect(screen.getByTestId('approval-no-longer-declared').textContent).toContain('K-3')
+
+    const text = screen.getByTestId('spec-approval-report').textContent ?? ''
+    const order = ['partial', 'K-1', 'K-2', 'K-3', 'K-4'].map((needle) => text.indexOf(needle))
+    expect(order[0]).toBeGreaterThanOrEqual(0)
+    for (let i = 1; i < order.length; i++) expect(order[i]).toBeGreaterThan(order[i - 1])
+  })
+
+  it('renders an outcome from a Hub that predates the refresh fields', async () => {
+    documents = [doc({ phase: 'approved' })]
+    loops = [loop()]
+    specOutcome = outcome({ created: [{ id: 't-1', key: 'T-1', title: 'Write the thing' }] })
+    renderReport()
+    await screen.findByTestId('approval-created')
+    expect(screen.queryByTestId('approval-refreshed')).toBeNull()
+  })
+
   it('shows the "use Start a flow… above" pointer when no unarchived loop declares the document', async () => {
     documents = [doc({ phase: 'approved' })]
     loops = []

@@ -2068,6 +2068,15 @@ async def set_phase(
                 for entry in outcome.already_served
             ],
             "failed": outcome.failed,
+            # F535: what re-approval did to tasks that already existed. Empty on a failed board,
+            # which rolled any refresh back with it.
+            "refreshed": [dataclasses.asdict(task) for task in outcome.board.refreshed],
+            "closed_linking_retired": [
+                dataclasses.asdict(task) for task in outcome.board.closed_linking_retired
+            ],
+            "no_longer_declared": [
+                dataclasses.asdict(task) for task in outcome.board.no_longer_declared
+            ],
             # When the board failed, `_materialise_edges` did not run, and the rows there are the
             # previous approval's (design D7, R3).
             "dependencies_not_honoured": (
@@ -2088,8 +2097,14 @@ async def set_phase(
     defer_broadcast(
         session, project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
-    if created_count:
-        defer_broadcast(session, project_id, "task_updated", {"created": created_count})
+    refreshed_count = len((report or {}).get("refreshed", []))
+    if created_count or refreshed_count:
+        defer_broadcast(
+            session,
+            project_id,
+            "task_updated",
+            {"created": created_count, "refreshed": refreshed_count},
+        )
     if created_job is not None:
         defer_broadcast(
             session, project_id, "job_created", {"id": created_job.id, "name": created_job.name}

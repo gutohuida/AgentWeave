@@ -16,15 +16,23 @@ Two rules shape this:
 the second approval duplicates the whole decomposition, and re-approving after a revision is exactly
 what a document earns by being revisable.
 
-**A task that already exists is never touched.** The document declares that work *exists* — not what
-has happened to it since. An approval that reset a task in progress, or reassigned it, would make
-re-approving a document something an operator learns to fear.
+**Progress and assignment are the board's; what the work is, is the document's** (F535). An approval
+that reset a task in progress, or reassigned it, would make re-approving a document something an
+operator learns to fear — so status, assignee and priority are never touched. But freezing the whole
+row froze the description of the work too: F532's amended document retired FR-3 and added FR-5, and
+its open task kept the old title and the link to the retired requirement while FR-5 went unserved.
+So an *open* task the document still declares is refreshed — title, description, criteria, and its
+links to this document's requirements. A task that is approved or rejected records what was asked
+when it was decided, and stays as it is. The approval report says what was refreshed, which closed
+tasks still link a retired requirement, and which tasks the document no longer declares.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import delete, select
@@ -38,6 +46,7 @@ from .db.models import (
     Task,
     TaskDependency,
     TaskDependencyReference,
+    TaskRequirementLink,
 )
 from .spec_lifecycle import APPROVED, Actor
 from .utils import short_id
@@ -61,6 +70,18 @@ MAX_TITLE = 80
 #: description already short enough to be a name comes through byte-for-byte.
 ELLIPSIS = "…"
 
+#: A task in one of these records what was delivered or turned down against what was asked then,
+#: so a later approval leaves it exactly as it is (F535).
+CLOSED_STATUSES = ("approved", "rejected")
+
+
+def _natural(identifier: str) -> list:
+    """`FR-2` before `FR-11`: digit runs compare as numbers."""
+    return [
+        (1, int(part), "") if part.isdigit() else (0, 0, part)
+        for part in re.split(r"(\d+)", identifier)
+    ]
+
 
 @dataclass(frozen=True)
 class CreatedTask:
@@ -81,6 +102,48 @@ class ServedEntry:
 
 
 @dataclass(frozen=True)
+class RefreshedTask:
+    """An open task re-approval brought up to date: which of its fields changed, and the identifiers
+    of this document's requirements it was linked to and unlinked from."""
+
+    id: str
+    key: str
+    title: str
+    fields: Tuple[str, ...]
+    linked: Tuple[str, ...]
+    unlinked: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ClosedLinkingRetired:
+    """A closed task, left as delivered, that still links a requirement this document retired."""
+
+    id: str
+    key: str
+    status: str
+    requirements: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UndeclaredTask:
+    """A task this document created under a key it no longer declares. Reported, never changed."""
+
+    id: str
+    key: str
+    status: str
+
+
+@dataclass
+class BoardReport:
+    """What approval found on the board for tasks that already existed (F535), collected by
+    `materialise` the way `already_served` is."""
+
+    refreshed: List[RefreshedTask] = field(default_factory=list)
+    closed_linking_retired: List[ClosedLinkingRetired] = field(default_factory=list)
+    no_longer_declared: List[UndeclaredTask] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class MaterialiseOutcome:
     """What approval's board did, in the payload's declaration order. Never ORM rows (design D7):
     rolling a savepoint back expires what was touched inside it, and reading an expired row in this
@@ -89,6 +152,7 @@ class MaterialiseOutcome:
     created: List[CreatedTask]
     already_served: List[ServedEntry]
     failed: Optional[str]
+    board: BoardReport = field(default_factory=BoardReport)
 
 
 def _title_from(description: str) -> str:
@@ -189,11 +253,14 @@ async def materialise(
     *,
     actor: Actor,
     already_served: Optional[List[ServedEntry]] = None,
+    board: Optional[BoardReport] = None,
 ) -> List[Task]:
-    """Create the tasks *document* declares that do not exist yet. Returns only what was created.
+    """Create the tasks *document* declares that do not exist yet, and refresh the open ones that
+    do (F535). Returns only what was created.
 
     *already_served*, when given, collects each declared entry skipped because hand-made tasks
-    already serve every requirement it names, for approval's report.
+    already serve every requirement it names, for approval's report. *board*, when given, collects
+    what happened to tasks that already existed.
 
     A document declaring nothing creates nothing, and that is not an error — it is a document whose
     decomposition has not been written, which is a normal state for one that was approved for its
@@ -236,14 +303,17 @@ async def materialise(
         .scalars()
         .all()
     )
-    existing_keys = {row.spec_task_key for row in existing_task_rows}
     # Every local task this document has ever materialised, by key — reused below to resolve edges
     # for a task this call did not itself create (4.4: a revision may add an edge to an existing
-    # task even though the task row itself is never touched). The query above already filters to
-    # `spec_task_key IS NOT NULL`; the `is not None` here is only to satisfy the type checker.
+    # task). The query above already filters to `spec_task_key IS NOT NULL`; the `is not None` here
+    # is only to satisfy the type checker.
     local_tasks: Dict[str, Task] = {
         row.spec_task_key: row for row in existing_task_rows if row.spec_task_key is not None
     }
+    # What existed before this call: these are refreshed, never re-created.
+    preexisting: Dict[str, Task] = dict(local_tasks)
+    # Keys this call has dealt with. A key declared twice is dealt with once.
+    seen: set = set()
 
     # The document's own key→identifier map. `spec_index` rebuilds the whole index from this, so it
     # is the same source of truth, read the same way — not a second interpretation of the file.
@@ -260,6 +330,7 @@ async def materialise(
     )
     by_identifier = {row.identifier: row for row in rows}
     by_key = {row.key: row for row in rows}
+    by_id = {row.id: row for row in rows}
 
     # Requirements a *hand-made* task already serves — one `spec_task_key IS NULL`, so not a task
     # this document's own decomposition produced. An entry whose every named requirement is already
@@ -282,8 +353,9 @@ async def materialise(
         if not isinstance(entry, dict):
             continue
         key = entry.get("key")
-        if not isinstance(key, str) or not key or key in existing_keys:
+        if not isinstance(key, str) or not key or key in seen:
             continue
+        seen.add(key)
         if isinstance(entry.get("from"), dict):
             # 4.2, the one new rule in this loop: an imported entry resolves to the task it names
             # and never creates one of its own. `_materialise_edges` below is what resolves it —
@@ -304,12 +376,28 @@ async def materialise(
             else:
                 unresolved.append(named)
 
+        prior = preexisting.get(key)
+        if prior is not None:
+            if prior.status not in CLOSED_STATUSES:
+                refreshed = await _refresh(
+                    session,
+                    prior,
+                    entry,
+                    requirements,
+                    _criteria_for_entry(names, criteria_index, position),
+                    document=document,
+                    by_id=by_id,
+                    actor=actor,
+                )
+                if refreshed is not None and board is not None:
+                    board.refreshed.append(refreshed)
+            continue
+
         if (
             requirements
             and not unresolved
             and all(row.id in served_by_hand for row in requirements)
         ):
-            existing_keys.add(key)
             if already_served is not None:
                 already_served.append(ServedEntry(key=key, requirements=tuple(names)))
             continue
@@ -343,13 +431,131 @@ async def materialise(
                 session, task, unresolved, actor=actor, replace=False
             )
 
-        existing_keys.add(key)
         local_tasks[key] = task
         created.append(task)
 
     await _materialise_edges(session, document, declared, local_tasks)
 
+    if board is not None:
+        await _report_unrefreshed(session, document, existing_task_rows, seen, board)
+
     return created
+
+
+async def _refresh(
+    session: AsyncSession,
+    task: Task,
+    entry: Dict[str, Any],
+    requirements: List[SpecRequirement],
+    criteria: List[str],
+    *,
+    document: SpecDocument,
+    by_id: Dict[str, SpecRequirement],
+    actor: Actor,
+) -> Optional[RefreshedTask]:
+    """Bring an open declared task's description of the work up to what *entry* now says.
+
+    Title, description, criteria, and links to **this** document's requirements; nothing else.
+    Links are set by difference, so a link the entry still names keeps its row and its actor, and a
+    task nothing changed for is not reported. Unresolved names are left in the task's free-text
+    references as they were: that record belongs to the approval that wrote it.
+    """
+    fields: List[str] = []
+    title = _title_for(entry)
+    if task.title != title:
+        task.title = title
+        fields.append("title")
+    description = entry.get("description") or ""
+    if task.description != description:
+        task.description = description
+        fields.append("description")
+    if (task.acceptance_criteria or None) != (criteria or None):
+        task.acceptance_criteria = criteria or None
+        fields.append("acceptance_criteria")
+
+    current = set(
+        (
+            await session.execute(
+                select(TaskRequirementLink.requirement_id)
+                .join(SpecRequirement, SpecRequirement.id == TaskRequirementLink.requirement_id)
+                .where(
+                    TaskRequirementLink.task_id == task.id,
+                    SpecRequirement.document_id == document.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    wanted = {row.id for row in requirements}
+    linked = await requirement_links.link(
+        session, task, [row for row in requirements if row.id not in current], actor=actor
+    )
+    removed = current - wanted
+    if removed:
+        await session.execute(
+            delete(TaskRequirementLink).where(
+                TaskRequirementLink.task_id == task.id,
+                TaskRequirementLink.requirement_id.in_(removed),
+            )
+        )
+    unlinked = [by_id[rid].identifier for rid in removed if rid in by_id]
+
+    if not (fields or linked or removed):
+        return None
+    task.updated = datetime.now(timezone.utc)
+    return RefreshedTask(
+        id=task.id,
+        key=task.spec_task_key or "",
+        title=task.title,
+        fields=tuple(fields),
+        linked=tuple(sorted(linked, key=_natural)),
+        unlinked=tuple(sorted(unlinked, key=_natural)),
+    )
+
+
+async def _report_unrefreshed(
+    session: AsyncSession,
+    document: SpecDocument,
+    existing_task_rows: List[Task],
+    declared_keys: set,
+    board: BoardReport,
+) -> None:
+    """The tasks a re-approval left alone that the operator still needs to hear about: closed ones
+    linking a requirement this document retired, and ones it no longer declares."""
+    ordered = sorted(existing_task_rows, key=lambda row: (row.created_at, row.id))
+    for row in ordered:
+        if row.spec_task_key not in declared_keys:
+            board.no_longer_declared.append(
+                UndeclaredTask(id=row.id, key=row.spec_task_key or "", status=row.status)
+            )
+
+    closed = [row for row in ordered if row.status in CLOSED_STATUSES]
+    if not closed:
+        return
+    retired: Dict[str, List[str]] = {}
+    for task_id, identifier in (
+        await session.execute(
+            select(TaskRequirementLink.task_id, SpecRequirement.identifier)
+            .join(SpecRequirement, SpecRequirement.id == TaskRequirementLink.requirement_id)
+            .where(
+                TaskRequirementLink.task_id.in_([row.id for row in closed]),
+                SpecRequirement.document_id == document.id,
+                SpecRequirement.state == "retired",
+            )
+        )
+    ).all():
+        retired.setdefault(task_id, []).append(identifier)
+    for row in closed:
+        if row.id in retired:
+            board.closed_linking_retired.append(
+                ClosedLinkingRetired(
+                    id=row.id,
+                    key=row.spec_task_key or "",
+                    status=row.status,
+                    requirements=tuple(sorted(retired[row.id], key=_natural)),
+                )
+            )
 
 
 async def _resolve_import(
@@ -539,9 +745,12 @@ async def materialise_quietly(
     them first, which satisfies it.
     """
     served: List[ServedEntry] = []
+    board = BoardReport()
     try:
         async with session.begin_nested():
-            rows = await materialise(session, document, payload, actor=actor, already_served=served)
+            rows = await materialise(
+                session, document, payload, actor=actor, already_served=served, board=board
+            )
             created = [
                 CreatedTask(id=row.id, key=row.spec_task_key or "", title=row.title) for row in rows
             ]
@@ -554,7 +763,7 @@ async def materialise_quietly(
         return MaterialiseOutcome(
             created=[], already_served=[], failed=f"{type(exc).__name__}: {exc}"
         )
-    return MaterialiseOutcome(created=created, already_served=served, failed=None)
+    return MaterialiseOutcome(created=created, already_served=served, failed=None, board=board)
 
 
 async def dependencies_not_honoured(

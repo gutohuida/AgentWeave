@@ -58,6 +58,32 @@ export interface ApprovalServedEntry {
   requirements: string[]
 }
 
+/** An open task re-approval brought up to date (F535): which fields changed, and the identifiers of
+ *  this document's requirements it was linked to and unlinked from. */
+export interface ApprovalRefreshedTask {
+  id: string
+  key: string
+  title: string
+  fields: string[]
+  linked: string[]
+  unlinked: string[]
+}
+
+/** A closed task, left as delivered, that still links a requirement the document retired. */
+export interface ApprovalClosedLinkingRetired {
+  id: string
+  key: string
+  status: string
+  requirements: string[]
+}
+
+/** A task the document created under a key it no longer declares. Reported, never changed. */
+export interface ApprovalUndeclaredTask {
+  id: string
+  key: string
+  status: string
+}
+
 /** A dependency this approval's tasks could not honour. */
 export interface ApprovalDependencyProblem {
   task_id: string
@@ -83,12 +109,16 @@ export interface ApprovalFlowOutcome {
 /** The newest approval's report (design D7) — present on `GET /spec` only for an approved
  *  document that has one. Every field is read as possibly absent: an older Hub returns neither
  *  this nor `delivery_status` at all (the `:8000` skew). Problems are rendered in the order the
- *  Hub returns them: created, then already_served, then failed, then dependencies_not_honoured,
- *  then the flow's own messages. */
+ *  Hub returns them: created, then already_served, then failed, then refreshed,
+ *  closed_linking_retired and no_longer_declared (F535; absent from an older Hub), then
+ *  dependencies_not_honoured, then the flow's own messages. */
 export interface SpecApprovalOutcome {
   created: ApprovalCreatedTask[]
   already_served: ApprovalServedEntry[]
   failed: string | null
+  refreshed?: ApprovalRefreshedTask[]
+  closed_linking_retired?: ApprovalClosedLinkingRetired[]
+  no_longer_declared?: ApprovalUndeclaredTask[]
   dependencies_not_honoured: ApprovalDependencyProblem[]
   flow: ApprovalFlowOutcome
   delivery_agent?: string | null
