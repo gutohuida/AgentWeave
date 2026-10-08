@@ -148,75 +148,124 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <body>
 <h1>Usage accounting</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a><a href="../../areas/the-local-instance.html">The local instance</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">8</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">8</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">35</span> criteria</p>
-<section id="summary"><h2>Summary</h2><p>Define durable per-turn token accounting, runner-neutral usage aggregation, honest allowance and API-equivalent presentation, and project budgets that pause autonomous work without preventing operator control.</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 1 of 8</span><p><span class="aw-modal aw-modal-must">MUST</span> The system SHALL persist exactly one accounting outcome for every Hub-owned run after that run ends. When the runner reports usable token telemetry, the outcome SHALL record normalized input, output, total, cache, and reasoning dimensions when available. When it does not, the outcome SHALL be explicitly unavailable and MUST NOT represent missing values as zero.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 2 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL normalize Claude Code result usage and model usage, Codex completed-turn and token-count telemetry, OpenCode completed-step telemetry, and GitHub Copilot per-call and per-prompt telemetry without changing the separate context-window meter semantics. Malformed telemetry SHALL degrade to an unavailable accounting outcome rather than failing the run.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A Copilot run&#x27;s tokens SHALL be measured two ways. One is the sum of its per-call usage events, each call counted once, including calls made by subagents and the model call of a compaction. The other is the per-prompt usage its own process reported. Copilot&#x27;s per-prompt usage is cumulative within a process, so a later prompt result SHALL replace an earlier one from the same process, and usage a process reported for an earlier run SHALL NOT be charged to this one. Each figure is a lower bound, so the run SHALL record the one with the larger total. The two SHALL NOT be added together. Copilot reports input tokens inclusive of cache reads, so cache reads SHALL NOT be added to its input or total again.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 3 of 8</span><p><span class="aw-modal aw-modal-must">MUST</span> The accounting API SHALL aggregate measured token totals per agent and project and SHALL separately report measured-turn and unavailable-turn counts. Historical or missing telemetry MUST NOT be invented.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 4 of 8</span><p><span class="aw-modal aw-modal-must">MUST</span> When a runner reports remaining rate-limit allowance, the accounting presentation SHALL prefer it to a monetary figure. Otherwise, any runner-reported monetary figure SHALL be labelled &quot;API-equivalent estimate&quot; and MUST NOT be described as an amount charged. The system MUST NOT invent a monetary figure from a model price catalog.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A monetary figure summed over turns SHALL state how many of those turns reported no cost and are therefore not in it. A figure that leaves out any turn MUST NOT be presented as though it covered them all.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span><a class="aw-anchor-copy" href="#FR-11" aria-label="Link to FR-11" title="Link to #FR-11">#</a> <span class="aw-position">Requirement 5 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL allow an operator to configure a positive token budget per project or disable it. When measured project usage is greater than or equal to the configured budget, autonomous turns SHALL remain queued and SHALL NOT start. Operator-initiated turns SHALL remain available and SHALL still be accounted.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span><a class="aw-anchor-copy" href="#FR-12" aria-label="Link to FR-12" title="Link to #FR-12">#</a> <span class="aw-position">Requirement 6 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The interface SHALL show the project&#x27;s measured token total and budget state, SHALL distinguish unavailable usage from zero, and SHALL state when exhausted budget has paused autonomous work while operator input remains available.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 7 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL record, for every Copilot run that reports them, the AI credits and premium requests that run consumed, and SHALL show them as information beside the tokens, while the token total remains the only quantity counted against a project&#x27;s budget.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Copilot reports its credit total as a session-wide running total, and each model call&#x27;s own credit cost. A run&#x27;s credits SHALL be the larger of two lower bounds. One is the session total at the run&#x27;s end minus the total the previous run of the same provider session recorded, or minus zero when the run created the session. The other is the sum of the run&#x27;s own per-call credit costs. When the difference cannot be taken, is negative, or is smaller than that sum, the run SHALL be charged the sum, and its premium requests SHALL be unknown. When Copilot reported neither, the run&#x27;s credits SHALL be unknown. The run SHALL record the session total it ended at, so that the next run can take its own difference. A run charged its per-call sum from a known starting total, with no session total reported, SHALL record the total it thereby reached, so that the next run does not charge the same credits again. The previous run SHALL be the one whose record was written last, not the one with the latest clock time, so that a clock that steps backwards cannot make an older total the baseline. A negative credit or premium-request figure reported by Copilot SHALL be ignored, and so SHALL a session total that is non-numeric, boolean, non-finite or larger than 2^53 − 1; an ignored session total SHALL make that figure unknown and SHALL NOT make the run fail or lose its tokens. No run SHALL be charged negative credits, and no credit SHALL be charged to two runs. Credits SHALL be stored in the unit Copilot reports them in, and SHALL be presented as AI credits. They are the provider&#x27;s own report of what the run consumed, not a monetary figure, and so are not the runner-reported monetary figure that allowance and currency presentation governs. They SHALL NOT be converted into a monetary figure, SHALL NOT be added to any token total, and SHALL NOT count toward a project&#x27;s token budget or its exhaustion, including the budget check that gates the scheduling of a turn. A screen that shows no credits for a project, agent, conversation or turn that reported none SHALL look as it did before credits existed. The accounting responses SHALL carry the credit and premium-request fields for every project, empty when none were reported, so a project with no Copilot runs gains those empty fields and is otherwise unchanged.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 8 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL record, for every Copilot one-shot call (a checkpoint, its probe, or any other Hub-owned `copilot -p` call that writes an invocation record) whose process exited successfully and whose output carries a session usage checkpoint, the AI credits and premium requests of the last such checkpoint as that call&#x27;s own charge.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A one-shot call is one process that opens one new session, so the session&#x27;s final cumulative total is the call&#x27;s whole charge. The last checkpoint SHALL be taken, and checkpoints SHALL NOT be summed. Each figure SHALL be read by the same rule as a Copilot run&#x27;s session checkpoint: a negative, non-numeric, boolean or non-finite figure, or a figure larger than 2^53 − 1 (the largest whole number a floating-point or JavaScript number holds exactly), SHALL be ignored and that figure SHALL be unknown, while the other figure is still recorded. A later checkpoint whose figure is ignored SHALL make that figure unknown, not leave an earlier checkpoint&#x27;s figure in its place. A call whose output carries no checkpoint SHALL record both figures as unknown, never as zero, and no other part of the output SHALL be used in their place. The credits SHALL be recorded whether the call produced a usable answer, reported an error, or produced no answer. A call whose process exited unsuccessfully, timed out or failed to start SHALL record both figures as unknown: its output is not read. Like a Copilot run&#x27;s credits, they SHALL NOT be converted into a monetary figure, SHALL NOT be added to any token total, and SHALL NOT count toward a project&#x27;s token budget. Reading a malformed figure SHALL NOT make the call fail, and SHALL NOT prevent the call&#x27;s invocation record from being written.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runner completes a turn and reports token usage</td><td>exactly one measured accounting record is associated with that run its normalized total is available for aggregation</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runner completes a turn without usable token telemetry</td><td>exactly one unavailable accounting record is associated with that run the interface does not display zero tokens for that turn</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Claude stream contains partial assistant usage followed by final result usage</td><td>the final result usage is the turn&#x27;s accounting outcome partial samples are not added as additional turns</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Codex or OpenCode reports input, output, cache, or reasoning dimensions</td><td>the dimensions are retained in the normalized accounting record cache or reasoning subsets are not double-counted in the total</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run reports three model calls and a prompt result whose cumulative usage equals</td><td>the run&#x27;s recorded tokens equal the sum of the three calls the prompt result&#x27;s usage is not added to them</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>one Copilot process reports two prompt results, the later of which includes the earlier</td><td>the run records the later result does not add the two together</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run&#x27;s per-call events sum to less than its process&#x27;s cumulative prompt usage</td><td>the run records the cumulative usage does not add the per-call sum to it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot call reports input tokens that include cache-read tokens</td><td>the recorded total is input plus output the cache-read tokens are retained as a breakdown only</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>measured turns exist for more than one agent in a project</td><td>each agent summary contains only that agent&#x27;s usage the project total contains the sum of their measured totals</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a project contains both measured and unavailable turn outcomes</td><td>the aggregate reports both counts the unavailable turn contributes no fabricated token value</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the latest accounting telemetry includes both rate-limit allowance and monetary data</td><td>the preferred display is the allowance</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>runner-reported monetary telemetry is displayed without allowance</td><td>it is labelled &quot;API-equivalent estimate&quot; it is not labelled spend, bill, or amount charged</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a project&#x27;s turns include some that reported a cost and some that did not</td><td>the monetary figure is the sum of the reported costs the presentation states how many turns reported no cost and are not included</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runner reports token usage for a turn but no cost</td><td>no monetary value is computed for that turn the turn is counted among those the monetary figure does not include</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent-origin queue batch is ready and the project budget is exhausted</td><td>no run starts every entry remains queued the waiting reason states that the token budget is exhausted</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a scheduled job queues work while the project budget is exhausted</td><td>that work does not start autonomously it is not misclassified as an operator turn</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>operator input is queued while the project budget is exhausted</td><td>its turn can start the resulting run is classified as operator-initiated</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>project usage meets or exceeds its configured budget</td><td>the interface states that autonomous turns are paused it states that operator messages can still run</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run reports its usage and its session&#x27;s credit total</td><td>the run&#x27;s accounting record carries its tokens and its credits the turn, its conversation, its agent and the project each show the credits beside their</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run resumes a session whose previous run ended at one credit total it ends at a higher total</td><td>it is charged the difference between the two totals</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a project has a token budget and a Copilot run reports credits</td><td>the budget&#x27;s used amount includes the run&#x27;s tokens does not include its credits</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run ends at a session credit total lower than its baseline</td><td>the run is charged the sum of its own per-call credit costs, and its premium requests are the total it ended at becomes the next run&#x27;s baseline</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run resumes a session and ends at a session credit total above its baseline the difference is smaller than the sum of the run&#x27;s own per-call credit costs</td><td>the run is charged the per-call sum, not the difference</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run that created its session reports per-call credit costs but no session the next run of that session ends at a session credit total</td><td>the first run is charged the sum of its per-call costs the next run is charged only the session total minus that sum</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a project&#x27;s runs are all Claude or Codex runs</td><td>no screen shows a credits figure the accounting responses report the project&#x27;s credits and premium requests as empty</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot session&#x27;s runs are recorded in order, and the clock stepped backwards between</td><td>each run&#x27;s baseline is the total recorded by the run written just before it no credit is charged to two runs</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a project&#x27;s token budget is not yet spent by its tokens its Copilot runs reported credits whose count exceeds that budget</td><td>the project&#x27;s budget is not exhausted and its turns are still scheduled</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run that completed reports a session credit total that is non-finite or larger</td><td>the run is recorded as completed, with its tokens its session credit total is unknown and its premium-request total is recorded</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot one-shot call&#x27;s output carries a session usage checkpoint</td><td>the call&#x27;s invocation record carries that checkpoint&#x27;s credits and premium requests</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot one-shot call&#x27;s output carries two session usage checkpoints</td><td>the call&#x27;s invocation record carries the second checkpoint&#x27;s figures, not their sum</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot one-shot call&#x27;s output carries a session error, or no answer, and a session usage checkpoint</td><td>the call is recorded as having failed its invocation record carries the checkpoint&#x27;s credits and premium requests</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot one-shot call&#x27;s output carries no session usage checkpoint</td><td>the call&#x27;s invocation record carries unknown credits and unknown premium requests</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot one-shot call&#x27;s checkpoint carries a negative, non-finite or too-large credit figure and a valid premium-request figure</td><td>the call&#x27;s invocation record is written, carrying unknown credits and the premium-request figure the call&#x27;s outcome is decided by its answer as if the checkpoint were absent</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot one-shot call&#x27;s output carries a checkpoint with valid figures, then a later checkpoint whose credit figure is negative</td><td>the call&#x27;s invocation record carries unknown credits and the later checkpoint&#x27;s premium requests</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot one-shot call&#x27;s process exits unsuccessfully, times out, or fails to start</td><td>the call&#x27;s invocation record carries unknown credits and unknown premium requests</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/usage-accounting/spec.md (8 requirements, 35 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 35 of 35 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">14</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">14</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">33</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>Every Hub-owned run gets one durable token-accounting outcome, measured or explicitly unavailable; usage is aggregated per agent, conversation and project; allowance and cost are presented without implying a bill; Copilot&#x27;s AI credits are recorded beside tokens; and a project token budget pauses autonomous work while the operator keeps control.</p></section><section id="problem"><h2>Problem</h2><p>Runners report usage in different shapes and sometimes not at all. Without one honest record per run, missing data reads as zero, estimates read as charges, and a budget either stops nothing or stops the operator too.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>`TurnUsage` rows and their normalisation from Claude, Codex and Copilot telemetry</li><li>`GET /accounting`, `GET /accounting/conversations/{id}`, `PATCH /accounting/budget`</li><li>Copilot AI credits and premium requests, for runs and one-shot calls</li><li>The token budget gate for autonomous turns, and how accounting is shown</li></ul><h3>Non-goals</h3><ul><li>The context-window meter (agent-context-usage)</li><li>Hop budget and delivery cap (turn scheduling)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 1 of 14</span><p><span class="aw-modal aw-modal-must">MUST</span> The Hub SHALL persist exactly one accounting outcome per Hub-owned run after it ends: `measured`, with normalised input, output and total tokens and cache and reasoning breakdowns where reported, or `unavailable`, which MUST NOT be represented as zero.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A missing figure shown as zero understates usage and cannot be told apart from a free turn.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 2 of 14</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL normalise Claude result usage, Codex completed-turn usage and Copilot usage into one accounting shape without double-counting cache or reasoning subsets, and malformed telemetry SHALL yield an `unavailable` outcome rather than failing the run.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>One shape makes per-agent and per-project totals comparable across runners.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 3 of 14</span><p><span class="aw-modal aw-modal-must">SHALL</span> A Copilot run&#x27;s tokens SHALL be the larger of the sum of its per-call usage (each call once, including subagent and compaction calls) and its process&#x27;s latest cumulative prompt usage for this run, never their sum, and cache reads SHALL NOT be added to its input or total again.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Each Copilot figure is a lower bound; Copilot&#x27;s input already includes cache reads.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 4 of 14</span><p><span class="aw-modal aw-modal-must">MUST</span> `GET /accounting` SHALL report measured token totals per agent and per project, with measured and unavailable turn counts and the most recent turns, and SHALL NOT invent values for unmeasured turns.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The operator needs to see who used what, and how much of it is unknown.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span><a class="aw-anchor-copy" href="#FR-16" aria-label="Link to FR-16" title="Link to #FR-16">#</a> <span class="aw-position">Requirement 5 of 14</span><p><span class="aw-modal aw-modal-must">SHALL</span> `GET /accounting/conversations/{id}` SHALL aggregate every run of that conversation, uncapped, and SHALL answer 404 for a conversation that does not exist or belongs to another project.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An aggregate over no rows is a valid zero, so an unknown conversation must not read as one that cost nothing (F239).</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 6 of 14</span><p><span class="aw-modal aw-modal-must">MUST</span> Accounting SHALL prefer the latest runner-reported rate-limit allowance (naming its runner) over any monetary figure; otherwise a runner-reported monetary figure SHALL be labelled &quot;API-equivalent estimate&quot; and state how many turns reported no cost, and the Hub MUST NOT compute money from a price catalogue.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Subscription users are not billed per token; an estimate that silently omits turns overstates its coverage.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span><a class="aw-anchor-copy" href="#FR-11" aria-label="Link to FR-11" title="Link to #FR-11">#</a> <span class="aw-position">Requirement 7 of 14</span><p><span class="aw-modal aw-modal-must">SHALL</span> An operator SHALL be able to set a positive project token budget or clear it; while measured project usage is at or above it, autonomous turns SHALL stay queued with the waiting reason &quot;token budget exhausted&quot;, and operator-initiated turns SHALL still start and be accounted.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A budget exists to stop runaway autonomy, not to lock the operator out of their own project.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span><a class="aw-anchor-copy" href="#FR-17" aria-label="Link to FR-17" title="Link to #FR-17">#</a> <span class="aw-position">Requirement 8 of 14</span><p><span class="aw-modal aw-modal-must">SHALL</span> A budget change SHALL be recorded as an `accounting_budget_updated` event and SHALL reconsider every agent with queued entries, so work held by an exhausted budget starts once the budget allows it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Raising the budget should release what it was holding without another nudge.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span><a class="aw-anchor-copy" href="#FR-12" aria-label="Link to FR-12" title="Link to #FR-12">#</a> <span class="aw-position">Requirement 9 of 14</span><p><span class="aw-modal aw-modal-must">SHALL</span> The interface SHALL show the project&#x27;s measured token total and budget, SHALL show unavailable usage as unavailable rather than zero, and when the budget is exhausted SHALL state that autonomous turns are paused and operator messages can still run.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A paused project that looks broken sends the operator looking for the wrong fault.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 10 of 14</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL record the AI credits and premium requests each Copilot run reports and show them beside tokens on the turn, conversation, agent and project, and accounting responses SHALL carry these fields for every project, null where none were reported.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Credits are what Copilot meters; a project with no Copilot runs must look as it did before credits existed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span><a class="aw-anchor-copy" href="#FR-18" aria-label="Link to FR-18" title="Link to #FR-18">#</a> <span class="aw-position">Requirement 11 of 14</span><p><span class="aw-modal aw-modal-must">SHALL</span> A Copilot run&#x27;s credits SHALL be the larger of its session total minus the total the previous run of that session recorded (zero for a new session) and the sum of its own per-call credit costs; when the difference cannot be taken, is negative, or is smaller than that sum, the run SHALL be charged the sum with premium requests unknown, and each run SHALL record the session total it reached, the previous run being the one written last.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Copilot reports a session-wide running total; no credit may be charged to two runs, and no run charged negative credits, even if the clock steps backwards.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span><a class="aw-anchor-copy" href="#FR-19" aria-label="Link to FR-19" title="Link to #FR-19">#</a> <span class="aw-position">Requirement 12 of 14</span><p><span class="aw-modal aw-modal-must">SHALL</span> A negative, non-numeric, boolean, non-finite or larger-than-2^53-1 credit or premium-request figure SHALL be ignored and that figure recorded as unknown, without failing the run or losing its tokens.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A bad figure from the provider should cost one field, not the run&#x27;s record.</p></div><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span><a class="aw-anchor-copy" href="#FR-20" aria-label="Link to FR-20" title="Link to #FR-20">#</a> <span class="aw-position">Requirement 13 of 14</span><p><span class="aw-modal aw-modal-must">SHALL</span> AI credits SHALL be stored in Copilot&#x27;s own unit and shown as AI credits, and SHALL NOT be converted to money, added to any token total, or counted toward a token budget or its exhaustion.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Credits are the provider&#x27;s report of consumption; the budget is denominated in tokens only.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 14 of 14</span><p><span class="aw-modal aw-modal-must">SHALL</span> A Copilot one-shot call (checkpoint, probe, or other Hub-owned `copilot -p` call with an invocation record) that exits successfully SHALL record the credits and premium requests of the last session usage checkpoint in its output, applying the same malformed-figure rule per figure; with no checkpoint, or when the process failed, timed out or did not start, both SHALL be unknown, never zero.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A one-shot call opens one session, so its last cumulative checkpoint is its whole charge; checkpoints must not be summed.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>A runner that reports usage</td><td>A turn completes</td><td>Exactly one `measured` row is stored for that run.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>A runner that reports no usable usage</td><td>A turn completes</td><td>Exactly one `unavailable` row is stored and the UI does not show zero tokens for it.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td>A Claude stream with partial assistant usage then final result usage</td><td>The turn is accounted</td><td>The final result usage is the outcome and partial samples add no turns.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td>Codex reporting input, output, cache and reasoning tokens</td><td>The turn is accounted</td><td>The breakdowns are kept and are not added to the total twice.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>A Copilot run with three model calls and a prompt result equal to their sum</td><td>It is accounted</td><td>Its tokens equal the sum of the calls, not double it.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>One Copilot process reporting two prompt results, the later including the earlier</td><td>The run is accounted</td><td>The later result is used.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>A Copilot call whose input includes cache reads</td><td>It is accounted</td><td>The total is input plus output and cache reads are a breakdown only.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-9">FR-9</a></td><td>Measured turns for two agents and another project</td><td>`GET /accounting` is called</td><td>Each agent&#x27;s summary holds only its usage, the project total is their sum, and nothing leaks across projects.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-9">FR-9</a></td><td>Measured and unavailable turns</td><td>Accounting is read</td><td>Both counts are reported and the unavailable turn adds no token value.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-16">FR-16</a></td><td>A conversation with more turns than the recent-turns cap</td><td>Its accounting is read</td><td>Every one of its runs is summed.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-16">FR-16</a></td><td>An unknown conversation ID</td><td>Its accounting is read</td><td>The route answers 404.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td>Recent turns with both allowance and cost data</td><td>Accounting is read</td><td>The preferred display is the allowance, naming its runner.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td>Cost data and no allowance</td><td>It is displayed</td><td>It is labelled &quot;API-equivalent estimate&quot; and never spend, bill or charged.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td>Some turns that reported a cost and some that did not</td><td>The estimate is shown</td><td>It sums the reported costs and states how many turns are excluded.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-11">FR-11</a></td><td>An exhausted budget and an agent-origin queue entry</td><td>Scheduling runs</td><td>No run starts, the entry stays queued, and the waiting reason is &quot;token budget exhausted&quot;.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td>An exhausted budget and operator input queued</td><td>Scheduling runs</td><td>The turn starts and the run is recorded as operator-initiated.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td>A project</td><td>`PATCH /accounting/budget` sends 0 or a negative value</td><td>It is refused with 422.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-17">FR-17</a></td><td>Autonomous work held by an exhausted budget</td><td>The budget is raised above usage</td><td>The held work starts.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-12">FR-12</a></td><td>Project usage at or above the budget</td><td>The budget view is shown</td><td>It states that autonomous turns are paused and operator messages can still run.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-13">FR-13</a></td><td>A Copilot run reporting usage and a session credit total</td><td>Accounting is read</td><td>The turn, its conversation, its agent and the project show its credits beside tokens.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-13">FR-13</a></td><td>A project with only Claude and Codex runs</td><td>Accounting is read</td><td>No screen shows credits and the credit fields are null.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-18">FR-18</a></td><td>A Copilot run resuming a session whose previous run ended at one total</td><td>It ends at a higher total</td><td>It is charged the difference.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-18">FR-18</a></td><td>A Copilot run ending below its baseline</td><td>It is accounted</td><td>It is charged its per-call sum, premium requests are unknown, and its total becomes the next baseline.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-18">FR-18</a></td><td>A run that created its session and reported only per-call costs</td><td>The next run of the session reports a session total</td><td>The next run is charged only that total minus the first run&#x27;s sum.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-18">FR-18</a></td><td>A session&#x27;s runs written in order while the clock stepped backwards</td><td>Each is accounted</td><td>Each run&#x27;s baseline is the run written just before it and no credit is charged twice.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-19">FR-19</a></td><td>A completed Copilot run reporting a non-finite session total</td><td>It is accounted</td><td>It is recorded as completed with its tokens, the credit figure unknown and premium requests recorded.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-20">FR-20</a></td><td>A project with a token budget and Copilot runs reporting credits</td><td>Budget state is computed</td><td>Used tokens include the runs&#x27; tokens and not their credits.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-20">FR-20</a></td><td>Credits that exceed the token budget while tokens do not</td><td>Scheduling runs</td><td>The budget is not exhausted and turns still start.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td>A one-shot call whose output carries two usage checkpoints</td><td>Its invocation record is written</td><td>It carries the second checkpoint&#x27;s figures, not their sum.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td>A one-shot call that reported a session error and a checkpoint</td><td>It is recorded</td><td>It is recorded as failed and still carries the checkpoint&#x27;s figures.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td>A one-shot call with no checkpoint</td><td>It is recorded</td><td>Credits and premium requests are unknown.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td>A valid checkpoint followed by one with a negative credit figure</td><td>It is recorded</td><td>Credits are unknown and premium requests come from the later checkpoint.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td>A one-shot call whose process failed, timed out or did not start</td><td>It is recorded</td><td>Both figures are unknown and its output is not read.</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>D1 Rows are immutable facts; every total is derived from `TurnUsage` by aggregate query (`hub/hub/usage_accounting.py`), so a fix to presentation never rewrites history.</p><p>D2 Unavailable is a status, not a zero: aggregates sum only `measured` rows and report the unavailable count beside them.</p><p>D3 Presentation preference is allowance, then API-equivalent estimate (with unpriced-turn count), then tokens, then unavailable. No price catalogue is consulted.</p><p>D4 Credits are stored as `ai_nano_aiu` (Copilot&#x27;s unit) and `premium_requests`, nullable, separate from tokens, and never read by the budget gate (`project_budget_state` sums `total_tokens` only).</p><p>D5 The budget gate lives in `turn_scheduler` and applies only to turns whose initiator is `autonomous`.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/tests/test_accounting_api.py, hub/tests/test_accounting_budget.py, hub/tests/test_accounting_model.py</li><li>hub/tests/test_copilot_usage.py</li></ul><h3 class="aw-limits">Limits</h3><ul><li>`hub/hub/runner_parsing.py` still carries an OpenCode telemetry parser, but no runner launches OpenCode, so it is not described as a supported source.</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
   "title": "Usage accounting",
-  "summary": "Define durable per-turn token accounting, runner-neutral usage aggregation, honest allowance and API-equivalent presentation, and project budgets that pause autonomous work without preventing operator control.",
-  "problem": "",
+  "summary": "Every Hub-owned run gets one durable token-accounting outcome, measured or explicitly unavailable; usage is aggregated per agent, conversation and project; allowance and cost are presented without implying a bill; Copilot's AI credits are recorded beside tokens; and a project token budget pauses autonomous work while the operator keeps control.",
+  "problem": "Runners report usage in different shapes and sometimes not at all. Without one honest record per run, missing data reads as zero, estimates read as charges, and a budget either stops nothing or stops the operator too.",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "`TurnUsage` rows and their normalisation from Claude, Codex and Copilot telemetry",
+      "`GET /accounting`, `GET /accounting/conversations/{id}`, `PATCH /accounting/budget`",
+      "Copilot AI credits and premium requests, for runs and one-shot calls",
+      "The token budget gate for autonomous turns, and how accounting is shown"
+    ],
+    "non_goals": [
+      "The context-window meter (agent-context-usage)",
+      "Hop budget and delivery cap (turn scheduling)"
+    ]
   },
   "requirements": [
     {
       "key": "every-hub-owned-turn-has-a-durable-accounting-outcome",
-      "statement": "The system SHALL persist exactly one accounting outcome for every Hub-owned run after that run ends. When the runner reports usable token telemetry, the outcome SHALL record normalized input, output, total, cache, and reasoning dimensions when available. When it does not, the outcome SHALL be explicitly unavailable and MUST NOT represent missing values as zero.",
+      "statement": "The Hub SHALL persist exactly one accounting outcome per Hub-owned run after it ends: `measured`, with normalised input, output and total tokens and cache and reasoning breakdowns where reported, or `unavailable`, which MUST NOT be represented as zero.",
       "modal": "MUST",
-      "rationale": null,
+      "rationale": "A missing figure shown as zero understates usage and cannot be told apart from a free turn.",
       "party": null
     },
     {
       "key": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
-      "statement": "The system SHALL normalize Claude Code result usage and model usage, Codex completed-turn and token-count telemetry, OpenCode completed-step telemetry, and GitHub Copilot per-call and per-prompt telemetry without changing the separate context-window meter semantics. Malformed telemetry SHALL degrade to an unavailable accounting outcome rather than failing the run.",
+      "statement": "The Hub SHALL normalise Claude result usage, Codex completed-turn usage and Copilot usage into one accounting shape without double-counting cache or reasoning subsets, and malformed telemetry SHALL yield an `unavailable` outcome rather than failing the run.",
       "modal": "SHALL",
-      "rationale": "A Copilot run's tokens SHALL be measured two ways. One is the sum of its per-call usage events, each call counted once, including calls made by subagents and the model call of a compaction. The other is the per-prompt usage its own process reported. Copilot's per-prompt usage is cumulative within a process, so a later prompt result SHALL replace an earlier one from the same process, and usage a process reported for an earlier run SHALL NOT be charged to this one. Each figure is a lower bound, so the run SHALL record the one with the larger total. The two SHALL NOT be added together. Copilot reports input tokens inclusive of cache reads, so cache reads SHALL NOT be added to its input or total again.",
+      "rationale": "One shape makes per-agent and per-project totals comparable across runners.",
+      "party": null
+    },
+    {
+      "key": "n1-a-copilot-run-records-the-larger-lower-bound-of-its-tokens",
+      "statement": "A Copilot run's tokens SHALL be the larger of the sum of its per-call usage (each call once, including subagent and compaction calls) and its process's latest cumulative prompt usage for this run, never their sum, and cache reads SHALL NOT be added to its input or total again.",
+      "modal": "SHALL",
+      "rationale": "Each Copilot figure is a lower bound; Copilot's input already includes cache reads.",
       "party": null
     },
     {
       "key": "usage-aggregates-by-agent-and-project",
-      "statement": "The accounting API SHALL aggregate measured token totals per agent and project and SHALL separately report measured-turn and unavailable-turn counts. Historical or missing telemetry MUST NOT be invented.",
+      "statement": "`GET /accounting` SHALL report measured token totals per agent and per project, with measured and unavailable turn counts and the most recent turns, and SHALL NOT invent values for unmeasured turns.",
       "modal": "MUST",
-      "rationale": null,
+      "rationale": "The operator needs to see who used what, and how much of it is unknown.",
+      "party": null
+    },
+    {
+      "key": "n2-a-conversation-has-its-own-usage-rollup",
+      "statement": "`GET /accounting/conversations/{id}` SHALL aggregate every run of that conversation, uncapped, and SHALL answer 404 for a conversation that does not exist or belongs to another project.",
+      "modal": "SHALL",
+      "rationale": "An aggregate over no rows is a valid zero, so an unknown conversation must not read as one that cost nothing (F239).",
       "party": null
     },
     {
       "key": "allowance-and-currency-presentation-cannot-imply-billing",
-      "statement": "When a runner reports remaining rate-limit allowance, the accounting presentation SHALL prefer it to a monetary figure. Otherwise, any runner-reported monetary figure SHALL be labelled \"API-equivalent estimate\" and MUST NOT be described as an amount charged. The system MUST NOT invent a monetary figure from a model price catalog.",
+      "statement": "Accounting SHALL prefer the latest runner-reported rate-limit allowance (naming its runner) over any monetary figure; otherwise a runner-reported monetary figure SHALL be labelled \"API-equivalent estimate\" and state how many turns reported no cost, and the Hub MUST NOT compute money from a price catalogue.",
       "modal": "MUST",
-      "rationale": "A monetary figure summed over turns SHALL state how many of those turns reported no cost and are therefore not in it. A figure that leaves out any turn MUST NOT be presented as though it covered them all.",
+      "rationale": "Subscription users are not billed per token; an estimate that silently omits turns overstates its coverage.",
       "party": null
     },
     {
       "key": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
-      "statement": "The system SHALL allow an operator to configure a positive token budget per project or disable it. When measured project usage is greater than or equal to the configured budget, autonomous turns SHALL remain queued and SHALL NOT start. Operator-initiated turns SHALL remain available and SHALL still be accounted.",
+      "statement": "An operator SHALL be able to set a positive project token budget or clear it; while measured project usage is at or above it, autonomous turns SHALL stay queued with the waiting reason \"token budget exhausted\", and operator-initiated turns SHALL still start and be accounted.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A budget exists to stop runaway autonomy, not to lock the operator out of their own project.",
+      "party": null
+    },
+    {
+      "key": "n3-changing-the-budget-reschedules-queued-work",
+      "statement": "A budget change SHALL be recorded as an `accounting_budget_updated` event and SHALL reconsider every agent with queued entries, so work held by an exhausted budget starts once the budget allows it.",
+      "modal": "SHALL",
+      "rationale": "Raising the budget should release what it was holding without another nudge.",
       "party": null
     },
     {
       "key": "the-operator-can-see-accounting-and-exhaustion-state",
-      "statement": "The interface SHALL show the project's measured token total and budget state, SHALL distinguish unavailable usage from zero, and SHALL state when exhausted budget has paused autonomous work while operator input remains available.",
+      "statement": "The interface SHALL show the project's measured token total and budget, SHALL show unavailable usage as unavailable rather than zero, and when the budget is exhausted SHALL state that autonomous turns are paused and operator messages can still run.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A paused project that looks broken sends the operator looking for the wrong fault.",
       "party": null
     },
     {
       "key": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
-      "statement": "The system SHALL record, for every Copilot run that reports them, the AI credits and premium requests that run consumed, and SHALL show them as information beside the tokens, while the token total remains the only quantity counted against a project's budget.",
+      "statement": "The Hub SHALL record the AI credits and premium requests each Copilot run reports and show them beside tokens on the turn, conversation, agent and project, and accounting responses SHALL carry these fields for every project, null where none were reported.",
       "modal": "SHALL",
-      "rationale": "Copilot reports its credit total as a session-wide running total, and each model call's own credit cost. A run's credits SHALL be the larger of two lower bounds. One is the session total at the run's end minus the total the previous run of the same provider session recorded, or minus zero when the run created the session. The other is the sum of the run's own per-call credit costs. When the difference cannot be taken, is negative, or is smaller than that sum, the run SHALL be charged the sum, and its premium requests SHALL be unknown. When Copilot reported neither, the run's credits SHALL be unknown. The run SHALL record the session total it ended at, so that the next run can take its own difference. A run charged its per-call sum from a known starting total, with no session total reported, SHALL record the total it thereby reached, so that the next run does not charge the same credits again. The previous run SHALL be the one whose record was written last, not the one with the latest clock time, so that a clock that steps backwards cannot make an older total the baseline. A negative credit or premium-request figure reported by Copilot SHALL be ignored, and so SHALL a session total that is non-numeric, boolean, non-finite or larger than 2^53 − 1; an ignored session total SHALL make that figure unknown and SHALL NOT make the run fail or lose its tokens. No run SHALL be charged negative credits, and no credit SHALL be charged to two runs. Credits SHALL be stored in the unit Copilot reports them in, and SHALL be presented as AI credits. They are the provider's own report of what the run consumed, not a monetary figure, and so are not the runner-reported monetary figure that allowance and currency presentation governs. They SHALL NOT be converted into a monetary figure, SHALL NOT be added to any token total, and SHALL NOT count toward a project's token budget or its exhaustion, including the budget check that gates the scheduling of a turn. A screen that shows no credits for a project, agent, conversation or turn that reported none SHALL look as it did before credits existed. The accounting responses SHALL carry the credit and premium-request fields for every project, empty when none were reported, so a project with no Copilot runs gains those empty fields and is otherwise unchanged.",
+      "rationale": "Credits are what Copilot meters; a project with no Copilot runs must look as it did before credits existed.",
+      "party": null
+    },
+    {
+      "key": "n4-a-copilot-run-is-charged-credits-once",
+      "statement": "A Copilot run's credits SHALL be the larger of its session total minus the total the previous run of that session recorded (zero for a new session) and the sum of its own per-call credit costs; when the difference cannot be taken, is negative, or is smaller than that sum, the run SHALL be charged the sum with premium requests unknown, and each run SHALL record the session total it reached, the previous run being the one written last.",
+      "modal": "SHALL",
+      "rationale": "Copilot reports a session-wide running total; no credit may be charged to two runs, and no run charged negative credits, even if the clock steps backwards.",
+      "party": null
+    },
+    {
+      "key": "n5-malformed-copilot-figures-are-unknown-not-fatal",
+      "statement": "A negative, non-numeric, boolean, non-finite or larger-than-2^53-1 credit or premium-request figure SHALL be ignored and that figure recorded as unknown, without failing the run or losing its tokens.",
+      "modal": "SHALL",
+      "rationale": "A bad figure from the provider should cost one field, not the run's record.",
+      "party": null
+    },
+    {
+      "key": "n6-credits-are-never-money-or-budget",
+      "statement": "AI credits SHALL be stored in Copilot's own unit and shown as AI credits, and SHALL NOT be converted to money, added to any token total, or counted toward a token budget or its exhaustion.",
+      "modal": "SHALL",
+      "rationale": "Credits are the provider's report of consumption; the budget is denominated in tokens only.",
       "party": null
     },
     {
       "key": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
-      "statement": "The system SHALL record, for every Copilot one-shot call (a checkpoint, its probe, or any other Hub-owned `copilot -p` call that writes an invocation record) whose process exited successfully and whose output carries a session usage checkpoint, the AI credits and premium requests of the last such checkpoint as that call's own charge.",
+      "statement": "A Copilot one-shot call (checkpoint, probe, or other Hub-owned `copilot -p` call with an invocation record) that exits successfully SHALL record the credits and premium requests of the last session usage checkpoint in its output, applying the same malformed-figure rule per figure; with no checkpoint, or when the process failed, timed out or did not start, both SHALL be unknown, never zero.",
       "modal": "SHALL",
-      "rationale": "A one-shot call is one process that opens one new session, so the session's final cumulative total is the call's whole charge. The last checkpoint SHALL be taken, and checkpoints SHALL NOT be summed. Each figure SHALL be read by the same rule as a Copilot run's session checkpoint: a negative, non-numeric, boolean or non-finite figure, or a figure larger than 2^53 − 1 (the largest whole number a floating-point or JavaScript number holds exactly), SHALL be ignored and that figure SHALL be unknown, while the other figure is still recorded. A later checkpoint whose figure is ignored SHALL make that figure unknown, not leave an earlier checkpoint's figure in its place. A call whose output carries no checkpoint SHALL record both figures as unknown, never as zero, and no other part of the output SHALL be used in their place. The credits SHALL be recorded whether the call produced a usable answer, reported an error, or produced no answer. A call whose process exited unsuccessfully, timed out or failed to start SHALL record both figures as unknown: its output is not read. Like a Copilot run's credits, they SHALL NOT be converted into a monetary figure, SHALL NOT be added to any token total, and SHALL NOT count toward a project's token budget. Reading a malformed figure SHALL NOT make the call fail, and SHALL NOT prevent the call's invocation record from being written.",
+      "rationale": "A one-shot call opens one session, so its last cumulative checkpoint is its whole charge; checkpoints must not be summed.",
       "party": null
     }
   ],
@@ -224,284 +273,283 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac1",
       "requirement": "every-hub-owned-turn-has-a-durable-accounting-outcome",
-      "given": "",
-      "when": "a runner completes a turn and reports token usage",
-      "then": "exactly one measured accounting record is associated with that run its normalized total is available for aggregation"
+      "given": "A runner that reports usage",
+      "when": "A turn completes",
+      "then": "Exactly one `measured` row is stored for that run."
     },
     {
       "key": "ac2",
       "requirement": "every-hub-owned-turn-has-a-durable-accounting-outcome",
-      "given": "",
-      "when": "a runner completes a turn without usable token telemetry",
-      "then": "exactly one unavailable accounting record is associated with that run the interface does not display zero tokens for that turn"
+      "given": "A runner that reports no usable usage",
+      "when": "A turn completes",
+      "then": "Exactly one `unavailable` row is stored and the UI does not show zero tokens for it."
     },
     {
       "key": "ac3",
       "requirement": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
-      "given": "",
-      "when": "a Claude stream contains partial assistant usage followed by final result usage",
-      "then": "the final result usage is the turn's accounting outcome partial samples are not added as additional turns"
+      "given": "A Claude stream with partial assistant usage then final result usage",
+      "when": "The turn is accounted",
+      "then": "The final result usage is the outcome and partial samples add no turns."
     },
     {
       "key": "ac4",
       "requirement": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
-      "given": "",
-      "when": "Codex or OpenCode reports input, output, cache, or reasoning dimensions",
-      "then": "the dimensions are retained in the normalized accounting record cache or reasoning subsets are not double-counted in the total"
+      "given": "Codex reporting input, output, cache and reasoning tokens",
+      "when": "The turn is accounted",
+      "then": "The breakdowns are kept and are not added to the total twice."
     },
     {
       "key": "ac5",
-      "requirement": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
-      "given": "",
-      "when": "a Copilot run reports three model calls and a prompt result whose cumulative usage equals",
-      "then": "the run's recorded tokens equal the sum of the three calls the prompt result's usage is not added to them"
+      "requirement": "n1-a-copilot-run-records-the-larger-lower-bound-of-its-tokens",
+      "given": "A Copilot run with three model calls and a prompt result equal to their sum",
+      "when": "It is accounted",
+      "then": "Its tokens equal the sum of the calls, not double it."
     },
     {
       "key": "ac6",
-      "requirement": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
-      "given": "",
-      "when": "one Copilot process reports two prompt results, the later of which includes the earlier",
-      "then": "the run records the later result does not add the two together"
-    },
-    {
-      "key": "ac7",
-      "requirement": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
-      "given": "",
-      "when": "a Copilot run's per-call events sum to less than its process's cumulative prompt usage",
-      "then": "the run records the cumulative usage does not add the per-call sum to it"
+      "requirement": "n1-a-copilot-run-records-the-larger-lower-bound-of-its-tokens",
+      "given": "One Copilot process reporting two prompt results, the later including the earlier",
+      "when": "The run is accounted",
+      "then": "The later result is used."
     },
     {
       "key": "ac8",
-      "requirement": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
-      "given": "",
-      "when": "a Copilot call reports input tokens that include cache-read tokens",
-      "then": "the recorded total is input plus output the cache-read tokens are retained as a breakdown only"
+      "requirement": "n1-a-copilot-run-records-the-larger-lower-bound-of-its-tokens",
+      "given": "A Copilot call whose input includes cache reads",
+      "when": "It is accounted",
+      "then": "The total is input plus output and cache reads are a breakdown only."
     },
     {
       "key": "ac9",
       "requirement": "usage-aggregates-by-agent-and-project",
-      "given": "",
-      "when": "measured turns exist for more than one agent in a project",
-      "then": "each agent summary contains only that agent's usage the project total contains the sum of their measured totals"
+      "given": "Measured turns for two agents and another project",
+      "when": "`GET /accounting` is called",
+      "then": "Each agent's summary holds only its usage, the project total is their sum, and nothing leaks across projects."
     },
     {
       "key": "ac10",
       "requirement": "usage-aggregates-by-agent-and-project",
-      "given": "",
-      "when": "a project contains both measured and unavailable turn outcomes",
-      "then": "the aggregate reports both counts the unavailable turn contributes no fabricated token value"
+      "given": "Measured and unavailable turns",
+      "when": "Accounting is read",
+      "then": "Both counts are reported and the unavailable turn adds no token value."
+    },
+    {
+      "key": "ac36",
+      "requirement": "n2-a-conversation-has-its-own-usage-rollup",
+      "given": "A conversation with more turns than the recent-turns cap",
+      "when": "Its accounting is read",
+      "then": "Every one of its runs is summed."
+    },
+    {
+      "key": "ac37",
+      "requirement": "n2-a-conversation-has-its-own-usage-rollup",
+      "given": "An unknown conversation ID",
+      "when": "Its accounting is read",
+      "then": "The route answers 404."
     },
     {
       "key": "ac11",
       "requirement": "allowance-and-currency-presentation-cannot-imply-billing",
-      "given": "",
-      "when": "the latest accounting telemetry includes both rate-limit allowance and monetary data",
-      "then": "the preferred display is the allowance"
+      "given": "Recent turns with both allowance and cost data",
+      "when": "Accounting is read",
+      "then": "The preferred display is the allowance, naming its runner."
     },
     {
       "key": "ac12",
       "requirement": "allowance-and-currency-presentation-cannot-imply-billing",
-      "given": "",
-      "when": "runner-reported monetary telemetry is displayed without allowance",
-      "then": "it is labelled \"API-equivalent estimate\" it is not labelled spend, bill, or amount charged"
+      "given": "Cost data and no allowance",
+      "when": "It is displayed",
+      "then": "It is labelled \"API-equivalent estimate\" and never spend, bill or charged."
     },
     {
       "key": "ac13",
       "requirement": "allowance-and-currency-presentation-cannot-imply-billing",
-      "given": "",
-      "when": "a project's turns include some that reported a cost and some that did not",
-      "then": "the monetary figure is the sum of the reported costs the presentation states how many turns reported no cost and are not included"
-    },
-    {
-      "key": "ac14",
-      "requirement": "allowance-and-currency-presentation-cannot-imply-billing",
-      "given": "",
-      "when": "a runner reports token usage for a turn but no cost",
-      "then": "no monetary value is computed for that turn the turn is counted among those the monetary figure does not include"
+      "given": "Some turns that reported a cost and some that did not",
+      "when": "The estimate is shown",
+      "then": "It sums the reported costs and states how many turns are excluded."
     },
     {
       "key": "ac15",
       "requirement": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
-      "given": "",
-      "when": "an agent-origin queue batch is ready and the project budget is exhausted",
-      "then": "no run starts every entry remains queued the waiting reason states that the token budget is exhausted"
-    },
-    {
-      "key": "ac16",
-      "requirement": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
-      "given": "",
-      "when": "a scheduled job queues work while the project budget is exhausted",
-      "then": "that work does not start autonomously it is not misclassified as an operator turn"
+      "given": "An exhausted budget and an agent-origin queue entry",
+      "when": "Scheduling runs",
+      "then": "No run starts, the entry stays queued, and the waiting reason is \"token budget exhausted\"."
     },
     {
       "key": "ac17",
       "requirement": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
-      "given": "",
-      "when": "operator input is queued while the project budget is exhausted",
-      "then": "its turn can start the resulting run is classified as operator-initiated"
+      "given": "An exhausted budget and operator input queued",
+      "when": "Scheduling runs",
+      "then": "The turn starts and the run is recorded as operator-initiated."
+    },
+    {
+      "key": "ac38",
+      "requirement": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
+      "given": "A project",
+      "when": "`PATCH /accounting/budget` sends 0 or a negative value",
+      "then": "It is refused with 422."
+    },
+    {
+      "key": "ac39",
+      "requirement": "n3-changing-the-budget-reschedules-queued-work",
+      "given": "Autonomous work held by an exhausted budget",
+      "when": "The budget is raised above usage",
+      "then": "The held work starts."
     },
     {
       "key": "ac18",
       "requirement": "the-operator-can-see-accounting-and-exhaustion-state",
-      "given": "",
-      "when": "project usage meets or exceeds its configured budget",
-      "then": "the interface states that autonomous turns are paused it states that operator messages can still run"
+      "given": "Project usage at or above the budget",
+      "when": "The budget view is shown",
+      "then": "It states that autonomous turns are paused and operator messages can still run."
     },
     {
       "key": "ac19",
       "requirement": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
-      "given": "",
-      "when": "a Copilot run reports its usage and its session's credit total",
-      "then": "the run's accounting record carries its tokens and its credits the turn, its conversation, its agent and the project each show the credits beside their"
-    },
-    {
-      "key": "ac20",
-      "requirement": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
-      "given": "",
-      "when": "a Copilot run resumes a session whose previous run ended at one credit total it ends at a higher total",
-      "then": "it is charged the difference between the two totals"
-    },
-    {
-      "key": "ac21",
-      "requirement": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
-      "given": "",
-      "when": "a project has a token budget and a Copilot run reports credits",
-      "then": "the budget's used amount includes the run's tokens does not include its credits"
-    },
-    {
-      "key": "ac22",
-      "requirement": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
-      "given": "",
-      "when": "a Copilot run ends at a session credit total lower than its baseline",
-      "then": "the run is charged the sum of its own per-call credit costs, and its premium requests are the total it ended at becomes the next run's baseline"
-    },
-    {
-      "key": "ac23",
-      "requirement": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
-      "given": "",
-      "when": "a Copilot run resumes a session and ends at a session credit total above its baseline the difference is smaller than the sum of the run's own per-call credit costs",
-      "then": "the run is charged the per-call sum, not the difference"
-    },
-    {
-      "key": "ac24",
-      "requirement": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
-      "given": "",
-      "when": "a Copilot run that created its session reports per-call credit costs but no session the next run of that session ends at a session credit total",
-      "then": "the first run is charged the sum of its per-call costs the next run is charged only the session total minus that sum"
+      "given": "A Copilot run reporting usage and a session credit total",
+      "when": "Accounting is read",
+      "then": "The turn, its conversation, its agent and the project show its credits beside tokens."
     },
     {
       "key": "ac25",
       "requirement": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
-      "given": "",
-      "when": "a project's runs are all Claude or Codex runs",
-      "then": "no screen shows a credits figure the accounting responses report the project's credits and premium requests as empty"
+      "given": "A project with only Claude and Codex runs",
+      "when": "Accounting is read",
+      "then": "No screen shows credits and the credit fields are null."
+    },
+    {
+      "key": "ac20",
+      "requirement": "n4-a-copilot-run-is-charged-credits-once",
+      "given": "A Copilot run resuming a session whose previous run ended at one total",
+      "when": "It ends at a higher total",
+      "then": "It is charged the difference."
+    },
+    {
+      "key": "ac22",
+      "requirement": "n4-a-copilot-run-is-charged-credits-once",
+      "given": "A Copilot run ending below its baseline",
+      "when": "It is accounted",
+      "then": "It is charged its per-call sum, premium requests are unknown, and its total becomes the next baseline."
+    },
+    {
+      "key": "ac24",
+      "requirement": "n4-a-copilot-run-is-charged-credits-once",
+      "given": "A run that created its session and reported only per-call costs",
+      "when": "The next run of the session reports a session total",
+      "then": "The next run is charged only that total minus the first run's sum."
     },
     {
       "key": "ac26",
-      "requirement": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
-      "given": "",
-      "when": "a Copilot session's runs are recorded in order, and the clock stepped backwards between",
-      "then": "each run's baseline is the total recorded by the run written just before it no credit is charged to two runs"
-    },
-    {
-      "key": "ac27",
-      "requirement": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
-      "given": "",
-      "when": "a project's token budget is not yet spent by its tokens its Copilot runs reported credits whose count exceeds that budget",
-      "then": "the project's budget is not exhausted and its turns are still scheduled"
+      "requirement": "n4-a-copilot-run-is-charged-credits-once",
+      "given": "A session's runs written in order while the clock stepped backwards",
+      "when": "Each is accounted",
+      "then": "Each run's baseline is the run written just before it and no credit is charged twice."
     },
     {
       "key": "ac28",
-      "requirement": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
-      "given": "",
-      "when": "a Copilot run that completed reports a session credit total that is non-finite or larger",
-      "then": "the run is recorded as completed, with its tokens its session credit total is unknown and its premium-request total is recorded"
+      "requirement": "n5-malformed-copilot-figures-are-unknown-not-fatal",
+      "given": "A completed Copilot run reporting a non-finite session total",
+      "when": "It is accounted",
+      "then": "It is recorded as completed with its tokens, the credit figure unknown and premium requests recorded."
+    },
+    {
+      "key": "ac21",
+      "requirement": "n6-credits-are-never-money-or-budget",
+      "given": "A project with a token budget and Copilot runs reporting credits",
+      "when": "Budget state is computed",
+      "then": "Used tokens include the runs' tokens and not their credits."
+    },
+    {
+      "key": "ac27",
+      "requirement": "n6-credits-are-never-money-or-budget",
+      "given": "Credits that exceed the token budget while tokens do not",
+      "when": "Scheduling runs",
+      "then": "The budget is not exhausted and turns still start."
     },
     {
       "key": "ac29",
       "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
-      "given": "",
-      "when": "a Copilot one-shot call's output carries a session usage checkpoint",
-      "then": "the call's invocation record carries that checkpoint's credits and premium requests"
-    },
-    {
-      "key": "ac30",
-      "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
-      "given": "",
-      "when": "a Copilot one-shot call's output carries two session usage checkpoints",
-      "then": "the call's invocation record carries the second checkpoint's figures, not their sum"
+      "given": "A one-shot call whose output carries two usage checkpoints",
+      "when": "Its invocation record is written",
+      "then": "It carries the second checkpoint's figures, not their sum."
     },
     {
       "key": "ac31",
       "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
-      "given": "",
-      "when": "a Copilot one-shot call's output carries a session error, or no answer, and a session usage checkpoint",
-      "then": "the call is recorded as having failed its invocation record carries the checkpoint's credits and premium requests"
+      "given": "A one-shot call that reported a session error and a checkpoint",
+      "when": "It is recorded",
+      "then": "It is recorded as failed and still carries the checkpoint's figures."
     },
     {
       "key": "ac32",
       "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
-      "given": "",
-      "when": "a Copilot one-shot call's output carries no session usage checkpoint",
-      "then": "the call's invocation record carries unknown credits and unknown premium requests"
-    },
-    {
-      "key": "ac33",
-      "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
-      "given": "",
-      "when": "a Copilot one-shot call's checkpoint carries a negative, non-finite or too-large credit figure and a valid premium-request figure",
-      "then": "the call's invocation record is written, carrying unknown credits and the premium-request figure the call's outcome is decided by its answer as if the checkpoint were absent"
+      "given": "A one-shot call with no checkpoint",
+      "when": "It is recorded",
+      "then": "Credits and premium requests are unknown."
     },
     {
       "key": "ac34",
       "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
-      "given": "",
-      "when": "a Copilot one-shot call's output carries a checkpoint with valid figures, then a later checkpoint whose credit figure is negative",
-      "then": "the call's invocation record carries unknown credits and the later checkpoint's premium requests"
+      "given": "A valid checkpoint followed by one with a negative credit figure",
+      "when": "It is recorded",
+      "then": "Credits are unknown and premium requests come from the later checkpoint."
     },
     {
       "key": "ac35",
       "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
-      "given": "",
-      "when": "a Copilot one-shot call's process exits unsuccessfully, times out, or fails to start",
-      "then": "the call's invocation record carries unknown credits and unknown premium requests"
+      "given": "A one-shot call whose process failed, timed out or did not start",
+      "when": "It is recorded",
+      "then": "Both figures are unknown and its output is not read."
     }
   ],
   "tasks": [],
   "algorithms": [],
-  "design": "",
+  "design": "D1 Rows are immutable facts; every total is derived from `TurnUsage` by aggregate query (`hub/hub/usage_accounting.py`), so a fix to presentation never rewrites history.\n\nD2 Unavailable is a status, not a zero: aggregates sum only `measured` rows and report the unavailable count beside them.\n\nD3 Presentation preference is allowance, then API-equivalent estimate (with unpriced-turn count), then tokens, then unavailable. No price catalogue is consulted.\n\nD4 Credits are stored as `ai_nano_aiu` (Copilot's unit) and `premium_requests`, nullable, separate from tokens, and never read by the budget gate (`project_budget_state` sums `total_tokens` only).\n\nD5 The budget gate lives in `turn_scheduler` and applies only to turns whose initiator is `autonomous`.",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/usage-accounting/spec.md (8 requirements, 35 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "hub/tests/test_accounting_api.py, hub/tests/test_accounting_budget.py, hub/tests/test_accounting_model.py",
+      "hub/tests/test_copilot_usage.py"
     ],
     "limits": [
-      "scenarios-state-no-starting-state: 35 of 35 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "`hub/hub/runner_parsing.py` still carries an OpenCode telemetry parser, but no runner launches OpenCode, so it is not described as a supported source."
     ]
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
       "every-hub-owned-turn-has-a-durable-accounting-outcome": "FR-7",
       "supported-runner-telemetry-normalizes-to-one-accounting-shap": "FR-8",
+      "n1-a-copilot-run-records-the-larger-lower-bound-of-its-tokens": "FR-15",
       "usage-aggregates-by-agent-and-project": "FR-9",
+      "n2-a-conversation-has-its-own-usage-rollup": "FR-16",
       "allowance-and-currency-presentation-cannot-imply-billing": "FR-10",
       "a-project-token-budget-pauses-autonomy-but-not-the-operator": "FR-11",
+      "n3-changing-the-budget-reschedules-queued-work": "FR-17",
       "the-operator-can-see-accounting-and-exhaustion-state": "FR-12",
       "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde": "FR-13",
+      "n4-a-copilot-run-is-charged-credits-once": "FR-18",
+      "n5-malformed-copilot-figures-are-unknown-not-fatal": "FR-19",
+      "n6-credits-are-never-money-or-budget": "FR-20",
       "a-copilot-one-shot-call-records-the-credits-its-session-repo": "FR-14"
     },
-    "high_water": 14,
+    "high_water": 20,
     "retired": {},
     "digests": {
-      "FR-7": "805a5f188e135ff0e247f833d307d5ddb1e47412b510f19ed2bcbd5dc19678f2",
-      "FR-8": "7c65cc5778059f2af90c2b4b786d36104d37c04152f385f650ffd18df59e5004",
-      "FR-9": "8c0bd2e99377fbd39c413c992dbbba30a9b610f24e920a2a0fc9e88f106423b8",
-      "FR-10": "69e54e06c7bab8117f167791aae3ea60590039614077832498821c0fafe20c89",
-      "FR-11": "4972c0e0ccd15794f8f728e1e2bd42b6d714a12057cc6a235bb15d22abc005a4",
-      "FR-12": "cb52efd40f7ee301cf5399fc75adc36ed153c44cbbfc438cd0ea49bdb698c693",
-      "FR-13": "51190546596bc5ee6885594ae730018b6ad879a05d82a2bacee3e4e1130924f1",
-      "FR-14": "1be7240bed958b56dd20ddd4701d8daf7aaee65ab7c83a636096c54ee81598ac"
+      "FR-7": "0243dcae0b94bec3d8557b1d6fbe37b827f6ac81370c20aac02c926ddd800868",
+      "FR-8": "a47401808ab90b647f8f27c6cfb33aa0b068daa8f6f20a22c5e66cc07a4af6e1",
+      "FR-15": "6faf288bac9e3952dcf3cb240483a0c4da92f47d675fa2294ed9a6996825328c",
+      "FR-9": "f9b839718a1d5e35d1d0b3306acbf14f7d2ac72c331553511beb93cb06c0b0f4",
+      "FR-16": "14e13db8c0b9197765e59815eb5256a8fd1e1bef4b7de7317b0a87058a5f4dcc",
+      "FR-10": "d178f731ddc22799f5bf808abbddf2c7cb3931719575bc0bbfb5a6e85d5f4114",
+      "FR-11": "339edcb026643691707bda3c65c5f14cccdd09045eb841d601d71623f5cfc8ba",
+      "FR-17": "d49c3180fdc914b74f745756b0aad9167769a34002d0e2fb4eef619594315825",
+      "FR-12": "4cae253530c547aac080dc845520d11d455eb80073cc64215ebf91c9df46b8b9",
+      "FR-13": "22965708f51572620d3a9cf6b2872525521e3c666f8377766d1bb2580c528423",
+      "FR-18": "bf00834e25b7fb2b680ef98d91d19fb19d7a4d9464417915b6b27ff96b6bcd4f",
+      "FR-19": "e16eb779c460f2ebf2473c3fb14cb63266b255e13afd56e005008d223817b5dd",
+      "FR-20": "a5e3a57a886560ddd02239bbdb130430ed317d50f2def4ecb182216f0e2c753c",
+      "FR-14": "f23ef7dd680e98400c58de83aa726e013c8627dcc703968bd10fd5498daa67ae"
     }
   }
 }

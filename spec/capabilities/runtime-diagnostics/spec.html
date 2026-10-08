@@ -148,138 +148,160 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <body>
 <h1>Runtime diagnostics</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a><a href="../../areas/the-local-instance.html">The local instance</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">17</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">17</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">58</span> criteria</p>
-<section id="summary"><h2>Summary</h2><p>TBD - created by syncing change improve-runtime-diagnostics. Update Purpose after archive.</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 1 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL provide non-mutating readiness checks for the single native AgentWeave instance without starting the Hub or making external model-provider API calls.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 2 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL represent each readiness check as a structured result with a stable check identifier, target, status, severity, user-facing message, and optional remediation hint.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 3 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL detect missing required proxy provider API key variables when agent configuration is validated and before a proxy runner is spawned.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span><a class="aw-anchor-copy" href="#FR-16" aria-label="Link to FR-16" title="Link to #FR-16">#</a> <span class="aw-position">Requirement 4 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL run deterministic preflight checks before spawning an agent&#x27;s run and SHALL refuse launches that are known to be impossible.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span><a class="aw-anchor-copy" href="#FR-17" aria-label="Link to FR-17" title="Link to #FR-17">#</a> <span class="aw-position">Requirement 5 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL emit durable structured diagnostic events for runtime failures, degraded states, skipped execution, and unavailable dependencies.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span><a class="aw-anchor-copy" href="#FR-18" aria-label="Link to FR-18" title="Link to #FR-18">#</a> <span class="aw-position">Requirement 6 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL distinguish queued agent work by execution confidence based on available agent and runner state.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span><a class="aw-anchor-copy" href="#FR-19" aria-label="Link to FR-19" title="Link to #FR-19">#</a> <span class="aw-position">Requirement 7 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub Logs UI SHALL expose diagnostics in a way that reflects the current project rather than a fixed set of agents.</p></div><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span><a class="aw-anchor-copy" href="#FR-20" aria-label="Link to FR-20" title="Link to #FR-20">#</a> <span class="aw-position">Requirement 8 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL make scheduled and manually fired job failures durable and visible.</p></div><div class="aw-requirement aw-requirement-must" id="FR-21"><span class="aw-id">FR-21</span><a class="aw-anchor-copy" href="#FR-21" aria-label="Link to FR-21" title="Link to #FR-21">#</a> <span class="aw-position">Requirement 9 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL summarize readiness so users can see whether configured agents are immediately usable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-22"><span class="aw-id">FR-22</span><a class="aw-anchor-copy" href="#FR-22" aria-label="Link to FR-22" title="Link to #FR-22">#</a> <span class="aw-position">Requirement 10 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL be able to report, for a project&#x27;s agents, whether agent-to-agent collaboration will actually work — not merely whether the runner CLI is installed and authorized.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The report SHALL cover whether the tool surface will be invocable by that agent&#x27;s provider, and whether the address supplied to runs is the address the Hub is serving on. Each unmet condition SHALL name what is wrong in terms an operator can act on. This check MUST NOT require starting an agent run.</p></div><div class="aw-requirement aw-requirement-must" id="FR-23"><span class="aw-id">FR-23</span><a class="aw-anchor-copy" href="#FR-23" aria-label="Link to FR-23" title="Link to #FR-23">#</a> <span class="aw-position">Requirement 11 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> A run that fails because its runtime process ended SHALL report the process&#x27;s exit status, the operation in flight when it ended, and what the process last wrote to its error stream.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>&quot;The process ended&quot; is true of every such failure and distinguishes none of them. A crash, a non-existent binary, a rejected credential and an unresumable session all produce the same sentence, so diagnosing one means inferring the cause from which other agents still work. The error stream of a runtime the system starts SHALL be read. A stream that is captured and never consumed can fill, at which point the process it belongs to blocks on writing to it — so leaving it unread is not merely a lost diagnostic but a way to hang the very process being diagnosed. What is retained SHALL be bounded. These facts SHALL be carried by the failure itself, so that every existing reader of the failure reports them without being changed. Each of these facts SHALL be reported as a distinct fact and not only within a composed sentence. A fact that exists solely inside a message can be read by a person and by nothing else, and where the composed sentence is not the surface the operator is looking at, the fact does not arrive at all. Where a run ends abnormally without raising — a turn that reports its own failure rather than one whose start failed — the same facts SHALL be reported. The operator cannot see which internal path a failure took, and reporting a runtime&#x27;s death well in one case and not the other is indistinguishable from reporting it unreliably. The exit status a run reports for its turn SHALL be distinguishable from the exit status of the runtime process. Where a transport has no process exit status for a turn, the system supplies one so that success and failure read uniformly across transports; conflating that supplied value with a process&#x27;s own status gives one death two contradictory numbers and no way to tell which is which. An exit status SHALL be rendered in a form a person can act on. A platform reporting a forced termination as a large unsigned value states a fact that reads as corruption; what is displayed SHALL convey the termination, while what is recorded remains what the platform reported.</p></div><div class="aw-requirement aw-requirement-must" id="FR-24"><span class="aw-id">FR-24</span><a class="aw-anchor-copy" href="#FR-24" aria-label="Link to FR-24" title="Link to #FR-24">#</a> <span class="aw-position">Requirement 12 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL treat the built interface artefact as current where a recorded assertion says it was built from the interface source as it now stands.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Staleness is reported today by comparing when the source was last changed against when the artefact was last changed. A source change that cannot alter the built output — a change to types, comments, or anything else erased before the output is produced — leaves the artefact byte for byte identical, so rebuilding produces nothing to record, the artefact&#x27;s timestamp never moves, and the warning stands permanently. A warning that cannot be cleared by doing the thing it asks for teaches the operator to ignore it, which costs the cases where it is right. The assertion SHALL identify the state of the source it was made against, including changes not yet committed, so that it distinguishes an artefact built from what is present from one built from something else. Where no assertion has been recorded, staleness SHALL be reported as it was before. An installation carrying no assertion is not thereby declared current. A recorded assertion SHALL take effect without restarting the system. Where the report instructs the operator to rebuild, it SHALL name a way to do so that is available to them. A warning naming a command the installation does not have is not actionable, and an unactionable warning is ignored — including on the occasions when it is right. This requirement establishes an assertion, not a proof. Only building the artefact can establish that it matches its source; what is recorded is a dated and attributable claim that someone did so.</p></div><div class="aw-requirement aw-requirement-must" id="FR-25"><span class="aw-id">FR-25</span><a class="aw-anchor-copy" href="#FR-25" aria-label="Link to FR-25" title="Link to #FR-25">#</a> <span class="aw-position">Requirement 13 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where the command-line help documents an option before the subcommand, that form SHALL take effect. An option that is accepted and silently ignored SHALL NOT exist: either it works, or it is refused with a statement of the form that does work.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Measured 2026-08-25 against a Hub confirmed live: the documented form reported the Hub **stopped** while the undocumented form reported it running. Neither errored, so the operator had no signal that the flag went nowhere — they were simply told the service was down while it was serving requests.</p></div><div class="aw-requirement aw-requirement-must" id="FR-26"><span class="aw-id">FR-26</span><a class="aw-anchor-copy" href="#FR-26" aria-label="Link to FR-26" title="Link to #FR-26">#</a> <span class="aw-position">Requirement 14 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Diagnostics SHALL describe a running instance by how it is actually running, and SHALL examine the instance the project is bound to rather than a default.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Today a native process is reported as Docker, and `doctor`, run from inside a project bound to a non-default port, checks the default port and a database nobody serves — then returns all checks passing without having examined the running instance at all. A clean bill of health that inspected the wrong thing is worse than no report.</p></div><div class="aw-requirement aw-requirement-must" id="FR-27"><span class="aw-id">FR-27</span><a class="aw-anchor-copy" href="#FR-27" aria-label="Link to FR-27" title="Link to #FR-27">#</a> <span class="aw-position">Requirement 15 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where the Hub deliberately degrades rather than failing, `doctor` SHALL report the degraded condition, name its consequence in terms the operator will meet it in, and name the remedy.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Degrading is often correct — failing a whole turn because a shared dependency directory could not be linked into an agent&#x27;s worktree would be worse than provisioning without it. What is not correct is that nobody is told. Measured on this machine: directory symlinks cannot be created without an extra privilege, so **every** agent worktree is provisioned without the project&#x27;s installed dependencies, and no surface says so. The agent discovers it by running the suite and failing. The operator sees a checkout that looks complete. The diagnostic did not look. It stayed invisible while the fixtures were projects whose tooling was already on the path, and stops being invisible the moment a reviewer is handed a checkout *because it can run the tests* — that reviewer then reports that it could not run the suite, and is telling the truth about an environment nobody told it about.</p></div><div class="aw-requirement aw-requirement-must" id="FR-28"><span class="aw-id">FR-28</span><a class="aw-anchor-copy" href="#FR-28" aria-label="Link to FR-28" title="Link to #FR-28">#</a> <span class="aw-position">Requirement 16 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The application SHALL show, at the control where the operator binds an agent&#x27;s runner, the Hub&#x27;s collaboration-readiness reason whenever the Hub reports that agent runnable but not collaboration-ready. It SHALL show nothing for an agent reported collaboration-ready, and nothing for a report that does not apply to the agent.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The reason shown SHALL be the Hub&#x27;s own sentence, so that the condition to fix is named where it can be fixed. A remedy the reason names SHALL be named as the application labels it. Once the operator changes or removes the runner, the application SHALL show the Hub&#x27;s new report without the operator reloading, so that a warning is not left standing after its condition was fixed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-29"><span class="aw-id">FR-29</span><a class="aw-anchor-copy" href="#FR-29" aria-label="Link to FR-29" title="Link to #FR-29">#</a> <span class="aw-position">Requirement 17 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL show, for each run, which surface the run was told to reach the Hub through and whether its harness started the Hub&#x27;s tool server, and when a run given the server did not start it, SHALL say so once in that run&#x27;s own activity, naming the surface the run was actually told to use.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An operator whose machine blocks tool-protocol servers learns it today only from the harness&#x27;s own wording, if it appears at all, while the run quietly behaves differently. Stating it once, where the run&#x27;s activity is read, turns a silent degradation into a fact the operator can act on. A run is not always told its surface after its own test. Some runners are told before they start, from the agent&#x27;s history, and their own test can then come back negative. The statement names what that run was told, not what the next run will be, because a statement that the run was told the call command, made about a run told the tool-protocol surface, is the very disagreement between telling and fact this requirement exists to expose. Where the runner&#x27;s own failure message already states it, that message is the one statement, and it too names the surface the run was told: a message saying the run had no way to reach the Hub, about a run told the call command, is false in the same way. Where the operator has declared the surface the agent uses, the statement does not promise that the next run is told otherwise. Where the harness gives its own account of the server, that account SHALL be quoted verbatim beside the statement and SHALL NOT be what the system decides from.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the user runs `agentweave doctor`</td><td>the system reports Python support, native Hub installation, runner CLIs on PATH, local port availability, SQLite database accessibility, and Hub-state file permissions</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the native Hub state directory does not exist</td><td>diagnostics inspect the nearest existing parent and do not create Hub state, a project, or a database</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>readiness checks inspect environment variables, transport configuration, runner commands, or proxy settings</td><td>the system reports variable names, paths, statuses, and hints without printing API key values, bearer tokens, or other secret values</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a readiness check detects a missing proxy API key</td><td>the result includes the check identifier, affected agent, status `fail`, severity `error`, the missing environment variable name, and a hint describing how to set it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the same readiness result is shown by `agentweave doctor` and `agentweave status`</td><td>the system uses the same status, severity, message, and hint semantics for that check</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a `claude_proxy` agent references a provider API key variable that is unavailable to the Hub process</td><td>the agent readiness response names the missing variable and explains how to provide it without exposing a secret value</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run is requested for a proxy agent whose required provider API key variable is missing</td><td>the Hub refuses the run before spawn with an actionable typed conflict naming the missing variable</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub receives a trigger for a proxy agent whose required provider API key variable is missing</td><td>it does not spawn the process, returns a typed conflict response naming the missing variable, and records a structured diagnostic event</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub receives a trigger for an agent whose runner CLI is not available in PATH</td><td>it does not spawn the process, returns a typed conflict response, and records a structured launch-skip diagnostic event</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub refuses a launch because a deterministic preflight check fails</td><td>the system preserves enough queued state for the user to retry after fixing the readiness issue</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a setup, synchronization, or registration step fails but the operation continues</td><td>the system emits a structured diagnostic event with the failing step, severity, message, and remediation hint when available</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an HTTP transport operation fails because the Hub is unreachable, authentication fails, a project is missing, a request times out, or the response is invalid</td><td>the system emits or returns a classified diagnostic rather than only a generic failure</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a launched agent subprocess exits with a non-zero status</td><td>the system records a structured diagnostic event containing agent name, runner type, exit code, duration when known, and a secret-safe summary of recent stderr</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-18">FR-18</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the user triggers an agent whose runner is configured as manual</td><td>the response indicates that the message was queued for manual handling and does not imply automatic execution</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-19">FR-19</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub Logs view is opened</td><td>the agent filter includes agents from configured session data, the project&#x27;s agents, or returned log entries, including custom agents and proxy agents</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-19">FR-19</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>diagnostic events exist in the log stream</td><td>the user can filter or search common categories such as runner, proxy credentials, setup, jobs, and agent stderr</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-19">FR-19</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a log entry contains diagnostic data derived from env vars, transport config, or runner commands</td><td>the UI does not display secret values</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-20">FR-20</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a job run fails to start, fails to trigger an agent, or raises an internal scheduler error</td><td>the system records the run as failed with a secret-safe error summary and emits a structured diagnostic event</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-20">FR-20</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a job has a recent failed run</td><td>the Hub job view exposes that failed state separately from jobs that are merely disabled, pending, or idle</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-21">FR-21</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator inspects configured agents</td><td>the Hub exposes a compact readiness summary for each agent covering runner type, CLI availability, required environment variables, context status, and overall readiness</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-21">FR-21</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>one or more readiness checks warn or fail</td><td>the Hub records structured diagnostic events and exposes remediation hints to the operator</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-22">FR-22</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>collaboration readiness is reported for an agent whose provider would refuse its tool calls</td><td>the agent is reported as not collaboration-ready the reason names the refusal</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-22">FR-22</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the address the Hub would supply to runs is not the address it is serving on</td><td>collaboration readiness reports the mismatch names both addresses</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-22">FR-22</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>collaboration readiness is reported</td><td>no agent run is started</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run fails because its runtime process ended</td><td>the failure names the process&#x27;s exit status it names the operation that was in flight</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runtime writes to its error stream and then exits</td><td>the failure includes what it wrote the amount retained is bounded</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runtime writes more to its error stream than the stream can hold</td><td>the runtime is not blocked</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run fails because its runtime process ended</td><td>the exit status, the operation in flight, and what was written to the error stream are</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn ends in failure and the runtime process has exited</td><td>the failure reports that process&#x27;s exit status it reports what the process wrote to its error stream</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run on a transport with no per-turn process exit status fails</td><td>the status reported for the turn is distinct from the status reported for the runtime neither is presented as the other</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runtime is terminated and the platform reports the termination as a large unsigned value</td><td>what is displayed conveys the termination rather than that value</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runtime exits with an ordinary status</td><td>that status is displayed as it is</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the artefact carries an assertion naming the interface source as it now stands</td><td>the system does not report the artefact as stale</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the interface source changes in a way that leaves the built artefact identical the artefact is rebuilt and the assertion recorded</td><td>the system does not report the artefact as stale</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the artefact carries an assertion naming source that differs from what is present</td><td>the system reports the artefact as stale</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the artefact carries no assertion</td><td>staleness is reported by comparing when source and artefact last changed</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an assertion is recorded while the system is running</td><td>the system stops reporting the artefact as stale without being restarted</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the system reports the artefact as stale</td><td>the instruction names a way to rebuild that does not depend on tooling the installation</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator supplies the port option in the position the help documents</td><td>it SHALL take effect</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator supplies the option both before and after the subcommand</td><td>the value nearer the subcommand SHALL win</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Hub is serving requests on the named port</td><td>it SHALL be reported running</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an instance was started as a local process rather than in a container</td><td>it SHALL be reported as native</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>diagnostics run inside a project bound to a particular instance</td><td>they SHALL examine that instance&#x27;s port and database</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the bound instance cannot be reached</td><td>that SHALL be reported as a failure rather than omitted from the summary</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>diagnostics run on a machine where that facility is unavailable</td><td>the report SHALL include a warning naming the facility and what will be missing without it SHALL name the remedy</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>diagnostics run on a machine where it works</td><td>the report SHALL say so and SHALL NOT warn</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the facility is unavailable but the Hub is otherwise ready</td><td>the condition SHALL be reported as a warning and SHALL NOT be reported as a failure</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the diagnostic tests the facility</td><td>it SHALL not leave anything behind in the location it probed</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>an agent the Hub reports as runnable and not collaboration-ready, with a reason</td><td>the operator opens that agent&#x27;s execution settings</td><td>the runner control states that the agent will run but cannot collaborate the statement carries the Hub&#x27;s reason</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>an agent the Hub reports as runnable and collaboration-ready</td><td>the operator opens that agent&#x27;s execution settings</td><td>no collaboration warning is shown</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>an agent the Hub reports as not runnable</td><td>the operator opens that agent&#x27;s execution settings</td><td>only the statement that it cannot run is shown</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>an agent whose runner control states that it cannot collaborate</td><td>the operator changes the agent&#x27;s runner or permissions, or edits that runner, so the Hub reports the agent collaboration-ready</td><td>the statement is no longer shown when the operator returns to the agent&#x27;s execution settings, without reloading the application</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>a Codex agent whose runner opted out of the app-server transport and whose permissions are not Full access</td><td>the Hub reports that agent&#x27;s collaboration readiness</td><td>the reason names the runner flag to avoid and the Full access permission setting it does not name a setting the application does not show</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run&#x27;s facts are read</td><td>they state the surface the run was told and whether its harness started the server, or</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run was given the Hub&#x27;s tool server, was told the call command, and its harness did</td><td>that run&#x27;s activity holds exactly one statement saying so and naming the call command as</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run was told the tool-protocol surface from its agent&#x27;s history, and its own harness then</td><td>that run&#x27;s activity holds exactly one statement saying the server did not start although it does not say the run was told the call command</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runner reports in its own message that the Hub&#x27;s tool server failed to start, for a run</td><td>that message states that the run was told to reach the Hub through the call command it does not state that the run had no way to send messages, update tasks or ask questions</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the harness reports its own reason for not starting the server</td><td>the statement quotes it what the run is told does not depend on its wording</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/runtime-diagnostics/spec.md (17 requirements, 58 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 53 of 58 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">19</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">19</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">43</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>How AgentWeave tells the operator whether it can run and why something did not: `agentweave doctor` and `agentweave status` for the instance, the Hub&#x27;s per-agent launchability and collaboration-readiness report, typed refusals before a spawn, and durable failure facts for runs and jobs.</p></section><section id="problem"><h2>Problem</h2><p>Most runtime failures look alike from the outside (&quot;the run failed&quot;, &quot;the Hub is down&quot;). Without checks that inspect the real instance and failures that carry their own facts, the operator diagnoses by guessing which other agents still work.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>`agentweave doctor` and `agentweave status` and the result model they share</li><li>`GET /agents/launchability`: runnable and collaboration-ready verdicts per agent</li><li>Pre-spawn refusals for agents that cannot run</li><li>Failure facts on `run_failed` and `job_run_failed`</li><li>The Logs view, the UI-bundle staleness signal, the run&#x27;s Hub-access statement</li></ul><h3>Non-goals</h3><ul><li>Context-window and token reporting (agent-context-usage, usage-accounting)</li><li>How runs are rendered in a conversation (agent-stream-events)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 1 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> `agentweave doctor` SHALL check Python support, the installed Hub runtime, runner CLIs on PATH, the Hub instance on the chosen port, port availability, database accessibility, Hub-state permissions and directory-symlink privilege, without starting the Hub, creating state, or calling any model provider.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A readiness check that changes what it inspects, or needs the thing it is diagnosing to be up, cannot be run before first launch.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 2 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> Each readiness check SHALL produce a result with a stable check ID, a target, a status (`pass`, `warn`, `fail`), a severity, a message and an optional hint, SHALL redact secret values from its data, and `doctor` SHALL exit non-zero only when a check fails.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A stable structured result is what `--json`, logs and scripts read; secrets never belong in a diagnostic.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 3 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> For a runner configured to send its runs to a model provider, the Hub SHALL report the agent not runnable when the environment variable the runner names for the key is unset, naming the variable and never its value.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A missing key otherwise surfaces as an opaque provider failure mid-run.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span><a class="aw-anchor-copy" href="#FR-16" aria-label="Link to FR-16" title="Link to #FR-16">#</a> <span class="aw-position">Requirement 4 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> Before spawning a run the Hub SHALL refuse, with a typed 409 naming the reason, an agent that does not exist, is archived, has no runner or a deleted runner, is not runnable, or already has a run in progress, and SHALL refuse with 501 a runner it has no adapter for; a refused delivery SHALL stay queued for retry.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A launch known to be impossible should fail immediately and say why, and must not lose the input that asked for it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span><a class="aw-anchor-copy" href="#FR-17" aria-label="Link to FR-17" title="Link to #FR-17">#</a> <span class="aw-position">Requirement 5 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> A run that fails SHALL be recorded as a persisted `run_failed` event with severity `warn` carrying the agent, run ID, error, and where known the exit code and the runtime&#x27;s error-stream tail, scrubbed of the run&#x27;s registered secrets.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A failure that exists only in a log line or a broadcast is gone by the time someone looks.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span><a class="aw-anchor-copy" href="#FR-19" aria-label="Link to FR-19" title="Link to #FR-19">#</a> <span class="aw-position">Requirement 6 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Logs view SHALL offer an agent filter drawn from the project&#x27;s roster and from agents named in returned log entries, shown as separate groups, and SHALL offer search and category filters (runner, proxy, setup, jobs, stderr).</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A deleted agent&#x27;s history must stay filterable, and a fixed agent list hides custom agents.</p></div><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span><a class="aw-anchor-copy" href="#FR-20" aria-label="Link to FR-20" title="Link to #FR-20">#</a> <span class="aw-position">Requirement 7 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> A scheduled or manually fired job run that fails to start, fails to trigger its agent, or meets an internal error SHALL be recorded as a failed job run with an error summary and a `job_run_failed` event, and the job view SHALL show a failed or skipped run with its summary, distinct from disabled or idle jobs.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A job that fails every five minutes in silence is indistinguishable from one that never fires.</p></div><div class="aw-requirement aw-requirement-must" id="FR-21"><span class="aw-id">FR-21</span><a class="aw-anchor-copy" href="#FR-21" aria-label="Link to FR-21" title="Link to #FR-21">#</a> <span class="aw-position">Requirement 8 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL report for each of a project&#x27;s agents its runner, CLI, whether the CLI is present and authorized, whether it is runnable, and the reason when it is not, without starting a run.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The operator should know an agent cannot run before they send it work.</p></div><div class="aw-requirement aw-requirement-must" id="FR-22"><span class="aw-id">FR-22</span><a class="aw-anchor-copy" href="#FR-22" aria-label="Link to FR-22" title="Link to #FR-22">#</a> <span class="aw-position">Requirement 9 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> For a runnable agent bound to a runner, the Hub SHALL also report whether it can collaborate (its provider will let it call the Hub&#x27;s tools, and the Hub knows the callback address it gives runs), naming each unmet condition in terms the operator can act on, without starting a run.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An agent that runs but cannot reach the Hub fails quietly; installed and authorized is not enough.</p></div><div class="aw-requirement aw-requirement-must" id="FR-23"><span class="aw-id">FR-23</span><a class="aw-anchor-copy" href="#FR-23" aria-label="Link to FR-23" title="Link to #FR-23">#</a> <span class="aw-position">Requirement 10 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> A run that fails because its runtime process ended SHALL report, as separate fields, the process&#x27;s exit status, the operation in flight, and a bounded tail of what it wrote to its error stream, whether the failure was raised at start or reported by the turn.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>&#x27;The process ended&#x27; is true of a crash, a missing binary, a rejected credential and an unresumable session alike; separate fields reach every reader, not only one sentence.</p></div><div class="aw-requirement aw-requirement-must" id="FR-30"><span class="aw-id">FR-30</span><a class="aw-anchor-copy" href="#FR-30" aria-label="Link to FR-30" title="Link to #FR-30">#</a> <span class="aw-position">Requirement 11 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL read the error stream of every runtime it starts, retaining only a bounded tail.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A captured stream nobody reads fills and blocks the very process being diagnosed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-31"><span class="aw-id">FR-31</span><a class="aw-anchor-copy" href="#FR-31" aria-label="Link to FR-31" title="Link to #FR-31">#</a> <span class="aw-position">Requirement 12 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> A turn&#x27;s exit status SHALL be reported separately from the runtime process&#x27;s exit status, and every displayed exit status SHALL be rendered readably (a forced termination reported as a large unsigned value is shown as the termination), while the recorded value stays as the platform reported it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>One death described by two or three different numbers cannot be diagnosed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-24"><span class="aw-id">FR-24</span><a class="aw-anchor-copy" href="#FR-24" aria-label="Link to FR-24" title="Link to #FR-24">#</a> <span class="aw-position">Requirement 13 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL treat the bundled UI as current when its build stamp&#x27;s source fingerprint matches the UI source as it stands, including uncommitted changes, SHALL otherwise report it stale through `/health`, `status` and `doctor` naming `python scripts/refresh_ui_bundle.py` as the remedy, and SHALL fall back to comparing commit dates when no stamp exists.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A date comparison cannot be cleared by a rebuild that produces identical output, and a warning that survives its remedy gets ignored.</p></div><div class="aw-requirement aw-requirement-must" id="FR-32"><span class="aw-id">FR-32</span><a class="aw-anchor-copy" href="#FR-32" aria-label="Link to FR-32" title="Link to #FR-32">#</a> <span class="aw-position">Requirement 14 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> A newly recorded build stamp SHALL clear the staleness warning without restarting the Hub.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The staleness answer is cached briefly, not for the process lifetime.</p></div><div class="aw-requirement aw-requirement-must" id="FR-25"><span class="aw-id">FR-25</span><a class="aw-anchor-copy" href="#FR-25" aria-label="Link to FR-25" title="Link to #FR-25">#</a> <span class="aw-position">Requirement 15 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> `--port` and `--profile` given before the subcommand SHALL take effect for `status`, `stop`, `doctor` and `reset`; given in both places, the value nearer the subcommand SHALL win; no accepted option MAY be silently ignored.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The documented form once reported a running Hub as stopped with no error.</p></div><div class="aw-requirement aw-requirement-must" id="FR-26"><span class="aw-id">FR-26</span><a class="aw-anchor-copy" href="#FR-26" aria-label="Link to FR-26" title="Link to #FR-26">#</a> <span class="aw-position">Requirement 16 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> `status` and `doctor` SHALL describe a running Hub by the runtime it reports about itself on `/health` (`native`, `docker`, or `AW_RUNTIME`), SHALL examine the port and profile database the operator named rather than the defaults, and SHALL report an unreachable instance rather than omit it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Only the running process knows whether it is in a container; a clean report on the wrong instance is worse than none.</p></div><div class="aw-requirement aw-requirement-must" id="FR-27"><span class="aw-id">FR-27</span><a class="aw-anchor-copy" href="#FR-27" aria-label="Link to FR-27" title="Link to #FR-27">#</a> <span class="aw-position">Requirement 17 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where the Hub deliberately degrades instead of failing, `doctor` SHALL report the condition as a warning (not a failure) naming its consequence and remedy; in particular it SHALL test whether a directory symlink can be created, leave nothing behind, and warn that agent checkouts will lack linked dependency directories when it cannot.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Degrading can be right; nobody being told is not. An agent finding missing dependencies by failing the suite is the cost.</p></div><div class="aw-requirement aw-requirement-must" id="FR-28"><span class="aw-id">FR-28</span><a class="aw-anchor-copy" href="#FR-28" aria-label="Link to FR-28" title="Link to #FR-28">#</a> <span class="aw-position">Requirement 18 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> An agent&#x27;s runner control SHALL show the Hub&#x27;s own collaboration reason when the Hub reports the agent runnable but not collaboration-ready, SHALL show nothing for a ready agent or one the verdict does not apply to, and SHALL refresh the verdict without a reload after the runner or permissions change.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The condition should be named where it can be fixed, and must not linger after it is fixed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-29"><span class="aw-id">FR-29</span><a class="aw-anchor-copy" href="#FR-29" aria-label="Link to FR-29" title="Link to #FR-29">#</a> <span class="aw-position">Requirement 19 of 19</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL record for each run which surface it was told to reach the Hub through and whether its harness started the Hub&#x27;s tool server, and when a run given the server did not start it, SHALL say so once in that run&#x27;s activity, naming the surface that run was told and quoting the harness&#x27;s own account where it gives one.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A machine that blocks tool-protocol servers otherwise shows only as runs that behave differently; the statement must describe what that run was told, not what the next one will be.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-13">FR-13</a></td><td>Any machine with AgentWeave installed</td><td>The operator runs `agentweave doctor`</td><td>It reports Python, Hub runtime, runner CLIs, the Hub instance, port, database, state permissions and symlink privilege.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td>No native Hub state directory yet</td><td>`doctor` runs</td><td>It inspects the nearest existing parent and creates no Hub state, project or database.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td>A check whose data includes an API key or token</td><td>`doctor --json` prints it</td><td>The value is redacted.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td>A check that fails</td><td>`doctor --json` runs</td><td>The result carries its ID, target, `fail`, severity `error`, message and hint, and the command exits 1.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>A provider runner naming `$MY_KEY`, unset in the Hub&#x27;s environment</td><td>Launchability is read</td><td>The agent is not runnable and the reason names `$MY_KEY` without any value.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>The same agent</td><td>A run is triggered</td><td>It is refused with 409 before any spawn, naming the variable.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td>An agent whose runner CLI is not on PATH</td><td>A run is triggered</td><td>No process is spawned and a 409 names the missing CLI.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td>A trigger naming an agent that does not exist in the project</td><td>It is received</td><td>It is refused with 409 saying the agent is not in this project.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td>A queued message for an agent that cannot launch</td><td>The launch is refused</td><td>The entry stays queued and is delivered once the agent can run.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-17">FR-17</a></td><td>A run whose process exits non-zero</td><td>The run ends</td><td>A persisted `run_failed` event with severity `warn` carries the agent, run ID, exit code and stderr tail.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-19">FR-19</a></td><td>Log entries from an agent since deleted</td><td>The Logs view is opened</td><td>The agent filter lists roster agents and log-only agents as separate groups, both selectable.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-19">FR-19</a></td><td>Diagnostic events in the log</td><td>The operator picks a category or types a search</td><td>Only matching entries are shown.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-20">FR-20</a></td><td>A manually fired job whose trigger fails</td><td>It runs</td><td>The job run is stored as failed with an error summary and a `job_run_failed` event is recorded.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-20">FR-20</a></td><td>A job whose latest run failed</td><td>The job view is shown</td><td>The failed run and its summary are visible, distinct from a disabled or idle job.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-21">FR-21</a></td><td>A project&#x27;s agents</td><td>`GET /agents/launchability` is called</td><td>Each agent has runner, cli, present, authorized, runnable and reason, and no run starts.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-21">FR-21</a></td><td>An agent with no runner bound</td><td>Launchability is read</td><td>The reason says no runner is bound, not that a CLI named after the agent is missing.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-22">FR-22</a></td><td>A non-full-access Codex agent whose runner opted out of the app-server transport</td><td>Launchability is read</td><td>It is runnable, not collaboration-ready, and the reason names the runner flag and the Full access setting.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-22">FR-22</a></td><td>A Hub that has no `HUB_URL` and has observed no bound address</td><td>Launchability is read</td><td>Runnable agents are not collaboration-ready and the reason says the callback address is unknown.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-22">FR-22</a></td><td>An agent that is not runnable, or has no bound runner</td><td>Launchability is read</td><td>It carries no collaboration verdict.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-23">FR-23</a></td><td>A run whose app-server process dies mid-request</td><td>The failure is reported</td><td>It carries the exit status, the method in flight and the stderr tail as separate fields.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-23">FR-23</a></td><td>A turn that reports its own failure after its runtime exited</td><td>`run_failed` is recorded</td><td>It carries the runtime&#x27;s exit status and stderr tail.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-30">FR-30</a></td><td>A runtime that writes more to stderr than a pipe holds</td><td>It keeps running</td><td>It is not blocked, and only a bounded tail is retained.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-31">FR-31</a></td><td>A run on a transport with no per-turn process exit</td><td>It fails</td><td>The turn&#x27;s status and the runtime&#x27;s status are reported in different fields.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-31">FR-31</a></td><td>A runtime killed and reported by the platform as 4294967295</td><td>The failure is displayed</td><td>It reads as a termination, and `Run.exit_code` keeps the raw value.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-24">FR-24</a></td><td>A build stamp whose fingerprint matches the UI source</td><td>`/health` is read</td><td>No staleness is reported.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-24">FR-24</a></td><td>A build stamp naming a different source state</td><td>`/health` is read</td><td>`ui_stale` is true and the detail names `python scripts/refresh_ui_bundle.py`.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-24">FR-24</a></td><td>No build stamp</td><td>Staleness is computed</td><td>It compares the last commit dates of source and bundle.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-32">FR-32</a></td><td>A Hub reporting the bundle stale</td><td>A matching stamp is recorded</td><td>The warning clears within the cache period, without a restart.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-25">FR-25</a></td><td>A Hub serving on port 8010</td><td>The operator runs `agentweave --port 8010 status`</td><td>It reports the Hub running.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-25">FR-25</a></td><td>`--port` given before and after the subcommand</td><td>The command runs</td><td>The value after the subcommand is used.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-26">FR-26</a></td><td>A Hub started by hand with uvicorn, no PID file</td><td>`status` runs</td><td>It reports `running (native)`, not docker.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-26">FR-26</a></td><td>A named profile and port</td><td>`doctor` runs with them</td><td>It probes that port and that profile&#x27;s database.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-26">FR-26</a></td><td>Nothing answering on the named port</td><td>`doctor` runs</td><td>It reports a `hub_not_running` warning rather than omitting the instance.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-27">FR-27</a></td><td>A machine that cannot create directory symlinks</td><td>`doctor` runs</td><td>It warns that agent checkouts will lack linked dependency directories and names the remedy, without failing.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-27">FR-27</a></td><td>A machine that can create them</td><td>`doctor` runs</td><td>The check passes and nothing is left where it probed.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>An agent the Hub reports runnable and not collaboration-ready</td><td>The operator opens its execution settings</td><td>The runner control says it will run but cannot collaborate, with the Hub&#x27;s reason.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>An agent reported collaboration-ready</td><td>Its execution settings are opened</td><td>No collaboration warning is shown.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>An agent reported not runnable</td><td>Its execution settings are opened</td><td>Only the cannot-run statement is shown.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>An agent showing the cannot-collaborate statement</td><td>The operator changes its runner or permissions so it becomes ready</td><td>The statement disappears without a reload.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-29">FR-29</a></td><td>A finished run</td><td>Its run facts are read</td><td>They state the surface it was told and the recorded tool-server status.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td>A run given the tool server and told the call command, whose harness did not start the server</td><td>Its activity is read</td><td>It holds exactly one statement saying so, naming the call command.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td>A run told the tool-protocol surface from its agent&#x27;s history whose harness then did not start the server</td><td>Its activity is read</td><td>One statement says the server did not start and does not claim the run was told the call command.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td>A harness that gives its own reason for not starting the server</td><td>The statement is written</td><td>It quotes that reason, and what the run is told does not depend on the wording.</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>D1 Two halves, no shared code. The CLI&#x27;s `agentweave/diagnostics.py` checks the machine and the instance; the Hub&#x27;s `launchability.py` and runner adapters judge agents. The Hub does not import the CLI package, so the two are kept separate on purpose.</p><p>D2 The instance describes itself. `/health` returns `runtime` (`native`, `docker`, or `AW_RUNTIME`) and the UI staleness verdict; `status` and `doctor` read that rather than inferring from a PID file.</p><p>D3 Collaboration readiness comes from the same adapter member the trigger path uses to pick a transport, so what the operator is told and what actually runs cannot drift.</p><p>D4 Exit codes: recorded raw (`Run.exit_code`), rendered readably wherever a payload is composed for display (`readable_exit_code`, applied in `_broadcast_run_lifecycle`).</p><p>D5 UI staleness is an assertion (`hub/hub/static/ui/ui-build-stamp.json` with a source fingerprint), not a proof; with no stamp the old commit-date comparison applies, so no installation is declared current by default.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>tests/test_diagnostics.py, tests/test_cli_port_and_runtime.py, tests/test_cli_symlink_privilege.py</li><li>hub/tests/test_launchability.py, hub/tests/test_runtime_diagnostics.py</li><li>hub/tests/test_ui_staleness.py, hub/tests/test_ui_build_stamp.py</li><li>hub/ui/src/__tests__/runnerPickerCannotCollaborate.test.tsx</li></ul><h3 class="aw-limits">Limits</h3><ul><li>Several CLI checks in src/agentweave/diagnostics.py (session, agentweave.yml, transport, per-agent readiness, jobs) are marked DEAD and are not run by `doctor`; they are not described here.</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
   "title": "Runtime diagnostics",
-  "summary": "TBD - created by syncing change improve-runtime-diagnostics. Update Purpose after archive.",
-  "problem": "",
+  "summary": "How AgentWeave tells the operator whether it can run and why something did not: `agentweave doctor` and `agentweave status` for the instance, the Hub's per-agent launchability and collaboration-readiness report, typed refusals before a spawn, and durable failure facts for runs and jobs.",
+  "problem": "Most runtime failures look alike from the outside (\"the run failed\", \"the Hub is down\"). Without checks that inspect the real instance and failures that carry their own facts, the operator diagnoses by guessing which other agents still work.",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "`agentweave doctor` and `agentweave status` and the result model they share",
+      "`GET /agents/launchability`: runnable and collaboration-ready verdicts per agent",
+      "Pre-spawn refusals for agents that cannot run",
+      "Failure facts on `run_failed` and `job_run_failed`",
+      "The Logs view, the UI-bundle staleness signal, the run's Hub-access statement"
+    ],
+    "non_goals": [
+      "Context-window and token reporting (agent-context-usage, usage-accounting)",
+      "How runs are rendered in a conversation (agent-stream-events)"
+    ]
   },
   "requirements": [
     {
       "key": "runtime-readiness-checks",
-      "statement": "The system SHALL provide non-mutating readiness checks for the single native AgentWeave instance without starting the Hub or making external model-provider API calls.",
+      "statement": "`agentweave doctor` SHALL check Python support, the installed Hub runtime, runner CLIs on PATH, the Hub instance on the chosen port, port availability, database accessibility, Hub-state permissions and directory-symlink privilege, without starting the Hub, creating state, or calling any model provider.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A readiness check that changes what it inspects, or needs the thing it is diagnosing to be up, cannot be run before first launch.",
       "party": null
     },
     {
       "key": "readiness-check-result-model",
-      "statement": "The system SHALL represent each readiness check as a structured result with a stable check identifier, target, status, severity, user-facing message, and optional remediation hint.",
+      "statement": "Each readiness check SHALL produce a result with a stable check ID, a target, a status (`pass`, `warn`, `fail`), a severity, a message and an optional hint, SHALL redact secret values from its data, and `doctor` SHALL exit non-zero only when a check fails.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A stable structured result is what `--json`, logs and scripts read; secrets never belong in a diagnostic.",
       "party": null
     },
     {
       "key": "proxy-credential-diagnostics",
-      "statement": "The Hub SHALL detect missing required proxy provider API key variables when agent configuration is validated and before a proxy runner is spawned.",
+      "statement": "For a runner configured to send its runs to a model provider, the Hub SHALL report the agent not runnable when the environment variable the runner names for the key is unset, naming the variable and never its value.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A missing key otherwise surfaces as an opaque provider failure mid-run.",
       "party": null
     },
     {
       "key": "watchdog-launch-preflight",
-      "statement": "The Hub SHALL run deterministic preflight checks before spawning an agent's run and SHALL refuse launches that are known to be impossible.",
+      "statement": "Before spawning a run the Hub SHALL refuse, with a typed 409 naming the reason, an agent that does not exist, is archived, has no runner or a deleted runner, is not runnable, or already has a run in progress, and SHALL refuse with 501 a runner it has no adapter for; a refused delivery SHALL stay queued for retry.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A launch known to be impossible should fail immediately and say why, and must not lose the input that asked for it.",
       "party": null
     },
     {
       "key": "structured-diagnostic-events",
-      "statement": "The system SHALL emit durable structured diagnostic events for runtime failures, degraded states, skipped execution, and unavailable dependencies.",
+      "statement": "A run that fails SHALL be recorded as a persisted `run_failed` event with severity `warn` carrying the agent, run ID, error, and where known the exit code and the runtime's error-stream tail, scrubbed of the run's registered secrets.",
       "modal": "SHALL",
-      "rationale": null,
-      "party": null
-    },
-    {
-      "key": "hub-trigger-confidence-reporting",
-      "statement": "The Hub SHALL distinguish queued agent work by execution confidence based on available agent and runner state.",
-      "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A failure that exists only in a log line or a broadcast is gone by the time someone looks.",
       "party": null
     },
     {
       "key": "hub-logs-usability",
-      "statement": "The Hub Logs UI SHALL expose diagnostics in a way that reflects the current project rather than a fixed set of agents.",
+      "statement": "The Logs view SHALL offer an agent filter drawn from the project's roster and from agents named in returned log entries, shown as separate groups, and SHALL offer search and category filters (runner, proxy, setup, jobs, stderr).",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A deleted agent's history must stay filterable, and a fixed agent list hides custom agents.",
       "party": null
     },
     {
       "key": "job-failure-diagnostics",
-      "statement": "The system SHALL make scheduled and manually fired job failures durable and visible.",
+      "statement": "A scheduled or manually fired job run that fails to start, fails to trigger its agent, or meets an internal error SHALL be recorded as a failed job run with an error summary and a `job_run_failed` event, and the job view SHALL show a failed or skipped run with its summary, distinct from disabled or idle jobs.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A job that fails every five minutes in silence is indistinguishable from one that never fires.",
       "party": null
     },
     {
       "key": "agent-readiness-summary",
-      "statement": "The Hub SHALL summarize readiness so users can see whether configured agents are immediately usable.",
+      "statement": "The Hub SHALL report for each of a project's agents its runner, CLI, whether the CLI is present and authorized, whether it is runnable, and the reason when it is not, without starting a run.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "The operator should know an agent cannot run before they send it work.",
       "party": null
     },
     {
       "key": "collaboration-readiness-is-checkable-before-it-is-needed",
-      "statement": "The Hub SHALL be able to report, for a project's agents, whether agent-to-agent collaboration will actually work — not merely whether the runner CLI is installed and authorized.",
+      "statement": "For a runnable agent bound to a runner, the Hub SHALL also report whether it can collaborate (its provider will let it call the Hub's tools, and the Hub knows the callback address it gives runs), naming each unmet condition in terms the operator can act on, without starting a run.",
       "modal": "SHALL",
-      "rationale": "The report SHALL cover whether the tool surface will be invocable by that agent's provider, and whether the address supplied to runs is the address the Hub is serving on. Each unmet condition SHALL name what is wrong in terms an operator can act on. This check MUST NOT require starting an agent run.",
+      "rationale": "An agent that runs but cannot reach the Hub fails quietly; installed and authorized is not enough.",
       "party": null
     },
     {
       "key": "a-runtime-that-dies-reports-what-it-was-doing",
-      "statement": "A run that fails because its runtime process ended SHALL report the process's exit status, the operation in flight when it ended, and what the process last wrote to its error stream.",
+      "statement": "A run that fails because its runtime process ended SHALL report, as separate fields, the process's exit status, the operation in flight, and a bounded tail of what it wrote to its error stream, whether the failure was raised at start or reported by the turn.",
       "modal": "SHALL",
-      "rationale": "\"The process ended\" is true of every such failure and distinguishes none of them. A crash, a non-existent binary, a rejected credential and an unresumable session all produce the same sentence, so diagnosing one means inferring the cause from which other agents still work. The error stream of a runtime the system starts SHALL be read. A stream that is captured and never consumed can fill, at which point the process it belongs to blocks on writing to it — so leaving it unread is not merely a lost diagnostic but a way to hang the very process being diagnosed. What is retained SHALL be bounded. These facts SHALL be carried by the failure itself, so that every existing reader of the failure reports them without being changed. Each of these facts SHALL be reported as a distinct fact and not only within a composed sentence. A fact that exists solely inside a message can be read by a person and by nothing else, and where the composed sentence is not the surface the operator is looking at, the fact does not arrive at all. Where a run ends abnormally without raising — a turn that reports its own failure rather than one whose start failed — the same facts SHALL be reported. The operator cannot see which internal path a failure took, and reporting a runtime's death well in one case and not the other is indistinguishable from reporting it unreliably. The exit status a run reports for its turn SHALL be distinguishable from the exit status of the runtime process. Where a transport has no process exit status for a turn, the system supplies one so that success and failure read uniformly across transports; conflating that supplied value with a process's own status gives one death two contradictory numbers and no way to tell which is which. An exit status SHALL be rendered in a form a person can act on. A platform reporting a forced termination as a large unsigned value states a fact that reads as corruption; what is displayed SHALL convey the termination, while what is recorded remains what the platform reported.",
+      "rationale": "'The process ended' is true of a crash, a missing binary, a rejected credential and an unresumable session alike; separate fields reach every reader, not only one sentence.",
+      "party": null
+    },
+    {
+      "key": "n1-a-runtime-error-stream-is-always-drained",
+      "statement": "The Hub SHALL read the error stream of every runtime it starts, retaining only a bounded tail.",
+      "modal": "SHALL",
+      "rationale": "A captured stream nobody reads fills and blocks the very process being diagnosed.",
+      "party": null
+    },
+    {
+      "key": "n2-exit-statuses-are-distinct-and-readable",
+      "statement": "A turn's exit status SHALL be reported separately from the runtime process's exit status, and every displayed exit status SHALL be rendered readably (a forced termination reported as a large unsigned value is shown as the termination), while the recorded value stays as the platform reported it.",
+      "modal": "SHALL",
+      "rationale": "One death described by two or three different numbers cannot be diagnosed.",
       "party": null
     },
     {
       "key": "the-built-interface-artefact-can-be-asserted-current",
-      "statement": "The system SHALL treat the built interface artefact as current where a recorded assertion says it was built from the interface source as it now stands.",
+      "statement": "The Hub SHALL treat the bundled UI as current when its build stamp's source fingerprint matches the UI source as it stands, including uncommitted changes, SHALL otherwise report it stale through `/health`, `status` and `doctor` naming `python scripts/refresh_ui_bundle.py` as the remedy, and SHALL fall back to comparing commit dates when no stamp exists.",
       "modal": "SHALL",
-      "rationale": "Staleness is reported today by comparing when the source was last changed against when the artefact was last changed. A source change that cannot alter the built output — a change to types, comments, or anything else erased before the output is produced — leaves the artefact byte for byte identical, so rebuilding produces nothing to record, the artefact's timestamp never moves, and the warning stands permanently. A warning that cannot be cleared by doing the thing it asks for teaches the operator to ignore it, which costs the cases where it is right. The assertion SHALL identify the state of the source it was made against, including changes not yet committed, so that it distinguishes an artefact built from what is present from one built from something else. Where no assertion has been recorded, staleness SHALL be reported as it was before. An installation carrying no assertion is not thereby declared current. A recorded assertion SHALL take effect without restarting the system. Where the report instructs the operator to rebuild, it SHALL name a way to do so that is available to them. A warning naming a command the installation does not have is not actionable, and an unactionable warning is ignored — including on the occasions when it is right. This requirement establishes an assertion, not a proof. Only building the artefact can establish that it matches its source; what is recorded is a dated and attributable claim that someone did so.",
+      "rationale": "A date comparison cannot be cleared by a rebuild that produces identical output, and a warning that survives its remedy gets ignored.",
+      "party": null
+    },
+    {
+      "key": "n3-a-recorded-build-stamp-takes-effect-without-restart",
+      "statement": "A newly recorded build stamp SHALL clear the staleness warning without restarting the Hub.",
+      "modal": "SHALL",
+      "rationale": "The staleness answer is cached briefly, not for the process lifetime.",
       "party": null
     },
     {
       "key": "the-documented-command-form-is-the-one-that-works",
-      "statement": "Where the command-line help documents an option before the subcommand, that form SHALL take effect. An option that is accepted and silently ignored SHALL NOT exist: either it works, or it is refused with a statement of the form that does work.",
+      "statement": "`--port` and `--profile` given before the subcommand SHALL take effect for `status`, `stop`, `doctor` and `reset`; given in both places, the value nearer the subcommand SHALL win; no accepted option MAY be silently ignored.",
       "modal": "SHALL",
-      "rationale": "Measured 2026-08-25 against a Hub confirmed live: the documented form reported the Hub **stopped** while the undocumented form reported it running. Neither errored, so the operator had no signal that the flag went nowhere — they were simply told the service was down while it was serving requests.",
+      "rationale": "The documented form once reported a running Hub as stopped with no error.",
       "party": null
     },
     {
       "key": "a-running-instance-is-described-as-what-it-actually-is",
-      "statement": "Diagnostics SHALL describe a running instance by how it is actually running, and SHALL examine the instance the project is bound to rather than a default.",
+      "statement": "`status` and `doctor` SHALL describe a running Hub by the runtime it reports about itself on `/health` (`native`, `docker`, or `AW_RUNTIME`), SHALL examine the port and profile database the operator named rather than the defaults, and SHALL report an unreachable instance rather than omit it.",
       "modal": "SHALL",
-      "rationale": "Today a native process is reported as Docker, and `doctor`, run from inside a project bound to a non-default port, checks the default port and a database nobody serves — then returns all checks passing without having examined the running instance at all. A clean bill of health that inspected the wrong thing is worse than no report.",
+      "rationale": "Only the running process knows whether it is in a container; a clean report on the wrong instance is worse than none.",
       "party": null
     },
     {
       "key": "a-silently-degraded-environment-shall-be-reported-once-where",
-      "statement": "Where the Hub deliberately degrades rather than failing, `doctor` SHALL report the degraded condition, name its consequence in terms the operator will meet it in, and name the remedy.",
+      "statement": "Where the Hub deliberately degrades instead of failing, `doctor` SHALL report the condition as a warning (not a failure) naming its consequence and remedy; in particular it SHALL test whether a directory symlink can be created, leave nothing behind, and warn that agent checkouts will lack linked dependency directories when it cannot.",
       "modal": "SHALL",
-      "rationale": "Degrading is often correct — failing a whole turn because a shared dependency directory could not be linked into an agent's worktree would be worse than provisioning without it. What is not correct is that nobody is told. Measured on this machine: directory symlinks cannot be created without an extra privilege, so **every** agent worktree is provisioned without the project's installed dependencies, and no surface says so. The agent discovers it by running the suite and failing. The operator sees a checkout that looks complete. The diagnostic did not look. It stayed invisible while the fixtures were projects whose tooling was already on the path, and stops being invisible the moment a reviewer is handed a checkout *because it can run the tests* — that reviewer then reports that it could not run the suite, and is telling the truth about an environment nobody told it about.",
+      "rationale": "Degrading can be right; nobody being told is not. An agent finding missing dependencies by failing the suite is the cost.",
       "party": null
     },
     {
       "key": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
-      "statement": "The application SHALL show, at the control where the operator binds an agent's runner, the Hub's collaboration-readiness reason whenever the Hub reports that agent runnable but not collaboration-ready. It SHALL show nothing for an agent reported collaboration-ready, and nothing for a report that does not apply to the agent.",
+      "statement": "An agent's runner control SHALL show the Hub's own collaboration reason when the Hub reports the agent runnable but not collaboration-ready, SHALL show nothing for a ready agent or one the verdict does not apply to, and SHALL refresh the verdict without a reload after the runner or permissions change.",
       "modal": "SHALL",
-      "rationale": "The reason shown SHALL be the Hub's own sentence, so that the condition to fix is named where it can be fixed. A remedy the reason names SHALL be named as the application labels it. Once the operator changes or removes the runner, the application SHALL show the Hub's new report without the operator reloading, so that a warning is not left standing after its condition was fixed.",
+      "rationale": "The condition should be named where it can be fixed, and must not linger after it is fixed.",
       "party": null
     },
     {
       "key": "a-run-states-how-it-reached-the-hub",
-      "statement": "The system SHALL show, for each run, which surface the run was told to reach the Hub through and whether its harness started the Hub's tool server, and when a run given the server did not start it, SHALL say so once in that run's own activity, naming the surface the run was actually told to use.",
+      "statement": "The Hub SHALL record for each run which surface it was told to reach the Hub through and whether its harness started the Hub's tool server, and when a run given the server did not start it, SHALL say so once in that run's activity, naming the surface that run was told and quoting the harness's own account where it gives one.",
       "modal": "SHALL",
-      "rationale": "An operator whose machine blocks tool-protocol servers learns it today only from the harness's own wording, if it appears at all, while the run quietly behaves differently. Stating it once, where the run's activity is read, turns a silent degradation into a fact the operator can act on. A run is not always told its surface after its own test. Some runners are told before they start, from the agent's history, and their own test can then come back negative. The statement names what that run was told, not what the next run will be, because a statement that the run was told the call command, made about a run told the tool-protocol surface, is the very disagreement between telling and fact this requirement exists to expose. Where the runner's own failure message already states it, that message is the one statement, and it too names the surface the run was told: a message saying the run had no way to reach the Hub, about a run told the call command, is false in the same way. Where the operator has declared the surface the agent uses, the statement does not promise that the next run is told otherwise. Where the harness gives its own account of the server, that account SHALL be quoted verbatim beside the statement and SHALL NOT be what the system decides from.",
+      "rationale": "A machine that blocks tool-protocol servers otherwise shows only as runs that behave differently; the statement must describe what that run was told, not what the next one will be.",
       "party": null
     }
   ],
@@ -287,422 +309,320 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac1",
       "requirement": "runtime-readiness-checks",
-      "given": "",
-      "when": "the user runs `agentweave doctor`",
-      "then": "the system reports Python support, native Hub installation, runner CLIs on PATH, local port availability, SQLite database accessibility, and Hub-state file permissions"
+      "given": "Any machine with AgentWeave installed",
+      "when": "The operator runs `agentweave doctor`",
+      "then": "It reports Python, Hub runtime, runner CLIs, the Hub instance, port, database, state permissions and symlink privilege."
     },
     {
       "key": "ac2",
       "requirement": "runtime-readiness-checks",
-      "given": "",
-      "when": "the native Hub state directory does not exist",
-      "then": "diagnostics inspect the nearest existing parent and do not create Hub state, a project, or a database"
+      "given": "No native Hub state directory yet",
+      "when": "`doctor` runs",
+      "then": "It inspects the nearest existing parent and creates no Hub state, project or database."
     },
     {
       "key": "ac3",
-      "requirement": "runtime-readiness-checks",
-      "given": "",
-      "when": "readiness checks inspect environment variables, transport configuration, runner commands, or proxy settings",
-      "then": "the system reports variable names, paths, statuses, and hints without printing API key values, bearer tokens, or other secret values"
+      "requirement": "readiness-check-result-model",
+      "given": "A check whose data includes an API key or token",
+      "when": "`doctor --json` prints it",
+      "then": "The value is redacted."
     },
     {
       "key": "ac4",
       "requirement": "readiness-check-result-model",
-      "given": "",
-      "when": "a readiness check detects a missing proxy API key",
-      "then": "the result includes the check identifier, affected agent, status `fail`, severity `error`, the missing environment variable name, and a hint describing how to set it"
-    },
-    {
-      "key": "ac5",
-      "requirement": "readiness-check-result-model",
-      "given": "",
-      "when": "the same readiness result is shown by `agentweave doctor` and `agentweave status`",
-      "then": "the system uses the same status, severity, message, and hint semantics for that check"
+      "given": "A check that fails",
+      "when": "`doctor --json` runs",
+      "then": "The result carries its ID, target, `fail`, severity `error`, message and hint, and the command exits 1."
     },
     {
       "key": "ac6",
       "requirement": "proxy-credential-diagnostics",
-      "given": "",
-      "when": "a `claude_proxy` agent references a provider API key variable that is unavailable to the Hub process",
-      "then": "the agent readiness response names the missing variable and explains how to provide it without exposing a secret value"
+      "given": "A provider runner naming `$MY_KEY`, unset in the Hub's environment",
+      "when": "Launchability is read",
+      "then": "The agent is not runnable and the reason names `$MY_KEY` without any value."
     },
     {
       "key": "ac7",
       "requirement": "proxy-credential-diagnostics",
-      "given": "",
-      "when": "a run is requested for a proxy agent whose required provider API key variable is missing",
-      "then": "the Hub refuses the run before spawn with an actionable typed conflict naming the missing variable"
-    },
-    {
-      "key": "ac8",
-      "requirement": "watchdog-launch-preflight",
-      "given": "",
-      "when": "the Hub receives a trigger for a proxy agent whose required provider API key variable is missing",
-      "then": "it does not spawn the process, returns a typed conflict response naming the missing variable, and records a structured diagnostic event"
+      "given": "The same agent",
+      "when": "A run is triggered",
+      "then": "It is refused with 409 before any spawn, naming the variable."
     },
     {
       "key": "ac9",
       "requirement": "watchdog-launch-preflight",
-      "given": "",
-      "when": "the Hub receives a trigger for an agent whose runner CLI is not available in PATH",
-      "then": "it does not spawn the process, returns a typed conflict response, and records a structured launch-skip diagnostic event"
+      "given": "An agent whose runner CLI is not on PATH",
+      "when": "A run is triggered",
+      "then": "No process is spawned and a 409 names the missing CLI."
+    },
+    {
+      "key": "ac76",
+      "requirement": "watchdog-launch-preflight",
+      "given": "A trigger naming an agent that does not exist in the project",
+      "when": "It is received",
+      "then": "It is refused with 409 saying the agent is not in this project."
     },
     {
       "key": "ac10",
       "requirement": "watchdog-launch-preflight",
-      "given": "",
-      "when": "the Hub refuses a launch because a deterministic preflight check fails",
-      "then": "the system preserves enough queued state for the user to retry after fixing the readiness issue"
-    },
-    {
-      "key": "ac11",
-      "requirement": "structured-diagnostic-events",
-      "given": "",
-      "when": "a setup, synchronization, or registration step fails but the operation continues",
-      "then": "the system emits a structured diagnostic event with the failing step, severity, message, and remediation hint when available"
-    },
-    {
-      "key": "ac12",
-      "requirement": "structured-diagnostic-events",
-      "given": "",
-      "when": "an HTTP transport operation fails because the Hub is unreachable, authentication fails, a project is missing, a request times out, or the response is invalid",
-      "then": "the system emits or returns a classified diagnostic rather than only a generic failure"
+      "given": "A queued message for an agent that cannot launch",
+      "when": "The launch is refused",
+      "then": "The entry stays queued and is delivered once the agent can run."
     },
     {
       "key": "ac13",
       "requirement": "structured-diagnostic-events",
-      "given": "",
-      "when": "a launched agent subprocess exits with a non-zero status",
-      "then": "the system records a structured diagnostic event containing agent name, runner type, exit code, duration when known, and a secret-safe summary of recent stderr"
-    },
-    {
-      "key": "ac14",
-      "requirement": "hub-trigger-confidence-reporting",
-      "given": "",
-      "when": "the user triggers an agent whose runner is configured as manual",
-      "then": "the response indicates that the message was queued for manual handling and does not imply automatic execution"
+      "given": "A run whose process exits non-zero",
+      "when": "The run ends",
+      "then": "A persisted `run_failed` event with severity `warn` carries the agent, run ID, exit code and stderr tail."
     },
     {
       "key": "ac15",
       "requirement": "hub-logs-usability",
-      "given": "",
-      "when": "the Hub Logs view is opened",
-      "then": "the agent filter includes agents from configured session data, the project's agents, or returned log entries, including custom agents and proxy agents"
+      "given": "Log entries from an agent since deleted",
+      "when": "The Logs view is opened",
+      "then": "The agent filter lists roster agents and log-only agents as separate groups, both selectable."
     },
     {
       "key": "ac16",
       "requirement": "hub-logs-usability",
-      "given": "",
-      "when": "diagnostic events exist in the log stream",
-      "then": "the user can filter or search common categories such as runner, proxy credentials, setup, jobs, and agent stderr"
-    },
-    {
-      "key": "ac17",
-      "requirement": "hub-logs-usability",
-      "given": "",
-      "when": "a log entry contains diagnostic data derived from env vars, transport config, or runner commands",
-      "then": "the UI does not display secret values"
+      "given": "Diagnostic events in the log",
+      "when": "The operator picks a category or types a search",
+      "then": "Only matching entries are shown."
     },
     {
       "key": "ac18",
       "requirement": "job-failure-diagnostics",
-      "given": "",
-      "when": "a job run fails to start, fails to trigger an agent, or raises an internal scheduler error",
-      "then": "the system records the run as failed with a secret-safe error summary and emits a structured diagnostic event"
+      "given": "A manually fired job whose trigger fails",
+      "when": "It runs",
+      "then": "The job run is stored as failed with an error summary and a `job_run_failed` event is recorded."
     },
     {
       "key": "ac19",
       "requirement": "job-failure-diagnostics",
-      "given": "",
-      "when": "a job has a recent failed run",
-      "then": "the Hub job view exposes that failed state separately from jobs that are merely disabled, pending, or idle"
+      "given": "A job whose latest run failed",
+      "when": "The job view is shown",
+      "then": "The failed run and its summary are visible, distinct from a disabled or idle job."
     },
     {
       "key": "ac20",
       "requirement": "agent-readiness-summary",
-      "given": "",
-      "when": "the operator inspects configured agents",
-      "then": "the Hub exposes a compact readiness summary for each agent covering runner type, CLI availability, required environment variables, context status, and overall readiness"
+      "given": "A project's agents",
+      "when": "`GET /agents/launchability` is called",
+      "then": "Each agent has runner, cli, present, authorized, runnable and reason, and no run starts."
     },
     {
-      "key": "ac21",
+      "key": "ac77",
       "requirement": "agent-readiness-summary",
-      "given": "",
-      "when": "one or more readiness checks warn or fail",
-      "then": "the Hub records structured diagnostic events and exposes remediation hints to the operator"
+      "given": "An agent with no runner bound",
+      "when": "Launchability is read",
+      "then": "The reason says no runner is bound, not that a CLI named after the agent is missing."
     },
     {
       "key": "ac22",
       "requirement": "collaboration-readiness-is-checkable-before-it-is-needed",
-      "given": "",
-      "when": "collaboration readiness is reported for an agent whose provider would refuse its tool calls",
-      "then": "the agent is reported as not collaboration-ready the reason names the refusal"
+      "given": "A non-full-access Codex agent whose runner opted out of the app-server transport",
+      "when": "Launchability is read",
+      "then": "It is runnable, not collaboration-ready, and the reason names the runner flag and the Full access setting."
     },
     {
       "key": "ac23",
       "requirement": "collaboration-readiness-is-checkable-before-it-is-needed",
-      "given": "",
-      "when": "the address the Hub would supply to runs is not the address it is serving on",
-      "then": "collaboration readiness reports the mismatch names both addresses"
+      "given": "A Hub that has no `HUB_URL` and has observed no bound address",
+      "when": "Launchability is read",
+      "then": "Runnable agents are not collaboration-ready and the reason says the callback address is unknown."
     },
     {
       "key": "ac24",
       "requirement": "collaboration-readiness-is-checkable-before-it-is-needed",
-      "given": "",
-      "when": "collaboration readiness is reported",
-      "then": "no agent run is started"
+      "given": "An agent that is not runnable, or has no bound runner",
+      "when": "Launchability is read",
+      "then": "It carries no collaboration verdict."
     },
     {
       "key": "ac25",
       "requirement": "a-runtime-that-dies-reports-what-it-was-doing",
-      "given": "",
-      "when": "a run fails because its runtime process ended",
-      "then": "the failure names the process's exit status it names the operation that was in flight"
-    },
-    {
-      "key": "ac26",
-      "requirement": "a-runtime-that-dies-reports-what-it-was-doing",
-      "given": "",
-      "when": "a runtime writes to its error stream and then exits",
-      "then": "the failure includes what it wrote the amount retained is bounded"
-    },
-    {
-      "key": "ac27",
-      "requirement": "a-runtime-that-dies-reports-what-it-was-doing",
-      "given": "",
-      "when": "a runtime writes more to its error stream than the stream can hold",
-      "then": "the runtime is not blocked"
-    },
-    {
-      "key": "ac28",
-      "requirement": "a-runtime-that-dies-reports-what-it-was-doing",
-      "given": "",
-      "when": "a run fails because its runtime process ended",
-      "then": "the exit status, the operation in flight, and what was written to the error stream are"
+      "given": "A run whose app-server process dies mid-request",
+      "when": "The failure is reported",
+      "then": "It carries the exit status, the method in flight and the stderr tail as separate fields."
     },
     {
       "key": "ac29",
       "requirement": "a-runtime-that-dies-reports-what-it-was-doing",
-      "given": "",
-      "when": "a turn ends in failure and the runtime process has exited",
-      "then": "the failure reports that process's exit status it reports what the process wrote to its error stream"
+      "given": "A turn that reports its own failure after its runtime exited",
+      "when": "`run_failed` is recorded",
+      "then": "It carries the runtime's exit status and stderr tail."
+    },
+    {
+      "key": "ac27",
+      "requirement": "n1-a-runtime-error-stream-is-always-drained",
+      "given": "A runtime that writes more to stderr than a pipe holds",
+      "when": "It keeps running",
+      "then": "It is not blocked, and only a bounded tail is retained."
     },
     {
       "key": "ac30",
-      "requirement": "a-runtime-that-dies-reports-what-it-was-doing",
-      "given": "",
-      "when": "a run on a transport with no per-turn process exit status fails",
-      "then": "the status reported for the turn is distinct from the status reported for the runtime neither is presented as the other"
+      "requirement": "n2-exit-statuses-are-distinct-and-readable",
+      "given": "A run on a transport with no per-turn process exit",
+      "when": "It fails",
+      "then": "The turn's status and the runtime's status are reported in different fields."
     },
     {
       "key": "ac31",
-      "requirement": "a-runtime-that-dies-reports-what-it-was-doing",
-      "given": "",
-      "when": "a runtime is terminated and the platform reports the termination as a large unsigned value",
-      "then": "what is displayed conveys the termination rather than that value"
-    },
-    {
-      "key": "ac32",
-      "requirement": "a-runtime-that-dies-reports-what-it-was-doing",
-      "given": "",
-      "when": "a runtime exits with an ordinary status",
-      "then": "that status is displayed as it is"
+      "requirement": "n2-exit-statuses-are-distinct-and-readable",
+      "given": "A runtime killed and reported by the platform as 4294967295",
+      "when": "The failure is displayed",
+      "then": "It reads as a termination, and `Run.exit_code` keeps the raw value."
     },
     {
       "key": "ac33",
       "requirement": "the-built-interface-artefact-can-be-asserted-current",
-      "given": "",
-      "when": "the artefact carries an assertion naming the interface source as it now stands",
-      "then": "the system does not report the artefact as stale"
-    },
-    {
-      "key": "ac34",
-      "requirement": "the-built-interface-artefact-can-be-asserted-current",
-      "given": "",
-      "when": "the interface source changes in a way that leaves the built artefact identical the artefact is rebuilt and the assertion recorded",
-      "then": "the system does not report the artefact as stale"
+      "given": "A build stamp whose fingerprint matches the UI source",
+      "when": "`/health` is read",
+      "then": "No staleness is reported."
     },
     {
       "key": "ac35",
       "requirement": "the-built-interface-artefact-can-be-asserted-current",
-      "given": "",
-      "when": "the artefact carries an assertion naming source that differs from what is present",
-      "then": "the system reports the artefact as stale"
+      "given": "A build stamp naming a different source state",
+      "when": "`/health` is read",
+      "then": "`ui_stale` is true and the detail names `python scripts/refresh_ui_bundle.py`."
     },
     {
       "key": "ac36",
       "requirement": "the-built-interface-artefact-can-be-asserted-current",
-      "given": "",
-      "when": "the artefact carries no assertion",
-      "then": "staleness is reported by comparing when source and artefact last changed"
+      "given": "No build stamp",
+      "when": "Staleness is computed",
+      "then": "It compares the last commit dates of source and bundle."
     },
     {
       "key": "ac37",
-      "requirement": "the-built-interface-artefact-can-be-asserted-current",
-      "given": "",
-      "when": "an assertion is recorded while the system is running",
-      "then": "the system stops reporting the artefact as stale without being restarted"
-    },
-    {
-      "key": "ac38",
-      "requirement": "the-built-interface-artefact-can-be-asserted-current",
-      "given": "",
-      "when": "the system reports the artefact as stale",
-      "then": "the instruction names a way to rebuild that does not depend on tooling the installation"
+      "requirement": "n3-a-recorded-build-stamp-takes-effect-without-restart",
+      "given": "A Hub reporting the bundle stale",
+      "when": "A matching stamp is recorded",
+      "then": "The warning clears within the cache period, without a restart."
     },
     {
       "key": "ac39",
       "requirement": "the-documented-command-form-is-the-one-that-works",
-      "given": "",
-      "when": "the operator supplies the port option in the position the help documents",
-      "then": "it SHALL take effect"
+      "given": "A Hub serving on port 8010",
+      "when": "The operator runs `agentweave --port 8010 status`",
+      "then": "It reports the Hub running."
     },
     {
       "key": "ac40",
       "requirement": "the-documented-command-form-is-the-one-that-works",
-      "given": "",
-      "when": "the operator supplies the option both before and after the subcommand",
-      "then": "the value nearer the subcommand SHALL win"
-    },
-    {
-      "key": "ac41",
-      "requirement": "the-documented-command-form-is-the-one-that-works",
-      "given": "",
-      "when": "a Hub is serving requests on the named port",
-      "then": "it SHALL be reported running"
+      "given": "`--port` given before and after the subcommand",
+      "when": "The command runs",
+      "then": "The value after the subcommand is used."
     },
     {
       "key": "ac42",
       "requirement": "a-running-instance-is-described-as-what-it-actually-is",
-      "given": "",
-      "when": "an instance was started as a local process rather than in a container",
-      "then": "it SHALL be reported as native"
+      "given": "A Hub started by hand with uvicorn, no PID file",
+      "when": "`status` runs",
+      "then": "It reports `running (native)`, not docker."
     },
     {
       "key": "ac43",
       "requirement": "a-running-instance-is-described-as-what-it-actually-is",
-      "given": "",
-      "when": "diagnostics run inside a project bound to a particular instance",
-      "then": "they SHALL examine that instance's port and database"
+      "given": "A named profile and port",
+      "when": "`doctor` runs with them",
+      "then": "It probes that port and that profile's database."
     },
     {
       "key": "ac44",
       "requirement": "a-running-instance-is-described-as-what-it-actually-is",
-      "given": "",
-      "when": "the bound instance cannot be reached",
-      "then": "that SHALL be reported as a failure rather than omitted from the summary"
+      "given": "Nothing answering on the named port",
+      "when": "`doctor` runs",
+      "then": "It reports a `hub_not_running` warning rather than omitting the instance."
     },
     {
       "key": "ac45",
       "requirement": "a-silently-degraded-environment-shall-be-reported-once-where",
-      "given": "",
-      "when": "diagnostics run on a machine where that facility is unavailable",
-      "then": "the report SHALL include a warning naming the facility and what will be missing without it SHALL name the remedy"
+      "given": "A machine that cannot create directory symlinks",
+      "when": "`doctor` runs",
+      "then": "It warns that agent checkouts will lack linked dependency directories and names the remedy, without failing."
     },
     {
       "key": "ac46",
       "requirement": "a-silently-degraded-environment-shall-be-reported-once-where",
-      "given": "",
-      "when": "diagnostics run on a machine where it works",
-      "then": "the report SHALL say so and SHALL NOT warn"
-    },
-    {
-      "key": "ac47",
-      "requirement": "a-silently-degraded-environment-shall-be-reported-once-where",
-      "given": "",
-      "when": "the facility is unavailable but the Hub is otherwise ready",
-      "then": "the condition SHALL be reported as a warning and SHALL NOT be reported as a failure"
-    },
-    {
-      "key": "ac48",
-      "requirement": "a-silently-degraded-environment-shall-be-reported-once-where",
-      "given": "",
-      "when": "the diagnostic tests the facility",
-      "then": "it SHALL not leave anything behind in the location it probed"
+      "given": "A machine that can create them",
+      "when": "`doctor` runs",
+      "then": "The check passes and nothing is left where it probed."
     },
     {
       "key": "ac49",
       "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
-      "given": "an agent the Hub reports as runnable and not collaboration-ready, with a reason",
-      "when": "the operator opens that agent's execution settings",
-      "then": "the runner control states that the agent will run but cannot collaborate the statement carries the Hub's reason"
+      "given": "An agent the Hub reports runnable and not collaboration-ready",
+      "when": "The operator opens its execution settings",
+      "then": "The runner control says it will run but cannot collaborate, with the Hub's reason."
     },
     {
       "key": "ac50",
       "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
-      "given": "an agent the Hub reports as runnable and collaboration-ready",
-      "when": "the operator opens that agent's execution settings",
-      "then": "no collaboration warning is shown"
+      "given": "An agent reported collaboration-ready",
+      "when": "Its execution settings are opened",
+      "then": "No collaboration warning is shown."
     },
     {
       "key": "ac51",
       "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
-      "given": "an agent the Hub reports as not runnable",
-      "when": "the operator opens that agent's execution settings",
-      "then": "only the statement that it cannot run is shown"
+      "given": "An agent reported not runnable",
+      "when": "Its execution settings are opened",
+      "then": "Only the cannot-run statement is shown."
     },
     {
       "key": "ac52",
       "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
-      "given": "an agent whose runner control states that it cannot collaborate",
-      "when": "the operator changes the agent's runner or permissions, or edits that runner, so the Hub reports the agent collaboration-ready",
-      "then": "the statement is no longer shown when the operator returns to the agent's execution settings, without reloading the application"
-    },
-    {
-      "key": "ac53",
-      "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
-      "given": "a Codex agent whose runner opted out of the app-server transport and whose permissions are not Full access",
-      "when": "the Hub reports that agent's collaboration readiness",
-      "then": "the reason names the runner flag to avoid and the Full access permission setting it does not name a setting the application does not show"
+      "given": "An agent showing the cannot-collaborate statement",
+      "when": "The operator changes its runner or permissions so it becomes ready",
+      "then": "The statement disappears without a reload."
     },
     {
       "key": "ac54",
       "requirement": "a-run-states-how-it-reached-the-hub",
-      "given": "",
-      "when": "a run's facts are read",
-      "then": "they state the surface the run was told and whether its harness started the server, or"
+      "given": "A finished run",
+      "when": "Its run facts are read",
+      "then": "They state the surface it was told and the recorded tool-server status."
     },
     {
       "key": "ac55",
       "requirement": "a-run-states-how-it-reached-the-hub",
-      "given": "",
-      "when": "a run was given the Hub's tool server, was told the call command, and its harness did",
-      "then": "that run's activity holds exactly one statement saying so and naming the call command as"
+      "given": "A run given the tool server and told the call command, whose harness did not start the server",
+      "when": "Its activity is read",
+      "then": "It holds exactly one statement saying so, naming the call command."
     },
     {
       "key": "ac56",
       "requirement": "a-run-states-how-it-reached-the-hub",
-      "given": "",
-      "when": "a run was told the tool-protocol surface from its agent's history, and its own harness then",
-      "then": "that run's activity holds exactly one statement saying the server did not start although it does not say the run was told the call command"
-    },
-    {
-      "key": "ac57",
-      "requirement": "a-run-states-how-it-reached-the-hub",
-      "given": "",
-      "when": "a runner reports in its own message that the Hub's tool server failed to start, for a run",
-      "then": "that message states that the run was told to reach the Hub through the call command it does not state that the run had no way to send messages, update tasks or ask questions"
+      "given": "A run told the tool-protocol surface from its agent's history whose harness then did not start the server",
+      "when": "Its activity is read",
+      "then": "One statement says the server did not start and does not claim the run was told the call command."
     },
     {
       "key": "ac58",
       "requirement": "a-run-states-how-it-reached-the-hub",
-      "given": "",
-      "when": "the harness reports its own reason for not starting the server",
-      "then": "the statement quotes it what the run is told does not depend on its wording"
+      "given": "A harness that gives its own reason for not starting the server",
+      "when": "The statement is written",
+      "then": "It quotes that reason, and what the run is told does not depend on the wording."
     }
   ],
   "tasks": [],
   "algorithms": [],
-  "design": "",
+  "design": "D1 Two halves, no shared code. The CLI's `agentweave/diagnostics.py` checks the machine and the instance; the Hub's `launchability.py` and runner adapters judge agents. The Hub does not import the CLI package, so the two are kept separate on purpose.\n\nD2 The instance describes itself. `/health` returns `runtime` (`native`, `docker`, or `AW_RUNTIME`) and the UI staleness verdict; `status` and `doctor` read that rather than inferring from a PID file.\n\nD3 Collaboration readiness comes from the same adapter member the trigger path uses to pick a transport, so what the operator is told and what actually runs cannot drift.\n\nD4 Exit codes: recorded raw (`Run.exit_code`), rendered readably wherever a payload is composed for display (`readable_exit_code`, applied in `_broadcast_run_lifecycle`).\n\nD5 UI staleness is an assertion (`hub/hub/static/ui/ui-build-stamp.json` with a source fingerprint), not a proof; with no stamp the old commit-date comparison applies, so no installation is declared current by default.",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/runtime-diagnostics/spec.md (17 requirements, 58 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "tests/test_diagnostics.py, tests/test_cli_port_and_runtime.py, tests/test_cli_symlink_privilege.py",
+      "hub/tests/test_launchability.py, hub/tests/test_runtime_diagnostics.py",
+      "hub/tests/test_ui_staleness.py, hub/tests/test_ui_build_stamp.py",
+      "hub/ui/src/__tests__/runnerPickerCannotCollaborate.test.tsx"
     ],
     "limits": [
-      "scenarios-state-no-starting-state: 53 of 58 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "Several CLI checks in src/agentweave/diagnostics.py (session, agentweave.yml, transport, per-agent readiness, jobs) are marked DEAD and are not run by `doctor`; they are not described here."
     ]
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
@@ -711,39 +631,46 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "proxy-credential-diagnostics": "FR-15",
       "watchdog-launch-preflight": "FR-16",
       "structured-diagnostic-events": "FR-17",
-      "hub-trigger-confidence-reporting": "FR-18",
       "hub-logs-usability": "FR-19",
       "job-failure-diagnostics": "FR-20",
       "agent-readiness-summary": "FR-21",
       "collaboration-readiness-is-checkable-before-it-is-needed": "FR-22",
       "a-runtime-that-dies-reports-what-it-was-doing": "FR-23",
+      "n1-a-runtime-error-stream-is-always-drained": "FR-30",
+      "n2-exit-statuses-are-distinct-and-readable": "FR-31",
       "the-built-interface-artefact-can-be-asserted-current": "FR-24",
+      "n3-a-recorded-build-stamp-takes-effect-without-restart": "FR-32",
       "the-documented-command-form-is-the-one-that-works": "FR-25",
       "a-running-instance-is-described-as-what-it-actually-is": "FR-26",
       "a-silently-degraded-environment-shall-be-reported-once-where": "FR-27",
       "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w": "FR-28",
       "a-run-states-how-it-reached-the-hub": "FR-29"
     },
-    "high_water": 29,
-    "retired": {},
+    "high_water": 32,
+    "retired": {
+      "hub-trigger-confidence-reporting": "FR-18"
+    },
     "digests": {
-      "FR-13": "3e0f9964702601b6b20d6e20ce7ac5f3c5289cc5367ef4195f9feee609718664",
-      "FR-14": "1e5a5f31c81c7baa7d1f5360318a6091440abcd1e4588430c20abb4d7fd7be2c",
-      "FR-15": "225789edceca993dd60f1200760de5654dfd71bd114ecc530db3987c961302a9",
-      "FR-16": "beb4bc0d972ca04afe81357e89a7268294f177dc37d35350025bf98713b19cfc",
-      "FR-17": "3749e793ab4d8c0c974911353924e921bc4ecb2dffdde2f1253bab34db2be884",
-      "FR-18": "b1e3e25c77ec11fcbc3b57468537bd12c03b44859650aec529206077b35f3225",
-      "FR-19": "64f82de3ab05fd98825cea11784e7fd737b23062398d9f64df7de217a252920c",
-      "FR-20": "720ec99e215342ef57cc4d4132f013f3bc4287a7467c3f16e84bbbaf6733713f",
-      "FR-21": "c5b60676e580e854340308084f928806d2b2976c192cd86a30e51cb33cdbbb44",
-      "FR-22": "1190756e24f53f710ac79a6157aa2190cf975508e547599551be3db3c4374fa1",
-      "FR-23": "4029f7d2577af8d86f699c66051fa09237deea4003b5ce9e919415f2b0ac0cb2",
-      "FR-24": "926e4b22ef4316efbfba82879650355a032c4e45926657863a2840207c582fff",
-      "FR-25": "e5f844018b0766ba47072c656cdb47b57748eaaa99a33ad34594ce256cabcacd",
-      "FR-26": "6e54fdc4b920a79bf1d59b6b3ec64a6d5e39f02f36a8861c88a6ea3d49ad345a",
-      "FR-27": "4a332d4f3bd5f65a236205aa1bf9140bdebc095ff94c4bfe929d9b6f3d9ff239",
-      "FR-28": "25fd1b9997117c1a9822e823f4857c56799054e692d4915447546edb83f8d201",
-      "FR-29": "899e27851af54c5c97c1a4d81e3f2bfefa1e456012f4698d9f4ac20f4c37b134"
+      "FR-13": "2ad09688c6b485399cb6c67190b10ca6408af886b2d96bd5ec1151e300bc0054",
+      "FR-14": "3e90b3ac36ddd6d20102ac137facaa7aa9713b2005c5092afe382699b17c1f5c",
+      "FR-15": "38a70e62eb577980ada160a4507d74e88e079adadadba8f6f28893ac5e0e7b88",
+      "FR-16": "e1929b468054fa3d211ec8385ad4d2111e9977b68b22ced372c62c58493f4c3d",
+      "FR-17": "14e7e6a2ac4c49ecd7b4106ced9cba9fae4b7265bbb92207185eb31d5241b015",
+      "FR-19": "f853aaa0112e6b36167dcc21be3e79176c10495f33f4f67bd9c1f0a70da6b30f",
+      "FR-20": "5020fb26a1bb19e2e87bc161c1be65ad3c33e602204ae3c995619639719c9771",
+      "FR-21": "872fbfb5adf856eec496361b69bdb1fd7d0972301fb12abc489d242c60c43a77",
+      "FR-22": "cbaffd0952419e3e2b5393d5da0c3021e9772e81f0001a03d06f6b24c7befc8f",
+      "FR-23": "2843846cb57518c405a25a4d3eab9245967ee9ac1c589897269b5b151fc7ef96",
+      "FR-30": "9c2e67552702e1aad3cffbe791f1962a08bb1aececc3bb926738cfbf3e81d880",
+      "FR-31": "ec53c15b762f1863071e29adf019ecf790a29bc9f21e2124c9808691ac524f7a",
+      "FR-24": "84affdea149ed8962bac647574bcf5dd02f5d430fbb5d6efcaffa8ed3ac8e16e",
+      "FR-32": "0bd566eb166d7f30492864e7f1ef01ec7185df2ecc2909af36b11c62cce549eb",
+      "FR-25": "191f9439ee86acd840eb8c74fa3c2ed873486aaba5a312a9c5f215634ba12cff",
+      "FR-26": "60ee492e66f0e26b126bc366445761fde2cee4d35f2e671e442d0207d1e5bee7",
+      "FR-27": "ba15c0ab04a5ec823a789c5ad1fcdbf3ffede2babc3ea7fd642f092941395d1a",
+      "FR-28": "d00ed752e58f16c4ebc329a215bdc2558490213e5d3b58a05ff8243d27fddff4",
+      "FR-29": "d71be73d3d67bb2e2a5ac402dffdece56909a2fc57f3b063eb049841ed84b082",
+      "FR-18": "b1e3e25c77ec11fcbc3b57468537bd12c03b44859650aec529206077b35f3225"
     }
   }
 }

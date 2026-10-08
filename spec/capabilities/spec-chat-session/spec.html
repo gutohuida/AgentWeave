@@ -148,61 +148,104 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <body>
 <h1>Spec chat session</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a><a href="../../areas/specification.html">Specification</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">6</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">6</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">21</span> criteria</p>
-<section id="summary"><h2>Summary</h2><p>The chat in the Hub&#x27;s specification workspace: which surface it is, whose conversation it shows, and what the agent is told about where the operator is looking. It is deliberately thin. The three requirements it used to carry — session resume, a deliberate new-session control, and a visible continuity indicator — were removed by `2026-08-10-one-chat-surface`: each described a mechanism this surface owned, and the point of that change is that this surface owns no mechanism. Continuity, starting fresh, and saying which of the two will happen are all properties of the one conversation surface, governed by `agent-conversation-workspace`.</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 6</span><p><span class="aw-modal aw-modal-must">MUST</span> The specification workspace&#x27;s chat SHALL use the same composer, banner stack, and conversation transcript as an agent conversation, and MUST NOT implement its own message input, run trigger, output rendering, or **agent selection**.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An operator working with a specification document SHALL be able to answer a permission request, answer a question the agent asked, and see a checkpoint warning, on that surface. A second implementation is not a styling difference. The surface this replaced could not render a permission card, a question card, or a checkpoint banner, so an agent that asked the operator anything blocked with nothing shown — and the authoring flow this capability exists to serve depends on the agent being able to ask. Agent selection is named here because removing one second implementation admitted another: the replacement surface added its own agent picker beside the one navigation already provides. The agent is whichever conversation the operator is in.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 6</span><p><span class="aw-modal aw-modal-must">SHALL</span> The specification workspace SHALL show the selected agent&#x27;s conversation, and SHALL create one on the first message when the agent has none.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Opening a specification SHALL be possible from within the conversation surface itself, without navigating away from the conversation first. There SHALL NOT be a separate project destination for specifications. Reaching a specification by leaving the conversation, opening the project, and choosing a tab puts the most-used surface in the product behind three navigations. The control that opens one belongs where the operator already is. The Hub MUST NOT record a specification-scoped conversation origin until a specification-scoped thread has a defined scope. `Conversation.origin` accepts a specification value that nothing produces. Producing it would require choosing whether such a thread belongs to a document or to a unit of specification work, before either is defined — and the direction taken is that a thread&#x27;s phase derives from the document open in it, which makes the durable relationship a link rather than an origin value.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 6</span><p><span class="aw-modal aw-modal-must">SHALL</span> When the operator has a specification document open, the Hub SHALL include that document in the canonical turn context, together with the phase the document is in and the obligation that phase carries. When no document is open, the Hub SHALL include nothing rather than a guessed value.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The document reference MUST NOT be added to the operator&#x27;s message. The phase statement MUST NOT depend on a charter being bound. A charter may make the agent&#x27;s work better; it MUST NOT be what makes the agent&#x27;s work valid. Turn context is rebuilt every turn and consumed identically by every runner, so the value tracks the operator&#x27;s navigation without being resent and without depending on the runner&#x27;s own extension format. Putting it in the message body would make a durable record of what the operator said contain something they did not say. The phase belongs in the same place for the same reason, and because a procedure the Hub states each turn is one the agent cannot be working from a stale copy of.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 6</span><p><span class="aw-modal aw-modal-must">MUST</span> A specification document SHALL open in a keyed tab within the conversation&#x27;s panel shell, alongside the conversation rather than in a separate screen, and the operator SHALL be able to close it and recover the full width for the conversation. The shell MAY host other tabs beside it; opening or switching to another tab MUST NOT close or discard an open document, only change which tab is shown.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The document **attached** to a conversation — the one an agent writes into while exploring — SHALL remain part of the addressed destination, so that reloading or sharing the location restores both the conversation and the document attached to it. Closing the tab that *displays* a document MUST NOT detach the document from the conversation: tidying the panel is not an edit to what the agent is working on. More than one document MAY be open for reading at the same time, independently of which one is attached to the conversation. A document panel available in any conversation is what makes the relationship between a thread and a document a link the operator makes, rather than a category the thread was born into — which is what &quot;a thread&#x27;s phase derives from the document open in it&quot; requires. A separate specification screen forces the opposite: a thread is a specification thread because of where it was opened. This remains true with the shell generalized to host other content: the document is still reached from the conversation it is a link from, never from a separate screen.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 6</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every control the conversation surface presents SHALL be fully within its container and legible at every width the surface can be shown at, and no two interactive elements SHALL overlap.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A control MUST NOT be removed from the surface as it narrows. Where space is insufficient, controls SHALL wrap or abbreviate their value while keeping what they control identifiable. Where a document is shown beside the conversation, the boundary between them SHALL be the operator&#x27;s: each pane SHALL be bounded only by a minimum below which it stops being usable, and neither SHALL carry a maximum that prevents the other from being made smaller. The surface was previously rendered in a pane far narrower than it was designed for, and its control row overflowed its container — the permission control, whose current value must be readable before sending, was clipped mid-word. Presence in the document is not evidence of this requirement being met; the check is geometric.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 6</span><p><span class="aw-modal aw-modal-must">SHALL</span> The operator SHALL be able to create an empty specification document from the conversation surface, and that document SHALL open beside the conversation in the `exploring` phase.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Creating the document MUST NOT require naming its requirements, choosing a template, or answering anything beyond what identifies the document. An exploration is declared, not detected. The Hub MUST NOT infer that a conversation is an exploration from its content.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent calls `ask_user` in a conversation with a specification document open</td><td>the question is presented on that surface the operator&#x27;s answer returns to the waiting run</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run in a conversation with a document open is in a permission posture that routes</td><td>the approval request is presented on that surface the operator&#x27;s decision resolves the run</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a message is sent with a specification document open</td><td>it goes through the same run-trigger path every other conversation uses no surface-specific timeout, session-mode handling, or error vocabulary applies to it</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator changes which agent they are working with</td><td>they do so through navigation no other surface offers a separate agent selector</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator sends the first message to an agent that has no conversation</td><td>a conversation is created by that message its origin is not a specification-scoped value</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator uses the specification control on the conversation surface</td><td>they choose a document without leaving the conversation no separate project destination for specifications exists</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run is triggered from the specification workspace with a document open</td><td>the canonical context for that turn names the document, its phase, and what the agent is the operator&#x27;s message is unchanged</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run is triggered with no document open</td><td>the canonical context names no document</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run is triggered with a document open and no charter bound to the agent</td><td>the canonical context still names the document, its phase, and the obligation</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator opens a specification document while in a conversation</td><td>the document is shown in its own tab in the shell beside that conversation the conversation remains usable without leaving it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator reloads with a document attached to the conversation</td><td>the same conversation is open with the same document still attached to it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a conversation with a document attached and that document&#x27;s tab open</td><td>the operator closes the tab</td><td>the document remains attached to the conversation the composer still names it as the attached document</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a conversation with one document attached</td><td>the operator opens a different document for reading</td><td>both are readable, and the attached document is unchanged</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator has a document open and switches the shell to another tab</td><td>the document&#x27;s tab remains open switching back to it shows the same document, not a picker</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator closes every open tab in the shell</td><td>the conversation occupies the full available width no specification navigation remains on screen</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the conversation surface is shown at its minimum supported width</td><td>every control is within its container and none is clipped no interactive element overlaps another</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the conversation surface narrows</td><td>the permission control still states which posture the run will use</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator moves the boundary between the conversation and an open document</td><td>either pane can be made the larger one each stops only at the width below which it is no longer usable</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator starts an exploration from a conversation</td><td>an empty document is created in the `exploring` phase it opens beside that conversation</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator later proposes or approves</td><td>the subject of that action is the document created at the start no separate step is needed to turn the conversation into a document</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a conversation discusses a change without the operator creating a document</td><td>it has no phase the Hub does not treat it as an exploration</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/spec-chat-session/spec.md (6 requirements, 21 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 19 of 21 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">11</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">11</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">27</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>Working on a specification document from inside an agent conversation: the conversation surface is the one composer every conversation uses, a specification document opens in a tab beside it, the document the operator has attached travels with each message as turn context (never as message text), and the operator starts an exploration by creating an empty document from the composer. Continuity, new conversations and the composer itself belong to `agent-conversation-workspace`; the panel shell&#x27;s tabs and resizing belong to `conversation-side-panel`; phases, payloads and authoring rules belong to `spec-document-authority`.</p></section><section id="problem"><h2>Problem</h2><p>An operator authoring or reading a specification needs the agent working with them to know which document they mean and what phase it is in, and needs to answer the agent&#x27;s questions and permission requests while doing so. A separate specification chat surface could not show those cards and duplicated the composer, so this capability defines the specification work as a property of the ordinary conversation surface.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>The conversation surface used while a specification document is attached or open</li><li>The `spec_document` carried by a trigger and how it reaches the turn context</li><li>Attaching, detaching and reading specification documents beside a conversation</li><li>Starting an exploration from the composer or the new-conversation surface</li></ul><h3>Non-goals</h3><ul><li>The project-level Spec page (`spec` project tab) and the corpus navigation it hosts</li><li>Phase transitions, payload validation and authoring obligations (spec-document-authority)</li><li>The panel shell&#x27;s tab strip, persistence and resize rules (conversation-side-panel)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 11</span><p><span class="aw-modal aw-modal-must">MUST</span> A conversation with a specification document attached or open SHALL use the same composer, banner stack and conversation transcript as any other agent conversation, and MUST NOT provide its own message input, run trigger, output rendering or agent selector.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The authoring flow depends on the agent being able to ask the operator questions and request permissions; only the shared surface renders those cards. The agent is whichever conversation the operator is in, so a second agent picker would contradict navigation.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 11</span><p><span class="aw-modal aw-modal-must">MUST</span> Specification work SHALL happen in the conversation the destination names; a message sent with no conversation named SHALL create an ordinary conversation with origin `operator`, and the Hub MUST NOT create a conversation with the `spec` origin.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A thread&#x27;s relationship to a document is the attachment the operator makes, not a category the thread was born into. The `spec` origin value is accepted by the schema but has no defined scope, so nothing produces it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 11</span><p><span class="aw-modal aw-modal-must">MUST</span> When a turn is triggered with a specification document attached, the Hub SHALL name that document in the canonical turn context, with its phase and that phase&#x27;s obligation, and MUST NOT add it to the stored operator message; when no document is attached, or the path names no document in this project, the context SHALL name none.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The message is the durable record of what the operator said; turn context is rebuilt each turn and read identically by every runner. A path that resolves to nothing is a stale client value, and naming it would be a guess. The phase statement is code-owned so that it holds with no charter bound.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 11</span><p><span class="aw-modal aw-modal-must">MUST</span> The attached specification document SHALL open in a tab of the panel shell beside the conversation, SHALL be part of the conversation&#x27;s URL destination so a reload restores it, and closing its tab MUST NOT detach it; only the composer&#x27;s own detach control detaches it, and detaching MUST NOT delete the document.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Tidying the reading pane is not an edit to what the agent is working against: the attachment decides the next turn&#x27;s context and restricts the agent&#x27;s file writes. An exploration leaves an artifact, so a detach that discarded it would be a trap.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every control the conversation surface presents SHALL stay within its container at every width the surface can be shown at, wrapping rather than being removed or clipped, and no two interactive elements SHALL overlap.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The surface is shown beside a document in a pane narrower than a full-width conversation; the permission control in particular must remain readable before sending. The check is geometric, not presence in the DOM.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 11</span><p><span class="aw-modal aw-modal-must">MUST</span> The operator SHALL be able to start an exploration from the composer with one action that creates an empty `exploring` document under a Hub-minted placeholder path and attaches it to the conversation; the Hub MUST NOT infer an exploration from conversation content.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An exploration is declared, not detected. Creating the document up front gives later propose and approve actions a subject, and the Hub mints the path because nobody yet knows the subject; the agent renames it once the interview settles it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 7 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> When a new conversation is started with an exploration armed, the document SHALL be created before the first turn is triggered and sent with it, and if the trigger is refused or fails the client SHALL delete that document.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The first message decides how the agent frames the exploration, so it must already carry the document; a refused send must not leave an empty placeholder behind on each retry.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 8 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> When the attached document is an `exploring` document with no requirements yet, the turn context SHALL tell the agent that this document is the one it is interviewing for and that it must submit to that path rather than create another document.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The general framing — an open document is context, not an instruction — is wrong for a freshly started exploration, and following it produced a second, orphaned document every time.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 9 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> The trigger SHALL validate `spec_document` against the specification path contract, refusing an unsafe path, SHALL treat an empty string as no document, and SHALL store the document on the queued entry so a message delivered later still carries it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>One definition of a legal specification path serves both writes and reads, and a queued message must not lose the context the operator sent it with.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 10 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> The attached document SHALL stay attached when the operator moves to another agent or conversation in the same project, SHALL stay detached when they move with none attached, SHALL survive a round trip through agent settings, and SHALL NOT be carried in from a project-level page.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A document is what the operator is working on, not a property of the thread; but arriving from project-level work should open nothing, because the memory is of what is on screen.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span><a class="aw-anchor-copy" href="#FR-11" aria-label="Link to FR-11" title="Link to #FR-11">#</a> <span class="aw-position">Requirement 11 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> Opening a document from the panel&#x27;s specification index for reading SHALL NOT change which document is attached to the conversation, and more than one document MAY be open for reading at once.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Reading a document and directing the agent at it are different acts; only attaching changes what the next turn is written against.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a conversation with a specification document attached</td><td>the agent calls `ask_user`</td><td>the question is shown on that surface and the operator&#x27;s answer returns to the waiting run</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a conversation with a document attached and a run in a permission posture that routes approvals</td><td>the run requests approval</td><td>the request is shown on that surface and the operator&#x27;s decision resolves the run</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a conversation with a document attached</td><td>the operator sends a message</td><td>it goes through the same trigger route every other conversation uses, with `spec_document` as its only difference</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a conversation with a document attached</td><td>the operator looks for a way to change agent</td><td>the surface offers no agent selector; the agent is changed through navigation</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>an agent and no conversation named by the destination</td><td>the operator sends the first message with a document attached</td><td>a conversation with origin `operator` is created by that message</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>an open conversation</td><td>the operator uses the composer&#x27;s specification control</td><td>they pick a document without leaving the conversation</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a document that exists in the project</td><td>a run is triggered with it as `spec_document`</td><td>the turn context names the document and its phase, and the stored message is exactly what the operator typed</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run is triggered with no `spec_document`</td><td>the turn context names no document</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>an agent with no charter bound</td><td>a run is triggered with a document attached</td><td>the turn context still names the document, its phase and the obligation</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a `spec_document` path that this project has no document for</td><td>a run is triggered</td><td>the turn context names no document</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>an open conversation</td><td>the operator attaches a specification document</td><td>it opens in a tab of the panel shell beside the conversation and the conversation stays usable</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a conversation with a document attached</td><td>the operator reloads the page</td><td>the same conversation is open with the same document attached</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a conversation with a document attached and its tab open</td><td>the operator closes the tab</td><td>the composer still names the document as attached</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a conversation with a document attached</td><td>the operator uses the composer&#x27;s detach control</td><td>the document is no longer attached, the shell closes, and the document still exists</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>a conversation with a document open in the shell</td><td>the window is 1400, 900, 700 or 560 px wide</td><td>the shell stays inside the viewport and the page does not scroll horizontally</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>the conversation pane at its minimum width</td><td>the composer control row does not fit on one line</td><td>it wraps, and the permission control still states which posture the run will use</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td>an open conversation with no document attached</td><td>the operator presses Explore</td><td>an empty `exploring` document is created under a minted placeholder path and opens attached beside the conversation</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td>an exploration started this way</td><td>the operator later closes exploration or proposes</td><td>the subject of that action is the document created at the start</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td>a conversation discussing a change with no document attached</td><td>turns run</td><td>no document is created and the turn context names no phase</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>the new-conversation surface with Explore armed</td><td>the operator sends the first message</td><td>the document is created first and the trigger carries its path as `spec_document`</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>the new-conversation surface with Explore armed</td><td>the trigger is refused</td><td>the client deletes the document it created and shows the Hub&#x27;s refusal</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td>an `exploring` document with no requirements</td><td>a run is triggered with it attached</td><td>the turn context says this document is what the agent is interviewing for and to submit to its path, not create another</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a trigger names an unsafe `spec_document` path</td><td>the request is refused with a validation error and no run starts</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a trigger carries a `spec_document`</td><td>the queued entry records the document and its message text does not contain it</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td>a conversation with a document attached</td><td>the operator selects another agent in the same project</td><td>the new conversation opens with the same document attached</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td>a conversation with a document attached</td><td>the operator opens agent settings and goes back</td><td>the document is still attached</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-11">FR-11</a></td><td>a conversation with one document attached</td><td>the operator opens a different document from the specification index tab</td><td>both are readable in tabs and the attached document is unchanged</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>D1 One surface. Specification work is a property of the ordinary conversation, not a screen: a separate chat could not render question, permission or checkpoint cards, and the authoring flow needs all three.</p><p>D2 Document as turn context. The attached document travels as `spec_document` on the trigger, is stored on the queued entry, and is rendered into the turn context (plus a turn-start notice, owned by spec-document-authority). It is never written into the operator&#x27;s message, which is the durable record of what they said.</p><p>D3 Attachment lives in the URL. The attached document is part of the conversation destination, so reload and links restore it, and it follows the operator across agents in a project. Reading tabs are separate from the attachment; closing a tab never detaches.</p><p>D4 Exploration is declared. One press creates an empty `exploring` document under a Hub-minted placeholder name and attaches it; the agent renames it once the subject is known. A refused first send withdraws the document it created.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/ui/src/__tests__/specChatSurface.test.tsx — one composer, questions/permissions, no agent selector, spec control, closing a tab does not detach</li><li>hub/tests/test_spec_document_context.py — document named / omitted / unknown path / stored on queued entry / unsafe path refused</li><li>hub/tests/test_spec_procedure_precedence.py — holds without a charter</li><li>hub/tests/browser/test_panel_shell.py and test_human_only_halves.py — shell placement, tab close, width bounds</li><li>hub/ui/src/__tests__/newConversationSurface.test.tsx — armed exploration and F330 withdrawal</li><li>hub/tests/test_spec_naming.py — placeholder path minting</li></ul><h3 class="aw-limits">Limits</h3><ul><li>No automated check that every composer control is unclipped at the minimum width; the browser test checks the shell&#x27;s bounds and horizontal overflow only.</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
   "title": "Spec chat session",
-  "summary": "The chat in the Hub's specification workspace: which surface it is, whose conversation it shows, and what the agent is told about where the operator is looking. It is deliberately thin. The three requirements it used to carry — session resume, a deliberate new-session control, and a visible continuity indicator — were removed by `2026-08-10-one-chat-surface`: each described a mechanism this surface owned, and the point of that change is that this surface owns no mechanism. Continuity, starting fresh, and saying which of the two will happen are all properties of the one conversation surface, governed by `agent-conversation-workspace`.",
-  "problem": "",
+  "summary": "Working on a specification document from inside an agent conversation: the conversation surface is the one composer every conversation uses, a specification document opens in a tab beside it, the document the operator has attached travels with each message as turn context (never as message text), and the operator starts an exploration by creating an empty document from the composer. Continuity, new conversations and the composer itself belong to `agent-conversation-workspace`; the panel shell's tabs and resizing belong to `conversation-side-panel`; phases, payloads and authoring rules belong to `spec-document-authority`.",
+  "problem": "An operator authoring or reading a specification needs the agent working with them to know which document they mean and what phase it is in, and needs to answer the agent's questions and permission requests while doing so. A separate specification chat surface could not show those cards and duplicated the composer, so this capability defines the specification work as a property of the ordinary conversation surface.",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "The conversation surface used while a specification document is attached or open",
+      "The `spec_document` carried by a trigger and how it reaches the turn context",
+      "Attaching, detaching and reading specification documents beside a conversation",
+      "Starting an exploration from the composer or the new-conversation surface"
+    ],
+    "non_goals": [
+      "The project-level Spec page (`spec` project tab) and the corpus navigation it hosts",
+      "Phase transitions, payload validation and authoring obligations (spec-document-authority)",
+      "The panel shell's tab strip, persistence and resize rules (conversation-side-panel)"
+    ]
   },
   "requirements": [
     {
       "key": "the-specification-workspace-uses-the-one-composer",
-      "statement": "The specification workspace's chat SHALL use the same composer, banner stack, and conversation transcript as an agent conversation, and MUST NOT implement its own message input, run trigger, output rendering, or **agent selection**.",
+      "statement": "A conversation with a specification document attached or open SHALL use the same composer, banner stack and conversation transcript as any other agent conversation, and MUST NOT provide its own message input, run trigger, output rendering or agent selector.",
       "modal": "MUST",
-      "rationale": "An operator working with a specification document SHALL be able to answer a permission request, answer a question the agent asked, and see a checkpoint warning, on that surface. A second implementation is not a styling difference. The surface this replaced could not render a permission card, a question card, or a checkpoint banner, so an agent that asked the operator anything blocked with nothing shown — and the authoring flow this capability exists to serve depends on the agent being able to ask. Agent selection is named here because removing one second implementation admitted another: the replacement surface added its own agent picker beside the one navigation already provides. The agent is whichever conversation the operator is in.",
+      "rationale": "The authoring flow depends on the agent being able to ask the operator questions and request permissions; only the shared surface renders those cards. The agent is whichever conversation the operator is in, so a second agent picker would contradict navigation.",
       "party": null
     },
     {
       "key": "the-specification-workspace-reuses-the-agent-s-conversation",
-      "statement": "The specification workspace SHALL show the selected agent's conversation, and SHALL create one on the first message when the agent has none.",
-      "modal": "SHALL",
-      "rationale": "Opening a specification SHALL be possible from within the conversation surface itself, without navigating away from the conversation first. There SHALL NOT be a separate project destination for specifications. Reaching a specification by leaving the conversation, opening the project, and choosing a tab puts the most-used surface in the product behind three navigations. The control that opens one belongs where the operator already is. The Hub MUST NOT record a specification-scoped conversation origin until a specification-scoped thread has a defined scope. `Conversation.origin` accepts a specification value that nothing produces. Producing it would require choosing whether such a thread belongs to a document or to a unit of specification work, before either is defined — and the direction taken is that a thread's phase derives from the document open in it, which makes the durable relationship a link rather than an origin value.",
+      "statement": "Specification work SHALL happen in the conversation the destination names; a message sent with no conversation named SHALL create an ordinary conversation with origin `operator`, and the Hub MUST NOT create a conversation with the `spec` origin.",
+      "modal": "MUST",
+      "rationale": "A thread's relationship to a document is the attachment the operator makes, not a category the thread was born into. The `spec` origin value is accepted by the schema but has no defined scope, so nothing produces it.",
       "party": null
     },
     {
       "key": "the-agent-is-told-which-document-the-operator-is-viewing",
-      "statement": "When the operator has a specification document open, the Hub SHALL include that document in the canonical turn context, together with the phase the document is in and the obligation that phase carries. When no document is open, the Hub SHALL include nothing rather than a guessed value.",
-      "modal": "SHALL",
-      "rationale": "The document reference MUST NOT be added to the operator's message. The phase statement MUST NOT depend on a charter being bound. A charter may make the agent's work better; it MUST NOT be what makes the agent's work valid. Turn context is rebuilt every turn and consumed identically by every runner, so the value tracks the operator's navigation without being resent and without depending on the runner's own extension format. Putting it in the message body would make a durable record of what the operator said contain something they did not say. The phase belongs in the same place for the same reason, and because a procedure the Hub states each turn is one the agent cannot be working from a stale copy of.",
+      "statement": "When a turn is triggered with a specification document attached, the Hub SHALL name that document in the canonical turn context, with its phase and that phase's obligation, and MUST NOT add it to the stored operator message; when no document is attached, or the path names no document in this project, the context SHALL name none.",
+      "modal": "MUST",
+      "rationale": "The message is the durable record of what the operator said; turn context is rebuilt each turn and read identically by every runner. A path that resolves to nothing is a stale client value, and naming it would be a guess. The phase statement is code-owned so that it holds with no charter bound.",
       "party": null
     },
     {
       "key": "a-specification-document-opens-beside-a-conversation",
-      "statement": "A specification document SHALL open in a keyed tab within the conversation's panel shell, alongside the conversation rather than in a separate screen, and the operator SHALL be able to close it and recover the full width for the conversation. The shell MAY host other tabs beside it; opening or switching to another tab MUST NOT close or discard an open document, only change which tab is shown.",
+      "statement": "The attached specification document SHALL open in a tab of the panel shell beside the conversation, SHALL be part of the conversation's URL destination so a reload restores it, and closing its tab MUST NOT detach it; only the composer's own detach control detaches it, and detaching MUST NOT delete the document.",
       "modal": "MUST",
-      "rationale": "The document **attached** to a conversation — the one an agent writes into while exploring — SHALL remain part of the addressed destination, so that reloading or sharing the location restores both the conversation and the document attached to it. Closing the tab that *displays* a document MUST NOT detach the document from the conversation: tidying the panel is not an edit to what the agent is working on. More than one document MAY be open for reading at the same time, independently of which one is attached to the conversation. A document panel available in any conversation is what makes the relationship between a thread and a document a link the operator makes, rather than a category the thread was born into — which is what \"a thread's phase derives from the document open in it\" requires. A separate specification screen forces the opposite: a thread is a specification thread because of where it was opened. This remains true with the shell generalized to host other content: the document is still reached from the conversation it is a link from, never from a separate screen.",
+      "rationale": "Tidying the reading pane is not an edit to what the agent is working against: the attachment decides the next turn's context and restricts the agent's file writes. An exploration leaves an artifact, so a detach that discarded it would be a trap.",
       "party": null
     },
     {
       "key": "the-conversation-surface-is-legible-at-every-width-it-is-off",
-      "statement": "Every control the conversation surface presents SHALL be fully within its container and legible at every width the surface can be shown at, and no two interactive elements SHALL overlap.",
+      "statement": "Every control the conversation surface presents SHALL stay within its container at every width the surface can be shown at, wrapping rather than being removed or clipped, and no two interactive elements SHALL overlap.",
       "modal": "SHALL",
-      "rationale": "A control MUST NOT be removed from the surface as it narrows. Where space is insufficient, controls SHALL wrap or abbreviate their value while keeping what they control identifiable. Where a document is shown beside the conversation, the boundary between them SHALL be the operator's: each pane SHALL be bounded only by a minimum below which it stops being usable, and neither SHALL carry a maximum that prevents the other from being made smaller. The surface was previously rendered in a pane far narrower than it was designed for, and its control row overflowed its container — the permission control, whose current value must be readable before sending, was clipped mid-word. Presence in the document is not evidence of this requirement being met; the check is geometric.",
+      "rationale": "The surface is shown beside a document in a pane narrower than a full-width conversation; the permission control in particular must remain readable before sending. The check is geometric, not presence in the DOM.",
       "party": null
     },
     {
       "key": "the-operator-can-start-an-exploration-by-creating-a-document",
-      "statement": "The operator SHALL be able to create an empty specification document from the conversation surface, and that document SHALL open beside the conversation in the `exploring` phase.",
+      "statement": "The operator SHALL be able to start an exploration from the composer with one action that creates an empty `exploring` document under a Hub-minted placeholder path and attaches it to the conversation; the Hub MUST NOT infer an exploration from conversation content.",
+      "modal": "MUST",
+      "rationale": "An exploration is declared, not detected. Creating the document up front gives later propose and approve actions a subject, and the Hub mints the path because nobody yet knows the subject; the agent renames it once the interview settles it.",
+      "party": null
+    },
+    {
+      "key": "n1",
+      "statement": "When a new conversation is started with an exploration armed, the document SHALL be created before the first turn is triggered and sent with it, and if the trigger is refused or fails the client SHALL delete that document.",
       "modal": "SHALL",
-      "rationale": "Creating the document MUST NOT require naming its requirements, choosing a template, or answering anything beyond what identifies the document. An exploration is declared, not detected. The Hub MUST NOT infer that a conversation is an exploration from its content.",
+      "rationale": "The first message decides how the agent frames the exploration, so it must already carry the document; a refused send must not leave an empty placeholder behind on each retry.",
+      "party": null
+    },
+    {
+      "key": "n2",
+      "statement": "When the attached document is an `exploring` document with no requirements yet, the turn context SHALL tell the agent that this document is the one it is interviewing for and that it must submit to that path rather than create another document.",
+      "modal": "SHALL",
+      "rationale": "The general framing — an open document is context, not an instruction — is wrong for a freshly started exploration, and following it produced a second, orphaned document every time.",
+      "party": null
+    },
+    {
+      "key": "n3",
+      "statement": "The trigger SHALL validate `spec_document` against the specification path contract, refusing an unsafe path, SHALL treat an empty string as no document, and SHALL store the document on the queued entry so a message delivered later still carries it.",
+      "modal": "SHALL",
+      "rationale": "One definition of a legal specification path serves both writes and reads, and a queued message must not lose the context the operator sent it with.",
+      "party": null
+    },
+    {
+      "key": "n4",
+      "statement": "The attached document SHALL stay attached when the operator moves to another agent or conversation in the same project, SHALL stay detached when they move with none attached, SHALL survive a round trip through agent settings, and SHALL NOT be carried in from a project-level page.",
+      "modal": "SHALL",
+      "rationale": "A document is what the operator is working on, not a property of the thread; but arriving from project-level work should open nothing, because the memory is of what is on screen.",
+      "party": null
+    },
+    {
+      "key": "n5",
+      "statement": "Opening a document from the panel's specification index for reading SHALL NOT change which document is attached to the conversation, and more than one document MAY be open for reading at once.",
+      "modal": "SHALL",
+      "rationale": "Reading a document and directing the agent at it are different acts; only attaching changes what the next turn is written against.",
       "party": null
     }
   ],
@@ -210,163 +253,210 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac1",
       "requirement": "the-specification-workspace-uses-the-one-composer",
-      "given": "",
-      "when": "an agent calls `ask_user` in a conversation with a specification document open",
-      "then": "the question is presented on that surface the operator's answer returns to the waiting run"
+      "given": "a conversation with a specification document attached",
+      "when": "the agent calls `ask_user`",
+      "then": "the question is shown on that surface and the operator's answer returns to the waiting run"
     },
     {
       "key": "ac2",
       "requirement": "the-specification-workspace-uses-the-one-composer",
-      "given": "",
-      "when": "a run in a conversation with a document open is in a permission posture that routes",
-      "then": "the approval request is presented on that surface the operator's decision resolves the run"
+      "given": "a conversation with a document attached and a run in a permission posture that routes approvals",
+      "when": "the run requests approval",
+      "then": "the request is shown on that surface and the operator's decision resolves the run"
     },
     {
       "key": "ac3",
       "requirement": "the-specification-workspace-uses-the-one-composer",
-      "given": "",
-      "when": "a message is sent with a specification document open",
-      "then": "it goes through the same run-trigger path every other conversation uses no surface-specific timeout, session-mode handling, or error vocabulary applies to it"
+      "given": "a conversation with a document attached",
+      "when": "the operator sends a message",
+      "then": "it goes through the same trigger route every other conversation uses, with `spec_document` as its only difference"
     },
     {
       "key": "ac4",
       "requirement": "the-specification-workspace-uses-the-one-composer",
-      "given": "",
-      "when": "the operator changes which agent they are working with",
-      "then": "they do so through navigation no other surface offers a separate agent selector"
+      "given": "a conversation with a document attached",
+      "when": "the operator looks for a way to change agent",
+      "then": "the surface offers no agent selector; the agent is changed through navigation"
     },
     {
       "key": "ac5",
       "requirement": "the-specification-workspace-reuses-the-agent-s-conversation",
-      "given": "",
-      "when": "the operator sends the first message to an agent that has no conversation",
-      "then": "a conversation is created by that message its origin is not a specification-scoped value"
+      "given": "an agent and no conversation named by the destination",
+      "when": "the operator sends the first message with a document attached",
+      "then": "a conversation with origin `operator` is created by that message"
     },
     {
       "key": "ac6",
       "requirement": "the-specification-workspace-reuses-the-agent-s-conversation",
-      "given": "",
-      "when": "the operator uses the specification control on the conversation surface",
-      "then": "they choose a document without leaving the conversation no separate project destination for specifications exists"
+      "given": "an open conversation",
+      "when": "the operator uses the composer's specification control",
+      "then": "they pick a document without leaving the conversation"
     },
     {
       "key": "ac7",
       "requirement": "the-agent-is-told-which-document-the-operator-is-viewing",
-      "given": "",
-      "when": "a run is triggered from the specification workspace with a document open",
-      "then": "the canonical context for that turn names the document, its phase, and what the agent is the operator's message is unchanged"
+      "given": "a document that exists in the project",
+      "when": "a run is triggered with it as `spec_document`",
+      "then": "the turn context names the document and its phase, and the stored message is exactly what the operator typed"
     },
     {
       "key": "ac8",
       "requirement": "the-agent-is-told-which-document-the-operator-is-viewing",
       "given": "",
-      "when": "a run is triggered with no document open",
-      "then": "the canonical context names no document"
+      "when": "a run is triggered with no `spec_document`",
+      "then": "the turn context names no document"
     },
     {
       "key": "ac9",
       "requirement": "the-agent-is-told-which-document-the-operator-is-viewing",
-      "given": "",
-      "when": "a run is triggered with a document open and no charter bound to the agent",
-      "then": "the canonical context still names the document, its phase, and the obligation"
+      "given": "an agent with no charter bound",
+      "when": "a run is triggered with a document attached",
+      "then": "the turn context still names the document, its phase and the obligation"
+    },
+    {
+      "key": "ac22",
+      "requirement": "the-agent-is-told-which-document-the-operator-is-viewing",
+      "given": "a `spec_document` path that this project has no document for",
+      "when": "a run is triggered",
+      "then": "the turn context names no document"
     },
     {
       "key": "ac10",
       "requirement": "a-specification-document-opens-beside-a-conversation",
-      "given": "",
-      "when": "the operator opens a specification document while in a conversation",
-      "then": "the document is shown in its own tab in the shell beside that conversation the conversation remains usable without leaving it"
+      "given": "an open conversation",
+      "when": "the operator attaches a specification document",
+      "then": "it opens in a tab of the panel shell beside the conversation and the conversation stays usable"
     },
     {
       "key": "ac11",
       "requirement": "a-specification-document-opens-beside-a-conversation",
-      "given": "",
-      "when": "the operator reloads with a document attached to the conversation",
-      "then": "the same conversation is open with the same document still attached to it"
+      "given": "a conversation with a document attached",
+      "when": "the operator reloads the page",
+      "then": "the same conversation is open with the same document attached"
     },
     {
       "key": "ac12",
       "requirement": "a-specification-document-opens-beside-a-conversation",
-      "given": "a conversation with a document attached and that document's tab open",
+      "given": "a conversation with a document attached and its tab open",
       "when": "the operator closes the tab",
-      "then": "the document remains attached to the conversation the composer still names it as the attached document"
-    },
-    {
-      "key": "ac13",
-      "requirement": "a-specification-document-opens-beside-a-conversation",
-      "given": "a conversation with one document attached",
-      "when": "the operator opens a different document for reading",
-      "then": "both are readable, and the attached document is unchanged"
+      "then": "the composer still names the document as attached"
     },
     {
       "key": "ac14",
       "requirement": "a-specification-document-opens-beside-a-conversation",
-      "given": "",
-      "when": "the operator has a document open and switches the shell to another tab",
-      "then": "the document's tab remains open switching back to it shows the same document, not a picker"
-    },
-    {
-      "key": "ac15",
-      "requirement": "a-specification-document-opens-beside-a-conversation",
-      "given": "",
-      "when": "the operator closes every open tab in the shell",
-      "then": "the conversation occupies the full available width no specification navigation remains on screen"
+      "given": "a conversation with a document attached",
+      "when": "the operator uses the composer's detach control",
+      "then": "the document is no longer attached, the shell closes, and the document still exists"
     },
     {
       "key": "ac16",
       "requirement": "the-conversation-surface-is-legible-at-every-width-it-is-off",
-      "given": "",
-      "when": "the conversation surface is shown at its minimum supported width",
-      "then": "every control is within its container and none is clipped no interactive element overlaps another"
+      "given": "a conversation with a document open in the shell",
+      "when": "the window is 1400, 900, 700 or 560 px wide",
+      "then": "the shell stays inside the viewport and the page does not scroll horizontally"
     },
     {
       "key": "ac17",
       "requirement": "the-conversation-surface-is-legible-at-every-width-it-is-off",
-      "given": "",
-      "when": "the conversation surface narrows",
-      "then": "the permission control still states which posture the run will use"
-    },
-    {
-      "key": "ac18",
-      "requirement": "the-conversation-surface-is-legible-at-every-width-it-is-off",
-      "given": "",
-      "when": "the operator moves the boundary between the conversation and an open document",
-      "then": "either pane can be made the larger one each stops only at the width below which it is no longer usable"
+      "given": "the conversation pane at its minimum width",
+      "when": "the composer control row does not fit on one line",
+      "then": "it wraps, and the permission control still states which posture the run will use"
     },
     {
       "key": "ac19",
       "requirement": "the-operator-can-start-an-exploration-by-creating-a-document",
-      "given": "",
-      "when": "the operator starts an exploration from a conversation",
-      "then": "an empty document is created in the `exploring` phase it opens beside that conversation"
+      "given": "an open conversation with no document attached",
+      "when": "the operator presses Explore",
+      "then": "an empty `exploring` document is created under a minted placeholder path and opens attached beside the conversation"
     },
     {
       "key": "ac20",
       "requirement": "the-operator-can-start-an-exploration-by-creating-a-document",
-      "given": "",
-      "when": "the operator later proposes or approves",
-      "then": "the subject of that action is the document created at the start no separate step is needed to turn the conversation into a document"
+      "given": "an exploration started this way",
+      "when": "the operator later closes exploration or proposes",
+      "then": "the subject of that action is the document created at the start"
     },
     {
       "key": "ac21",
       "requirement": "the-operator-can-start-an-exploration-by-creating-a-document",
+      "given": "a conversation discussing a change with no document attached",
+      "when": "turns run",
+      "then": "no document is created and the turn context names no phase"
+    },
+    {
+      "key": "ac23",
+      "requirement": "n1",
+      "given": "the new-conversation surface with Explore armed",
+      "when": "the operator sends the first message",
+      "then": "the document is created first and the trigger carries its path as `spec_document`"
+    },
+    {
+      "key": "ac24",
+      "requirement": "n1",
+      "given": "the new-conversation surface with Explore armed",
+      "when": "the trigger is refused",
+      "then": "the client deletes the document it created and shows the Hub's refusal"
+    },
+    {
+      "key": "ac25",
+      "requirement": "n2",
+      "given": "an `exploring` document with no requirements",
+      "when": "a run is triggered with it attached",
+      "then": "the turn context says this document is what the agent is interviewing for and to submit to its path, not create another"
+    },
+    {
+      "key": "ac26",
+      "requirement": "n3",
       "given": "",
-      "when": "a conversation discusses a change without the operator creating a document",
-      "then": "it has no phase the Hub does not treat it as an exploration"
+      "when": "a trigger names an unsafe `spec_document` path",
+      "then": "the request is refused with a validation error and no run starts"
+    },
+    {
+      "key": "ac27",
+      "requirement": "n3",
+      "given": "",
+      "when": "a trigger carries a `spec_document`",
+      "then": "the queued entry records the document and its message text does not contain it"
+    },
+    {
+      "key": "ac28",
+      "requirement": "n4",
+      "given": "a conversation with a document attached",
+      "when": "the operator selects another agent in the same project",
+      "then": "the new conversation opens with the same document attached"
+    },
+    {
+      "key": "ac29",
+      "requirement": "n4",
+      "given": "a conversation with a document attached",
+      "when": "the operator opens agent settings and goes back",
+      "then": "the document is still attached"
+    },
+    {
+      "key": "ac13",
+      "requirement": "n5",
+      "given": "a conversation with one document attached",
+      "when": "the operator opens a different document from the specification index tab",
+      "then": "both are readable in tabs and the attached document is unchanged"
     }
   ],
   "tasks": [],
   "algorithms": [],
-  "design": "",
+  "design": "D1 One surface. Specification work is a property of the ordinary conversation, not a screen: a separate chat could not render question, permission or checkpoint cards, and the authoring flow needs all three.\n\nD2 Document as turn context. The attached document travels as `spec_document` on the trigger, is stored on the queued entry, and is rendered into the turn context (plus a turn-start notice, owned by spec-document-authority). It is never written into the operator's message, which is the durable record of what they said.\n\nD3 Attachment lives in the URL. The attached document is part of the conversation destination, so reload and links restore it, and it follows the operator across agents in a project. Reading tabs are separate from the attachment; closing a tab never detaches.\n\nD4 Exploration is declared. One press creates an empty `exploring` document under a Hub-minted placeholder name and attaches it; the agent renames it once the subject is known. A refused first send withdraws the document it created.",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/spec-chat-session/spec.md (6 requirements, 21 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "hub/ui/src/__tests__/specChatSurface.test.tsx — one composer, questions/permissions, no agent selector, spec control, closing a tab does not detach",
+      "hub/tests/test_spec_document_context.py — document named / omitted / unknown path / stored on queued entry / unsafe path refused",
+      "hub/tests/test_spec_procedure_precedence.py — holds without a charter",
+      "hub/tests/browser/test_panel_shell.py and test_human_only_halves.py — shell placement, tab close, width bounds",
+      "hub/ui/src/__tests__/newConversationSurface.test.tsx — armed exploration and F330 withdrawal",
+      "hub/tests/test_spec_naming.py — placeholder path minting"
     ],
     "limits": [
-      "scenarios-state-no-starting-state: 19 of 21 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "No automated check that every composer control is unclipped at the minimum width; the browser test checks the shell's bounds and horizontal overflow only."
     ]
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
@@ -375,17 +465,27 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "the-agent-is-told-which-document-the-operator-is-viewing": "FR-3",
       "a-specification-document-opens-beside-a-conversation": "FR-4",
       "the-conversation-surface-is-legible-at-every-width-it-is-off": "FR-5",
-      "the-operator-can-start-an-exploration-by-creating-a-document": "FR-6"
+      "the-operator-can-start-an-exploration-by-creating-a-document": "FR-6",
+      "n1": "FR-7",
+      "n2": "FR-8",
+      "n3": "FR-9",
+      "n4": "FR-10",
+      "n5": "FR-11"
     },
-    "high_water": 6,
+    "high_water": 11,
     "retired": {},
     "digests": {
-      "FR-1": "491a69e0d0998720ff8064ad456fcfd47d9b09c654070712c3a6b2c64a11e650",
-      "FR-2": "48cbde58a30a7f98106ed7881f24953ce03a192815ed84cb387802399f067b17",
-      "FR-3": "1db112cbdd3960f39214b700dbf09ce888c8caa577f1281971e0a79242f303ac",
-      "FR-4": "41f77daffcf6c840e05256d219a983febb62b4b9c1200ee94814b4d6743080df",
-      "FR-5": "1e7b3715f6e0619d4a91c586a94c8108288c612d1caf6264c21142f792cb35cb",
-      "FR-6": "00082ae81c6710a27bfa22f7d391a6b7be4cebdbb2db483a52d3be60af2ba5a0"
+      "FR-1": "9c1ed2bb4fe225f5d4576ea4a9f3bc1601b0ce939e8d7cd13deebf21cb59253e",
+      "FR-2": "68edec3be0ca259f2ad52c1cf67997b26c9f3316f38a0aa017276288f5bc829e",
+      "FR-3": "ffc6f55ce539912c79844a531cce01507c3f7c1b6fcbb66c06d9a357db9a8142",
+      "FR-4": "6aa65cdc5ffa3cfb23055e4fd59c66406d6649b949b3965d1924f4649b6dcc74",
+      "FR-5": "50527755b7316342bccd5d8f365c1afec72cce261b6d331edd54293326ddfd72",
+      "FR-6": "a641ad895bfcba9557fe391d0be0835f46631cbb14a639ac8940a997dee6dd7f",
+      "FR-7": "8b34e837992210b26bf8ed4339a1db9b075b845f1165adffa54a50718380a6b6",
+      "FR-8": "b2fcffc5ae0e9dfc3171dcad2628cd28b3285bffd501001745b2beeef5905af0",
+      "FR-9": "3f0d78af3319472281c1f2eefe4ca1fc55af248d6248f2349e787a5b60b202bf",
+      "FR-10": "80378a850a20ccd96cc387f3174e8572636c596372f3abd9058f232571209085",
+      "FR-11": "7b42e8765249329ca1e5dcf82d0abd081fc62b3ecfd235d6fd8cdda00b926ecb"
     }
   }
 }

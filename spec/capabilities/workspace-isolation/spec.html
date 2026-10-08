@@ -148,96 +148,147 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <body>
 <h1>Workspace isolation</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">11</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">11</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">35</span> criteria</p>
-<section id="summary"><h2>Summary</h2><p>The Hub gives concurrent work its own place on disk. This document owns the **mechanism**: what a workspace is, the namespaces it comes in, where each one lives, how it is provisioned, how it is given back, and how it is reported to an operator. It deliberately does not own *who gets which workspace for a given turn* — that is `run-task-binding` (the task is resolved before the workspace is chosen) and `operator-agent-creation` (a turn about a task works in that task&#x27;s checkout). Nor does it own *when* a release is triggered, which is `task-lifecycle-governance`. Those documents answer &quot;which one, and when&quot;; this one answers &quot;what it is, and what it guarantees&quot;. Written as a current-behaviour record on 2026-08-27, after the change `2026-08-27-work-is-isolated-per-task` shipped per-task isolation and renamed a public API response shape (`ConflictInfo.agents` to `.workspaces`, `WorktreeInfo` to `WorkspaceInfo`) with no requirement of record constraining it. Implemented in `hub/hub/worktrees.py`, `hub/hub/task_workspace.py` and `hub/hub/api/v1/worktrees.py`.</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL provision isolated checkouts in two namespaces: one keyed by **agent**, one keyed by **task**. An agent&#x27;s checkout SHALL live at `.agentweave/worktrees/&lt;agent&gt;` on branch `agentweave/&lt;agent&gt;`. A task&#x27;s checkout SHALL live at `.agentweave/tasks/&lt;task-id&gt;` on branch `agentweave/task/&lt;task-id&gt;`.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The two namespaces SHALL be disjoint **by construction rather than by convention**. An agent name is drawn from a character class that excludes `/`, so the extra `task/` segment in a task branch is a shape no agent branch can take. Without that segment the branch `agentweave/task-ab12cd34ef56` would be simultaneously a valid task branch and the branch of an agent legitimately named `task-ab12cd34ef56`, and the system would have no way to tell which of the two a ref belonged to. A task id SHALL be accepted only in the form the product itself mints: `task-` followed by 1 to 64 **lowercase** hexadecimal digits. Lowercase is required rather than normalised: two ids differing only in case are two distinct git refs but a single directory on Windows and macOS, so accepting both would let one task&#x27;s checkout be handed to another. An agent name SHALL be validated before it is used as either a path component or a ref suffix.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> Deriving a workspace path or a branch name SHALL provision nothing. These SHALL be pure computations, so that the answer for a workspace that does not exist yet is where it *will* be rather than an error or a newly created directory.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An operator reading a configuration surface must not thereby write to the repository. Were derivation and provisioning the same operation, opening a panel would create checkouts, and the number of checkouts a project carries would be a function of who looked at what.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> Provisioning SHALL return an existing checkout correctly registered for the expected branch without rebuilding it, and SHALL then bring in the commits of the task&#x27;s **approved** prerequisites that its branch lacks, so that repeated turns on one task do not repeatedly rebuild it and a dependent started before its prerequisite was approved does not go on without that work.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Provisioning SHALL refuse, rather than adopt, a path that exists but is not the registered git worktree for the expected ref — including a symbolic link. Adopting an unknown directory would hand an agent a tree whose contents the system cannot account for. Provisioning SHALL refuse a checkout left in an unfinished merge, and SHALL say so. That is the one state a process killed mid-provision can leave, and handing it over asks an agent to reconstruct what happened to it from a tree full of conflict markers. When the branch does not yet exist, the checkout SHALL be cut from a supplied integration base, and SHALL NOT be cut from wherever the project checkout currently sits. The base SHALL be supplied by the caller; a task checkout requested without one is an error rather than an occasion to substitute `HEAD`. At branch creation, prerequisite work is merged as before (including a prerequisite&#x27;s accepted evidence). On an existing branch, only the commits of prerequisites that are `approved` and not already ancestors of the branch SHALL be merged, each as a merge commit, never by rewriting the branch. Where there is nothing to merge, nothing SHALL change. On an existing branch, a merge that cannot be made cleanly SHALL be aborted and the turn refused, leaving the branch tip and the files exactly as they were; so SHALL a checkout with uncommitted changes when there is something to merge, and so SHALL a merge that git does not finish in time. The refusal SHALL name the prerequisite task, the commit, the checkout and the command that merges it, so that a person can reconcile it; and the refused work SHALL be reported as unstaffed with that sentence rather than retried silently. If a prerequisite cannot be brought in at branch creation, provisioning SHALL leave **no checkout and no branch** behind, and SHALL refuse the turn. A half-provisioned workspace is worse than none: the next turn would find a registered checkout and adopt it as correct. When the branch already exists — a task released and worked again — the checkout SHALL be re-provisioned from that branch, so the task resumes with its own prior work present.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> Releasing a checkout SHALL remove the directory and SHALL NOT remove the branch. What bounds a repository&#x27;s size is the checkout; the branch is the record of what was done and is what an operator reads afterwards.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Any uncommitted change in the checkout SHALL be committed onto its branch before the directory is removed. Any commit the branch carries beyond the primary checkout&#x27;s HEAD SHALL be **reported** rather than discarded. A release SHALL report what it did: whether a checkout was actually released, the branch retained, whether uncommitted work was snapshotted and under which commit, and which commits remain unintegrated. Releasing a task&#x27;s checkout SHALL NOT release any review checkout, which is keyed by the reviewing agent rather than by a task and therefore has none to release.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL supply an explicit author identity on every commit it creates itself — a release snapshot, or the merge that integrates approved work — and SHALL NOT rely on the repository&#x27;s configured identity.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A project in which the operator has never configured a git identity is an ordinary project, and git refuses to commit there at all. Relying on configuration means the Hub can snapshot an agent&#x27;s work and then fail to merge it, which is a state in which work exists but cannot be shipped.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> A fresh checkout SHALL have a small, explicit set of dependency directories linked into it from the project checkout, rather than reinstalled.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The set SHALL stay explicit, and SHALL be extended only for directories that are both expensive to regenerate and safe to share read-only across concurrent checkouts. Provisioning a checkout is on the path of an agent&#x27;s first writing turn, so a full dependency install there is a per-task cost paid at the least convenient moment.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 7 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every API response describing a checkout SHALL identify **which kind** of workspace it is and what it belongs to, as two fields — a kind and a name — rather than as an agent name alone.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A single name field carrying two namespaces is not sufficient: a task id is not an oddly named agent, and a consumer given only a name cannot tell which of the two it holds. Listing the checkouts of a project SHALL read git&#x27;s own registration, and SHALL NOT compose an answer from the derived paths. A checkout registered somewhere unexpected SHALL then be **absent** from the listing rather than reported at a location it does not occupy. Listing SHALL provision nothing. The listing SHALL exclude retained branches that have no checkout, and review checkouts, which are detached and carry no branch record. An agent&#x27;s workspace response SHALL enumerate the task checkouts of that agent&#x27;s live tasks, and SHALL distinguish a task that has no checkout of its own because its work predates per-task isolation from one whose checkout is merely not provisioned yet. Without that distinction an operator looking for a task&#x27;s directory and finding none would reasonably conclude the work was lost.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 8 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> A report of two diverging checkouts SHALL name each side as a workspace — its kind and its name — and SHALL NOT name each side as an agent.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Since per-task isolation, a diverging branch may belong to a task rather than to an agent, and **two tasks held by the same agent can diverge from each other**. A pair of agent names cannot express that: it would report the agent as conflicting with itself, or drop the report for want of a second distinct name. Conflict detection SHALL be performed without touching the working tree or the index of any checkout, so that asking whether two branches conflict never disturbs work in progress.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 9 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> A refusal to provision a workspace SHALL identify which workspace could not be prepared — the agent&#x27;s own, or a named task&#x27;s — and SHALL state what the operator would have to do to clear it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Which workspace it is about is not a detail of the wording. It decides what is blocked: an agent&#x27;s own workspace carries every turn of that agent that is not about a task, and a task&#x27;s checkout carries one task&#x27;s work. A refusal that names the agent for both sends the reader to the wrong directory in one of the two cases, and leaves anything downstream deciding what is blocked to guess from the sentence. Stating the repair is required because the input is held. Where the system holds the operator&#x27;s input until they perform a repair, a refusal that names the obstruction but not the remedy asks them to work it out from outside the product — and the wait continues until they do. The remedy SHALL be stated per obstruction rather than as one sentence covering all of them. A directory that is not the expected checkout, a link where a directory was expected, and a checkout left mid-merge are cleared by different actions, and a single message covering all three sends the operator looking for the wrong thing.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 10 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> The directory recorded for a run SHALL mean the directory that run was started in, and SHALL NOT be read as a statement that the run&#x27;s writes stayed inside it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A workspace is a working directory. It is the process&#x27;s `cwd` and the root of the agent&#x27;s own branch; it is not a wall, and nothing in the product makes it one. Whether a write stays inside is decided by the path the model chose to spell — a relative path stays, an absolute one does not — and by whether the run&#x27;s permission posture happened to be one that checks. Two runs of the same agent, given the same instruction in different words, were measured landing on opposite sides of that line while recording the same directory. Any consumer that needs to know whether a run&#x27;s work is inside its recorded directory SHALL consult the record of writes that left it, and SHALL NOT infer it from the recorded directory alone. Where an outside write is recorded, the destination SHALL be identified as a workspace kind and name, in the same two-field form every reported checkout already uses. A destination given as a bare path puts the reader back where the finding began: unable to tell whether the write landed in the project&#x27;s own directory, in another agent&#x27;s checkout, or in a task&#x27;s. The kinds SHALL distinguish the Hub&#x27;s own working directory beneath the project root from the project&#x27;s tracked tree. They are not the same destination: the Hub&#x27;s subtree is added to the repository&#x27;s ignore rules by the Hub itself, so a write there is invisible to the owner&#x27;s `git status`, while a write into the tracked tree is exactly what that command is for.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span><a class="aw-anchor-copy" href="#FR-11" aria-label="Link to FR-11" title="Link to #FR-11">#</a> <span class="aw-position">Requirement 11 of 11</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL refuse a change to whether an agent works in its own checkout while that agent has a turn in progress or is assigned a task that has not been approved or rejected.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Changing it moves where the agent&#x27;s next turn runs. Work already in the old location — a task checkout, or uncommitted edits in the project&#x27;s own checkout — stays where the agent no longer looks, and a task-bound turn in the project&#x27;s checkout is not committed onto the task&#x27;s branch. Whether an agent works in its own checkout SHALL be judged on the configuration the Hub actually reads when it chooses the agent&#x27;s workspace — the agent&#x27;s stored configuration with the project&#x27;s synced session state for that agent applied over it — before and after the request. A request whose effect that configuration overrides is not a change. The refusal SHALL apply on every operation that changes that configuration, including one that replaces the project&#x27;s synced session state, and SHALL name each turn and task that holds it and what would clear it. A refused request SHALL change nothing — neither the agent nor, for a session replacement, the session state or the roster. A request that leaves the setting as it was SHALL NOT be refused on these grounds.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent is named identically to a valid task id and both have checkouts</td><td>the two occupy different directories the two are on different branches</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task checkout is requested for an id that is not `task-` followed by lowercase hex</td><td>the request is refused no directory and no branch are created</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task checkout is requested for an id containing uppercase hexadecimal digits</td><td>the request is refused rather than folded onto the lowercase id&#x27;s checkout</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the workspace of an agent with no checkout is queried</td><td>the path and branch it would use are reported it is reported as not provisioned no directory is created</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task that already has a correctly registered checkout is provisioned again, and no newly approved prerequisite commit is missing from its branch</td><td>the same directory is returned no branch is re-created and nothing is merged</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>task B depends on task A, and B&#x27;s branch was cut while A was still being worked</td><td>A is approved and B is provisioned for its next turn</td><td>A&#x27;s commit is an ancestor of B&#x27;s branch B&#x27;s own earlier commits are still on it</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an approved prerequisite&#x27;s commit conflicts with commits already on the dependent&#x27;s branch</td><td>the turn is refused naming the prerequisite task, the commit, the checkout and the merge command the branch tip and the working files are byte-identical to before</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>merging an approved prerequisite into an existing branch times out</td><td>the merge is aborted and the turn refused the checkout is not left in an unfinished merge</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task&#x27;s checkout path exists but is not the registered worktree for that task&#x27;s branch</td><td>provisioning is refused with a reason naming the path</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>provisioning a new task checkout and a prerequisite cannot be merged</td><td>the turn is refused neither the checkout directory nor the task branch exists afterwards</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task whose checkout was released, and whose branch carries commits, is provisioned again</td><td>the checkout is restored on that branch with those commits present</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a checkout with uncommitted changes is released</td><td>those changes are committed onto its branch first the release names the commit it created</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a checkout is released</td><td>its directory no longer exists its branch still does</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a checkout whose branch carries commits absent from the primary checkout is released</td><td>those commits are reported by the release</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub snapshots or integrates work in a repository with no configured user identity</td><td>the commit succeeds it is attributed to the Hub&#x27;s own identity</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a checkout is provisioned in a project that has a shared dependency directory</td><td>that directory is reachable from the new checkout without being reinstalled</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a project has both an agent checkout and a task checkout</td><td>both are listed each states which kind it is</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the checkouts of a project with no provisioned workspaces are listed</td><td>the listing is empty no directory has been created</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a branch in the Hub&#x27;s namespace is registered at a path other than the one its namespace</td><td>it is omitted from the listing rather than reported at the predicted path</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent holds a task whose work began before per-task isolation</td><td>that task is reported as working in the agent&#x27;s checkout it is distinguished from a task whose own checkout simply does not exist yet</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>two task branches held by the same agent modify the same paths divergently</td><td>a conflict is reported between the two task workspaces each side is identified by its own task</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>conflicts are detected in a project with provisioned checkouts</td><td>no checkout&#x27;s working tree or index is modified</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s own workspace cannot be prepared</td><td>the refusal identifies it as that agent&#x27;s workspace it states what would clear the obstruction it found</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the checkout for a task cannot be prepared</td><td>the refusal names the task rather than the agent whose turn it was it states what would clear the obstruction it found</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>provisioning is refused because a path exists that is not the expected registered checkout</td><td>the remedy stated is the one for that obstruction a different obstruction at the same path states a different remedy</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run is started in a workspace</td><td>the directory recorded for it is that workspace it remains that directory whether or not the run wrote outside it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a consumer needs to know whether a run&#x27;s work is confined to its recorded directory</td><td>it reads the record of writes that left the workspace does not treat the recorded directory as an answer on its own</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a write outside the run&#x27;s workspace is recorded</td><td>the destination is identified by workspace kind and name a path that belongs to no workspace is identified as such rather than left unclassified</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run writes into the Hub&#x27;s working directory beneath the project root, outside any agent,</td><td>the destination is identified as the Hub&#x27;s own directory it is not identified as the project&#x27;s tracked tree</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator sets an agent to share the project checkout while it is assigned an in-progress task</td><td>the request is refused, naming the task the agent&#x27;s configuration is unchanged</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator sets a sharing agent to work in its own checkout while it has a turn in progress</td><td>the request is refused, naming the turn</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the synced session state is replaced with an entry that changes whether an agent holding an open task works in its own checkout</td><td>the replacement is refused, naming the agent and the task the session state and the roster are unchanged</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the synced session state fixes whether an agent works in its own checkout and a request changes only the agent&#x27;s stored value for it, while the agent holds an open task</td><td>the request is accepted, because where the agent works does not change</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the agent has no turn in progress and no open task</td><td>the change is accepted</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a request changes other configuration and leaves isolation as it was</td><td>it is accepted whatever the agent is doing</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/workspace-isolation/spec.md (11 requirements, 35 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 34 of 35 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">17</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">17</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">43</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>What a Hub workspace is and what it guarantees: the agent, task and review checkouts the Hub provisions inside a project&#x27;s git repository, where each lives, how it is provisioned and given back, how it is reported, and how conflicts between workspaces are detected. Which workspace a given turn uses belongs to `run-task-binding` and `operator-agent-creation`; when a release is triggered belongs to `task-lifecycle-governance`. Implemented in `hub/hub/worktrees.py`, `hub/hub/task_workspace.py` and `hub/hub/api/v1/worktrees.py`.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>Checkout namespaces, paths, branches and id validation</li><li>Provisioning, prerequisite catch-up, release and snapshots</li><li>Workspace and conflict read routes (`/worktrees`)</li><li>Refusals to provision and their remedies</li><li>The guard on changing whether an agent works in its own checkout</li></ul><h3>Non-goals</h3><ul><li>Which workspace a turn uses (run-task-binding, operator-agent-creation)</li><li>When a task checkout is released or integrated (task-lifecycle-governance)</li><li>Recording writes that leave a run&#x27;s workspace (agent-run-sandboxing)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL provision a writing agent&#x27;s own checkout at `.agentweave/worktrees/&lt;agent&gt;` on branch `agentweave/&lt;agent&gt;`, and a task&#x27;s checkout at `.agentweave/tasks/&lt;task-id&gt;` on branch `agentweave/task/&lt;task-id&gt;`, and SHALL accept as a task id only `task-` followed by 1 to 64 lowercase hexadecimal digits, and as an agent name only a name that is valid and not reserved.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The `task/` segment makes the two namespaces disjoint by construction: an agent name cannot contain `/`, so no agent branch can take a task branch&#x27;s shape, even for an agent named like a task id. Lowercase is required rather than normalised because two ids differing only in case are two git refs but one directory on Windows and macOS. Both are validated before use as a path component or ref suffix.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Deriving a workspace path or branch name, listing checkouts, and reading an agent&#x27;s workspace SHALL provision nothing; for a workspace that does not exist yet they SHALL report where it will be.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Opening a panel must not write to the repository; otherwise how many checkouts a project carries would depend on who looked at what.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Provisioning a task checkout that already exists, correctly registered for its branch, SHALL return it without rebuilding it and SHALL then merge in, as merge commits, the commits of the task&#x27;s approved prerequisites that its branch lacks; a merge that conflicts, a merge that does not finish in time, or a checkout with uncommitted changes when something must be merged SHALL refuse the turn and leave the branch tip and files unchanged.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Repeated turns on one task must not rebuild it, and a dependent started before its prerequisite was approved must not go on without that work. The existing branch carries the task&#x27;s own work, so nothing may be rewritten: the merge is aborted on failure and the refusal names the prerequisite task, the commit, the checkout and the command that merges it, so a person can reconcile it. A task released and worked again is re-provisioned from its retained branch, so it resumes with its prior work.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span><a class="aw-anchor-copy" href="#FR-12" aria-label="Link to FR-12" title="Link to #FR-12">#</a> <span class="aw-position">Requirement 4 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Creating a task checkout SHALL cut its branch from the integration base the caller supplies, SHALL merge the prerequisites&#x27; work into it, and SHALL leave no checkout and no branch behind when any prerequisite cannot be merged.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A half-provisioned workspace is worse than none: the next turn would find a registered checkout and adopt it. The base is never substituted with `HEAD`, which would cut the branch from wherever the operator&#x27;s checkout happens to sit; a task checkout requested without a base is an error.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 5 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Releasing a checkout SHALL commit any uncommitted change onto its branch, remove the directory, keep the branch, and report whether a checkout was released, the branch, the snapshot commit if one was made, and the branch&#x27;s commits not on the project checkout&#x27;s HEAD.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The checkout is what bounds a repository&#x27;s size; the branch is the record of what was done and what a reopened task resumes from. Releasing an agent&#x27;s checkout also removes that agent&#x27;s review checkout, which carries no work; releasing a task&#x27;s checkout releases no review checkout, since none is keyed by a task.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 6 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every commit the Hub creates itself - a turn or release snapshot, a prerequisite merge, or the merge that integrates approved work - SHALL carry the Hub&#x27;s own author identity (`AgentWeave &lt;agentweave@localhost&gt;`) and SHALL NOT rely on the repository&#x27;s configured identity.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A project with no configured git identity is ordinary, and git refuses to commit there; relying on configuration lets the Hub snapshot work and then fail to merge it. Snapshots also skip the project&#x27;s commit hooks, so a project hook cannot strand an agent&#x27;s work uncommitted.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 7 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> A newly provisioned agent, task or review checkout SHALL have the project checkout&#x27;s `node_modules`, `.venv` and `venv` directories, where present, linked into it rather than reinstalled; where the platform refuses the link, provisioning SHALL still succeed without it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Provisioning is on the path of an agent&#x27;s first writing turn, so a dependency install there is paid at the worst moment. The set stays explicit and grows only for directories that are expensive to regenerate and safe to share across concurrent checkouts. A Windows host without symlink privilege degrades to no shared dependencies rather than to no checkout.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 8 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every API response describing a checkout SHALL identify it by a kind (`agent` or `task`) and a name; `GET /worktrees` SHALL be built from git&#x27;s own worktree registration and list only checkouts registered at the path their namespace predicts, excluding retained branches with no checkout and review checkouts.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A task id is not an oddly named agent, and one name field cannot say which it holds. Reading git&#x27;s registration means a checkout registered somewhere unexpected is absent rather than reported where it is not. An agent&#x27;s workspace response (`GET /worktrees/{agent}`) also lists the checkouts of that agent&#x27;s live tasks, marking a task whose work predates per-task isolation as working in the agent&#x27;s checkout, so an operator who finds no directory for it does not conclude the work was lost.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 9 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> `GET /worktrees` and `GET /worktrees/conflicts` SHALL state whether the project is a git repository, and when it is not SHALL give the reason and what would change it; `GET /worktrees/{agent}` SHALL refuse a name that is not a valid agent name (400) or not an agent of the project (404).</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A bare empty list reads the same for a non-repository as for a healthy repository with no checkouts, and the panel then promises checkouts that will never come (F249). Describing a workspace for an agent that was never created invents one (F247).</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 10 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> A conflict report SHALL name each side as a workspace (kind, name and branch) and SHALL be computed without touching any checkout&#x27;s working tree or index.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Two tasks held by the same agent can diverge from each other, which a pair of agent names cannot express. Detection uses `git merge-tree`, so asking never disturbs work in progress.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 11 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Conflict detection SHALL also check every workspace against the project&#x27;s accepted main branch, reported as a workspace of kind `main`, and SHALL include released task branches of non-rejected tasks whose work has not reached that branch; with no accepted or resolvable main branch it SHALL check nothing against one.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>&quot;This work will not merge&quot; is the conflict an operator most needs, and before F245 it surfaced only when integration failed at approval. A finished task&#x27;s branch outlives its checkout and still has to land (F246). A guessed base would make conflicts that are not facts.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 12 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> A refusal to provision a workspace SHALL say whether it concerns the agent&#x27;s own workspace or a named task&#x27;s checkout, and SHALL state the remedy for the specific obstruction found.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Which workspace failed decides what is blocked: the agent&#x27;s own carries every turn not about a task, a task&#x27;s carries one task. The operator&#x27;s input is held until they repair it, so the remedy must be stated, and per obstruction: a link is removed (and only the link), a foreign directory is moved aside, and a checkout left mid-merge must not be removed but finished or aborted.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 13 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> Provisioning SHALL refuse, before creating any directory, a checkout whose source ref names no commit, telling the operator to make a first commit when the repository has none, and naming the ref that does not resolve when it has commits elsewhere.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Git&#x27;s own error for this is plumbing nobody can act on (F347). The Hub deliberately creates no commit and no orphan branch of its own in the operator&#x27;s repository; the two cases need different repairs.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span><a class="aw-anchor-copy" href="#FR-16" aria-label="Link to FR-16" title="Link to #FR-16">#</a> <span class="aw-position">Requirement 14 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> An agent&#x27;s own checkout SHALL be cut from the project checkout&#x27;s HEAD when its branch does not exist; when the branch exists from an earlier release it SHALL be reused, fast-forwarded to HEAD only if it carries no commit HEAD lacks.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A released agent resumes its own history rather than starting over; a branch whose work already landed can safely catch up, while one carrying unique commits is the agent&#x27;s retained work and is not moved.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span><a class="aw-anchor-copy" href="#FR-17" aria-label="Link to FR-17" title="Link to #FR-17">#</a> <span class="aw-position">Requirement 15 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> A review turn SHALL run in a checkout keyed by the reviewing agent at `.agentweave/reviews/&lt;agent&gt;`, detached at the commit under review with no branch, re-pointed at each later review, and SHALL be refused when that commit is not in the repository.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Keying by the reviewer bounds the directories by the roster rather than by the number of reviews. Detached means a reviewer is not an author: `git status` states the role, and an accidental commit is orphaned. A reviewer pointed at the wrong tree would report on code nobody wrote, so a missing commit is refused.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 16 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The directory recorded for a run SHALL mean the directory the run was started in, and SHALL NOT be presented as a statement that the run&#x27;s writes stayed inside it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A workspace is the process&#x27;s working directory and the root of its branch, not a wall: whether a write stays inside depends on the path the model spells and on the run&#x27;s permission posture. A consumer that needs to know whether writes left it reads the record of outside writes that `agent-run-sandboxing` defines.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span><a class="aw-anchor-copy" href="#FR-11" aria-label="Link to FR-11" title="Link to #FR-11">#</a> <span class="aw-position">Requirement 17 of 17</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL refuse a change to whether an agent works in its own checkout while that agent has a running turn or an assigned task not in a terminal status, judged on the configuration the Hub reads to choose the workspace (the agent&#x27;s stored configuration with the synced session entry laid over it), on every route that changes that configuration, and a refused request SHALL change nothing.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Changing it moves where the next turn runs; work already in the old place is left where the agent no longer looks, and a task-bound turn in the shared checkout is not committed onto the task&#x27;s branch (F242). A request whose effect the session entry overrides, or that leaves the setting as it was, is not a change and is not refused. The refusal (`isolation_change_under_held_work`) names each running turn and open task and what clears it.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>an agent named `task-ab12` exists and task `task-ab12` exists</td><td>both are given checkouts</td><td>they occupy different directories and different branches</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task checkout is requested for an id that is not `task-` followed by lowercase hex</td><td>the request is refused and no directory and no branch are created</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task checkout is requested for an id containing uppercase hexadecimal digits</td><td>the request is refused rather than folded onto the lowercase id&#x27;s checkout</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a writing agent in a repository has never run</td><td>its workspace is read (`GET /worktrees/{agent}`)</td><td>the path and branch it would use are reported, `provisioned` is false, and no directory is created</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a repository with no provisioned checkouts</td><td>`GET /worktrees` is called</td><td>the listing is empty, `repository` is true, and no directory has been created</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a task has a correctly registered checkout and no newly approved prerequisite commit is missing</td><td>it is provisioned again</td><td>the same directory is returned, no branch is re-created and nothing is merged</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>task B depends on task A, and B&#x27;s branch was cut while A was still being worked</td><td>A is approved and B is provisioned for its next turn</td><td>A&#x27;s commit is an ancestor of B&#x27;s branch and B&#x27;s own earlier commits are still on it</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>an approved prerequisite&#x27;s commit conflicts with commits already on the dependent&#x27;s branch</td><td>the dependent is provisioned</td><td>the turn is refused naming the prerequisite task, the commit, the checkout and the merge command, and the branch tip and working files are byte-identical to before</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>merging an approved prerequisite into an existing branch times out</td><td>the merge is aborted, the turn is refused, and the checkout is not left in an unfinished merge</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a task&#x27;s checkout was released and its branch carries commits</td><td>the task is provisioned again</td><td>the checkout is restored on that branch with those commits present</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a new task checkout is provisioned and a prerequisite cannot be merged</td><td>the turn is refused and neither the checkout directory nor the task branch exists afterwards</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-12">FR-12</a></td><td>the operator&#x27;s project checkout is on a feature branch and the integration base is `main`</td><td>a new task checkout is provisioned</td><td>its branch is cut from `main`</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a checkout with uncommitted changes is released</td><td>those changes are committed onto its branch first and the release names the commit it created</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a checkout is released</td><td>its directory no longer exists and its branch still does</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a checkout whose branch carries commits absent from the project checkout&#x27;s HEAD is released</td><td>those commits are reported by the release</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-5">FR-5</a></td><td>a repository with no configured user identity</td><td>the Hub snapshots or integrates work</td><td>the commit succeeds and is attributed to the Hub&#x27;s own identity</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-6">FR-6</a></td><td>the project checkout has a `node_modules` directory</td><td>a checkout is provisioned</td><td>`node_modules` is reachable from the new checkout without being reinstalled</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-7">FR-7</a></td><td>a project has an agent checkout and a task checkout</td><td>`GET /worktrees` is called</td><td>both are listed and each states its kind</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-7">FR-7</a></td><td>a branch in the Hub&#x27;s namespace is registered at a path other than the one its namespace predicts</td><td>`GET /worktrees` is called</td><td>it is omitted rather than reported at the predicted path</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-7">FR-7</a></td><td>an agent holds a task whose work began before per-task isolation</td><td>the agent&#x27;s workspace is read</td><td>that task is reported as `grandfathered`, with the agent&#x27;s own checkout as its path, distinct from a task whose own checkout is merely not provisioned yet</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-13">FR-13</a></td><td>the project directory is not a git repository</td><td>`GET /worktrees` is called</td><td>the response has `repository: false` and an `unavailable_reason` naming `git init` and a first commit</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>`GET /worktrees/{agent}` is called for a name no agent of the project holds</td><td>the response is 404</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td>two task branches held by the same agent modify the same paths divergently</td><td>conflicts are listed</td><td>a conflict is reported between the two task workspaces, each identified by its task</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td>a project has provisioned checkouts</td><td>conflicts are detected</td><td>no checkout&#x27;s working tree or index is modified</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-14">FR-14</a></td><td>the project&#x27;s main branch and a task branch modify the same file divergently</td><td>`GET /worktrees/conflicts` is called</td><td>a conflict is reported whose first workspace has kind `main` and names the main branch</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-14">FR-14</a></td><td>a task&#x27;s checkout was released with commits not yet on the main branch, and the task is not rejected</td><td>conflicts are detected</td><td>that task&#x27;s branch is still checked against the other workspaces</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s own workspace cannot be prepared</td><td>the refusal begins &quot;Could not prepare &lt;agent&gt;&#x27;s own workspace&quot; and states what would clear the obstruction</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task&#x27;s checkout cannot be prepared</td><td>the refusal begins &quot;Could not prepare the checkout for task &lt;id&gt;&quot; rather than naming the agent, and states what would clear the obstruction</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>provisioning is refused because the path is a symbolic link, is not the registered worktree, or is a checkout left in an unfinished merge</td><td>each states its own remedy: remove the link, move the directory aside, or `merge --abort` without removing it</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>a git repository with no commit</td><td>a writing agent&#x27;s turn is triggered</td><td>the turn is refused asking for a first commit, and no checkout directory, branch or commit is created</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>a repository with commits whose integration base names a deleted branch</td><td>a new task checkout is provisioned</td><td>the refusal names that base as the ref that does not name a commit</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td>an agent&#x27;s released branch carries a commit not on HEAD</td><td>the agent&#x27;s checkout is provisioned</td><td>the checkout is on that branch with that commit, and the branch was not reset</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td>an agent&#x27;s released branch is an ancestor of HEAD</td><td>the agent&#x27;s checkout is provisioned</td><td>the branch is fast-forwarded to HEAD before the checkout is made</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-17">FR-17</a></td><td>an agent has reviewed one commit</td><td>it is asked to review a second commit</td><td>the same directory is re-pointed, detached at the second commit</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a review is requested for a commit absent from the repository</td><td>the review checkout is refused with a reason naming the commit</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run is started in a workspace</td><td>the directory recorded for it is that workspace, whether or not the run later wrote outside it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a consumer needs to know whether a run&#x27;s work stayed in its recorded directory</td><td>it reads the run&#x27;s record of outside writes rather than treating the recorded directory as the answer</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-11">FR-11</a></td><td>an agent is assigned an in-progress task</td><td>the operator sets it to share the project checkout</td><td>the request is refused naming the task, and the agent&#x27;s configuration is unchanged</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td>a sharing agent has a turn in progress</td><td>the operator sets it to work in its own checkout</td><td>the request is refused naming the turn</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td>an agent holds an open task</td><td>the synced session state is replaced with an entry that changes whether that agent works in its own checkout</td><td>the replacement is refused naming the agent and the task, and the session state and roster are unchanged</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td>the synced session state fixes whether an agent works in its own checkout and the agent holds an open task</td><td>a request changes only the agent&#x27;s stored value for it</td><td>the request is accepted, because where the agent works does not change</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td>the agent has no turn in progress and no open task</td><td>isolation is changed</td><td>the change is accepted</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a request changes other configuration and leaves isolation as it was</td><td>it is accepted whatever the agent is doing</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>D1 Namespaces by construction. Agent checkouts live under `.agentweave/worktrees/`, task checkouts under `.agentweave/tasks/` on `agentweave/task/&lt;id&gt;`, review checkouts under `.agentweave/reviews/` detached. The `task/` branch segment cannot be produced by an agent name, so the namespaces cannot collide.</p><p>D2 Git&#x27;s registration is the truth. Whether a checkout exists is decided from `git worktree list --porcelain`, never from a directory existing: git run inside an untracked directory answers about the enclosing repository. Path functions are pure; only the `ensure_*` functions provision.</p><p>D3 Never destroy work. Release removes the directory and keeps the branch, snapshotting first. Catch-up on an existing branch merges with `--no-ff` and aborts on any failure. Only a branch seconds old (creation path) is ever deleted, by the unwind.</p><p>D4 The Hub commits as itself (`COMMIT_IDENTITY`) with `--no-verify` on snapshots, so neither a missing git identity nor a project hook can strand work.</p><p>D5 No repository, no isolation. A project that is not a git repository (or a machine without git) runs writers in place; a repository whose provisioning fails refuses the turn rather than falling back to the operator&#x27;s checkout.</p><p>D6 Refusals name scope and remedy. The trigger prefixes the scope (agent&#x27;s own workspace or task checkout) using the same predicate the resolver obeys (`takes_task_workspace`); the module writes one remedy per obstruction.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/tests/test_worktrees.py - provisioning, release, snapshot identity, listing, conflicts incl. main branch, non-repository listings</li><li>hub/tests/test_task_worktrees.py, test_a_task_checkout_catches_up.py - task namespace, all-or-nothing creation, prerequisite catch-up</li><li>hub/tests/test_task_release.py, test_task_workspace_scheme.py - release and grandfathered tasks</li><li>hub/tests/test_resolving_a_workspace_writes_nothing.py - read paths provision nothing</li><li>hub/tests/test_a_blocked_workspace_refusal_names_its_scope.py, test_a_refusal_names_a_remedy_that_works.py - refusal scope and remedies</li><li>hub/tests/test_isolation_does_not_change_under_held_work.py - the isolation-change guard</li><li>Ran 2026-10-08 at e25e059: the files above plus test_conflict_refusal_names_what_clears_it.py, 173 passed</li></ul><h3 class="aw-limits">Limits</h3><ul><li>The symlink-degradation path of shared dependency directories is logged only; nothing reports it to the operator.</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
   "title": "Workspace isolation",
-  "summary": "The Hub gives concurrent work its own place on disk. This document owns the **mechanism**: what a workspace is, the namespaces it comes in, where each one lives, how it is provisioned, how it is given back, and how it is reported to an operator. It deliberately does not own *who gets which workspace for a given turn* — that is `run-task-binding` (the task is resolved before the workspace is chosen) and `operator-agent-creation` (a turn about a task works in that task's checkout). Nor does it own *when* a release is triggered, which is `task-lifecycle-governance`. Those documents answer \"which one, and when\"; this one answers \"what it is, and what it guarantees\". Written as a current-behaviour record on 2026-08-27, after the change `2026-08-27-work-is-isolated-per-task` shipped per-task isolation and renamed a public API response shape (`ConflictInfo.agents` to `.workspaces`, `WorktreeInfo` to `WorkspaceInfo`) with no requirement of record constraining it. Implemented in `hub/hub/worktrees.py`, `hub/hub/task_workspace.py` and `hub/hub/api/v1/worktrees.py`.",
+  "summary": "What a Hub workspace is and what it guarantees: the agent, task and review checkouts the Hub provisions inside a project's git repository, where each lives, how it is provisioned and given back, how it is reported, and how conflicts between workspaces are detected. Which workspace a given turn uses belongs to `run-task-binding` and `operator-agent-creation`; when a release is triggered belongs to `task-lifecycle-governance`. Implemented in `hub/hub/worktrees.py`, `hub/hub/task_workspace.py` and `hub/hub/api/v1/worktrees.py`.",
   "problem": "",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "Checkout namespaces, paths, branches and id validation",
+      "Provisioning, prerequisite catch-up, release and snapshots",
+      "Workspace and conflict read routes (`/worktrees`)",
+      "Refusals to provision and their remedies",
+      "The guard on changing whether an agent works in its own checkout"
+    ],
+    "non_goals": [
+      "Which workspace a turn uses (run-task-binding, operator-agent-creation)",
+      "When a task checkout is released or integrated (task-lifecycle-governance)",
+      "Recording writes that leave a run's workspace (agent-run-sandboxing)"
+    ]
   },
   "requirements": [
     {
       "key": "the-hub-owns-two-workspace-namespaces-that-cannot-collide",
-      "statement": "The Hub SHALL provision isolated checkouts in two namespaces: one keyed by **agent**, one keyed by **task**. An agent's checkout SHALL live at `.agentweave/worktrees/\u003cagent>` on branch `agentweave/\u003cagent>`. A task's checkout SHALL live at `.agentweave/tasks/\u003ctask-id>` on branch `agentweave/task/\u003ctask-id>`.",
+      "statement": "The Hub SHALL provision a writing agent's own checkout at `.agentweave/worktrees/\u003cagent>` on branch `agentweave/\u003cagent>`, and a task's checkout at `.agentweave/tasks/\u003ctask-id>` on branch `agentweave/task/\u003ctask-id>`, and SHALL accept as a task id only `task-` followed by 1 to 64 lowercase hexadecimal digits, and as an agent name only a name that is valid and not reserved.",
       "modal": "SHALL",
-      "rationale": "The two namespaces SHALL be disjoint **by construction rather than by convention**. An agent name is drawn from a character class that excludes `/`, so the extra `task/` segment in a task branch is a shape no agent branch can take. Without that segment the branch `agentweave/task-ab12cd34ef56` would be simultaneously a valid task branch and the branch of an agent legitimately named `task-ab12cd34ef56`, and the system would have no way to tell which of the two a ref belonged to. A task id SHALL be accepted only in the form the product itself mints: `task-` followed by 1 to 64 **lowercase** hexadecimal digits. Lowercase is required rather than normalised: two ids differing only in case are two distinct git refs but a single directory on Windows and macOS, so accepting both would let one task's checkout be handed to another. An agent name SHALL be validated before it is used as either a path component or a ref suffix.",
+      "rationale": "The `task/` segment makes the two namespaces disjoint by construction: an agent name cannot contain `/`, so no agent branch can take a task branch's shape, even for an agent named like a task id. Lowercase is required rather than normalised because two ids differing only in case are two git refs but one directory on Windows and macOS. Both are validated before use as a path component or ref suffix.",
       "party": null
     },
     {
       "key": "asking-where-work-happens-never-causes-it-to-happen",
-      "statement": "Deriving a workspace path or a branch name SHALL provision nothing. These SHALL be pure computations, so that the answer for a workspace that does not exist yet is where it *will* be rather than an error or a newly created directory.",
+      "statement": "Deriving a workspace path or branch name, listing checkouts, and reading an agent's workspace SHALL provision nothing; for a workspace that does not exist yet they SHALL report where it will be.",
       "modal": "SHALL",
-      "rationale": "An operator reading a configuration surface must not thereby write to the repository. Were derivation and provisioning the same operation, opening a panel would create checkouts, and the number of checkouts a project carries would be a function of who looked at what.",
+      "rationale": "Opening a panel must not write to the repository; otherwise how many checkouts a project carries would depend on who looked at what.",
       "party": null
     },
     {
       "key": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
-      "statement": "Provisioning SHALL return an existing checkout correctly registered for the expected branch without rebuilding it, and SHALL then bring in the commits of the task's **approved** prerequisites that its branch lacks, so that repeated turns on one task do not repeatedly rebuild it and a dependent started before its prerequisite was approved does not go on without that work.",
+      "statement": "Provisioning a task checkout that already exists, correctly registered for its branch, SHALL return it without rebuilding it and SHALL then merge in, as merge commits, the commits of the task's approved prerequisites that its branch lacks; a merge that conflicts, a merge that does not finish in time, or a checkout with uncommitted changes when something must be merged SHALL refuse the turn and leave the branch tip and files unchanged.",
       "modal": "SHALL",
-      "rationale": "Provisioning SHALL refuse, rather than adopt, a path that exists but is not the registered git worktree for the expected ref — including a symbolic link. Adopting an unknown directory would hand an agent a tree whose contents the system cannot account for. Provisioning SHALL refuse a checkout left in an unfinished merge, and SHALL say so. That is the one state a process killed mid-provision can leave, and handing it over asks an agent to reconstruct what happened to it from a tree full of conflict markers. When the branch does not yet exist, the checkout SHALL be cut from a supplied integration base, and SHALL NOT be cut from wherever the project checkout currently sits. The base SHALL be supplied by the caller; a task checkout requested without one is an error rather than an occasion to substitute `HEAD`. At branch creation, prerequisite work is merged as before (including a prerequisite's accepted evidence). On an existing branch, only the commits of prerequisites that are `approved` and not already ancestors of the branch SHALL be merged, each as a merge commit, never by rewriting the branch. Where there is nothing to merge, nothing SHALL change. On an existing branch, a merge that cannot be made cleanly SHALL be aborted and the turn refused, leaving the branch tip and the files exactly as they were; so SHALL a checkout with uncommitted changes when there is something to merge, and so SHALL a merge that git does not finish in time. The refusal SHALL name the prerequisite task, the commit, the checkout and the command that merges it, so that a person can reconcile it; and the refused work SHALL be reported as unstaffed with that sentence rather than retried silently. If a prerequisite cannot be brought in at branch creation, provisioning SHALL leave **no checkout and no branch** behind, and SHALL refuse the turn. A half-provisioned workspace is worse than none: the next turn would find a registered checkout and adopt it as correct. When the branch already exists — a task released and worked again — the checkout SHALL be re-provisioned from that branch, so the task resumes with its own prior work present.",
+      "rationale": "Repeated turns on one task must not rebuild it, and a dependent started before its prerequisite was approved must not go on without that work. The existing branch carries the task's own work, so nothing may be rewritten: the merge is aborted on failure and the refusal names the prerequisite task, the commit, the checkout and the command that merges it, so a person can reconcile it. A task released and worked again is re-provisioned from its retained branch, so it resumes with its prior work.",
+      "party": null
+    },
+    {
+      "key": "n2",
+      "statement": "Creating a task checkout SHALL cut its branch from the integration base the caller supplies, SHALL merge the prerequisites' work into it, and SHALL leave no checkout and no branch behind when any prerequisite cannot be merged.",
+      "modal": "SHALL",
+      "rationale": "A half-provisioned workspace is worse than none: the next turn would find a registered checkout and adopt it. The base is never substituted with `HEAD`, which would cut the branch from wherever the operator's checkout happens to sit; a task checkout requested without a base is an error.",
       "party": null
     },
     {
       "key": "a-release-gives-back-the-directory-and-never-the-work",
-      "statement": "Releasing a checkout SHALL remove the directory and SHALL NOT remove the branch. What bounds a repository's size is the checkout; the branch is the record of what was done and is what an operator reads afterwards.",
+      "statement": "Releasing a checkout SHALL commit any uncommitted change onto its branch, remove the directory, keep the branch, and report whether a checkout was released, the branch, the snapshot commit if one was made, and the branch's commits not on the project checkout's HEAD.",
       "modal": "SHALL",
-      "rationale": "Any uncommitted change in the checkout SHALL be committed onto its branch before the directory is removed. Any commit the branch carries beyond the primary checkout's HEAD SHALL be **reported** rather than discarded. A release SHALL report what it did: whether a checkout was actually released, the branch retained, whether uncommitted work was snapshotted and under which commit, and which commits remain unintegrated. Releasing a task's checkout SHALL NOT release any review checkout, which is keyed by the reviewing agent rather than by a task and therefore has none to release.",
+      "rationale": "The checkout is what bounds a repository's size; the branch is the record of what was done and what a reopened task resumes from. Releasing an agent's checkout also removes that agent's review checkout, which carries no work; releasing a task's checkout releases no review checkout, since none is keyed by a task.",
       "party": null
     },
     {
       "key": "the-hub-commits-under-its-own-identity",
-      "statement": "The Hub SHALL supply an explicit author identity on every commit it creates itself — a release snapshot, or the merge that integrates approved work — and SHALL NOT rely on the repository's configured identity.",
+      "statement": "Every commit the Hub creates itself - a turn or release snapshot, a prerequisite merge, or the merge that integrates approved work - SHALL carry the Hub's own author identity (`AgentWeave \u003cagentweave@localhost>`) and SHALL NOT rely on the repository's configured identity.",
       "modal": "SHALL",
-      "rationale": "A project in which the operator has never configured a git identity is an ordinary project, and git refuses to commit there at all. Relying on configuration means the Hub can snapshot an agent's work and then fail to merge it, which is a state in which work exists but cannot be shipped.",
+      "rationale": "A project with no configured git identity is ordinary, and git refuses to commit there; relying on configuration lets the Hub snapshot work and then fail to merge it. Snapshots also skip the project's commit hooks, so a project hook cannot strand an agent's work uncommitted.",
       "party": null
     },
     {
       "key": "expensive-shared-dependency-directories-are-linked-not-rebui",
-      "statement": "A fresh checkout SHALL have a small, explicit set of dependency directories linked into it from the project checkout, rather than reinstalled.",
+      "statement": "A newly provisioned agent, task or review checkout SHALL have the project checkout's `node_modules`, `.venv` and `venv` directories, where present, linked into it rather than reinstalled; where the platform refuses the link, provisioning SHALL still succeed without it.",
       "modal": "SHALL",
-      "rationale": "The set SHALL stay explicit, and SHALL be extended only for directories that are both expensive to regenerate and safe to share read-only across concurrent checkouts. Provisioning a checkout is on the path of an agent's first writing turn, so a full dependency install there is a per-task cost paid at the least convenient moment.",
+      "rationale": "Provisioning is on the path of an agent's first writing turn, so a dependency install there is paid at the worst moment. The set stays explicit and grows only for directories that are expensive to regenerate and safe to share across concurrent checkouts. A Windows host without symlink privilege degrades to no shared dependencies rather than to no checkout.",
       "party": null
     },
     {
       "key": "a-reported-workspace-says-which-namespace-it-belongs-to",
-      "statement": "Every API response describing a checkout SHALL identify **which kind** of workspace it is and what it belongs to, as two fields — a kind and a name — rather than as an agent name alone.",
+      "statement": "Every API response describing a checkout SHALL identify it by a kind (`agent` or `task`) and a name; `GET /worktrees` SHALL be built from git's own worktree registration and list only checkouts registered at the path their namespace predicts, excluding retained branches with no checkout and review checkouts.",
       "modal": "SHALL",
-      "rationale": "A single name field carrying two namespaces is not sufficient: a task id is not an oddly named agent, and a consumer given only a name cannot tell which of the two it holds. Listing the checkouts of a project SHALL read git's own registration, and SHALL NOT compose an answer from the derived paths. A checkout registered somewhere unexpected SHALL then be **absent** from the listing rather than reported at a location it does not occupy. Listing SHALL provision nothing. The listing SHALL exclude retained branches that have no checkout, and review checkouts, which are detached and carry no branch record. An agent's workspace response SHALL enumerate the task checkouts of that agent's live tasks, and SHALL distinguish a task that has no checkout of its own because its work predates per-task isolation from one whose checkout is merely not provisioned yet. Without that distinction an operator looking for a task's directory and finding none would reasonably conclude the work was lost.",
+      "rationale": "A task id is not an oddly named agent, and one name field cannot say which it holds. Reading git's registration means a checkout registered somewhere unexpected is absent rather than reported where it is not. An agent's workspace response (`GET /worktrees/{agent}`) also lists the checkouts of that agent's live tasks, marking a task whose work predates per-task isolation as working in the agent's checkout, so an operator who finds no directory for it does not conclude the work was lost.",
+      "party": null
+    },
+    {
+      "key": "n3",
+      "statement": "`GET /worktrees` and `GET /worktrees/conflicts` SHALL state whether the project is a git repository, and when it is not SHALL give the reason and what would change it; `GET /worktrees/{agent}` SHALL refuse a name that is not a valid agent name (400) or not an agent of the project (404).",
+      "modal": "SHALL",
+      "rationale": "A bare empty list reads the same for a non-repository as for a healthy repository with no checkouts, and the panel then promises checkouts that will never come (F249). Describing a workspace for an agent that was never created invents one (F247).",
       "party": null
     },
     {
       "key": "a-conflict-is-reported-between-workspaces-not-between-agents",
-      "statement": "A report of two diverging checkouts SHALL name each side as a workspace — its kind and its name — and SHALL NOT name each side as an agent.",
+      "statement": "A conflict report SHALL name each side as a workspace (kind, name and branch) and SHALL be computed without touching any checkout's working tree or index.",
       "modal": "SHALL",
-      "rationale": "Since per-task isolation, a diverging branch may belong to a task rather than to an agent, and **two tasks held by the same agent can diverge from each other**. A pair of agent names cannot express that: it would report the agent as conflicting with itself, or drop the report for want of a second distinct name. Conflict detection SHALL be performed without touching the working tree or the index of any checkout, so that asking whether two branches conflict never disturbs work in progress.",
+      "rationale": "Two tasks held by the same agent can diverge from each other, which a pair of agent names cannot express. Detection uses `git merge-tree`, so asking never disturbs work in progress.",
+      "party": null
+    },
+    {
+      "key": "n4",
+      "statement": "Conflict detection SHALL also check every workspace against the project's accepted main branch, reported as a workspace of kind `main`, and SHALL include released task branches of non-rejected tasks whose work has not reached that branch; with no accepted or resolvable main branch it SHALL check nothing against one.",
+      "modal": "SHALL",
+      "rationale": "\"This work will not merge\" is the conflict an operator most needs, and before F245 it surfaced only when integration failed at approval. A finished task's branch outlives its checkout and still has to land (F246). A guessed base would make conflicts that are not facts.",
       "party": null
     },
     {
       "key": "a-refusal-to-provision-names-the-workspace-it-is-about-and-w",
-      "statement": "A refusal to provision a workspace SHALL identify which workspace could not be prepared — the agent's own, or a named task's — and SHALL state what the operator would have to do to clear it.",
+      "statement": "A refusal to provision a workspace SHALL say whether it concerns the agent's own workspace or a named task's checkout, and SHALL state the remedy for the specific obstruction found.",
       "modal": "SHALL",
-      "rationale": "Which workspace it is about is not a detail of the wording. It decides what is blocked: an agent's own workspace carries every turn of that agent that is not about a task, and a task's checkout carries one task's work. A refusal that names the agent for both sends the reader to the wrong directory in one of the two cases, and leaves anything downstream deciding what is blocked to guess from the sentence. Stating the repair is required because the input is held. Where the system holds the operator's input until they perform a repair, a refusal that names the obstruction but not the remedy asks them to work it out from outside the product — and the wait continues until they do. The remedy SHALL be stated per obstruction rather than as one sentence covering all of them. A directory that is not the expected checkout, a link where a directory was expected, and a checkout left mid-merge are cleared by different actions, and a single message covering all three sends the operator looking for the wrong thing.",
+      "rationale": "Which workspace failed decides what is blocked: the agent's own carries every turn not about a task, a task's carries one task. The operator's input is held until they repair it, so the remedy must be stated, and per obstruction: a link is removed (and only the link), a foreign directory is moved aside, and a checkout left mid-merge must not be removed but finished or aborted.",
+      "party": null
+    },
+    {
+      "key": "n5",
+      "statement": "Provisioning SHALL refuse, before creating any directory, a checkout whose source ref names no commit, telling the operator to make a first commit when the repository has none, and naming the ref that does not resolve when it has commits elsewhere.",
+      "modal": "SHALL",
+      "rationale": "Git's own error for this is plumbing nobody can act on (F347). The Hub deliberately creates no commit and no orphan branch of its own in the operator's repository; the two cases need different repairs.",
+      "party": null
+    },
+    {
+      "key": "n6",
+      "statement": "An agent's own checkout SHALL be cut from the project checkout's HEAD when its branch does not exist; when the branch exists from an earlier release it SHALL be reused, fast-forwarded to HEAD only if it carries no commit HEAD lacks.",
+      "modal": "SHALL",
+      "rationale": "A released agent resumes its own history rather than starting over; a branch whose work already landed can safely catch up, while one carrying unique commits is the agent's retained work and is not moved.",
+      "party": null
+    },
+    {
+      "key": "n1",
+      "statement": "A review turn SHALL run in a checkout keyed by the reviewing agent at `.agentweave/reviews/\u003cagent>`, detached at the commit under review with no branch, re-pointed at each later review, and SHALL be refused when that commit is not in the repository.",
+      "modal": "SHALL",
+      "rationale": "Keying by the reviewer bounds the directories by the roster rather than by the number of reviews. Detached means a reviewer is not an author: `git status` states the role, and an accidental commit is orphaned. A reviewer pointed at the wrong tree would report on code nobody wrote, so a missing commit is refused.",
       "party": null
     },
     {
       "key": "a-run-s-recorded-workspace-says-where-it-started-not-where-i",
-      "statement": "The directory recorded for a run SHALL mean the directory that run was started in, and SHALL NOT be read as a statement that the run's writes stayed inside it.",
+      "statement": "The directory recorded for a run SHALL mean the directory the run was started in, and SHALL NOT be presented as a statement that the run's writes stayed inside it.",
       "modal": "SHALL",
-      "rationale": "A workspace is a working directory. It is the process's `cwd` and the root of the agent's own branch; it is not a wall, and nothing in the product makes it one. Whether a write stays inside is decided by the path the model chose to spell — a relative path stays, an absolute one does not — and by whether the run's permission posture happened to be one that checks. Two runs of the same agent, given the same instruction in different words, were measured landing on opposite sides of that line while recording the same directory. Any consumer that needs to know whether a run's work is inside its recorded directory SHALL consult the record of writes that left it, and SHALL NOT infer it from the recorded directory alone. Where an outside write is recorded, the destination SHALL be identified as a workspace kind and name, in the same two-field form every reported checkout already uses. A destination given as a bare path puts the reader back where the finding began: unable to tell whether the write landed in the project's own directory, in another agent's checkout, or in a task's. The kinds SHALL distinguish the Hub's own working directory beneath the project root from the project's tracked tree. They are not the same destination: the Hub's subtree is added to the repository's ignore rules by the Hub itself, so a write there is invisible to the owner's `git status`, while a write into the tracked tree is exactly what that command is for.",
+      "rationale": "A workspace is the process's working directory and the root of its branch, not a wall: whether a write stays inside depends on the path the model spells and on the run's permission posture. A consumer that needs to know whether writes left it reads the record of outside writes that `agent-run-sandboxing` defines.",
       "party": null
     },
     {
       "key": "whether-an-agent-works-in-its-own-checkout-does-not-change-w",
-      "statement": "The Hub SHALL refuse a change to whether an agent works in its own checkout while that agent has a turn in progress or is assigned a task that has not been approved or rejected.",
+      "statement": "The Hub SHALL refuse a change to whether an agent works in its own checkout while that agent has a running turn or an assigned task not in a terminal status, judged on the configuration the Hub reads to choose the workspace (the agent's stored configuration with the synced session entry laid over it), on every route that changes that configuration, and a refused request SHALL change nothing.",
       "modal": "SHALL",
-      "rationale": "Changing it moves where the agent's next turn runs. Work already in the old location — a task checkout, or uncommitted edits in the project's own checkout — stays where the agent no longer looks, and a task-bound turn in the project's checkout is not committed onto the task's branch. Whether an agent works in its own checkout SHALL be judged on the configuration the Hub actually reads when it chooses the agent's workspace — the agent's stored configuration with the project's synced session state for that agent applied over it — before and after the request. A request whose effect that configuration overrides is not a change. The refusal SHALL apply on every operation that changes that configuration, including one that replaces the project's synced session state, and SHALL name each turn and task that holds it and what would clear it. A refused request SHALL change nothing — neither the agent nor, for a session replacement, the session state or the roster. A request that leaves the setting as it was SHALL NOT be refused on these grounds.",
+      "rationale": "Changing it moves where the next turn runs; work already in the old place is left where the agent no longer looks, and a task-bound turn in the shared checkout is not committed onto the task's branch (F242). A request whose effect the session entry overrides, or that leaves the setting as it was, is not a change and is not refused. The refusal (`isolation_change_under_held_work`) names each running turn and open task and what clears it.",
       "party": null
     }
   ],
@@ -245,16 +296,16 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac1",
       "requirement": "the-hub-owns-two-workspace-namespaces-that-cannot-collide",
-      "given": "",
-      "when": "an agent is named identically to a valid task id and both have checkouts",
-      "then": "the two occupy different directories the two are on different branches"
+      "given": "an agent named `task-ab12` exists and task `task-ab12` exists",
+      "when": "both are given checkouts",
+      "then": "they occupy different directories and different branches"
     },
     {
       "key": "ac2",
       "requirement": "the-hub-owns-two-workspace-namespaces-that-cannot-collide",
       "given": "",
       "when": "a task checkout is requested for an id that is not `task-` followed by lowercase hex",
-      "then": "the request is refused no directory and no branch are created"
+      "then": "the request is refused and no directory and no branch are created"
     },
     {
       "key": "ac3",
@@ -266,218 +317,274 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac4",
       "requirement": "asking-where-work-happens-never-causes-it-to-happen",
-      "given": "",
-      "when": "the workspace of an agent with no checkout is queried",
-      "then": "the path and branch it would use are reported it is reported as not provisioned no directory is created"
+      "given": "a writing agent in a repository has never run",
+      "when": "its workspace is read (`GET /worktrees/{agent}`)",
+      "then": "the path and branch it would use are reported, `provisioned` is false, and no directory is created"
+    },
+    {
+      "key": "ac18",
+      "requirement": "asking-where-work-happens-never-causes-it-to-happen",
+      "given": "a repository with no provisioned checkouts",
+      "when": "`GET /worktrees` is called",
+      "then": "the listing is empty, `repository` is true, and no directory has been created"
     },
     {
       "key": "ac5",
       "requirement": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
-      "given": "",
-      "when": "a task that already has a correctly registered checkout is provisioned again, and no newly approved prerequisite commit is missing from its branch",
-      "then": "the same directory is returned no branch is re-created and nothing is merged"
+      "given": "a task has a correctly registered checkout and no newly approved prerequisite commit is missing",
+      "when": "it is provisioned again",
+      "then": "the same directory is returned, no branch is re-created and nothing is merged"
     },
     {
       "key": "ac6",
       "requirement": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
       "given": "task B depends on task A, and B's branch was cut while A was still being worked",
       "when": "A is approved and B is provisioned for its next turn",
-      "then": "A's commit is an ancestor of B's branch B's own earlier commits are still on it"
+      "then": "A's commit is an ancestor of B's branch and B's own earlier commits are still on it"
     },
     {
       "key": "ac7",
       "requirement": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
-      "given": "",
-      "when": "an approved prerequisite's commit conflicts with commits already on the dependent's branch",
-      "then": "the turn is refused naming the prerequisite task, the commit, the checkout and the merge command the branch tip and the working files are byte-identical to before"
+      "given": "an approved prerequisite's commit conflicts with commits already on the dependent's branch",
+      "when": "the dependent is provisioned",
+      "then": "the turn is refused naming the prerequisite task, the commit, the checkout and the merge command, and the branch tip and working files are byte-identical to before"
     },
     {
       "key": "ac8",
       "requirement": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
       "given": "",
       "when": "merging an approved prerequisite into an existing branch times out",
-      "then": "the merge is aborted and the turn refused the checkout is not left in an unfinished merge"
-    },
-    {
-      "key": "ac9",
-      "requirement": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
-      "given": "",
-      "when": "a task's checkout path exists but is not the registered worktree for that task's branch",
-      "then": "provisioning is refused with a reason naming the path"
-    },
-    {
-      "key": "ac10",
-      "requirement": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
-      "given": "",
-      "when": "provisioning a new task checkout and a prerequisite cannot be merged",
-      "then": "the turn is refused neither the checkout directory nor the task branch exists afterwards"
+      "then": "the merge is aborted, the turn is refused, and the checkout is not left in an unfinished merge"
     },
     {
       "key": "ac11",
       "requirement": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
-      "given": "",
-      "when": "a task whose checkout was released, and whose branch carries commits, is provisioned again",
+      "given": "a task's checkout was released and its branch carries commits",
+      "when": "the task is provisioned again",
       "then": "the checkout is restored on that branch with those commits present"
+    },
+    {
+      "key": "ac10",
+      "requirement": "n2",
+      "given": "",
+      "when": "a new task checkout is provisioned and a prerequisite cannot be merged",
+      "then": "the turn is refused and neither the checkout directory nor the task branch exists afterwards"
+    },
+    {
+      "key": "n2-ac1",
+      "requirement": "n2",
+      "given": "the operator's project checkout is on a feature branch and the integration base is `main`",
+      "when": "a new task checkout is provisioned",
+      "then": "its branch is cut from `main`"
     },
     {
       "key": "ac12",
       "requirement": "a-release-gives-back-the-directory-and-never-the-work",
       "given": "",
       "when": "a checkout with uncommitted changes is released",
-      "then": "those changes are committed onto its branch first the release names the commit it created"
+      "then": "those changes are committed onto its branch first and the release names the commit it created"
     },
     {
       "key": "ac13",
       "requirement": "a-release-gives-back-the-directory-and-never-the-work",
       "given": "",
       "when": "a checkout is released",
-      "then": "its directory no longer exists its branch still does"
+      "then": "its directory no longer exists and its branch still does"
     },
     {
       "key": "ac14",
       "requirement": "a-release-gives-back-the-directory-and-never-the-work",
       "given": "",
-      "when": "a checkout whose branch carries commits absent from the primary checkout is released",
+      "when": "a checkout whose branch carries commits absent from the project checkout's HEAD is released",
       "then": "those commits are reported by the release"
     },
     {
       "key": "ac15",
       "requirement": "the-hub-commits-under-its-own-identity",
-      "given": "",
-      "when": "the Hub snapshots or integrates work in a repository with no configured user identity",
-      "then": "the commit succeeds it is attributed to the Hub's own identity"
+      "given": "a repository with no configured user identity",
+      "when": "the Hub snapshots or integrates work",
+      "then": "the commit succeeds and is attributed to the Hub's own identity"
     },
     {
       "key": "ac16",
       "requirement": "expensive-shared-dependency-directories-are-linked-not-rebui",
-      "given": "",
-      "when": "a checkout is provisioned in a project that has a shared dependency directory",
-      "then": "that directory is reachable from the new checkout without being reinstalled"
+      "given": "the project checkout has a `node_modules` directory",
+      "when": "a checkout is provisioned",
+      "then": "`node_modules` is reachable from the new checkout without being reinstalled"
     },
     {
       "key": "ac17",
       "requirement": "a-reported-workspace-says-which-namespace-it-belongs-to",
-      "given": "",
-      "when": "a project has both an agent checkout and a task checkout",
-      "then": "both are listed each states which kind it is"
-    },
-    {
-      "key": "ac18",
-      "requirement": "a-reported-workspace-says-which-namespace-it-belongs-to",
-      "given": "",
-      "when": "the checkouts of a project with no provisioned workspaces are listed",
-      "then": "the listing is empty no directory has been created"
+      "given": "a project has an agent checkout and a task checkout",
+      "when": "`GET /worktrees` is called",
+      "then": "both are listed and each states its kind"
     },
     {
       "key": "ac19",
       "requirement": "a-reported-workspace-says-which-namespace-it-belongs-to",
-      "given": "",
-      "when": "a branch in the Hub's namespace is registered at a path other than the one its namespace",
-      "then": "it is omitted from the listing rather than reported at the predicted path"
+      "given": "a branch in the Hub's namespace is registered at a path other than the one its namespace predicts",
+      "when": "`GET /worktrees` is called",
+      "then": "it is omitted rather than reported at the predicted path"
     },
     {
       "key": "ac20",
       "requirement": "a-reported-workspace-says-which-namespace-it-belongs-to",
+      "given": "an agent holds a task whose work began before per-task isolation",
+      "when": "the agent's workspace is read",
+      "then": "that task is reported as `grandfathered`, with the agent's own checkout as its path, distinct from a task whose own checkout is merely not provisioned yet"
+    },
+    {
+      "key": "n3-ac1",
+      "requirement": "n3",
+      "given": "the project directory is not a git repository",
+      "when": "`GET /worktrees` is called",
+      "then": "the response has `repository: false` and an `unavailable_reason` naming `git init` and a first commit"
+    },
+    {
+      "key": "n3-ac2",
+      "requirement": "n3",
       "given": "",
-      "when": "an agent holds a task whose work began before per-task isolation",
-      "then": "that task is reported as working in the agent's checkout it is distinguished from a task whose own checkout simply does not exist yet"
+      "when": "`GET /worktrees/{agent}` is called for a name no agent of the project holds",
+      "then": "the response is 404"
     },
     {
       "key": "ac21",
       "requirement": "a-conflict-is-reported-between-workspaces-not-between-agents",
-      "given": "",
-      "when": "two task branches held by the same agent modify the same paths divergently",
-      "then": "a conflict is reported between the two task workspaces each side is identified by its own task"
+      "given": "two task branches held by the same agent modify the same paths divergently",
+      "when": "conflicts are listed",
+      "then": "a conflict is reported between the two task workspaces, each identified by its task"
     },
     {
       "key": "ac22",
       "requirement": "a-conflict-is-reported-between-workspaces-not-between-agents",
-      "given": "",
-      "when": "conflicts are detected in a project with provisioned checkouts",
+      "given": "a project has provisioned checkouts",
+      "when": "conflicts are detected",
       "then": "no checkout's working tree or index is modified"
+    },
+    {
+      "key": "n4-ac1",
+      "requirement": "n4",
+      "given": "the project's main branch and a task branch modify the same file divergently",
+      "when": "`GET /worktrees/conflicts` is called",
+      "then": "a conflict is reported whose first workspace has kind `main` and names the main branch"
+    },
+    {
+      "key": "n4-ac2",
+      "requirement": "n4",
+      "given": "a task's checkout was released with commits not yet on the main branch, and the task is not rejected",
+      "when": "conflicts are detected",
+      "then": "that task's branch is still checked against the other workspaces"
     },
     {
       "key": "ac23",
       "requirement": "a-refusal-to-provision-names-the-workspace-it-is-about-and-w",
       "given": "",
       "when": "an agent's own workspace cannot be prepared",
-      "then": "the refusal identifies it as that agent's workspace it states what would clear the obstruction it found"
+      "then": "the refusal begins \"Could not prepare \u003cagent>'s own workspace\" and states what would clear the obstruction"
     },
     {
       "key": "ac24",
       "requirement": "a-refusal-to-provision-names-the-workspace-it-is-about-and-w",
       "given": "",
-      "when": "the checkout for a task cannot be prepared",
-      "then": "the refusal names the task rather than the agent whose turn it was it states what would clear the obstruction it found"
+      "when": "a task's checkout cannot be prepared",
+      "then": "the refusal begins \"Could not prepare the checkout for task \u003cid>\" rather than naming the agent, and states what would clear the obstruction"
     },
     {
       "key": "ac25",
       "requirement": "a-refusal-to-provision-names-the-workspace-it-is-about-and-w",
       "given": "",
-      "when": "provisioning is refused because a path exists that is not the expected registered checkout",
-      "then": "the remedy stated is the one for that obstruction a different obstruction at the same path states a different remedy"
+      "when": "provisioning is refused because the path is a symbolic link, is not the registered worktree, or is a checkout left in an unfinished merge",
+      "then": "each states its own remedy: remove the link, move the directory aside, or `merge --abort` without removing it"
+    },
+    {
+      "key": "n5-ac1",
+      "requirement": "n5",
+      "given": "a git repository with no commit",
+      "when": "a writing agent's turn is triggered",
+      "then": "the turn is refused asking for a first commit, and no checkout directory, branch or commit is created"
+    },
+    {
+      "key": "n5-ac2",
+      "requirement": "n5",
+      "given": "a repository with commits whose integration base names a deleted branch",
+      "when": "a new task checkout is provisioned",
+      "then": "the refusal names that base as the ref that does not name a commit"
+    },
+    {
+      "key": "n6-ac1",
+      "requirement": "n6",
+      "given": "an agent's released branch carries a commit not on HEAD",
+      "when": "the agent's checkout is provisioned",
+      "then": "the checkout is on that branch with that commit, and the branch was not reset"
+    },
+    {
+      "key": "n6-ac2",
+      "requirement": "n6",
+      "given": "an agent's released branch is an ancestor of HEAD",
+      "when": "the agent's checkout is provisioned",
+      "then": "the branch is fast-forwarded to HEAD before the checkout is made"
+    },
+    {
+      "key": "n1-ac1",
+      "requirement": "n1",
+      "given": "an agent has reviewed one commit",
+      "when": "it is asked to review a second commit",
+      "then": "the same directory is re-pointed, detached at the second commit"
+    },
+    {
+      "key": "n1-ac2",
+      "requirement": "n1",
+      "given": "",
+      "when": "a review is requested for a commit absent from the repository",
+      "then": "the review checkout is refused with a reason naming the commit"
     },
     {
       "key": "ac26",
       "requirement": "a-run-s-recorded-workspace-says-where-it-started-not-where-i",
       "given": "",
       "when": "a run is started in a workspace",
-      "then": "the directory recorded for it is that workspace it remains that directory whether or not the run wrote outside it"
+      "then": "the directory recorded for it is that workspace, whether or not the run later wrote outside it"
     },
     {
       "key": "ac27",
       "requirement": "a-run-s-recorded-workspace-says-where-it-started-not-where-i",
       "given": "",
-      "when": "a consumer needs to know whether a run's work is confined to its recorded directory",
-      "then": "it reads the record of writes that left the workspace does not treat the recorded directory as an answer on its own"
-    },
-    {
-      "key": "ac28",
-      "requirement": "a-run-s-recorded-workspace-says-where-it-started-not-where-i",
-      "given": "",
-      "when": "a write outside the run's workspace is recorded",
-      "then": "the destination is identified by workspace kind and name a path that belongs to no workspace is identified as such rather than left unclassified"
-    },
-    {
-      "key": "ac29",
-      "requirement": "a-run-s-recorded-workspace-says-where-it-started-not-where-i",
-      "given": "",
-      "when": "a run writes into the Hub's working directory beneath the project root, outside any agent,",
-      "then": "the destination is identified as the Hub's own directory it is not identified as the project's tracked tree"
+      "when": "a consumer needs to know whether a run's work stayed in its recorded directory",
+      "then": "it reads the run's record of outside writes rather than treating the recorded directory as the answer"
     },
     {
       "key": "ac30",
       "requirement": "whether-an-agent-works-in-its-own-checkout-does-not-change-w",
-      "given": "",
-      "when": "the operator sets an agent to share the project checkout while it is assigned an in-progress task",
-      "then": "the request is refused, naming the task the agent's configuration is unchanged"
+      "given": "an agent is assigned an in-progress task",
+      "when": "the operator sets it to share the project checkout",
+      "then": "the request is refused naming the task, and the agent's configuration is unchanged"
     },
     {
       "key": "ac31",
       "requirement": "whether-an-agent-works-in-its-own-checkout-does-not-change-w",
-      "given": "",
-      "when": "the operator sets a sharing agent to work in its own checkout while it has a turn in progress",
-      "then": "the request is refused, naming the turn"
+      "given": "a sharing agent has a turn in progress",
+      "when": "the operator sets it to work in its own checkout",
+      "then": "the request is refused naming the turn"
     },
     {
       "key": "ac32",
       "requirement": "whether-an-agent-works-in-its-own-checkout-does-not-change-w",
-      "given": "",
-      "when": "the synced session state is replaced with an entry that changes whether an agent holding an open task works in its own checkout",
-      "then": "the replacement is refused, naming the agent and the task the session state and the roster are unchanged"
+      "given": "an agent holds an open task",
+      "when": "the synced session state is replaced with an entry that changes whether that agent works in its own checkout",
+      "then": "the replacement is refused naming the agent and the task, and the session state and roster are unchanged"
     },
     {
       "key": "ac33",
       "requirement": "whether-an-agent-works-in-its-own-checkout-does-not-change-w",
-      "given": "",
-      "when": "the synced session state fixes whether an agent works in its own checkout and a request changes only the agent's stored value for it, while the agent holds an open task",
+      "given": "the synced session state fixes whether an agent works in its own checkout and the agent holds an open task",
+      "when": "a request changes only the agent's stored value for it",
       "then": "the request is accepted, because where the agent works does not change"
     },
     {
       "key": "ac34",
       "requirement": "whether-an-agent-works-in-its-own-checkout-does-not-change-w",
-      "given": "",
-      "when": "the agent has no turn in progress and no open task",
+      "given": "the agent has no turn in progress and no open task",
+      "when": "isolation is changed",
       "then": "the change is accepted"
     },
     {
@@ -490,45 +597,63 @@ code { padding: .1rem .3rem; font-size: .88em; }
   ],
   "tasks": [],
   "algorithms": [],
-  "design": "",
+  "design": "D1 Namespaces by construction. Agent checkouts live under `.agentweave/worktrees/`, task checkouts under `.agentweave/tasks/` on `agentweave/task/\u003cid>`, review checkouts under `.agentweave/reviews/` detached. The `task/` branch segment cannot be produced by an agent name, so the namespaces cannot collide.\n\nD2 Git's registration is the truth. Whether a checkout exists is decided from `git worktree list --porcelain`, never from a directory existing: git run inside an untracked directory answers about the enclosing repository. Path functions are pure; only the `ensure_*` functions provision.\n\nD3 Never destroy work. Release removes the directory and keeps the branch, snapshotting first. Catch-up on an existing branch merges with `--no-ff` and aborts on any failure. Only a branch seconds old (creation path) is ever deleted, by the unwind.\n\nD4 The Hub commits as itself (`COMMIT_IDENTITY`) with `--no-verify` on snapshots, so neither a missing git identity nor a project hook can strand work.\n\nD5 No repository, no isolation. A project that is not a git repository (or a machine without git) runs writers in place; a repository whose provisioning fails refuses the turn rather than falling back to the operator's checkout.\n\nD6 Refusals name scope and remedy. The trigger prefixes the scope (agent's own workspace or task checkout) using the same predicate the resolver obeys (`takes_task_workspace`); the module writes one remedy per obstruction.",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/workspace-isolation/spec.md (11 requirements, 35 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "hub/tests/test_worktrees.py - provisioning, release, snapshot identity, listing, conflicts incl. main branch, non-repository listings",
+      "hub/tests/test_task_worktrees.py, test_a_task_checkout_catches_up.py - task namespace, all-or-nothing creation, prerequisite catch-up",
+      "hub/tests/test_task_release.py, test_task_workspace_scheme.py - release and grandfathered tasks",
+      "hub/tests/test_resolving_a_workspace_writes_nothing.py - read paths provision nothing",
+      "hub/tests/test_a_blocked_workspace_refusal_names_its_scope.py, test_a_refusal_names_a_remedy_that_works.py - refusal scope and remedies",
+      "hub/tests/test_isolation_does_not_change_under_held_work.py - the isolation-change guard",
+      "Ran 2026-10-08 at e25e059: the files above plus test_conflict_refusal_names_what_clears_it.py, 173 passed"
     ],
     "limits": [
-      "scenarios-state-no-starting-state: 34 of 35 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "The symlink-degradation path of shared dependency directories is logged only; nothing reports it to the operator."
     ]
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
       "the-hub-owns-two-workspace-namespaces-that-cannot-collide": "FR-1",
       "asking-where-work-happens-never-causes-it-to-happen": "FR-2",
       "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin": "FR-3",
+      "n2": "FR-12",
       "a-release-gives-back-the-directory-and-never-the-work": "FR-4",
       "the-hub-commits-under-its-own-identity": "FR-5",
       "expensive-shared-dependency-directories-are-linked-not-rebui": "FR-6",
       "a-reported-workspace-says-which-namespace-it-belongs-to": "FR-7",
+      "n3": "FR-13",
       "a-conflict-is-reported-between-workspaces-not-between-agents": "FR-8",
+      "n4": "FR-14",
       "a-refusal-to-provision-names-the-workspace-it-is-about-and-w": "FR-9",
+      "n5": "FR-15",
+      "n6": "FR-16",
+      "n1": "FR-17",
       "a-run-s-recorded-workspace-says-where-it-started-not-where-i": "FR-10",
       "whether-an-agent-works-in-its-own-checkout-does-not-change-w": "FR-11"
     },
-    "high_water": 11,
+    "high_water": 17,
     "retired": {},
     "digests": {
-      "FR-1": "2510274a66f85c5d1836f79b17b200565beff564d59f731e1ca86ecc255dd82e",
-      "FR-2": "d9b2e26512acca49a8aa7c185c012ef9697c532e5a33334c62595a297870978d",
-      "FR-3": "ad88391db25b679f8b13922855edf368761df4c7b7678e864a29c20298f0fdb2",
-      "FR-4": "555871fb2adaf7a2d2ec4289e6f3a6f9268f331756a4f01ace0eed77bb9924f8",
-      "FR-5": "b4948046d3c3b6de58ea090a7b04fa69dcb9bc608b2929f00dbec398d5ff998e",
-      "FR-6": "ab3a73ee424a34c16b6eaf73f193ff271373e3def5c88ab0c02992bb106ac74e",
-      "FR-7": "26af6ac0df1616347992fb27896f63a74fc6ebbf7ae0d3e388aabe38613b24d3",
-      "FR-8": "b277aefe895741c53a118faff96fcb66dcff275b9e4e5568405d710fc3ef945c",
-      "FR-9": "c25429fde2075310a0f03d1b9f80f2fe3a2468a8498309b4390646d664315774",
-      "FR-10": "745fa58aed5dbea3d1ce12f4e48e687eabe9d29dcfedead4ff30fe33ff8866cc",
-      "FR-11": "59f439056d0445b69f35271aef447c8bb6ebc04a52202b8d34f3b82e93b8dfc8"
+      "FR-1": "875cee10c3290467a0e5c2b70f8d102c711b6d90e2c0b2dce8707c328adeb547",
+      "FR-2": "5e4846aa90699ccd7a00d275d59790ffbcef81f5cf1d5f98f241d7b7c6fe927d",
+      "FR-3": "578c57590967474c1d6097b5947ba8aa5c9b0b55a4f0e5ba74ac23d868def107",
+      "FR-12": "5450a5187f28400de4c94abf952c5dd9ca34310b962b7f759d314a2e8ef698cd",
+      "FR-4": "779c4ad1e9e50a999c045132129fb97926b8a2e6f3f0bbb6b9fe353dfb87913b",
+      "FR-5": "06f5abef393dd426ff6c95abe633ce57112c8f62672e60577c0118d2a5dffb09",
+      "FR-6": "a72a8e0e1823e288f65cbbb6de4f70d6ea454b337e540023efe7d46da14c6426",
+      "FR-7": "44b15f6a2b34472a91255b961f2ec1cc455e16b5e5cdae6d9ad39870ffffa2e2",
+      "FR-13": "e1d95283a3bec25f269ac3b3c8f7acd48be11fd008cbf4454bf64918301a391a",
+      "FR-8": "fe2379d83fa6d75cf1038e6cb5dd13e7668a0d84166b3b9902b18318360de9a9",
+      "FR-14": "3a6bf5840dcf13bdbd2c7d115f4ec05687bca6eac8a96b4220b5e2de17009d9f",
+      "FR-9": "8e45d687d7b57ccd3956b9d857a30802194af946eeb690fa3ec188a9921496c0",
+      "FR-15": "2350fb24cc41b96768aeb03d88283bf5f17348c1879e6f6bbfefa0ce9a4f881b",
+      "FR-16": "eacf4d12669d000db3b75d064c6401575bb9d840a42272729200fd2bfc5e58fe",
+      "FR-17": "5802c9f421f2be2e5040d455bff6559430538e234c774ecc7ae104ad04dc6734",
+      "FR-10": "0253e515f308193d0745ecb0c5ef3310918370b4588b9b9f8f0670ba497ff06b",
+      "FR-11": "1b32f44467c818c9b45c994523b9d082af967191196bcf9698445e250454a13e"
     }
   }
 }

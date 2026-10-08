@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hub api request contract</title>
+<title>Hub API request contract</title>
 <meta name="aw-spec-kind" content="capability">
 <meta name="aw-spec-status" content="current">
 <meta name="aw-spec-rigor" content="sketch">
@@ -146,28 +146,55 @@ code { padding: .1rem .3rem; font-size: .88em; }
 </style>
 </head>
 <body>
-<h1>Hub api request contract</h1>
+<h1>Hub API request contract</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">1</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">1</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">8</span> criteria</p>
-<section id="summary"><h2>Summary</h2><p>What the Hub&#x27;s HTTP write surface promises a caller about the request they sent: that a field the receiving contract cannot honour is refused by name rather than absorbed, uniformly across every route, and that where a contract declines that rule it says so in its own text. Covers the translation of superseded vocabularies, which is where the rule is most easily reintroduced as its own failure, and the detection of a route that evades the rule by declaring no contract at all.</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 1</span><p><span class="aw-modal aw-modal-must">SHALL</span> A write request carrying a field the receiving contract does not declare SHALL be refused, and the refusal SHALL name the field.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Silently discarding an undeclared field tells the caller their request was understood when part of it was not. Where the discarded field selects a safety posture, the caller is told a run began under supervision they asked for and did not receive — and the run is already executing by the time the response is read. There is no response the caller can inspect to learn that the field was dropped, so the tolerance cannot be detected, only suffered. The refusal SHALL be uniform across the write surface. A caller cannot be expected to know which routes read their whole request and which read part of it; two policies in one interface make the strict routes look arbitrary and the lax ones look safe. The rule holds for a field that is merely a typo as much as for one that changes behaviour, because the system cannot tell those apart — only the caller can, and only if told. A contract MAY decline this rule where the system&#x27;s answer to an undeclared field is to **honour the request in a way the field could not have expressed**, rather than to ignore the field. Where a destination is minted rather than accepted, sending a destination is not a misunderstanding to refuse; it is a request the system answers completely, on its own terms. Such a contract SHALL state in its own text why it declines, so that a declining contract is distinguishable from one where the rule was never applied. Where a contract accepts a superseded vocabulary by translating it into its declared fields before validating them, the translation SHALL remove every name that vocabulary defines and SHALL carry every other field forward to be refused. A translation that rebuilds the request from the names it knows discards the rest silently, which is this rule&#x27;s own failure reintroduced inside the mechanism meant to satisfy it — and hidden better, because the contract&#x27;s declaration says it refuses unknown fields while one of its vocabularies does not. What the translation removes SHALL be the vocabulary it defines, not the names it happened to read. A superseded vocabulary commonly offers several names for one value, and a request carrying two of them is what a rolling upgrade emits rather than a mistake: the translation reads one, and refusing the other would refuse a name the contract itself declares it accepts. A field the vocabulary does not define SHALL still be refused, and both vocabularies SHALL be refused on the same terms. The vocabulary SHALL include the names the superseded writer emitted that the translation reads nowhere at all. A retired writer commonly sends values the current contract has stopped acting on — a threshold it now derives itself, an identifier the route already carries — and those names appear in no translation rule precisely because nothing consumes them. Enumerating the vocabulary from the translation&#x27;s own reads therefore misses them, and the omission is invisible while the translation rebuilds the request, because rebuilding drops them silently. Refusing them once it stops rebuilding turns a request the contract is required to accept into an error. The system SHALL detect a write contract that neither refuses undeclared fields nor states why it does not. The rule&#x27;s failure mode is omission: it is enforced by writing nothing, so its absence is invisible on inspection and its cost surfaces only when a caller sends the field. Any check performed once decays at the next route added. A write request that declares no contract for its body SHALL be detected by that same check. A body accepted as an open mapping does not declare a field, so it cannot refuse one, and it evades a check that inspects contracts by having none to inspect — the rule&#x27;s absence is invisible there twice over. Such a route SHALL either declare a contract or be recorded as declining, on the same terms as any other exemption.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a caller submits a write request carrying a field the contract does not declare</td><td>the request is refused the refusal names the undeclared field</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a caller submits a request to start agent work, naming a supervision posture in a field the contract does not declare</td><td>no work is started the caller is told which field was not understood</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a write contract answers an undeclared field by producing a value the caller could not have supplied</td><td>that contract may accept the request without refusing the field its own text states why it declines the rule</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a caller submits a request in a superseded vocabulary the contract translates, carrying a field that vocabulary does not define</td><td>the request is refused the refusal names that field a request in that vocabulary carrying only names it defines is accepted</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a caller submits a request in a superseded vocabulary carrying a name that writer emitted and the translation reads nowhere</td><td>the request is accepted and translated that name is not refused</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a caller submits a request carrying two names the superseded vocabulary defines for the same value, of which the translation reads one</td><td>the request is accepted and translated the name the translation did not read is not refused</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a write route accepts its body as an open mapping rather than as a declared contract</td><td>the system reports it as a defect reporting it does not depend on the route being sent an undeclared field</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a write contract neither refuses undeclared fields nor states why it declines the rule</td><td>the system reports it as a defect</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/hub-api-request-contract/spec.md (1 requirements, 8 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 8 of 8 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">4</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">4</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">10</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>What the Hub&#x27;s HTTP write surface promises about the request a caller sent: a body field the receiving contract does not declare is refused by name, uniformly; the few contracts that decline the rule say why in the code; legacy vocabularies are translated without swallowing unknown fields; and a test over the routing table catches any route that slips.</p></section><section id="problem"><h2>Problem</h2><p>A field silently discarded tells the caller they were understood when they were not. When the field was a supervision posture, the run is already executing unsupervised by the time the response is read (F116).</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>Every HTTP request body model (`RequestModel`, `extra=&quot;forbid&quot;`)</li><li>Before-validators that translate legacy field names</li><li>The declared exemptions and the test that enforces the rule</li></ul><h3>Non-goals</h3><ul><li>Validation of field values (owned by each route&#x27;s capability)</li><li>MCP tool argument handling (agent-tool-surface)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> A write request whose body carries a field its contract does not declare SHALL be refused, and the refusal SHALL name the field, on every route alike.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The Hub cannot tell a typo from a field that changes behaviour; only the caller can, and only if told. One policy across routes means no route looks safe by accident.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> A request contract MAY accept undeclared fields only where its own requirement demands it, and SHALL then be listed with its reason among the declared exemptions; a body accepted as an untyped mapping SHALL likewise be listed with its reason and SHALL refuse unknown keys by name itself.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An exemption without a reason is indistinguishable from the rule never having been applied.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> A contract that translates a superseded vocabulary before validation SHALL remove every name that vocabulary defines, including names nothing reads any more, and SHALL carry every other field forward to be refused, so that a request carrying two legacy names for one value is accepted and a field outside both vocabularies is refused by name.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A translation that rebuilds the body from the names it knows drops the rest silently, reintroducing the failure inside the mechanism meant to prevent it; one that removes only the name it read refuses a rolling upgrade&#x27;s second alias.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> The test suite SHALL derive every write route from the application&#x27;s routing table and fail when a body model, or any model nested in it, tolerates extra fields, or a route declares no body model, unless it is a listed exemption with a reason.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The rule fails by omission, so a one-time check decays at the next route; deriving the list from routing makes a new route covered by construction.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>A strict write route</td><td>A caller sends a body with an undeclared field</td><td>The request is refused with 422 naming that field.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>`POST /agent/trigger`</td><td>The body carries a top-level `permission_mode` the contract does not declare</td><td>No run starts and the refusal names `permission_mode`.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>Stored project instructions</td><td>`PUT /project/instructions` sends `contents` instead of `content`</td><td>It is refused naming `contents` and the stored text is unchanged.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>The spec document payload, whose contract requires unrecognised fields to round-trip</td><td>It is posted with an unrecognised field</td><td>It is accepted, and the exemption list states that reason.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>`PATCH` on an agent, whose body is an untyped mapping</td><td>It carries a key outside the fields it accepts</td><td>It is refused with 400 naming the key.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>A legacy context-usage body</td><td>It also carries a field neither vocabulary defines</td><td>It is refused naming that field.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>A legacy body carrying a retired field the translation does not read</td><td>It is posted</td><td>It is accepted and translated.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>A rolling-upgrade body carrying both `tokens_used` and `input_tokens`</td><td>It is posted to the real route</td><td>It is accepted.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>A new write route whose body is `dict`</td><td>The suite runs</td><td>It fails until the route declares a model or is listed with a reason, without anyone sending it a request.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>A request model with `extra` other than `forbid`, not listed as an exemption</td><td>The suite runs</td><td>It fails naming the model.</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>D1 Every request model inherits `RequestModel` (`hub/hub/schemas/common.py`, `extra=&quot;forbid&quot;`), so strictness is the default rather than a per-model decision.</p><p>D2 Exemptions live in `hub/tests/test_request_strictness.py` as `LAX_BY_DESIGN` (today: the spec document payload, forward compatible by its own requirement) and `NO_CONTRACT_BY_DESIGN` (today: `patch_agent`, which refuses unknown keys by hand with 400), each with a reason that the suite also asserts is present.</p><p>D3 Legacy translation subtracts the whole vocabulary (`LEGACY_CONTEXT_VOCABULARY` in `hub/hub/schemas/agents.py`, assignee aliases in `hub/hub/schemas/tasks.py`) and starts from the residue, so `forbid` judges everything else.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/tests/test_request_strictness.py</li><li>hub/tests/test_legacy_vocabulary_is_consumed.py</li><li>hub/tests/test_patch_agent_refuses_unknown_fields.py</li></ul><h3 class="aw-limits">Limits</h3><ul><li>The check is a test run in CI, not a runtime report; a route added without running the suite is unchecked until it is.</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
-  "title": "Hub api request contract",
-  "summary": "What the Hub's HTTP write surface promises a caller about the request they sent: that a field the receiving contract cannot honour is refused by name rather than absorbed, uniformly across every route, and that where a contract declines that rule it says so in its own text. Covers the translation of superseded vocabularies, which is where the rule is most easily reintroduced as its own failure, and the detection of a route that evades the rule by declaring no contract at all.",
-  "problem": "",
+  "title": "Hub API request contract",
+  "summary": "What the Hub's HTTP write surface promises about the request a caller sent: a body field the receiving contract does not declare is refused by name, uniformly; the few contracts that decline the rule say why in the code; legacy vocabularies are translated without swallowing unknown fields; and a test over the routing table catches any route that slips.",
+  "problem": "A field silently discarded tells the caller they were understood when they were not. When the field was a supervision posture, the run is already executing unsupervised by the time the response is read (F116).",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "Every HTTP request body model (`RequestModel`, `extra=\"forbid\"`)",
+      "Before-validators that translate legacy field names",
+      "The declared exemptions and the test that enforces the rule"
+    ],
+    "non_goals": [
+      "Validation of field values (owned by each route's capability)",
+      "MCP tool argument handling (agent-tool-surface)"
+    ]
   },
   "requirements": [
     {
       "key": "a-request-body-field-the-system-cannot-honour-is-refused-by-",
-      "statement": "A write request carrying a field the receiving contract does not declare SHALL be refused, and the refusal SHALL name the field.",
+      "statement": "A write request whose body carries a field its contract does not declare SHALL be refused, and the refusal SHALL name the field, on every route alike.",
       "modal": "SHALL",
-      "rationale": "Silently discarding an undeclared field tells the caller their request was understood when part of it was not. Where the discarded field selects a safety posture, the caller is told a run began under supervision they asked for and did not receive — and the run is already executing by the time the response is read. There is no response the caller can inspect to learn that the field was dropped, so the tolerance cannot be detected, only suffered. The refusal SHALL be uniform across the write surface. A caller cannot be expected to know which routes read their whole request and which read part of it; two policies in one interface make the strict routes look arbitrary and the lax ones look safe. The rule holds for a field that is merely a typo as much as for one that changes behaviour, because the system cannot tell those apart — only the caller can, and only if told. A contract MAY decline this rule where the system's answer to an undeclared field is to **honour the request in a way the field could not have expressed**, rather than to ignore the field. Where a destination is minted rather than accepted, sending a destination is not a misunderstanding to refuse; it is a request the system answers completely, on its own terms. Such a contract SHALL state in its own text why it declines, so that a declining contract is distinguishable from one where the rule was never applied. Where a contract accepts a superseded vocabulary by translating it into its declared fields before validating them, the translation SHALL remove every name that vocabulary defines and SHALL carry every other field forward to be refused. A translation that rebuilds the request from the names it knows discards the rest silently, which is this rule's own failure reintroduced inside the mechanism meant to satisfy it — and hidden better, because the contract's declaration says it refuses unknown fields while one of its vocabularies does not. What the translation removes SHALL be the vocabulary it defines, not the names it happened to read. A superseded vocabulary commonly offers several names for one value, and a request carrying two of them is what a rolling upgrade emits rather than a mistake: the translation reads one, and refusing the other would refuse a name the contract itself declares it accepts. A field the vocabulary does not define SHALL still be refused, and both vocabularies SHALL be refused on the same terms. The vocabulary SHALL include the names the superseded writer emitted that the translation reads nowhere at all. A retired writer commonly sends values the current contract has stopped acting on — a threshold it now derives itself, an identifier the route already carries — and those names appear in no translation rule precisely because nothing consumes them. Enumerating the vocabulary from the translation's own reads therefore misses them, and the omission is invisible while the translation rebuilds the request, because rebuilding drops them silently. Refusing them once it stops rebuilding turns a request the contract is required to accept into an error. The system SHALL detect a write contract that neither refuses undeclared fields nor states why it does not. The rule's failure mode is omission: it is enforced by writing nothing, so its absence is invisible on inspection and its cost surfaces only when a caller sends the field. Any check performed once decays at the next route added. A write request that declares no contract for its body SHALL be detected by that same check. A body accepted as an open mapping does not declare a field, so it cannot refuse one, and it evades a check that inspects contracts by having none to inspect — the rule's absence is invisible there twice over. Such a route SHALL either declare a contract or be recorded as declining, on the same terms as any other exemption.",
+      "rationale": "The Hub cannot tell a typo from a field that changes behaviour; only the caller can, and only if told. One policy across routes means no route looks safe by accident.",
+      "party": null
+    },
+    {
+      "key": "n1-a-contract-that-declines-the-rule-says-why",
+      "statement": "A request contract MAY accept undeclared fields only where its own requirement demands it, and SHALL then be listed with its reason among the declared exemptions; a body accepted as an untyped mapping SHALL likewise be listed with its reason and SHALL refuse unknown keys by name itself.",
+      "modal": "SHALL",
+      "rationale": "An exemption without a reason is indistinguishable from the rule never having been applied.",
+      "party": null
+    },
+    {
+      "key": "n2-a-legacy-vocabulary-is-consumed-not-rebuilt",
+      "statement": "A contract that translates a superseded vocabulary before validation SHALL remove every name that vocabulary defines, including names nothing reads any more, and SHALL carry every other field forward to be refused, so that a request carrying two legacy names for one value is accepted and a field outside both vocabularies is refused by name.",
+      "modal": "SHALL",
+      "rationale": "A translation that rebuilds the body from the names it knows drops the rest silently, reintroducing the failure inside the mechanism meant to prevent it; one that removes only the name it read refuses a rolling upgrade's second alias.",
+      "party": null
+    },
+    {
+      "key": "n3-the-rule-is-checked-over-the-whole-routing-table",
+      "statement": "The test suite SHALL derive every write route from the application's routing table and fail when a body model, or any model nested in it, tolerates extra fields, or a route declares no body model, unless it is a listed exemption with a reason.",
+      "modal": "SHALL",
+      "rationale": "The rule fails by omission, so a one-time check decays at the next route; deriving the list from routing makes a new route covered by construction.",
       "party": null
     }
   ],
@@ -175,81 +202,103 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac1",
       "requirement": "a-request-body-field-the-system-cannot-honour-is-refused-by-",
-      "given": "",
-      "when": "a caller submits a write request carrying a field the contract does not declare",
-      "then": "the request is refused the refusal names the undeclared field"
+      "given": "A strict write route",
+      "when": "A caller sends a body with an undeclared field",
+      "then": "The request is refused with 422 naming that field."
     },
     {
       "key": "ac2",
       "requirement": "a-request-body-field-the-system-cannot-honour-is-refused-by-",
-      "given": "",
-      "when": "a caller submits a request to start agent work, naming a supervision posture in a field the contract does not declare",
-      "then": "no work is started the caller is told which field was not understood"
+      "given": "`POST /agent/trigger`",
+      "when": "The body carries a top-level `permission_mode` the contract does not declare",
+      "then": "No run starts and the refusal names `permission_mode`."
+    },
+    {
+      "key": "ac9",
+      "requirement": "a-request-body-field-the-system-cannot-honour-is-refused-by-",
+      "given": "Stored project instructions",
+      "when": "`PUT /project/instructions` sends `contents` instead of `content`",
+      "then": "It is refused naming `contents` and the stored text is unchanged."
     },
     {
       "key": "ac3",
-      "requirement": "a-request-body-field-the-system-cannot-honour-is-refused-by-",
-      "given": "",
-      "when": "a write contract answers an undeclared field by producing a value the caller could not have supplied",
-      "then": "that contract may accept the request without refusing the field its own text states why it declines the rule"
+      "requirement": "n1-a-contract-that-declines-the-rule-says-why",
+      "given": "The spec document payload, whose contract requires unrecognised fields to round-trip",
+      "when": "It is posted with an unrecognised field",
+      "then": "It is accepted, and the exemption list states that reason."
+    },
+    {
+      "key": "ac10",
+      "requirement": "n1-a-contract-that-declines-the-rule-says-why",
+      "given": "`PATCH` on an agent, whose body is an untyped mapping",
+      "when": "It carries a key outside the fields it accepts",
+      "then": "It is refused with 400 naming the key."
     },
     {
       "key": "ac4",
-      "requirement": "a-request-body-field-the-system-cannot-honour-is-refused-by-",
-      "given": "",
-      "when": "a caller submits a request in a superseded vocabulary the contract translates, carrying a field that vocabulary does not define",
-      "then": "the request is refused the refusal names that field a request in that vocabulary carrying only names it defines is accepted"
+      "requirement": "n2-a-legacy-vocabulary-is-consumed-not-rebuilt",
+      "given": "A legacy context-usage body",
+      "when": "It also carries a field neither vocabulary defines",
+      "then": "It is refused naming that field."
     },
     {
       "key": "ac5",
-      "requirement": "a-request-body-field-the-system-cannot-honour-is-refused-by-",
-      "given": "",
-      "when": "a caller submits a request in a superseded vocabulary carrying a name that writer emitted and the translation reads nowhere",
-      "then": "the request is accepted and translated that name is not refused"
+      "requirement": "n2-a-legacy-vocabulary-is-consumed-not-rebuilt",
+      "given": "A legacy body carrying a retired field the translation does not read",
+      "when": "It is posted",
+      "then": "It is accepted and translated."
     },
     {
       "key": "ac6",
-      "requirement": "a-request-body-field-the-system-cannot-honour-is-refused-by-",
-      "given": "",
-      "when": "a caller submits a request carrying two names the superseded vocabulary defines for the same value, of which the translation reads one",
-      "then": "the request is accepted and translated the name the translation did not read is not refused"
+      "requirement": "n2-a-legacy-vocabulary-is-consumed-not-rebuilt",
+      "given": "A rolling-upgrade body carrying both `tokens_used` and `input_tokens`",
+      "when": "It is posted to the real route",
+      "then": "It is accepted."
     },
     {
       "key": "ac7",
-      "requirement": "a-request-body-field-the-system-cannot-honour-is-refused-by-",
-      "given": "",
-      "when": "a write route accepts its body as an open mapping rather than as a declared contract",
-      "then": "the system reports it as a defect reporting it does not depend on the route being sent an undeclared field"
+      "requirement": "n3-the-rule-is-checked-over-the-whole-routing-table",
+      "given": "A new write route whose body is `dict`",
+      "when": "The suite runs",
+      "then": "It fails until the route declares a model or is listed with a reason, without anyone sending it a request."
     },
     {
       "key": "ac8",
-      "requirement": "a-request-body-field-the-system-cannot-honour-is-refused-by-",
-      "given": "",
-      "when": "a write contract neither refuses undeclared fields nor states why it declines the rule",
-      "then": "the system reports it as a defect"
+      "requirement": "n3-the-rule-is-checked-over-the-whole-routing-table",
+      "given": "A request model with `extra` other than `forbid`, not listed as an exemption",
+      "when": "The suite runs",
+      "then": "It fails naming the model."
     }
   ],
   "tasks": [],
   "algorithms": [],
-  "design": "",
+  "design": "D1 Every request model inherits `RequestModel` (`hub/hub/schemas/common.py`, `extra=\"forbid\"`), so strictness is the default rather than a per-model decision.\n\nD2 Exemptions live in `hub/tests/test_request_strictness.py` as `LAX_BY_DESIGN` (today: the spec document payload, forward compatible by its own requirement) and `NO_CONTRACT_BY_DESIGN` (today: `patch_agent`, which refuses unknown keys by hand with 400), each with a reason that the suite also asserts is present.\n\nD3 Legacy translation subtracts the whole vocabulary (`LEGACY_CONTEXT_VOCABULARY` in `hub/hub/schemas/agents.py`, assignee aliases in `hub/hub/schemas/tasks.py`) and starts from the residue, so `forbid` judges everything else.",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/hub-api-request-contract/spec.md (1 requirements, 8 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "hub/tests/test_request_strictness.py",
+      "hub/tests/test_legacy_vocabulary_is_consumed.py",
+      "hub/tests/test_patch_agent_refuses_unknown_fields.py"
     ],
     "limits": [
-      "scenarios-state-no-starting-state: 8 of 8 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "The check is a test run in CI, not a runtime report; a route added without running the suite is unchecked until it is."
     ]
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
-      "a-request-body-field-the-system-cannot-honour-is-refused-by-": "FR-1"
+      "a-request-body-field-the-system-cannot-honour-is-refused-by-": "FR-1",
+      "n1-a-contract-that-declines-the-rule-says-why": "FR-2",
+      "n2-a-legacy-vocabulary-is-consumed-not-rebuilt": "FR-3",
+      "n3-the-rule-is-checked-over-the-whole-routing-table": "FR-4"
     },
-    "high_water": 1,
+    "high_water": 4,
     "retired": {},
     "digests": {
-      "FR-1": "ebdc7a3bfbe54e1d7f0103d46a673730b6dec141dd41c6ed96d4653a17a4486e"
+      "FR-1": "809314e9427959b7a5f5f7fe99047c9f523e660c3ec133c61d1cbe088d320b05",
+      "FR-2": "097d755fc10b9f0fe494504cb930c8c647e1d7904424f9748396ac8df3eb7dbb",
+      "FR-3": "dd8ae8f8284dbd8d46b4809968b25e0070421bf98e9876c0263ae6cea0f274a8",
+      "FR-4": "f387dfc62ada90dc506a2000e154fed47c7d1bc28f340d209a23d5c328fd4255"
     }
   }
 }

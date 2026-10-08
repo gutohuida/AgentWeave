@@ -148,82 +148,97 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <body>
 <h1>Hub interaction feedback</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a><a href="../../areas/interface.html">Interface</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">9</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">9</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">25</span> criteria</p>
-<section id="summary"><h2>Summary</h2><p>How the Hub answers a pointer and a keyboard: what every activatable element owes the operator in resting, hover, pressed, and focused states, and how emphasis is allowed to change. Separated from `hub-workspace-shell` by `2026-08-04-hub-contextual-navigation` because it is not about layout. The shell decides what is on screen and where; this decides whether what is on screen answers when touched. Stating it once keeps every surface from inventing its own answer.</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 1 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every activatable element SHALL present a visible resting state, a hover state, a pressed state, and a visible focus indicator when focused by keyboard. This applies to controls, navigation rows, list rows, tabs, cards, and disclosures.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An element that changes the application&#x27;s state when clicked MUST NOT be visually inert under the pointer.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 2 of 9</span><p><span class="aw-modal aw-modal-must">MUST</span> A selected or current element SHALL be distinguishable from a merely hovered element. The two states MUST NOT resolve to the same appearance.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The current element SHALL remain identifiable while the pointer is elsewhere.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 3 of 9</span><p><span class="aw-modal aw-modal-must">MUST</span> An element changing between its resting, hover, pressed, and selected states MUST NOT change its own size or position, and MUST NOT displace any neighbouring element.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 4 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> A row that reveals secondary actions only while hovered or focused SHALL reserve their layout space at rest, so revealing them displaces nothing. Those actions MUST remain reachable by keyboard.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span><a class="aw-anchor-copy" href="#FR-11" aria-label="Link to FR-11" title="Link to #FR-11">#</a> <span class="aw-position">Requirement 5 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Transitions between interaction states SHALL be eased using the application&#x27;s shared duration and easing tokens rather than switching instantly.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>When the operator has asked for reduced motion, transitions SHALL be suppressed while every state remains distinguishable by its appearance alone.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span><a class="aw-anchor-copy" href="#FR-12" aria-label="Link to FR-12" title="Link to #FR-12">#</a> <span class="aw-position">Requirement 6 of 9</span><p><span class="aw-modal aw-modal-must">MUST</span> Resting, hover, pressed, and selected treatments SHALL resolve from semantic tokens defined for both the light and dark themes. A surface MUST NOT hard-code a colour for an interaction state, and the same kind of element SHALL use the same tokens wherever it appears.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 7 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> A dismissal keystroke SHALL be answered by exactly one control — the innermost one that owns it — and a surface that dismisses on that keystroke SHALL NOT do so when a control nearer the operator has already handled it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A control that handles a dismissal keystroke SHALL mark the keystroke as handled, so that the surfaces containing it can tell. A surface cannot know what is nested inside it, and a nested control cannot know what contains it; the keystroke itself is the only thing both can see. Nesting is the ordinary case, not an exotic one. A panel holds a menu; a panel holds an input that cancels; a panel holds a browser that closes. In every one of those the operator pressing Escape is dismissing the thing they are looking at, and the surface behind it is the context they expect to come back to. A surface that leaves with the control being dismissed takes the operator&#x27;s place with it, and there is nothing on screen afterwards to say what happened. The cost is worse than an extra click, and it is why this is stated once here rather than repaired per screen. A nested control that owns the key **cannot be observed to work at all** while the surface around it also acts: the code runs, does exactly what it was written to do, and is unmounted by the same keystroke. That failure is invisible to anything except operating the product. This requirement is about who answers, not about where a listener is bound or which mechanism marks the keystroke. A surface may listen wherever it needs to.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 8 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> A menu action whose effect is to present a control expecting the operator&#x27;s input SHALL leave keyboard focus in that control once the menu has closed, and SHALL NOT return focus to the control that opened the menu.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A menu returning focus to its trigger is right for an action that leaves nothing on screen: it is where the operator was, and it is where they can act next. It is wrong for an action whose whole purpose is to ask a question, because the field holding the answer is then the one place the keyboard is not. **The failure is silent, which is what makes it worth a requirement rather than a fix.** The operator types and nothing appears; the control they are actually typing into is a button, so their keystrokes activate it; and the action they were completing sits waiting on input the product will not accept from them. Nothing is written wrongly and no error is shown, so there is no moment at which the product says anything is wrong. This applies to the action, not to the menu. A menu that offers both kinds of action SHALL distinguish them: an action that presents nothing keeps returning focus to the trigger, and only the action that asks stands the restoration down.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 9 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> A dialog SHALL move keyboard focus into itself when it opens, and SHALL return focus to the control that opened it when it closes; a confirmation whose action cannot be undone SHALL open with focus on the choice that changes nothing.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A dialog that leaves the keyboard on the control that opened it answers the operator&#x27;s next key with that control, which sits behind the dialog where they cannot see it. A second Enter repeats the action the dialog is asking about, and a screen reader never announces the question. The choice that receives focus in a confirmation SHALL be marked explicitly rather than inferred from the order the choices are drawn in, so that restyling a dialog cannot move the keyboard onto its destructive choice. Where every control in a dialog is unavailable, the dialog itself SHALL hold focus, so that the keyboard is still inside the dialog and not behind it. Where the control holding focus becomes unavailable while the dialog waits on the action it started, the dialog itself SHALL take focus. This applies to every modal dialog the app draws, whether it asks a question, collects a form, or connects the app to a Hub. Where something inside a dialog is designed to take focus when the dialog opens, the dialog SHALL still record, before that happens, where focus was, so that closing the dialog returns it there.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator hovers a project, an agent, a project view, or a configuration section</td><td>that row takes on a hover treatment distinguishing it from the rows around it</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator presses an activatable element</td><td>its appearance changes again, distinctly from its hover appearance it returns to the hover appearance when released with the pointer still over it</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator moves focus to an activatable element with the keyboard</td><td>a focus indicator is drawn that is visible against the surface behind it</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>one configuration section is selected and the operator hovers a different one</td><td>both are distinguishable from the unselected rows they are distinguishable from each other</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the pointer leaves the navigation region entirely</td><td>the current destination remains marked</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator moves the pointer across a list of rows</td><td>no row, and no text within a row, moves by any amount</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator hovers a row carrying secondary actions</td><td>those actions become visible the row&#x27;s other content does not move</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator tabs into a row whose secondary actions are not currently drawn</td><td>those actions can be reached and activated</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an element enters or leaves its hover state</td><td>the change is eased over the application&#x27;s fast duration</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator has requested reduced motion</td><td>interaction states change without animating hover, pressed, and selected states remain distinguishable from one another and from rest</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a navigation row, a configuration section row, and a list row are compared in either theme</td><td>their hover, pressed, and selected treatments are drawn from the same tokens</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the production stylesheet is checked</td><td>every token referenced by an interaction state has a value in both light and dark themes</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator opens a menu belonging to a control inside a panel that itself dismisses on</td><td>the menu closes the panel is still open</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a panel that dismisses on Escape is showing a control that cancels itself on Escape, and</td><td>that control is cancelled the panel is still open, showing what it showed before the control appeared</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a secondary panel is open over the panel that opened it, and both dismiss on Escape, and</td><td>the secondary panel closes the panel that opened it is still open</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator presses Escape while a panel is open and nothing inside it has claimed the</td><td>the panel dismisses, exactly as it did before</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator chooses a menu action that presents a control expecting their input</td><td>keyboard focus is in that control once the menu has closed what they type next appears in it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator chooses a menu action that presents no control expecting input</td><td>keyboard focus returns to the control that opened the menu</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator types an answer containing spaces into the control a menu action presented</td><td>the menu does not re-open the surface behind that control does not stop answering the pointer because a menu re-opened</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator opens a confirmation whose action cannot be undone</td><td>keyboard focus is on the choice that changes nothing pressing Enter closes the dialog without taking the action</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator opens a dialog that asks them to type something</td><td>keyboard focus is in that field</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a dialog opens while every control in it is unavailable</td><td>keyboard focus is inside the dialog</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator closes a dialog they opened from a control</td><td>keyboard focus is on that control</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator opens a dialog that creates or edits a charter, a runner or a job, and then</td><td>keyboard focus was in the dialog&#x27;s first field while it was open keyboard focus is on the control that opened the dialog once it has closed</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator confirms a dialog&#x27;s action and the control they used becomes unavailable</td><td>keyboard focus is inside the dialog</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/hub-interaction-feedback/spec.md (9 requirements, 25 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 25 of 25 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">10</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">10</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">26</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>How the Hub answers the pointer and the keyboard: every activatable element shows resting, hover, pressed and focus states from shared tokens without moving anything; hover-revealed row actions keep their space; one Escape dismisses one thing; and menus and dialogs put the keyboard where the operator&#x27;s next input belongs.</p></section><section id="problem"><h2>Problem</h2><p>Elements that did not respond to the pointer looked broken, emphasis that shifted layout made lists jitter, and keyboard focus left behind a dialog or on a menu trigger made the operator&#x27;s keystrokes act on something they could not see.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>Resting, hover, pressed, selected and focus treatments of activatable elements</li><li>Hover-revealed row actions</li><li>Motion and reduced motion for state changes</li><li>Escape ownership between nested surfaces</li><li>Focus placement for menus and modal dialogs</li></ul><h3>Non-goals</h3><ul><li>Shell layout, palette and the contrast ramp (hub-workspace-shell)</li><li>Composer-specific control treatment (agent-composer)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 1 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every activatable element (controls, navigation and list rows, tabs, cards, disclosures) SHALL present distinct resting, hover and pressed states and a visible keyboard focus indicator; the shared Button primitive and row treatment SHALL supply these so no element that changes state when clicked is inert under the pointer.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An element that does not answer the pointer reads as broken or decorative.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 2 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> A selected or current element SHALL look different from a merely hovered one and SHALL remain identifiable while the pointer is elsewhere; the hover, pressed and selected treatments MUST NOT resolve to the same appearance.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Where the operator is and where the pointer is are different facts.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 3 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> Changing between resting, hover, pressed and selected states MUST NOT change an element&#x27;s size or position or displace any neighbour; controls SHALL reserve their border space at rest.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A one-pixel shift on hover makes a list jitter under the pointer.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 4 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> A row&#x27;s secondary actions that appear only on hover or focus SHALL occupy their layout space at rest (revealed by opacity), SHALL appear when the row has keyboard focus, SHALL stay visible while their menu is open or for the active item, and MUST remain reachable by keyboard.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Revealing an action must not move the row, and an action that only the mouse can find does not exist for the keyboard.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span><a class="aw-anchor-copy" href="#FR-11" aria-label="Link to FR-11" title="Link to #FR-11">#</a> <span class="aw-position">Requirement 5 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> Transitions between interaction states SHALL use the shared duration and easing tokens; when the operator prefers reduced motion, transitions and animations SHALL be reduced to effectively instant while every state stays distinguishable by appearance alone.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Easing makes state changes legible; motion must never be the only signal.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span><a class="aw-anchor-copy" href="#FR-12" aria-label="Link to FR-12" title="Link to #FR-12">#</a> <span class="aw-position">Requirement 6 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> Hover, pressed and selected treatments SHALL resolve from semantic tokens defined in both modes (`--row-hover`, `--row-active`, `--row-selected` for rows), and the same kind of element SHALL use the same tokens wherever it appears; a component MUST NOT hard-code a colour for an interaction state.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>One ladder of tokens keeps the three states from collapsing onto each other on some surfaces.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 7 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> An Escape keystroke SHALL be answered by exactly one surface, the innermost one that owns it: a nested control that handles Escape SHALL mark the event handled (`preventDefault`), and a containing surface SHALL NOT dismiss on an Escape already handled. Of several stacked dialogs, only the newest SHALL answer.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A panel that closes along with the menu or field inside it takes the operator&#x27;s context with it, and the nested control can never be seen to work. The containing listener sits on `document` in the bubble phase so every nearer handler has already run.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 8 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> A menu action that presents a control expecting input SHALL be declared as taking focus and SHALL leave keyboard focus in that control once the menu closes, running after the menu has gone; every other menu action SHALL return focus to the menu&#x27;s trigger.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Returning focus to the trigger after an action that asks a question sends the operator&#x27;s typing to a button; nothing errors and nothing appears.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 9 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every modal dialog SHALL record where focus was, move focus into itself on open (to the control marked as initial focus, else its first enabled control, else the panel itself), and return focus to the recorded element on close. A confirmation of an action that cannot be undone SHALL mark its non-destructive choice as initial focus. While a dialog waits on an action that disabled the focused control, the dialog panel SHALL hold focus.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Focus left behind a dialog answers the next key with the control that opened it, repeating the action being asked about; marking the initial control explicitly keeps a restyle from moving the keyboard onto a destructive choice.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span><a class="aw-anchor-copy" href="#FR-16" aria-label="Link to FR-16" title="Link to #FR-16">#</a> <span class="aw-position">Requirement 10 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> While a modal dialog is open, Tab and Shift+Tab SHALL cycle through its enabled controls and MUST NOT move focus behind it, including on the first Tab when focus is still outside the panel; only the newest of stacked dialogs SHALL handle Tab.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A first Tab that fell through to the page landed behind the scrim, where the operator cannot see what they are operating.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>the rail</td><td>the operator hovers a project, an agent, a project view tab or a configuration section</td><td>that row takes a hover treatment distinguishing it from its neighbours</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>an activatable element</td><td>the operator presses it</td><td>its appearance differs from its hover appearance, and returns to hover on release with the pointer still over it</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>an activatable element</td><td>the operator focuses it with the keyboard</td><td>a focus ring visible against the surface behind it is drawn</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td>one configuration section is selected</td><td>the operator hovers another</td><td>both are distinguishable from unselected rows and from each other</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td>a current destination</td><td>the pointer leaves the rail</td><td>the current destination remains marked</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-9">FR-9</a></td><td>a list of rows</td><td>the pointer moves across it</td><td>no row and no text within a row moves</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td>a row with secondary actions</td><td>the operator hovers it</td><td>the actions become visible and the row&#x27;s other content does not move</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td>a row whose actions are hidden</td><td>the operator tabs into it</td><td>the actions are shown and can be activated</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-11">FR-11</a></td><td>an element</td><td>it enters or leaves hover</td><td>the change eases over the fast duration token</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-11">FR-11</a></td><td>the operator prefers reduced motion</td><td>states change</td><td>they change without visible animation and remain distinguishable from rest and from each other</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-12">FR-12</a></td><td>a navigation row, a configuration section row and a list row</td><td>they are compared in either mode</td><td>their hover, pressed and selected treatments use the same tokens</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-12">FR-12</a></td><td>the stylesheet</td><td>it is checked</td><td>every interaction-state token has a value in both modes</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-13">FR-13</a></td><td>a menu open inside a panel that dismisses on Escape</td><td>the operator presses Escape</td><td>the menu closes and the panel stays open</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td>a panel that dismisses on Escape showing an inline field that cancels on Escape</td><td>the operator presses Escape in the field</td><td>the field is cancelled and the panel stays open as it was</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td>a dialog opened from another dialog</td><td>the operator presses Escape</td><td>only the newer dialog closes</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-13">FR-13</a></td><td>a dialog with nothing inside it claiming Escape</td><td>the operator presses Escape</td><td>the dialog closes</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td>a task&#x27;s status menu</td><td>the operator chooses Blocked, which asks for a reason</td><td>focus is in the reason field once the menu has closed and typing appears there</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td>a row menu</td><td>the operator chooses an action that presents no input</td><td>focus returns to the menu&#x27;s trigger</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td>the reason field presented by a menu action</td><td>the operator types an answer containing spaces</td><td>the menu does not re-open</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>a delete confirmation</td><td>it opens</td><td>focus is on Cancel, and pressing Enter closes it without deleting</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>a dialog that asks for a name</td><td>it opens</td><td>focus is in the name field</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>a dialog whose every control is disabled</td><td>it opens</td><td>focus is on the dialog panel</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>a dialog opened from a control</td><td>the operator closes it, including by Escape</td><td>focus is on that control</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>a confirmation dialog</td><td>the operator confirms and the dialog disables its controls while the action runs</td><td>focus is on the dialog panel</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td>a dialog just opened while focus is still on its opener</td><td>the operator presses Tab</td><td>focus moves to the dialog&#x27;s first control, not behind the scrim</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td>focus on a dialog&#x27;s last control</td><td>the operator presses Tab</td><td>focus moves to its first control</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>D1. States come from primitives, not per-screen styles: the Button primitive carries a permanent transparent border and a focus-visible ring; every list row uses the shared `.row-item` treatment and the `--row-hover` / `--row-active` / `--row-selected` ladder.</p><p>D2. Escape ownership is signalled on the event itself (`defaultPrevented`); `useDialogFocus` listens on `document` in the bubble phase so it is always the last to see the key, and keeps a stack so only the newest dialog answers.</p><p>D3. Menu items declare `takesFocus` when they present an input; such an item runs as the menu closes and the menu does not restore focus to its trigger.</p><p>D4. Dialog initial focus is marked explicitly (`data-dialog-initial-focus`) rather than inferred from DOM order.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/ui/src/hooks/useDialogFocus.ts and its users (DeleteConfirmDialog, JobForm, ArchiveConfirmDialog hold focus on the panel while pending)</li><li>hub/ui/src/__tests__/agentCreateDialogFocusRestore.test.tsx, jobFormFocus.test.tsx, chartersUi.test.tsx, runnersUi.test.tsx, setupModalAccessibility.test.tsx (initial focus and focus return)</li><li>hub/ui/src/__tests__/rowMenus.test.tsx, taskBlockedTreatment.test.tsx, taskDetailDrawer.test.tsx (menus, nested Escape)</li><li>hub/ui/src/__tests__/hubVisualLanguage.test.ts (motion and reduced-motion support)</li></ul><h3 class="aw-limits">Limits</h3><ul><li>Hover/pressed distinctness and no-shift are enforced by the shared primitives and CSS (buttonVariants.ts, index.css row treatment), not by a test that measures layout.</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
   "title": "Hub interaction feedback",
-  "summary": "How the Hub answers a pointer and a keyboard: what every activatable element owes the operator in resting, hover, pressed, and focused states, and how emphasis is allowed to change. Separated from `hub-workspace-shell` by `2026-08-04-hub-contextual-navigation` because it is not about layout. The shell decides what is on screen and where; this decides whether what is on screen answers when touched. Stating it once keeps every surface from inventing its own answer.",
-  "problem": "",
+  "summary": "How the Hub answers the pointer and the keyboard: every activatable element shows resting, hover, pressed and focus states from shared tokens without moving anything; hover-revealed row actions keep their space; one Escape dismisses one thing; and menus and dialogs put the keyboard where the operator's next input belongs.",
+  "problem": "Elements that did not respond to the pointer looked broken, emphasis that shifted layout made lists jitter, and keyboard focus left behind a dialog or on a menu trigger made the operator's keystrokes act on something they could not see.",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "Resting, hover, pressed, selected and focus treatments of activatable elements",
+      "Hover-revealed row actions",
+      "Motion and reduced motion for state changes",
+      "Escape ownership between nested surfaces",
+      "Focus placement for menus and modal dialogs"
+    ],
+    "non_goals": [
+      "Shell layout, palette and the contrast ramp (hub-workspace-shell)",
+      "Composer-specific control treatment (agent-composer)"
+    ]
   },
   "requirements": [
     {
       "key": "every-activatable-element-responds-to-the-pointer-and-to-foc",
-      "statement": "Every activatable element SHALL present a visible resting state, a hover state, a pressed state, and a visible focus indicator when focused by keyboard. This applies to controls, navigation rows, list rows, tabs, cards, and disclosures.",
+      "statement": "Every activatable element (controls, navigation and list rows, tabs, cards, disclosures) SHALL present distinct resting, hover and pressed states and a visible keyboard focus indicator; the shared Button primitive and row treatment SHALL supply these so no element that changes state when clicked is inert under the pointer.",
       "modal": "SHALL",
-      "rationale": "An element that changes the application's state when clicked MUST NOT be visually inert under the pointer.",
+      "rationale": "An element that does not answer the pointer reads as broken or decorative.",
       "party": null
     },
     {
       "key": "where-the-operator-is-differs-from-where-the-pointer-is",
-      "statement": "A selected or current element SHALL be distinguishable from a merely hovered element. The two states MUST NOT resolve to the same appearance.",
+      "statement": "A selected or current element SHALL look different from a merely hovered one and SHALL remain identifiable while the pointer is elsewhere; the hover, pressed and selected treatments MUST NOT resolve to the same appearance.",
       "modal": "MUST",
-      "rationale": "The current element SHALL remain identifiable while the pointer is elsewhere.",
+      "rationale": "Where the operator is and where the pointer is are different facts.",
       "party": null
     },
     {
       "key": "gaining-emphasis-never-moves-anything",
-      "statement": "An element changing between its resting, hover, pressed, and selected states MUST NOT change its own size or position, and MUST NOT displace any neighbouring element.",
+      "statement": "Changing between resting, hover, pressed and selected states MUST NOT change an element's size or position or displace any neighbour; controls SHALL reserve their border space at rest.",
       "modal": "MUST",
-      "rationale": null,
+      "rationale": "A one-pixel shift on hover makes a list jitter under the pointer.",
       "party": null
     },
     {
       "key": "a-row-may-reveal-its-secondary-actions-on-hover",
-      "statement": "A row that reveals secondary actions only while hovered or focused SHALL reserve their layout space at rest, so revealing them displaces nothing. Those actions MUST remain reachable by keyboard.",
-      "modal": "SHALL",
-      "rationale": null,
+      "statement": "A row's secondary actions that appear only on hover or focus SHALL occupy their layout space at rest (revealed by opacity), SHALL appear when the row has keyboard focus, SHALL stay visible while their menu is open or for the active item, and MUST remain reachable by keyboard.",
+      "modal": "MUST",
+      "rationale": "Revealing an action must not move the row, and an action that only the mouse can find does not exist for the keyboard.",
       "party": null
     },
     {
       "key": "state-changes-are-eased-and-easing-is-never-the-only-signal",
-      "statement": "Transitions between interaction states SHALL be eased using the application's shared duration and easing tokens rather than switching instantly.",
+      "statement": "Transitions between interaction states SHALL use the shared duration and easing tokens; when the operator prefers reduced motion, transitions and animations SHALL be reduced to effectively instant while every state stays distinguishable by appearance alone.",
       "modal": "SHALL",
-      "rationale": "When the operator has asked for reduced motion, transitions SHALL be suppressed while every state remains distinguishable by its appearance alone.",
+      "rationale": "Easing makes state changes legible; motion must never be the only signal.",
       "party": null
     },
     {
       "key": "interaction-states-resolve-from-shared-semantic-tokens",
-      "statement": "Resting, hover, pressed, and selected treatments SHALL resolve from semantic tokens defined for both the light and dark themes. A surface MUST NOT hard-code a colour for an interaction state, and the same kind of element SHALL use the same tokens wherever it appears.",
+      "statement": "Hover, pressed and selected treatments SHALL resolve from semantic tokens defined in both modes (`--row-hover`, `--row-active`, `--row-selected` for rows), and the same kind of element SHALL use the same tokens wherever it appears; a component MUST NOT hard-code a colour for an interaction state.",
       "modal": "MUST",
-      "rationale": null,
+      "rationale": "One ladder of tokens keeps the three states from collapsing onto each other on some surfaces.",
       "party": null
     },
     {
       "key": "one-dismissal-keystroke-dismisses-one-thing",
-      "statement": "A dismissal keystroke SHALL be answered by exactly one control — the innermost one that owns it — and a surface that dismisses on that keystroke SHALL NOT do so when a control nearer the operator has already handled it.",
+      "statement": "An Escape keystroke SHALL be answered by exactly one surface, the innermost one that owns it: a nested control that handles Escape SHALL mark the event handled (`preventDefault`), and a containing surface SHALL NOT dismiss on an Escape already handled. Of several stacked dialogs, only the newest SHALL answer.",
       "modal": "SHALL",
-      "rationale": "A control that handles a dismissal keystroke SHALL mark the keystroke as handled, so that the surfaces containing it can tell. A surface cannot know what is nested inside it, and a nested control cannot know what contains it; the keystroke itself is the only thing both can see. Nesting is the ordinary case, not an exotic one. A panel holds a menu; a panel holds an input that cancels; a panel holds a browser that closes. In every one of those the operator pressing Escape is dismissing the thing they are looking at, and the surface behind it is the context they expect to come back to. A surface that leaves with the control being dismissed takes the operator's place with it, and there is nothing on screen afterwards to say what happened. The cost is worse than an extra click, and it is why this is stated once here rather than repaired per screen. A nested control that owns the key **cannot be observed to work at all** while the surface around it also acts: the code runs, does exactly what it was written to do, and is unmounted by the same keystroke. That failure is invisible to anything except operating the product. This requirement is about who answers, not about where a listener is bound or which mechanism marks the keystroke. A surface may listen wherever it needs to.",
+      "rationale": "A panel that closes along with the menu or field inside it takes the operator's context with it, and the nested control can never be seen to work. The containing listener sits on `document` in the bubble phase so every nearer handler has already run.",
       "party": null
     },
     {
       "key": "an-action-that-asks-for-something-leaves-the-keyboard-in-wha",
-      "statement": "A menu action whose effect is to present a control expecting the operator's input SHALL leave keyboard focus in that control once the menu has closed, and SHALL NOT return focus to the control that opened the menu.",
+      "statement": "A menu action that presents a control expecting input SHALL be declared as taking focus and SHALL leave keyboard focus in that control once the menu closes, running after the menu has gone; every other menu action SHALL return focus to the menu's trigger.",
       "modal": "SHALL",
-      "rationale": "A menu returning focus to its trigger is right for an action that leaves nothing on screen: it is where the operator was, and it is where they can act next. It is wrong for an action whose whole purpose is to ask a question, because the field holding the answer is then the one place the keyboard is not. **The failure is silent, which is what makes it worth a requirement rather than a fix.** The operator types and nothing appears; the control they are actually typing into is a button, so their keystrokes activate it; and the action they were completing sits waiting on input the product will not accept from them. Nothing is written wrongly and no error is shown, so there is no moment at which the product says anything is wrong. This applies to the action, not to the menu. A menu that offers both kinds of action SHALL distinguish them: an action that presents nothing keeps returning focus to the trigger, and only the action that asks stands the restoration down.",
+      "rationale": "Returning focus to the trigger after an action that asks a question sends the operator's typing to a button; nothing errors and nothing appears.",
       "party": null
     },
     {
       "key": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
-      "statement": "A dialog SHALL move keyboard focus into itself when it opens, and SHALL return focus to the control that opened it when it closes; a confirmation whose action cannot be undone SHALL open with focus on the choice that changes nothing.",
+      "statement": "Every modal dialog SHALL record where focus was, move focus into itself on open (to the control marked as initial focus, else its first enabled control, else the panel itself), and return focus to the recorded element on close. A confirmation of an action that cannot be undone SHALL mark its non-destructive choice as initial focus. While a dialog waits on an action that disabled the focused control, the dialog panel SHALL hold focus.",
       "modal": "SHALL",
-      "rationale": "A dialog that leaves the keyboard on the control that opened it answers the operator's next key with that control, which sits behind the dialog where they cannot see it. A second Enter repeats the action the dialog is asking about, and a screen reader never announces the question. The choice that receives focus in a confirmation SHALL be marked explicitly rather than inferred from the order the choices are drawn in, so that restyling a dialog cannot move the keyboard onto its destructive choice. Where every control in a dialog is unavailable, the dialog itself SHALL hold focus, so that the keyboard is still inside the dialog and not behind it. Where the control holding focus becomes unavailable while the dialog waits on the action it started, the dialog itself SHALL take focus. This applies to every modal dialog the app draws, whether it asks a question, collects a form, or connects the app to a Hub. Where something inside a dialog is designed to take focus when the dialog opens, the dialog SHALL still record, before that happens, where focus was, so that closing the dialog returns it there.",
+      "rationale": "Focus left behind a dialog answers the next key with the control that opened it, repeating the action being asked about; marking the initial control explicitly keeps a restyle from moving the keyboard onto a destructive choice.",
+      "party": null
+    },
+    {
+      "key": "n1-tab-stays-inside-an-open-dialog",
+      "statement": "While a modal dialog is open, Tab and Shift+Tab SHALL cycle through its enabled controls and MUST NOT move focus behind it, including on the first Tab when focus is still outside the panel; only the newest of stacked dialogs SHALL handle Tab.",
+      "modal": "MUST",
+      "rationale": "A first Tab that fell through to the page landed behind the scrim, where the operator cannot see what they are operating.",
       "party": null
     }
   ],
@@ -231,191 +246,201 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac1",
       "requirement": "every-activatable-element-responds-to-the-pointer-and-to-foc",
-      "given": "",
-      "when": "the operator hovers a project, an agent, a project view, or a configuration section",
-      "then": "that row takes on a hover treatment distinguishing it from the rows around it"
+      "given": "the rail",
+      "when": "the operator hovers a project, an agent, a project view tab or a configuration section",
+      "then": "that row takes a hover treatment distinguishing it from its neighbours"
     },
     {
       "key": "ac2",
       "requirement": "every-activatable-element-responds-to-the-pointer-and-to-foc",
-      "given": "",
-      "when": "the operator presses an activatable element",
-      "then": "its appearance changes again, distinctly from its hover appearance it returns to the hover appearance when released with the pointer still over it"
+      "given": "an activatable element",
+      "when": "the operator presses it",
+      "then": "its appearance differs from its hover appearance, and returns to hover on release with the pointer still over it"
     },
     {
       "key": "ac3",
       "requirement": "every-activatable-element-responds-to-the-pointer-and-to-foc",
-      "given": "",
-      "when": "the operator moves focus to an activatable element with the keyboard",
-      "then": "a focus indicator is drawn that is visible against the surface behind it"
+      "given": "an activatable element",
+      "when": "the operator focuses it with the keyboard",
+      "then": "a focus ring visible against the surface behind it is drawn"
     },
     {
       "key": "ac4",
       "requirement": "where-the-operator-is-differs-from-where-the-pointer-is",
-      "given": "",
-      "when": "one configuration section is selected and the operator hovers a different one",
-      "then": "both are distinguishable from the unselected rows they are distinguishable from each other"
+      "given": "one configuration section is selected",
+      "when": "the operator hovers another",
+      "then": "both are distinguishable from unselected rows and from each other"
     },
     {
       "key": "ac5",
       "requirement": "where-the-operator-is-differs-from-where-the-pointer-is",
-      "given": "",
-      "when": "the pointer leaves the navigation region entirely",
+      "given": "a current destination",
+      "when": "the pointer leaves the rail",
       "then": "the current destination remains marked"
     },
     {
       "key": "ac6",
       "requirement": "gaining-emphasis-never-moves-anything",
-      "given": "",
-      "when": "the operator moves the pointer across a list of rows",
-      "then": "no row, and no text within a row, moves by any amount"
+      "given": "a list of rows",
+      "when": "the pointer moves across it",
+      "then": "no row and no text within a row moves"
     },
     {
       "key": "ac7",
       "requirement": "a-row-may-reveal-its-secondary-actions-on-hover",
-      "given": "",
-      "when": "the operator hovers a row carrying secondary actions",
-      "then": "those actions become visible the row's other content does not move"
+      "given": "a row with secondary actions",
+      "when": "the operator hovers it",
+      "then": "the actions become visible and the row's other content does not move"
     },
     {
       "key": "ac8",
       "requirement": "a-row-may-reveal-its-secondary-actions-on-hover",
-      "given": "",
-      "when": "the operator tabs into a row whose secondary actions are not currently drawn",
-      "then": "those actions can be reached and activated"
+      "given": "a row whose actions are hidden",
+      "when": "the operator tabs into it",
+      "then": "the actions are shown and can be activated"
     },
     {
       "key": "ac9",
       "requirement": "state-changes-are-eased-and-easing-is-never-the-only-signal",
-      "given": "",
-      "when": "an element enters or leaves its hover state",
-      "then": "the change is eased over the application's fast duration"
+      "given": "an element",
+      "when": "it enters or leaves hover",
+      "then": "the change eases over the fast duration token"
     },
     {
       "key": "ac10",
       "requirement": "state-changes-are-eased-and-easing-is-never-the-only-signal",
-      "given": "",
-      "when": "the operator has requested reduced motion",
-      "then": "interaction states change without animating hover, pressed, and selected states remain distinguishable from one another and from rest"
+      "given": "the operator prefers reduced motion",
+      "when": "states change",
+      "then": "they change without visible animation and remain distinguishable from rest and from each other"
     },
     {
       "key": "ac11",
       "requirement": "interaction-states-resolve-from-shared-semantic-tokens",
-      "given": "",
-      "when": "a navigation row, a configuration section row, and a list row are compared in either theme",
-      "then": "their hover, pressed, and selected treatments are drawn from the same tokens"
+      "given": "a navigation row, a configuration section row and a list row",
+      "when": "they are compared in either mode",
+      "then": "their hover, pressed and selected treatments use the same tokens"
     },
     {
       "key": "ac12",
       "requirement": "interaction-states-resolve-from-shared-semantic-tokens",
-      "given": "",
-      "when": "the production stylesheet is checked",
-      "then": "every token referenced by an interaction state has a value in both light and dark themes"
+      "given": "the stylesheet",
+      "when": "it is checked",
+      "then": "every interaction-state token has a value in both modes"
     },
     {
       "key": "ac13",
       "requirement": "one-dismissal-keystroke-dismisses-one-thing",
-      "given": "",
-      "when": "the operator opens a menu belonging to a control inside a panel that itself dismisses on",
-      "then": "the menu closes the panel is still open"
+      "given": "a menu open inside a panel that dismisses on Escape",
+      "when": "the operator presses Escape",
+      "then": "the menu closes and the panel stays open"
     },
     {
       "key": "ac14",
       "requirement": "one-dismissal-keystroke-dismisses-one-thing",
-      "given": "",
-      "when": "a panel that dismisses on Escape is showing a control that cancels itself on Escape, and",
-      "then": "that control is cancelled the panel is still open, showing what it showed before the control appeared"
+      "given": "a panel that dismisses on Escape showing an inline field that cancels on Escape",
+      "when": "the operator presses Escape in the field",
+      "then": "the field is cancelled and the panel stays open as it was"
     },
     {
       "key": "ac15",
       "requirement": "one-dismissal-keystroke-dismisses-one-thing",
-      "given": "",
-      "when": "a secondary panel is open over the panel that opened it, and both dismiss on Escape, and",
-      "then": "the secondary panel closes the panel that opened it is still open"
+      "given": "a dialog opened from another dialog",
+      "when": "the operator presses Escape",
+      "then": "only the newer dialog closes"
     },
     {
       "key": "ac16",
       "requirement": "one-dismissal-keystroke-dismisses-one-thing",
-      "given": "",
-      "when": "the operator presses Escape while a panel is open and nothing inside it has claimed the",
-      "then": "the panel dismisses, exactly as it did before"
+      "given": "a dialog with nothing inside it claiming Escape",
+      "when": "the operator presses Escape",
+      "then": "the dialog closes"
     },
     {
       "key": "ac17",
       "requirement": "an-action-that-asks-for-something-leaves-the-keyboard-in-wha",
-      "given": "",
-      "when": "the operator chooses a menu action that presents a control expecting their input",
-      "then": "keyboard focus is in that control once the menu has closed what they type next appears in it"
+      "given": "a task's status menu",
+      "when": "the operator chooses Blocked, which asks for a reason",
+      "then": "focus is in the reason field once the menu has closed and typing appears there"
     },
     {
       "key": "ac18",
       "requirement": "an-action-that-asks-for-something-leaves-the-keyboard-in-wha",
-      "given": "",
-      "when": "the operator chooses a menu action that presents no control expecting input",
-      "then": "keyboard focus returns to the control that opened the menu"
+      "given": "a row menu",
+      "when": "the operator chooses an action that presents no input",
+      "then": "focus returns to the menu's trigger"
     },
     {
       "key": "ac19",
       "requirement": "an-action-that-asks-for-something-leaves-the-keyboard-in-wha",
-      "given": "",
-      "when": "the operator types an answer containing spaces into the control a menu action presented",
-      "then": "the menu does not re-open the surface behind that control does not stop answering the pointer because a menu re-opened"
+      "given": "the reason field presented by a menu action",
+      "when": "the operator types an answer containing spaces",
+      "then": "the menu does not re-open"
     },
     {
       "key": "ac20",
       "requirement": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
-      "given": "",
-      "when": "the operator opens a confirmation whose action cannot be undone",
-      "then": "keyboard focus is on the choice that changes nothing pressing Enter closes the dialog without taking the action"
+      "given": "a delete confirmation",
+      "when": "it opens",
+      "then": "focus is on Cancel, and pressing Enter closes it without deleting"
     },
     {
       "key": "ac21",
       "requirement": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
-      "given": "",
-      "when": "the operator opens a dialog that asks them to type something",
-      "then": "keyboard focus is in that field"
+      "given": "a dialog that asks for a name",
+      "when": "it opens",
+      "then": "focus is in the name field"
     },
     {
       "key": "ac22",
       "requirement": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
-      "given": "",
-      "when": "a dialog opens while every control in it is unavailable",
-      "then": "keyboard focus is inside the dialog"
+      "given": "a dialog whose every control is disabled",
+      "when": "it opens",
+      "then": "focus is on the dialog panel"
     },
     {
       "key": "ac23",
       "requirement": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
-      "given": "",
-      "when": "the operator closes a dialog they opened from a control",
-      "then": "keyboard focus is on that control"
-    },
-    {
-      "key": "ac24",
-      "requirement": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
-      "given": "",
-      "when": "the operator opens a dialog that creates or edits a charter, a runner or a job, and then",
-      "then": "keyboard focus was in the dialog's first field while it was open keyboard focus is on the control that opened the dialog once it has closed"
+      "given": "a dialog opened from a control",
+      "when": "the operator closes it, including by Escape",
+      "then": "focus is on that control"
     },
     {
       "key": "ac25",
       "requirement": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
-      "given": "",
-      "when": "the operator confirms a dialog's action and the control they used becomes unavailable",
-      "then": "keyboard focus is inside the dialog"
+      "given": "a confirmation dialog",
+      "when": "the operator confirms and the dialog disables its controls while the action runs",
+      "then": "focus is on the dialog panel"
+    },
+    {
+      "key": "n1-ac1",
+      "requirement": "n1-tab-stays-inside-an-open-dialog",
+      "given": "a dialog just opened while focus is still on its opener",
+      "when": "the operator presses Tab",
+      "then": "focus moves to the dialog's first control, not behind the scrim"
+    },
+    {
+      "key": "n1-ac2",
+      "requirement": "n1-tab-stays-inside-an-open-dialog",
+      "given": "focus on a dialog's last control",
+      "when": "the operator presses Tab",
+      "then": "focus moves to its first control"
     }
   ],
   "tasks": [],
   "algorithms": [],
-  "design": "",
+  "design": "D1. States come from primitives, not per-screen styles: the Button primitive carries a permanent transparent border and a focus-visible ring; every list row uses the shared `.row-item` treatment and the `--row-hover` / `--row-active` / `--row-selected` ladder.\n\nD2. Escape ownership is signalled on the event itself (`defaultPrevented`); `useDialogFocus` listens on `document` in the bubble phase so it is always the last to see the key, and keeps a stack so only the newest dialog answers.\n\nD3. Menu items declare `takesFocus` when they present an input; such an item runs as the menu closes and the menu does not restore focus to its trigger.\n\nD4. Dialog initial focus is marked explicitly (`data-dialog-initial-focus`) rather than inferred from DOM order.",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/hub-interaction-feedback/spec.md (9 requirements, 25 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "hub/ui/src/hooks/useDialogFocus.ts and its users (DeleteConfirmDialog, JobForm, ArchiveConfirmDialog hold focus on the panel while pending)",
+      "hub/ui/src/__tests__/agentCreateDialogFocusRestore.test.tsx, jobFormFocus.test.tsx, chartersUi.test.tsx, runnersUi.test.tsx, setupModalAccessibility.test.tsx (initial focus and focus return)",
+      "hub/ui/src/__tests__/rowMenus.test.tsx, taskBlockedTreatment.test.tsx, taskDetailDrawer.test.tsx (menus, nested Escape)",
+      "hub/ui/src/__tests__/hubVisualLanguage.test.ts (motion and reduced-motion support)"
     ],
     "limits": [
-      "scenarios-state-no-starting-state: 25 of 25 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "Hover/pressed distinctness and no-shift are enforced by the shared primitives and CSS (buttonVariants.ts, index.css row treatment), not by a test that measures layout."
     ]
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
@@ -427,20 +452,22 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "interaction-states-resolve-from-shared-semantic-tokens": "FR-12",
       "one-dismissal-keystroke-dismisses-one-thing": "FR-13",
       "an-action-that-asks-for-something-leaves-the-keyboard-in-wha": "FR-14",
-      "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-": "FR-15"
+      "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-": "FR-15",
+      "n1-tab-stays-inside-an-open-dialog": "FR-16"
     },
-    "high_water": 15,
+    "high_water": 16,
     "retired": {},
     "digests": {
-      "FR-7": "1982dda2b1a38689a37c0961c3bf8901c585ea5d947c8e767fe7a44b84bac745",
-      "FR-8": "739fd435313fe67dbc4b7c100fb70f3c0a1f6097c58869ccb0b545b34a33adc9",
-      "FR-9": "1d2581295491ad855a725f2f8dc396152c1cb8bc15773203abbf5a366020604a",
-      "FR-10": "ce77f79dd05df37dcca13146ee87f47f922f36034600ad3593f37295c01d31fd",
-      "FR-11": "f62cb8462b5a29f2cb95af0d5e9633abfa03d200ca32ccd1def0f3159025914a",
-      "FR-12": "00a02cd6729f57f8564cb8eb2559b3ba0e5a50ee0084d00d6732f3ad93c6db1b",
-      "FR-13": "7bf41d30f21c4aa33d36f6a8114e4bb0d89856a53327e217f6819c9f0e20e496",
-      "FR-14": "31c8037e962662e5f19df7063da59e7f85c5c940e5cea85bba15217befbd1ed4",
-      "FR-15": "f670f4cec0d58d5672552fa580133f52caf7635cd6cfeaa1a740f3ffd85d25f0"
+      "FR-7": "aa69a377a9fa0cecf966fdfa29f8d30ce23f2090035148c5bf5f9ef59487d004",
+      "FR-8": "b1f7093009c462f72b53373e2a48b4b58129b021c90195c6852e409838424a0c",
+      "FR-9": "54e8e549aae2839aa90acf9048b01332368f57df5c9070856a80042416ac26d1",
+      "FR-10": "7116456d77812153ee9686912f44d26521f4295f165cf9cd01b85a0cf7a2dbc5",
+      "FR-11": "ff9da65c1c3faaad1f271319e6ce40246fc042690cbbeb1ac0925a24b9fb92e1",
+      "FR-12": "9e5e8d806a20a3dcbe64f8240f93abb77b0680f8fdb9df3ef00dc6ab905bdc1b",
+      "FR-13": "b40a166dcec667836425ab63119d138f9dda5eb4fb97e8fe5b60fd49edb15ee4",
+      "FR-14": "b35512f16c52081a3cf1beeafbab8920bdb04d7a06bba7b6158e177a5ac29144",
+      "FR-15": "bf434a3fc7995c7b828ac8596595031667759452fe07df0943f2dd7b2fb889e7",
+      "FR-16": "4550e6a90e169c64592912f3caebaf199a7342d41a61230584decf7e08841728"
     }
   }
 }

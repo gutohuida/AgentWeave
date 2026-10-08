@@ -148,47 +148,53 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <body>
 <h1>Loop firing accountability</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a></p>
 <p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">4</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">4</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">12</span> criteria</p>
-<section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL NOT report a firing as in progress once it is known that no agent was started for it. Where a firing queues its input but the turn does not begin, the firing&#x27;s record SHALL reach a terminal state carrying the stated reason, without waiting for any later sweep.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>This was measured on 2026-08-21: a firing whose agent had no runner bound left its record at `in_progress` and the loop reported itself as firing continuously, with nothing behind it. The reason existed at the moment it happened and was discarded.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL clear firings left in progress with no live run behind them without requiring a restart. A restart SHALL remain sufficient, but SHALL NOT be necessary.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An unattended loop is the case this exists for, and it is the case where nobody restarts anything. Before this, a stranded firing was reconciled only at Hub start, so the loop card stayed wrong for as long as the Hub stayed up.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> A firing refused before any agent is briefed SHALL NOT create a conversation. A refused firing already leaves no claim, queues no input, and changes no task; a conversation is the remaining artefact that implies otherwise.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Measured 2026-08-21: five firings produced five conversations and three of those firings were refused, each leaving a thread named after the job with nothing in it. On a five-minute schedule a stalled loop produces twelve an hour, none distinguishable by name from a real one until opened.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL count a job&#x27;s firings as firings: a firing that queues work for at least one agent SHALL add exactly one to the job&#x27;s firing count, whether it queues work for one agent or several. A firing that queues work for no agent SHALL NOT add to it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A firing counts where it queues its input, not where an agent&#x27;s turn begins, so a firing whose turn then fails to begin still counts once: the job did fire, and its record carries why the turn did not begin. Each agent a firing starts has its own record, because each agent&#x27;s work is correlated to its own conversation and concludes on its own. Those records are the firing&#x27;s dispatches, and they SHALL NOT each count as a firing. A job&#x27;s card SHALL name the count as firings, not as runs, because a run is one agent&#x27;s attempt at a turn and the app uses the word for that everywhere else.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a loop whose agent cannot be started</td><td>its job fires</td><td>the firing&#x27;s record does not remain in an in-progress state the loop is not reported as firing</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a firing queues its input and the turn does not begin</td><td>the firing&#x27;s record carries the stated reason it did not begin that reason is the one the queue itself would give for the same agent</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a firing queues its input and the agent&#x27;s turn begins</td><td>the firing is reported as in progress exactly as before its record reaches its terminal state when the agent&#x27;s run ends</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a firing recorded as in progress with no live run behind it</td><td>the Hub continues running without being restarted</td><td>that firing is eventually recorded as failed the loop stops being reported as firing</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a firing whose run is still running</td><td>the Hub clears stranded firings</td><td>that firing is left alone</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a loop whose queue is stalled</td><td>its job fires and the firing is refused</td><td>no conversation is created for that firing</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a loop past its stop time</td><td>its job fires and the firing is refused</td><td>no conversation is created for that firing</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a firing is not refused and briefs an agent</td><td>a conversation is created and named after the job, as before</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a flow with two independent startable tasks and two eligible agents</td><td>the flow fires once and starts both</td><td>two records are written for that firing, one per agent the job&#x27;s firing count rises by one</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a plain job or a single-agent loop fires and starts its agent</td><td>the job&#x27;s firing count rises by one</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a loop&#x27;s firing is refused because its queue is stalled</td><td>the job&#x27;s firing count does not change</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator reads a job&#x27;s card</td><td>the count is labelled as firings it is not labelled as runs</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/loop-firing-accountability/spec.md (4 requirements, 12 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 6 of 12 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<section id="summary"><h2>Summary</h2><p>A job&#x27;s firing records say truthfully what each firing did: a firing whose agent cannot start is recorded as failed at once, a stranded record never makes a loop read as firing, a refused firing leaves no conversation behind, and the firing count counts firings rather than agents started.</p></section><section id="problem"><h2>Problem</h2><p>An unattended loop is read through its firing records and counts. Records left in progress, empty conversations from refused firings, and counts that mix firings with dispatches make a stalled loop look busy and a busy one look broken.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>The status of a firing&#x27;s run record from queueing to the end of its run</li><li>Reconciling stranded firing records</li><li>Which firings create conversations</li><li>The job&#x27;s firing count</li></ul><h3>Non-goals</h3><ul><li>What a firing decides to do (agent-loops)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> When a firing has queued its input and the Hub then learns that the agent&#x27;s turn cannot begin (for example, no runner is bound), the Hub SHALL record that firing as `failed` at once, carrying the reason the inbound queue gives for that agent, and SHALL NOT leave it `in_progress`.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The reason exists at the moment the turn is refused; a firing left in progress made a loop read as firing continuously with nothing behind it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL NOT report a loop as firing on account of a firing record that has no running run behind it, and SHALL mark every such record `failed` when the Hub next starts, leaving alone a record whose run is still running or whose input waits on a provider-allowance refusal.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Once a refused turn is recorded at the moment it happens, a record can only be stranded by the Hub process dying, and a start always follows that. The loop&#x27;s active-firing flag is derived from live runs, so it is honest without waiting for the start (operator decision, 2026-08-21).</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> A firing that is refused or skipped before it queues any input (busy guard, stall, stop condition, every task already in flight, held-queue coalescing) SHALL NOT create a conversation; a firing that proceeds SHALL create, or resume, a conversation named after its job.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A conversation implies work happened; refused firings on a short schedule otherwise fill the list with empty threads indistinguishable by name from real ones.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 4</span><p><span class="aw-modal aw-modal-must">SHALL</span> A job&#x27;s firing count SHALL rise by exactly one for each firing that queues input for at least one agent, however many agents it starts, and SHALL NOT rise for a firing that queues nothing; each agent a firing starts SHALL have its own run record and conversation, and the job&#x27;s card SHALL label the count as fired rather than as runs.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The count rises where input is queued, so a firing whose turn then fails to begin still counts once and its record says why. A run in the app means one agent&#x27;s attempt at a turn.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a loop whose agent has no runner bound</td><td>its job fires</td><td>the firing&#x27;s record is `failed` with the queue&#x27;s reason, and the loop is not reported as firing</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a firing queues its input and the agent&#x27;s turn begins</td><td>the record is `in_progress` until the run ends, then takes the run&#x27;s outcome</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a firing record `in_progress` whose conversation has no running run</td><td>the loop is read without a restart</td><td>it is not reported as firing</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>the same record</td><td>the Hub starts</td><td>the record is `failed` with a reason saying no live run was behind it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a firing whose run is still running</td><td>the Hub starts</td><td>its record is left `in_progress`</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a loop whose queue is stalled</td><td>its job fires</td><td>no conversation is created</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a loop past its stop time</td><td>its job fires</td><td>no conversation is created</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a firing proceeds and briefs an agent</td><td>a conversation named after the job is created</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a flow with two independent startable tasks and two free agents</td><td>it fires once and starts both</td><td>two run records and two conversations are written and the firing count rises by one</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a plain job or a single-agent loop fires and starts its agent</td><td>the count rises by one</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a loop&#x27;s firing is refused because its queue is stalled</td><td>the count does not change</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator reads a job&#x27;s card</td><td>the count reads `N fired`, not runs</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>D1 A firing record becomes `in_progress` only when input is queued, and `failed` at once when the scheduler reports a terminal reason the turn cannot start (scheduler.py `_do_fire_job`).</p><p>D2 No periodic sweep: the active-firing flag joins each `in_progress` record to a running run, and startup reconciliation (`run_reconciliation.reconcile_stale_job_runs`) clears what a dead process left. A sweep was rejected as machinery for a residue not observed.</p><p>D3 The conversation is created after every refusal point, so only a proceeding firing has one.</p><p>D4 `run_count` and `last_run` are stamped where input is queued, once per firing; extra selections of a wide flow write their own run records but do not count.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/tests/test_scheduler.py (test_job_that_cannot_start_records_the_queue_reason_as_failed, test_run_count_and_last_run_describe_firings_not_considerations, conversation checks in the stop and stall tests)</li><li>hub/tests/test_run_reconciliation.py (stale job runs), hub/tests/test_loop_archival.py (test_firing_active_reflects_an_in_progress_job_run)</li><li>hub/tests/test_flow_width.py (test_two_firings_of_one_flow_count_as_two_however_many_agents_each_started)</li></ul><h3 class="aw-limits">Limits</h3><ul><li>Audited by reading code and test names at e25e059; no test suite was run for this overhaul.</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
   "title": "Loop firing accountability",
-  "summary": "",
-  "problem": "",
+  "summary": "A job's firing records say truthfully what each firing did: a firing whose agent cannot start is recorded as failed at once, a stranded record never makes a loop read as firing, a refused firing leaves no conversation behind, and the firing count counts firings rather than agents started.",
+  "problem": "An unattended loop is read through its firing records and counts. Records left in progress, empty conversations from refused firings, and counts that mix firings with dispatches make a stalled loop look busy and a busy one look broken.",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "The status of a firing's run record from queueing to the end of its run",
+      "Reconciling stranded firing records",
+      "Which firings create conversations",
+      "The job's firing count"
+    ],
+    "non_goals": [
+      "What a firing decides to do (agent-loops)"
+    ]
   },
   "requirements": [
     {
       "key": "a-firing-that-starts-no-agent-shall-not-be-reported-as-runni",
-      "statement": "The Hub SHALL NOT report a firing as in progress once it is known that no agent was started for it. Where a firing queues its input but the turn does not begin, the firing's record SHALL reach a terminal state carrying the stated reason, without waiting for any later sweep.",
+      "statement": "When a firing has queued its input and the Hub then learns that the agent's turn cannot begin (for example, no runner is bound), the Hub SHALL record that firing as `failed` at once, carrying the reason the inbound queue gives for that agent, and SHALL NOT leave it `in_progress`.",
       "modal": "SHALL",
-      "rationale": "This was measured on 2026-08-21: a firing whose agent had no runner bound left its record at `in_progress` and the loop reported itself as firing continuously, with nothing behind it. The reason existed at the moment it happened and was discarded.",
+      "rationale": "The reason exists at the moment the turn is refused; a firing left in progress made a loop read as firing continuously with nothing behind it.",
       "party": null
     },
     {
       "key": "a-stranded-firing-shall-be-recoverable-without-restarting-th",
-      "statement": "The Hub SHALL clear firings left in progress with no live run behind them without requiring a restart. A restart SHALL remain sufficient, but SHALL NOT be necessary.",
+      "statement": "The Hub SHALL NOT report a loop as firing on account of a firing record that has no running run behind it, and SHALL mark every such record `failed` when the Hub next starts, leaving alone a record whose run is still running or whose input waits on a provider-allowance refusal.",
       "modal": "SHALL",
-      "rationale": "An unattended loop is the case this exists for, and it is the case where nobody restarts anything. Before this, a stranded firing was reconciled only at Hub start, so the loop card stayed wrong for as long as the Hub stayed up.",
+      "rationale": "Once a refused turn is recorded at the moment it happens, a record can only be stranded by the Hub process dying, and a start always follows that. The loop's active-firing flag is derived from live runs, so it is honest without waiting for the start (operator decision, 2026-08-21).",
       "party": null
     },
     {
       "key": "a-refused-firing-shall-leave-no-artefact-implying-work-happe",
-      "statement": "A firing refused before any agent is briefed SHALL NOT create a conversation. A refused firing already leaves no claim, queues no input, and changes no task; a conversation is the remaining artefact that implies otherwise.",
+      "statement": "A firing that is refused or skipped before it queues any input (busy guard, stall, stop condition, every task already in flight, held-queue coalescing) SHALL NOT create a conversation; a firing that proceeds SHALL create, or resume, a conversation named after its job.",
       "modal": "SHALL",
-      "rationale": "Measured 2026-08-21: five firings produced five conversations and three of those firings were refused, each leaving a thread named after the job with nothing in it. On a five-minute schedule a stalled loop produces twelve an hour, none distinguishable by name from a real one until opened.",
+      "rationale": "A conversation implies work happened; refused firings on a short schedule otherwise fill the list with empty threads indistinguishable by name from real ones.",
       "party": null
     },
     {
       "key": "a-firing-shall-be-counted-once-however-many-agents-it-starts",
-      "statement": "The Hub SHALL count a job's firings as firings: a firing that queues work for at least one agent SHALL add exactly one to the job's firing count, whether it queues work for one agent or several. A firing that queues work for no agent SHALL NOT add to it.",
+      "statement": "A job's firing count SHALL rise by exactly one for each firing that queues input for at least one agent, however many agents it starts, and SHALL NOT rise for a firing that queues nothing; each agent a firing starts SHALL have its own run record and conversation, and the job's card SHALL label the count as fired rather than as runs.",
       "modal": "SHALL",
-      "rationale": "A firing counts where it queues its input, not where an agent's turn begins, so a firing whose turn then fails to begin still counts once: the job did fire, and its record carries why the turn did not begin. Each agent a firing starts has its own record, because each agent's work is correlated to its own conversation and concludes on its own. Those records are the firing's dispatches, and they SHALL NOT each count as a firing. A job's card SHALL name the count as firings, not as runs, because a run is one agent's attempt at a turn and the app uses the word for that everywhere else.",
+      "rationale": "The count rises where input is queued, so a firing whose turn then fails to begin still counts once and its record says why. A run in the app means one agent's attempt at a turn.",
       "party": null
     }
   ],
@@ -196,101 +202,102 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac1",
       "requirement": "a-firing-that-starts-no-agent-shall-not-be-reported-as-runni",
-      "given": "a loop whose agent cannot be started",
+      "given": "a loop whose agent has no runner bound",
       "when": "its job fires",
-      "then": "the firing's record does not remain in an in-progress state the loop is not reported as firing"
+      "then": "the firing's record is `failed` with the queue's reason, and the loop is not reported as firing"
     },
     {
       "key": "ac2",
       "requirement": "a-firing-that-starts-no-agent-shall-not-be-reported-as-runni",
       "given": "",
-      "when": "a firing queues its input and the turn does not begin",
-      "then": "the firing's record carries the stated reason it did not begin that reason is the one the queue itself would give for the same agent"
+      "when": "a firing queues its input and the agent's turn begins",
+      "then": "the record is `in_progress` until the run ends, then takes the run's outcome"
     },
     {
       "key": "ac3",
-      "requirement": "a-firing-that-starts-no-agent-shall-not-be-reported-as-runni",
-      "given": "",
-      "when": "a firing queues its input and the agent's turn begins",
-      "then": "the firing is reported as in progress exactly as before its record reaches its terminal state when the agent's run ends"
+      "requirement": "a-stranded-firing-shall-be-recoverable-without-restarting-th",
+      "given": "a firing record `in_progress` whose conversation has no running run",
+      "when": "the loop is read without a restart",
+      "then": "it is not reported as firing"
     },
     {
       "key": "ac4",
       "requirement": "a-stranded-firing-shall-be-recoverable-without-restarting-th",
-      "given": "a firing recorded as in progress with no live run behind it",
-      "when": "the Hub continues running without being restarted",
-      "then": "that firing is eventually recorded as failed the loop stops being reported as firing"
+      "given": "the same record",
+      "when": "the Hub starts",
+      "then": "the record is `failed` with a reason saying no live run was behind it"
     },
     {
       "key": "ac5",
       "requirement": "a-stranded-firing-shall-be-recoverable-without-restarting-th",
       "given": "a firing whose run is still running",
-      "when": "the Hub clears stranded firings",
-      "then": "that firing is left alone"
+      "when": "the Hub starts",
+      "then": "its record is left `in_progress`"
     },
     {
       "key": "ac6",
       "requirement": "a-refused-firing-shall-leave-no-artefact-implying-work-happe",
       "given": "a loop whose queue is stalled",
-      "when": "its job fires and the firing is refused",
-      "then": "no conversation is created for that firing"
+      "when": "its job fires",
+      "then": "no conversation is created"
     },
     {
       "key": "ac7",
       "requirement": "a-refused-firing-shall-leave-no-artefact-implying-work-happe",
       "given": "a loop past its stop time",
-      "when": "its job fires and the firing is refused",
-      "then": "no conversation is created for that firing"
+      "when": "its job fires",
+      "then": "no conversation is created"
     },
     {
       "key": "ac8",
       "requirement": "a-refused-firing-shall-leave-no-artefact-implying-work-happe",
       "given": "",
-      "when": "a firing is not refused and briefs an agent",
-      "then": "a conversation is created and named after the job, as before"
+      "when": "a firing proceeds and briefs an agent",
+      "then": "a conversation named after the job is created"
     },
     {
       "key": "ac9",
       "requirement": "a-firing-shall-be-counted-once-however-many-agents-it-starts",
-      "given": "a flow with two independent startable tasks and two eligible agents",
-      "when": "the flow fires once and starts both",
-      "then": "two records are written for that firing, one per agent the job's firing count rises by one"
+      "given": "a flow with two independent startable tasks and two free agents",
+      "when": "it fires once and starts both",
+      "then": "two run records and two conversations are written and the firing count rises by one"
     },
     {
       "key": "ac10",
       "requirement": "a-firing-shall-be-counted-once-however-many-agents-it-starts",
       "given": "",
       "when": "a plain job or a single-agent loop fires and starts its agent",
-      "then": "the job's firing count rises by one"
+      "then": "the count rises by one"
     },
     {
       "key": "ac11",
       "requirement": "a-firing-shall-be-counted-once-however-many-agents-it-starts",
       "given": "",
       "when": "a loop's firing is refused because its queue is stalled",
-      "then": "the job's firing count does not change"
+      "then": "the count does not change"
     },
     {
       "key": "ac12",
       "requirement": "a-firing-shall-be-counted-once-however-many-agents-it-starts",
       "given": "",
       "when": "the operator reads a job's card",
-      "then": "the count is labelled as firings it is not labelled as runs"
+      "then": "the count reads `N fired`, not runs"
     }
   ],
   "tasks": [],
   "algorithms": [],
-  "design": "",
+  "design": "D1 A firing record becomes `in_progress` only when input is queued, and `failed` at once when the scheduler reports a terminal reason the turn cannot start (scheduler.py `_do_fire_job`).\n\nD2 No periodic sweep: the active-firing flag joins each `in_progress` record to a running run, and startup reconciliation (`run_reconciliation.reconcile_stale_job_runs`) clears what a dead process left. A sweep was rejected as machinery for a residue not observed.\n\nD3 The conversation is created after every refusal point, so only a proceeding firing has one.\n\nD4 `run_count` and `last_run` are stamped where input is queued, once per firing; extra selections of a wide flow write their own run records but do not count.",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/loop-firing-accountability/spec.md (4 requirements, 12 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "hub/tests/test_scheduler.py (test_job_that_cannot_start_records_the_queue_reason_as_failed, test_run_count_and_last_run_describe_firings_not_considerations, conversation checks in the stop and stall tests)",
+      "hub/tests/test_run_reconciliation.py (stale job runs), hub/tests/test_loop_archival.py (test_firing_active_reflects_an_in_progress_job_run)",
+      "hub/tests/test_flow_width.py (test_two_firings_of_one_flow_count_as_two_however_many_agents_each_started)"
     ],
     "limits": [
-      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
-      "scenarios-state-no-starting-state: 6 of 12 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "Audited by reading code and test names at e25e059; no test suite was run for this overhaul."
     ]
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
@@ -302,10 +309,10 @@ code { padding: .1rem .3rem; font-size: .88em; }
     "high_water": 4,
     "retired": {},
     "digests": {
-      "FR-1": "c8998db2cd17facf76a43685ead63314fc8953933d0ce7c3c25d6d566c7a8734",
-      "FR-2": "a0f8e5c4c1f1ebae8a005241607423d38b64c0280d2bb9207f5e8ae0a27a2273",
-      "FR-3": "c588fdf9e70c0c54d50a355afd2db62b13bdbdc4db0c67145d9c72963c9d1044",
-      "FR-4": "1aed04caf56dac6048df647de22293d4075e2791eff9201228ece33aa41d1ecc"
+      "FR-1": "a8754bfbcf3e2d69b0e10592c914ee960c155aef6469191e679eb9d7dc4e27ef",
+      "FR-2": "8262f161961965fe6cfab34cde7099a64fe447a4f8d7784caa606ac23dd704e9",
+      "FR-3": "9e4df4c18ceab437c3eaecf6bc77df936006c272c058f70d4463bdc3c445e5d6",
+      "FR-4": "58a408c60cf040770ef8671e9b44f5aaee459bacb552e22bb3b9a0b4a62d8998"
     }
   }
 }

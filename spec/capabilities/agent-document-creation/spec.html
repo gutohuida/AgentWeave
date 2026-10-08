@@ -148,54 +148,76 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <body>
 <h1>Agent document creation</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">5</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">5</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">16</span> criteria</p>
-<section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 5</span><p><span class="aw-modal aw-modal-must">SHALL</span> The capability plane SHALL offer an operation by which an agent creates a specification document, and the created document SHALL be immediately writable by that agent through the existing submission operation.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An agent that reaches the point where a finding deserves a document should record it and keep working. Requiring the operator to create the document first turns every such moment into a stop, and the operator asked for that stop to be removed. The created document SHALL enter the same phase and carry the same lifecycle as one the operator created. Nothing about its origin makes it a lesser document.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 5</span><p><span class="aw-modal aw-modal-must">SHALL</span> The creation operation SHALL NOT accept a document path, a filename, a slug, or any value from which one is derived. The Hub SHALL mint a placeholder path that is free against both the project&#x27;s records and the contents of the specification directory.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Path validation is the single control keeping a document from being written to an arbitrary location beneath the specification directory. An operation that accepted a destination would make that control the only guard standing between the least trusted caller in the system and every document in the corpus — including the capability documents that a separate rule forbids agents from writing. A minted path makes the wrong destination unexpressible rather than merely refused. A minted path being free against the filesystem as well as the records is what guarantees that creation cannot overwrite an existing document.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 5</span><p><span class="aw-modal aw-modal-must">SHALL</span> The creation operation SHALL produce a document of the change-specification kind or, when the agent asks for it, of the roadmap kind, SHALL default to the change-specification kind, and SHALL NOT offer any other.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Two reasons, and the first is a trap rather than a preference. A capability document is created directly in the current phase, and a separate standing rule refuses every capability submission from an agent — so an agent permitted to choose that kind would create a document that succeeds and can then never be filled in. Creation that looks like success and produces an unusable artefact is worse than a refusal. The second reason is that the remaining kinds describe what a project *is* and how its corpus is arranged, rather than contributing to it. A change specification is the one kind whose whole lifecycle is designed to be authored by an agent and gated by the operator at each transition. A roadmap is the same kind of thing at a larger scale: the plan whose slices are change specifications, with the same operator-gated lifecycle. An agent told to write a large request as a roadmap plus a slice must be able to create both. A refusal SHALL name what may be created, not only what may not.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 5</span><p><span class="aw-modal aw-modal-must">SHALL</span> An agent that created a document SHALL have no capability over that document beyond what any agent has over any document. In particular it SHALL NOT be able to propose it, approve it, transition its phase, or archive it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Authorship is not authority. An agent that could approve what it wrote would be the sole party in its own gate, which is the arrangement every other rule in the specification lifecycle exists to prevent.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 5</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where a submission names a path with no document, the refusal SHALL state that the document can be created, and SHALL NOT state that only the operator may create it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>This rule previously read that the operator starts an exploration and the agent fills it in. It was stated in two places — the tool description a model reads before acting, and the error a model reads after failing. Both are retired by this change, and they are retired together: leaving either would have the product contradict itself in exactly the place a confused agent looks.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent creates a specification document and then submits a payload against the returned</td><td>the creation succeeds and the submission is accepted</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent creates a specification document</td><td>the document&#x27;s phase is `exploring`</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent creates a specification document</td><td>the creation event names the agent and its run</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a creation request carries an actor, agent name or run identifier in its body</td><td>that value is ignored and identity is taken from the run credential</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent attempts to create a document at a chosen path</td><td>the path is not honoured and the Hub mints one</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub mints a path for a new document</td><td>no record and no file occupies that path</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent creates documents repeatedly in a project whose specification directory already</td><td>no existing document&#x27;s file is modified</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent renames a document it created, supplying the subject</td><td>the document moves to a path derived from that subject</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent attempts to create a capability document</td><td>it is refused the refusal names the kinds an agent may create, change specification and roadmap</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent creates a document and submits a capability payload against it</td><td>the submission is refused because the document&#x27;s kind is fixed at creation</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent creates a document asking for the roadmap kind</td><td>a roadmap is created in the exploring phase</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent creates a document without naming a kind</td><td>a change specification is created</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the agent that created a document attempts to approve it</td><td>it is refused</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the agent that created a document attempts to move it to another phase</td><td>it is refused</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent submits a payload for a path with no document</td><td>the submission is refused</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent submits a payload for a path with no document</td><td>the refusal states that the agent may create the document</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-document-creation/spec.md (5 requirements, 16 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 16 of 16 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">7</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">7</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">16</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>An agent may start its own specification document — a change specification or a roadmap — through `create_spec_document`, without asking the operator first. The Hub chooses where the document lands, the document starts in `exploring` like any operator-created one, and creating it gives the agent no say over its lifecycle.</p></section><section id="problem"><h2>Problem</h2><p>An agent that reaches something worth writing up — a finding, a proposal, a design — should record it and keep working. If only the operator could create documents, every such moment became a stop. Letting an agent create documents must not, however, let the least trusted caller choose where a write lands, create a document it can never fill, or gate its own work.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>The agent creation route `POST /agent-actions/spec/documents/create` and its MCP tool `create_spec_document`</li><li>Which kinds an agent may create, and where the created document lands</li><li>The refusal an agent sees when it submits against a path with no document</li></ul><h3>Non-goals</h3><ul><li>Renaming a document and the path a subject yields (spec-document-authority)</li><li>What a submission validates and stores, and the operator-only phase transitions (spec-document-authority)</li><li>Roadmap and slice semantics (spec-roadmaps)</li><li>When a spec-chat turn should write into the operator&#x27;s open document instead of creating one (spec-chat-session)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL let an agent create a specification document through `create_spec_document` (`POST /agent-actions/spec/documents/create`); the document SHALL start in the `exploring` phase, SHALL be attributed to the calling agent and run taken from the run credential, and SHALL be immediately writable by that agent through `submit_spec_document`.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An agent that needs a document should record its finding and keep working rather than stop for the operator. A document an agent created is an ordinary document: same phase, same lifecycle, listed for the operator like any other. Identity comes from the credential because a request body is caller-controlled.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> The creation operation SHALL NOT accept a path, filename or slug; the Hub SHALL mint a meaningless placeholder path that is free against both the project&#x27;s recorded documents and the files in the specification directory, and SHALL ignore (not refuse) any path or identity field a caller sends anyway.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Path validation is the single control keeping a document from being written anywhere beneath `spec/`. A minted path makes a wrong destination unexpressible rather than merely refused, and minting against the disk as well as the records guarantees creation never overwrites an existing file. Stray fields are ignored rather than refused so they cost the caller nothing and gain it nothing.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> The creation operation SHALL create a `change-spec` document by default or a `roadmap` when the agent asks for one, and SHALL refuse every other kind with a 422 (`kind_not_creatable`) whose message names the two kinds an agent may create.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A capability document is created directly in `current` and agents may never write one, so allowing an agent to create it would produce a document that can never be filled in — success that yields an unusable artefact. Change specifications and roadmaps are the kinds whose lifecycle is authored by an agent and gated by the operator. A refusal that names what is allowed tells the agent what to do next.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> An agent that created a document SHALL have no capability over it beyond what any agent has over any document; in particular it SHALL NOT be able to propose, approve, transition or archive it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Authorship is not authority. An agent that could approve what it wrote would be the only party in its own gate. The agent surface offers no transition route, and the operator&#x27;s transition routes refuse a run credential.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> When an agent submits a payload for a path with no document, the Hub SHALL refuse it with a 404 whose message tells the agent to call `create_spec_document` (then `rename_spec_document`), and SHALL NOT say that only the operator may create documents.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The refusal is where a confused agent looks next. Naming the remedy the agent actually has keeps it working; naming a rule that no longer exists would have the product contradict its own tool descriptions.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> Document creation by an agent SHALL NOT depend on the project&#x27;s agent-jobs allowance (`allow_agent_jobs`).</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>That allowance gates scheduled jobs an agent may create. Reusing it here would silently stop agents from recording findings in every project that has not opted into agent jobs.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 7 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> When the Hub cannot mint a free placeholder name, or cannot resolve the project&#x27;s workspace, the creation operation SHALL refuse with a 409 and create nothing.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Minting is bounded so a full namespace yields a refusal rather than a hang, and a document whose file cannot be written must not be recorded.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>an agent run with a valid run credential</td><td>the agent creates a specification document and then submits a payload against the returned path</td><td>the creation returns 201 and the submission is accepted</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>an agent run</td><td>the agent creates a specification document</td><td>the response and the stored document both report phase `exploring`, and the document appears in the operator&#x27;s document list</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>an agent run</td><td>the agent creates a specification document</td><td>the creation event names the agent and its run</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>an agent run</td><td>a creation request carries an actor, agent name or run identifier in its body</td><td>the request succeeds, the value is ignored, and identity is taken from the run credential</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>an agent run</td><td>the agent sends a `path` in its creation request</td><td>the request succeeds, the path is not honoured, and the document lands at a path the Hub minted</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>an agent run</td><td>the agent creates documents twice</td><td>each call returns a distinct placeholder path that no record and no file occupied before</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a specification directory that already holds documents</td><td>an agent creates documents repeatedly</td><td>no pre-existing document&#x27;s file is modified</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>an agent run</td><td>the agent asks to create a `capability`, `baseline`, `system-map` or unknown kind</td><td>it is refused with 422, the refusal names `change-spec` and `roadmap`, and no document is recorded</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a document an agent created as a change specification</td><td>the agent submits a payload of another kind against it</td><td>the submission is refused with `kind_is_fixed`</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>an agent run</td><td>the agent creates a document asking for the roadmap kind</td><td>a roadmap is created in the `exploring` phase</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>an agent run</td><td>the agent creates a document without naming a kind</td><td>a change specification is created</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a document an agent created</td><td>that agent calls the operator&#x27;s propose route with its run credential</td><td>it is refused with 401 and the document stays `exploring`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>the agent action surface</td><td>its routes are listed</td><td>none proposes, approves, transitions or archives a specification document</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>no document at a path</td><td>an agent submits a payload for that path</td><td>it is refused with 404 and the message names `create_spec_document`</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td>a project with `allow_agent_jobs` false, then true</td><td>an agent creates a document under each setting</td><td>both creations return 201</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>a placeholder namespace with no free name, or a project whose workspace cannot be resolved</td><td>an agent creates a document</td><td>the call returns 409 (`naming_exhausted` for the first) and no document is recorded</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>D1 — One minting rule. The agent route and the operator&#x27;s `POST /project/documents` share `spec_service.mint_document_path`, so there is exactly one definition of a free path (free in the records and on disk).</p><p>D2 — The path arrives second. Creation returns a meaningless placeholder (a colour and a mythic animal); the agent calls `rename_spec_document(path, subject)` once it knows the subject, and the Hub derives the real path. Renaming is specified in spec-document-authority.</p><p>D3 — Lax body by design. `SpecDocumentCreate` deliberately does not inherit the strict `RequestModel` (it is the one entry in `LAX_BY_DESIGN`, hub/tests/test_request_strictness.py): stray `path`, `actor`, `agent` or `run_id` fields are ignored, which keeps placement and identity unexpressible without making a forward-compatible client fail.</p><p>D4 — Creation writes through the normal save path. The route records the document, then saves a minimal payload (`schema_version`, `kind`, `title`) through `spec_service.save_document`, so the file exists and is rendered the same way as any later submission.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/tests/test_agent_created_documents.py — creation, attribution, distinct placeholders, ignored identity/path fields, 409s, three-call flow, no self-propose, allow_agent_jobs independence</li><li>hub/tests/test_spec_roadmaps.py — test_an_agent_creates_a_roadmap, test_no_kind_is_a_change_spec, test_any_other_kind_is_refused_naming_both_kinds</li><li>hub/tests/test_spec_documents_api.py — test_submitting_to_a_document_that_does_not_exist_says_how_to_start_one</li><li>hub/tests/test_spec_capability_kind.py — kind_is_fixed on submission</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
   "title": "Agent document creation",
-  "summary": "",
-  "problem": "",
+  "summary": "An agent may start its own specification document — a change specification or a roadmap — through `create_spec_document`, without asking the operator first. The Hub chooses where the document lands, the document starts in `exploring` like any operator-created one, and creating it gives the agent no say over its lifecycle.",
+  "problem": "An agent that reaches something worth writing up — a finding, a proposal, a design — should record it and keep working. If only the operator could create documents, every such moment became a stop. Letting an agent create documents must not, however, let the least trusted caller choose where a write lands, create a document it can never fill, or gate its own work.",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "The agent creation route `POST /agent-actions/spec/documents/create` and its MCP tool `create_spec_document`",
+      "Which kinds an agent may create, and where the created document lands",
+      "The refusal an agent sees when it submits against a path with no document"
+    ],
+    "non_goals": [
+      "Renaming a document and the path a subject yields (spec-document-authority)",
+      "What a submission validates and stores, and the operator-only phase transitions (spec-document-authority)",
+      "Roadmap and slice semantics (spec-roadmaps)",
+      "When a spec-chat turn should write into the operator's open document instead of creating one (spec-chat-session)"
+    ]
   },
   "requirements": [
     {
       "key": "an-agent-may-begin-a-specification-document",
-      "statement": "The capability plane SHALL offer an operation by which an agent creates a specification document, and the created document SHALL be immediately writable by that agent through the existing submission operation.",
+      "statement": "The Hub SHALL let an agent create a specification document through `create_spec_document` (`POST /agent-actions/spec/documents/create`); the document SHALL start in the `exploring` phase, SHALL be attributed to the calling agent and run taken from the run credential, and SHALL be immediately writable by that agent through `submit_spec_document`.",
       "modal": "SHALL",
-      "rationale": "An agent that reaches the point where a finding deserves a document should record it and keep working. Requiring the operator to create the document first turns every such moment into a stop, and the operator asked for that stop to be removed. The created document SHALL enter the same phase and carry the same lifecycle as one the operator created. Nothing about its origin makes it a lesser document.",
+      "rationale": "An agent that needs a document should record its finding and keep working rather than stop for the operator. A document an agent created is an ordinary document: same phase, same lifecycle, listed for the operator like any other. Identity comes from the credential because a request body is caller-controlled.",
       "party": null
     },
     {
       "key": "the-hub-chooses-where-an-agent-s-document-lands",
-      "statement": "The creation operation SHALL NOT accept a document path, a filename, a slug, or any value from which one is derived. The Hub SHALL mint a placeholder path that is free against both the project's records and the contents of the specification directory.",
+      "statement": "The creation operation SHALL NOT accept a path, filename or slug; the Hub SHALL mint a meaningless placeholder path that is free against both the project's recorded documents and the files in the specification directory, and SHALL ignore (not refuse) any path or identity field a caller sends anyway.",
       "modal": "SHALL",
-      "rationale": "Path validation is the single control keeping a document from being written to an arbitrary location beneath the specification directory. An operation that accepted a destination would make that control the only guard standing between the least trusted caller in the system and every document in the corpus — including the capability documents that a separate rule forbids agents from writing. A minted path makes the wrong destination unexpressible rather than merely refused. A minted path being free against the filesystem as well as the records is what guarantees that creation cannot overwrite an existing document.",
+      "rationale": "Path validation is the single control keeping a document from being written anywhere beneath `spec/`. A minted path makes a wrong destination unexpressible rather than merely refused, and minting against the disk as well as the records guarantees creation never overwrites an existing file. Stray fields are ignored rather than refused so they cost the caller nothing and gain it nothing.",
       "party": null
     },
     {
       "key": "an-agent-may-begin-only-a-change-specification",
-      "statement": "The creation operation SHALL produce a document of the change-specification kind or, when the agent asks for it, of the roadmap kind, SHALL default to the change-specification kind, and SHALL NOT offer any other.",
+      "statement": "The creation operation SHALL create a `change-spec` document by default or a `roadmap` when the agent asks for one, and SHALL refuse every other kind with a 422 (`kind_not_creatable`) whose message names the two kinds an agent may create.",
       "modal": "SHALL",
-      "rationale": "Two reasons, and the first is a trap rather than a preference. A capability document is created directly in the current phase, and a separate standing rule refuses every capability submission from an agent — so an agent permitted to choose that kind would create a document that succeeds and can then never be filled in. Creation that looks like success and produces an unusable artefact is worse than a refusal. The second reason is that the remaining kinds describe what a project *is* and how its corpus is arranged, rather than contributing to it. A change specification is the one kind whose whole lifecycle is designed to be authored by an agent and gated by the operator at each transition. A roadmap is the same kind of thing at a larger scale: the plan whose slices are change specifications, with the same operator-gated lifecycle. An agent told to write a large request as a roadmap plus a slice must be able to create both. A refusal SHALL name what may be created, not only what may not.",
+      "rationale": "A capability document is created directly in `current` and agents may never write one, so allowing an agent to create it would produce a document that can never be filled in — success that yields an unusable artefact. Change specifications and roadmaps are the kinds whose lifecycle is authored by an agent and gated by the operator. A refusal that names what is allowed tells the agent what to do next.",
       "party": null
     },
     {
       "key": "creating-a-document-confers-no-authority-over-it",
-      "statement": "An agent that created a document SHALL have no capability over that document beyond what any agent has over any document. In particular it SHALL NOT be able to propose it, approve it, transition its phase, or archive it.",
+      "statement": "An agent that created a document SHALL have no capability over it beyond what any agent has over any document; in particular it SHALL NOT be able to propose, approve, transition or archive it.",
       "modal": "SHALL",
-      "rationale": "Authorship is not authority. An agent that could approve what it wrote would be the sole party in its own gate, which is the arrangement every other rule in the specification lifecycle exists to prevent.",
+      "rationale": "Authorship is not authority. An agent that could approve what it wrote would be the only party in its own gate. The agent surface offers no transition route, and the operator's transition routes refuse a run credential.",
       "party": null
     },
     {
       "key": "submission-against-a-missing-document-names-the-remedy-an-ag",
-      "statement": "Where a submission names a path with no document, the refusal SHALL state that the document can be created, and SHALL NOT state that only the operator may create it.",
+      "statement": "When an agent submits a payload for a path with no document, the Hub SHALL refuse it with a 404 whose message tells the agent to call `create_spec_document` (then `rename_spec_document`), and SHALL NOT say that only the operator may create documents.",
       "modal": "SHALL",
-      "rationale": "This rule previously read that the operator starts an exploration and the agent fills it in. It was stated in two places — the tool description a model reads before acting, and the error a model reads after failing. Both are retired by this change, and they are retired together: leaving either would have the product contradict itself in exactly the place a confused agent looks.",
+      "rationale": "The refusal is where a confused agent looks next. Naming the remedy the agent actually has keeps it working; naming a rule that no longer exists would have the product contradict its own tool descriptions.",
+      "party": null
+    },
+    {
+      "key": "n1",
+      "statement": "Document creation by an agent SHALL NOT depend on the project's agent-jobs allowance (`allow_agent_jobs`).",
+      "modal": "SHALL",
+      "rationale": "That allowance gates scheduled jobs an agent may create. Reusing it here would silently stop agents from recording findings in every project that has not opted into agent jobs.",
+      "party": null
+    },
+    {
+      "key": "n2",
+      "statement": "When the Hub cannot mint a free placeholder name, or cannot resolve the project's workspace, the creation operation SHALL refuse with a 409 and create nothing.",
+      "modal": "SHALL",
+      "rationale": "Minting is bounded so a full namespace yields a refusal rather than a hang, and a document whose file cannot be written must not be recorded.",
       "party": null
     }
   ],
@@ -203,129 +225,129 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac1",
       "requirement": "an-agent-may-begin-a-specification-document",
-      "given": "",
-      "when": "an agent creates a specification document and then submits a payload against the returned",
-      "then": "the creation succeeds and the submission is accepted"
+      "given": "an agent run with a valid run credential",
+      "when": "the agent creates a specification document and then submits a payload against the returned path",
+      "then": "the creation returns 201 and the submission is accepted"
     },
     {
       "key": "ac2",
       "requirement": "an-agent-may-begin-a-specification-document",
-      "given": "",
-      "when": "an agent creates a specification document",
-      "then": "the document's phase is `exploring`"
+      "given": "an agent run",
+      "when": "the agent creates a specification document",
+      "then": "the response and the stored document both report phase `exploring`, and the document appears in the operator's document list"
     },
     {
       "key": "ac3",
       "requirement": "an-agent-may-begin-a-specification-document",
-      "given": "",
-      "when": "an agent creates a specification document",
+      "given": "an agent run",
+      "when": "the agent creates a specification document",
       "then": "the creation event names the agent and its run"
     },
     {
       "key": "ac4",
       "requirement": "an-agent-may-begin-a-specification-document",
-      "given": "",
+      "given": "an agent run",
       "when": "a creation request carries an actor, agent name or run identifier in its body",
-      "then": "that value is ignored and identity is taken from the run credential"
+      "then": "the request succeeds, the value is ignored, and identity is taken from the run credential"
     },
     {
       "key": "ac5",
       "requirement": "the-hub-chooses-where-an-agent-s-document-lands",
-      "given": "",
-      "when": "an agent attempts to create a document at a chosen path",
-      "then": "the path is not honoured and the Hub mints one"
+      "given": "an agent run",
+      "when": "the agent sends a `path` in its creation request",
+      "then": "the request succeeds, the path is not honoured, and the document lands at a path the Hub minted"
     },
     {
       "key": "ac6",
       "requirement": "the-hub-chooses-where-an-agent-s-document-lands",
-      "given": "",
-      "when": "the Hub mints a path for a new document",
-      "then": "no record and no file occupies that path"
+      "given": "an agent run",
+      "when": "the agent creates documents twice",
+      "then": "each call returns a distinct placeholder path that no record and no file occupied before"
     },
     {
       "key": "ac7",
       "requirement": "the-hub-chooses-where-an-agent-s-document-lands",
-      "given": "",
-      "when": "an agent creates documents repeatedly in a project whose specification directory already",
-      "then": "no existing document's file is modified"
-    },
-    {
-      "key": "ac8",
-      "requirement": "the-hub-chooses-where-an-agent-s-document-lands",
-      "given": "",
-      "when": "an agent renames a document it created, supplying the subject",
-      "then": "the document moves to a path derived from that subject"
+      "given": "a specification directory that already holds documents",
+      "when": "an agent creates documents repeatedly",
+      "then": "no pre-existing document's file is modified"
     },
     {
       "key": "ac9",
       "requirement": "an-agent-may-begin-only-a-change-specification",
-      "given": "",
-      "when": "an agent attempts to create a capability document",
-      "then": "it is refused the refusal names the kinds an agent may create, change specification and roadmap"
+      "given": "an agent run",
+      "when": "the agent asks to create a `capability`, `baseline`, `system-map` or unknown kind",
+      "then": "it is refused with 422, the refusal names `change-spec` and `roadmap`, and no document is recorded"
     },
     {
       "key": "ac10",
       "requirement": "an-agent-may-begin-only-a-change-specification",
-      "given": "",
-      "when": "an agent creates a document and submits a capability payload against it",
-      "then": "the submission is refused because the document's kind is fixed at creation"
+      "given": "a document an agent created as a change specification",
+      "when": "the agent submits a payload of another kind against it",
+      "then": "the submission is refused with `kind_is_fixed`"
     },
     {
       "key": "ac11",
       "requirement": "an-agent-may-begin-only-a-change-specification",
-      "given": "",
-      "when": "an agent creates a document asking for the roadmap kind",
-      "then": "a roadmap is created in the exploring phase"
+      "given": "an agent run",
+      "when": "the agent creates a document asking for the roadmap kind",
+      "then": "a roadmap is created in the `exploring` phase"
     },
     {
       "key": "ac12",
       "requirement": "an-agent-may-begin-only-a-change-specification",
-      "given": "",
-      "when": "an agent creates a document without naming a kind",
+      "given": "an agent run",
+      "when": "the agent creates a document without naming a kind",
       "then": "a change specification is created"
     },
     {
       "key": "ac13",
       "requirement": "creating-a-document-confers-no-authority-over-it",
-      "given": "",
-      "when": "the agent that created a document attempts to approve it",
-      "then": "it is refused"
+      "given": "a document an agent created",
+      "when": "that agent calls the operator's propose route with its run credential",
+      "then": "it is refused with 401 and the document stays `exploring`"
     },
     {
       "key": "ac14",
       "requirement": "creating-a-document-confers-no-authority-over-it",
-      "given": "",
-      "when": "the agent that created a document attempts to move it to another phase",
-      "then": "it is refused"
-    },
-    {
-      "key": "ac15",
-      "requirement": "submission-against-a-missing-document-names-the-remedy-an-ag",
-      "given": "",
-      "when": "an agent submits a payload for a path with no document",
-      "then": "the submission is refused"
+      "given": "the agent action surface",
+      "when": "its routes are listed",
+      "then": "none proposes, approves, transitions or archives a specification document"
     },
     {
       "key": "ac16",
       "requirement": "submission-against-a-missing-document-names-the-remedy-an-ag",
-      "given": "",
-      "when": "an agent submits a payload for a path with no document",
-      "then": "the refusal states that the agent may create the document"
+      "given": "no document at a path",
+      "when": "an agent submits a payload for that path",
+      "then": "it is refused with 404 and the message names `create_spec_document`"
+    },
+    {
+      "key": "ac17",
+      "requirement": "n1",
+      "given": "a project with `allow_agent_jobs` false, then true",
+      "when": "an agent creates a document under each setting",
+      "then": "both creations return 201"
+    },
+    {
+      "key": "ac18",
+      "requirement": "n2",
+      "given": "a placeholder namespace with no free name, or a project whose workspace cannot be resolved",
+      "when": "an agent creates a document",
+      "then": "the call returns 409 (`naming_exhausted` for the first) and no document is recorded"
     }
   ],
   "tasks": [],
   "algorithms": [],
-  "design": "",
+  "design": "D1 — One minting rule. The agent route and the operator's `POST /project/documents` share `spec_service.mint_document_path`, so there is exactly one definition of a free path (free in the records and on disk).\n\nD2 — The path arrives second. Creation returns a meaningless placeholder (a colour and a mythic animal); the agent calls `rename_spec_document(path, subject)` once it knows the subject, and the Hub derives the real path. Renaming is specified in spec-document-authority.\n\nD3 — Lax body by design. `SpecDocumentCreate` deliberately does not inherit the strict `RequestModel` (it is the one entry in `LAX_BY_DESIGN`, hub/tests/test_request_strictness.py): stray `path`, `actor`, `agent` or `run_id` fields are ignored, which keeps placement and identity unexpressible without making a forward-compatible client fail.\n\nD4 — Creation writes through the normal save path. The route records the document, then saves a minimal payload (`schema_version`, `kind`, `title`) through `spec_service.save_document`, so the file exists and is rendered the same way as any later submission.",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/agent-document-creation/spec.md (5 requirements, 16 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "hub/tests/test_agent_created_documents.py — creation, attribution, distinct placeholders, ignored identity/path fields, 409s, three-call flow, no self-propose, allow_agent_jobs independence",
+      "hub/tests/test_spec_roadmaps.py — test_an_agent_creates_a_roadmap, test_no_kind_is_a_change_spec, test_any_other_kind_is_refused_naming_both_kinds",
+      "hub/tests/test_spec_documents_api.py — test_submitting_to_a_document_that_does_not_exist_says_how_to_start_one",
+      "hub/tests/test_spec_capability_kind.py — kind_is_fixed on submission"
     ],
-    "limits": [
-      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
-      "scenarios-state-no-starting-state: 16 of 16 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
-    ]
+    "limits": []
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
@@ -333,16 +355,20 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "the-hub-chooses-where-an-agent-s-document-lands": "FR-2",
       "an-agent-may-begin-only-a-change-specification": "FR-3",
       "creating-a-document-confers-no-authority-over-it": "FR-4",
-      "submission-against-a-missing-document-names-the-remedy-an-ag": "FR-5"
+      "submission-against-a-missing-document-names-the-remedy-an-ag": "FR-5",
+      "n1": "FR-6",
+      "n2": "FR-7"
     },
-    "high_water": 5,
+    "high_water": 7,
     "retired": {},
     "digests": {
-      "FR-1": "3907354a87eb3f661c833111be593cb7ea8f39817ac3da772bff5f03c77593a7",
-      "FR-2": "f315f03d5da5efb4d9c0c9e81fce70ee96c9e1d1e4dae948ca29d8ac6183d629",
-      "FR-3": "980bebf3296559e67b9eb4e4c87aa6d486f031ebdbc52d3a2210e6d5edb3f8be",
-      "FR-4": "d91bd2ed267fe4697da75e6d437afbcc840df685acc6bd71aa936e70dfbb4867",
-      "FR-5": "478b976fa3334e54ba1a2bdf478e118a328d95600a39493f41fdf5644f3dc2fc"
+      "FR-1": "950c653781d27945de97b66117b8b9e97b074f11f409a28183296477002c7d82",
+      "FR-2": "37456ea2969f40f9345d9d338b490ec17f79997af8eab6e702abf20f43325bf5",
+      "FR-3": "e7376c4cbf23a6d337d01abb86123cb5d61e28db135d4ca8d41d98e993e22c8e",
+      "FR-4": "29650c562ff47fb85e60445730b51218237e40594901cf9ac5ffd22311b69a03",
+      "FR-5": "81726418160cc343875174a54a67aedf9ea2e91aaed3d528ad6259a356ed7557",
+      "FR-6": "726b8d2200a670991d82a3927894e801392e37fbaac6c30a5d813e6f04f9f16b",
+      "FR-7": "0ae856d857d162ac15dcd6643bc48e25c6f1d0da9f6278590150479536bea29b"
     }
   }
 }

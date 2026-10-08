@@ -148,75 +148,88 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <body>
 <h1>Agent charter</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a><a href="../../areas/agents-and-execution.html">Agents and execution</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">8</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">8</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">26</span> criteria</p>
-<section id="summary"><h2>Summary</h2><p>Define project-scoped, operator-authored behavior charters, their one-time migration seed from the legacy role guides, and the single explicit charter binding used to build each agent&#x27;s context.</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 1 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL persist charters as project-scoped database rows, each with a name and markdown behavior content. A charter SHALL NOT be represented as a file on disk or as a fixed, hardcoded list of personas.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 2 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> A project with zero charter records SHALL be seeded, on first Hub start, with the bundled starter charter set. This seeding SHALL run at most once per project.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The starter set SHALL be curated against the accountability test defined below, not derived one-for-one from the legacy role guides. A charter SHALL be included only if it names something an agent can be held answerable for. Seeding SHALL NOT modify, replace, or reconcile the charters of a project that already has them. A project seeded from an earlier starter set keeps that set, including any charter the operator has since edited.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 3 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> Each Hub `Agent` record SHALL reference at most one charter record. An agent with no bound charter SHALL remain usable — its context response SHALL state plainly that no charter is assigned rather than erroring or fabricating behavior content.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span><a class="aw-anchor-copy" href="#FR-11" aria-label="Link to FR-11" title="Link to #FR-11">#</a> <span class="aw-position">Requirement 4 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub UI SHALL provide a screen to list, read, create, edit, and delete charters, and to bind an agent to a charter from the agent&#x27;s detail view. This screen replaces any prior role-assignment command or interface.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Reading a charter&#x27;s full content SHALL be possible without opening any surface that can modify it. A charter&#x27;s content is the text injected into an agent&#x27;s turn, so an operator choosing which charter to bind SHALL be able to see all of it. The screen SHALL allow more than one charter to be open for reading at the same time, so that two can be compared without closing either.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span><a class="aw-anchor-copy" href="#FR-12" aria-label="Link to FR-12" title="Link to #FR-12">#</a> <span class="aw-position">Requirement 5 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> Seeded charters SHALL describe only mechanisms the runtime actually offers. A charter&#x27;s content is injected into an agent&#x27;s context verbatim, so a charter is instruction, not documentation.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A seeded charter MUST NOT instruct an agent to read a file the system does not create, run a command that does not exist, or address a participant the roster does not contain. A roster is whatever agents the operator has created. No charter may therefore assume that any particular other charter, title, or specialism is present in the project. Where a seeded charter needs to escalate, hand off, or resolve an ambiguity, it SHALL direct the agent to the operator, which is the one participant always reachable. A seeded charter MUST NOT restate a rule that the system enforces in code. A gate the agent is subject to is not a gate the agent administers, and a prose copy of it can disagree with the enforced version while carrying no authority. Where a charter would once have told an agent to gather its orientation, it SHALL instead rely on the context it is given: the roster, the project instructions, and the charter itself all arrive with the turn, and nothing needs to be read before starting.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 6 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> A seeded charter SHALL describe what its holder is answerable for. It SHALL NOT be defined by the activity its holder performs, by the technology its holder works in, or by the phase of work it occurs in.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Two candidate charters that are answerable for the same thing and differ only in subject matter SHALL be one charter carrying an explicit scope, rather than two charters. Coordination that the system performs in code SHALL NOT also be expressed as a charter. A charter asking a model to guarantee in prose what a service guarantees in code creates an unenforced second authority.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 7 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> The bundled starter set SHALL include at least one pair of charters from a non-software domain whose separation from each other is a control rather than a convenience — where one holder may not perform the other&#x27;s step.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>This exists because the software case cannot demonstrate it. One capable model can perform every activity in a development workflow, which makes charters look like topic labels; a genuine separation of duties is what shows a charter carrying a guarantee.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 8 of 8</span><p><span class="aw-modal aw-modal-must">SHALL</span> Deleting a charter that an agent is bound to SHALL be refused with a message naming every holder and the repair, and every agent it names SHALL be one the project&#x27;s default roster shows.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The repair it names — unbind the agent, then delete — works only if the operator can reach the agent. The default roster excludes archived agents on purpose, so a refusal naming an archived holder names a repair on a record the operator cannot locate from the sentence they were given. Measured: a charter bound to an agent that was then archived could not be deleted, and the agent the refusal named was absent from the roster with nothing in the message saying why. This requirement SHALL be satisfied by an archived agent holding no charter at all, rather than by the delete route filtering archived holders out of its own query. A filter at the reader would leave the charter deleted while an archived agent still referenced it, and the reader&#x27;s filter is the pattern that produced this defect: the roster&#x27;s lifecycle filter was added once, at one site, and every later site that selected agents by a binding was written without it. A charter with no holder SHALL be deleted without a refusal, and the refusal SHALL NOT be weakened for an open holder: naming the holder and the repair is what makes it actionable.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator creates a charter with a name and content</td><td>the Hub persists it as a project-scoped record with a stable identifier</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator edits an existing charter&#x27;s content and saves</td><td>subsequent context lookups for agents bound to that charter return the updated content</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a project has no charter records and the Hub starts</td><td>the Hub creates one charter per entry in the bundled starter set, with matching name and</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub restarts after charters already exist for a project</td><td>no additional seed charters are created</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the bundled starter set changes and the Hub starts on a project that was seeded earlier</td><td>that project&#x27;s charters are left exactly as they are, and none is added, removed, or</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent with a bound charter begins a turn</td><td>the supplied context includes that charter&#x27;s content</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent with no bound charter requests its context</td><td>the response includes project instructions and a clear no-charter notice, and does not</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator expands a charter on the charter screen</td><td>its full content is shown, and no editable field, save action, or discard action is</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator opens one charter for reading and then opens a second</td><td>both remain open, and the first is not closed by the second</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the charter screen is first opened</td><td>every charter is collapsed to a short summary, and the list of charter names is readable</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator opens the charter screen and creates a charter with custom content</td><td>the charter is available to bind to any agent in the project</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator selects a different charter for an agent in the Hub UI</td><td>the agent&#x27;s charter binding updates and its next context response reflects the new</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a seeded charter&#x27;s content is examined</td><td>it instructs the agent to read no file the system does not create</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a seeded charter&#x27;s content is examined</td><td>it names no command the shipped runtime does not provide</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a seeded charter&#x27;s content is examined for escalation, hand-off, or consultation</td><td>none of them names another charter&#x27;s title as the party to address</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a seeded charter describes what to do about an ambiguity or a dispute it cannot settle</td><td>it directs the agent to ask the operator</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a seeded charter&#x27;s content is examined against rules the system enforces</td><td>it does not instruct the agent to enforce a status transition or approval gate that the</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a seeded charter describes how an agent should begin</td><td>it relies on the roster, instructions, and charter already supplied with the turn</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the starter set is examined for charters answerable for the same outcome</td><td>they appear as a single charter with a scope the operator fills in, not as several</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the starter set is examined</td><td>it contains no charter whose responsibility is to route work, assign tasks, select models,</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the starter set is examined</td><td>no charter&#x27;s identity is the stage of work its holder is in</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator views the charters seeded into a fresh project</td><td>at least one pair describes accountabilities from a domain other than software development</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>either charter of the non-software pair is read</td><td>it states which step belongs to the other holder and that it may not perform that step</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator deletes a charter bound to an agent in the default roster</td><td>the deletion is refused the message names that agent and how to unbind it performing that repair makes the deletion succeed</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator archives the only agent bound to a charter and then deletes that charter</td><td>the charter is deleted the operator is not asked to unbind anything</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a charter deletion is refused with a list of holders</td><td>each named agent is present in the project&#x27;s default agent roster</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-charter/spec.md (8 requirements, 26 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 26 of 26 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">9</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">9</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">14</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>Charters are project-scoped, operator-authored markdown records describing what an agent is answerable for. Each project is seeded once with a bundled starter set. An agent binds to at most one charter, whose content is injected verbatim into the agent&#x27;s turn context. A charter is managed on the Charters page and cannot be deleted while an open agent holds it.</p></section><section id="problem"><h2>Problem</h2><p>Behaviour defined by a fixed list of personas, or by files on disk, cannot be edited by the operator and drifts from what the runtime actually offers; a charter that describes an activity rather than an accountability reads as a topic label and guarantees nothing.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>The `charters` table and `/api/v1/charters` routes.</li><li>The bundled starter set in `hub/hub/data/charters/` and its one-time seeding.</li><li>The Charters page and the charter binding on an agent.</li></ul><h3>Non-goals</h3><ul><li>How the charter is placed among the rest of an agent&#x27;s context (agent-context-onboarding).</li><li>Releasing a charter when its agent is archived (agent-configuration).</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 1 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL persist each charter as a project-scoped database row with a non-blank name and markdown content, created, read, edited and deleted through `/api/v1/charters`, and SHALL NOT represent charters as files on disk or a hard-coded persona list.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A charter is the operator&#x27;s to write and change; an edit must reach the next turn without a release.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 2 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL seed each project with the bundled starter charter set exactly once (on registration, or at startup for a project not yet seeded), recording that it did so, and SHALL NOT seed again, add, remove or reconcile charters afterwards, even if the operator deletes every charter or the bundled set changes.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>After seeding the charters are the operator&#x27;s; reconciling them with a newer bundle would overwrite their edits.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 3 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Each agent SHALL reference at most one charter; a bound charter&#x27;s content SHALL be injected verbatim into the agent&#x27;s context, and an agent with no charter SHALL remain usable, its context stating &quot;No charter is assigned to this agent.&quot; and listing `charter` as missing.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A charter is optional guidance; its absence must be said plainly rather than fabricated or treated as an error.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span><a class="aw-anchor-copy" href="#FR-11" aria-label="Link to FR-11" title="Link to #FR-11">#</a> <span class="aw-position">Requirement 4 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub UI SHALL provide a Charters page to list, read, create, edit and delete charters, where each charter starts collapsed to a summary, its full content can be expanded read-only without opening an editor, and several can be expanded at once; an agent&#x27;s charter SHALL be bound from the agent&#x27;s configuration.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A charter&#x27;s content is the text injected into a turn, so an operator choosing one must be able to read and compare it in full without risking an edit.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span><a class="aw-anchor-copy" href="#FR-16" aria-label="Link to FR-16" title="Link to #FR-16">#</a> <span class="aw-position">Requirement 5 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Deleting a charter from the Charters page SHALL first ask for confirmation, naming the charter and how much content would be lost.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Charter deletion is a hard delete with no copy kept; rows can share a name, so the size is what tells two apart.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 6 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Deleting a charter an agent holds SHALL be refused with 409 naming every holder and saying to unbind before deleting, and a charter no agent holds SHALL be deleted; because archival releases an agent&#x27;s charter, every holder named SHALL be an open agent the default roster shows.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The repair (unbind, then delete) works only if the operator can find the named agent; the guarantee rests on archived agents holding no charter, not on a filter in this route.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span><a class="aw-anchor-copy" href="#FR-12" aria-label="Link to FR-12" title="Link to #FR-12">#</a> <span class="aw-position">Requirement 7 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> A seeded charter SHALL describe only mechanisms the runtime offers: it SHALL NOT tell an agent to read a file the system does not create, run a command that does not exist, address a charter title or a participant not guaranteed to exist, restate a rule the system enforces in code, or gather orientation the turn already supplies; escalation and ambiguity SHALL go to the operator.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Charter content is injected verbatim, so it is instruction, not documentation; a roster is whatever the operator created, and the operator is the one participant always reachable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 8 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> A seeded charter SHALL state what its holder is answerable for, not an activity, technology or phase; charters answerable for the same outcome SHALL be one charter with an operator-filled scope; and no seeded charter SHALL take on coordination the system performs in code.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A charter asking a model to guarantee in prose what a service guarantees in code is an unenforced second authority.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 9 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> The starter set SHALL include at least one pair of charters from a non-software domain (today Underwriter and Underwriting Approver) whose separation is a control, each stating which step belongs to the other holder and that it may not perform it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>In software one capable model can do every step, which makes charters look like topic labels; a real separation of duties shows a charter carrying a guarantee.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-8">FR-8</a></td><td>a project</td><td>the operator creates a charter and later edits its content</td><td>it is stored as a project row with a `charter-` id, and the next context of an agent bound to it carries the edited content</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-8">FR-8</a></td><td>a project</td><td>a charter with a blank name is submitted</td><td>it is refused</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-9">FR-9</a></td><td>a newly registered project</td><td>its charters are listed</td><td>there is one charter per entry of `data/charters/charters.json`, with that name and file content</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-9">FR-9</a></td><td>a seeded project whose operator deleted every charter</td><td>the Hub restarts</td><td>no charter is added</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-10">FR-10</a></td><td>an agent bound to a charter</td><td>its context is built</td><td>it has a `## Charter: &lt;name&gt;` section with the charter&#x27;s content</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-10">FR-10</a></td><td>an agent with no charter</td><td>`GET /agents/agent-context?agent=&lt;name&gt;` is called</td><td>the context says no charter is assigned, `missing` includes `charter`, and the call succeeds</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td>the Charters page</td><td>it opens and the operator expands one charter then a second</td><td>all start collapsed; both expanded charters stay open, showing full content with no editable field or save action</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td>an agent&#x27;s Charter section</td><td>the operator selects a different charter</td><td>the binding updates and the agent&#x27;s next context carries the new charter</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-16">FR-16</a></td><td>an unbound charter</td><td>the operator clicks Delete</td><td>a dialog names the charter and its size, and only Confirm deletes it</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td>a charter bound to an open agent</td><td>it is deleted</td><td>409 names the agent and says to unbind before deleting; after unbinding the delete succeeds</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td>a charter whose only holder was archived</td><td>it is deleted</td><td>it is deleted without a refusal</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-12">FR-12</a></td><td>the bundled starter set</td><td>each charter is checked</td><td>none cites a removed subsystem or `aw-*` skill, defers to a principal, or addresses another charter&#x27;s title</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-13">FR-13</a></td><td>the bundled starter set</td><td>it is examined</td><td>each charter has a &quot;You Are Accountable For&quot; section, and none routes work, assigns tasks or selects models</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-14">FR-14</a></td><td>a fresh project</td><td>the Underwriter charter is read</td><td>it states that acceptance is a separate step performed by a different holder that it may not perform</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>**Records, not files.** `Charter` rows replaced the fixed role-guide list (`runner-agent-charter-separation`, 2026-08-03). The bundled Markdown files are only a seed.</p><p>**Seed once, by flag.** `Project.charters_seeded` makes seeding a one-time event per project, so deleting every charter does not bring the bundle back.</p><p>**Starter set of nine.** Tech Lead, Developer, Code Reviewer, Verifier, Security Engineer, Guardian, Spec Author, and the Underwriter / Underwriting Approver pair, curated in 2026-08 from 21 role guides against the accountability test.</p><p>**Deletion relies on archival.** The delete route queries holders without a lifecycle filter; that is correct only because archival clears `charter_id` (and migration 0105 cleared older archived agents).</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/tests/test_charters_api.py — records, seeding once, delete rules including archived holders.</li><li>hub/tests/test_agent_facing_text.py — seeded content checks and the non-software pair.</li><li>hub/tests/test_charter_context.py — charter in the agent&#x27;s context.</li><li>hub/ui/src/__tests__/chartersUi.test.tsx, charterReadView.test.tsx, charterDeleteAndRefusal.test.tsx.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>Charter list order is `created_at` only; ties are unordered (F177 open).</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
   "title": "Agent charter",
-  "summary": "Define project-scoped, operator-authored behavior charters, their one-time migration seed from the legacy role guides, and the single explicit charter binding used to build each agent's context.",
-  "problem": "",
+  "summary": "Charters are project-scoped, operator-authored markdown records describing what an agent is answerable for. Each project is seeded once with a bundled starter set. An agent binds to at most one charter, whose content is injected verbatim into the agent's turn context. A charter is managed on the Charters page and cannot be deleted while an open agent holds it.",
+  "problem": "Behaviour defined by a fixed list of personas, or by files on disk, cannot be edited by the operator and drifts from what the runtime actually offers; a charter that describes an activity rather than an accountability reads as a topic label and guarantees nothing.",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "The `charters` table and `/api/v1/charters` routes.",
+      "The bundled starter set in `hub/hub/data/charters/` and its one-time seeding.",
+      "The Charters page and the charter binding on an agent."
+    ],
+    "non_goals": [
+      "How the charter is placed among the rest of an agent's context (agent-context-onboarding).",
+      "Releasing a charter when its agent is archived (agent-configuration)."
+    ]
   },
   "requirements": [
     {
       "key": "charters-are-project-scoped-authored-hub-records",
-      "statement": "The Hub SHALL persist charters as project-scoped database rows, each with a name and markdown behavior content. A charter SHALL NOT be represented as a file on disk or as a fixed, hardcoded list of personas.",
+      "statement": "The Hub SHALL persist each charter as a project-scoped database row with a non-blank name and markdown content, created, read, edited and deleted through `/api/v1/charters`, and SHALL NOT represent charters as files on disk or a hard-coded persona list.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A charter is the operator's to write and change; an edit must reach the next turn without a release.",
       "party": null
     },
     {
       "key": "existing-role-guides-seed-initial-charters-once",
-      "statement": "A project with zero charter records SHALL be seeded, on first Hub start, with the bundled starter charter set. This seeding SHALL run at most once per project.",
+      "statement": "The Hub SHALL seed each project with the bundled starter charter set exactly once (on registration, or at startup for a project not yet seeded), recording that it did so, and SHALL NOT seed again, add, remove or reconcile charters afterwards, even if the operator deletes every charter or the bundled set changes.",
       "modal": "SHALL",
-      "rationale": "The starter set SHALL be curated against the accountability test defined below, not derived one-for-one from the legacy role guides. A charter SHALL be included only if it names something an agent can be held answerable for. Seeding SHALL NOT modify, replace, or reconcile the charters of a project that already has them. A project seeded from an earlier starter set keeps that set, including any charter the operator has since edited.",
+      "rationale": "After seeding the charters are the operator's; reconciling them with a newer bundle would overwrite their edits.",
       "party": null
     },
     {
       "key": "an-agent-is-bound-to-at-most-one-charter",
-      "statement": "Each Hub `Agent` record SHALL reference at most one charter record. An agent with no bound charter SHALL remain usable — its context response SHALL state plainly that no charter is assigned rather than erroring or fabricating behavior content.",
+      "statement": "Each agent SHALL reference at most one charter; a bound charter's content SHALL be injected verbatim into the agent's context, and an agent with no charter SHALL remain usable, its context stating \"No charter is assigned to this agent.\" and listing `charter` as missing.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A charter is optional guidance; its absence must be said plainly rather than fabricated or treated as an error.",
       "party": null
     },
     {
       "key": "charter-management-is-available-through-the-hub-ui",
-      "statement": "The Hub UI SHALL provide a screen to list, read, create, edit, and delete charters, and to bind an agent to a charter from the agent's detail view. This screen replaces any prior role-assignment command or interface.",
+      "statement": "The Hub UI SHALL provide a Charters page to list, read, create, edit and delete charters, where each charter starts collapsed to a summary, its full content can be expanded read-only without opening an editor, and several can be expanded at once; an agent's charter SHALL be bound from the agent's configuration.",
       "modal": "SHALL",
-      "rationale": "Reading a charter's full content SHALL be possible without opening any surface that can modify it. A charter's content is the text injected into an agent's turn, so an operator choosing which charter to bind SHALL be able to see all of it. The screen SHALL allow more than one charter to be open for reading at the same time, so that two can be compared without closing either.",
+      "rationale": "A charter's content is the text injected into a turn, so an operator choosing one must be able to read and compare it in full without risking an edit.",
       "party": null
     },
     {
-      "key": "seeded-charters-describe-only-what-the-runtime-provides",
-      "statement": "Seeded charters SHALL describe only mechanisms the runtime actually offers. A charter's content is injected into an agent's context verbatim, so a charter is instruction, not documentation.",
+      "key": "n1",
+      "statement": "Deleting a charter from the Charters page SHALL first ask for confirmation, naming the charter and how much content would be lost.",
       "modal": "SHALL",
-      "rationale": "A seeded charter MUST NOT instruct an agent to read a file the system does not create, run a command that does not exist, or address a participant the roster does not contain. A roster is whatever agents the operator has created. No charter may therefore assume that any particular other charter, title, or specialism is present in the project. Where a seeded charter needs to escalate, hand off, or resolve an ambiguity, it SHALL direct the agent to the operator, which is the one participant always reachable. A seeded charter MUST NOT restate a rule that the system enforces in code. A gate the agent is subject to is not a gate the agent administers, and a prose copy of it can disagree with the enforced version while carrying no authority. Where a charter would once have told an agent to gather its orientation, it SHALL instead rely on the context it is given: the roster, the project instructions, and the charter itself all arrive with the turn, and nothing needs to be read before starting.",
-      "party": null
-    },
-    {
-      "key": "a-charter-names-an-accountability-not-an-activity",
-      "statement": "A seeded charter SHALL describe what its holder is answerable for. It SHALL NOT be defined by the activity its holder performs, by the technology its holder works in, or by the phase of work it occurs in.",
-      "modal": "SHALL",
-      "rationale": "Two candidate charters that are answerable for the same thing and differ only in subject matter SHALL be one charter carrying an explicit scope, rather than two charters. Coordination that the system performs in code SHALL NOT also be expressed as a charter. A charter asking a model to guarantee in prose what a service guarantees in code creates an unenforced second authority.",
-      "party": null
-    },
-    {
-      "key": "the-starter-set-demonstrates-a-non-software-separation-of-du",
-      "statement": "The bundled starter set SHALL include at least one pair of charters from a non-software domain whose separation from each other is a control rather than a convenience — where one holder may not perform the other's step.",
-      "modal": "SHALL",
-      "rationale": "This exists because the software case cannot demonstrate it. One capable model can perform every activity in a development workflow, which makes charters look like topic labels; a genuine separation of duties is what shows a charter carrying a guarantee.",
+      "rationale": "Charter deletion is a hard delete with no copy kept; rows can share a name, so the size is what tells two apart.",
       "party": null
     },
     {
       "key": "deleting-a-held-charter-is-refused-and-every-holder-it-names",
-      "statement": "Deleting a charter that an agent is bound to SHALL be refused with a message naming every holder and the repair, and every agent it names SHALL be one the project's default roster shows.",
+      "statement": "Deleting a charter an agent holds SHALL be refused with 409 naming every holder and saying to unbind before deleting, and a charter no agent holds SHALL be deleted; because archival releases an agent's charter, every holder named SHALL be an open agent the default roster shows.",
       "modal": "SHALL",
-      "rationale": "The repair it names — unbind the agent, then delete — works only if the operator can reach the agent. The default roster excludes archived agents on purpose, so a refusal naming an archived holder names a repair on a record the operator cannot locate from the sentence they were given. Measured: a charter bound to an agent that was then archived could not be deleted, and the agent the refusal named was absent from the roster with nothing in the message saying why. This requirement SHALL be satisfied by an archived agent holding no charter at all, rather than by the delete route filtering archived holders out of its own query. A filter at the reader would leave the charter deleted while an archived agent still referenced it, and the reader's filter is the pattern that produced this defect: the roster's lifecycle filter was added once, at one site, and every later site that selected agents by a binding was written without it. A charter with no holder SHALL be deleted without a refusal, and the refusal SHALL NOT be weakened for an open holder: naming the holder and the repair is what makes it actionable.",
+      "rationale": "The repair (unbind, then delete) works only if the operator can find the named agent; the guarantee rests on archived agents holding no charter, not on a filter in this route.",
+      "party": null
+    },
+    {
+      "key": "seeded-charters-describe-only-what-the-runtime-provides",
+      "statement": "A seeded charter SHALL describe only mechanisms the runtime offers: it SHALL NOT tell an agent to read a file the system does not create, run a command that does not exist, address a charter title or a participant not guaranteed to exist, restate a rule the system enforces in code, or gather orientation the turn already supplies; escalation and ambiguity SHALL go to the operator.",
+      "modal": "SHALL",
+      "rationale": "Charter content is injected verbatim, so it is instruction, not documentation; a roster is whatever the operator created, and the operator is the one participant always reachable.",
+      "party": null
+    },
+    {
+      "key": "a-charter-names-an-accountability-not-an-activity",
+      "statement": "A seeded charter SHALL state what its holder is answerable for, not an activity, technology or phase; charters answerable for the same outcome SHALL be one charter with an operator-filled scope; and no seeded charter SHALL take on coordination the system performs in code.",
+      "modal": "SHALL",
+      "rationale": "A charter asking a model to guarantee in prose what a service guarantees in code is an unenforced second authority.",
+      "party": null
+    },
+    {
+      "key": "the-starter-set-demonstrates-a-non-software-separation-of-du",
+      "statement": "The starter set SHALL include at least one pair of charters from a non-software domain (today Underwriter and Underwriting Approver) whose separation is a control, each stating which step belongs to the other holder and that it may not perform it.",
+      "modal": "SHALL",
+      "rationale": "In software one capable model can do every step, which makes charters look like topic labels; a real separation of duties shows a charter carrying a guarantee.",
       "party": null
     }
   ],
@@ -224,198 +237,117 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac1",
       "requirement": "charters-are-project-scoped-authored-hub-records",
-      "given": "",
-      "when": "an operator creates a charter with a name and content",
-      "then": "the Hub persists it as a project-scoped record with a stable identifier"
+      "given": "a project",
+      "when": "the operator creates a charter and later edits its content",
+      "then": "it is stored as a project row with a `charter-` id, and the next context of an agent bound to it carries the edited content"
     },
     {
       "key": "ac2",
       "requirement": "charters-are-project-scoped-authored-hub-records",
-      "given": "",
-      "when": "an operator edits an existing charter's content and saves",
-      "then": "subsequent context lookups for agents bound to that charter return the updated content"
+      "given": "a project",
+      "when": "a charter with a blank name is submitted",
+      "then": "it is refused"
     },
     {
       "key": "ac3",
       "requirement": "existing-role-guides-seed-initial-charters-once",
-      "given": "",
-      "when": "a project has no charter records and the Hub starts",
-      "then": "the Hub creates one charter per entry in the bundled starter set, with matching name and"
+      "given": "a newly registered project",
+      "when": "its charters are listed",
+      "then": "there is one charter per entry of `data/charters/charters.json`, with that name and file content"
     },
     {
       "key": "ac4",
       "requirement": "existing-role-guides-seed-initial-charters-once",
-      "given": "",
-      "when": "the Hub restarts after charters already exist for a project",
-      "then": "no additional seed charters are created"
+      "given": "a seeded project whose operator deleted every charter",
+      "when": "the Hub restarts",
+      "then": "no charter is added"
     },
     {
       "key": "ac5",
-      "requirement": "existing-role-guides-seed-initial-charters-once",
-      "given": "",
-      "when": "the bundled starter set changes and the Hub starts on a project that was seeded earlier",
-      "then": "that project's charters are left exactly as they are, and none is added, removed, or"
+      "requirement": "an-agent-is-bound-to-at-most-one-charter",
+      "given": "an agent bound to a charter",
+      "when": "its context is built",
+      "then": "it has a `## Charter: \u003cname>` section with the charter's content"
     },
     {
       "key": "ac6",
       "requirement": "an-agent-is-bound-to-at-most-one-charter",
-      "given": "",
-      "when": "an agent with a bound charter begins a turn",
-      "then": "the supplied context includes that charter's content"
+      "given": "an agent with no charter",
+      "when": "`GET /agents/agent-context?agent=\u003cname>` is called",
+      "then": "the context says no charter is assigned, `missing` includes `charter`, and the call succeeds"
     },
     {
       "key": "ac7",
-      "requirement": "an-agent-is-bound-to-at-most-one-charter",
-      "given": "",
-      "when": "an agent with no bound charter requests its context",
-      "then": "the response includes project instructions and a clear no-charter notice, and does not"
+      "requirement": "charter-management-is-available-through-the-hub-ui",
+      "given": "the Charters page",
+      "when": "it opens and the operator expands one charter then a second",
+      "then": "all start collapsed; both expanded charters stay open, showing full content with no editable field or save action"
     },
     {
       "key": "ac8",
       "requirement": "charter-management-is-available-through-the-hub-ui",
-      "given": "",
-      "when": "an operator expands a charter on the charter screen",
-      "then": "its full content is shown, and no editable field, save action, or discard action is"
+      "given": "an agent's Charter section",
+      "when": "the operator selects a different charter",
+      "then": "the binding updates and the agent's next context carries the new charter"
     },
     {
       "key": "ac9",
-      "requirement": "charter-management-is-available-through-the-hub-ui",
-      "given": "",
-      "when": "an operator opens one charter for reading and then opens a second",
-      "then": "both remain open, and the first is not closed by the second"
+      "requirement": "n1",
+      "given": "an unbound charter",
+      "when": "the operator clicks Delete",
+      "then": "a dialog names the charter and its size, and only Confirm deletes it"
     },
     {
       "key": "ac10",
-      "requirement": "charter-management-is-available-through-the-hub-ui",
-      "given": "",
-      "when": "the charter screen is first opened",
-      "then": "every charter is collapsed to a short summary, and the list of charter names is readable"
+      "requirement": "deleting-a-held-charter-is-refused-and-every-holder-it-names",
+      "given": "a charter bound to an open agent",
+      "when": "it is deleted",
+      "then": "409 names the agent and says to unbind before deleting; after unbinding the delete succeeds"
     },
     {
       "key": "ac11",
-      "requirement": "charter-management-is-available-through-the-hub-ui",
-      "given": "",
-      "when": "an operator opens the charter screen and creates a charter with custom content",
-      "then": "the charter is available to bind to any agent in the project"
+      "requirement": "deleting-a-held-charter-is-refused-and-every-holder-it-names",
+      "given": "a charter whose only holder was archived",
+      "when": "it is deleted",
+      "then": "it is deleted without a refusal"
     },
     {
       "key": "ac12",
-      "requirement": "charter-management-is-available-through-the-hub-ui",
-      "given": "",
-      "when": "an operator selects a different charter for an agent in the Hub UI",
-      "then": "the agent's charter binding updates and its next context response reflects the new"
+      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
+      "given": "the bundled starter set",
+      "when": "each charter is checked",
+      "then": "none cites a removed subsystem or `aw-*` skill, defers to a principal, or addresses another charter's title"
     },
     {
       "key": "ac13",
-      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
-      "given": "",
-      "when": "a seeded charter's content is examined",
-      "then": "it instructs the agent to read no file the system does not create"
+      "requirement": "a-charter-names-an-accountability-not-an-activity",
+      "given": "the bundled starter set",
+      "when": "it is examined",
+      "then": "each charter has a \"You Are Accountable For\" section, and none routes work, assigns tasks or selects models"
     },
     {
       "key": "ac14",
-      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
-      "given": "",
-      "when": "a seeded charter's content is examined",
-      "then": "it names no command the shipped runtime does not provide"
-    },
-    {
-      "key": "ac15",
-      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
-      "given": "",
-      "when": "a seeded charter's content is examined for escalation, hand-off, or consultation",
-      "then": "none of them names another charter's title as the party to address"
-    },
-    {
-      "key": "ac16",
-      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
-      "given": "",
-      "when": "a seeded charter describes what to do about an ambiguity or a dispute it cannot settle",
-      "then": "it directs the agent to ask the operator"
-    },
-    {
-      "key": "ac17",
-      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
-      "given": "",
-      "when": "a seeded charter's content is examined against rules the system enforces",
-      "then": "it does not instruct the agent to enforce a status transition or approval gate that the"
-    },
-    {
-      "key": "ac18",
-      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
-      "given": "",
-      "when": "a seeded charter describes how an agent should begin",
-      "then": "it relies on the roster, instructions, and charter already supplied with the turn"
-    },
-    {
-      "key": "ac19",
-      "requirement": "a-charter-names-an-accountability-not-an-activity",
-      "given": "",
-      "when": "the starter set is examined for charters answerable for the same outcome",
-      "then": "they appear as a single charter with a scope the operator fills in, not as several"
-    },
-    {
-      "key": "ac20",
-      "requirement": "a-charter-names-an-accountability-not-an-activity",
-      "given": "",
-      "when": "the starter set is examined",
-      "then": "it contains no charter whose responsibility is to route work, assign tasks, select models,"
-    },
-    {
-      "key": "ac21",
-      "requirement": "a-charter-names-an-accountability-not-an-activity",
-      "given": "",
-      "when": "the starter set is examined",
-      "then": "no charter's identity is the stage of work its holder is in"
-    },
-    {
-      "key": "ac22",
       "requirement": "the-starter-set-demonstrates-a-non-software-separation-of-du",
-      "given": "",
-      "when": "an operator views the charters seeded into a fresh project",
-      "then": "at least one pair describes accountabilities from a domain other than software development"
-    },
-    {
-      "key": "ac23",
-      "requirement": "the-starter-set-demonstrates-a-non-software-separation-of-du",
-      "given": "",
-      "when": "either charter of the non-software pair is read",
-      "then": "it states which step belongs to the other holder and that it may not perform that step"
-    },
-    {
-      "key": "ac24",
-      "requirement": "deleting-a-held-charter-is-refused-and-every-holder-it-names",
-      "given": "",
-      "when": "an operator deletes a charter bound to an agent in the default roster",
-      "then": "the deletion is refused the message names that agent and how to unbind it performing that repair makes the deletion succeed"
-    },
-    {
-      "key": "ac25",
-      "requirement": "deleting-a-held-charter-is-refused-and-every-holder-it-names",
-      "given": "",
-      "when": "an operator archives the only agent bound to a charter and then deletes that charter",
-      "then": "the charter is deleted the operator is not asked to unbind anything"
-    },
-    {
-      "key": "ac26",
-      "requirement": "deleting-a-held-charter-is-refused-and-every-holder-it-names",
-      "given": "",
-      "when": "a charter deletion is refused with a list of holders",
-      "then": "each named agent is present in the project's default agent roster"
+      "given": "a fresh project",
+      "when": "the Underwriter charter is read",
+      "then": "it states that acceptance is a separate step performed by a different holder that it may not perform"
     }
   ],
   "tasks": [],
   "algorithms": [],
-  "design": "",
+  "design": "**Records, not files.** `Charter` rows replaced the fixed role-guide list (`runner-agent-charter-separation`, 2026-08-03). The bundled Markdown files are only a seed.\n\n**Seed once, by flag.** `Project.charters_seeded` makes seeding a one-time event per project, so deleting every charter does not bring the bundle back.\n\n**Starter set of nine.** Tech Lead, Developer, Code Reviewer, Verifier, Security Engineer, Guardian, Spec Author, and the Underwriter / Underwriting Approver pair, curated in 2026-08 from 21 role guides against the accountability test.\n\n**Deletion relies on archival.** The delete route queries holders without a lifecycle filter; that is correct only because archival clears `charter_id` (and migration 0105 cleared older archived agents).",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/agent-charter/spec.md (8 requirements, 26 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "hub/tests/test_charters_api.py — records, seeding once, delete rules including archived holders.",
+      "hub/tests/test_agent_facing_text.py — seeded content checks and the non-software pair.",
+      "hub/tests/test_charter_context.py — charter in the agent's context.",
+      "hub/ui/src/__tests__/chartersUi.test.tsx, charterReadView.test.tsx, charterDeleteAndRefusal.test.tsx."
     ],
     "limits": [
-      "scenarios-state-no-starting-state: 26 of 26 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "Charter list order is `created_at` only; ties are unordered (F177 open)."
     ]
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
@@ -423,22 +355,24 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "existing-role-guides-seed-initial-charters-once": "FR-9",
       "an-agent-is-bound-to-at-most-one-charter": "FR-10",
       "charter-management-is-available-through-the-hub-ui": "FR-11",
+      "n1": "FR-16",
+      "deleting-a-held-charter-is-refused-and-every-holder-it-names": "FR-15",
       "seeded-charters-describe-only-what-the-runtime-provides": "FR-12",
       "a-charter-names-an-accountability-not-an-activity": "FR-13",
-      "the-starter-set-demonstrates-a-non-software-separation-of-du": "FR-14",
-      "deleting-a-held-charter-is-refused-and-every-holder-it-names": "FR-15"
+      "the-starter-set-demonstrates-a-non-software-separation-of-du": "FR-14"
     },
-    "high_water": 15,
+    "high_water": 16,
     "retired": {},
     "digests": {
-      "FR-8": "f290b4c71f20ffe73f2da24238806953b72f944718519a26717eddc64dd4118e",
-      "FR-9": "5087143a8cff93624bcca6d951e0c7234e936e8c57e38c75ad885582f47dc9b4",
-      "FR-10": "0a506ce35634630e40433d429c5052c83c3007c707f55104d0f806acc56e13e3",
-      "FR-11": "7db4ee57d65149ed91165a15663a75ae335a7a0fbd1b4234068603297761223a",
-      "FR-12": "2dcf6015304c46b1b458c64d3b38948133d90e74410b92ed716d58f69cdb245f",
-      "FR-13": "d59f277e6e816c80479234135e8632456c75492be662ae0e9391b2e465646a2d",
-      "FR-14": "6b2c53dc0ccade7246b27baa0ac580701b3c3c759e126a0a6207a78a9bcdb644",
-      "FR-15": "837a42ae4e261b5de753da09066bd1cd717d88001611dad5d97a8a552bbe8972"
+      "FR-8": "683c2bd325b857147b304b1fe9478d3cb38bb58c6e7575a35cc62e8b8486a6b5",
+      "FR-9": "215cddc7a326fe5fc39067b54e5b97f8a19d7aa0b60b970c6880b7462e598671",
+      "FR-10": "6b08edbebd11168b1fab2dd47e712377915967dd33f4f8411b76ee833f5ffb37",
+      "FR-11": "9e87f7f9aa666c2d1230a42393c597d832baa7ed13dc6303f5aac1412203c618",
+      "FR-16": "ce1598bab1ea2f98199fa28a034d99ca2c4377b784e4e526b729d50974f2fa0a",
+      "FR-15": "d600967e9ca906b58a9c473cfefdbae09c5f4d5ef611aa624060d0f41b22e04a",
+      "FR-12": "ada23fee324d9792a301cb524abaa34052bdd9d739eab9e0067a6641eec9e07c",
+      "FR-13": "3502a3d9f0a255e629030bdd363ffbdf49d2c3fbd70046779fd5f888700eeca3",
+      "FR-14": "96180f36c848f2751711e6954305c43c75e31439216fa4a8a050621b361be99c"
     }
   }
 }

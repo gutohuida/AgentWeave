@@ -148,26 +148,67 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <body>
 <h1>Turn outcome visibility</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">1</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">1</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">8</span> criteria</p>
-<section id="summary"><h2>Summary</h2><p>Define how the Hub records and surfaces a run that ends without advancing the deliverable it was given and without asking the operator anything, determined from structured state alone and never by inspecting the agent&#x27;s prose.</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 1</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL record, and surface to the operator, a run that reaches a terminal status having neither advanced the deliverable it was given nor recorded a question.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The determination SHALL be made from structured state alone: that the run ended, that it wrote no question, and that the deliverable did not advance. **The agent&#x27;s prose SHALL NOT be inspected, and no inference SHALL be drawn from how its final message reads.** That constraint is the point of this requirement, not an aside. A backstop that guessed whether trailing prose was a question previously existed and was retired deliberately, on the reasoning that such a guess is a judgement the product should not make on the operator&#x27;s behalf. That reasoning stands. What this requirement adds needs no guess: every fact it uses is already recorded. The measured cost of having nothing here: an agent read the code, diagnosed the bug correctly and unprompted, asked four well-judged questions as chat text, and ended its turn. No question row, no blocking, no parked task — the run was over and the specification was never written. The agent was not underinstructed; its charter names the asking tool six times, and told plainly on the next turn it used it immediately and well. The mechanism works; what was missing was anything making it the path of least resistance at the moment the agent had a question.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run reaches a terminal status, wrote no question, and its deliverable did not advance</td><td>that outcome SHALL be recorded against the run SHALL be visible to the operator</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run recorded a question</td><td>no such outcome SHALL be recorded, whether or not the deliverable advanced</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run advanced the deliverable it was given</td><td>no such outcome SHALL be recorded</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run was given no document and no task</td><td>no such outcome SHALL be recorded, whatever the run produced an ordinary conversational reply SHALL therefore never be recorded as a non-outcome</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run bound to a task ends without moving it</td><td>the existing run-divergence behaviour SHALL apply unchanged the two mechanisms SHALL NOT both record the same run</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run&#x27;s final message reads like a question but no question was recorded and the deliverable advanced</td><td>no such outcome SHALL be recorded</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>canonical context is assembled for a turn whose deliverable is an unwritten document</td><td>the context SHALL state that ending without either submitting it or asking is not a valid outcome</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run is given a document that the Hub created and scaffolded but into which nothing has since been written</td><td>that deliverable SHALL be treated as not advanced the determination SHALL NOT rest on any field the Hub populates at creation time</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/turn-outcome-visibility/spec.md (1 requirements, 8 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 8 of 8 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">6</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">6</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">10</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>How the Hub notices and surfaces an authoring turn that was given a specification document, wrote nothing into it, and asked the operator nothing — decided from recorded state alone, never from the agent&#x27;s prose.</p></section><section id="problem"><h2>Problem</h2><p>An agent can end a turn having written its questions as ordinary reply text: no question row exists, nothing blocks, and the document it was given stays empty. Without a record, the operator only finds out by reading the transcript.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>Runs not bound to a task whose delivered input named a specification document</li><li>The `turn_produced_nothing` event and its summary in the operator&#x27;s activity views</li><li>The exit-condition line in the canonical context of a turn with an open specification document</li></ul><h3>Non-goals</h3><ul><li>Runs bound to a task: a bound run that ends without moving its task is a run divergence (run-task-binding)</li><li>Inferring from an agent&#x27;s final message whether it asked something</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 6</span><p><span class="aw-modal aw-modal-must">SHALL</span> When a run that is not bound to a task ends, and the input delivered in it named a specification document into which nothing has been written beyond its creation scaffold, and the run recorded no question, the Hub SHALL record a `turn_produced_nothing` warning event naming the run, the agent, the document, its phase and the run&#x27;s exit status.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An agent that writes its questions as chat text and ends its turn leaves no question row and an empty document; the operator needs a visible record that the turn produced nothing. Exit status is not a condition, so a crashed run reads differently from a completed one only through the recorded status.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 6</span><p><span class="aw-modal aw-modal-must">SHALL</span> The determination SHALL use only recorded state — the delivered input&#x27;s document, the document&#x27;s write events and the run&#x27;s question rows — and SHALL NOT read or interpret the agent&#x27;s output text.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Guessing whether trailing prose is a question is a judgement the product does not make on the operator&#x27;s behalf; the retired prose detector (dropped in migration 0082) must not return under another name.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 6</span><p><span class="aw-modal aw-modal-must">SHALL</span> A document SHALL count as written only when it has more than one `content` event; the scaffold write made at creation and any field populated at creation time (such as `content_digest`) SHALL NOT count as the document having advanced.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Both document-creation paths save a scaffold immediately, so creation-time fields are always populated and would make the check unreachable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 6</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL NOT evaluate a run for this outcome when its delivered input named no specification document, when the run is bound to a task, or when the run&#x27;s delivered input was returned to the queue for redelivery.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Most turns are conversation, and recording every chat reply would be noise; a bound run is already covered by run divergence, and returned input is about to be handled by another run, so nothing was dropped.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 6</span><p><span class="aw-modal aw-modal-must">SHALL</span> When canonical context is assembled for a turn whose open specification document has a lifecycle phase, the context SHALL state that ending the turn without either submitting the document or calling `ask_user` is not a way to finish, and that questions written as reply text reach nobody.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Recording the outcome after the fact is the fallback; telling the agent the exit condition up front is what makes asking through the tool the path of least resistance.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 6</span><p><span class="aw-modal aw-modal-must">SHALL</span> The operator&#x27;s activity views SHALL summarise a `turn_produced_nothing` event as &quot;&lt;agent&gt; ended (&lt;exit status&gt;) without changing &lt;document&gt;&quot;, worded differently from a run-divergence row.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An operator reading a timeline must be able to tell a document nobody changed from a task nobody moved without opening either row.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>an unbound run whose delivered input named a document that holds only its creation scaffold</td><td>the run ends without recording a question</td><td>exactly one `turn_produced_nothing` event with severity `warn` is recorded, carrying run_id, agent, spec_document, document_phase and run_exit_status</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>the same run</td><td>it recorded a question, blocking or not</td><td>no `turn_produced_nothing` event is recorded</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>the same run</td><td>it submitted content to the document</td><td>no `turn_produced_nothing` event is recorded</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>an unbound run whose document was written</td><td>its final message reads like a question and no question row exists</td><td>no `turn_produced_nothing` event is recorded</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a document created and scaffolded by the Hub, with a populated content_digest and a single `content` event</td><td>an unbound run given it ends without writing or asking</td><td>the document is treated as not advanced and the event is recorded</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>an unbound run whose delivered input named no specification document</td><td>the run ends, whatever it produced</td><td>no `turn_produced_nothing` event is recorded</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a run bound to a task (including a review run) that was also given a document</td><td>it ends without writing the document or moving the task</td><td>the run-divergence path handles it and no `turn_produced_nothing` event is recorded</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a run that died and whose delivered input was returned to the queue</td><td>the run-end check runs with input returned</td><td>the run is not evaluated and nothing is recorded</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>the operator has a specification document with a lifecycle phase open in the Spec view</td><td>canonical context is assembled for the turn</td><td>the context contains the line saying that ending the turn without submitting the document or calling `ask_user` is not a way to finish</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td>a `turn_produced_nothing` event for agent `author`, exit status `completed`, document `spec/changes/x/spec.html`</td><td>the event is summarised for the activity view</td><td>it reads &quot;author ended (completed) without changing spec/changes/x/spec.html&quot;</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>D1 — State only. The check asks three recorded questions: was the turn given a document (the delivered InboundQueueEntry.spec_document), was anything written into it (more than one `content` SpecDocumentEvent), and did this run create a Question. It never reads the agent&#x27;s output; that is the capability&#x27;s defining constraint.</p><p>D2 — Documents only; tasks belong to divergence. The check runs from evaluate_run_end only on the `not run.task_id` branch. A bound run, including a review, that produced nothing is a divergence, the stronger and actionable record.</p><p>D3 — A note, not a policy. The event is a warning for the operator; it starts no retry, parks nothing and returns no divergence id.</p><p>D4 — Prevention in the context. The canonical context of a turn with an open, phased document states the exit condition explicitly, because the instruction to use `ask_user` alone did not stop agents ending turns with chat-text questions.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/tests/test_turn_produced_nothing.py — recorded / asked / written / no document / prose ignored / record fields / scaffold-only digest / bound review takes divergence</li><li>hub/ui/src/__tests__/eventSummary.test.ts — turn_produced_nothing summary wording</li><li>hub/hub/run_divergence.py note_turn_that_produced_nothing and evaluate_run_end; hub/hub/api/v1/agents.py exit-condition context line</li></ul><h3 class="aw-limits">Limits</h3><ul><li>No test located that asserts the exit-condition context line (n4) directly.</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
   "title": "Turn outcome visibility",
-  "summary": "Define how the Hub records and surfaces a run that ends without advancing the deliverable it was given and without asking the operator anything, determined from structured state alone and never by inspecting the agent's prose.",
-  "problem": "",
+  "summary": "How the Hub notices and surfaces an authoring turn that was given a specification document, wrote nothing into it, and asked the operator nothing — decided from recorded state alone, never from the agent's prose.",
+  "problem": "An agent can end a turn having written its questions as ordinary reply text: no question row exists, nothing blocks, and the document it was given stays empty. Without a record, the operator only finds out by reading the transcript.",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "Runs not bound to a task whose delivered input named a specification document",
+      "The `turn_produced_nothing` event and its summary in the operator's activity views",
+      "The exit-condition line in the canonical context of a turn with an open specification document"
+    ],
+    "non_goals": [
+      "Runs bound to a task: a bound run that ends without moving its task is a run divergence (run-task-binding)",
+      "Inferring from an agent's final message whether it asked something"
+    ]
   },
   "requirements": [
     {
       "key": "a-turn-that-produced-nothing-and-asked-nothing-is-recorded-a",
-      "statement": "The Hub SHALL record, and surface to the operator, a run that reaches a terminal status having neither advanced the deliverable it was given nor recorded a question.",
+      "statement": "When a run that is not bound to a task ends, and the input delivered in it named a specification document into which nothing has been written beyond its creation scaffold, and the run recorded no question, the Hub SHALL record a `turn_produced_nothing` warning event naming the run, the agent, the document, its phase and the run's exit status.",
       "modal": "SHALL",
-      "rationale": "The determination SHALL be made from structured state alone: that the run ended, that it wrote no question, and that the deliverable did not advance. **The agent's prose SHALL NOT be inspected, and no inference SHALL be drawn from how its final message reads.** That constraint is the point of this requirement, not an aside. A backstop that guessed whether trailing prose was a question previously existed and was retired deliberately, on the reasoning that such a guess is a judgement the product should not make on the operator's behalf. That reasoning stands. What this requirement adds needs no guess: every fact it uses is already recorded. The measured cost of having nothing here: an agent read the code, diagnosed the bug correctly and unprompted, asked four well-judged questions as chat text, and ended its turn. No question row, no blocking, no parked task — the run was over and the specification was never written. The agent was not underinstructed; its charter names the asking tool six times, and told plainly on the next turn it used it immediately and well. The mechanism works; what was missing was anything making it the path of least resistance at the moment the agent had a question.",
+      "rationale": "An agent that writes its questions as chat text and ends its turn leaves no question row and an empty document; the operator needs a visible record that the turn produced nothing. Exit status is not a condition, so a crashed run reads differently from a completed one only through the recorded status.",
+      "party": null
+    },
+    {
+      "key": "n1",
+      "statement": "The determination SHALL use only recorded state — the delivered input's document, the document's write events and the run's question rows — and SHALL NOT read or interpret the agent's output text.",
+      "modal": "SHALL",
+      "rationale": "Guessing whether trailing prose is a question is a judgement the product does not make on the operator's behalf; the retired prose detector (dropped in migration 0082) must not return under another name.",
+      "party": null
+    },
+    {
+      "key": "n2",
+      "statement": "A document SHALL count as written only when it has more than one `content` event; the scaffold write made at creation and any field populated at creation time (such as `content_digest`) SHALL NOT count as the document having advanced.",
+      "modal": "SHALL",
+      "rationale": "Both document-creation paths save a scaffold immediately, so creation-time fields are always populated and would make the check unreachable.",
+      "party": null
+    },
+    {
+      "key": "n3",
+      "statement": "The Hub SHALL NOT evaluate a run for this outcome when its delivered input named no specification document, when the run is bound to a task, or when the run's delivered input was returned to the queue for redelivery.",
+      "modal": "SHALL",
+      "rationale": "Most turns are conversation, and recording every chat reply would be noise; a bound run is already covered by run divergence, and returned input is about to be handled by another run, so nothing was dropped.",
+      "party": null
+    },
+    {
+      "key": "n4",
+      "statement": "When canonical context is assembled for a turn whose open specification document has a lifecycle phase, the context SHALL state that ending the turn without either submitting the document or calling `ask_user` is not a way to finish, and that questions written as reply text reach nobody.",
+      "modal": "SHALL",
+      "rationale": "Recording the outcome after the fact is the fallback; telling the agent the exit condition up front is what makes asking through the tool the path of least resistance.",
+      "party": null
+    },
+    {
+      "key": "n5",
+      "statement": "The operator's activity views SHALL summarise a `turn_produced_nothing` event as \"\u003cagent> ended (\u003cexit status>) without changing \u003cdocument>\", worded differently from a run-divergence row.",
+      "modal": "SHALL",
+      "rationale": "An operator reading a timeline must be able to tell a document nobody changed from a task nobody moved without opening either row.",
       "party": null
     }
   ],
@@ -175,81 +216,107 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac1",
       "requirement": "a-turn-that-produced-nothing-and-asked-nothing-is-recorded-a",
-      "given": "",
-      "when": "a run reaches a terminal status, wrote no question, and its deliverable did not advance",
-      "then": "that outcome SHALL be recorded against the run SHALL be visible to the operator"
+      "given": "an unbound run whose delivered input named a document that holds only its creation scaffold",
+      "when": "the run ends without recording a question",
+      "then": "exactly one `turn_produced_nothing` event with severity `warn` is recorded, carrying run_id, agent, spec_document, document_phase and run_exit_status"
     },
     {
       "key": "ac2",
       "requirement": "a-turn-that-produced-nothing-and-asked-nothing-is-recorded-a",
-      "given": "",
-      "when": "a run recorded a question",
-      "then": "no such outcome SHALL be recorded, whether or not the deliverable advanced"
+      "given": "the same run",
+      "when": "it recorded a question, blocking or not",
+      "then": "no `turn_produced_nothing` event is recorded"
     },
     {
       "key": "ac3",
       "requirement": "a-turn-that-produced-nothing-and-asked-nothing-is-recorded-a",
-      "given": "",
-      "when": "a run advanced the deliverable it was given",
-      "then": "no such outcome SHALL be recorded"
-    },
-    {
-      "key": "ac4",
-      "requirement": "a-turn-that-produced-nothing-and-asked-nothing-is-recorded-a",
-      "given": "",
-      "when": "a run was given no document and no task",
-      "then": "no such outcome SHALL be recorded, whatever the run produced an ordinary conversational reply SHALL therefore never be recorded as a non-outcome"
-    },
-    {
-      "key": "ac5",
-      "requirement": "a-turn-that-produced-nothing-and-asked-nothing-is-recorded-a",
-      "given": "",
-      "when": "a run bound to a task ends without moving it",
-      "then": "the existing run-divergence behaviour SHALL apply unchanged the two mechanisms SHALL NOT both record the same run"
+      "given": "the same run",
+      "when": "it submitted content to the document",
+      "then": "no `turn_produced_nothing` event is recorded"
     },
     {
       "key": "ac6",
-      "requirement": "a-turn-that-produced-nothing-and-asked-nothing-is-recorded-a",
-      "given": "",
-      "when": "a run's final message reads like a question but no question was recorded and the deliverable advanced",
-      "then": "no such outcome SHALL be recorded"
-    },
-    {
-      "key": "ac7",
-      "requirement": "a-turn-that-produced-nothing-and-asked-nothing-is-recorded-a",
-      "given": "",
-      "when": "canonical context is assembled for a turn whose deliverable is an unwritten document",
-      "then": "the context SHALL state that ending without either submitting it or asking is not a valid outcome"
+      "requirement": "n1",
+      "given": "an unbound run whose document was written",
+      "when": "its final message reads like a question and no question row exists",
+      "then": "no `turn_produced_nothing` event is recorded"
     },
     {
       "key": "ac8",
-      "requirement": "a-turn-that-produced-nothing-and-asked-nothing-is-recorded-a",
-      "given": "",
-      "when": "a run is given a document that the Hub created and scaffolded but into which nothing has since been written",
-      "then": "that deliverable SHALL be treated as not advanced the determination SHALL NOT rest on any field the Hub populates at creation time"
+      "requirement": "n2",
+      "given": "a document created and scaffolded by the Hub, with a populated content_digest and a single `content` event",
+      "when": "an unbound run given it ends without writing or asking",
+      "then": "the document is treated as not advanced and the event is recorded"
+    },
+    {
+      "key": "ac4",
+      "requirement": "n3",
+      "given": "an unbound run whose delivered input named no specification document",
+      "when": "the run ends, whatever it produced",
+      "then": "no `turn_produced_nothing` event is recorded"
+    },
+    {
+      "key": "ac5",
+      "requirement": "n3",
+      "given": "a run bound to a task (including a review run) that was also given a document",
+      "when": "it ends without writing the document or moving the task",
+      "then": "the run-divergence path handles it and no `turn_produced_nothing` event is recorded"
+    },
+    {
+      "key": "ac9",
+      "requirement": "n3",
+      "given": "a run that died and whose delivered input was returned to the queue",
+      "when": "the run-end check runs with input returned",
+      "then": "the run is not evaluated and nothing is recorded"
+    },
+    {
+      "key": "ac7",
+      "requirement": "n4",
+      "given": "the operator has a specification document with a lifecycle phase open in the Spec view",
+      "when": "canonical context is assembled for the turn",
+      "then": "the context contains the line saying that ending the turn without submitting the document or calling `ask_user` is not a way to finish"
+    },
+    {
+      "key": "ac10",
+      "requirement": "n5",
+      "given": "a `turn_produced_nothing` event for agent `author`, exit status `completed`, document `spec/changes/x/spec.html`",
+      "when": "the event is summarised for the activity view",
+      "then": "it reads \"author ended (completed) without changing spec/changes/x/spec.html\""
     }
   ],
   "tasks": [],
   "algorithms": [],
-  "design": "",
+  "design": "D1 — State only. The check asks three recorded questions: was the turn given a document (the delivered InboundQueueEntry.spec_document), was anything written into it (more than one `content` SpecDocumentEvent), and did this run create a Question. It never reads the agent's output; that is the capability's defining constraint.\n\nD2 — Documents only; tasks belong to divergence. The check runs from evaluate_run_end only on the `not run.task_id` branch. A bound run, including a review, that produced nothing is a divergence, the stronger and actionable record.\n\nD3 — A note, not a policy. The event is a warning for the operator; it starts no retry, parks nothing and returns no divergence id.\n\nD4 — Prevention in the context. The canonical context of a turn with an open, phased document states the exit condition explicitly, because the instruction to use `ask_user` alone did not stop agents ending turns with chat-text questions.",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/turn-outcome-visibility/spec.md (1 requirements, 8 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "hub/tests/test_turn_produced_nothing.py — recorded / asked / written / no document / prose ignored / record fields / scaffold-only digest / bound review takes divergence",
+      "hub/ui/src/__tests__/eventSummary.test.ts — turn_produced_nothing summary wording",
+      "hub/hub/run_divergence.py note_turn_that_produced_nothing and evaluate_run_end; hub/hub/api/v1/agents.py exit-condition context line"
     ],
     "limits": [
-      "scenarios-state-no-starting-state: 8 of 8 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "No test located that asserts the exit-condition context line (n4) directly."
     ]
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
-      "a-turn-that-produced-nothing-and-asked-nothing-is-recorded-a": "FR-1"
+      "a-turn-that-produced-nothing-and-asked-nothing-is-recorded-a": "FR-1",
+      "n1": "FR-2",
+      "n2": "FR-3",
+      "n3": "FR-4",
+      "n4": "FR-5",
+      "n5": "FR-6"
     },
-    "high_water": 1,
+    "high_water": 6,
     "retired": {},
     "digests": {
-      "FR-1": "810bf5a1e44a3c6af8ab2f6845569d3682439260a83832a23c5e4876be790feb"
+      "FR-1": "165f1bc0e0545485467b2f8fc18390d65feeb0bd63d85bd8dbfdcca44cad2824",
+      "FR-2": "ed5ce00a8ebeeab473efd3a4473590c3b95cc1333503244495bf09c0c9b57c4a",
+      "FR-3": "61eac8204190d56b937494cc89d26b8eb370ebffa61bfcbfb7ec9a2749331d5f",
+      "FR-4": "6a1859d81108fbdca0249be35a11c23e304f2edae9d9b1e75dfbab59a45f81dd",
+      "FR-5": "ac87c583bf207bec47920518eaab467de240513839d741afa60934dc49b397bd",
+      "FR-6": "827428569e013392149028f09fa643474b5e6b46adc17a0df78ebd668d77e5a3"
     }
   }
 }

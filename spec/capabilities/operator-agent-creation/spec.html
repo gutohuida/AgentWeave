@@ -148,89 +148,131 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <body>
 <h1>Operator agent creation</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a><a href="../../areas/agents-and-execution.html">Agents and execution</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">10</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">10</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">44</span> criteria</p>
-<section id="summary"><h2>Summary</h2><p>Define how an operator creates a project-scoped, runner-bound agent from the Hub while preserving launchability truth, optional charter guidance, stable identity, and lazy worktree isolation.</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 1 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> Each project workspace SHALL expose an **Add agent** action. Creating an agent SHALL require a valid project-unique name, a launchable provider, and a model that provider&#x27;s catalog entry declares. A charter MAY be selected but MUST NOT be required. The operator MUST NOT be asked to choose a persona or organizational role.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The operator MUST NOT be required to have configured a runner beforehand. Selecting a provider and a model SHALL be sufficient to create a working agent.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 2 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> The creation journey SHALL display every provider it offers with that provider&#x27;s current launchability. An unlaunchable provider SHALL remain visible with the reason it cannot run and MUST NOT be selectable as ready. The server SHALL repeat launchability validation when creation is submitted.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 3 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> An operator-created agent SHALL be a Hub-owned project participant with its own queue, conversation identity, and stable color. Creation SHALL NOT provision or mutate a Git worktree. The existing scheduler SHALL provision an isolated worktree only when the agent first begins writing work, and only where the project directory is a Git repository.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>**The unit of isolation SHALL be the task, where the turn is about one.** A writing turn bound to a task SHALL run in a checkout provisioned for that task, on a branch that carries that task&#x27;s work and no other task&#x27;s. A writing turn bound to no task SHALL run in a checkout provisioned for the agent, on that agent&#x27;s own branch. Which checkout a turn gets is therefore decided by what the turn is about, not by who is doing it. A per-agent branch carries every task its agent has ever worked on, so any operation that merges such a branch — or merges a commit on it, since merging a commit brings its whole ancestry — integrates work that was never approved. A branch that corresponds to a task is what makes &quot;this task&#x27;s work&quot; a thing the system can name. Where the project directory is a Git repository and the isolated checkout cannot be provisioned, the Hub SHALL refuse the turn and state why. It MUST NOT run the agent in the primary checkout instead: a project that has isolation SHALL NOT lose it silently.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span><a class="aw-anchor-copy" href="#FR-11" aria-label="Link to FR-11" title="Link to #FR-11">#</a> <span class="aw-position">Requirement 4 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> When agent creation requires a runner that does not exist, the Hub SHALL create the runner and the agent as one atomic operation. A failure at any point SHALL leave neither record behind.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The Hub SHALL reuse an existing same-project runner whose provider and model match the operator&#x27;s selection rather than creating a duplicate.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span><a class="aw-anchor-copy" href="#FR-12" aria-label="Link to FR-12" title="Link to #FR-12">#</a> <span class="aw-position">Requirement 5 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where the operator chooses an agent&#x27;s provider, each provider SHALL be presented with its own visual mark alongside its name.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A provider for which no mark is available SHALL be presented with its name alone and MUST NOT be given another provider&#x27;s mark. A mark MUST NOT be the only thing distinguishing one provider from another — the provider&#x27;s name SHALL always be present. Provider marks MUST NOT introduce a second icon system, a webfont, or a network request to render. Presenting a provider&#x27;s mark MUST NOT change which providers are offered. Launchability remains the sole determinant of whether a provider can be chosen.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 6 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> Agent creation SHALL offer a setting when the agent&#x27;s first turn would be materially different without it, and SHALL leave every other setting to the agent&#x27;s configuration destination.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>This capability already fixes *what* creation collects — a project-unique name, a launchable provider, a model the catalog declares, and an optional charter. What it does not state is the rule by which anything new is placed, so each future setting would be argued individually and creation would grow by accretion. The rule governs what is **offered**, not what is **required**. A charter is offered because it shapes the first turn, and remains optional under the existing no-charter contract; nothing here tightens that. A setting with a workable default, which can be changed before it takes effect, MUST NOT be added to creation. Lengthening creation is friction at the first moment an operator uses the product, and buys nothing that the configuration destination cannot provide later.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 7 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where a project&#x27;s directory is not a Git repository, the Hub SHALL run a writing agent in that directory rather than refusing the turn. Absence of a repository SHALL NOT be reported as a condition the operator must resolve before working.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The Hub SHALL state the resulting posture rather than leave it to be discovered. The agent&#x27;s canonical turn context SHALL say that it is working in the project&#x27;s shared directory and that no isolated checkout is available, and the agent&#x27;s workspace report SHALL distinguish an agent sharing the project directory because no repository exists from one sharing it by configuration. Concurrent writing agents in such a project SHALL be permitted. The Hub SHALL NOT serialize them, lock the directory, or refuse a second writer. Because their edits can overwrite one another with no conflict to resolve, and no mechanism for producing a conflict exists without a repository, the Hub SHALL tell each agent that it shares the directory. That statement is the whole of the mitigation and SHALL NOT be removed while the permission stands. The Hub SHALL NOT create, initialize, or modify a Git repository in the project directory in order to satisfy this requirement.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 8 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> A task that was already being worked on a per-agent branch when per-task isolation is introduced SHALL continue to be worked in that per-agent checkout for the remainder of its life, and SHALL NOT be given a task checkout.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>No existing branch SHALL be renamed, deleted, split, or rewritten in order to introduce per-task isolation. There is no record of which commit on a per-agent branch belongs to which task — that absence is the defect being fixed — so any automatic split would be a guess, and a guess that rewrites history cannot be undone by the operator who did not ask for it. Adopting such a branch as the task&#x27;s own branch SHALL NOT be done either. The branch carries other tasks&#x27; commits, so adopting it would leave the system claiming that one approval lands one task&#x27;s work while that claim was false for an unbounded set of tasks, and false silently. The set of covered tasks SHALL be recorded once, when per-task isolation is introduced, and SHALL NOT be recomputed afterwards. Determining it from the state of the world at each turn — whether a branch exists, or whether a particular kind of commit was recorded — makes a task&#x27;s scheme depend on things that change after the fact, so a task could move between schemes mid-life without anyone deciding it should. Because nothing writes the record after it is made, the set is fixed when the change ships and only shrinks. The recorded set SHALL cover every task that has already been worked at all, whether or not a commit can be found for it. Covering a task that had nothing to preserve costs it only the isolation it never had; failing to cover a task that did have work costs that work its place in the checkout the agent is about to be given, with no statement that anything is missing. Those costs are not comparable, so the boundary is drawn on the safe side of it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span><a class="aw-anchor-copy" href="#FR-16" aria-label="Link to FR-16" title="Link to #FR-16">#</a> <span class="aw-position">Requirement 9 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> While a writing turn is in flight for a task, the system SHALL refuse to start another writing turn for that same task on behalf of a different agent, and the refusal SHALL name the agent already holding it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Before work was isolated per task, this held without being stated: a checkout belonged to an agent, and an agent could have only one turn in flight, so no two processes could share a working tree. Isolating per task removes that coupling — nothing else in the system prevents two agents from being pointed at the same task — and two live processes editing one working tree lose each other&#x27;s changes silently, which is the outcome workspace isolation exists to prevent. A turn started to **review** a task SHALL NOT be refused by this rule. A review runs in a checkout of the commit under review rather than in the task&#x27;s own checkout, so there is nothing for it to collide with, and refusing it would stop a task being reviewed while it is being worked. An agent that works in the project&#x27;s shared checkout rather than an isolated one SHALL NOT be refused by this rule either. It has no isolated checkout to collide over, and the shared checkout&#x27;s behaviour is unchanged by this requirement. Nor SHALL a task still worked under the per-agent scheme be refused. Such a task has no checkout of its own to admit anybody to, and the coupling this rule replaces still holds for it, so refusing here would forbid something that is safe. The refusal SHALL be temporary rather than terminal: input that was refused for this reason SHALL be retained and delivered once the holding turn ends, not discarded. The condition clears by itself, which is what distinguishes it from a refusal about a request that will never become valid.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span><a class="aw-anchor-copy" href="#FR-17" aria-label="Link to FR-17" title="Link to #FR-17">#</a> <span class="aw-position">Requirement 10 of 10</span><p><span class="aw-modal aw-modal-must">SHALL</span> When a Copilot agent is created, or its runner binding or charter changes, the Hub SHALL write that agent&#x27;s Copilot files into a Copilot home the Hub owns for that agent, and SHALL NOT write them into the project&#x27;s repository.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The files SHALL include two things: - A Copilot custom agent named after the agent. It carries the agent&#x27;s stable context (its identity, the project&#x27;s instructions and its charter) and a statement that this context takes precedence over the repository&#x27;s own instruction files where they conflict. - The configuration that gives Copilot the Hub&#x27;s `agentweave` MCP server. Per-turn material SHALL NOT be written there. That means the workspace, the specification in view, the team, other agents&#x27; history and the turn notices, which reach each turn with its prompt. The Hub SHALL bring these files up to date before every Copilot turn, so that a charter, instructions or model edit made anywhere reaches the next turn. The home&#x27;s location SHALL be derived only from identifiers the Hub has checked to be single, safe path components, because a project&#x27;s identifier can come from a marker file inside the project&#x27;s own folder. The files SHALL carry no credential; the home&#x27;s own configuration SHALL name the account the operator signed Copilot in with, copied from the operator&#x27;s Copilot home before every turn (runner-registry, &quot;Copilot launchability is read from Copilot itself&quot;). A failure to write them SHALL NOT undo the agent&#x27;s creation. The same failure before a turn SHALL refuse that turn with a reason. The Hub SHALL own the home&#x27;s whole configuration surface, not only the files it writes. Before every Copilot turn it SHALL remove from the home any hook, plugin, MCP configuration or custom agent it did not write, and any setting that trusts a folder or grants a permission, so that nothing left in the home can answer a permission request in the Hub&#x27;s place. When Copilot does not select the Hub&#x27;s custom agent for a turn, the Hub SHALL leave no other custom agent selected for that turn, and SHALL NOT send the prompt while a custom agent it did not write is selected.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator supplies a valid unused name and selects a launchable provider and a model</td><td>the agent is created with a stable project color and runner binding it appears in the project rail without a reload its conversation opens ready for input</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator selects a provider and model for which the project has no runner</td><td>creation succeeds and the agent is bound to a runner for that provider and model</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator selects a provider</td><td>the models offered are those the catalog declares for that provider</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator creates an agent without selecting a charter</td><td>creation succeeds with full project scope under the existing no-charter contract</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the supplied name already identifies an agent in that project</td><td>creation is refused with a field-specific reason the dialog preserves the operator&#x27;s other selections for correction</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a provider&#x27;s CLI or authorization is unavailable</td><td>the provider is displayed disabled with the current reason submitting that provider cannot create an apparently ready agent</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-9">FR-9</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>provider launchability changes after the dialog loads but before submission</td><td>the server refuses creation with the current typed reason</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator creates an agent but sends it no work</td><td>no agent worktree exists</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the new agent begins its first writing turn</td><td>the scheduler provisions that turn&#x27;s isolated checkout under the existing project guard other checkouts and the primary checkout remain unchanged</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a writing agent&#x27;s turn is bound to a task</td><td>it runs in a checkout provisioned for that task, on a branch dedicated to that task</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the same agent takes turns on two different tasks</td><td>each turn runs on its own task&#x27;s branch neither branch carries the other task&#x27;s commits</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a writing agent&#x27;s turn is bound to no task</td><td>it runs in the checkout provisioned for that agent, on that agent&#x27;s own branch</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a writing agent&#x27;s turn begins in a project that is a Git repository and provisioning its</td><td>the turn does not start the reason names the provisioning failure</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator creates a second agent on a provider and model that an existing runner in</td><td>the new agent is bound to that existing runner no additional runner is created</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>agent creation fails after a runner would have been provisioned</td><td>no runner record remains from the attempt</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runner has been provisioned through agent creation</td><td>it appears in runner management and can be inspected, edited, and deleted like any other</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator opens the provider choice</td><td>each provider is shown with its mark and its name</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a provider has no available mark</td><td>it is shown with its name is not given another provider&#x27;s mark</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a provider is launchable but has no mark</td><td>it remains selectable</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>provider marks are rendered</td><td>they resolve without a second icon system, a webfont, or a network request</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a setting would materially change how the agent&#x27;s first turn behaves</td><td>creation offers it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a setting has a workable default and can be changed before it takes effect</td><td>creation does not offer it it is available on the agent&#x27;s configuration destination</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a setting is offered at creation</td><td>it may still be optional an existing optional contract for it is preserved</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a writing agent is triggered in a project whose directory is not a Git repository</td><td>the turn starts with the project directory as its working directory no repository, worktree, or branch is created</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator inspects the queue status for an agent in a project with no repository</td><td>no waiting reason names the absent repository</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn&#x27;s canonical context is built for an agent running in a project with no repository</td><td>the context states that the working directory is the project&#x27;s shared directory and that it states that another agent in the project works in that same directory and that their</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>two writing agents are triggered in the same project with no repository</td><td>both run, in that project&#x27;s directory neither is refused, queued, or delayed on account of the other</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator views the workspace of an agent in a project with no repository</td><td>it reports the project directory as the working directory, with no branch, and states that an agent that shares the project directory by configuration is reported without that</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a writing agent&#x27;s turn requests a working directory within a project that is a Git the same request is made within a project that is not a Git repository</td><td>the request is refused as overriding isolation it is resolved as a project-relative path under the existing containment guard</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a writing turn is taken on a task that was already worked before per-task isolation</td><td>the turn runs in that per-agent checkout no task branch is created for that task</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a writing turn is taken on a task whose earlier turns committed their work directly, so</td><td>the turn still runs in the per-agent checkout, with that work present</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a task is created after per-task isolation is introduced and given a writing turn</td><td>it runs in a checkout provisioned for that task</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>per-task isolation is introduced into a project with existing per-agent branches</td><td>every one of those branches still exists, at the same commit, with the same history</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a writing turn is triggered for a task that another agent already has a run in flight for</td><td>the turn is refused the refusal names the agent holding the task</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn is refused because another agent holds the task, and that agent&#x27;s turn then ends</td><td>the input that was refused is still pending it is delivered on a subsequent attempt rather than having been discarded</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a review turn is triggered for a task that an agent is currently working</td><td>the review turn starts</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s turn on a task ends and it is triggered on that task again</td><td>the turn starts in the same task checkout</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator creates an agent bound to a `copilot` runner</td><td>the agent&#x27;s Hub-owned Copilot home contains a custom agent file named after the agent, holding its charter and the precedence statement the project&#x27;s repository contains no new file</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator edits the charter of a Copilot agent and then triggers it</td><td>the custom agent file the turn uses carries the edited charter</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot agent&#x27;s home has been written for a run</td><td>none of its files contains the run&#x27;s token</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot turn is triggered in a project whose identifier contains a path separator or is `..`</td><td>the Hub writes no file for it and refuses the turn with a reason</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Copilot does not select the Hub&#x27;s custom agent for a turn, or selects one that is not the Hub&#x27;s</td><td>the turn receives its stable context with its prompt instead no custom agent is selected for the turn the run&#x27;s timeline says why</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a file the Hub did not write has been placed in the hooks directory of a Copilot agent&#x27;s home, and the agent is triggered</td><td>the file is gone before the Copilot process starts the turn&#x27;s permission requests reach the Hub</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>Copilot has written its own configuration file, holding no setting that trusts a folder or grants a permission, and an empty plugin directory into a Copilot agent&#x27;s home, and the agent is triggered again</td><td>both are still there when the Copilot process starts the turn&#x27;s timeline reports no repair of the home</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/operator-agent-creation/spec.md (10 requirements, 44 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenario-had-multiple-cycles: &#x27;A working directory override is refused only where isolation exists&#x27; states 2 WHEN/THEN cycles under one name; they are joined into one criterion because a criterion has one of each</li><li>scenarios-state-no-starting-state: 44 of 44 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">15</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">15</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">27</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>An operator creates an agent from the project workspace by naming it and choosing a launchable provider and a model (or an existing runner), with an optional charter. The Hub finds or creates the matching runner in the same transaction, checks launchability again on submit, and announces the new agent. Creation provisions no checkout. Which checkout an agent&#x27;s turns later get is decided per task, with a shared directory for projects that are not Git repositories. A Copilot agent&#x27;s native files are written into a Copilot home the Hub owns.</p></section><section id="problem"><h2>Problem</h2><p>Agents that can only be created by editing configuration, or that look ready in the app but cannot run, put the first moment an operator uses the product behind a barrier or a lie.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>The Add agent dialog (`hub/ui/src/components/agents/AgentCreateDialog.tsx`) and `POST /agents`.</li><li>Which checkout a writing turn is given: per task, per agent, grandfathered per-agent, or the shared directory.</li><li>A Copilot agent&#x27;s Hub-owned Copilot home.</li></ul><h3>Non-goals</h3><ul><li>How a checkout is provisioned, released and reported (workspace-isolation).</li><li>Editing an agent after creation (agent-configuration).</li><li>Agents requested by other agents (`POST /agents/request`).</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 1 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> Each project workspace SHALL offer an Add agent action that creates an agent from a project-unique name, a launchable provider and a model that provider&#x27;s catalog declares, with an optional charter, and SHALL NOT require a runner to exist beforehand nor ask for a persona or organizational role.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Choosing a provider and a model is enough to describe a working agent; anything more at creation is friction at first use.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span><a class="aw-anchor-copy" href="#FR-18" aria-label="Link to FR-18" title="Link to #FR-18">#</a> <span class="aw-position">Requirement 2 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> `POST /agents` SHALL refuse with 400 a name that does not match `^[a-zA-Z0-9_-]{1,32}$` or is a reserved name (`user`, `operator`), and with 409 a name already held by an agent or a session-configured agent in the project, and SHALL accept either `runner_id` or both `provider` and `model`, never both and never neither.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An agent&#x27;s name becomes a path component, a branch suffix and an attribution; reserved names already mean someone who is not an agent, and every route that runs an agent refuses them.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 3 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> The creation dialog SHALL show every provider with its current launchability from `GET /runners/launchability-by-provider`, keep an unlaunchable provider visible but not selectable with its reason, and the Hub SHALL re-check the chosen runner&#x27;s launchability on submit and refuse with 409 and the current reason when it cannot run.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Launchability can change between loading the dialog and submitting it; an agent that looks ready but cannot run is the failure this prevents.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span><a class="aw-anchor-copy" href="#FR-11" aria-label="Link to FR-11" title="Link to #FR-11">#</a> <span class="aw-position">Requirement 4 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> When created from a provider and model, the Hub SHALL reuse a project runner with the same CLI and model, or else create one named &quot;&lt;provider label&gt; — &lt;model label&gt;&quot; (&quot;&lt;alias&gt; (latest)&quot; for an alias) in the same commit as the agent, so that a failure leaves neither record behind.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Duplicate runners for one choice clutter runner management, and a runner left behind by a failed creation is a record nobody asked for. An alias-created runner is named for the alias, since its target moves.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span><a class="aw-anchor-copy" href="#FR-19" aria-label="Link to FR-19" title="Link to #FR-19">#</a> <span class="aw-position">Requirement 5 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> A created agent SHALL receive a stable project color, be bound to its runner and optional charter, and be recorded as an `agent_created` event broadcast to open clients, so it appears in the rail without a reload.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The operator should be able to talk to the agent immediately, and other open clients should see it too.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span><a class="aw-anchor-copy" href="#FR-12" aria-label="Link to FR-12" title="Link to #FR-12">#</a> <span class="aw-position">Requirement 6 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where the operator chooses a provider, each SHALL be shown by its name with its own inline mark where one exists, never another provider&#x27;s mark, and marks SHALL use no second icon system, webfont or network request and SHALL NOT affect which providers are offered or selectable.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A mark helps recognition but must never be the only distinction; launchability alone decides what can be chosen.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 7 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> Agent creation SHALL offer a setting only when the agent&#x27;s first turn would be materially different without it, and SHALL leave every setting with a workable default that can be changed before it takes effect to the agent&#x27;s configuration.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A stated placement rule stops creation growing by accretion. A charter is offered because it shapes the first turn, and stays optional.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 8 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> Creating an agent SHALL NOT provision or change any Git checkout; in a Git project, a writing turn bound to a task SHALL run in that task&#x27;s own checkout on a branch carrying only that task&#x27;s work, a writing turn bound to no task SHALL run in the agent&#x27;s own checkout, and a turn whose checkout cannot be provisioned SHALL be refused with the reason rather than run in the primary checkout.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A per-agent branch carries every task its agent ever worked on, so merging it integrates unapproved work; a branch per task is what lets one approval land one task&#x27;s work. Silently losing isolation is worse than refusing.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 9 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> In a project whose directory is not a Git repository, the Hub SHALL run writing agents in the project directory without refusing, serialising or locking them and without creating a repository, SHALL tell each agent in its context that it shares the directory with any other agent and has no isolated checkout, and SHALL NOT report the absent repository as a queue waiting reason.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Without a repository there is no way to produce a conflict, so the honest mitigation is to say so to every agent; refusing would make a plain folder unusable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span><a class="aw-anchor-copy" href="#FR-20" aria-label="Link to FR-20" title="Link to #FR-20">#</a> <span class="aw-position">Requirement 10 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> A turn&#x27;s `work_dir` override SHALL be refused with 400 for a writing agent in a Git project, and resolved as a project-relative path under the containment guard in a project that is not a Git repository.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>There is isolation to override only where a repository exists.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 11 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> A task that had been worked before per-task isolation shipped (stamped `workspace_scheme = agent` once, by migration 0095, and never written again) SHALL keep being worked in its agent&#x27;s own checkout, and no existing branch SHALL be renamed, deleted, split, rewritten or adopted as a task branch.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Nothing records which commit on a per-agent branch belongs to which task, so any split is a guess that rewrites history; recomputing the set per turn would let a task change scheme mid-life without anyone deciding it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span><a class="aw-anchor-copy" href="#FR-16" aria-label="Link to FR-16" title="Link to #FR-16">#</a> <span class="aw-position">Requirement 12 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> While a writing turn holds a task&#x27;s own checkout, a writing turn for that task by a different agent SHALL be refused with 409 naming the holder, as a transient refusal that keeps the input queued for delivery once the holding turn ends; review turns, shared-checkout agents and grandfathered tasks SHALL NOT be refused by this rule.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Two processes editing one working tree lose each other&#x27;s changes silently; the exempt cases have no task checkout to collide over.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span><a class="aw-anchor-copy" href="#FR-17" aria-label="Link to FR-17" title="Link to #FR-17">#</a> <span class="aw-position">Requirement 13 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> When a Copilot agent is created or its runner or charter binding changes, and before every Copilot turn, the Hub SHALL write a custom agent named after the agent (its identity, the project&#x27;s instructions and its charter, with a statement that this takes precedence over the repository&#x27;s instruction files) and the `agentweave` MCP configuration into a Copilot home it owns under `~/.agentweave/hub/copilot-home/projects/&lt;project&gt;/&lt;agent&gt;/`, never into the repository and never with a credential.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Copilot reads custom agents and MCP configuration from its home; writing them into the repository would change the operator&#x27;s project. Per-turn material reaches each turn with its prompt instead.</p></div><div class="aw-requirement aw-requirement-must" id="FR-21"><span class="aw-id">FR-21</span><a class="aw-anchor-copy" href="#FR-21" aria-label="Link to FR-21" title="Link to #FR-21">#</a> <span class="aw-position">Requirement 14 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Copilot home&#x27;s path SHALL be built only from identifiers checked to be single, safe path components, and a turn whose home cannot be written SHALL be refused with a reason, while a write failure at creation SHALL NOT undo the agent&#x27;s creation.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A project&#x27;s identifier can come from a marker file inside the project&#x27;s own folder.</p></div><div class="aw-requirement aw-requirement-must" id="FR-22"><span class="aw-id">FR-22</span><a class="aw-anchor-copy" href="#FR-22" aria-label="Link to FR-22" title="Link to #FR-22">#</a> <span class="aw-position">Requirement 15 of 15</span><p><span class="aw-modal aw-modal-must">SHALL</span> Before every Copilot turn the Hub SHALL remove from the agent&#x27;s home any hook, plugin, MCP configuration or custom agent it did not write and any setting that trusts a folder or grants a permission, leaving Copilot&#x27;s own harmless files in place, and SHALL NOT send a prompt while a custom agent it did not write is selected.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Nothing left in the home may answer a permission request in the Hub&#x27;s place.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-8">FR-8</a></td><td>a project with no runner for `claude` / Sonnet 5</td><td>the operator adds an agent with a valid name, provider `claude`, model Sonnet 5 and no charter</td><td>the agent is created, bound to a runner for that model, with no charter</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-8">FR-8</a></td><td>the Add agent dialog</td><td>a provider is chosen</td><td>the models offered are that provider&#x27;s catalog models, and no persona or role is asked for</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-18">FR-18</a></td><td>a project with an agent named `dev`</td><td>an agent named `dev`, `operator`, or `bad name` is submitted</td><td>the first returns 409 and the dialog keeps the other selections; the others return 400 with a sentence</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-18">FR-18</a></td><td>a project</td><td>`POST /agents` carries both `runner_id` and `provider`+`model`, or neither</td><td>the request is refused</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-9">FR-9</a></td><td>a provider whose CLI is missing or not signed in</td><td>the dialog is opened</td><td>that provider is shown disabled with its reason</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-9">FR-9</a></td><td>a provider launchable when the dialog loaded</td><td>it becomes unlaunchable before submit and the operator submits</td><td>the Hub returns 409 with the current reason and creates nothing</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td>an existing project runner on `claude` / `claude-sonnet-5`</td><td>a second agent is created on that provider and model</td><td>it is bound to the existing runner and no runner is added</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td>no matching runner</td><td>creation fails after the runner was added to the transaction</td><td>no runner remains; a runner created by a successful creation appears in runner management like any other</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-11">FR-11</a></td><td>no matching runner</td><td>an agent is created on alias `opus`</td><td>the new runner is named &quot;Claude Code — opus (latest)&quot; and records `opus`</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-19">FR-19</a></td><td>a second client with the project open</td><td>an agent is created</td><td>an `agent_created` event is recorded and broadcast, and the agent appears in both rails without a reload</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-12">FR-12</a></td><td>the provider choice</td><td>it is opened</td><td>each provider shows its name and, where one exists, its own inline SVG mark; a launchable provider with no mark is still selectable</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-13">FR-13</a></td><td>the Add agent dialog</td><td>its fields are listed</td><td>they are name, provider, model and an optional charter; posture, waiting times and grants are left to the agent&#x27;s configuration</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td>a Git project</td><td>an agent is created and sent no work</td><td>no checkout exists for it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td>a writing agent in a Git project</td><td>it takes turns on two tasks and one turn bound to no task</td><td>each task turn runs on its own task branch carrying no other task&#x27;s commits, and the unbound turn runs in the agent&#x27;s own checkout</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td>a Git project where the checkout cannot be provisioned</td><td>a writing turn starts</td><td>it is refused naming the failure and does not run in the primary checkout</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-14">FR-14</a></td><td>a project directory that is not a Git repository</td><td>two writing agents are triggered</td><td>both run in the project directory, neither is delayed, no repository is created, and each turn&#x27;s context says the directory is shared and has no isolated checkout</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-14">FR-14</a></td><td>the same project</td><td>an agent&#x27;s queue status is read</td><td>no waiting reason names the absent repository</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-20">FR-20</a></td><td>a writing agent</td><td>a turn requests a `work_dir` in a Git project, and in a non-Git project</td><td>the first is refused with 400; the second is resolved under the project</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>a task stamped `workspace_scheme = agent`</td><td>a writing turn is taken on it</td><td>it runs in the agent&#x27;s own checkout with its earlier work present and no task branch is created</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>a task created after migration 0095</td><td>a writing turn is taken on it</td><td>it runs in a checkout provisioned for that task</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td>agent A has a writing turn in flight on a task</td><td>agent B is triggered on the same task</td><td>409 names agent A, and B&#x27;s input stays queued and is delivered after A&#x27;s turn ends</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td>an agent is working a task</td><td>a review turn is triggered for that task</td><td>the review starts</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-17">FR-17</a></td><td>a `copilot` runner</td><td>an agent bound to it is created, its charter edited, and it is triggered</td><td>its Hub-owned home holds a custom agent named after it with the edited charter and the precedence statement, the repository has no new file, and no file holds the run&#x27;s token</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-21">FR-21</a></td><td>a project whose identifier contains a path separator or is `..`</td><td>a Copilot turn is triggered</td><td>no file is written and the turn is refused with a reason</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-22">FR-22</a></td><td>a hook file the Hub did not write in a Copilot agent&#x27;s home</td><td>the agent is triggered</td><td>the file is gone before Copilot starts and permission requests reach the Hub</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-22">FR-22</a></td><td>Copilot&#x27;s own config file with no trust or permission setting, and an empty plugin directory</td><td>the agent is triggered</td><td>both remain and the timeline reports no repair</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-22">FR-22</a></td><td>Copilot does not select the Hub&#x27;s custom agent, or selects another</td><td>a turn starts</td><td>no custom agent is selected, the stable context is sent with the prompt, and the timeline says why</td></tr></tbody></table></section><section id="behaviour"><h2>Behaviour</h2><h3>Which checkout a writing turn gets</h3><ol><li>If the turn is a review, use a detached checkout of the commit under review.</li><li>If the agent is read-only, or the project is not a Git repository, use the project directory.</li><li>If the turn is bound to a task whose `workspace_scheme` is `task`, use (and provision on first use) that task&#x27;s checkout, refusing if another agent&#x27;s turn holds it.</li><li>Otherwise (no task, or a grandfathered `agent`-scheme task), use the agent&#x27;s own checkout.</li><li>If the chosen checkout cannot be provisioned, refuse the turn with the reason.</li></ol></section><section id="design"><h2>Design</h2><p>**Find-or-create in one commit.** `POST /agents` adds a new runner to the same session as the agent and commits once, so neither record survives a failure; an existing runner with the same CLI and model is reused.</p><p>**Launchability twice.** The dialog reads per-provider launchability before a runner exists; the route probes the actual runner on submit.</p><p>**Isolation is per task.** `task_workspace` decides which checkout a turn is entitled to from the database and never writes `Task.workspace_scheme`; migration 0095 stamped the grandfathered set once, so it can only shrink.</p><p>**Copilot home owned whole.** The Hub writes the custom agent and MCP config and sweeps everything else that could approve a permission, so the Hub stays the only approver.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/tests/test_operator_agent_creation.py (`POST /agents`); hub/ui/src/__tests__/agentCreationUi.test.tsx, providerMark.test.tsx.</li><li>hub/tests/test_task_workspace_scheme.py — the grandfathered set is never written.</li><li>hub/tests/test_copilot_home.py, test_copilot_home_has_no_deciding_hook.py, test_copilot_home_routes.py.</li><li>hub/tests/test_operator_is_a_reserved_agent_name.py.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>Names that shadow a Hub route (`conflicts`, `settings`, `sessions`, `board`, `boards`) are still accepted at creation (F248 open).</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
   "title": "Operator agent creation",
-  "summary": "Define how an operator creates a project-scoped, runner-bound agent from the Hub while preserving launchability truth, optional charter guidance, stable identity, and lazy worktree isolation.",
-  "problem": "",
+  "summary": "An operator creates an agent from the project workspace by naming it and choosing a launchable provider and a model (or an existing runner), with an optional charter. The Hub finds or creates the matching runner in the same transaction, checks launchability again on submit, and announces the new agent. Creation provisions no checkout. Which checkout an agent's turns later get is decided per task, with a shared directory for projects that are not Git repositories. A Copilot agent's native files are written into a Copilot home the Hub owns.",
+  "problem": "Agents that can only be created by editing configuration, or that look ready in the app but cannot run, put the first moment an operator uses the product behind a barrier or a lie.",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "The Add agent dialog (`hub/ui/src/components/agents/AgentCreateDialog.tsx`) and `POST /agents`.",
+      "Which checkout a writing turn is given: per task, per agent, grandfathered per-agent, or the shared directory.",
+      "A Copilot agent's Hub-owned Copilot home."
+    ],
+    "non_goals": [
+      "How a checkout is provisioned, released and reported (workspace-isolation).",
+      "Editing an agent after creation (agent-configuration).",
+      "Agents requested by other agents (`POST /agents/request`)."
+    ]
   },
   "requirements": [
     {
       "key": "an-operator-can-create-an-agent-from-the-project-workspace",
-      "statement": "Each project workspace SHALL expose an **Add agent** action. Creating an agent SHALL require a valid project-unique name, a launchable provider, and a model that provider's catalog entry declares. A charter MAY be selected but MUST NOT be required. The operator MUST NOT be asked to choose a persona or organizational role.",
-      "modal": "MUST",
-      "rationale": "The operator MUST NOT be required to have configured a runner beforehand. Selecting a provider and a model SHALL be sufficient to create a working agent.",
+      "statement": "Each project workspace SHALL offer an Add agent action that creates an agent from a project-unique name, a launchable provider and a model that provider's catalog declares, with an optional charter, and SHALL NOT require a runner to exist beforehand nor ask for a persona or organizational role.",
+      "modal": "SHALL",
+      "rationale": "Choosing a provider and a model is enough to describe a working agent; anything more at creation is friction at first use.",
+      "party": null
+    },
+    {
+      "key": "n1",
+      "statement": "`POST /agents` SHALL refuse with 400 a name that does not match `^[a-zA-Z0-9_-]{1,32}$` or is a reserved name (`user`, `operator`), and with 409 a name already held by an agent or a session-configured agent in the project, and SHALL accept either `runner_id` or both `provider` and `model`, never both and never neither.",
+      "modal": "SHALL",
+      "rationale": "An agent's name becomes a path component, a branch suffix and an attribution; reserved names already mean someone who is not an agent, and every route that runs an agent refuses them.",
       "party": null
     },
     {
       "key": "agent-creation-exposes-real-runner-launchability",
-      "statement": "The creation journey SHALL display every provider it offers with that provider's current launchability. An unlaunchable provider SHALL remain visible with the reason it cannot run and MUST NOT be selectable as ready. The server SHALL repeat launchability validation when creation is submitted.",
-      "modal": "MUST",
-      "rationale": null,
-      "party": null
-    },
-    {
-      "key": "operator-created-agents-preserve-runtime-isolation",
-      "statement": "An operator-created agent SHALL be a Hub-owned project participant with its own queue, conversation identity, and stable color. Creation SHALL NOT provision or mutate a Git worktree. The existing scheduler SHALL provision an isolated worktree only when the agent first begins writing work, and only where the project directory is a Git repository.",
+      "statement": "The creation dialog SHALL show every provider with its current launchability from `GET /runners/launchability-by-provider`, keep an unlaunchable provider visible but not selectable with its reason, and the Hub SHALL re-check the chosen runner's launchability on submit and refuse with 409 and the current reason when it cannot run.",
       "modal": "SHALL",
-      "rationale": "**The unit of isolation SHALL be the task, where the turn is about one.** A writing turn bound to a task SHALL run in a checkout provisioned for that task, on a branch that carries that task's work and no other task's. A writing turn bound to no task SHALL run in a checkout provisioned for the agent, on that agent's own branch. Which checkout a turn gets is therefore decided by what the turn is about, not by who is doing it. A per-agent branch carries every task its agent has ever worked on, so any operation that merges such a branch — or merges a commit on it, since merging a commit brings its whole ancestry — integrates work that was never approved. A branch that corresponds to a task is what makes \"this task's work\" a thing the system can name. Where the project directory is a Git repository and the isolated checkout cannot be provisioned, the Hub SHALL refuse the turn and state why. It MUST NOT run the agent in the primary checkout instead: a project that has isolation SHALL NOT lose it silently.",
+      "rationale": "Launchability can change between loading the dialog and submitting it; an agent that looks ready but cannot run is the failure this prevents.",
       "party": null
     },
     {
       "key": "agent-creation-provisions-its-runner-atomically",
-      "statement": "When agent creation requires a runner that does not exist, the Hub SHALL create the runner and the agent as one atomic operation. A failure at any point SHALL leave neither record behind.",
+      "statement": "When created from a provider and model, the Hub SHALL reuse a project runner with the same CLI and model, or else create one named \"\u003cprovider label> — \u003cmodel label>\" (\"\u003calias> (latest)\" for an alias) in the same commit as the agent, so that a failure leaves neither record behind.",
       "modal": "SHALL",
-      "rationale": "The Hub SHALL reuse an existing same-project runner whose provider and model match the operator's selection rather than creating a duplicate.",
+      "rationale": "Duplicate runners for one choice clutter runner management, and a runner left behind by a failed creation is a record nobody asked for. An alias-created runner is named for the alias, since its target moves.",
+      "party": null
+    },
+    {
+      "key": "n2",
+      "statement": "A created agent SHALL receive a stable project color, be bound to its runner and optional charter, and be recorded as an `agent_created` event broadcast to open clients, so it appears in the rail without a reload.",
+      "modal": "SHALL",
+      "rationale": "The operator should be able to talk to the agent immediately, and other open clients should see it too.",
       "party": null
     },
     {
       "key": "provider-choice-is-presented-by-provider-identity",
-      "statement": "Where the operator chooses an agent's provider, each provider SHALL be presented with its own visual mark alongside its name.",
+      "statement": "Where the operator chooses a provider, each SHALL be shown by its name with its own inline mark where one exists, never another provider's mark, and marks SHALL use no second icon system, webfont or network request and SHALL NOT affect which providers are offered or selectable.",
       "modal": "SHALL",
-      "rationale": "A provider for which no mark is available SHALL be presented with its name alone and MUST NOT be given another provider's mark. A mark MUST NOT be the only thing distinguishing one provider from another — the provider's name SHALL always be present. Provider marks MUST NOT introduce a second icon system, a webfont, or a network request to render. Presenting a provider's mark MUST NOT change which providers are offered. Launchability remains the sole determinant of whether a provider can be chosen.",
+      "rationale": "A mark helps recognition but must never be the only distinction; launchability alone decides what can be chosen.",
       "party": null
     },
     {
       "key": "what-creation-collects-is-decided-by-whether-it-changes-the-",
-      "statement": "Agent creation SHALL offer a setting when the agent's first turn would be materially different without it, and SHALL leave every other setting to the agent's configuration destination.",
+      "statement": "Agent creation SHALL offer a setting only when the agent's first turn would be materially different without it, and SHALL leave every setting with a workable default that can be changed before it takes effect to the agent's configuration.",
       "modal": "SHALL",
-      "rationale": "This capability already fixes *what* creation collects — a project-unique name, a launchable provider, a model the catalog declares, and an optional charter. What it does not state is the rule by which anything new is placed, so each future setting would be argued individually and creation would grow by accretion. The rule governs what is **offered**, not what is **required**. A charter is offered because it shapes the first turn, and remains optional under the existing no-charter contract; nothing here tightens that. A setting with a workable default, which can be changed before it takes effect, MUST NOT be added to creation. Lengthening creation is friction at the first moment an operator uses the product, and buys nothing that the configuration destination cannot provide later.",
+      "rationale": "A stated placement rule stops creation growing by accretion. A charter is offered because it shapes the first turn, and stays optional.",
+      "party": null
+    },
+    {
+      "key": "operator-created-agents-preserve-runtime-isolation",
+      "statement": "Creating an agent SHALL NOT provision or change any Git checkout; in a Git project, a writing turn bound to a task SHALL run in that task's own checkout on a branch carrying only that task's work, a writing turn bound to no task SHALL run in the agent's own checkout, and a turn whose checkout cannot be provisioned SHALL be refused with the reason rather than run in the primary checkout.",
+      "modal": "SHALL",
+      "rationale": "A per-agent branch carries every task its agent ever worked on, so merging it integrates unapproved work; a branch per task is what lets one approval land one task's work. Silently losing isolation is worse than refusing.",
       "party": null
     },
     {
       "key": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
-      "statement": "Where a project's directory is not a Git repository, the Hub SHALL run a writing agent in that directory rather than refusing the turn. Absence of a repository SHALL NOT be reported as a condition the operator must resolve before working.",
+      "statement": "In a project whose directory is not a Git repository, the Hub SHALL run writing agents in the project directory without refusing, serialising or locking them and without creating a repository, SHALL tell each agent in its context that it shares the directory with any other agent and has no isolated checkout, and SHALL NOT report the absent repository as a queue waiting reason.",
       "modal": "SHALL",
-      "rationale": "The Hub SHALL state the resulting posture rather than leave it to be discovered. The agent's canonical turn context SHALL say that it is working in the project's shared directory and that no isolated checkout is available, and the agent's workspace report SHALL distinguish an agent sharing the project directory because no repository exists from one sharing it by configuration. Concurrent writing agents in such a project SHALL be permitted. The Hub SHALL NOT serialize them, lock the directory, or refuse a second writer. Because their edits can overwrite one another with no conflict to resolve, and no mechanism for producing a conflict exists without a repository, the Hub SHALL tell each agent that it shares the directory. That statement is the whole of the mitigation and SHALL NOT be removed while the permission stands. The Hub SHALL NOT create, initialize, or modify a Git repository in the project directory in order to satisfy this requirement.",
+      "rationale": "Without a repository there is no way to produce a conflict, so the honest mitigation is to say so to every agent; refusing would make a plain folder unusable.",
+      "party": null
+    },
+    {
+      "key": "n3",
+      "statement": "A turn's `work_dir` override SHALL be refused with 400 for a writing agent in a Git project, and resolved as a project-relative path under the containment guard in a project that is not a Git repository.",
+      "modal": "SHALL",
+      "rationale": "There is isolation to override only where a repository exists.",
       "party": null
     },
     {
       "key": "work-already-under-way-keeps-the-checkout-it-started-in",
-      "statement": "A task that was already being worked on a per-agent branch when per-task isolation is introduced SHALL continue to be worked in that per-agent checkout for the remainder of its life, and SHALL NOT be given a task checkout.",
+      "statement": "A task that had been worked before per-task isolation shipped (stamped `workspace_scheme = agent` once, by migration 0095, and never written again) SHALL keep being worked in its agent's own checkout, and no existing branch SHALL be renamed, deleted, split, rewritten or adopted as a task branch.",
       "modal": "SHALL",
-      "rationale": "No existing branch SHALL be renamed, deleted, split, or rewritten in order to introduce per-task isolation. There is no record of which commit on a per-agent branch belongs to which task — that absence is the defect being fixed — so any automatic split would be a guess, and a guess that rewrites history cannot be undone by the operator who did not ask for it. Adopting such a branch as the task's own branch SHALL NOT be done either. The branch carries other tasks' commits, so adopting it would leave the system claiming that one approval lands one task's work while that claim was false for an unbounded set of tasks, and false silently. The set of covered tasks SHALL be recorded once, when per-task isolation is introduced, and SHALL NOT be recomputed afterwards. Determining it from the state of the world at each turn — whether a branch exists, or whether a particular kind of commit was recorded — makes a task's scheme depend on things that change after the fact, so a task could move between schemes mid-life without anyone deciding it should. Because nothing writes the record after it is made, the set is fixed when the change ships and only shrinks. The recorded set SHALL cover every task that has already been worked at all, whether or not a commit can be found for it. Covering a task that had nothing to preserve costs it only the isolation it never had; failing to cover a task that did have work costs that work its place in the checkout the agent is about to be given, with no statement that anything is missing. Those costs are not comparable, so the boundary is drawn on the safe side of it.",
+      "rationale": "Nothing records which commit on a per-agent branch belongs to which task, so any split is a guess that rewrites history; recomputing the set per turn would let a task change scheme mid-life without anyone deciding it.",
       "party": null
     },
     {
       "key": "a-task-s-checkout-is-worked-by-one-turn-at-a-time",
-      "statement": "While a writing turn is in flight for a task, the system SHALL refuse to start another writing turn for that same task on behalf of a different agent, and the refusal SHALL name the agent already holding it.",
+      "statement": "While a writing turn holds a task's own checkout, a writing turn for that task by a different agent SHALL be refused with 409 naming the holder, as a transient refusal that keeps the input queued for delivery once the holding turn ends; review turns, shared-checkout agents and grandfathered tasks SHALL NOT be refused by this rule.",
       "modal": "SHALL",
-      "rationale": "Before work was isolated per task, this held without being stated: a checkout belonged to an agent, and an agent could have only one turn in flight, so no two processes could share a working tree. Isolating per task removes that coupling — nothing else in the system prevents two agents from being pointed at the same task — and two live processes editing one working tree lose each other's changes silently, which is the outcome workspace isolation exists to prevent. A turn started to **review** a task SHALL NOT be refused by this rule. A review runs in a checkout of the commit under review rather than in the task's own checkout, so there is nothing for it to collide with, and refusing it would stop a task being reviewed while it is being worked. An agent that works in the project's shared checkout rather than an isolated one SHALL NOT be refused by this rule either. It has no isolated checkout to collide over, and the shared checkout's behaviour is unchanged by this requirement. Nor SHALL a task still worked under the per-agent scheme be refused. Such a task has no checkout of its own to admit anybody to, and the coupling this rule replaces still holds for it, so refusing here would forbid something that is safe. The refusal SHALL be temporary rather than terminal: input that was refused for this reason SHALL be retained and delivered once the holding turn ends, not discarded. The condition clears by itself, which is what distinguishes it from a refusal about a request that will never become valid.",
+      "rationale": "Two processes editing one working tree lose each other's changes silently; the exempt cases have no task checkout to collide over.",
       "party": null
     },
     {
       "key": "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-",
-      "statement": "When a Copilot agent is created, or its runner binding or charter changes, the Hub SHALL write that agent's Copilot files into a Copilot home the Hub owns for that agent, and SHALL NOT write them into the project's repository.",
+      "statement": "When a Copilot agent is created or its runner or charter binding changes, and before every Copilot turn, the Hub SHALL write a custom agent named after the agent (its identity, the project's instructions and its charter, with a statement that this takes precedence over the repository's instruction files) and the `agentweave` MCP configuration into a Copilot home it owns under `~/.agentweave/hub/copilot-home/projects/\u003cproject>/\u003cagent>/`, never into the repository and never with a credential.",
       "modal": "SHALL",
-      "rationale": "The files SHALL include two things: - A Copilot custom agent named after the agent. It carries the agent's stable context (its identity, the project's instructions and its charter) and a statement that this context takes precedence over the repository's own instruction files where they conflict. - The configuration that gives Copilot the Hub's `agentweave` MCP server. Per-turn material SHALL NOT be written there. That means the workspace, the specification in view, the team, other agents' history and the turn notices, which reach each turn with its prompt. The Hub SHALL bring these files up to date before every Copilot turn, so that a charter, instructions or model edit made anywhere reaches the next turn. The home's location SHALL be derived only from identifiers the Hub has checked to be single, safe path components, because a project's identifier can come from a marker file inside the project's own folder. The files SHALL carry no credential; the home's own configuration SHALL name the account the operator signed Copilot in with, copied from the operator's Copilot home before every turn (runner-registry, \"Copilot launchability is read from Copilot itself\"). A failure to write them SHALL NOT undo the agent's creation. The same failure before a turn SHALL refuse that turn with a reason. The Hub SHALL own the home's whole configuration surface, not only the files it writes. Before every Copilot turn it SHALL remove from the home any hook, plugin, MCP configuration or custom agent it did not write, and any setting that trusts a folder or grants a permission, so that nothing left in the home can answer a permission request in the Hub's place. When Copilot does not select the Hub's custom agent for a turn, the Hub SHALL leave no other custom agent selected for that turn, and SHALL NOT send the prompt while a custom agent it did not write is selected.",
+      "rationale": "Copilot reads custom agents and MCP configuration from its home; writing them into the repository would change the operator's project. Per-turn material reaches each turn with its prompt instead.",
+      "party": null
+    },
+    {
+      "key": "n4",
+      "statement": "The Copilot home's path SHALL be built only from identifiers checked to be single, safe path components, and a turn whose home cannot be written SHALL be refused with a reason, while a write failure at creation SHALL NOT undo the agent's creation.",
+      "modal": "SHALL",
+      "rationale": "A project's identifier can come from a marker file inside the project's own folder.",
+      "party": null
+    },
+    {
+      "key": "n5",
+      "statement": "Before every Copilot turn the Hub SHALL remove from the agent's home any hook, plugin, MCP configuration or custom agent it did not write and any setting that trusts a folder or grants a permission, leaving Copilot's own harmless files in place, and SHALL NOT send a prompt while a custom agent it did not write is selected.",
+      "modal": "SHALL",
+      "rationale": "Nothing left in the home may answer a permission request in the Hub's place.",
       "party": null
     }
   ],
@@ -238,352 +280,256 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac1",
       "requirement": "an-operator-can-create-an-agent-from-the-project-workspace",
-      "given": "",
-      "when": "the operator supplies a valid unused name and selects a launchable provider and a model",
-      "then": "the agent is created with a stable project color and runner binding it appears in the project rail without a reload its conversation opens ready for input"
+      "given": "a project with no runner for `claude` / Sonnet 5",
+      "when": "the operator adds an agent with a valid name, provider `claude`, model Sonnet 5 and no charter",
+      "then": "the agent is created, bound to a runner for that model, with no charter"
     },
     {
       "key": "ac2",
       "requirement": "an-operator-can-create-an-agent-from-the-project-workspace",
-      "given": "",
-      "when": "the operator selects a provider and model for which the project has no runner",
-      "then": "creation succeeds and the agent is bound to a runner for that provider and model"
+      "given": "the Add agent dialog",
+      "when": "a provider is chosen",
+      "then": "the models offered are that provider's catalog models, and no persona or role is asked for"
     },
     {
       "key": "ac3",
-      "requirement": "an-operator-can-create-an-agent-from-the-project-workspace",
-      "given": "",
-      "when": "the operator selects a provider",
-      "then": "the models offered are those the catalog declares for that provider"
+      "requirement": "n1",
+      "given": "a project with an agent named `dev`",
+      "when": "an agent named `dev`, `operator`, or `bad name` is submitted",
+      "then": "the first returns 409 and the dialog keeps the other selections; the others return 400 with a sentence"
     },
     {
       "key": "ac4",
-      "requirement": "an-operator-can-create-an-agent-from-the-project-workspace",
-      "given": "",
-      "when": "the operator creates an agent without selecting a charter",
-      "then": "creation succeeds with full project scope under the existing no-charter contract"
+      "requirement": "n1",
+      "given": "a project",
+      "when": "`POST /agents` carries both `runner_id` and `provider`+`model`, or neither",
+      "then": "the request is refused"
     },
     {
       "key": "ac5",
-      "requirement": "an-operator-can-create-an-agent-from-the-project-workspace",
-      "given": "",
-      "when": "the supplied name already identifies an agent in that project",
-      "then": "creation is refused with a field-specific reason the dialog preserves the operator's other selections for correction"
+      "requirement": "agent-creation-exposes-real-runner-launchability",
+      "given": "a provider whose CLI is missing or not signed in",
+      "when": "the dialog is opened",
+      "then": "that provider is shown disabled with its reason"
     },
     {
       "key": "ac6",
       "requirement": "agent-creation-exposes-real-runner-launchability",
-      "given": "",
-      "when": "a provider's CLI or authorization is unavailable",
-      "then": "the provider is displayed disabled with the current reason submitting that provider cannot create an apparently ready agent"
+      "given": "a provider launchable when the dialog loaded",
+      "when": "it becomes unlaunchable before submit and the operator submits",
+      "then": "the Hub returns 409 with the current reason and creates nothing"
     },
     {
       "key": "ac7",
-      "requirement": "agent-creation-exposes-real-runner-launchability",
-      "given": "",
-      "when": "provider launchability changes after the dialog loads but before submission",
-      "then": "the server refuses creation with the current typed reason"
+      "requirement": "agent-creation-provisions-its-runner-atomically",
+      "given": "an existing project runner on `claude` / `claude-sonnet-5`",
+      "when": "a second agent is created on that provider and model",
+      "then": "it is bound to the existing runner and no runner is added"
     },
     {
       "key": "ac8",
-      "requirement": "operator-created-agents-preserve-runtime-isolation",
-      "given": "",
-      "when": "an operator creates an agent but sends it no work",
-      "then": "no agent worktree exists"
+      "requirement": "agent-creation-provisions-its-runner-atomically",
+      "given": "no matching runner",
+      "when": "creation fails after the runner was added to the transaction",
+      "then": "no runner remains; a runner created by a successful creation appears in runner management like any other"
     },
     {
       "key": "ac9",
-      "requirement": "operator-created-agents-preserve-runtime-isolation",
-      "given": "",
-      "when": "the new agent begins its first writing turn",
-      "then": "the scheduler provisions that turn's isolated checkout under the existing project guard other checkouts and the primary checkout remain unchanged"
+      "requirement": "agent-creation-provisions-its-runner-atomically",
+      "given": "no matching runner",
+      "when": "an agent is created on alias `opus`",
+      "then": "the new runner is named \"Claude Code — opus (latest)\" and records `opus`"
     },
     {
       "key": "ac10",
-      "requirement": "operator-created-agents-preserve-runtime-isolation",
-      "given": "",
-      "when": "a writing agent's turn is bound to a task",
-      "then": "it runs in a checkout provisioned for that task, on a branch dedicated to that task"
+      "requirement": "n2",
+      "given": "a second client with the project open",
+      "when": "an agent is created",
+      "then": "an `agent_created` event is recorded and broadcast, and the agent appears in both rails without a reload"
     },
     {
       "key": "ac11",
-      "requirement": "operator-created-agents-preserve-runtime-isolation",
-      "given": "",
-      "when": "the same agent takes turns on two different tasks",
-      "then": "each turn runs on its own task's branch neither branch carries the other task's commits"
+      "requirement": "provider-choice-is-presented-by-provider-identity",
+      "given": "the provider choice",
+      "when": "it is opened",
+      "then": "each provider shows its name and, where one exists, its own inline SVG mark; a launchable provider with no mark is still selectable"
     },
     {
       "key": "ac12",
-      "requirement": "operator-created-agents-preserve-runtime-isolation",
-      "given": "",
-      "when": "a writing agent's turn is bound to no task",
-      "then": "it runs in the checkout provisioned for that agent, on that agent's own branch"
+      "requirement": "what-creation-collects-is-decided-by-whether-it-changes-the-",
+      "given": "the Add agent dialog",
+      "when": "its fields are listed",
+      "then": "they are name, provider, model and an optional charter; posture, waiting times and grants are left to the agent's configuration"
     },
     {
       "key": "ac13",
       "requirement": "operator-created-agents-preserve-runtime-isolation",
-      "given": "",
-      "when": "a writing agent's turn begins in a project that is a Git repository and provisioning its",
-      "then": "the turn does not start the reason names the provisioning failure"
+      "given": "a Git project",
+      "when": "an agent is created and sent no work",
+      "then": "no checkout exists for it"
     },
     {
       "key": "ac14",
-      "requirement": "agent-creation-provisions-its-runner-atomically",
-      "given": "",
-      "when": "the operator creates a second agent on a provider and model that an existing runner in",
-      "then": "the new agent is bound to that existing runner no additional runner is created"
+      "requirement": "operator-created-agents-preserve-runtime-isolation",
+      "given": "a writing agent in a Git project",
+      "when": "it takes turns on two tasks and one turn bound to no task",
+      "then": "each task turn runs on its own task branch carrying no other task's commits, and the unbound turn runs in the agent's own checkout"
     },
     {
       "key": "ac15",
-      "requirement": "agent-creation-provisions-its-runner-atomically",
-      "given": "",
-      "when": "agent creation fails after a runner would have been provisioned",
-      "then": "no runner record remains from the attempt"
+      "requirement": "operator-created-agents-preserve-runtime-isolation",
+      "given": "a Git project where the checkout cannot be provisioned",
+      "when": "a writing turn starts",
+      "then": "it is refused naming the failure and does not run in the primary checkout"
     },
     {
       "key": "ac16",
-      "requirement": "agent-creation-provisions-its-runner-atomically",
-      "given": "",
-      "when": "a runner has been provisioned through agent creation",
-      "then": "it appears in runner management and can be inspected, edited, and deleted like any other"
+      "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
+      "given": "a project directory that is not a Git repository",
+      "when": "two writing agents are triggered",
+      "then": "both run in the project directory, neither is delayed, no repository is created, and each turn's context says the directory is shared and has no isolated checkout"
     },
     {
       "key": "ac17",
-      "requirement": "provider-choice-is-presented-by-provider-identity",
-      "given": "",
-      "when": "the operator opens the provider choice",
-      "then": "each provider is shown with its mark and its name"
-    },
-    {
-      "key": "ac18",
-      "requirement": "provider-choice-is-presented-by-provider-identity",
-      "given": "",
-      "when": "a provider has no available mark",
-      "then": "it is shown with its name is not given another provider's mark"
-    },
-    {
-      "key": "ac19",
-      "requirement": "provider-choice-is-presented-by-provider-identity",
-      "given": "",
-      "when": "a provider is launchable but has no mark",
-      "then": "it remains selectable"
-    },
-    {
-      "key": "ac20",
-      "requirement": "provider-choice-is-presented-by-provider-identity",
-      "given": "",
-      "when": "provider marks are rendered",
-      "then": "they resolve without a second icon system, a webfont, or a network request"
-    },
-    {
-      "key": "ac21",
-      "requirement": "what-creation-collects-is-decided-by-whether-it-changes-the-",
-      "given": "",
-      "when": "a setting would materially change how the agent's first turn behaves",
-      "then": "creation offers it"
-    },
-    {
-      "key": "ac22",
-      "requirement": "what-creation-collects-is-decided-by-whether-it-changes-the-",
-      "given": "",
-      "when": "a setting has a workable default and can be changed before it takes effect",
-      "then": "creation does not offer it it is available on the agent's configuration destination"
-    },
-    {
-      "key": "ac23",
-      "requirement": "what-creation-collects-is-decided-by-whether-it-changes-the-",
-      "given": "",
-      "when": "a setting is offered at creation",
-      "then": "it may still be optional an existing optional contract for it is preserved"
-    },
-    {
-      "key": "ac24",
       "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
-      "given": "",
-      "when": "a writing agent is triggered in a project whose directory is not a Git repository",
-      "then": "the turn starts with the project directory as its working directory no repository, worktree, or branch is created"
-    },
-    {
-      "key": "ac25",
-      "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
-      "given": "",
-      "when": "the operator inspects the queue status for an agent in a project with no repository",
+      "given": "the same project",
+      "when": "an agent's queue status is read",
       "then": "no waiting reason names the absent repository"
     },
     {
-      "key": "ac26",
-      "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
-      "given": "",
-      "when": "a turn's canonical context is built for an agent running in a project with no repository",
-      "then": "the context states that the working directory is the project's shared directory and that it states that another agent in the project works in that same directory and that their"
+      "key": "ac18",
+      "requirement": "n3",
+      "given": "a writing agent",
+      "when": "a turn requests a `work_dir` in a Git project, and in a non-Git project",
+      "then": "the first is refused with 400; the second is resolved under the project"
     },
     {
-      "key": "ac27",
-      "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
-      "given": "",
-      "when": "two writing agents are triggered in the same project with no repository",
-      "then": "both run, in that project's directory neither is refused, queued, or delayed on account of the other"
-    },
-    {
-      "key": "ac28",
-      "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
-      "given": "",
-      "when": "the operator views the workspace of an agent in a project with no repository",
-      "then": "it reports the project directory as the working directory, with no branch, and states that an agent that shares the project directory by configuration is reported without that"
-    },
-    {
-      "key": "ac29",
-      "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
-      "given": "",
-      "when": "a writing agent's turn requests a working directory within a project that is a Git the same request is made within a project that is not a Git repository",
-      "then": "the request is refused as overriding isolation it is resolved as a project-relative path under the existing containment guard"
-    },
-    {
-      "key": "ac30",
+      "key": "ac19",
       "requirement": "work-already-under-way-keeps-the-checkout-it-started-in",
-      "given": "",
-      "when": "a writing turn is taken on a task that was already worked before per-task isolation",
-      "then": "the turn runs in that per-agent checkout no task branch is created for that task"
+      "given": "a task stamped `workspace_scheme = agent`",
+      "when": "a writing turn is taken on it",
+      "then": "it runs in the agent's own checkout with its earlier work present and no task branch is created"
     },
     {
-      "key": "ac31",
+      "key": "ac20",
       "requirement": "work-already-under-way-keeps-the-checkout-it-started-in",
-      "given": "",
-      "when": "a writing turn is taken on a task whose earlier turns committed their work directly, so",
-      "then": "the turn still runs in the per-agent checkout, with that work present"
-    },
-    {
-      "key": "ac32",
-      "requirement": "work-already-under-way-keeps-the-checkout-it-started-in",
-      "given": "",
-      "when": "a task is created after per-task isolation is introduced and given a writing turn",
+      "given": "a task created after migration 0095",
+      "when": "a writing turn is taken on it",
       "then": "it runs in a checkout provisioned for that task"
     },
     {
-      "key": "ac33",
-      "requirement": "work-already-under-way-keeps-the-checkout-it-started-in",
-      "given": "",
-      "when": "per-task isolation is introduced into a project with existing per-agent branches",
-      "then": "every one of those branches still exists, at the same commit, with the same history"
-    },
-    {
-      "key": "ac34",
+      "key": "ac21",
       "requirement": "a-task-s-checkout-is-worked-by-one-turn-at-a-time",
-      "given": "",
-      "when": "a writing turn is triggered for a task that another agent already has a run in flight for",
-      "then": "the turn is refused the refusal names the agent holding the task"
+      "given": "agent A has a writing turn in flight on a task",
+      "when": "agent B is triggered on the same task",
+      "then": "409 names agent A, and B's input stays queued and is delivered after A's turn ends"
     },
     {
-      "key": "ac35",
+      "key": "ac22",
       "requirement": "a-task-s-checkout-is-worked-by-one-turn-at-a-time",
-      "given": "",
-      "when": "a turn is refused because another agent holds the task, and that agent's turn then ends",
-      "then": "the input that was refused is still pending it is delivered on a subsequent attempt rather than having been discarded"
+      "given": "an agent is working a task",
+      "when": "a review turn is triggered for that task",
+      "then": "the review starts"
     },
     {
-      "key": "ac36",
-      "requirement": "a-task-s-checkout-is-worked-by-one-turn-at-a-time",
-      "given": "",
-      "when": "a review turn is triggered for a task that an agent is currently working",
-      "then": "the review turn starts"
-    },
-    {
-      "key": "ac37",
-      "requirement": "a-task-s-checkout-is-worked-by-one-turn-at-a-time",
-      "given": "",
-      "when": "an agent's turn on a task ends and it is triggered on that task again",
-      "then": "the turn starts in the same task checkout"
-    },
-    {
-      "key": "ac38",
+      "key": "ac23",
       "requirement": "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-",
-      "given": "",
-      "when": "an operator creates an agent bound to a `copilot` runner",
-      "then": "the agent's Hub-owned Copilot home contains a custom agent file named after the agent, holding its charter and the precedence statement the project's repository contains no new file"
+      "given": "a `copilot` runner",
+      "when": "an agent bound to it is created, its charter edited, and it is triggered",
+      "then": "its Hub-owned home holds a custom agent named after it with the edited charter and the precedence statement, the repository has no new file, and no file holds the run's token"
     },
     {
-      "key": "ac39",
-      "requirement": "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-",
-      "given": "",
-      "when": "an operator edits the charter of a Copilot agent and then triggers it",
-      "then": "the custom agent file the turn uses carries the edited charter"
+      "key": "ac24",
+      "requirement": "n4",
+      "given": "a project whose identifier contains a path separator or is `..`",
+      "when": "a Copilot turn is triggered",
+      "then": "no file is written and the turn is refused with a reason"
     },
     {
-      "key": "ac40",
-      "requirement": "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-",
-      "given": "",
-      "when": "a Copilot agent's home has been written for a run",
-      "then": "none of its files contains the run's token"
+      "key": "ac25",
+      "requirement": "n5",
+      "given": "a hook file the Hub did not write in a Copilot agent's home",
+      "when": "the agent is triggered",
+      "then": "the file is gone before Copilot starts and permission requests reach the Hub"
     },
     {
-      "key": "ac41",
-      "requirement": "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-",
-      "given": "",
-      "when": "a Copilot turn is triggered in a project whose identifier contains a path separator or is `..`",
-      "then": "the Hub writes no file for it and refuses the turn with a reason"
+      "key": "ac26",
+      "requirement": "n5",
+      "given": "Copilot's own config file with no trust or permission setting, and an empty plugin directory",
+      "when": "the agent is triggered",
+      "then": "both remain and the timeline reports no repair"
     },
     {
-      "key": "ac42",
-      "requirement": "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-",
-      "given": "",
-      "when": "Copilot does not select the Hub's custom agent for a turn, or selects one that is not the Hub's",
-      "then": "the turn receives its stable context with its prompt instead no custom agent is selected for the turn the run's timeline says why"
-    },
-    {
-      "key": "ac43",
-      "requirement": "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-",
-      "given": "",
-      "when": "a file the Hub did not write has been placed in the hooks directory of a Copilot agent's home, and the agent is triggered",
-      "then": "the file is gone before the Copilot process starts the turn's permission requests reach the Hub"
-    },
-    {
-      "key": "ac44",
-      "requirement": "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-",
-      "given": "",
-      "when": "Copilot has written its own configuration file, holding no setting that trusts a folder or grants a permission, and an empty plugin directory into a Copilot agent's home, and the agent is triggered again",
-      "then": "both are still there when the Copilot process starts the turn's timeline reports no repair of the home"
+      "key": "ac27",
+      "requirement": "n5",
+      "given": "Copilot does not select the Hub's custom agent, or selects another",
+      "when": "a turn starts",
+      "then": "no custom agent is selected, the stable context is sent with the prompt, and the timeline says why"
     }
   ],
   "tasks": [],
-  "algorithms": [],
-  "design": "",
+  "algorithms": [
+    {
+      "name": "Which checkout a writing turn gets",
+      "steps": [
+        "If the turn is a review, use a detached checkout of the commit under review.",
+        "If the agent is read-only, or the project is not a Git repository, use the project directory.",
+        "If the turn is bound to a task whose `workspace_scheme` is `task`, use (and provision on first use) that task's checkout, refusing if another agent's turn holds it.",
+        "Otherwise (no task, or a grandfathered `agent`-scheme task), use the agent's own checkout.",
+        "If the chosen checkout cannot be provisioned, refuse the turn with the reason."
+      ]
+    }
+  ],
+  "design": "**Find-or-create in one commit.** `POST /agents` adds a new runner to the same session as the agent and commits once, so neither record survives a failure; an existing runner with the same CLI and model is reused.\n\n**Launchability twice.** The dialog reads per-provider launchability before a runner exists; the route probes the actual runner on submit.\n\n**Isolation is per task.** `task_workspace` decides which checkout a turn is entitled to from the database and never writes `Task.workspace_scheme`; migration 0095 stamped the grandfathered set once, so it can only shrink.\n\n**Copilot home owned whole.** The Hub writes the custom agent and MCP config and sweeps everything else that could approve a permission, so the Hub stays the only approver.",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/operator-agent-creation/spec.md (10 requirements, 44 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "hub/tests/test_operator_agent_creation.py (`POST /agents`); hub/ui/src/__tests__/agentCreationUi.test.tsx, providerMark.test.tsx.",
+      "hub/tests/test_task_workspace_scheme.py — the grandfathered set is never written.",
+      "hub/tests/test_copilot_home.py, test_copilot_home_has_no_deciding_hook.py, test_copilot_home_routes.py.",
+      "hub/tests/test_operator_is_a_reserved_agent_name.py."
     ],
     "limits": [
-      "scenario-had-multiple-cycles: 'A working directory override is refused only where isolation exists' states 2 WHEN/THEN cycles under one name; they are joined into one criterion because a criterion has one of each",
-      "scenarios-state-no-starting-state: 44 of 44 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "Names that shadow a Hub route (`conflicts`, `settings`, `sessions`, `board`, `boards`) are still accepted at creation (F248 open)."
     ]
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
       "an-operator-can-create-an-agent-from-the-project-workspace": "FR-8",
+      "n1": "FR-18",
       "agent-creation-exposes-real-runner-launchability": "FR-9",
-      "operator-created-agents-preserve-runtime-isolation": "FR-10",
       "agent-creation-provisions-its-runner-atomically": "FR-11",
+      "n2": "FR-19",
       "provider-choice-is-presented-by-provider-identity": "FR-12",
       "what-creation-collects-is-decided-by-whether-it-changes-the-": "FR-13",
+      "operator-created-agents-preserve-runtime-isolation": "FR-10",
       "a-project-that-is-not-a-git-repository-still-runs-its-agents": "FR-14",
+      "n3": "FR-20",
       "work-already-under-way-keeps-the-checkout-it-started-in": "FR-15",
       "a-task-s-checkout-is-worked-by-one-turn-at-a-time": "FR-16",
-      "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-": "FR-17"
+      "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-": "FR-17",
+      "n4": "FR-21",
+      "n5": "FR-22"
     },
-    "high_water": 17,
+    "high_water": 22,
     "retired": {},
     "digests": {
-      "FR-8": "2294922c88fc9680c4c87c3f9427e3c3be1a64334aaa10ec4800d3ba4e2a4c34",
-      "FR-9": "364196386a9fb76f67f7da4f2f229842dc70bfd5ec6f001c4376e361db66025a",
-      "FR-10": "046cf26596a4a4aaf277afe4d7947c00e48d210abc54a460a39b98b7c96d83df",
-      "FR-11": "11996ff9e322b9400308785e9a243243e2d2a48341c877abdd811f7a40a94020",
-      "FR-12": "cf8986bbe2745b73bb7e19e477ac629e13fb33e7c4d209b727a028aa3a8eae80",
-      "FR-13": "2b1fe09ff50d56a235481621ab7bf7e12adff67def2184d1cd75ce2be7881f1f",
-      "FR-14": "cdad7c538a2f8491f34f40f092c6bc169ed17753e407a0e0f0db24361ddbff2c",
-      "FR-15": "dc34d9b8d0d7cb53118077d9a20cca97bdd0dbea48d660df7724be133ead4eb6",
-      "FR-16": "eb48f1e0b5ed3af825d20582b2533ae8093a13d2ad7b35e97b75f4654980a63e",
-      "FR-17": "288750327935ae5f5d5abd7ad15b51efe4da4cea92fcf94baacc15c3172b5a15"
+      "FR-8": "f0c7d1bdb3710f2d52883b023635e1cd03cd15e114bcec81c1f58aaee170e956",
+      "FR-18": "63e2a1382f4cde9f825427ed82a68139312b16ba1e998f66c5a4ee3e1f254cc5",
+      "FR-9": "3c1aaa536d9fdf4419ddeb5f56e3deb41e1794f6cba078f9daaa46ea5edcb7e7",
+      "FR-11": "26cf6bce3b012492976e2d5cb465d7dfda46fe6585b7a0d440578d4a5dd1c4e5",
+      "FR-19": "82267cf09f53e5ad5ec9829c533ed411eafee51ed0c1f8e911ee40883a5036ce",
+      "FR-12": "9945dc8420bde0eafde470de5d0d13ecb9d13169be039de863b452582b8c1f21",
+      "FR-13": "e496b9740ca31eba23dfcce4f7cc1e881cfbdfead8e81b5c5ac909ec5878c0a7",
+      "FR-10": "159f260ab983226f3ff9e2e39f1d4a6af2659e18aacd0314bdc484c40cfde7fa",
+      "FR-14": "caaae67923a41efa3e398f0351d47a90626eccf91a096f72e4aba956196022a8",
+      "FR-20": "33a38a88ced040c65a4284f040c8269c7a9bfb747316ee6a92a46fb56c51c178",
+      "FR-15": "9a3d4a11c8658acdd816d24da0c48d8498a0fa78dd22306718606e78872a56ef",
+      "FR-16": "9f9a8d9d8fcc0e8609aa148c0d0d7c02de1e1535f98ce5f5d44ffe700e6eb3ac",
+      "FR-17": "2f6240cae0afce2bc5d95a6b7659e015593652fef37947a847d0957f33105b77",
+      "FR-21": "c2411a4a38df7ba5e42f900b3e0881b5830196d5c5f9f71a4c8d717ec7e6eb80",
+      "FR-22": "13c04a023f0daf74c68e386305d0edfa12c67c959532bbae0791a976801cf038"
     }
   }
 }

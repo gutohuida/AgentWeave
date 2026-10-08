@@ -148,68 +148,89 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <body>
 <h1>Project environment settings</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a><a href="../../areas/the-local-instance.html">The local instance</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">7</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">7</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">14</span> criteria</p>
-<section id="summary"><h2>Summary</h2><p>The project&#x27;s own configuration surface: how a section states what it governs, how settings are presented as rows rather than boxes, and how saving reports its outcome. Introduced by `2026-08-04-hub-contextual-navigation`, which moved per-project configuration out of the navigation rail and needed somewhere to say what that surface owes the operator once it is no longer a menu.</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every configuration section SHALL open with its own title and a short statement of what it governs, so that a section holding few settings still reads as complete rather than unfinished.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> A configuration section SHALL present its settings as a sequence of rows. Each row SHALL pair its label, and an explanation of what the setting does, with the control that changes it. Rows SHALL be separated from one another by a hairline rather than each being enclosed in its own bounded card.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 7</span><p><span class="aw-modal aw-modal-must">MUST</span> A configuration section SHALL fill the content region it is given. Text and controls SHALL be bounded to a readable measure, but a section MUST NOT leave a large unused region beside a column narrower than the space available to it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 7</span><p><span class="aw-modal aw-modal-must">MUST</span> A numeric setting SHALL be entered by typing. Increment and decrement stepper buttons MUST NOT be rendered, in any browser engine.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Removing the steppers MUST NOT remove the field&#x27;s numeric constraints; invalid values SHALL still be rejected with an explanation.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> Changing a configuration section&#x27;s settings SHALL report whether the change was saved, and a failure SHALL state why in the section rather than only in a log.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL offer the operator a control for choosing the project&#x27;s main branch, in the place it tells them to look for one.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Nothing merges until a branch is chosen, and the system already says so — it tells the operator to choose one in the project&#x27;s settings. A message pointing at a control that does not exist is a closed loop: the operator is told what to do and given no way to do it. The system SHALL offer a detected branch as a suggestion. Detection is safe for a report and unsafe for a write, so a suggestion takes effect only once the operator submits it. A project that is not a repository SHALL be handled without offering a choice that cannot apply.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 7 of 7</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL accept a settings change that names only the fields being changed, leaving the rest as they were.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A surface that must resend every setting to change one is a surface that can silently revert a setting it did not know about — which is how a save cleared a project&#x27;s entire checkpoint configuration. Omitting a field SHALL mean &quot;unchanged&quot;, and SHALL remain distinguishable from clearing it deliberately. Validation that spans more than one field SHALL be applied to the resulting settings, not to the change alone. A change carrying half of a paired setting is valid when the other half is already stored.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator opens a configuration section containing only a few settings</td><td>the section shows its title and a statement of what it governs its settings are grouped and separated rather than floating in empty space</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator reads a setting row</td><td>its label and an explanation of its effect are shown beside the control that changes it</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a section&#x27;s settings are displayed</td><td>consecutive rows are separated by a hairline no row is enclosed in its own card</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a configuration section is displayed at a wide viewport</td><td>the section occupies the content region no substantial area of the content region is left visibly unused beside it</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator focuses or hovers a numeric setting</td><td>no increment or decrement button is shown</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator types a value outside a numeric setting&#x27;s permitted range and saves</td><td>the value is rejected the operator is told what is permitted</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator saves a valid change</td><td>the interface confirms the change was saved</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a save is rejected</td><td>the reason is shown in the section the operator&#x27;s entered values are preserved for correction</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator opens the project&#x27;s settings</td><td>a main-branch control is present it offers the detected branch as a suggestion</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a branch is detected and the operator has chosen nothing</td><td>the project still has no main branch nothing merges</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>work is not merged because no main branch is set the operator follows the message to the project&#x27;s settings</td><td>the control it names is there</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a settings change names only the main branch</td><td>the main branch changes every other setting keeps its value</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a settings change names only one of two fields that are validated together the stored settings already carry the other</td><td>the change is accepted</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a settings change names a field with an empty value</td><td>that field is cleared rather than left unchanged</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/project-environment-settings/spec.md (7 requirements, 14 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 14 of 14 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">9</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">9</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">16</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>The project&#x27;s configuration surface under Environment: how each section introduces itself, how settings are laid out as labelled rows, how saving reports its outcome, that a change may name only the fields it changes, and that a saved change is recorded in the project&#x27;s history.</p></section><section id="problem"><h2>Problem</h2><p>Per-project configuration moved out of the navigation rail into Environment sections. Those sections must read as complete, show what each setting does, never silently revert settings the surface did not know about, and say whether a save worked.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>Presentation of Environment configuration sections (project and per-agent settings share it)</li><li>Save feedback</li><li>`PUT /projects/{id}/settings` partial-update semantics and its history record</li><li>The main-branch control in Settings</li></ul><h3>Non-goals</h3><ul><li>What each individual setting means (owned by its capability: budgets, checkpointing, checks, conversation titles)</li><li>Project identity, relocation and deletion (local-project-workspace)</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every configuration section SHALL open with its scope, its title and a short statement of what it governs.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A section with few settings should still read as complete, and the operator should know whether it is project or agent configuration.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> A configuration section SHALL present its settings as rows, each pairing a label and an explanation of the setting&#x27;s effect with its control, separated by hairlines rather than each enclosed in a card.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Rows scan quickly and keep the explanation next to the control it explains.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 9</span><p><span class="aw-modal aw-modal-must">MUST</span> A configuration section SHALL fill the content region it is given, bounding text and controls to a readable measure without leaving a large unused region beside a narrow column.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A narrow column in a wide pane reads as unfinished.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 9</span><p><span class="aw-modal aw-modal-must">MUST</span> Numeric settings SHALL be typed, with no increment or decrement steppers in any browser engine, and SHALL keep their numeric constraints, an invalid value being refused with an explanation.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Steppers invite accidental changes on hover and scroll; removing them must not remove validation.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> Saving a configuration section SHALL report success in the section, and a refused save SHALL state the reason in the section and keep the values the operator entered.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A save whose outcome is only in a log is a save the operator has to guess about.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Settings section SHALL offer a main-branch control showing the project&#x27;s chosen branch, offering the repository&#x27;s detected branch as a one-click suggestion when none is chosen, and disabled with an explanation when the project is not a git repository.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The note on an unmerged task sends the operator to settings to choose a branch; the control it names has to be there.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 7 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> `PUT /projects/{id}/settings` SHALL accept a body naming only the fields being changed, treating an omitted field as unchanged and an explicit null as a clear, and SHALL apply cross-field validation to the merged result.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A surface that must resend every setting can silently revert one it does not know about, which is how a save once cleared a project&#x27;s checkpoint configuration.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 8 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> A settings save that changes at least one value SHALL persist a `project_settings_updated` event listing each changed field&#x27;s previous and new value, and a save that changes nothing SHALL record nothing.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Budget changes made in Accounting were already in the project&#x27;s history; the same change made in Settings must be too (F238).</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 9 of 9</span><p><span class="aw-modal aw-modal-must">SHALL</span> A settings save naming a conversation-title runner or checkpoint runner that does not exist in this project SHALL be refused with 400 naming the runner ID.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>These references are not foreign keys, so the route is the only place a cross-project or deleted runner can be caught.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>The Environment area</td><td>The operator opens a section with only a few settings</td><td>It shows its scope, title and a statement of what it governs.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>A configuration section</td><td>The operator reads a setting</td><td>Its label and explanation are beside its control.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>A configuration section</td><td>It is displayed</td><td>Rows are separated by hairlines and no row is in its own card.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>A wide viewport</td><td>A configuration section is displayed</td><td>It occupies the content region without a large unused area beside it.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>A numeric setting</td><td>The operator focuses or hovers it</td><td>No stepper buttons are shown.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>A numeric setting</td><td>The operator types a value outside its range and saves</td><td>The value is refused and the permitted range is stated.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>The Settings section</td><td>The operator saves a valid change</td><td>The section shows &quot;Settings saved.&quot;</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>The Settings section</td><td>A save is refused</td><td>The reason is shown in the section and the entered values remain.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td>A git project with no main branch chosen and a detected branch</td><td>The operator opens Settings</td><td>The main-branch control shows the suggestion and a button to use it.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td>A project that is not a git repository</td><td>Settings is opened</td><td>The main-branch control is disabled and says there is nothing to merge into.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>A project with checkpoint settings</td><td>A save names only the main branch</td><td>The main branch changes and every other setting keeps its value.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>A stored checkpoint threshold</td><td>A save names only a notes value below it</td><td>The save is accepted.</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>A project with a token budget</td><td>A save sends `token_budget: null`</td><td>The budget is cleared.</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td>A project</td><td>The hop budget is changed from 5 to 8</td><td>A `project_settings_updated` event records `hop_budget` was 5 and is 8.</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td>A project</td><td>Settings are saved with no value changed</td><td>No `project_settings_updated` event is persisted.</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-9">FR-9</a></td><td>A runner belonging to another project</td><td>A save names it as the checkpoint runner</td><td>It is refused with 400 naming the runner ID.</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>D1 One shared `SettingsSection` / `SettingsRow` pair (`hub/ui/src/components/environment/SettingsSection.tsx`) serves project and per-agent settings; its `scope` eyebrow says which.</p><p>D2 The update body is derived from `ProjectSettings` with every field optional (`ProjectSettingsUpdate` in `hub/hub/api/v1/projects.py`), so a field cannot be accepted and then silently not written; the handler merges onto stored values with `exclude_unset` and validates the merged object.</p><p>D3 Steppers are removed in CSS (`hub/ui/src/index.css`), not by changing input types, so browser validation still applies.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/ui/src/__tests__/projectSettingsPanel.test.tsx, hub/ui/src/__tests__/environmentPresentation.test.tsx</li><li>hub/tests/test_operator_projects_api.py (settings routes)</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
   "title": "Project environment settings",
-  "summary": "The project's own configuration surface: how a section states what it governs, how settings are presented as rows rather than boxes, and how saving reports its outcome. Introduced by `2026-08-04-hub-contextual-navigation`, which moved per-project configuration out of the navigation rail and needed somewhere to say what that surface owes the operator once it is no longer a menu.",
-  "problem": "",
+  "summary": "The project's configuration surface under Environment: how each section introduces itself, how settings are laid out as labelled rows, how saving reports its outcome, that a change may name only the fields it changes, and that a saved change is recorded in the project's history.",
+  "problem": "Per-project configuration moved out of the navigation rail into Environment sections. Those sections must read as complete, show what each setting does, never silently revert settings the surface did not know about, and say whether a save worked.",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "Presentation of Environment configuration sections (project and per-agent settings share it)",
+      "Save feedback",
+      "`PUT /projects/{id}/settings` partial-update semantics and its history record",
+      "The main-branch control in Settings"
+    ],
+    "non_goals": [
+      "What each individual setting means (owned by its capability: budgets, checkpointing, checks, conversation titles)",
+      "Project identity, relocation and deletion (local-project-workspace)"
+    ]
   },
   "requirements": [
     {
       "key": "a-configuration-section-states-what-it-governs",
-      "statement": "Every configuration section SHALL open with its own title and a short statement of what it governs, so that a section holding few settings still reads as complete rather than unfinished.",
+      "statement": "Every configuration section SHALL open with its scope, its title and a short statement of what it governs.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A section with few settings should still read as complete, and the operator should know whether it is project or agent configuration.",
       "party": null
     },
     {
       "key": "settings-are-presented-as-labelled-rows-not-as-boxed-cards",
-      "statement": "A configuration section SHALL present its settings as a sequence of rows. Each row SHALL pair its label, and an explanation of what the setting does, with the control that changes it. Rows SHALL be separated from one another by a hairline rather than each being enclosed in its own bounded card.",
+      "statement": "A configuration section SHALL present its settings as rows, each pairing a label and an explanation of the setting's effect with its control, separated by hairlines rather than each enclosed in a card.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "Rows scan quickly and keep the explanation next to the control it explains.",
       "party": null
     },
     {
       "key": "a-configuration-section-occupies-the-content-region",
-      "statement": "A configuration section SHALL fill the content region it is given. Text and controls SHALL be bounded to a readable measure, but a section MUST NOT leave a large unused region beside a column narrower than the space available to it.",
+      "statement": "A configuration section SHALL fill the content region it is given, bounding text and controls to a readable measure without leaving a large unused region beside a narrow column.",
       "modal": "MUST",
-      "rationale": null,
+      "rationale": "A narrow column in a wide pane reads as unfinished.",
       "party": null
     },
     {
       "key": "numeric-fields-are-typed-not-stepped",
-      "statement": "A numeric setting SHALL be entered by typing. Increment and decrement stepper buttons MUST NOT be rendered, in any browser engine.",
+      "statement": "Numeric settings SHALL be typed, with no increment or decrement steppers in any browser engine, and SHALL keep their numeric constraints, an invalid value being refused with an explanation.",
       "modal": "MUST",
-      "rationale": "Removing the steppers MUST NOT remove the field's numeric constraints; invalid values SHALL still be rejected with an explanation.",
+      "rationale": "Steppers invite accidental changes on hover and scroll; removing them must not remove validation.",
       "party": null
     },
     {
       "key": "saving-reports-its-outcome",
-      "statement": "Changing a configuration section's settings SHALL report whether the change was saved, and a failure SHALL state why in the section rather than only in a log.",
+      "statement": "Saving a configuration section SHALL report success in the section, and a refused save SHALL state the reason in the section and keep the values the operator entered.",
       "modal": "SHALL",
-      "rationale": null,
+      "rationale": "A save whose outcome is only in a log is a save the operator has to guess about.",
       "party": null
     },
     {
       "key": "the-operator-can-choose-the-branch-approval-merges-into",
-      "statement": "The system SHALL offer the operator a control for choosing the project's main branch, in the place it tells them to look for one.",
+      "statement": "The Settings section SHALL offer a main-branch control showing the project's chosen branch, offering the repository's detected branch as a one-click suggestion when none is chosen, and disabled with an explanation when the project is not a git repository.",
       "modal": "SHALL",
-      "rationale": "Nothing merges until a branch is chosen, and the system already says so — it tells the operator to choose one in the project's settings. A message pointing at a control that does not exist is a closed loop: the operator is told what to do and given no way to do it. The system SHALL offer a detected branch as a suggestion. Detection is safe for a report and unsafe for a write, so a suggestion takes effect only once the operator submits it. A project that is not a repository SHALL be handled without offering a choice that cannot apply.",
+      "rationale": "The note on an unmerged task sends the operator to settings to choose a branch; the control it names has to be there.",
       "party": null
     },
     {
       "key": "settings-may-be-changed-one-at-a-time",
-      "statement": "The system SHALL accept a settings change that names only the fields being changed, leaving the rest as they were.",
+      "statement": "`PUT /projects/{id}/settings` SHALL accept a body naming only the fields being changed, treating an omitted field as unchanged and an explicit null as a clear, and SHALL apply cross-field validation to the merged result.",
       "modal": "SHALL",
-      "rationale": "A surface that must resend every setting to change one is a surface that can silently revert a setting it did not know about — which is how a save cleared a project's entire checkpoint configuration. Omitting a field SHALL mean \"unchanged\", and SHALL remain distinguishable from clearing it deliberately. Validation that spans more than one field SHALL be applied to the resulting settings, not to the change alone. A change carrying half of a paired setting is valid when the other half is already stored.",
+      "rationale": "A surface that must resend every setting can silently revert one it does not know about, which is how a save once cleared a project's checkpoint configuration.",
+      "party": null
+    },
+    {
+      "key": "n1-a-saved-settings-change-is-recorded-in-history",
+      "statement": "A settings save that changes at least one value SHALL persist a `project_settings_updated` event listing each changed field's previous and new value, and a save that changes nothing SHALL record nothing.",
+      "modal": "SHALL",
+      "rationale": "Budget changes made in Accounting were already in the project's history; the same change made in Settings must be too (F238).",
+      "party": null
+    },
+    {
+      "key": "n2-a-runner-named-in-settings-must-belong-to-the-project",
+      "statement": "A settings save naming a conversation-title runner or checkpoint runner that does not exist in this project SHALL be refused with 400 naming the runner ID.",
+      "modal": "SHALL",
+      "rationale": "These references are not foreign keys, so the route is the only place a cross-project or deleted runner can be caught.",
       "party": null
     }
   ],
@@ -217,114 +238,127 @@ code { padding: .1rem .3rem; font-size: .88em; }
     {
       "key": "ac1",
       "requirement": "a-configuration-section-states-what-it-governs",
-      "given": "",
-      "when": "the operator opens a configuration section containing only a few settings",
-      "then": "the section shows its title and a statement of what it governs its settings are grouped and separated rather than floating in empty space"
+      "given": "The Environment area",
+      "when": "The operator opens a section with only a few settings",
+      "then": "It shows its scope, title and a statement of what it governs."
     },
     {
       "key": "ac2",
       "requirement": "settings-are-presented-as-labelled-rows-not-as-boxed-cards",
-      "given": "",
-      "when": "the operator reads a setting row",
-      "then": "its label and an explanation of its effect are shown beside the control that changes it"
+      "given": "A configuration section",
+      "when": "The operator reads a setting",
+      "then": "Its label and explanation are beside its control."
     },
     {
       "key": "ac3",
       "requirement": "settings-are-presented-as-labelled-rows-not-as-boxed-cards",
-      "given": "",
-      "when": "a section's settings are displayed",
-      "then": "consecutive rows are separated by a hairline no row is enclosed in its own card"
+      "given": "A configuration section",
+      "when": "It is displayed",
+      "then": "Rows are separated by hairlines and no row is in its own card."
     },
     {
       "key": "ac4",
       "requirement": "a-configuration-section-occupies-the-content-region",
-      "given": "",
-      "when": "a configuration section is displayed at a wide viewport",
-      "then": "the section occupies the content region no substantial area of the content region is left visibly unused beside it"
+      "given": "A wide viewport",
+      "when": "A configuration section is displayed",
+      "then": "It occupies the content region without a large unused area beside it."
     },
     {
       "key": "ac5",
       "requirement": "numeric-fields-are-typed-not-stepped",
-      "given": "",
-      "when": "the operator focuses or hovers a numeric setting",
-      "then": "no increment or decrement button is shown"
+      "given": "A numeric setting",
+      "when": "The operator focuses or hovers it",
+      "then": "No stepper buttons are shown."
     },
     {
       "key": "ac6",
       "requirement": "numeric-fields-are-typed-not-stepped",
-      "given": "",
-      "when": "the operator types a value outside a numeric setting's permitted range and saves",
-      "then": "the value is rejected the operator is told what is permitted"
+      "given": "A numeric setting",
+      "when": "The operator types a value outside its range and saves",
+      "then": "The value is refused and the permitted range is stated."
     },
     {
       "key": "ac7",
       "requirement": "saving-reports-its-outcome",
-      "given": "",
-      "when": "the operator saves a valid change",
-      "then": "the interface confirms the change was saved"
+      "given": "The Settings section",
+      "when": "The operator saves a valid change",
+      "then": "The section shows \"Settings saved.\""
     },
     {
       "key": "ac8",
       "requirement": "saving-reports-its-outcome",
-      "given": "",
-      "when": "a save is rejected",
-      "then": "the reason is shown in the section the operator's entered values are preserved for correction"
+      "given": "The Settings section",
+      "when": "A save is refused",
+      "then": "The reason is shown in the section and the entered values remain."
     },
     {
       "key": "ac9",
       "requirement": "the-operator-can-choose-the-branch-approval-merges-into",
-      "given": "",
-      "when": "the operator opens the project's settings",
-      "then": "a main-branch control is present it offers the detected branch as a suggestion"
+      "given": "A git project with no main branch chosen and a detected branch",
+      "when": "The operator opens Settings",
+      "then": "The main-branch control shows the suggestion and a button to use it."
     },
     {
       "key": "ac10",
       "requirement": "the-operator-can-choose-the-branch-approval-merges-into",
-      "given": "",
-      "when": "a branch is detected and the operator has chosen nothing",
-      "then": "the project still has no main branch nothing merges"
-    },
-    {
-      "key": "ac11",
-      "requirement": "the-operator-can-choose-the-branch-approval-merges-into",
-      "given": "",
-      "when": "work is not merged because no main branch is set the operator follows the message to the project's settings",
-      "then": "the control it names is there"
+      "given": "A project that is not a git repository",
+      "when": "Settings is opened",
+      "then": "The main-branch control is disabled and says there is nothing to merge into."
     },
     {
       "key": "ac12",
       "requirement": "settings-may-be-changed-one-at-a-time",
-      "given": "",
-      "when": "a settings change names only the main branch",
-      "then": "the main branch changes every other setting keeps its value"
+      "given": "A project with checkpoint settings",
+      "when": "A save names only the main branch",
+      "then": "The main branch changes and every other setting keeps its value."
     },
     {
       "key": "ac13",
       "requirement": "settings-may-be-changed-one-at-a-time",
-      "given": "",
-      "when": "a settings change names only one of two fields that are validated together the stored settings already carry the other",
-      "then": "the change is accepted"
+      "given": "A stored checkpoint threshold",
+      "when": "A save names only a notes value below it",
+      "then": "The save is accepted."
     },
     {
       "key": "ac14",
       "requirement": "settings-may-be-changed-one-at-a-time",
-      "given": "",
-      "when": "a settings change names a field with an empty value",
-      "then": "that field is cleared rather than left unchanged"
+      "given": "A project with a token budget",
+      "when": "A save sends `token_budget: null`",
+      "then": "The budget is cleared."
+    },
+    {
+      "key": "ac15",
+      "requirement": "n1-a-saved-settings-change-is-recorded-in-history",
+      "given": "A project",
+      "when": "The hop budget is changed from 5 to 8",
+      "then": "A `project_settings_updated` event records `hop_budget` was 5 and is 8."
+    },
+    {
+      "key": "ac16",
+      "requirement": "n1-a-saved-settings-change-is-recorded-in-history",
+      "given": "A project",
+      "when": "Settings are saved with no value changed",
+      "then": "No `project_settings_updated` event is persisted."
+    },
+    {
+      "key": "ac17",
+      "requirement": "n2-a-runner-named-in-settings-must-belong-to-the-project",
+      "given": "A runner belonging to another project",
+      "when": "A save names it as the checkpoint runner",
+      "then": "It is refused with 400 naming the runner ID."
     }
   ],
   "tasks": [],
   "algorithms": [],
-  "design": "",
+  "design": "D1 One shared `SettingsSection` / `SettingsRow` pair (`hub/ui/src/components/environment/SettingsSection.tsx`) serves project and per-agent settings; its `scope` eyebrow says which.\n\nD2 The update body is derived from `ProjectSettings` with every field optional (`ProjectSettingsUpdate` in `hub/hub/api/v1/projects.py`), so a field cannot be accepted and then silently not written; the handler merges onto stored values with `exclude_unset` and validates the merged object.\n\nD3 Steppers are removed in CSS (`hub/ui/src/index.css`), not by changing input types, so browser validation still applies.",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/project-environment-settings/spec.md (7 requirements, 14 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "hub/ui/src/__tests__/projectSettingsPanel.test.tsx, hub/ui/src/__tests__/environmentPresentation.test.tsx",
+      "hub/tests/test_operator_projects_api.py (settings routes)"
     ],
-    "limits": [
-      "scenarios-state-no-starting-state: 14 of 14 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
-    ]
+    "limits": []
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
@@ -334,18 +368,22 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "numeric-fields-are-typed-not-stepped": "FR-4",
       "saving-reports-its-outcome": "FR-5",
       "the-operator-can-choose-the-branch-approval-merges-into": "FR-6",
-      "settings-may-be-changed-one-at-a-time": "FR-7"
+      "settings-may-be-changed-one-at-a-time": "FR-7",
+      "n1-a-saved-settings-change-is-recorded-in-history": "FR-8",
+      "n2-a-runner-named-in-settings-must-belong-to-the-project": "FR-9"
     },
-    "high_water": 7,
+    "high_water": 9,
     "retired": {},
     "digests": {
-      "FR-1": "fd4456ed159ef2b726fba34b356770dad7fca85d2b25635a3ae672e1a59cf305",
-      "FR-2": "29521894fa468e34df72b340e7ac28d2e6db553f3176d5bea9c7b99cc5b861f9",
-      "FR-3": "9ad92ebf0dcdd1188d92e21ad10fd84f5fe86603dd339174c30c91aa127ab372",
-      "FR-4": "c9699b8ee3c50d2d08a7d1fbdc88d4282739be40b497cda1cc7e2c9460279e09",
-      "FR-5": "462a84febaab07b619adc5ea68e75b88c86d10eeb771057733bd363d846eff0a",
-      "FR-6": "db8b94e8d9871ffb7e909c2fdbbe526993392bb06b44ea43465dc1cb146dee11",
-      "FR-7": "df5cf84f9ac6e5515ca9e342f3da8d97c570a679411914f716471f6a10397ed8"
+      "FR-1": "8885a4f88f9c19092e2c1fbc626f65974221178de88bbb68649f0187ff00d096",
+      "FR-2": "21c521d1941ebd10d4988a731e78d7c8a92dcb95409e783193bab6c8995ba9b2",
+      "FR-3": "3d17e80456d3f69222d7169a7c4ec9ce2d4a46f47cbc111314070a9aa06d74d3",
+      "FR-4": "c3fa0ada765d0b1b4df73f7a0b5713adf89b1ebe9295037ced4ec359b0def217",
+      "FR-5": "e96d369a56a85af82bd1c1cded65f19882ef14ac46b961ad196d133b16e4861b",
+      "FR-6": "349c879716437957c01306e3b473e6a1d5600b9a8f1cf94694c38f99135888d1",
+      "FR-7": "28a1fe201a71e177776f497199e0ef9700a57df52d3f3164e9c304842e58b4b1",
+      "FR-8": "fbe280747c17fa189e29bd08b42d6ae2417f40c215e181fe700d92ee3e734dc4",
+      "FR-9": "5b0433746ab29fd83c04af62dfa6376c1faea677d279d9d7fa87a1dc7e9dcf57"
     }
   }
 }

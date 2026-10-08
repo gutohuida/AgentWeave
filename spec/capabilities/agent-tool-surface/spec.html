@@ -148,706 +148,524 @@ code { padding: .1rem .3rem; font-size: .88em; }
 <body>
 <h1>Agent tool surface</h1>
 <p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
-<p class="aw-nav"><a href="../../agentweave.html">Home</a><a href="../../areas/agents-and-execution.html">Agents and execution</a></p>
-<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">22</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">22</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">73</span> criteria</p>
-<section id="summary"><h2>Summary</h2><p>Defines what an agent may do through HTTP and MCP, and how that access is established. Originated by `openspec/changes/2026-07-30-hub-native-experience`; the identity requirement below carries the `openspec/changes/agent-capability-plane` revision (run-credential authentication in place of environment-variable binding). `openspec/changes/single-runtime` removed the per-runner access-path selection and command-based-fallback requirements below, since it deletes the CLI collaboration commands they depended on — HTTP and MCP are the only two paths now. **Reconciled 2026-08-07.** The first requirement below previously limited the surface to *causing effects*, while the next one required an agent to read the task ledger and receive an answer — a contradiction recorded in `openspec/explorations/2026-08-02-product-direction.md`. The effect-only sentence is replaced by the least-privilege read boundary that document prescribes; the prohibition on reading around the delivery system is preserved unchanged.</p></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span><a class="aw-anchor-copy" href="#FR-12" aria-label="Link to FR-12" title="Link to #FR-12">#</a> <span class="aw-position">Requirement 1 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL supply everything an agent needs in order to begin a turn — its queued entries, the roster of its collaborators, its charter, and its project&#x27;s instructions — at the start of that turn.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Turn-start supply is an onboarding and delivery guarantee, **not** a prohibition on reading during a turn. The boundary on reads is least privilege rather than grammatical shape: a tool MAY return information the agent needs for its own work, scoped to the current project and run — for example a task&#x27;s detail, or the answer to a question it asked. A tool MUST NOT let an agent read around delivery or governance — another agent&#x27;s undelivered queue, secrets, hidden operator state, or configuration outside its scope — and MUST NOT let an agent alter its own configuration or scope.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span><a class="aw-anchor-copy" href="#FR-13" aria-label="Link to FR-13" title="Link to #FR-13">#</a> <span class="aw-position">Requirement 2 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> An agent SHALL retain the ability to message another agent, to create and update work in the shared task ledger, to read the task ledger, and to ask the operator a question and receive an answer.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>These SHALL remain available because they are the agent&#x27;s only means of affecting shared state, and each is attributable to the agent and turn that performed it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 3 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> A tool that causes a new agent to exist SHALL be subject to the project&#x27;s agent budget. A tool that creates, enables, or triggers recurring scheduled work SHALL be governed by the operator, either by budget or by explicit approval.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>No tool SHALL allow an agent to bring another agent into existence outside the agent budget.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 4 of 22</span><p><span class="aw-modal aw-modal-must">MUST</span> An agent&#x27;s identity SHALL be established by the Hub when it starts the agent, and every effect the agent causes SHALL be attributed to that identity and run. The application API and every adapter MUST NOT accept an identity supplied by the caller, and MUST NOT fall back to an unattributed or placeholder identity.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An agent MUST NOT be able to cause an effect attributed to another agent. Binding an environment variable without validating a live run credential SHALL NOT by itself satisfy this requirement. A run credential SHALL be honoured only by the Hub instance that issued it. A Hub instance receiving an agent action bearing a credential it did not issue SHALL refuse the action and SHALL NOT apply its effect, whatever database that instance holds.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span><a class="aw-anchor-copy" href="#FR-16" aria-label="Link to FR-16" title="Link to #FR-16">#</a> <span class="aw-position">Requirement 5 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL configure one tool surface for a spawned run, and an agent SHALL receive it without the operator wiring anything by hand.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>**The surface SHALL be verified as the process actually serves it.** The server is spawned as a script, and a check that imports the module instead observes a different program: an import executes the whole file, while running it as a script stops wherever the entry-point guard is and never returns. A tool defined below that guard registers for every importing test and for no agent. Verification SHALL therefore spawn the server the way the Hub spawns it, from a working directory that is not the package root, and read the advertised tools over the transport. The spawned surface and the imported surface SHALL be equal, and a difference SHALL fail rather than be reported.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span><a class="aw-anchor-copy" href="#FR-17" aria-label="Link to FR-17" title="Link to #FR-17">#</a> <span class="aw-position">Requirement 6 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL supply each run with the address of the Hub instance that started it, and that address SHALL be the address the instance is actually serving on.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The address MUST NOT be derived from a configured default, an assumed port, or any value that can differ from the address in use. Where the operator has explicitly supplied an external address for the Hub, that address SHALL take precedence, because it is a deliberate deployment statement rather than an assumption. If the Hub can determine neither an operator-supplied address nor the address it is serving on, it SHALL refuse to start the run and record the reason. It MUST NOT start a run carrying a guessed address.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span><a class="aw-anchor-copy" href="#FR-18" aria-label="Link to FR-18" title="Link to #FR-18">#</a> <span class="aw-position">Requirement 7 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> When a tool call made by an agent fails, the failure SHALL be reported to the agent with enough detail to distinguish its cause, and SHALL be recorded by the Hub where the Hub is able to observe it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The report SHALL identify which endpoint the call was directed at, so that a call delivered somewhere other than the intended Hub is diagnosable from the agent&#x27;s own record of the turn. A failure the Hub observes SHALL be recorded as an event on the causing agent&#x27;s timeline, alongside the run&#x27;s other recorded outcomes.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span><a class="aw-anchor-copy" href="#FR-19" aria-label="Link to FR-19" title="Link to #FR-19">#</a> <span class="aw-position">Requirement 8 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL select an invocable configuration by default, wherever a provider offers more than one way to start a run and only some of those ways permit approvals to be answered per request.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An operator MUST NOT be required to set a flag, edit a runner record, or know a sentinel value in order for a newly created agent&#x27;s tool surface to be callable. A runner created through the Hub&#x27;s own agent-creation flow, with no further configuration, SHALL produce runs whose tool surface the agent can actually call. Where a less capable transport is retained for diagnostic or compatibility reasons, it SHALL be reachable only by explicit opt-out, and the reported readiness of an agent SHALL reflect the transport that will actually be used for its next run.</p></div><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span><a class="aw-anchor-copy" href="#FR-20" aria-label="Link to FR-20" title="Link to #FR-20">#</a> <span class="aw-position">Requirement 9 of 22</span><p><span class="aw-modal aw-modal-must">MUST</span> Where a tool parameter accepts only certain values, the tool&#x27;s published schema SHALL declare those values. An agent MUST NOT have to discover a constraint by having a call rejected.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The declared values SHALL derive from the same source as the validation that enforces them, so the two cannot diverge. A rejection SHALL state, in a sentence a model can act on, what was wrong and what is accepted. It MUST NOT surface the validator&#x27;s internal error structure.</p></div><div class="aw-requirement aw-requirement-must" id="FR-21"><span class="aw-id">FR-21</span><a class="aw-anchor-copy" href="#FR-21" aria-label="Link to FR-21" title="Link to #FR-21">#</a> <span class="aw-position">Requirement 10 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> A tool that exists to serve the runtime SHALL NOT be described to the agent as one of its own capabilities, even where it is registered on the same server as the agent&#x27;s collaboration tools.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The described tool surface exists so an agent knows what it can deliberately use. Listing an endpoint the harness invokes on the agent&#x27;s behalf misrepresents what the agent is for and invites calls that accomplish nothing. This narrows what is described, not what exists. The requirement that every tool the agent can deliberately use is described SHALL continue to hold.</p></div><div class="aw-requirement aw-requirement-must" id="FR-22"><span class="aw-id">FR-22</span><a class="aw-anchor-copy" href="#FR-22" aria-label="Link to FR-22" title="Link to #FR-22">#</a> <span class="aw-position">Requirement 11 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> The agent&#x27;s tool surface SHALL include a tool that renames the open specification document from a subject in prose, and that tool SHALL appear in the described surface the agent is given.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An agent conducting an exploration learns what the document is about before anyone else does, and until now had no way to say so: it minted a real title inside the payload while the document&#x27;s path went on naming the operator&#x27;s opening sentence. The tool closes the gap between the moment the subject becomes known and the moment the document reflects it. The tool SHALL take the document&#x27;s current path and a subject, and SHALL NOT take a path to rename to. It SHALL return the new path, so that an agent renaming and then writing in the same turn addresses the document it just moved rather than the one it no longer has. The described tool surface SHALL list this tool, and the surface described SHALL remain equal to the surface the server serves when spawned as a subprocess — the condition that already fails the build when it is broken.</p></div><div class="aw-requirement aw-requirement-must" id="FR-23"><span class="aw-id">FR-23</span><a class="aw-anchor-copy" href="#FR-23" aria-label="Link to FR-23" title="Link to #FR-23">#</a> <span class="aw-position">Requirement 12 of 22</span><p><span class="aw-modal aw-modal-must">MUST</span> The published description of the outbound message tool SHALL describe the delivery rule the Hub enforces. It MUST NOT describe a rule the Hub no longer applies.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The tool schema is the agent&#x27;s only documentation of the surface; an agent cannot read the Hub&#x27;s source to discover that the description is stale. A description that names a superseded rule is worse than none, because it is acted on. The description of the parameter that names a recipient conversation SHALL state what omitting it does — resolve by binding — rather than stating that it selects the recipient&#x27;s most recent conversation. Recency selection was removed when the binding contract shipped, and the description has named it since. The description SHALL state that a new thread is started only by explicit request or by checkpoint cutover, so that an agent has no reason to expect one to appear on its own.</p></div><div class="aw-requirement aw-requirement-must" id="FR-24"><span class="aw-id">FR-24</span><a class="aw-anchor-copy" href="#FR-24" aria-label="Link to FR-24" title="Link to #FR-24">#</a> <span class="aw-position">Requirement 13 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every structured parameter of a tool SHALL declare its type in the schema clients receive, so that an object or array parameter is discoverable as such before the tool is called.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>**This requirement replaces one that briefly held the opposite, and the reversal is recorded here rather than dropped.** The measured problem was real: an agent called the document-submission tool **ten times** in a single turn, guessing at a nested schema from type errors and a link to a validator&#x27;s website, and that turn recorded **718,650 input tokens** against 73,622 for the turn before it, because every retry resends the whole conversation. The first remedy shaped a refusal that named the field, its shape and a working example. Shaping it required the wrong value to reach the tool&#x27;s own code, which meant untyped annotations — so the seven structured fields stopped advertising `object`/`array` at all. The operator weighed that trade on 2026-08-25 and chose the schema. The refusal machinery was removed rather than kept alongside the restored annotations. The framework validates arguments before a tool body runs, so with the types declared nothing could ever have reached it — and code that cannot be reached, kept because it looks like a safeguard, is the exact defect this same change found in its own turn-outcome check. A safeguard nobody can trigger is worse than no safeguard, because it is counted as one.</p></div><div class="aw-requirement aw-requirement-must" id="FR-25"><span class="aw-id">FR-25</span><a class="aw-anchor-copy" href="#FR-25" aria-label="Link to FR-25" title="Link to #FR-25">#</a> <span class="aw-position">Requirement 14 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> Canonical turn context SHALL name the tools available to the agent by their exact callable names, so that reaching a tool does not depend on discovering it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Where the harness a run executes in exposes those tools under a name of its own making, the context SHALL use that name, not a shorter form the reader must translate. A note asking the reader to apply a prefix is weaker than a name that is already correct: measured 2026-08-30 (F139), an agent told to use the message tool reached for the harness&#x27;s own similarly named tool, which continues the agent&#x27;s own sub-agents and cannot reach an AgentWeave agent, and reported the project&#x27;s roster as unreachable. Where the harness&#x27;s own tools have names a reader could confuse with these, the context SHALL say once that they are not AgentWeave&#x27;s. Measured 2026-08-24: an agent did the work correctly — edited the code, added a test, ran the suite, committed — then looped on tool discovery and ended its turn `completed`, with a confident summary and **zero evidence rows**. The same agent, asked to do nothing but make that one call, succeeded immediately. The failure is invisible exactly where it matters: the run reports success while the record it was asked to write does not exist.</p></div><div class="aw-requirement aw-requirement-must" id="FR-26"><span class="aw-id">FR-26</span><a class="aw-anchor-copy" href="#FR-26" aria-label="Link to FR-26" title="Link to #FR-26">#</a> <span class="aw-position">Requirement 15 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> The tool surface SHALL offer a distinct tool for creating a flow, rather than distinguishing a flow from a loop by an optional parameter of one tool.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Creating a flow SHALL require a specification document and SHALL be refused without one. Creating a loop SHALL be refused when a document is supplied, and the refusal SHALL name the tool that creates a flow. Each refusal SHALL state why, in the manner the surface already uses for a loop created with no stop condition.</p></div><div class="aw-requirement aw-requirement-must" id="FR-27"><span class="aw-id">FR-27</span><a class="aw-anchor-copy" href="#FR-27" aria-label="Link to FR-27" title="Link to #FR-27">#</a> <span class="aw-position">Requirement 16 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL give every run it spawns the tool server program it held when it started, and SHALL NOT give a run whatever the server&#x27;s source file on disk holds at the moment that run spawns.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A Hub&#x27;s routes are fixed when it starts; the program that calls them on an agent&#x27;s behalf must be fixed at the same moment. Where the two are read at different times, an edit to the source reaches running agents before the Hub has the routes it calls, and an edit that is only half-written reaches them as a server that fails to start. Neither is visible to the operator as a change they made. Where the Hub cannot make the program it holds available to a run, it SHALL refuse to start that run with a reason naming the failure, and SHALL NOT fall back to the source file on disk. A fallback would make the guarantee hold only on machines where nothing goes wrong, and the operator could not tell which kind of run they had. The copy SHALL live outside the project&#x27;s repository, so that it is never part of any agent&#x27;s workspace and never appears as a change to the project. The copy SHALL live in a directory that only the user the Hub runs as can write, and SHALL NOT live in a directory shared between the machine&#x27;s users. A shared directory lets another local user pre-create the copy&#x27;s location, then either replace the program between the Hub&#x27;s check and the run&#x27;s start, or make it unwritable so that every run of this user&#x27;s Hub is refused. A copy the Hub no longer holds MAY be removed once no Hub on the machine has given it to a run for some days; the Hub SHALL NOT remove a copy another running Hub may still be giving to its runs.</p></div><div class="aw-requirement aw-requirement-must" id="FR-28"><span class="aw-id">FR-28</span><a class="aw-anchor-copy" href="#FR-28" aria-label="Link to FR-28" title="Link to #FR-28">#</a> <span class="aw-position">Requirement 17 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where an agent sends a message that is queued past the project&#x27;s hop budget, the answer to that send SHALL state that the message was recorded and will not be delivered unless the operator continues the chain or raises the budget, and SHALL NOT be only the answer an ordinary send receives.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A message queued past the budget is delivered only if the operator acts. The sender reads the answer to its send and nothing else about the message: no later briefing tells it what became of it. Answered exactly as an ordinary send, it tells a colleague the message arrived, and a chain of work that was waiting on that message stops with nobody saying so. The answer SHALL name the depth and the budget, and SHALL name what would deliver the message. It SHALL NOT tell the sender to send the message again, because a resend from the same turn is queued at the same depth and held the same way. The answer SHALL still report the send as recorded, with the message&#x27;s identifier. The message exists, the operator can see it, and it can still be delivered; reporting a failure would invite a retry that is held in turn. A message queued within the budget SHALL be answered as it is today.</p></div><div class="aw-requirement aw-requirement-must" id="FR-29"><span class="aw-id">FR-29</span><a class="aw-anchor-copy" href="#FR-29" aria-label="Link to FR-29" title="Link to #FR-29">#</a> <span class="aw-position">Requirement 18 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> A request by an agent for a further agent SHALL name, as its template, an open agent of the same project, and the new agent SHALL be created with that agent&#x27;s bound runner, charter and runner configuration.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The operator approves a kind of agent by creating one. A template source that no surface writes approves nothing, and a tool whose only input has no producer refuses every call while being described to agents as available. The new agent SHALL NOT inherit authority the operator grants one agent at a time — the grants to accept evidence, to read other agents&#x27; checkpoints and to recall observations — nor its default permission posture, in any spelling the spawn reads, nor that agent&#x27;s description or per-agent overrides. A new agent runs under the built-in default posture until the operator sets one. An agent MUST NOT be able to create a second holder of a grant the operator gave to one. A declaration that changes which tools a run is given, and through that its posture, SHALL NOT be inherited either: the operator&#x27;s statement that an agent runs without the Hub&#x27;s own tool server is made about that agent alone. A per-agent override carried in the template&#x27;s runner environment, such as how long it waits for an answer, SHALL NOT be inherited any more than the same override written on the agent. A request naming no such agent SHALL be refused with the names of the project&#x27;s open agents it could have named. A request naming an archived agent, or an agent with no runner bound, SHALL be refused saying so. The agent budget SHALL be counted over the project&#x27;s agents alone.</p></div><div class="aw-requirement aw-requirement-must" id="FR-30"><span class="aw-id">FR-30</span><a class="aw-anchor-copy" href="#FR-30" aria-label="Link to FR-30" title="Link to #FR-30">#</a> <span class="aw-position">Requirement 19 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL configure its MCP server for a Copilot run with a tool-call timeout longer than the longest wait any of its tools can make, and SHALL name the server&#x27;s tools to a Copilot run by the names Copilot gives them.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Copilot ends an MCP tool call after 30 seconds unless the server&#x27;s configuration says otherwise. The Hub&#x27;s `ask_user` waits for the operator for up to the agent&#x27;s question timeout, and waiting on the operator for other decisions can take as long. A Copilot run whose calls were cut at 30 seconds could never receive an answer the operator took a minute to write. On Copilot, an MCP tool is called `&lt;server&gt;-&lt;tool&gt;`, so the Hub&#x27;s `send_message` is `agentweave-send_message`. The tool list and the turn-start access notice of a Copilot run SHALL use those names.</p></div><div class="aw-requirement aw-requirement-must" id="FR-31"><span class="aw-id">FR-31</span><a class="aw-anchor-copy" href="#FR-31" aria-label="Link to FR-31" title="Link to #FR-31">#</a> <span class="aw-position">Requirement 20 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL put a command named `aw-tool` first on the executable search path of every run it spawns, on Windows and on POSIX, and that command SHALL run the tool server program the Hub pinned at start, in its call mode, with no other program in between.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The call command must be the pinned program for the same reason the tool-protocol server must: a Hub&#x27;s routes are fixed when it starts, and a program read at another moment can call routes the Hub does not have. The command is not named `aw`, because that name is already the application&#x27;s own command-line interface, and a run whose search path lost the Hub&#x27;s entry would silently reach that interface instead. A run&#x27;s shell may be a POSIX shell or PowerShell, and on Windows either can be the one a harness gives it, so the command SHALL resolve by its bare name in both. Call mode SHALL NOT load the tool-protocol library, so that each call costs a process start and not a server start, and the program SHALL still be one file, so that the pinned copy remains a byte-for-byte copy of the program the Hub loaded.</p></div><div class="aw-requirement aw-requirement-must" id="FR-32"><span class="aw-id">FR-32</span><a class="aw-anchor-copy" href="#FR-32" aria-label="Link to FR-32" title="Link to #FR-32">#</a> <span class="aw-position">Requirement 21 of 22</span><p><span class="aw-modal aw-modal-must">SHALL</span> When a run is described the call command, its canonical context SHALL render every operation it describes in the call-command form, from the same single description of the operations the tool-protocol rendering uses, and SHALL state once that any operation named elsewhere in the turn by its short name is called through the call command.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Operations are named by their short names in many places a turn reads: the checkpoint prompt, the specification notices, the task instructions. Rewriting every one of them for each access path would be a second description of each; one rule stated once maps them all. An operation that waits for the operator SHALL be described with the time it waits, so that the run can give the command a longer timeout than its shell&#x27;s default.</p></div><div class="aw-requirement aw-requirement-must" id="FR-33"><span class="aw-id">FR-33</span><a class="aw-anchor-copy" href="#FR-33" aria-label="Link to FR-33" title="Link to #FR-33">#</a> <span class="aw-position">Requirement 22 of 22</span><p><span class="aw-modal aw-modal-must">MUST</span> `aw-tool --help &lt;tool&gt;` MUST print the complete description of that tool, and a name that is not a callable tool is refused with a usage error naming it; `aw-tool --help` alone and `aw-tool --list` are unchanged. The tool-access notice of a run that reaches the Hub through `aw-tool` states that `--list` shows only each tool&#x27;s first line and `--help &lt;tool&gt;` shows the whole.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>F509 slice 1b: `--list` cut descriptions to one line, hiding the task fields.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn begins</td><td>the agent has its queued entries, roster, charter, and project instructions it need invoke no tool to obtain them</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent attempts to read queued or undelivered entries directly</td><td>no tool provides them</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent attempts to alter its own charter, scope, or configuration</td><td>no tool permits it</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent sends a message, creates or updates a task, or asks the operator a question</td><td>the effect is applied it is attributed to that agent and turn</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-13">FR-13</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent sends a message to another agent</td><td>it enters the recipient&#x27;s queue as an entry with a hop depth it is subject to the hop budget</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent uses the tool surface to request a further agent</td><td>the request is subject to the project&#x27;s agent budget and approval rules</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-14">FR-14</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent creates, enables, or triggers recurring scheduled work</td><td>the action is either within a configured allowance or awaits operator approval</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent causes any effect through HTTP, MCP, or command access</td><td>it is attributed to the live run credential established by the Hub no caller-supplied identity is accepted</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent attempts to cause an effect as another agent</td><td>the attempt is refused or remains attributed to its authenticated run</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>any effect is recorded</td><td>it names the agent and run that caused it no effect is recorded against an unknown or placeholder identity</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-15">FR-15</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Hub instance receives an agent action bearing a run credential it did not issue</td><td>the action is refused as unattributable no effect is written to that instance&#x27;s records</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the tool surface is verified</td><td>the server is started as a subprocess and its tools are listed over its transport</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the tools advertised by the spawned server differ from those registered on import</td><td>the difference is reported as a failure, naming which tools are missing from which</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a tool is defined after the block that starts the server</td><td>verification fails, rather than passing because the check imported the module</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Hub serving on a given address starts a run</td><td>the run is given that address the address does not depend on any configured default</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Hub is started on a port other than its configured default and then starts a run</td><td>the run is given the port the Hub is actually serving on</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the operator has explicitly supplied an external address for the Hub</td><td>runs are given that address in preference to the observed one</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-17">FR-17</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub can determine neither an explicit nor an observed address</td><td>it refuses to start the run records the reason</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-18">FR-18</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s tool call fails</td><td>the reported failure identifies the endpoint the call was directed at</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-18">FR-18</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s tool call fails</td><td>the report distinguishes a rejected request from an unreachable or unintended destination</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-18">FR-18</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub observes a tool call fail</td><td>an event recording the failure and its reason appears on the causing agent&#x27;s timeline</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-19">FR-19</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an operator creates an agent through the Hub&#x27;s agent-creation flow and changes nothing else that agent&#x27;s provider requires approvals before a tool call proceeds</td><td>its runs use a transport in which the Hub answers those approvals its tool calls to the Hub&#x27;s own surface succeed</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-19">FR-19</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a runner has not opted out of the invocable transport</td><td>the invocable transport is used</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-19">FR-19</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s collaboration readiness is reported</td><td>it reflects the transport its next run will actually use an agent that will use an invocable transport is not reported as unable to collaborate</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-20">FR-20</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent inspects a tool whose parameter accepts only certain values</td><td>the schema lists those values</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-20">FR-20</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the values a tool declares are compared with the values its server enforces</td><td>they are identical</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-20">FR-20</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a tool call is rejected for an invalid value</td><td>the error names the offending parameter and the accepted values in prose</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-21">FR-21</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>generated context describes the agent&#x27;s tools</td><td>it does not list a tool that exists solely for the runtime to call</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-21">FR-21</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>generated context describes the agent&#x27;s tools</td><td>every tool the agent can deliberately use is still described</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-22">FR-22</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the specification server is spawned as the Hub spawns it and its tools are listed</td><td>the rename tool is among them</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-22">FR-22</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s canonical context is assembled</td><td>the described tool surface names the rename tool and what it takes</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-22">FR-22</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent renames a document</td><td>the result states the document&#x27;s new path</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-22">FR-22</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the rename tool&#x27;s schema is inspected</td><td>it accepts a subject and not a destination path</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the outbound message tool&#x27;s published description of delivery is compared with the rule</td><td>they agree</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent inspects the parameter that names a recipient conversation</td><td>the description states that omitting it resolves delivery by binding it does not state that the recipient&#x27;s most recent conversation is used</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent inspects the outbound message tool</td><td>the parameter that starts a new thread is declared with its default the description states that continuing is what happens when it is omitted</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a client reads a tool&#x27;s input schema</td><td>a parameter that requires an object SHALL be declared as an object SHALL NOT be declared as accepting any type</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a client reads a tool&#x27;s input schema</td><td>a parameter that requires a list SHALL be declared as an array</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the tool surface is exercised by a test</td><td>the assertion SHALL be made against the schema a client actually receives an untyped parameter SHALL fail that assertion</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>canonical context is assembled for a turn whose deliverable includes recording evidence</td><td>the context SHALL name the evidence-recording tool by its exact callable name</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a named tool cannot be called in this turn</td><td>the context SHALL say so rather than name it as available</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>canonical context is assembled for a run described as having the injected tool surface, on a harness whose injected-tool prefix the Hub knows</td><td>each AgentWeave tool is named with that prefix, as the run would call it the context states that the harness&#x27;s similarly named messaging tool does not reach AgentWeave agents</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>canonical context is assembled for a run on that harness that is described in the request form</td><td>no tool is named with the injected prefix the context still states that the harness&#x27;s similarly named messaging tool does not reach AgentWeave agents</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-25">FR-25</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>canonical context is assembled for a run on a harness whose injected-tool naming the Hub does not know</td><td>the tools are named as they are declared, with a note that the harness may show them with a prefix the note does not assert that they are prefixed</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent creates a flow and names no specification document</td><td>the call is refused, stating that a flow executes a declared decomposition</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent creates a loop and names a specification document</td><td>the call is refused, naming the tool that creates a flow</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a flow and a loop are each created</td><td>both produce a job and a loop record, differing only in the declared document</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the tool server&#x27;s source file changes on disk after the Hub started the Hub then spawns a run that is given the tool server</td><td>that run is given the program the Hub held at start the changed source reaches runs only after the Hub restarts</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the copy the Hub gives its runs has been deleted or altered since the Hub started the Hub spawns a run that is given the tool server</td><td>the run is given the program the Hub held at start</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub cannot make the program it holds available to a run</td><td>the run is not started the reason names the failure to prepare the tool server the run is not given the source file on disk instead</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub prepares the program it gives its runs</td><td>the copy is under the Hub user&#x27;s own AgentWeave directory it is not under a directory other users of the machine can write</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub starts and finds copies of other versions of the program</td><td>it removes those no Hub has given to a run for seven days it keeps any copy given to a run more recently, and its own</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-27">FR-27</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the tool surface is verified by spawning the server</td><td>the program spawned is the one the Hub gives its runs</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-28">FR-28</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s turn at the project&#x27;s hop budget sends a message to another agent</td><td>the answer reports the message as recorded, with its identifier it states that the message will not be delivered unless the operator continues the chain or raises the budget it names the depth and the budget</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-28">FR-28</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a sent message is held by the hop budget</td><td>the answer does not tell the sender to send it again</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-28">FR-28</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent&#x27;s turn below the project&#x27;s hop budget sends a message</td><td>the answer is what an ordinary send receives, with no statement about holding</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-29">FR-29</a></td><td>the operator created an agent with a bound runner and a charter</td><td>another agent&#x27;s run requests a new agent naming it as the template, within the agent budget</td><td>the new agent exists with the same runner and charter its first turn is queued and is not held for want of a runner</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-29">FR-29</a></td><td>a template agent the operator granted authority to accept evidence</td><td>an agent is requested from it</td><td>the new agent holds no such grant</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-29">FR-29</a></td><td>a template agent the operator set to run with full access</td><td>an agent is requested from it</td><td>the new agent&#x27;s first turn is not started with full access its settings show the built-in default posture</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-29">FR-29</a></td><td>a template agent the operator declared to run without the Hub&#x27;s own tool server</td><td>an agent is requested from it</td><td>the new agent carries no such declaration its first turn is not started under the posture a run without that server falls back to</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-29">FR-29</a></td><td>a template agent whose runner environment sets how long it waits for an answer</td><td>an agent is requested from it</td><td>the new agent keeps the template&#x27;s other runner environment settings it waits for an answer for the Hub&#x27;s default time</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a request names a template that is not an agent of the project</td><td>the request is refused the refusal lists the project&#x27;s open agents</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-29">FR-29</a></td><td>the project already has as many agents as its agent budget</td><td>an agent is requested from a valid template</td><td>the request is refused and no agent is created</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-30">FR-30</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot agent calls `agentweave-ask_user` and the operator answers after 90 seconds</td><td>the tool call returns the operator&#x27;s answer rather than a timeout</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-30">FR-30</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run&#x27;s context lists the Hub&#x27;s tools in the MCP form</td><td>each tool is named `agentweave-&lt;tool&gt;`</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-31">FR-31</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run&#x27;s shell resolves `aw-tool` by name, in a POSIX shell and in PowerShell</td><td>it runs the Hub&#x27;s launcher for this Hub&#x27;s pinned tool server</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-31">FR-31</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the tool server&#x27;s source file changes on disk after the Hub started a run then calls an operation through `aw-tool`</td><td>the program that runs is the one the Hub held at start</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-31">FR-31</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>`aw-tool --list` is run from the pinned program, from a directory that is not the package</td><td>it lists exactly the tools the server serves over its transport, less the approval</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-31">FR-31</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub cannot write the launcher for a run</td><td>the run is not started, and the reason names the failure to prepare the tool server</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-32">FR-32</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the canonical context of a run described the call command is rendered</td><td>each operation it describes is shown as `aw-tool &lt;operation&gt;` with the argument names its</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-32">FR-32</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run described the call command reads an instruction naming an operation by its short</td><td>the context it was given states that the operation is called as `aw-tool &lt;name&gt;` with an</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-32">FR-32</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the context describes asking the operator a question through the call command</td><td>it states how many seconds that call waits for this agent</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-33">FR-33</a></td><td>`aw-tool --help submit_spec_document` and `aw-tool --help not_a_tool`</td><td>each runs in call mode</td><td>the first prints the whole description, naming `depends_on` and `files`; the second is a usage error naming `not_a_tool`</td></tr></tbody></table></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-tool-surface/spec.md (21 requirements, 72 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 66 of 72 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">23</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">23</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">44</span> criteria</p>
+<section id="summary"><h2>Summary</h2><p>The adapters through which an agent reaches the capability plane: the Hub&#x27;s own MCP tool server and the `aw-tool` call command, which are one pinned program. This capability covers how that program is given to a run, how its tools are named, typed and described, how failures reach the agent, and the shape of individual tools (messages, loops and flows, agent requests, documents). The contract the tools call is agent-capability-plane.</p></section><section id="problem"><h2>Problem</h2><p>An agent knows only what its tools&#x27; names, schemas and descriptions tell it. A tool that is mis-described, untyped, unreachable from the agent&#x27;s harness, or served from a different program than the Hub loaded fails in ways the agent cannot diagnose.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>The MCP server and `aw-tool`: how they are pinned, spawned, put on PATH and told the Hub&#x27;s address.</li><li>Tool schemas, descriptions, names per harness, and which tools are described.</li><li>How tool failures are reported.</li><li>Tool-level rules for messages held by the hop budget, loops versus flows, and agent requests.</li></ul><h3>Non-goals</h3><ul><li>The HTTP contract, authentication and attribution (agent-capability-plane).</li><li>Permission postures and approving a run&#x27;s own tool calls (agent-run-sandboxing).</li><li>Runner transports and adapters beyond the tool server they are given (runner-registry).</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span><a class="aw-anchor-copy" href="#FR-12" aria-label="Link to FR-12" title="Link to #FR-12">#</a> <span class="aw-position">Requirement 1 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL place in each turn everything the agent needs to begin it - its queued inbound entries, the roster of its project&#x27;s open agents, its charter and the project&#x27;s instructions - so that no tool is needed to retrieve them, and no tool SHALL offer an agent another agent&#x27;s queue, secrets, hidden operator state, or a way to alter its own configuration or scope.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Turn-start supply is a delivery guarantee; reads during a turn are allowed only where scoped to the agent&#x27;s own work.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span><a class="aw-anchor-copy" href="#FR-14" aria-label="Link to FR-14" title="Link to #FR-14">#</a> <span class="aw-position">Requirement 2 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> A tool that brings a new agent into existence SHALL be bounded by the project&#x27;s agent budget, counted over the project&#x27;s own agents. A tool that creates, enables, triggers or archives scheduled work SHALL be refused while the operator has not turned on the project&#x27;s `allow_agent_jobs` setting, and archiving SHALL additionally need the operator&#x27;s direction for that job.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Each new agent or recurring job commits spend the operator did not authorise per occurrence.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span><a class="aw-anchor-copy" href="#FR-15" aria-label="Link to FR-15" title="Link to #FR-15">#</a> <span class="aw-position">Requirement 3 of 23</span><p><span class="aw-modal aw-modal-must">MUST</span> The tool server and call command MUST take identity only from the run credential the Hub placed in their environment, MUST refuse every effect when it is absent rather than fall back to a placeholder identity, and a credential SHALL be honoured only by the Hub instance that issued it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An agent must not be able to cause an effect attributed to another agent, and an environment variable naming an agent proves nothing without a live credential.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span><a class="aw-anchor-copy" href="#FR-16" aria-label="Link to FR-16" title="Link to #FR-16">#</a> <span class="aw-position">Requirement 4 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL give each run whose tool surface is MCP exactly one tool server, its own, configured on the run&#x27;s command line with no operator wiring, and the build SHALL verify the surface by spawning the server as the Hub does, from a directory other than the package root, and comparing the tools it advertises over stdio with the imported module&#x27;s; any difference SHALL fail.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Importing the module runs the whole file while spawning it stops at the entry-point guard, so a tool defined below the guard is visible to every test and to no agent.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span><a class="aw-anchor-copy" href="#FR-17" aria-label="Link to FR-17" title="Link to #FR-17">#</a> <span class="aw-position">Requirement 5 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL give each run, as `HUB_URL`, the operator&#x27;s explicit `HUB_URL` if set, else the loopback address on the port the Hub has observed itself serving, and SHALL refuse to start the run (409, retried later) when it has neither, never a configured default or assumed port.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A guessed address can be a different Hub, typically the operator&#x27;s real one, where the run&#x27;s credential is unknown.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span><a class="aw-anchor-copy" href="#FR-18" aria-label="Link to FR-18" title="Link to #FR-18">#</a> <span class="aw-position">Requirement 6 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> A failed tool call SHALL be reported to the agent distinguishing a Hub rejection (with status, the method and path called, and the Hub&#x27;s sentence) from an unreachable Hub (with the address tried), and SHALL be recorded on the agent&#x27;s timeline where the Hub observes it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A call delivered to the wrong Hub is diagnosable only if the report names where it went.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span><a class="aw-anchor-copy" href="#FR-19" aria-label="Link to FR-19" title="Link to #FR-19">#</a> <span class="aw-position">Requirement 7 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> Where a runner offers more than one way to start a run and only some let the Hub answer approvals per request, the Hub SHALL select an approvable transport by default; a less capable transport SHALL be reachable only by an explicit opt-out flag, and an agent&#x27;s reported readiness SHALL reflect the transport its next run will use.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An operator must not need to know a flag or sentinel for a newly created agent&#x27;s tools to be callable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span><a class="aw-anchor-copy" href="#FR-20" aria-label="Link to FR-20" title="Link to #FR-20">#</a> <span class="aw-position">Requirement 8 of 23</span><p><span class="aw-modal aw-modal-must">MUST</span> Where a tool parameter accepts only certain values, its published schema SHALL declare them as an enum restated from the Hub&#x27;s own validator, with a test holding the two equal; a rejection SHALL reach the agent as a sentence naming the field and what is accepted, never the validator&#x27;s raw error structure.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An agent must not discover a constraint by being rejected, and a raw validation dump is not something a model can act on.</p></div><div class="aw-requirement aw-requirement-must" id="FR-21"><span class="aw-id">FR-21</span><a class="aw-anchor-copy" href="#FR-21" aria-label="Link to FR-21" title="Link to #FR-21">#</a> <span class="aw-position">Requirement 9 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> A tool that serves the runtime (`approve_tool_call`) SHALL NOT be described to the agent or callable through the call command, though it is served on the same MCP server; every other served tool SHALL be described in the standing surface unless recorded as a deliberate omission with its reason (today only `submit_checkpoint_notes`, described in the checkpoint prompt).</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The described surface tells an agent what it can deliberately use; a silently incomplete one is believed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-22"><span class="aw-id">FR-22</span><a class="aw-anchor-copy" href="#FR-22" aria-label="Link to FR-22" title="Link to #FR-22">#</a> <span class="aw-position">Requirement 10 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> The tool surface SHALL include `rename_spec_document(path, subject)`, which derives the new path from the subject, takes no destination path, returns the new and previous paths, and appears in the described surface.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The agent learns a document&#x27;s subject first; taking a path would let the least trusted caller choose where a write lands.</p></div><div class="aw-requirement aw-requirement-must" id="FR-23"><span class="aw-id">FR-23</span><a class="aw-anchor-copy" href="#FR-23" aria-label="Link to FR-23" title="Link to #FR-23">#</a> <span class="aw-position">Requirement 11 of 23</span><p><span class="aw-modal aw-modal-must">MUST</span> The `send_message` description SHALL describe the delivery rule the Hub enforces: omitting `conversation_id` continues the thread bound between sender and recipient or starts one if none is bound; a new thread is started only by `start_new_thread` or by checkpoint cutover; and a send to an archived conversation fails returning the content. It MUST NOT describe a rule the Hub no longer applies.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The tool schema is the agent&#x27;s only documentation of the surface, and a stale rule is acted on.</p></div><div class="aw-requirement aw-requirement-must" id="FR-24"><span class="aw-id">FR-24</span><a class="aw-anchor-copy" href="#FR-24" aria-label="Link to FR-24" title="Link to #FR-24">#</a> <span class="aw-position">Requirement 12 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every object or array parameter of a tool SHALL declare that type in the schema clients receive.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A client can only shape a call it can see; the operator chose the advertised schema over a hand-written refusal that needed untyped parameters to fire (2026-08-25).</p></div><div class="aw-requirement aw-requirement-must" id="FR-25"><span class="aw-id">FR-25</span><a class="aw-anchor-copy" href="#FR-25" aria-label="Link to FR-25" title="Link to #FR-25">#</a> <span class="aw-position">Requirement 13 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> The canonical context SHALL name the tools by the exact names the run&#x27;s harness exposes where that naming is known (`mcp__agentweave__&lt;tool&gt;` for Claude, `agentweave-&lt;tool&gt;` for Copilot), say elsewhere that a harness may add a prefix, and, where the harness has similarly named tools of its own, say once that they are not AgentWeave&#x27;s.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>An agent told a short name reached for the harness&#x27;s own similarly named tool and reported the roster unreachable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-26"><span class="aw-id">FR-26</span><a class="aw-anchor-copy" href="#FR-26" aria-label="Link to FR-26" title="Link to #FR-26">#</a> <span class="aw-position">Requirement 14 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> The tool surface SHALL offer `create_flow` separately from `create_loop`. `create_flow` SHALL require a specification document and refuse `work_needs_evidence`; `create_loop` SHALL refuse a document, naming `create_flow`; both SHALL require a stop condition; each refusal SHALL say why.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A flow and a loop differ in what they do with their queue; an optional parameter that silently switches between them hides that.</p></div><div class="aw-requirement aw-requirement-must" id="FR-27"><span class="aw-id">FR-27</span><a class="aw-anchor-copy" href="#FR-27" aria-label="Link to FR-27" title="Link to #FR-27">#</a> <span class="aw-position">Requirement 15 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL give every run a copy of the tool server it read at start, held under `~/.agentweave/hub/tool-server/&lt;digest&gt;/` in a directory only the Hub&#x27;s user can write, rewriting the copy if it is missing or altered, and SHALL refuse the run naming the failure if it cannot, never falling back to the source file. A copy no Hub has touched for 7 days MAY be pruned, never the current one.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Routes are fixed at Hub start; a server read later can call routes the Hub lacks, and a half-written edit reaches running agents as a server that fails to start.</p></div><div class="aw-requirement aw-requirement-must" id="FR-28"><span class="aw-id">FR-28</span><a class="aw-anchor-copy" href="#FR-28" aria-label="Link to FR-28" title="Link to #FR-28">#</a> <span class="aw-position">Requirement 16 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> When a sent message is queued past the project&#x27;s hop budget, the send SHALL still succeed with the message id, and SHALL add `held_by_hop_budget` and a note naming the depth and budget, that the recipient receives it only if the operator continues the chain or raises the budget, that resending queues it at the same depth, and that it must not be reported delivered. A send within budget SHALL be answered as usual.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The sender reads only the answer to its send; answered like an ordinary send, a held message silently stops a chain of work.</p></div><div class="aw-requirement aw-requirement-must" id="FR-29"><span class="aw-id">FR-29</span><a class="aw-anchor-copy" href="#FR-29" aria-label="Link to FR-29" title="Link to #FR-29">#</a> <span class="aw-position">Requirement 17 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> `request_agent` SHALL name as template an open agent of the same project with a bound runner, and create the new agent with that agent&#x27;s runner, charter and runner configuration, but without its grants, default posture, `hub_client` declaration, description, per-agent overrides or wait override; a template that does not exist SHALL be refused naming the open agents, and one archived or with no runner SHALL be refused saying so.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The operator approves a kind of agent by creating one; an agent must not create a second holder of a grant the operator gave to one.</p></div><div class="aw-requirement aw-requirement-must" id="FR-30"><span class="aw-id">FR-30</span><a class="aw-anchor-copy" href="#FR-30" aria-label="Link to FR-30" title="Link to #FR-30">#</a> <span class="aw-position">Requirement 18 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL configure its MCP server for a Copilot run with a tool-call timeout (660 s) longer than the longest wait any tool can make, and SHALL name the tools to a Copilot run as `agentweave-&lt;tool&gt;`.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Copilot ends an MCP call after 30 s unless told otherwise, which would cut off every answer the operator took longer to write.</p></div><div class="aw-requirement aw-requirement-must" id="FR-31"><span class="aw-id">FR-31</span><a class="aw-anchor-copy" href="#FR-31" aria-label="Link to FR-31" title="Link to #FR-31">#</a> <span class="aw-position">Requirement 19 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL put an `aw-tool` command first on the `PATH` of every run, as both `aw-tool.cmd` and a POSIX `aw-tool`, each running the pinned tool server with `-I -S --call` and nothing in between; call mode SHALL NOT import the MCP library.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The command must be the pinned program for the same reason the server is; it is not named `aw` because that is the application&#x27;s own CLI; `-I -S` stops environment variables or site packages changing what an auto-approved command runs.</p></div><div class="aw-requirement aw-requirement-must" id="FR-32"><span class="aw-id">FR-32</span><a class="aw-anchor-copy" href="#FR-32" aria-label="Link to FR-32" title="Link to #FR-32">#</a> <span class="aw-position">Requirement 20 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> When a run is told the call command, its canonical context SHALL render every operation in the `aw-tool` form from the same operation descriptions the MCP rendering uses, SHALL state once that an operation named elsewhere by its short name is called through `aw-tool`, and SHALL state how long `ask_user` waits and that `archive_job` waits for direction.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Operations are named by short name throughout a turn; one stated rule maps them all, and a run must give a waiting command a longer timeout than its shell&#x27;s default.</p></div><div class="aw-requirement aw-requirement-must" id="FR-33"><span class="aw-id">FR-33</span><a class="aw-anchor-copy" href="#FR-33" aria-label="Link to FR-33" title="Link to #FR-33">#</a> <span class="aw-position">Requirement 21 of 23</span><p><span class="aw-modal aw-modal-must">MUST</span> `aw-tool --help &lt;tool&gt;` MUST print that tool&#x27;s complete description with its parameters, and a name that is not a callable tool is refused as a usage error naming it; `aw-tool --list` prints each tool&#x27;s parameters and only the first line of its description. The call-command notice SHALL say which of the two shows the whole description.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>`--list` cut descriptions to one line, hiding the fields an agent needed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-34"><span class="aw-id">FR-34</span><a class="aw-anchor-copy" href="#FR-34" aria-label="Link to FR-34" title="Link to #FR-34">#</a> <span class="aw-position">Requirement 22 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> Every `aw-tool` invocation SHALL print exactly one JSON object as its last line, `{&quot;ok&quot;: true, &quot;result&quot;: ...}` or `{&quot;ok&quot;: false, &quot;error&quot;: {&quot;kind&quot;, &quot;detail&quot;}}` with kind `rejected`, `unreachable`, `unbound`, `usage` or `internal` and a matching exit code, SHALL refuse an unknown argument naming the accepted ones, and SHALL never print a traceback; an internal failure SHALL say the outcome is unknown and how to check before retrying.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The envelope is the whole contract a shell caller has; a traceback or mixed output cannot be parsed reliably across shells.</p></div><div class="aw-requirement aw-requirement-must" id="FR-35"><span class="aw-id">FR-35</span><a class="aw-anchor-copy" href="#FR-35" aria-label="Link to FR-35" title="Link to #FR-35">#</a> <span class="aw-position">Requirement 23 of 23</span><p><span class="aw-modal aw-modal-must">SHALL</span> The tool server SHALL refuse to start, and the call command SHALL refuse every call, when `HUB_URL` is unset, and neither SHALL fall back to a default address.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The one address a guess lands on is the operator&#x27;s own Hub.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a turn begins</td><td>its queued entries, roster, charter and project instructions are in the prompt or canonical context</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-12">FR-12</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the served tools are enumerated</td><td>none reads an inbound queue, the roster, settings or agent configuration</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td>a project is at its agent budget</td><td>an agent calls `request_agent`</td><td>it is refused naming the budget</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-14">FR-14</a></td><td>`allow_agent_jobs` is off</td><td>an agent calls `create_job`, `create_loop`, `create_flow`, `toggle_job` or `run_job`</td><td>it is refused 403</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>`AW_RUN_TOKEN` is unset</td><td>any tool that causes an effect is called</td><td>it fails as unbound and nothing is sent</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-15">FR-15</a></td><td>a run was issued by another Hub instance</td><td>its credential reaches this Hub</td><td>the call is refused 401</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run with an MCP tool surface is spawned</td><td>its command line names the pinned tool server and no other MCP server</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-16">FR-16</a></td><td>a tool is defined after the `__main__` guard</td><td>the stdio surface test runs</td><td>it fails</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-17">FR-17</a></td><td>no `HUB_URL` is set and the Hub has served a request on port 8010</td><td>a run starts</td><td>its `HUB_URL` is `http://127.0.0.1:8010`</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-17">FR-17</a></td><td>no `HUB_URL` is set and no request has been served yet</td><td>a run is triggered</td><td>it is refused 409 as transient with the reason</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-18">FR-18</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub rejects a tool call 403</td><td>the agent receives `Hub rejected &lt;METHOD&gt; &lt;path&gt; (403): &lt;reason&gt;`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-18">FR-18</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>no Hub answers at `HUB_URL`</td><td>the agent receives a `Cannot reach the Hub at &lt;url&gt;` failure, distinct from a rejection</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-18">FR-18</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run&#x27;s tool call returns an error</td><td>the run&#x27;s timeline records the tool event as failed</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-19">FR-19</a></td><td>a Codex runner has no transport flag</td><td>a run starts</td><td>it uses app-server, and `--no-app-server` is the opt-out</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-19">FR-19</a></td><td>a Claude run has the Hub&#x27;s tool server</td><td>its default posture is decided</td><td>the Hub&#x27;s approval tool answers its permission requests</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-20">FR-20</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the `update_task` schema is read</td><td>`status` is an enum of the eight statuses an agent may request</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-20">FR-20</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub rejects a field with a validation error</td><td>the agent reads `&lt;field&gt;: &lt;message&gt;`, not a list of error dicts</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-21">FR-21</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the described surface and the served tools are compared</td><td>each served tool is described or listed with a reason, and the test fails otherwise</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-21">FR-21</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>`aw-tool approve_tool_call` is run</td><td>it is refused as not a callable tool</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-22">FR-22</a></td><td>an exploring document has a placeholder path</td><td>the agent renames it with a subject</td><td>the response carries the new path and the previous path, and the old path no longer resolves</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-23">FR-23</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the `send_message` description is read</td><td>it states the binding rule, `start_new_thread`, the archived-conversation failure and that checkpoint cutover also starts a new thread, and does not mention recency selection</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the `submit_spec_document` schema is read</td><td>`scope`, `requirements`, `acceptance_criteria`, `tasks`, `algorithms`, `evidence`, `open_questions`, `delivery`, `slices` and `roadmap` are typed object or array</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-24">FR-24</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the `ask_user` schema is read</td><td>`questions` is typed array</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-25">FR-25</a></td><td>a Claude run has the MCP tools</td><td>its context is rendered</td><td>each tool is listed as `mcp__agentweave__&lt;tool&gt;` with a note that the host&#x27;s similarly named tools are not AgentWeave&#x27;s</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>`create_loop` is called with a `spec_document_id`</td><td>it is refused naming `create_flow`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>`create_flow` is called with no document</td><td>it is refused naming `create_loop`</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-26">FR-26</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>either is called with neither `stop_at` nor `stop_when_queue_empties`</td><td>it is refused for lacking a stop condition</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-27">FR-27</a></td><td>the checkout&#x27;s `mcp_server.py` is edited after the Hub started</td><td>a run spawns</td><td>it gets the pinned copy the Hub read at start</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-27">FR-27</a></td><td>the pin cannot be written</td><td>a run is triggered</td><td>it is refused 409 naming the failure</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-28">FR-28</a></td><td>a chain is at its hop budget</td><td>an agent sends another message</td><td>the result carries `success`, the message id, `held_by_hop_budget: true` and the delivery note</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>an agent requests a new agent modelled on an open agent</td><td>the new agent has the template&#x27;s runner and charter and no grants</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the template names no agent</td><td>the refusal lists the project&#x27;s open agents</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-29">FR-29</a></td><td>the template is archived</td><td>a request names it</td><td>it is refused saying it is archived</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-30">FR-30</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run&#x27;s MCP configuration is written</td><td>the Hub server&#x27;s timeout is 660000 ms</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-30">FR-30</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a Copilot run&#x27;s tool list is rendered</td><td>tools are named `agentweave-&lt;tool&gt;`</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-31">FR-31</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>a run is spawned</td><td>its `PATH` begins with the launcher directory holding `aw-tool` and `aw-tool.cmd`</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-31">FR-31</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>`aw-tool --list` runs</td><td>it completes without importing fastmcp</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-32">FR-32</a></td><td>a run is told the call command with a 300 s question wait</td><td>its context is rendered</td><td>each operation appears as `aw-tool &lt;tool&gt;` and the preamble says `ask_user` waits up to 300 seconds</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-33">FR-33</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>`aw-tool --help update_task` runs</td><td>the result holds the full description</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-33">FR-33</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>`aw-tool --help nope` runs</td><td>it fails as a usage error naming `nope`</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-34">FR-34</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>`aw-tool create_task` is given an arguments file with an unknown key</td><td>it prints a `usage` envelope naming the accepted arguments and exits 64</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-34">FR-34</a></td><td class="aw-cell-empty"><span aria-label="Not specified">—</span></td><td>the Hub rejects the call</td><td>it prints a `rejected` envelope with the status and exits 1</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-35">FR-35</a></td><td>`HUB_URL` is unset</td><td>the MCP server is started</td><td>it exits naming the missing address and serves nothing</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-35">FR-35</a></td><td>`HUB_URL` is unset</td><td>`aw-tool list_tasks` runs</td><td>it prints an `unbound` envelope and sends nothing</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>D1 One program, two modes. `hub/hub/mcp_server.py` is the MCP server and, with `--call`, the `aw-tool` command. Call mode is decided before the fastmcp import and every tool registered with `_tool()` is callable through it (`_CALLABLE_TOOLS`). The file imports only stdlib and fastmcp; constrained values are restated as `Literal`s and tests (test_mcp_tool_schemas.py) hold them equal to the Hub&#x27;s validators.</p><p>D2 The Hub pins the program at start (hub/hub/tool_server.py): a digest-named copy under the user&#x27;s home, 0700, with `aw-tool`/`aw-tool.cmd` launchers keyed by interpreter, prepended to every run&#x27;s PATH. An edit reaches agents on the Hub&#x27;s next restart, never mid-run.</p><p>D3 One description of the operations (`_operations` in hub/hub/api/v1/agents.py) is rendered as MCP names, as `aw-tool` calls, or (tests only) as HTTP. `UNDESCRIBED_TOOLS` records each deliberate omission; test_tool_surface_matches_server.py fails on any other difference.</p><p>D4 Waiting tools poll contract routes with Hub-stamped deadlines; per-agent waits arrive as environment variables, bounded 10-600 s, else defaults (120 s decisions, 240 s questions). Copilot&#x27;s MCP timeout (660 s) exceeds the longest wait.</p><p>D5 The adapter never guesses: no `HUB_URL` means no server and no call; no credential means no effect.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/tests/test_mcp_server_stdio_surface.py - the spawned surface equals the imported one</li><li>hub/tests/test_tool_surface_matches_server.py, test_mcp_tool_schemas.py - described vs served, enums vs validators</li><li>hub/tests/test_mcp_call_mode.py, test_aw_tool_help.py - call command envelope and help</li><li>hub/tests/test_tool_server_pin.py - pinning and launchers</li><li>hub/tests/test_the_mcp_server_never_guesses_a_hub.py, test_instance_identity.py</li><li>hub/tests/test_hop_budget_bound.py, test_request_agent_models_an_existing_agent.py, test_agent_trigger.py (bound address)</li></ul><h3 class="aw-limits">Limits</h3><ul><li>`send_message`&#x27;s description (hub/hub/mcp_server.py:288-295) does not yet say that checkpoint cutover starts a new thread; the requirement is kept and this is reported as a finding.</li><li>The loop/flow refusals are enforced in the adapter only (hub/hub/mcp_server.py:822-940); the HTTP route accepts a loop with no stop condition (see agent-capability-plane).</li><li>Many criteria still carry an empty GIVEN from the openspec import.</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
 <script type="application/agentweave-spec+json" id="aw-spec-payload">
 {
   "schema_version": 1,
   "kind": "capability",
   "title": "Agent tool surface",
-  "summary": "Defines what an agent may do through HTTP and MCP, and how that access is established. Originated by `openspec/changes/2026-07-30-hub-native-experience`; the identity requirement below carries the `openspec/changes/agent-capability-plane` revision (run-credential authentication in place of environment-variable binding). `openspec/changes/single-runtime` removed the per-runner access-path selection and command-based-fallback requirements below, since it deletes the CLI collaboration commands they depended on — HTTP and MCP are the only two paths now. **Reconciled 2026-08-07.** The first requirement below previously limited the surface to *causing effects*, while the next one required an agent to read the task ledger and receive an answer — a contradiction recorded in `openspec/explorations/2026-08-02-product-direction.md`. The effect-only sentence is replaced by the least-privilege read boundary that document prescribes; the prohibition on reading around the delivery system is preserved unchanged.",
-  "problem": "",
+  "summary": "The adapters through which an agent reaches the capability plane: the Hub's own MCP tool server and the `aw-tool` call command, which are one pinned program. This capability covers how that program is given to a run, how its tools are named, typed and described, how failures reach the agent, and the shape of individual tools (messages, loops and flows, agent requests, documents). The contract the tools call is agent-capability-plane.",
+  "problem": "An agent knows only what its tools' names, schemas and descriptions tell it. A tool that is mis-described, untyped, unreachable from the agent's harness, or served from a different program than the Hub loaded fails in ways the agent cannot diagnose.",
   "scope": {
-    "in_scope": [],
-    "non_goals": []
+    "in_scope": [
+      "The MCP server and `aw-tool`: how they are pinned, spawned, put on PATH and told the Hub's address.",
+      "Tool schemas, descriptions, names per harness, and which tools are described.",
+      "How tool failures are reported.",
+      "Tool-level rules for messages held by the hop budget, loops versus flows, and agent requests."
+    ],
+    "non_goals": [
+      "The HTTP contract, authentication and attribution (agent-capability-plane).",
+      "Permission postures and approving a run's own tool calls (agent-run-sandboxing).",
+      "Runner transports and adapters beyond the tool server they are given (runner-registry)."
+    ]
   },
   "requirements": [
     {
       "key": "the-hub-supplies-state-the-tool-surface-carries-intent",
-      "statement": "The system SHALL supply everything an agent needs in order to begin a turn — its queued entries, the roster of its collaborators, its charter, and its project's instructions — at the start of that turn.",
+      "statement": "The Hub SHALL place in each turn everything the agent needs to begin it - its queued inbound entries, the roster of its project's open agents, its charter and the project's instructions - so that no tool is needed to retrieve them, and no tool SHALL offer an agent another agent's queue, secrets, hidden operator state, or a way to alter its own configuration or scope.",
       "modal": "SHALL",
-      "rationale": "Turn-start supply is an onboarding and delivery guarantee, **not** a prohibition on reading during a turn. The boundary on reads is least privilege rather than grammatical shape: a tool MAY return information the agent needs for its own work, scoped to the current project and run — for example a task's detail, or the answer to a question it asked. A tool MUST NOT let an agent read around delivery or governance — another agent's undelivered queue, secrets, hidden operator state, or configuration outside its scope — and MUST NOT let an agent alter its own configuration or scope.",
-      "party": null
-    },
-    {
-      "key": "outbound-intent-remains-available",
-      "statement": "An agent SHALL retain the ability to message another agent, to create and update work in the shared task ledger, to read the task ledger, and to ask the operator a question and receive an answer.",
-      "modal": "SHALL",
-      "rationale": "These SHALL remain available because they are the agent's only means of affecting shared state, and each is attributable to the agent and turn that performed it.",
+      "rationale": "Turn-start supply is a delivery guarantee; reads during a turn are allowed only where scoped to the agent's own work.",
       "party": null
     },
     {
       "key": "creating-agents-and-scheduling-recurring-work-are-governed-n",
-      "statement": "A tool that causes a new agent to exist SHALL be subject to the project's agent budget. A tool that creates, enables, or triggers recurring scheduled work SHALL be governed by the operator, either by budget or by explicit approval.",
+      "statement": "A tool that brings a new agent into existence SHALL be bounded by the project's agent budget, counted over the project's own agents. A tool that creates, enables, triggers or archives scheduled work SHALL be refused while the operator has not turned on the project's `allow_agent_jobs` setting, and archiving SHALL additionally need the operator's direction for that job.",
       "modal": "SHALL",
-      "rationale": "No tool SHALL allow an agent to bring another agent into existence outside the agent budget.",
+      "rationale": "Each new agent or recurring job commits spend the operator did not authorise per occurrence.",
       "party": null
     },
     {
       "key": "an-agent-s-identity-is-bound-by-the-hub-never-asserted-by-th",
-      "statement": "An agent's identity SHALL be established by the Hub when it starts the agent, and every effect the agent causes SHALL be attributed to that identity and run. The application API and every adapter MUST NOT accept an identity supplied by the caller, and MUST NOT fall back to an unattributed or placeholder identity.",
+      "statement": "The tool server and call command MUST take identity only from the run credential the Hub placed in their environment, MUST refuse every effect when it is absent rather than fall back to a placeholder identity, and a credential SHALL be honoured only by the Hub instance that issued it.",
       "modal": "MUST",
-      "rationale": "An agent MUST NOT be able to cause an effect attributed to another agent. Binding an environment variable without validating a live run credential SHALL NOT by itself satisfy this requirement. A run credential SHALL be honoured only by the Hub instance that issued it. A Hub instance receiving an agent action bearing a credential it did not issue SHALL refuse the action and SHALL NOT apply its effect, whatever database that instance holds.",
+      "rationale": "An agent must not be able to cause an effect attributed to another agent, and an environment variable naming an agent proves nothing without a live credential.",
       "party": null
     },
     {
       "key": "one-tool-surface-configured-automatically",
-      "statement": "The Hub SHALL configure one tool surface for a spawned run, and an agent SHALL receive it without the operator wiring anything by hand.",
+      "statement": "The Hub SHALL give each run whose tool surface is MCP exactly one tool server, its own, configured on the run's command line with no operator wiring, and the build SHALL verify the surface by spawning the server as the Hub does, from a directory other than the package root, and comparing the tools it advertises over stdio with the imported module's; any difference SHALL fail.",
       "modal": "SHALL",
-      "rationale": "**The surface SHALL be verified as the process actually serves it.** The server is spawned as a script, and a check that imports the module instead observes a different program: an import executes the whole file, while running it as a script stops wherever the entry-point guard is and never returns. A tool defined below that guard registers for every importing test and for no agent. Verification SHALL therefore spawn the server the way the Hub spawns it, from a working directory that is not the package root, and read the advertised tools over the transport. The spawned surface and the imported surface SHALL be equal, and a difference SHALL fail rather than be reported.",
+      "rationale": "Importing the module runs the whole file while spawning it stops at the entry-point guard, so a tool defined below the guard is visible to every test and to no agent.",
       "party": null
     },
     {
       "key": "an-agent-is-told-the-address-of-the-hub-that-started-it",
-      "statement": "The Hub SHALL supply each run with the address of the Hub instance that started it, and that address SHALL be the address the instance is actually serving on.",
+      "statement": "The Hub SHALL give each run, as `HUB_URL`, the operator's explicit `HUB_URL` if set, else the loopback address on the port the Hub has observed itself serving, and SHALL refuse to start the run (409, retried later) when it has neither, never a configured default or assumed port.",
       "modal": "SHALL",
-      "rationale": "The address MUST NOT be derived from a configured default, an assumed port, or any value that can differ from the address in use. Where the operator has explicitly supplied an external address for the Hub, that address SHALL take precedence, because it is a deliberate deployment statement rather than an assumption. If the Hub can determine neither an operator-supplied address nor the address it is serving on, it SHALL refuse to start the run and record the reason. It MUST NOT start a run carrying a guessed address.",
+      "rationale": "A guessed address can be a different Hub, typically the operator's real one, where the run's credential is unknown.",
       "party": null
     },
     {
       "key": "a-failed-tool-call-is-reported-not-silently-absorbed",
-      "statement": "When a tool call made by an agent fails, the failure SHALL be reported to the agent with enough detail to distinguish its cause, and SHALL be recorded by the Hub where the Hub is able to observe it.",
+      "statement": "A failed tool call SHALL be reported to the agent distinguishing a Hub rejection (with status, the method and path called, and the Hub's sentence) from an unreachable Hub (with the address tried), and SHALL be recorded on the agent's timeline where the Hub observes it.",
       "modal": "SHALL",
-      "rationale": "The report SHALL identify which endpoint the call was directed at, so that a call delivered somewhere other than the intended Hub is diagnosable from the agent's own record of the turn. A failure the Hub observes SHALL be recorded as an event on the causing agent's timeline, alongside the run's other recorded outcomes.",
+      "rationale": "A call delivered to the wrong Hub is diagnosable only if the report names where it went.",
       "party": null
     },
     {
       "key": "an-invocable-tool-surface-is-the-default-not-an-opt-in",
-      "statement": "The Hub SHALL select an invocable configuration by default, wherever a provider offers more than one way to start a run and only some of those ways permit approvals to be answered per request.",
+      "statement": "Where a runner offers more than one way to start a run and only some let the Hub answer approvals per request, the Hub SHALL select an approvable transport by default; a less capable transport SHALL be reachable only by an explicit opt-out flag, and an agent's reported readiness SHALL reflect the transport its next run will use.",
       "modal": "SHALL",
-      "rationale": "An operator MUST NOT be required to set a flag, edit a runner record, or know a sentinel value in order for a newly created agent's tool surface to be callable. A runner created through the Hub's own agent-creation flow, with no further configuration, SHALL produce runs whose tool surface the agent can actually call. Where a less capable transport is retained for diagnostic or compatibility reasons, it SHALL be reachable only by explicit opt-out, and the reported readiness of an agent SHALL reflect the transport that will actually be used for its next run.",
+      "rationale": "An operator must not need to know a flag or sentinel for a newly created agent's tools to be callable.",
       "party": null
     },
     {
       "key": "a-constrained-tool-parameter-declares-its-valid-values",
-      "statement": "Where a tool parameter accepts only certain values, the tool's published schema SHALL declare those values. An agent MUST NOT have to discover a constraint by having a call rejected.",
+      "statement": "Where a tool parameter accepts only certain values, its published schema SHALL declare them as an enum restated from the Hub's own validator, with a test holding the two equal; a rejection SHALL reach the agent as a sentence naming the field and what is accepted, never the validator's raw error structure.",
       "modal": "MUST",
-      "rationale": "The declared values SHALL derive from the same source as the validation that enforces them, so the two cannot diverge. A rejection SHALL state, in a sentence a model can act on, what was wrong and what is accepted. It MUST NOT surface the validator's internal error structure.",
+      "rationale": "An agent must not discover a constraint by being rejected, and a raw validation dump is not something a model can act on.",
       "party": null
     },
     {
       "key": "an-endpoint-the-harness-calls-is-not-advertised-as-a-capabil",
-      "statement": "A tool that exists to serve the runtime SHALL NOT be described to the agent as one of its own capabilities, even where it is registered on the same server as the agent's collaboration tools.",
+      "statement": "A tool that serves the runtime (`approve_tool_call`) SHALL NOT be described to the agent or callable through the call command, though it is served on the same MCP server; every other served tool SHALL be described in the standing surface unless recorded as a deliberate omission with its reason (today only `submit_checkpoint_notes`, described in the checkpoint prompt).",
       "modal": "SHALL",
-      "rationale": "The described tool surface exists so an agent knows what it can deliberately use. Listing an endpoint the harness invokes on the agent's behalf misrepresents what the agent is for and invites calls that accomplish nothing. This narrows what is described, not what exists. The requirement that every tool the agent can deliberately use is described SHALL continue to hold.",
+      "rationale": "The described surface tells an agent what it can deliberately use; a silently incomplete one is believed.",
       "party": null
     },
     {
       "key": "the-agent-can-name-the-document-it-is-exploring",
-      "statement": "The agent's tool surface SHALL include a tool that renames the open specification document from a subject in prose, and that tool SHALL appear in the described surface the agent is given.",
+      "statement": "The tool surface SHALL include `rename_spec_document(path, subject)`, which derives the new path from the subject, takes no destination path, returns the new and previous paths, and appears in the described surface.",
       "modal": "SHALL",
-      "rationale": "An agent conducting an exploration learns what the document is about before anyone else does, and until now had no way to say so: it minted a real title inside the payload while the document's path went on naming the operator's opening sentence. The tool closes the gap between the moment the subject becomes known and the moment the document reflects it. The tool SHALL take the document's current path and a subject, and SHALL NOT take a path to rename to. It SHALL return the new path, so that an agent renaming and then writing in the same turn addresses the document it just moved rather than the one it no longer has. The described tool surface SHALL list this tool, and the surface described SHALL remain equal to the surface the server serves when spawned as a subprocess — the condition that already fails the build when it is broken.",
+      "rationale": "The agent learns a document's subject first; taking a path would let the least trusted caller choose where a write lands.",
       "party": null
     },
     {
       "key": "the-outbound-message-tool-describes-how-delivery-is-actually",
-      "statement": "The published description of the outbound message tool SHALL describe the delivery rule the Hub enforces. It MUST NOT describe a rule the Hub no longer applies.",
+      "statement": "The `send_message` description SHALL describe the delivery rule the Hub enforces: omitting `conversation_id` continues the thread bound between sender and recipient or starts one if none is bound; a new thread is started only by `start_new_thread` or by checkpoint cutover; and a send to an archived conversation fails returning the content. It MUST NOT describe a rule the Hub no longer applies.",
       "modal": "MUST",
-      "rationale": "The tool schema is the agent's only documentation of the surface; an agent cannot read the Hub's source to discover that the description is stale. A description that names a superseded rule is worse than none, because it is acted on. The description of the parameter that names a recipient conversation SHALL state what omitting it does — resolve by binding — rather than stating that it selects the recipient's most recent conversation. Recency selection was removed when the binding contract shipped, and the description has named it since. The description SHALL state that a new thread is started only by explicit request or by checkpoint cutover, so that an agent has no reason to expect one to appear on its own.",
+      "rationale": "The tool schema is the agent's only documentation of the surface, and a stale rule is acted on.",
       "party": null
     },
     {
       "key": "a-structured-tool-parameter-advertises-its-shape-in-the-tool",
-      "statement": "Every structured parameter of a tool SHALL declare its type in the schema clients receive, so that an object or array parameter is discoverable as such before the tool is called.",
+      "statement": "Every object or array parameter of a tool SHALL declare that type in the schema clients receive.",
       "modal": "SHALL",
-      "rationale": "**This requirement replaces one that briefly held the opposite, and the reversal is recorded here rather than dropped.** The measured problem was real: an agent called the document-submission tool **ten times** in a single turn, guessing at a nested schema from type errors and a link to a validator's website, and that turn recorded **718,650 input tokens** against 73,622 for the turn before it, because every retry resends the whole conversation. The first remedy shaped a refusal that named the field, its shape and a working example. Shaping it required the wrong value to reach the tool's own code, which meant untyped annotations — so the seven structured fields stopped advertising `object`/`array` at all. The operator weighed that trade on 2026-08-25 and chose the schema. The refusal machinery was removed rather than kept alongside the restored annotations. The framework validates arguments before a tool body runs, so with the types declared nothing could ever have reached it — and code that cannot be reached, kept because it looks like a safeguard, is the exact defect this same change found in its own turn-outcome check. A safeguard nobody can trigger is worse than no safeguard, because it is counted as one.",
+      "rationale": "A client can only shape a call it can see; the operator chose the advertised schema over a hand-written refusal that needed untyped parameters to fire (2026-08-25).",
       "party": null
     },
     {
       "key": "the-tools-an-agent-may-call-are-named-to-it",
-      "statement": "Canonical turn context SHALL name the tools available to the agent by their exact callable names, so that reaching a tool does not depend on discovering it.",
+      "statement": "The canonical context SHALL name the tools by the exact names the run's harness exposes where that naming is known (`mcp__agentweave__\u003ctool>` for Claude, `agentweave-\u003ctool>` for Copilot), say elsewhere that a harness may add a prefix, and, where the harness has similarly named tools of its own, say once that they are not AgentWeave's.",
       "modal": "SHALL",
-      "rationale": "Where the harness a run executes in exposes those tools under a name of its own making, the context SHALL use that name, not a shorter form the reader must translate. A note asking the reader to apply a prefix is weaker than a name that is already correct: measured 2026-08-30 (F139), an agent told to use the message tool reached for the harness's own similarly named tool, which continues the agent's own sub-agents and cannot reach an AgentWeave agent, and reported the project's roster as unreachable. Where the harness's own tools have names a reader could confuse with these, the context SHALL say once that they are not AgentWeave's. Measured 2026-08-24: an agent did the work correctly — edited the code, added a test, ran the suite, committed — then looped on tool discovery and ended its turn `completed`, with a confident summary and **zero evidence rows**. The same agent, asked to do nothing but make that one call, succeeded immediately. The failure is invisible exactly where it matters: the run reports success while the record it was asked to write does not exist.",
+      "rationale": "An agent told a short name reached for the harness's own similarly named tool and reported the roster unreachable.",
       "party": null
     },
     {
       "key": "creating-a-flow-is-a-distinct-tool-from-creating-a-loop",
-      "statement": "The tool surface SHALL offer a distinct tool for creating a flow, rather than distinguishing a flow from a loop by an optional parameter of one tool.",
+      "statement": "The tool surface SHALL offer `create_flow` separately from `create_loop`. `create_flow` SHALL require a specification document and refuse `work_needs_evidence`; `create_loop` SHALL refuse a document, naming `create_flow`; both SHALL require a stop condition; each refusal SHALL say why.",
       "modal": "SHALL",
-      "rationale": "Creating a flow SHALL require a specification document and SHALL be refused without one. Creating a loop SHALL be refused when a document is supplied, and the refusal SHALL name the tool that creates a flow. Each refusal SHALL state why, in the manner the surface already uses for a loop created with no stop condition.",
+      "rationale": "A flow and a loop differ in what they do with their queue; an optional parameter that silently switches between them hides that.",
       "party": null
     },
     {
       "key": "the-tool-server-a-run-is-given-is-the-one-its-hub-loaded",
-      "statement": "The Hub SHALL give every run it spawns the tool server program it held when it started, and SHALL NOT give a run whatever the server's source file on disk holds at the moment that run spawns.",
+      "statement": "The Hub SHALL give every run a copy of the tool server it read at start, held under `~/.agentweave/hub/tool-server/\u003cdigest>/` in a directory only the Hub's user can write, rewriting the copy if it is missing or altered, and SHALL refuse the run naming the failure if it cannot, never falling back to the source file. A copy no Hub has touched for 7 days MAY be pruned, never the current one.",
       "modal": "SHALL",
-      "rationale": "A Hub's routes are fixed when it starts; the program that calls them on an agent's behalf must be fixed at the same moment. Where the two are read at different times, an edit to the source reaches running agents before the Hub has the routes it calls, and an edit that is only half-written reaches them as a server that fails to start. Neither is visible to the operator as a change they made. Where the Hub cannot make the program it holds available to a run, it SHALL refuse to start that run with a reason naming the failure, and SHALL NOT fall back to the source file on disk. A fallback would make the guarantee hold only on machines where nothing goes wrong, and the operator could not tell which kind of run they had. The copy SHALL live outside the project's repository, so that it is never part of any agent's workspace and never appears as a change to the project. The copy SHALL live in a directory that only the user the Hub runs as can write, and SHALL NOT live in a directory shared between the machine's users. A shared directory lets another local user pre-create the copy's location, then either replace the program between the Hub's check and the run's start, or make it unwritable so that every run of this user's Hub is refused. A copy the Hub no longer holds MAY be removed once no Hub on the machine has given it to a run for some days; the Hub SHALL NOT remove a copy another running Hub may still be giving to its runs.",
+      "rationale": "Routes are fixed at Hub start; a server read later can call routes the Hub lacks, and a half-written edit reaches running agents as a server that fails to start.",
       "party": null
     },
     {
       "key": "a-message-the-hop-budget-holds-is-reported-to-its-sender-as-",
-      "statement": "Where an agent sends a message that is queued past the project's hop budget, the answer to that send SHALL state that the message was recorded and will not be delivered unless the operator continues the chain or raises the budget, and SHALL NOT be only the answer an ordinary send receives.",
+      "statement": "When a sent message is queued past the project's hop budget, the send SHALL still succeed with the message id, and SHALL add `held_by_hop_budget` and a note naming the depth and budget, that the recipient receives it only if the operator continues the chain or raises the budget, that resending queues it at the same depth, and that it must not be reported delivered. A send within budget SHALL be answered as usual.",
       "modal": "SHALL",
-      "rationale": "A message queued past the budget is delivered only if the operator acts. The sender reads the answer to its send and nothing else about the message: no later briefing tells it what became of it. Answered exactly as an ordinary send, it tells a colleague the message arrived, and a chain of work that was waiting on that message stops with nobody saying so. The answer SHALL name the depth and the budget, and SHALL name what would deliver the message. It SHALL NOT tell the sender to send the message again, because a resend from the same turn is queued at the same depth and held the same way. The answer SHALL still report the send as recorded, with the message's identifier. The message exists, the operator can see it, and it can still be delivered; reporting a failure would invite a retry that is held in turn. A message queued within the budget SHALL be answered as it is today.",
+      "rationale": "The sender reads only the answer to its send; answered like an ordinary send, a held message silently stops a chain of work.",
       "party": null
     },
     {
       "key": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
-      "statement": "A request by an agent for a further agent SHALL name, as its template, an open agent of the same project, and the new agent SHALL be created with that agent's bound runner, charter and runner configuration.",
+      "statement": "`request_agent` SHALL name as template an open agent of the same project with a bound runner, and create the new agent with that agent's runner, charter and runner configuration, but without its grants, default posture, `hub_client` declaration, description, per-agent overrides or wait override; a template that does not exist SHALL be refused naming the open agents, and one archived or with no runner SHALL be refused saying so.",
       "modal": "SHALL",
-      "rationale": "The operator approves a kind of agent by creating one. A template source that no surface writes approves nothing, and a tool whose only input has no producer refuses every call while being described to agents as available. The new agent SHALL NOT inherit authority the operator grants one agent at a time — the grants to accept evidence, to read other agents' checkpoints and to recall observations — nor its default permission posture, in any spelling the spawn reads, nor that agent's description or per-agent overrides. A new agent runs under the built-in default posture until the operator sets one. An agent MUST NOT be able to create a second holder of a grant the operator gave to one. A declaration that changes which tools a run is given, and through that its posture, SHALL NOT be inherited either: the operator's statement that an agent runs without the Hub's own tool server is made about that agent alone. A per-agent override carried in the template's runner environment, such as how long it waits for an answer, SHALL NOT be inherited any more than the same override written on the agent. A request naming no such agent SHALL be refused with the names of the project's open agents it could have named. A request naming an archived agent, or an agent with no runner bound, SHALL be refused saying so. The agent budget SHALL be counted over the project's agents alone.",
+      "rationale": "The operator approves a kind of agent by creating one; an agent must not create a second holder of a grant the operator gave to one.",
       "party": null
     },
     {
       "key": "a-copilot-run-s-mcp-tool-calls-outlast-the-hub-s-longest-wai",
-      "statement": "The Hub SHALL configure its MCP server for a Copilot run with a tool-call timeout longer than the longest wait any of its tools can make, and SHALL name the server's tools to a Copilot run by the names Copilot gives them.",
+      "statement": "The Hub SHALL configure its MCP server for a Copilot run with a tool-call timeout (660 s) longer than the longest wait any tool can make, and SHALL name the tools to a Copilot run as `agentweave-\u003ctool>`.",
       "modal": "SHALL",
-      "rationale": "Copilot ends an MCP tool call after 30 seconds unless the server's configuration says otherwise. The Hub's `ask_user` waits for the operator for up to the agent's question timeout, and waiting on the operator for other decisions can take as long. A Copilot run whose calls were cut at 30 seconds could never receive an answer the operator took a minute to write. On Copilot, an MCP tool is called `\u003cserver>-\u003ctool>`, so the Hub's `send_message` is `agentweave-send_message`. The tool list and the turn-start access notice of a Copilot run SHALL use those names.",
+      "rationale": "Copilot ends an MCP call after 30 s unless told otherwise, which would cut off every answer the operator took longer to write.",
       "party": null
     },
     {
       "key": "the-call-command-is-on-the-run-s-path-and-is-the-program-its",
-      "statement": "The Hub SHALL put a command named `aw-tool` first on the executable search path of every run it spawns, on Windows and on POSIX, and that command SHALL run the tool server program the Hub pinned at start, in its call mode, with no other program in between.",
+      "statement": "The Hub SHALL put an `aw-tool` command first on the `PATH` of every run, as both `aw-tool.cmd` and a POSIX `aw-tool`, each running the pinned tool server with `-I -S --call` and nothing in between; call mode SHALL NOT import the MCP library.",
       "modal": "SHALL",
-      "rationale": "The call command must be the pinned program for the same reason the tool-protocol server must: a Hub's routes are fixed when it starts, and a program read at another moment can call routes the Hub does not have. The command is not named `aw`, because that name is already the application's own command-line interface, and a run whose search path lost the Hub's entry would silently reach that interface instead. A run's shell may be a POSIX shell or PowerShell, and on Windows either can be the one a harness gives it, so the command SHALL resolve by its bare name in both. Call mode SHALL NOT load the tool-protocol library, so that each call costs a process start and not a server start, and the program SHALL still be one file, so that the pinned copy remains a byte-for-byte copy of the program the Hub loaded.",
+      "rationale": "The command must be the pinned program for the same reason the server is; it is not named `aw` because that is the application's own CLI; `-I -S` stops environment variables or site packages changing what an auto-approved command runs.",
       "party": null
     },
     {
       "key": "a-run-without-the-tool-protocol-surface-is-told-each-tool-s-",
-      "statement": "When a run is described the call command, its canonical context SHALL render every operation it describes in the call-command form, from the same single description of the operations the tool-protocol rendering uses, and SHALL state once that any operation named elsewhere in the turn by its short name is called through the call command.",
+      "statement": "When a run is told the call command, its canonical context SHALL render every operation in the `aw-tool` form from the same operation descriptions the MCP rendering uses, SHALL state once that an operation named elsewhere by its short name is called through `aw-tool`, and SHALL state how long `ask_user` waits and that `archive_job` waits for direction.",
       "modal": "SHALL",
-      "rationale": "Operations are named by their short names in many places a turn reads: the checkpoint prompt, the specification notices, the task instructions. Rewriting every one of them for each access path would be a second description of each; one rule stated once maps them all. An operation that waits for the operator SHALL be described with the time it waits, so that the run can give the command a longer timeout than its shell's default.",
+      "rationale": "Operations are named by short name throughout a turn; one stated rule maps them all, and a run must give a waiting command a longer timeout than its shell's default.",
       "party": null
     },
     {
       "key": "aw-tool-help-prints-a-tools-whole-description",
-      "statement": "`aw-tool --help \u003ctool>` MUST print the complete description of that tool, and a name that is not a callable tool is refused with a usage error naming it; `aw-tool --help` alone and `aw-tool --list` are unchanged. The tool-access notice of a run that reaches the Hub through `aw-tool` states that `--list` shows only each tool's first line and `--help \u003ctool>` shows the whole.",
+      "statement": "`aw-tool --help \u003ctool>` MUST print that tool's complete description with its parameters, and a name that is not a callable tool is refused as a usage error naming it; `aw-tool --list` prints each tool's parameters and only the first line of its description. The call-command notice SHALL say which of the two shows the whole description.",
       "modal": "MUST",
-      "rationale": "F509 slice 1b: `--list` cut descriptions to one line, hiding the task fields.",
+      "rationale": "`--list` cut descriptions to one line, hiding the fields an agent needed.",
+      "party": null
+    },
+    {
+      "key": "n1",
+      "statement": "Every `aw-tool` invocation SHALL print exactly one JSON object as its last line, `{\"ok\": true, \"result\": ...}` or `{\"ok\": false, \"error\": {\"kind\", \"detail\"}}` with kind `rejected`, `unreachable`, `unbound`, `usage` or `internal` and a matching exit code, SHALL refuse an unknown argument naming the accepted ones, and SHALL never print a traceback; an internal failure SHALL say the outcome is unknown and how to check before retrying.",
+      "modal": "SHALL",
+      "rationale": "The envelope is the whole contract a shell caller has; a traceback or mixed output cannot be parsed reliably across shells.",
+      "party": null
+    },
+    {
+      "key": "n2",
+      "statement": "The tool server SHALL refuse to start, and the call command SHALL refuse every call, when `HUB_URL` is unset, and neither SHALL fall back to a default address.",
+      "modal": "SHALL",
+      "rationale": "The one address a guess lands on is the operator's own Hub.",
       "party": null
     }
   ],
   "acceptance_criteria": [
     {
-      "key": "ac1",
+      "key": "cr1",
       "requirement": "the-hub-supplies-state-the-tool-surface-carries-intent",
       "given": "",
       "when": "a turn begins",
-      "then": "the agent has its queued entries, roster, charter, and project instructions it need invoke no tool to obtain them"
+      "then": "its queued entries, roster, charter and project instructions are in the prompt or canonical context"
     },
     {
-      "key": "ac2",
+      "key": "cr2",
       "requirement": "the-hub-supplies-state-the-tool-surface-carries-intent",
       "given": "",
-      "when": "an agent attempts to read queued or undelivered entries directly",
-      "then": "no tool provides them"
+      "when": "the served tools are enumerated",
+      "then": "none reads an inbound queue, the roster, settings or agent configuration"
     },
     {
-      "key": "ac3",
-      "requirement": "the-hub-supplies-state-the-tool-surface-carries-intent",
-      "given": "",
-      "when": "an agent attempts to alter its own charter, scope, or configuration",
-      "then": "no tool permits it"
-    },
-    {
-      "key": "ac4",
-      "requirement": "outbound-intent-remains-available",
-      "given": "",
-      "when": "an agent sends a message, creates or updates a task, or asks the operator a question",
-      "then": "the effect is applied it is attributed to that agent and turn"
-    },
-    {
-      "key": "ac5",
-      "requirement": "outbound-intent-remains-available",
-      "given": "",
-      "when": "an agent sends a message to another agent",
-      "then": "it enters the recipient's queue as an entry with a hop depth it is subject to the hop budget"
-    },
-    {
-      "key": "ac6",
+      "key": "cr3",
       "requirement": "creating-agents-and-scheduling-recurring-work-are-governed-n",
-      "given": "",
-      "when": "an agent uses the tool surface to request a further agent",
-      "then": "the request is subject to the project's agent budget and approval rules"
+      "given": "a project is at its agent budget",
+      "when": "an agent calls `request_agent`",
+      "then": "it is refused naming the budget"
     },
     {
-      "key": "ac7",
+      "key": "cr4",
       "requirement": "creating-agents-and-scheduling-recurring-work-are-governed-n",
-      "given": "",
-      "when": "an agent creates, enables, or triggers recurring scheduled work",
-      "then": "the action is either within a configured allowance or awaits operator approval"
+      "given": "`allow_agent_jobs` is off",
+      "when": "an agent calls `create_job`, `create_loop`, `create_flow`, `toggle_job` or `run_job`",
+      "then": "it is refused 403"
     },
     {
-      "key": "ac8",
+      "key": "cr5",
       "requirement": "an-agent-s-identity-is-bound-by-the-hub-never-asserted-by-th",
-      "given": "",
-      "when": "an agent causes any effect through HTTP, MCP, or command access",
-      "then": "it is attributed to the live run credential established by the Hub no caller-supplied identity is accepted"
+      "given": "`AW_RUN_TOKEN` is unset",
+      "when": "any tool that causes an effect is called",
+      "then": "it fails as unbound and nothing is sent"
     },
     {
-      "key": "ac9",
+      "key": "cr6",
       "requirement": "an-agent-s-identity-is-bound-by-the-hub-never-asserted-by-th",
-      "given": "",
-      "when": "an agent attempts to cause an effect as another agent",
-      "then": "the attempt is refused or remains attributed to its authenticated run"
+      "given": "a run was issued by another Hub instance",
+      "when": "its credential reaches this Hub",
+      "then": "the call is refused 401"
     },
     {
-      "key": "ac10",
-      "requirement": "an-agent-s-identity-is-bound-by-the-hub-never-asserted-by-th",
-      "given": "",
-      "when": "any effect is recorded",
-      "then": "it names the agent and run that caused it no effect is recorded against an unknown or placeholder identity"
-    },
-    {
-      "key": "ac11",
-      "requirement": "an-agent-s-identity-is-bound-by-the-hub-never-asserted-by-th",
-      "given": "",
-      "when": "a Hub instance receives an agent action bearing a run credential it did not issue",
-      "then": "the action is refused as unattributable no effect is written to that instance's records"
-    },
-    {
-      "key": "ac12",
+      "key": "cr7",
       "requirement": "one-tool-surface-configured-automatically",
       "given": "",
-      "when": "the tool surface is verified",
-      "then": "the server is started as a subprocess and its tools are listed over its transport"
+      "when": "a run with an MCP tool surface is spawned",
+      "then": "its command line names the pinned tool server and no other MCP server"
     },
     {
-      "key": "ac13",
+      "key": "cr8",
       "requirement": "one-tool-surface-configured-automatically",
-      "given": "",
-      "when": "the tools advertised by the spawned server differ from those registered on import",
-      "then": "the difference is reported as a failure, naming which tools are missing from which"
+      "given": "a tool is defined after the `__main__` guard",
+      "when": "the stdio surface test runs",
+      "then": "it fails"
     },
     {
-      "key": "ac14",
-      "requirement": "one-tool-surface-configured-automatically",
-      "given": "",
-      "when": "a tool is defined after the block that starts the server",
-      "then": "verification fails, rather than passing because the check imported the module"
-    },
-    {
-      "key": "ac15",
+      "key": "cr9",
       "requirement": "an-agent-is-told-the-address-of-the-hub-that-started-it",
-      "given": "",
-      "when": "a Hub serving on a given address starts a run",
-      "then": "the run is given that address the address does not depend on any configured default"
+      "given": "no `HUB_URL` is set and the Hub has served a request on port 8010",
+      "when": "a run starts",
+      "then": "its `HUB_URL` is `http://127.0.0.1:8010`"
     },
     {
-      "key": "ac16",
+      "key": "cr10",
       "requirement": "an-agent-is-told-the-address-of-the-hub-that-started-it",
-      "given": "",
-      "when": "a Hub is started on a port other than its configured default and then starts a run",
-      "then": "the run is given the port the Hub is actually serving on"
+      "given": "no `HUB_URL` is set and no request has been served yet",
+      "when": "a run is triggered",
+      "then": "it is refused 409 as transient with the reason"
     },
     {
-      "key": "ac17",
-      "requirement": "an-agent-is-told-the-address-of-the-hub-that-started-it",
-      "given": "",
-      "when": "the operator has explicitly supplied an external address for the Hub",
-      "then": "runs are given that address in preference to the observed one"
-    },
-    {
-      "key": "ac18",
-      "requirement": "an-agent-is-told-the-address-of-the-hub-that-started-it",
-      "given": "",
-      "when": "the Hub can determine neither an explicit nor an observed address",
-      "then": "it refuses to start the run records the reason"
-    },
-    {
-      "key": "ac19",
+      "key": "cr11",
       "requirement": "a-failed-tool-call-is-reported-not-silently-absorbed",
       "given": "",
-      "when": "an agent's tool call fails",
-      "then": "the reported failure identifies the endpoint the call was directed at"
+      "when": "the Hub rejects a tool call 403",
+      "then": "the agent receives `Hub rejected \u003cMETHOD> \u003cpath> (403): \u003creason>`"
     },
     {
-      "key": "ac20",
+      "key": "cr12",
       "requirement": "a-failed-tool-call-is-reported-not-silently-absorbed",
       "given": "",
-      "when": "an agent's tool call fails",
-      "then": "the report distinguishes a rejected request from an unreachable or unintended destination"
+      "when": "no Hub answers at `HUB_URL`",
+      "then": "the agent receives a `Cannot reach the Hub at \u003curl>` failure, distinct from a rejection"
     },
     {
-      "key": "ac21",
+      "key": "cr13",
       "requirement": "a-failed-tool-call-is-reported-not-silently-absorbed",
       "given": "",
-      "when": "the Hub observes a tool call fail",
-      "then": "an event recording the failure and its reason appears on the causing agent's timeline"
+      "when": "a run's tool call returns an error",
+      "then": "the run's timeline records the tool event as failed"
     },
     {
-      "key": "ac22",
+      "key": "cr14",
       "requirement": "an-invocable-tool-surface-is-the-default-not-an-opt-in",
-      "given": "",
-      "when": "an operator creates an agent through the Hub's agent-creation flow and changes nothing else that agent's provider requires approvals before a tool call proceeds",
-      "then": "its runs use a transport in which the Hub answers those approvals its tool calls to the Hub's own surface succeed"
+      "given": "a Codex runner has no transport flag",
+      "when": "a run starts",
+      "then": "it uses app-server, and `--no-app-server` is the opt-out"
     },
     {
-      "key": "ac23",
+      "key": "cr15",
       "requirement": "an-invocable-tool-surface-is-the-default-not-an-opt-in",
-      "given": "",
-      "when": "a runner has not opted out of the invocable transport",
-      "then": "the invocable transport is used"
+      "given": "a Claude run has the Hub's tool server",
+      "when": "its default posture is decided",
+      "then": "the Hub's approval tool answers its permission requests"
     },
     {
-      "key": "ac24",
-      "requirement": "an-invocable-tool-surface-is-the-default-not-an-opt-in",
-      "given": "",
-      "when": "an agent's collaboration readiness is reported",
-      "then": "it reflects the transport its next run will actually use an agent that will use an invocable transport is not reported as unable to collaborate"
-    },
-    {
-      "key": "ac25",
+      "key": "cr16",
       "requirement": "a-constrained-tool-parameter-declares-its-valid-values",
       "given": "",
-      "when": "an agent inspects a tool whose parameter accepts only certain values",
-      "then": "the schema lists those values"
+      "when": "the `update_task` schema is read",
+      "then": "`status` is an enum of the eight statuses an agent may request"
     },
     {
-      "key": "ac26",
+      "key": "cr17",
       "requirement": "a-constrained-tool-parameter-declares-its-valid-values",
       "given": "",
-      "when": "the values a tool declares are compared with the values its server enforces",
-      "then": "they are identical"
+      "when": "the Hub rejects a field with a validation error",
+      "then": "the agent reads `\u003cfield>: \u003cmessage>`, not a list of error dicts"
     },
     {
-      "key": "ac27",
-      "requirement": "a-constrained-tool-parameter-declares-its-valid-values",
-      "given": "",
-      "when": "a tool call is rejected for an invalid value",
-      "then": "the error names the offending parameter and the accepted values in prose"
-    },
-    {
-      "key": "ac28",
+      "key": "cr18",
       "requirement": "an-endpoint-the-harness-calls-is-not-advertised-as-a-capabil",
       "given": "",
-      "when": "generated context describes the agent's tools",
-      "then": "it does not list a tool that exists solely for the runtime to call"
+      "when": "the described surface and the served tools are compared",
+      "then": "each served tool is described or listed with a reason, and the test fails otherwise"
     },
     {
-      "key": "ac29",
+      "key": "cr19",
       "requirement": "an-endpoint-the-harness-calls-is-not-advertised-as-a-capabil",
       "given": "",
-      "when": "generated context describes the agent's tools",
-      "then": "every tool the agent can deliberately use is still described"
+      "when": "`aw-tool approve_tool_call` is run",
+      "then": "it is refused as not a callable tool"
     },
     {
-      "key": "ac30",
+      "key": "cr20",
       "requirement": "the-agent-can-name-the-document-it-is-exploring",
-      "given": "",
-      "when": "the specification server is spawned as the Hub spawns it and its tools are listed",
-      "then": "the rename tool is among them"
+      "given": "an exploring document has a placeholder path",
+      "when": "the agent renames it with a subject",
+      "then": "the response carries the new path and the previous path, and the old path no longer resolves"
     },
     {
-      "key": "ac31",
-      "requirement": "the-agent-can-name-the-document-it-is-exploring",
-      "given": "",
-      "when": "an agent's canonical context is assembled",
-      "then": "the described tool surface names the rename tool and what it takes"
-    },
-    {
-      "key": "ac32",
-      "requirement": "the-agent-can-name-the-document-it-is-exploring",
-      "given": "",
-      "when": "an agent renames a document",
-      "then": "the result states the document's new path"
-    },
-    {
-      "key": "ac33",
-      "requirement": "the-agent-can-name-the-document-it-is-exploring",
-      "given": "",
-      "when": "the rename tool's schema is inspected",
-      "then": "it accepts a subject and not a destination path"
-    },
-    {
-      "key": "ac34",
+      "key": "cr21",
       "requirement": "the-outbound-message-tool-describes-how-delivery-is-actually",
       "given": "",
-      "when": "the outbound message tool's published description of delivery is compared with the rule",
-      "then": "they agree"
+      "when": "the `send_message` description is read",
+      "then": "it states the binding rule, `start_new_thread`, the archived-conversation failure and that checkpoint cutover also starts a new thread, and does not mention recency selection"
     },
     {
-      "key": "ac35",
-      "requirement": "the-outbound-message-tool-describes-how-delivery-is-actually",
-      "given": "",
-      "when": "an agent inspects the parameter that names a recipient conversation",
-      "then": "the description states that omitting it resolves delivery by binding it does not state that the recipient's most recent conversation is used"
-    },
-    {
-      "key": "ac36",
-      "requirement": "the-outbound-message-tool-describes-how-delivery-is-actually",
-      "given": "",
-      "when": "an agent inspects the outbound message tool",
-      "then": "the parameter that starts a new thread is declared with its default the description states that continuing is what happens when it is omitted"
-    },
-    {
-      "key": "ac37",
+      "key": "cr22",
       "requirement": "a-structured-tool-parameter-advertises-its-shape-in-the-tool",
       "given": "",
-      "when": "a client reads a tool's input schema",
-      "then": "a parameter that requires an object SHALL be declared as an object SHALL NOT be declared as accepting any type"
+      "when": "the `submit_spec_document` schema is read",
+      "then": "`scope`, `requirements`, `acceptance_criteria`, `tasks`, `algorithms`, `evidence`, `open_questions`, `delivery`, `slices` and `roadmap` are typed object or array"
     },
     {
-      "key": "ac38",
+      "key": "cr23",
       "requirement": "a-structured-tool-parameter-advertises-its-shape-in-the-tool",
       "given": "",
-      "when": "a client reads a tool's input schema",
-      "then": "a parameter that requires a list SHALL be declared as an array"
+      "when": "the `ask_user` schema is read",
+      "then": "`questions` is typed array"
     },
     {
-      "key": "ac39",
-      "requirement": "a-structured-tool-parameter-advertises-its-shape-in-the-tool",
-      "given": "",
-      "when": "the tool surface is exercised by a test",
-      "then": "the assertion SHALL be made against the schema a client actually receives an untyped parameter SHALL fail that assertion"
-    },
-    {
-      "key": "ac40",
+      "key": "cr24",
       "requirement": "the-tools-an-agent-may-call-are-named-to-it",
-      "given": "",
-      "when": "canonical context is assembled for a turn whose deliverable includes recording evidence",
-      "then": "the context SHALL name the evidence-recording tool by its exact callable name"
+      "given": "a Claude run has the MCP tools",
+      "when": "its context is rendered",
+      "then": "each tool is listed as `mcp__agentweave__\u003ctool>` with a note that the host's similarly named tools are not AgentWeave's"
     },
     {
-      "key": "ac41",
-      "requirement": "the-tools-an-agent-may-call-are-named-to-it",
-      "given": "",
-      "when": "a named tool cannot be called in this turn",
-      "then": "the context SHALL say so rather than name it as available"
-    },
-    {
-      "key": "ac42",
-      "requirement": "the-tools-an-agent-may-call-are-named-to-it",
-      "given": "",
-      "when": "canonical context is assembled for a run described as having the injected tool surface, on a harness whose injected-tool prefix the Hub knows",
-      "then": "each AgentWeave tool is named with that prefix, as the run would call it the context states that the harness's similarly named messaging tool does not reach AgentWeave agents"
-    },
-    {
-      "key": "ac43",
-      "requirement": "the-tools-an-agent-may-call-are-named-to-it",
-      "given": "",
-      "when": "canonical context is assembled for a run on that harness that is described in the request form",
-      "then": "no tool is named with the injected prefix the context still states that the harness's similarly named messaging tool does not reach AgentWeave agents"
-    },
-    {
-      "key": "ac44",
-      "requirement": "the-tools-an-agent-may-call-are-named-to-it",
-      "given": "",
-      "when": "canonical context is assembled for a run on a harness whose injected-tool naming the Hub does not know",
-      "then": "the tools are named as they are declared, with a note that the harness may show them with a prefix the note does not assert that they are prefixed"
-    },
-    {
-      "key": "ac45",
+      "key": "cr25",
       "requirement": "creating-a-flow-is-a-distinct-tool-from-creating-a-loop",
       "given": "",
-      "when": "an agent creates a flow and names no specification document",
-      "then": "the call is refused, stating that a flow executes a declared decomposition"
+      "when": "`create_loop` is called with a `spec_document_id`",
+      "then": "it is refused naming `create_flow`"
     },
     {
-      "key": "ac46",
+      "key": "cr26",
       "requirement": "creating-a-flow-is-a-distinct-tool-from-creating-a-loop",
       "given": "",
-      "when": "an agent creates a loop and names a specification document",
-      "then": "the call is refused, naming the tool that creates a flow"
+      "when": "`create_flow` is called with no document",
+      "then": "it is refused naming `create_loop`"
     },
     {
-      "key": "ac47",
+      "key": "cr27",
       "requirement": "creating-a-flow-is-a-distinct-tool-from-creating-a-loop",
       "given": "",
-      "when": "a flow and a loop are each created",
-      "then": "both produce a job and a loop record, differing only in the declared document"
+      "when": "either is called with neither `stop_at` nor `stop_when_queue_empties`",
+      "then": "it is refused for lacking a stop condition"
     },
     {
-      "key": "ac48",
+      "key": "cr28",
       "requirement": "the-tool-server-a-run-is-given-is-the-one-its-hub-loaded",
-      "given": "",
-      "when": "the tool server's source file changes on disk after the Hub started the Hub then spawns a run that is given the tool server",
-      "then": "that run is given the program the Hub held at start the changed source reaches runs only after the Hub restarts"
+      "given": "the checkout's `mcp_server.py` is edited after the Hub started",
+      "when": "a run spawns",
+      "then": "it gets the pinned copy the Hub read at start"
     },
     {
-      "key": "ac49",
+      "key": "cr29",
       "requirement": "the-tool-server-a-run-is-given-is-the-one-its-hub-loaded",
-      "given": "",
-      "when": "the copy the Hub gives its runs has been deleted or altered since the Hub started the Hub spawns a run that is given the tool server",
-      "then": "the run is given the program the Hub held at start"
+      "given": "the pin cannot be written",
+      "when": "a run is triggered",
+      "then": "it is refused 409 naming the failure"
     },
     {
-      "key": "ac50",
-      "requirement": "the-tool-server-a-run-is-given-is-the-one-its-hub-loaded",
-      "given": "",
-      "when": "the Hub cannot make the program it holds available to a run",
-      "then": "the run is not started the reason names the failure to prepare the tool server the run is not given the source file on disk instead"
-    },
-    {
-      "key": "ac51",
-      "requirement": "the-tool-server-a-run-is-given-is-the-one-its-hub-loaded",
-      "given": "",
-      "when": "the Hub prepares the program it gives its runs",
-      "then": "the copy is under the Hub user's own AgentWeave directory it is not under a directory other users of the machine can write"
-    },
-    {
-      "key": "ac52",
-      "requirement": "the-tool-server-a-run-is-given-is-the-one-its-hub-loaded",
-      "given": "",
-      "when": "the Hub starts and finds copies of other versions of the program",
-      "then": "it removes those no Hub has given to a run for seven days it keeps any copy given to a run more recently, and its own"
-    },
-    {
-      "key": "ac53",
-      "requirement": "the-tool-server-a-run-is-given-is-the-one-its-hub-loaded",
-      "given": "",
-      "when": "the tool surface is verified by spawning the server",
-      "then": "the program spawned is the one the Hub gives its runs"
-    },
-    {
-      "key": "ac54",
+      "key": "cr30",
       "requirement": "a-message-the-hop-budget-holds-is-reported-to-its-sender-as-",
-      "given": "",
-      "when": "an agent's turn at the project's hop budget sends a message to another agent",
-      "then": "the answer reports the message as recorded, with its identifier it states that the message will not be delivered unless the operator continues the chain or raises the budget it names the depth and the budget"
+      "given": "a chain is at its hop budget",
+      "when": "an agent sends another message",
+      "then": "the result carries `success`, the message id, `held_by_hop_budget: true` and the delivery note"
     },
     {
-      "key": "ac55",
-      "requirement": "a-message-the-hop-budget-holds-is-reported-to-its-sender-as-",
-      "given": "",
-      "when": "a sent message is held by the hop budget",
-      "then": "the answer does not tell the sender to send it again"
-    },
-    {
-      "key": "ac56",
-      "requirement": "a-message-the-hop-budget-holds-is-reported-to-its-sender-as-",
-      "given": "",
-      "when": "an agent's turn below the project's hop budget sends a message",
-      "then": "the answer is what an ordinary send receives, with no statement about holding"
-    },
-    {
-      "key": "ac57",
-      "requirement": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
-      "given": "the operator created an agent with a bound runner and a charter",
-      "when": "another agent's run requests a new agent naming it as the template, within the agent budget",
-      "then": "the new agent exists with the same runner and charter its first turn is queued and is not held for want of a runner"
-    },
-    {
-      "key": "ac58",
-      "requirement": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
-      "given": "a template agent the operator granted authority to accept evidence",
-      "when": "an agent is requested from it",
-      "then": "the new agent holds no such grant"
-    },
-    {
-      "key": "ac59",
-      "requirement": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
-      "given": "a template agent the operator set to run with full access",
-      "when": "an agent is requested from it",
-      "then": "the new agent's first turn is not started with full access its settings show the built-in default posture"
-    },
-    {
-      "key": "ac60",
-      "requirement": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
-      "given": "a template agent the operator declared to run without the Hub's own tool server",
-      "when": "an agent is requested from it",
-      "then": "the new agent carries no such declaration its first turn is not started under the posture a run without that server falls back to"
-    },
-    {
-      "key": "ac61",
-      "requirement": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
-      "given": "a template agent whose runner environment sets how long it waits for an answer",
-      "when": "an agent is requested from it",
-      "then": "the new agent keeps the template's other runner environment settings it waits for an answer for the Hub's default time"
-    },
-    {
-      "key": "ac62",
+      "key": "cr31",
       "requirement": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
       "given": "",
-      "when": "a request names a template that is not an agent of the project",
-      "then": "the request is refused the refusal lists the project's open agents"
+      "when": "an agent requests a new agent modelled on an open agent",
+      "then": "the new agent has the template's runner and charter and no grants"
     },
     {
-      "key": "ac63",
+      "key": "cr32",
       "requirement": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
-      "given": "the project already has as many agents as its agent budget",
-      "when": "an agent is requested from a valid template",
-      "then": "the request is refused and no agent is created"
+      "given": "",
+      "when": "the template names no agent",
+      "then": "the refusal lists the project's open agents"
     },
     {
-      "key": "ac64",
+      "key": "cr33",
+      "requirement": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
+      "given": "the template is archived",
+      "when": "a request names it",
+      "then": "it is refused saying it is archived"
+    },
+    {
+      "key": "cr34",
       "requirement": "a-copilot-run-s-mcp-tool-calls-outlast-the-hub-s-longest-wai",
       "given": "",
-      "when": "a Copilot agent calls `agentweave-ask_user` and the operator answers after 90 seconds",
-      "then": "the tool call returns the operator's answer rather than a timeout"
+      "when": "a Copilot run's MCP configuration is written",
+      "then": "the Hub server's timeout is 660000 ms"
     },
     {
-      "key": "ac65",
+      "key": "cr35",
       "requirement": "a-copilot-run-s-mcp-tool-calls-outlast-the-hub-s-longest-wai",
       "given": "",
-      "when": "a Copilot run's context lists the Hub's tools in the MCP form",
-      "then": "each tool is named `agentweave-\u003ctool>`"
+      "when": "a Copilot run's tool list is rendered",
+      "then": "tools are named `agentweave-\u003ctool>`"
     },
     {
-      "key": "ac66",
+      "key": "cr36",
       "requirement": "the-call-command-is-on-the-run-s-path-and-is-the-program-its",
       "given": "",
-      "when": "a run's shell resolves `aw-tool` by name, in a POSIX shell and in PowerShell",
-      "then": "it runs the Hub's launcher for this Hub's pinned tool server"
+      "when": "a run is spawned",
+      "then": "its `PATH` begins with the launcher directory holding `aw-tool` and `aw-tool.cmd`"
     },
     {
-      "key": "ac67",
+      "key": "cr37",
       "requirement": "the-call-command-is-on-the-run-s-path-and-is-the-program-its",
       "given": "",
-      "when": "the tool server's source file changes on disk after the Hub started a run then calls an operation through `aw-tool`",
-      "then": "the program that runs is the one the Hub held at start"
+      "when": "`aw-tool --list` runs",
+      "then": "it completes without importing fastmcp"
     },
     {
-      "key": "ac68",
-      "requirement": "the-call-command-is-on-the-run-s-path-and-is-the-program-its",
-      "given": "",
-      "when": "`aw-tool --list` is run from the pinned program, from a directory that is not the package",
-      "then": "it lists exactly the tools the server serves over its transport, less the approval"
-    },
-    {
-      "key": "ac69",
-      "requirement": "the-call-command-is-on-the-run-s-path-and-is-the-program-its",
-      "given": "",
-      "when": "the Hub cannot write the launcher for a run",
-      "then": "the run is not started, and the reason names the failure to prepare the tool server"
-    },
-    {
-      "key": "ac70",
+      "key": "cr38",
       "requirement": "a-run-without-the-tool-protocol-surface-is-told-each-tool-s-",
-      "given": "",
-      "when": "the canonical context of a run described the call command is rendered",
-      "then": "each operation it describes is shown as `aw-tool \u003coperation>` with the argument names its"
+      "given": "a run is told the call command with a 300 s question wait",
+      "when": "its context is rendered",
+      "then": "each operation appears as `aw-tool \u003ctool>` and the preamble says `ask_user` waits up to 300 seconds"
     },
     {
-      "key": "ac71",
-      "requirement": "a-run-without-the-tool-protocol-surface-is-told-each-tool-s-",
-      "given": "",
-      "when": "a run described the call command reads an instruction naming an operation by its short",
-      "then": "the context it was given states that the operation is called as `aw-tool \u003cname>` with an"
-    },
-    {
-      "key": "ac72",
-      "requirement": "a-run-without-the-tool-protocol-surface-is-told-each-tool-s-",
-      "given": "",
-      "when": "the context describes asking the operator a question through the call command",
-      "then": "it states how many seconds that call waits for this agent"
-    },
-    {
-      "key": "f509-help",
+      "key": "cr39",
       "requirement": "aw-tool-help-prints-a-tools-whole-description",
-      "given": "`aw-tool --help submit_spec_document` and `aw-tool --help not_a_tool`",
-      "when": "each runs in call mode",
-      "then": "the first prints the whole description, naming `depends_on` and `files`; the second is a usage error naming `not_a_tool`"
+      "given": "",
+      "when": "`aw-tool --help update_task` runs",
+      "then": "the result holds the full description"
+    },
+    {
+      "key": "cr40",
+      "requirement": "aw-tool-help-prints-a-tools-whole-description",
+      "given": "",
+      "when": "`aw-tool --help nope` runs",
+      "then": "it fails as a usage error naming `nope`"
+    },
+    {
+      "key": "cr41",
+      "requirement": "n1",
+      "given": "",
+      "when": "`aw-tool create_task` is given an arguments file with an unknown key",
+      "then": "it prints a `usage` envelope naming the accepted arguments and exits 64"
+    },
+    {
+      "key": "cr42",
+      "requirement": "n1",
+      "given": "",
+      "when": "the Hub rejects the call",
+      "then": "it prints a `rejected` envelope with the status and exits 1"
+    },
+    {
+      "key": "cr43",
+      "requirement": "n2",
+      "given": "`HUB_URL` is unset",
+      "when": "the MCP server is started",
+      "then": "it exits naming the missing address and serves nothing"
+    },
+    {
+      "key": "cr44",
+      "requirement": "n2",
+      "given": "`HUB_URL` is unset",
+      "when": "`aw-tool list_tasks` runs",
+      "then": "it prints an `unbound` envelope and sends nothing"
     }
   ],
   "tasks": [],
   "algorithms": [],
-  "design": "",
+  "design": "D1 One program, two modes. `hub/hub/mcp_server.py` is the MCP server and, with `--call`, the `aw-tool` command. Call mode is decided before the fastmcp import and every tool registered with `_tool()` is callable through it (`_CALLABLE_TOOLS`). The file imports only stdlib and fastmcp; constrained values are restated as `Literal`s and tests (test_mcp_tool_schemas.py) hold them equal to the Hub's validators.\n\nD2 The Hub pins the program at start (hub/hub/tool_server.py): a digest-named copy under the user's home, 0700, with `aw-tool`/`aw-tool.cmd` launchers keyed by interpreter, prepended to every run's PATH. An edit reaches agents on the Hub's next restart, never mid-run.\n\nD3 One description of the operations (`_operations` in hub/hub/api/v1/agents.py) is rendered as MCP names, as `aw-tool` calls, or (tests only) as HTTP. `UNDESCRIBED_TOOLS` records each deliberate omission; test_tool_surface_matches_server.py fails on any other difference.\n\nD4 Waiting tools poll contract routes with Hub-stamped deadlines; per-agent waits arrive as environment variables, bounded 10-600 s, else defaults (120 s decisions, 240 s questions). Copilot's MCP timeout (660 s) exceeds the longest wait.\n\nD5 The adapter never guesses: no `HUB_URL` means no server and no call; no credential means no effect.",
   "evidence": {
     "checked": [
-      "Translated from openspec/specs/agent-tool-surface/spec.md (21 requirements, 72 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+      "hub/tests/test_mcp_server_stdio_surface.py - the spawned surface equals the imported one",
+      "hub/tests/test_tool_surface_matches_server.py, test_mcp_tool_schemas.py - described vs served, enums vs validators",
+      "hub/tests/test_mcp_call_mode.py, test_aw_tool_help.py - call command envelope and help",
+      "hub/tests/test_tool_server_pin.py - pinning and launchers",
+      "hub/tests/test_the_mcp_server_never_guesses_a_hub.py, test_instance_identity.py",
+      "hub/tests/test_hop_budget_bound.py, test_request_agent_models_an_existing_agent.py, test_agent_trigger.py (bound address)"
     ],
     "limits": [
-      "scenarios-state-no-starting-state: 66 of 72 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+      "`send_message`'s description (hub/hub/mcp_server.py:288-295) does not yet say that checkpoint cutover starts a new thread; the requirement is kept and this is reported as a finding.",
+      "The loop/flow refusals are enforced in the adapter only (hub/hub/mcp_server.py:822-940); the HTTP route accepts a loop with no stop condition (see agent-capability-plane).",
+      "Many criteria still carry an empty GIVEN from the openspec import."
     ]
   },
-  "lifecycle": "",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
   "open_questions": [],
   "aw_identity": {
     "requirements": {
       "the-hub-supplies-state-the-tool-surface-carries-intent": "FR-12",
-      "outbound-intent-remains-available": "FR-13",
       "creating-agents-and-scheduling-recurring-work-are-governed-n": "FR-14",
       "an-agent-s-identity-is-bound-by-the-hub-never-asserted-by-th": "FR-15",
       "one-tool-surface-configured-automatically": "FR-16",
@@ -867,33 +685,39 @@ code { padding: .1rem .3rem; font-size: .88em; }
       "a-copilot-run-s-mcp-tool-calls-outlast-the-hub-s-longest-wai": "FR-30",
       "the-call-command-is-on-the-run-s-path-and-is-the-program-its": "FR-31",
       "a-run-without-the-tool-protocol-surface-is-told-each-tool-s-": "FR-32",
-      "aw-tool-help-prints-a-tools-whole-description": "FR-33"
+      "aw-tool-help-prints-a-tools-whole-description": "FR-33",
+      "n1": "FR-34",
+      "n2": "FR-35"
     },
-    "high_water": 33,
-    "retired": {},
+    "high_water": 35,
+    "retired": {
+      "outbound-intent-remains-available": "FR-13"
+    },
     "digests": {
-      "FR-12": "6e62e8c1c26a6e206859ca75ed9f28a0c001444d068a4cfaed5662f0ad1522a3",
-      "FR-13": "e2210d70d24a4e6653b9dd96fe44670dfc37dd5fec3403b2fe987622969238a7",
-      "FR-14": "41564978937373898f7c2649b167aa445e949736484d878233fa2de2104330bc",
-      "FR-15": "5fa9eb6aab9cac707d2a0cb042ed09b7dd3e8da0e0b7b1e8c5996332e6df8def",
-      "FR-16": "bd96be53329affd4f165dfc92b20c1c73dd386eb746f39ccd3f8975d613ec756",
-      "FR-17": "75bc81d5b62b317cfc561f3ce4f50a1b5d5fba6d1955c3b24544cd1a57a8bda4",
-      "FR-18": "d7f2909afca0e8533004958b8628851fbc52f49a730ffe48751dcd2a32da1201",
-      "FR-19": "4acc3382fb8d6279c70c10180983494c55ea8a567f39c16ea307240fbd7c3dab",
-      "FR-20": "d59d9cd0abdd3955d8c9117e920ae00773fced5b8faed498e23a19190a3032d5",
-      "FR-21": "862da32298db012e8d7288f40c46ffd320f16a09e8bf3b53ff1beea2b6e9bdf6",
-      "FR-22": "88cf2d439f4bd57b60865b29b7b454684db001b2f042dbd905f4f091ebc2a763",
-      "FR-23": "222cb43ea62a7882b37014f463bb90e0300a355c314640c0af65b94a56e04997",
-      "FR-24": "19a079e1ee2440801fc01195a8490133a5411ac28e5080ccd61557a26c5d4841",
-      "FR-25": "715910078654bed20c27cb5020763a07ee4ad5b7ca367ff78b02003ac8ff7b62",
-      "FR-26": "d550ce83c72a1c308bcc953412680831fdfb35f101769f195839e3379ff90d25",
-      "FR-27": "f6751780d592aac449946ecabc727b23b4f18c7e89ec1bd2c1c6cb30bd508260",
-      "FR-28": "9e3ebd2a8e07e501f73f773a5b7e525ebdaaa85a999fcd38cb48098fb252d192",
-      "FR-29": "68cadcfbf54c2a58597cdf482895c4d6f48a58dc395753da7bfba8627c96c97e",
-      "FR-30": "b5bcd7a1dc18a5c01610485413a147b31aa77ad0df1abf3c372034d215ce59d1",
-      "FR-31": "65cd9ffeb1c70cbb75755a62c4a99fefca176d8029d2ce1664b265d203952c29",
-      "FR-32": "ea826141d3794406f4f4615e94331f7caecfaf292039faab7a90481ef8e1ace9",
-      "FR-33": "e3352b78a16af4d6c53eccdd95e6098ab7cb86e692bb20b61b233280473781a3"
+      "FR-12": "5e21fd5f4040c26f86a6785fcad2bb32f3b2ff57c586b6aed4ff0e65842a0d31",
+      "FR-14": "08d3c47381c2a52c2f68f2aceb88002ce0cc6e5b488cf1cb247bdf219209298e",
+      "FR-15": "d6c05b463df6f9ba5c772b6d061a3250500354dc28b5f0e770ce874c1fd60937",
+      "FR-16": "9ae231a2a1a030636fa13cc91979ae6d0e4be28064fa55cb102eb04d0734846b",
+      "FR-17": "df5defed7bcc38cdbb078459c5011395fac8944b28fc740c76977f69c9cb2469",
+      "FR-18": "88227c9442562f624f4470471605f2da1c04bbc50e21b66f6094bf37bc5bfda4",
+      "FR-19": "a08ae24a6b39f4df582420d7e9baad7ae9e7be869172fb032a0a4587ace328ec",
+      "FR-20": "2a2047012b4198165bbb02adf67fe09578a921169eaf6d4794927438082ea568",
+      "FR-21": "2d9c85e0d66abeca3a77de7a2f16934b9b99d8f5e31fbedfde962635d90c0a7c",
+      "FR-22": "18cc305c2b9e7aae8640897e13f361e2ad6dcf18afec49e5792964ba9a647151",
+      "FR-23": "54102ab277844efac6d48cf2c8e117a8b534dc91e428c6c737b96bed349aa077",
+      "FR-24": "c52e7959a0af955377e0fca8aa9c7aaa459626804754f2045e742a049e6e691c",
+      "FR-25": "aacfe9e477867573ce49ab5e763268cd047726b925fb19dbab9d250a174ba59e",
+      "FR-26": "854d12abe9462c8d6d24b42cbdcdd49e706ab0438651ed7185543b2ae835ad25",
+      "FR-27": "51ae3feb2d43a7a587e4bbfb61d3894b315b4d7921102055799dfce65c8e8484",
+      "FR-28": "7f71f047974cd101ae1e4289123251bbc84b0420c48e791f2e9b537209ab92a9",
+      "FR-29": "053786b71a70119239604ca13750339f2cd14dc8fe954600314d624b26efa63e",
+      "FR-30": "60608ff37f2edd85ea6ca696aaa372d628e65faad43599c044b8383a2eba46ca",
+      "FR-31": "c4b7eb6a775afe7acb5e340a3767ed7c1ed81705e113f4579d671af828106d16",
+      "FR-32": "731c09243a25799be5b9a7717c64b4117c511ada146d6cf0a1ba8bedaa97d41f",
+      "FR-33": "9a15e7c8985a08e7f3ec400d6a3e8c062d0d2c267d73510830f5ad2520e6d5b4",
+      "FR-34": "11065e5e0492d98de1665605a9156203a816349d3237497a7418adcf49178b93",
+      "FR-35": "ee97f282ef0b6a5c186b5f60c03cf5c571184af7df97e2f37418d0535a9fda04",
+      "FR-13": "e2210d70d24a4e6653b9dd96fe44670dfc37dd5fec3403b2fe987622969238a7"
     }
   }
 }
