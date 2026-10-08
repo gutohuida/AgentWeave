@@ -204,7 +204,7 @@
     },
     {
       "path": "spec/capabilities/hub-api-request-contract/spec.html",
-      "title": "Hub api request contract",
+      "title": "Hub API request contract",
       "kind": "capability",
       "status": "current",
       "parent": null,
@@ -254,7 +254,7 @@
       "path": "spec/capabilities/opencode-config/spec.html",
       "title": "Opencode config",
       "kind": "capability",
-      "status": "current",
+      "status": "archived",
       "parent": "spec/areas/the-local-instance.html",
       "order": 220
     },
@@ -294,7 +294,7 @@
       "path": "spec/capabilities/quiet-hours/spec.html",
       "title": "Quiet hours",
       "kind": "capability",
-      "status": "current",
+      "status": "archived",
       "parent": "spec/areas/the-local-instance.html",
       "order": 350
     },
@@ -398,7 +398,7 @@
       "path": "spec/capabilities/trace-timeline/spec.html",
       "title": "Trace timeline",
       "kind": "capability",
-      "status": "current",
+      "status": "archived",
       "parent": "spec/areas/work-and-traceability.html",
       "order": 320
     },
@@ -425,6 +425,14 @@
       "status": "current",
       "parent": null,
       "order": 530
+    },
+    {
+      "path": "spec/changes/a-capability-can-be-retired/spec.html",
+      "title": "A capability can be retired",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 660
     },
     {
       "path": "spec/changes/a-codex-app-server-spec-turn-keeps-no-write-tools/spec.html",
@@ -459,6 +467,14 @@
       "order": 620
     },
     {
+      "path": "spec/changes/a-fold-can-retire-what-the-change-supersedes/spec.html",
+      "title": "A fold can retire what the change supersedes in the capability",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 670
+    },
+    {
       "path": "spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server/spec.html",
       "title": "A Hub Claude run gets the Hub's tool server and no other",
       "kind": "change-spec",
@@ -491,6 +507,14 @@
       "order": 650
     },
     {
+      "path": "spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks/spec.html",
+      "title": "Re-approving an amended document refreshes its open tasks",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 680
+    },
+    {
       "path": "spec/changes/same-file-tasks-build-in-order-the-shim-planner-is-told/spec.html",
       "title": "Slice 1b: a planner on the aw-tool path is told about files and same-file ordering",
       "kind": "change-spec",
@@ -521,6 +545,14 @@
       "status": "archived",
       "parent": null,
       "order": 580
+    },
+    {
+      "path": "spec/changes/the-operator-can-delete-a-document-a-task-or-an-archived-agent/spec.html",
+      "title": "The operator can delete a document or a task, and a runner only archived agents hold",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 690
     }
   ]
 }
