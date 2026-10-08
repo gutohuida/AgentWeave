@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Re-approving an amended document refreshes its open tasks</title>
+<meta name="aw-spec-kind" content="change-spec">
+<meta name="aw-spec-status" content="approved">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Re-approving an amended document refreshes its open tasks</h1>
+<p class="aw-meta"><span class="aw-chip">change-spec</span><span class="aw-chip aw-chip-phase-done">approved</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">4</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">4</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">4</span> criteria<span class="aw-summary-sep">·</span><span class="aw-count">3</span> tasks</p>
+<section id="summary"><h2>Summary</h2><p>When an amended document is approved again, a task it already created and still declares is brought up to date if it is still open: its title, description, criteria and its links to this document&#x27;s requirements become what the document now says. Status, assignee and links to other documents are never touched; closed tasks stay as delivered. The approval report says what changed, which closed tasks still link a retired requirement, and which tasks the document no longer declares.</p></section><section id="problem"><h2>Problem</h2><p>F535: reopening F532&#x27;s approved document, retiring FR-3 and adding FR-5, then approving again created no task and changed none. The backend task kept its first title and its link to the retired FR-3, and FR-5 was served by no task until the operator linked it by hand. Coverage showed a new requirement unserved while a task claimed a retired one. task-lifecycle-governance says a task that already exists for a declared task SHALL NOT be modified by a later approval; that freezes the description of the work along with its progress.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>Refreshing an open declared task&#x27;s title, description, acceptance criteria and same-document requirement links at re-approval</li><li>Reporting refreshed tasks, closed tasks linking a retired requirement, and tasks the document no longer declares</li><li>Showing those three in the approval report in the app</li></ul><h3>Non-goals</h3><ul><li>Changing a task&#x27;s status, assignee, priority or dependencies&#x27; removal: progress and who does the work stay the board&#x27;s</li><li>Touching an approved or rejected task: it records what was delivered against what was asked then</li><li>Deleting or closing a task the document no longer declares: reported, the operator decides</li><li>Touching links to requirements of other documents, or free-text requirement notes</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 4</span><p><span class="aw-modal aw-modal-must">MUST</span> When a document is approved and a task it created earlier is still declared under the same key and is neither approved nor rejected, approval MUST set that task&#x27;s title, description and acceptance criteria to what the declared entry now gives, and its links to this document&#x27;s requirements to exactly the requirements the entry names. Its status, assignee, priority and its links to other documents&#x27; requirements MUST NOT change.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The document declares what the work is; a revision that changes what is asked must reach the open work, or coverage reports a new requirement unserved while a task claims a retired one. Progress and assignment remain the board&#x27;s, so re-approving still cannot reset or reassign work.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 4</span><p><span class="aw-modal aw-modal-must">MUST</span> A task that is approved or rejected MUST NOT be changed by a later approval of its document.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A closed task records what was delivered or turned down against what was asked at the time.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 4</span><p><span class="aw-modal aw-modal-must">MUST</span> The approval report MUST list each refreshed task with the fields that changed and the requirement links added and removed, each closed task that links a requirement this document has retired, and each task this document created whose key it no longer declares; none of these MUST be changed beyond the refresh rule.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Anything a re-approval changed or chose not to change must be visible where the operator decided it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 4</span><p><span class="aw-modal aw-modal-must">MUST</span> The approval report in the app MUST show refreshed tasks, closed tasks linking a retired requirement, and tasks no longer declared.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The report is where the operator sees what approval did to the board.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>an open declared task assigned to an agent, linked to a requirement of another document</td><td>its document is amended and approved again</td><td>title, description, criteria and same-document links follow the document; status, assignee, priority and the other document&#x27;s link are unchanged</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>an approved task and a rejected task whose entries changed</td><td>the document is approved again</td><td>neither task&#x27;s title, description, criteria or links change</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a re-approval that refreshes one task, leaves a closed task linking a retired requirement, and no longer declares a third</td><td>approval answers</td><td>approval_outcome lists refreshed (fields, linked, unlinked), closed_linking_retired and no_longer_declared; an unchanged open task is not listed as refreshed</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>the trial Hub on :8010 and an approved change with requirements a and b and tasks t1 (a, open), t2 (a, approved) and t3 (b, open)</td><td>the operator reopens it, retires a, adds c, retitles t1 and points it at b and c, drops t3, and approves again (scripts/drive/d1008_reapproval_refresh_drive.py)</td><td>t1 keeps its id and status with the new title and links to b and c only; t2 is unchanged; t3 is unchanged; no task is created; the report in Chromium shows t1 refreshed, t2 linking retired a, and t3 no longer declared</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>Tier 1, no migration. Operator decision 2026-10-08: refresh open tasks (rejected: additive links only; report only). Open means status is neither approved nor rejected. Links are set by diff, so an unchanged task is not reported and a link the entry still names keeps its row and actor. Removed links are deleted rows; the approval report event is their record. Folds into task-lifecycle-governance, replacing the requirement that says an existing declared task SHALL NOT be modified. HAZARD: the UI bundle reaches :8000&#x27;s app at its next reload. Rollback: revert.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/hub/spec_tasks.py materialise skips any key already on the board (existing_keys)</li><li>task-lifecycle-governance: a task that already exists for a declared task SHALL NOT be modified, reassigned or reverted by a later approval</li><li>F532&#x27;s document: backend task kept its link to retired FR-3; FR-5 linked by hand</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>one-off</p></section><section id="tasks"><h2>Tasks</h2><ul class="aw-task-list"><li class="aw-task"><strong>Acceptance drive, failing on today&#x27;s Hub</strong> — scripts/drive/d1008_reapproval_refresh_drive.py against :8010: the &#x27;drive&#x27; criterion, run before the build.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-4">FR-4</a></span></li><li class="aw-task"><strong>Refresh open declared tasks at approval and report it</strong> — Failing tests first in hub/tests/test_re_approving_refreshes_open_tasks.py. spec_tasks.materialise refreshes existing open tasks and collects the report; the phase route adds refreshed, closed_linking_retired and no_longer_declared to approval_outcome.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-2">FR-2</a><a class="aw-chip-ref" href="#FR-3">FR-3</a></span></li><li class="aw-task"><strong>Show refreshed, closed and undeclared tasks in the approval report</strong> — Vitest first; SpecApprovalReport renders the three lists; bundle refreshed; the drive passes on a restarted :8010.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-4">FR-4</a></span></li></ul></section><section id="delivery"><h2>Delivery</h2><p>No flow. The tasks go on the board and are started by hand.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "change-spec",
+  "title": "Re-approving an amended document refreshes its open tasks",
+  "summary": "When an amended document is approved again, a task it already created and still declares is brought up to date if it is still open: its title, description, criteria and its links to this document's requirements become what the document now says. Status, assignee and links to other documents are never touched; closed tasks stay as delivered. The approval report says what changed, which closed tasks still link a retired requirement, and which tasks the document no longer declares.",
+  "problem": "F535: reopening F532's approved document, retiring FR-3 and adding FR-5, then approving again created no task and changed none. The backend task kept its first title and its link to the retired FR-3, and FR-5 was served by no task until the operator linked it by hand. Coverage showed a new requirement unserved while a task claimed a retired one. task-lifecycle-governance says a task that already exists for a declared task SHALL NOT be modified by a later approval; that freezes the description of the work along with its progress.",
+  "scope": {
+    "in_scope": [
+      "Refreshing an open declared task's title, description, acceptance criteria and same-document requirement links at re-approval",
+      "Reporting refreshed tasks, closed tasks linking a retired requirement, and tasks the document no longer declares",
+      "Showing those three in the approval report in the app"
+    ],
+    "non_goals": [
+      "Changing a task's status, assignee, priority or dependencies' removal: progress and who does the work stay the board's",
+      "Touching an approved or rejected task: it records what was delivered against what was asked then",
+      "Deleting or closing a task the document no longer declares: reported, the operator decides",
+      "Touching links to requirements of other documents, or free-text requirement notes"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "refresh",
+      "statement": "When a document is approved and a task it created earlier is still declared under the same key and is neither approved nor rejected, approval MUST set that task's title, description and acceptance criteria to what the declared entry now gives, and its links to this document's requirements to exactly the requirements the entry names. Its status, assignee, priority and its links to other documents' requirements MUST NOT change.",
+      "modal": "MUST",
+      "rationale": "The document declares what the work is; a revision that changes what is asked must reach the open work, or coverage reports a new requirement unserved while a task claims a retired one. Progress and assignment remain the board's, so re-approving still cannot reset or reassign work.",
+      "party": null
+    },
+    {
+      "key": "closed-frozen",
+      "statement": "A task that is approved or rejected MUST NOT be changed by a later approval of its document.",
+      "modal": "MUST",
+      "rationale": "A closed task records what was delivered or turned down against what was asked at the time.",
+      "party": null
+    },
+    {
+      "key": "report",
+      "statement": "The approval report MUST list each refreshed task with the fields that changed and the requirement links added and removed, each closed task that links a requirement this document has retired, and each task this document created whose key it no longer declares; none of these MUST be changed beyond the refresh rule.",
+      "modal": "MUST",
+      "rationale": "Anything a re-approval changed or chose not to change must be visible where the operator decided it.",
+      "party": null
+    },
+    {
+      "key": "app",
+      "statement": "The approval report in the app MUST show refreshed tasks, closed tasks linking a retired requirement, and tasks no longer declared.",
+      "modal": "MUST",
+      "rationale": "The report is where the operator sees what approval did to the board.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "drive",
+      "requirement": "app",
+      "given": "the trial Hub on :8010 and an approved change with requirements a and b and tasks t1 (a, open), t2 (a, approved) and t3 (b, open)",
+      "when": "the operator reopens it, retires a, adds c, retitles t1 and points it at b and c, drops t3, and approves again (scripts/drive/d1008_reapproval_refresh_drive.py)",
+      "then": "t1 keeps its id and status with the new title and links to b and c only; t2 is unchanged; t3 is unchanged; no task is created; the report in Chromium shows t1 refreshed, t2 linking retired a, and t3 no longer declared"
+    },
+    {
+      "key": "refresh-open",
+      "requirement": "refresh",
+      "given": "an open declared task assigned to an agent, linked to a requirement of another document",
+      "when": "its document is amended and approved again",
+      "then": "title, description, criteria and same-document links follow the document; status, assignee, priority and the other document's link are unchanged"
+    },
+    {
+      "key": "closed-unchanged",
+      "requirement": "closed-frozen",
+      "given": "an approved task and a rejected task whose entries changed",
+      "when": "the document is approved again",
+      "then": "neither task's title, description, criteria or links change"
+    },
+    {
+      "key": "report-lists",
+      "requirement": "report",
+      "given": "a re-approval that refreshes one task, leaves a closed task linking a retired requirement, and no longer declares a third",
+      "when": "approval answers",
+      "then": "approval_outcome lists refreshed (fields, linked, unlinked), closed_linking_retired and no_longer_declared; an unchanged open task is not listed as refreshed"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "drive-first",
+      "title": "Acceptance drive, failing on today's Hub",
+      "description": "scripts/drive/d1008_reapproval_refresh_drive.py against :8010: the 'drive' criterion, run before the build.",
+      "requirements": [
+        "app"
+      ],
+      "depends_on": [],
+      "files": [
+        "scripts/drive/d1008_reapproval_refresh_drive.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "backend",
+      "title": "Refresh open declared tasks at approval and report it",
+      "description": "Failing tests first in hub/tests/test_re_approving_refreshes_open_tasks.py. spec_tasks.materialise refreshes existing open tasks and collects the report; the phase route adds refreshed, closed_linking_retired and no_longer_declared to approval_outcome.",
+      "requirements": [
+        "refresh",
+        "closed-frozen",
+        "report"
+      ],
+      "depends_on": [
+        "drive-first"
+      ],
+      "files": [
+        "hub/hub/spec_tasks.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests/test_re_approving_refreshes_open_tasks.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "ui",
+      "title": "Show refreshed, closed and undeclared tasks in the approval report",
+      "description": "Vitest first; SpecApprovalReport renders the three lists; bundle refreshed; the drive passes on a restarted :8010.",
+      "requirements": [
+        "app"
+      ],
+      "depends_on": [
+        "backend"
+      ],
+      "files": [
+        "hub/ui/src/components/spec/SpecApprovalReport.tsx",
+        "hub/ui/src/api/spec.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "reviewer": null
+    }
+  ],
+  "algorithms": [],
+  "design": "Tier 1, no migration. Operator decision 2026-10-08: refresh open tasks (rejected: additive links only; report only). Open means status is neither approved nor rejected. Links are set by diff, so an unchanged task is not reported and a link the entry still names keeps its row and actor. Removed links are deleted rows; the approval report event is their record. Folds into task-lifecycle-governance, replacing the requirement that says an existing declared task SHALL NOT be modified. HAZARD: the UI bundle reaches :8000's app at its next reload. Rollback: revert.",
+  "evidence": {
+    "checked": [
+      "hub/hub/spec_tasks.py materialise skips any key already on the board (existing_keys)",
+      "task-lifecycle-governance: a task that already exists for a declared task SHALL NOT be modified, reassigned or reverted by a later approval",
+      "F532's document: backend task kept its link to retired FR-3; FR-5 linked by hand"
+    ],
+    "limits": []
+  },
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "delivery": {
+    "mode": "none",
+    "agent": null,
+    "reviewer": null,
+    "stop_when_queue_empties": false,
+    "stop_at": null,
+    "cron": "*/5 * * * *"
+  },
+  "aw_identity": {
+    "requirements": {
+      "refresh": "FR-1",
+      "closed-frozen": "FR-2",
+      "report": "FR-3",
+      "app": "FR-4"
+    },
+    "high_water": 4,
+    "retired": {},
+    "digests": {
+      "FR-1": "d2a238e425057f8a2f9a9541505a4d40dff7b1de4585ea65bb5f178f2dd67fb3",
+      "FR-2": "2a45fb322c9f0adf00095baaa91169a3a2efe14c449a3bbbb1dd36c89e91f273",
+      "FR-3": "5edf2ce06d2795a783661949720f4723f3f2a97b720953ef4ddbcf0e50308e90",
+      "FR-4": "1198d2f4ba9215c5252a016ce150cecd6360c9ce5f5dae923f03644d0a8f5d1b"
+    }
+  }
+}
+</script>
+</body>
+</html>
