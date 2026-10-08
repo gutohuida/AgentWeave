@@ -27,6 +27,8 @@ class TestBuildCommandClaude:
             "--output-format",
             "stream-json",
             "--verbose",
+            # F531: only the servers this command line names, even when it names none.
+            "--strict-mcp-config",
             # `a-run-reaches-the-hub-without-mcp` D13: the call command is pre-allowed on every
             # non-yolo run, MCP or not.
             "--allowedTools",

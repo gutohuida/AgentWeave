@@ -222,6 +222,12 @@ def _build_claude_command(
     )
     if context_file is not None and context_file.exists():
         cmd += ["--append-system-prompt-file", str(context_file)]
+    # Only the servers this command line names: without it Claude merges in the operator's claude.ai
+    # account connectors and user/project servers, which no Hub surface granted or describes (F531).
+    # Here rather than in `_claude_mcp_args`, which is empty for a run given no server, and that run
+    # must not inherit them either. A runner's own `--mcp-config` flag still loads.
+    if "--strict-mcp-config" not in (extra_flags or []):
+        cmd += ["--strict-mcp-config"]
     mcp_args = _claude_mcp_args(mcp_command, yolo=yolo)
     cmd += mcp_args
     if not yolo:

@@ -20,6 +20,7 @@ CLAIM_TESTS = "hub/tests/test_a_run_claims_only_its_agents_or_nobodys_work.py"
 READ_ONLY_TESTS = "hub/tests/test_a_read_only_agent_holds_no_task_work.py"
 CODEX_SPEC_TESTS = "hub/tests/test_a_codex_app_server_spec_turn_keeps_no_write_tools.py"
 DEFAULT_REVIEWER_TESTS = "hub/tests/test_a_document_names_its_default_reviewer.py"
+STRICT_MCP_TESTS = "hub/tests/test_a_hub_run_gets_only_the_hubs_tool_server.py"
 
 CHANGES = {
     "f440": {
@@ -97,6 +98,25 @@ CHANGES = {
             ("FR-4", "task-b263ff986238", "test_result", CODEX_SPEC_TESTS,
              "With no document open Full access starts danger-full-access/never and Workspace only "
              "accepts the command (the controls); MCP elicitation is accepted on a spec turn."),
+        ],
+    },
+    "f531": {
+        "document": "spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server/spec.html",
+        "tasks": ["task-c657e94471f5", "task-91d8626ddfe7"],
+        "evidence": [
+            ("FR-1", "task-91d8626ddfe7", "test_result", STRICT_MCP_TESTS,
+             "Every Claude agent argv (Hub server, none, yolo, resume, spec turn) carries "
+             "--strict-mcp-config exactly once, the Hub's --mcp-config unchanged, Codex untouched "
+             "(6 red before the build); the 52 Claude argv goldens differ by that flag alone."),
+            ("FR-1", "task-c657e94471f5", "manual_observation",
+             "scripts/drive/d1008_f531_no_connectors_drive.py",
+             "Driven on :8010 with a real Haiku turn: 1/3 before (no flag; the agent named eight "
+             "mcp__claude_ai_Claude_Docs__* tools), 3/3 after (flag in the spawned argv; 'NONE'); "
+             "the Hub's own server still connected."),
+            ("FR-2", "task-91d8626ddfe7", "test_result", STRICT_MCP_TESTS,
+             "A runner's own --mcp-config flag stays in the argv beside the Hub's; a runner that "
+             "already passes --strict-mcp-config is not given it twice. Live read-out of the built "
+             "argv with alwaysLoad: system/init lists exactly agentweave and the runner's server."),
         ],
     },
     "f508": {
