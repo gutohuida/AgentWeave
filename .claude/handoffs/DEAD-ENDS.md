@@ -2235,3 +2235,15 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-10-08 (home) -- `openspec archive <name> --skip-specs --yes` archives a change with open
   tasks** (warns, continues). Used to retire a superseded change; prepend a superseded note to its
   proposal.md and tasks.md first so the archive says why.
+- **2026-10-08 (home) -- a subagent cannot Write a `report.md`**: the harness refuses `.md` report
+  files from subagents ("return findings as text"). Some routed around it through the shell, most
+  did not. Brief subagents to return the report in their final message, or to write JSON.
+- **2026-10-08 (home) -- a scratch module named `hub.py` shadows the `hub` package** when the
+  scratchpad is on `sys.path` before `hub/`; `from hub.spec_payload import ...` then fails or binds
+  the wrong module. Name scratch helpers anything else (`awc.py`).
+- **2026-10-08 (home) -- `GET /project/spec/coverage` has no `include_retired`**: retired
+  requirements are simply absent from it. Read one requirement's state with
+  `GET /project/spec/requirements/{FR-n}?document=<path>` (`requirement.state`).
+- **2026-10-08 (home) -- `spec/index.json` status is refreshed only by reindex, arrange and delete**,
+  not by a phase move (approve/archive leave the index's `status` stale until the next reindex).
+  Retiring a capability rebuilds it (F536); other phase moves still do not.
