@@ -134,6 +134,7 @@ async def _review_row(task_id):
     return [t for t in await _transitions(task_id) if t.to_status == "under_review"][-1]
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_an_operators_by_hand_review_is_the_operators(
     app, auth_headers, bind_runner, tmp_path
 ):

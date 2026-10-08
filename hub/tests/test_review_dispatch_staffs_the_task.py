@@ -187,6 +187,7 @@ async def _transition_count(db, task_id):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_review_started_by_hand_leaves_the_reviewer_holding_the_task(
     app, auth_headers, bind_runner, tmp_path
 ):
@@ -205,6 +206,7 @@ async def test_a_review_started_by_hand_leaves_the_reviewer_holding_the_task(
         assert fresh.assignee == REVIEWER
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_dispatching_an_already_staffed_review_records_no_second_transition(
     app, auth_headers, bind_runner, tmp_path
 ):
@@ -479,6 +481,7 @@ async def test_a_dispatchable_review_is_not_refused_by_the_route(
         assert await _snapshot(db, task.id) == ("under_review", REVIEWER)
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_the_binding_is_resolved_before_the_review_is_staffed_and_moves_nothing(
     app, auth_headers, bind_runner, tmp_path
 ):
