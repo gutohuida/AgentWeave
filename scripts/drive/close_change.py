@@ -6,6 +6,10 @@ already on the main branch lands as `already integrated`; nothing is merged.
 
   AW_HUB=http://127.0.0.1:8010 AW_KEY=... AW_PROJECT=proj-d85a82bf4216 \
       MSYS_NO_PATHCONV=1 py -3.11 scripts/drive/close_change.py f440 f450
+
+Then reconcile the change into its capability, commit that, and finish the lifecycle with
+`close_change.py --archive f440 f450` (see ARCHIVE: it refuses unless every task is approved and
+the reconciled requirement is in the capability).
 """
 
 import json
@@ -14,6 +18,8 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from aw import P, api  # noqa: E402
+
+REPO = pathlib.Path(__file__).resolve().parents[2]
 
 TESTS = "hub/tests/test_a_decided_task_withdraws_its_waiting_reviews.py"
 CLAIM_TESTS = "hub/tests/test_a_run_claims_only_its_agents_or_nobodys_work.py"
@@ -177,5 +183,55 @@ def close(name: str) -> None:
         print(name, task_id, "land", code, task.get("status") if code == 200 else json.dumps(task)[:400])
 
 
-for arg in sys.argv[1:]:
-    close(arg)
+#: The last step of a close-out, run after the change is reconciled: the document id, and one
+#: (capability, requirement key) the change was reconciled under. A change is archived only when
+#: every task of its document is approved and that key is in the capability, because `archived` has
+#: no way back and a shipped change whose requirements live nowhere else must not become history.
+#: F509's slices and F510 shipped before `spec/` owned the corpus and are archived from here too.
+ARCHIVE = {
+    "f440": ("spec/changes/a-decided-task-withdraws-its-waiting-reviews/spec.html", "spdoc-3b1585810681",
+             "run-task-binding", "a-decided-task-withdraws-its-waiting-reviews"),
+    "f450": ("spec/changes/a-run-claims-only-its-agents-or-nobodys-work/spec.html", "spdoc-02d1259eea94",
+             "run-task-binding", "a-run-claims-only-its-agents-or-nobodys-work"),
+    "f425": ("spec/changes/a-read-only-agent-holds-no-task-work/spec.html", "spdoc-e7299e2e30ce",
+             "run-task-binding", "a-read-only-agent-holds-no-task-work"),
+    "f462": ("spec/changes/a-codex-app-server-spec-turn-keeps-no-write-tools/spec.html", "spdoc-4e84aebf7712",
+             "spec-document-authority", "a-codex-app-server-spec-turn-keeps-no-write-tools"),
+    "f508": ("spec/changes/a-document-names-its-default-reviewer/spec.html", "spdoc-54a29332c4a2",
+             "agent-flows", "a-document-names-its-default-reviewer"),
+    "f531": ("spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server/spec.html", "spdoc-721c3e827237",
+             "agent-run-sandboxing", "a-hub-claude-run-gets-only-the-hubs-tool-server"),
+    "f510": ("spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/"
+             "spec.html", "spdoc-eeaf6a633f2d",
+             "agent-conversation-workspace", "where-evidence-does-not-govern-the-merge-a-review-turn-revie"),
+    "f509-1": ("spec/changes/same-file-tasks-build-in-order/spec.html", "spdoc-2b89ed059860",
+               "spec-document-authority", "unordered-tasks-sharing-a-file-are-warned"),
+    "f509-1b": ("spec/changes/same-file-tasks-build-in-order-the-shim-planner-is-told/spec.html",
+                "spdoc-4503a507472f", "agent-tool-surface", "aw-tool-help-prints-a-tools-whole-description"),
+    "f509-1c": ("spec/changes/submission-warns-when-a-multi-task-planner-declares-no-files/spec.html",
+                "spdoc-1612097b4bc3", "spec-document-authority", "a-multi-task-document-without-files-is-warned"),
+}
+
+
+def archive(name: str) -> None:
+    path, doc_id, capability, key = ARCHIVE[name]
+    _, tasks = api("GET", f"/projects/{P}/tasks")
+    rows = tasks if isinstance(tasks, list) else tasks.get("tasks", tasks.get("items", []))
+    open_tasks = [(t["id"], t["status"]) for t in rows
+                  if t.get("spec_document_id") == doc_id and t["status"] != "approved"]
+    if open_tasks or not any(t.get("spec_document_id") == doc_id for t in rows):
+        raise SystemExit(f"{name}: not archived, tasks not all approved: {open_tasks or 'none found'}")
+    corpus = (REPO / "spec/capabilities" / capability / "spec.html").read_text(encoding="utf-8")
+    if f'"key": "{key}"' not in corpus:
+        raise SystemExit(f"{name}: not archived, {capability} has no requirement {key}: reconcile first")
+    code, res = api("POST", f"/projects/{P}/project/documents/phase?path={path}&to=archived",
+                    {"reason": f"shipped; reconciled into {capability} ({key})"})
+    print(name, "archive", code, res.get("phase") if code == 200 else json.dumps(res)[:400])
+
+
+if sys.argv[1:2] == ["--archive"]:
+    for arg in sys.argv[2:]:
+        archive(arg)
+else:
+    for arg in sys.argv[1:]:
+        close(arg)
