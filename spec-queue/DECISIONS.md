@@ -65,6 +65,27 @@ decided (operator, 2026-10-08: "File them, decide later"). Detail per capability
 - OPEN      overhaul-refusal-length  `task-lifecycle-governance` dropped "a refusal SHALL fit the shortest surface that records
   it at the longest task id and agent name" (no test names it). Was it a real rule?
 
+### The spec file structure after the step journey -- 2026-10-08 interactive, DECIDED 2026-10-08
+
+Asked in handoff 0183 ("is the file structure that we're using sound?"). Measured: 77 HTML files, 4.9 MB,
+each carrying its content as JSON payload (2.0 MB total) + rendered HTML (2.2 MB) + its own CSS copy
+(0.67 MB); a document's `step`/`size` live only in the DB (0122), not in the file; 17 of 19 change
+documents are archived beside live ones; the 7 system maps never left `exploring`. The operator reads
+documents only in the app, beside the composer (`SpecFrame` renders the file's HTML).
+
+- DECIDED   structure-format  **The payload is the source; HTML is a view.** Each document is stored as
+  `spec.json` (the payload plus `step` and `size`); the Hub renders HTML with `render_document` when the
+  app opens it, so the page beside the composer is unchanged. One-time conversion of the corpus. Tier 2:
+  `:8000` serves 2 live spec documents (LoopEngine, LoopEngine_2), so a legacy `.html` must still read.
+  Built before roadmap slice 2, so the amendment marks and review diffs build on the new format once.
+- DECIDED   structure-archive  Archived change documents move to `spec/changes/archive/`.
+- DECIDED   structure-steps  Project-defined steps (slice 2) live in a tracked file under `spec/`
+  (e.g. `spec/journey.json`), edited through the app, so a clone or a team gets the same steps.
+- DECIDED   structure-maps  System maps stop being authored documents: the Hub generates the map from
+  each capability's area metadata.
+- Rejected: Markdown as the source (the structured payload replaced 713 lines of prose conventions, and
+  the field's review complaint is Markdown sprawl); one file per step (Kiro-style), for the same reason.
+
 ### F525: how a legacy footprint is rebuilt -- 2026-10-07 interactive, DECIDED 2026-10-07
 
 - DECIDED   drift-legacy-baseline  **(d): a row rebuilt from its merge watches from today's main; a
