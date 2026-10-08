@@ -2247,3 +2247,18 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-10-08 (home) -- `spec/index.json` status is refreshed only by reindex, arrange and delete**,
   not by a phase move (approve/archive leave the index's `status` stale until the next reindex).
   Retiring a capability rebuilds it (F536); other phase moves still do not.
+- **2026-10-08 (home) -- a class on a `<button>` cannot set its border or fill**: `index.css`'s global
+  `button:not([data-slot="button"]):not(.row-item):not(.row-action)` (specificity 0,3,1) sets `border: 1px solid
+  transparent` and `background-color: transparent`, beating any single class. Chips that are buttons set colours
+  inline (`aw-chip` + `style`), as `OverviewPage`'s task chips do. Vitest cannot see it; only a screenshot did.
+- **2026-10-08 (home) -- Playwright `inner_text()` returns CSS-uppercased text** (`text-transform: uppercase`
+  headings read `COLLABORATION`); compare with `all_text_contents()` / `text_content()`.
+- **2026-10-08 (home) -- `readableApiError` returns the fallback for a plain `Error`**; a UI test of a refused save
+  must build `new ApiError(status, JSON.stringify({ detail: ... }))`, the shape `fetchWithAuth` raises.
+- **2026-10-08 (home) -- a change-spec requirement's `modal` must be one of MUST, SHOULD, MAY, SHALL**; "MUST NOT"
+  is refused (422 `payload_invalid`). Put the negation in the statement.
+- **2026-10-08 (home) -- `projects.evidence_retention` is written by one route and read by nothing** (F558): no
+  cleanup exists. Do not offer it as a working setting.
+- **2026-10-08 (home) -- a scratch Hub for a UI drive**: `AW_BOOTSTRAP_API_KEY=aw_live_<32 hex>` plus a fresh
+  `DATABASE_URL` gives a usable key with no setup; `scripts/drive/d1008_project_page_settings.py` starts and kills its
+  own on :8097 and serves the committed bundle (run `scripts/refresh_ui_bundle.py` first).
