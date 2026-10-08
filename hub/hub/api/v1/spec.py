@@ -520,6 +520,9 @@ class EvidenceRecord(RequestModel):
     summary: str = Field(default="", max_length=10000)
     document: Optional[str] = Field(default=None, max_length=255)
     task_id: Optional[str] = Field(default=None, max_length=64)
+    # The commit that did the work (F529), when the locator names a file instead. Verified like a
+    # locator-named commit (F71): refused, never replaced by HEAD, when the repository lacks it.
+    commit: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{7,40}$")
 
 
 class EvidenceDecision(RequestModel):
@@ -1071,6 +1074,7 @@ async def record_evidence(
             locator=body.locator,
             summary=body.summary,
             task_id=body.task_id,
+            commit=body.commit,
             workspace=workspace,
             actor=spec_lifecycle.Actor(kind="operator", name="operator"),
             main_branch=await _main_branch(session, project_id),

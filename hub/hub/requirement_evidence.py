@@ -131,8 +131,12 @@ async def record(
     task_id: Optional[str] = None,
     workspace: Optional[ProjectWorkspace] = None,
     main_branch: Optional[str] = None,
+    commit: Optional[str] = None,
 ) -> RequirementEvidence:
     """Store one piece of evidence against the requirement's *current* digest.
+
+    *commit* is an operator naming the commit that did the work while the locator names a file
+    (F529); it outranks a commit the locator names, and is verified the same way.
 
     *main_branch* is the project's configured main line; both recording routes pass it, so the
     footprint's reachability and rule 3's branch diff ask the branch drift compares against.
@@ -172,6 +176,7 @@ async def record(
             await recorded_workspace_dir(session, actor.run_id),
             task_id,
             main_branch=main_branch,
+            commit=commit,
         )
         own: Optional[RequirementEvidence] = None
         if actor.kind == "agent" and actor.run_id:
@@ -392,6 +397,7 @@ def _take_footprint(
     task_id: Optional[str] = None,
     *,
     main_branch: Optional[str] = None,
+    commit: Optional[str] = None,
 ) -> Footprint:
     """The footprint this evidence should carry, given who is recording it and what they named.
 
@@ -420,7 +426,7 @@ def _take_footprint(
     and all, and `restamp_run_footprints` corrects it once the commit exists — a locator-named
     commit would fight that mechanism rather than improve it.
     """
-    named = locator_commit(locator) if actor.kind == "operator" else None
+    named = (commit or locator_commit(locator)) if actor.kind == "operator" else None
     return read_evidence_footprint(
         workspace,
         actor.kind,
@@ -477,11 +483,11 @@ def read_evidence_footprint(
     resolved = _git(root, "rev-parse", "--verify", f"{named}^{{commit}}")
     if resolved is None:
         raise EvidenceRefusedError(
-            f"this evidence names commit {named} as its locator, and that commit is not in this "
+            f"this evidence names commit {named}, and that commit is not in this "
             f"project's repository. Recording it would footprint the checkout's own HEAD instead, "
             f"which describes a different tree than the one named — and a review of this task "
             f"would then be handed that tree as though it were the work. Fetch or push the commit "
-            f"first, or name something other than a commit in the locator.",
+            f"first, or name a commit this repository has.",
             code="locator_commit_unknown",
         )
     return read_footprint(

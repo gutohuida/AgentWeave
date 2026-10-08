@@ -1,7 +1,8 @@
 """Close an app-authored change's Hub records once its build is committed: record operator
 evidence per requirement, then walk each change task pending -> in_progress -> completed -> land.
 
-Commit first: the evidence footprint names HEAD, and integration skips on a dirty tree. A commit
+Commit first: integration skips on a dirty tree. A change's optional "commit" names the commit that
+built it, which its evidence is footprinted at (F529); without one the footprint names HEAD. A commit
 already on the main branch lands as `already integrated`; nothing is merged.
 
   AW_HUB=http://127.0.0.1:8010 AW_KEY=... AW_PROJECT=proj-d85a82bf4216 \
@@ -269,10 +270,14 @@ CHANGES = {
 def close(name: str) -> None:
     change = CHANGES[name]
     for identifier, task_id, kind, locator, summary in change["evidence"]:
-        code, res = api("POST", f"/projects/{P}/project/spec/evidence", {
+        body = {
             "identifier": identifier, "kind": kind, "locator": locator, "summary": summary,
             "task_id": task_id, "document": change["document"],
-        })
+        }
+        if change.get("commit"):
+            # The commit that built the change (F529); without it the evidence pins today's HEAD.
+            body["commit"] = change["commit"]
+        code, res = api("POST", f"/projects/{P}/project/spec/evidence", body)
         footprint = (res.get("footprint") or {}) if isinstance(res, dict) else {}
         print(name, "evidence", identifier, task_id, code,
               footprint.get("commit_sha", "")[:12] if code == 201 else json.dumps(res)[:300])
