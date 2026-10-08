@@ -34936,7 +34936,7 @@ server gets). Acceptance drive: a Hub run's tool list on `:8010` names no `claud
 
 ## F532 (C) -- the Hub cannot delete a specification document, a task or an agent
 
-**Status:** open (filed 2026-10-08, interactive, from cleaning the trial project `proj-d85a82bf4216`).
+**Status:** fixed a29a308 (Tier 2, 2026-10-08, authored in the app: `spec/changes/the-operator-can-delete-a-document-a-task-or-an-archived-agent`): `DELETE /project/documents/{path}` and `DELETE /tasks/{id}` with their cascades in `hub/hub/deletion.py` (a guard test covers every reference column), Delete in the phase bar and the task drawer. Agents are still archived, never deleted (the operator kept `agent_lifecycle`'s decision); instead a runner no open agent holds now deletes, unbinding its archived holders. Drive 1/9 -> 9/9. Was: open (filed 2026-10-08, interactive, from cleaning the trial project `proj-d85a82bf4216`).
 
 The operator API deletes projects, runners, jobs and charters (`@router.delete` in `projects.py`, `runners.py`,
 `jobs.py`, `charters.py`) and nothing else. Clearing drive residue out of this repo's own trial project (26 documents
@@ -34965,3 +34965,15 @@ behaviour has no fold path at all. Likely shape: the change payload states what 
 against a capability, which by design has no tasks and no non-goals. Nothing is blocked (the merge wrote), but a caller
 reading `blocking` sees a document that is wrong in 77 ways. Likely fix: skip the task and scope rules for
 `kind == "capability"` in the completeness check, or omit `blocking` from the merge response.
+
+## F535 (C) -- re-approving an amended document leaves its tasks as the first approval made them
+
+**Status:** open (filed 2026-10-08, interactive, from amending F532's document after the operator kept agent archival).
+
+Reopening an approved change, replacing a requirement (`agent` FR-3 retired, `runner` FR-5 minted) and approving again
+created no task and changed none: the `backend` task kept its first title and its link to the retired FR-3, and FR-5 was
+served by no task until the operator linked it by hand (`PATCH /tasks/{id}` with `requirement_ids` and `spec_document`,
+since an identifier like FR-5 exists in many documents). Coverage would otherwise show the new requirement unserved while
+a task still claims a retired one. Likely fix: at re-approval, reconcile the board with the document's declared tasks
+by key -- refresh title, description and requirement links of a task the document still declares, and report (not
+silently drop) links to retired requirements.
