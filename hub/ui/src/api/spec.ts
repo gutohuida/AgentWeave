@@ -166,6 +166,14 @@ export interface SpecDocument {
   fold_state?: SpecFoldState
   approval_outcome?: SpecApprovalOutcome
   roadmap_slice?: SpecRoadmapSlice
+  /** Set only on a retired (archived) capability: why, and the capability that absorbed it (F536). */
+  retired?: SpecRetirement
+}
+
+export interface SpecRetirement {
+  reason: string
+  absorbed_by: string | null
+  at: string | null
 }
 
 // `source_id` and `updated_at` are gone with the push model: a source was a
@@ -658,6 +666,7 @@ export function useSetSpecPhase() {
       delivery_agent,
       draft_next_slice,
       no_capability_change,
+      absorbed_by,
     }: {
       path: string
       to: string
@@ -665,6 +674,9 @@ export function useSetSpecPhase() {
       /** Archiving an approved change folded into no capability; `reason` says why. Sent only when
        *  true, so a Hub without the archive guard never receives it. */
       no_capability_change?: boolean
+      /** Retiring a capability (to `archived`): the current capability that absorbed it. Sent only
+       *  when chosen, so a Hub without retirement never receives it (F536). */
+      absorbed_by?: string
       /** Sent only for a document whose `GET /spec` named a `roadmap_slice`: a Hub that returns
        *  that field also accepts this one, and no other Hub is ever sent it (it would 422). */
       draft_next_slice?: boolean
@@ -686,6 +698,7 @@ export function useSetSpecPhase() {
           ...(delivery_agent !== undefined ? { delivery_agent } : {}),
           ...(draft_next_slice !== undefined ? { draft_next_slice } : {}),
           ...(no_capability_change ? { no_capability_change } : {}),
+          ...(absorbed_by ? { absorbed_by } : {}),
         },
       ),
     onSuccess: () => {

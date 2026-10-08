@@ -898,6 +898,11 @@ def fold_draft(
         raise FoldRefusedError(
             f"{capability.path} is not a capability document", code="fold_target_not_capability"
         )
+    if capability.phase != spec_lifecycle.CURRENT:
+        raise FoldRefusedError(
+            f"{capability.path} is retired; nothing is folded into a retired capability",
+            code="capability_retired",
+        )
     source = _read(workspace, change)
     target = _read(workspace, capability)
     by_key = {r["key"]: r for r in source.get("requirements") or []}

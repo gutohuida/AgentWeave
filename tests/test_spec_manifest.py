@@ -261,8 +261,8 @@ class TestLoadManifest:
         assert manifest is None
         assert any(d.code == "manifest_kind_status_mismatch" for d in diagnostics)
 
-    @pytest.mark.parametrize("phase", ["exploring", "proposed", "approved", "archived"])
-    def test_capability_rejects_every_phase_but_current(self, phase):
+    @pytest.mark.parametrize("phase", ["exploring", "proposed", "approved"])
+    def test_capability_rejects_every_phase_but_current_and_archived(self, phase):
         data = self._valid_manifest()
         data["documents"][0]["kind"] = "capability"
         data["documents"][0]["status"] = phase
@@ -270,10 +270,12 @@ class TestLoadManifest:
         assert manifest is None
         assert any(d.code == "manifest_kind_status_mismatch" for d in diagnostics)
 
-    def test_capability_at_current_is_accepted(self):
+    @pytest.mark.parametrize("phase", ["current", "archived"])
+    def test_capability_at_current_or_retired_is_accepted(self, phase):
+        # `archived` is a retired capability (F536).
         data = self._valid_manifest()
         data["documents"][0]["kind"] = "capability"
-        data["documents"][0]["status"] = "current"
+        data["documents"][0]["status"] = phase
         manifest, diagnostics = load_manifest(json.dumps(data))
         assert manifest is not None
         assert diagnostics == []

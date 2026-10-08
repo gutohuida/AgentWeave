@@ -47,7 +47,10 @@ export function FoldIntoCapabilityDialog({
   const panelRef = useRef<HTMLDivElement>(null)
   useDialogFocus(true, panelRef, onClose)
   const { data: documents, isError: documentsError, error: documentsReadError } = useSpecDocuments()
-  const capabilities = (documents?.documents ?? []).filter((d) => d.kind === 'capability')
+  // A retired capability (archived, F536) takes no fold; the Hub refuses one.
+  const capabilities = (documents?.documents ?? []).filter(
+    (d) => d.kind === 'capability' && d.phase === 'current',
+  )
   const [into, setInto] = useState<string | null>(null)
   const draft = useFoldDraft(path, into)
   const fold = useFoldDocument()

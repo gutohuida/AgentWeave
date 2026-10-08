@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0120"
+HEAD_REVISION = "0121"
 
 
 # ---------------------------------------------------------------------------
@@ -4832,3 +4832,56 @@ def test_migration_0120_downgrades_cleanly(tmp_path) -> None:
         assert "watched_from" not in {
             r[1] for r in conn.execute("PRAGMA table_info(evidence_footprints)")
         }
+
+
+# ---------------------------------------------------------------------------------------------
+# 0121 -- a capability can be retired: ck_spec_documents_kind_phase lets a capability be archived.
+# ---------------------------------------------------------------------------------------------
+
+
+def _insert_capability(conn, doc_id: str, phase: str) -> None:
+    conn.execute(
+        "INSERT INTO spec_documents (id, project_id, path, title, kind, phase, rigor, created_at, "
+        "updated_at) VALUES (?, 'proj-1', ?, 't', 'capability', ?, 'sketch', "
+        "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        (doc_id, f"spec/capabilities/{doc_id}/spec.html", phase),
+    )
+
+
+def test_migration_0121_lets_a_capability_be_archived_and_downgrades_it_to_current(
+    tmp_path,
+) -> None:
+    db_file = tmp_path / "retire.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0121')")
+        conn.execute("PRAGMA foreign_keys=OFF")
+        _insert_capability(conn, "kept", "current")
+        _insert_capability(conn, "gone", "archived")
+        conn.commit()
+
+    _downgrade_to(db_url, "0120")
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        phases = dict(conn.execute("SELECT id, phase FROM spec_documents"))
+        assert phases == {"kept": "current", "gone": "current"}
+        with pytest.raises(sqlite3.IntegrityError):
+            _insert_capability(conn, "again", "archived")
+
+    _upgrade_to(db_url, "head")
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("UPDATE spec_documents SET phase = 'archived' WHERE id = 'gone'")
+        conn.commit()
+        assert conn.execute("SELECT phase FROM spec_documents WHERE id='gone'").fetchone()[0] == (
+            "archived"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO spec_documents (id, project_id, path, title, kind, phase, rigor, "
+                "created_at, updated_at) VALUES ('x', 'proj-1', 'spec/changes/x/spec.html', 't', "
+                "'change-spec', 'current', 'sketch', '2026-01-01T00:00:00Z', "
+                "'2026-01-01T00:00:00Z')"
+            )

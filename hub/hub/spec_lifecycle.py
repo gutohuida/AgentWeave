@@ -66,6 +66,10 @@ TRANSITIONS = {
     # expressible.
     (EXPLORING, ARCHIVED),
     (PROPOSED, ARCHIVED),
+    # Retiring a capability that no longer describes the product (F536): operator-only, with a
+    # reason, never while open work serves it. Its requirements are retired by the index
+    # (`spec_index.reindex_document`); like any archived document it has no way back.
+    (CURRENT, ARCHIVED),
 }
 
 
@@ -287,6 +291,7 @@ async def transition(
     workspace: ProjectWorkspace,
     reason: str = "",
     no_capability_change: bool = False,
+    absorbed_by: Optional[str] = None,
 ) -> SpecDocumentEvent:
     """Move a document between phases, or refuse and say why.
 
@@ -347,6 +352,9 @@ async def transition(
                 code="archive_would_orphan_work",
             )
 
+    if to_phase == ARCHIVED and document.phase == CURRENT:
+        await _check_retirement(session, document, reason=reason, absorbed_by=absorbed_by)
+
     if to_phase == ARCHIVED and document.phase == APPROVED and document.kind == "change-spec":
         open_tasks = await open_task_ids(session, document)
         if open_tasks:
@@ -390,13 +398,59 @@ async def transition(
         # comment in db/models.py. A later archive-then-reopen must not clear it.
         document.first_approved_at = datetime.now(timezone.utc)
 
-    return await record_event(
-        session,
-        document,
-        kind="phase",
-        actor=actor,
-        detail={"from": previous, "to": to_phase, "reason": reason},
+    detail: Dict[str, Any] = {"from": previous, "to": to_phase, "reason": reason}
+    if previous == CURRENT:
+        detail["absorbed_by"] = absorbed_by
+    return await record_event(session, document, kind="phase", actor=actor, detail=detail)
+
+
+async def _check_retirement(
+    session: AsyncSession, document: SpecDocument, *, reason: str, absorbed_by: Optional[str]
+) -> None:
+    """What retiring a capability needs (F536): a reason, a real absorber, and no open work.
+
+    Open work is a task neither approved nor rejected that links one of the capability's active
+    requirements: retiring would leave it serving requirements nobody holds any more.
+    """
+    from .db.models import SpecRequirement, Task, TaskRequirementLink
+
+    if not reason.strip():
+        raise PhaseError(
+            "retiring a capability needs a reason: say why it no longer describes the product",
+            code="retire_needs_reason",
+        )
+    if absorbed_by is not None:
+        absorber = await get_document(session, document.project_id, absorbed_by)
+        if (
+            absorber is None
+            or absorber.id == document.id
+            or absorber.kind != "capability"
+            or absorber.phase != CURRENT
+        ):
+            raise PhaseError(
+                f"{absorbed_by} is not another current capability, so it cannot have absorbed "
+                "this one",
+                code="absorber_invalid",
+            )
+    rows = await session.execute(
+        select(Task.id)
+        .join(TaskRequirementLink, TaskRequirementLink.task_id == Task.id)
+        .join(SpecRequirement, SpecRequirement.id == TaskRequirementLink.requirement_id)
+        .where(
+            SpecRequirement.document_id == document.id,
+            SpecRequirement.state == "active",
+            Task.status.notin_(_TASK_DONE),
+        )
+        .order_by(Task.created_at, Task.id)
     )
+    open_tasks = list(dict.fromkeys(rows.scalars()))
+    if open_tasks:
+        raise PhaseError(
+            "open tasks still serve this capability's requirements ("
+            + ", ".join(open_tasks)
+            + "); approve, reject or relink each before retiring it",
+            code="capability_has_open_work",
+        )
 
 
 #: Task statuses after which a task asks nothing more of anyone.

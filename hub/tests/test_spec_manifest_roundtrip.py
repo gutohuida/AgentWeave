@@ -74,9 +74,11 @@ class TestTwinAgreement:
         }
         assert lifecycle_phases == hub_manifest.LIFECYCLE_PHASES
         assert hub_manifest.CURRENT == spec_lifecycle.CURRENT
-        # A capability's phase set is `{current}` only because no transition leaves it. If one is
-        # ever added, this is the tripwire.
-        assert not any(source == spec_lifecycle.CURRENT for source, _ in spec_lifecycle.TRANSITIONS)
+        # A capability holds `current` and wherever a transition from `current` leads (F536 added
+        # `archived`). Any further edge out of `current` must be mirrored here, or this trips.
+        reachable = {to for source, to in spec_lifecycle.TRANSITIONS if source == "current"}
+        capability_phases = hub_manifest.CAPABILITY_PHASES
+        assert capability_phases == {spec_lifecycle.CURRENT, *reachable}
 
 
 @pytest.mark.parametrize("module", MODULES)

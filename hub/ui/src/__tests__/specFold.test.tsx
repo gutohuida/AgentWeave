@@ -100,6 +100,19 @@ describe('folding a finished change', () => {
     expect(screen.queryByTestId('fold-open')).not.toBeInTheDocument()
   })
 
+  it('offers only current capabilities to fold into, never a retired one (F536)', async () => {
+    documents = [
+      ...documents,
+      doc({ id: 'spdoc-gone', path: 'spec/capabilities/gone/spec.html', title: 'Gone', kind: 'capability', phase: 'archived' }),
+    ]
+    renderBar()
+    await userEvent.click(screen.getByTestId('fold-open'))
+    const offered = Array.from(screen.getByTestId('fold-capability').querySelectorAll('option')).map(
+      (option) => option.textContent,
+    )
+    expect(offered).toEqual(['Choose…', 'Widgets'])
+  })
+
   it('names the capability a folded change went into', () => {
     foldState = { state: 'folded', open_tasks: [], capabilities: [CAP] }
     renderBar()

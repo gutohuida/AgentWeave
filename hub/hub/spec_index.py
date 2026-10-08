@@ -19,7 +19,7 @@ backfilled — once the row carries the new digest, the old meaning is unrecover
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -174,6 +174,10 @@ async def reindex_document(
     it and absent here is retired. Callers that could not read the document pass
     nothing at all rather than an empty list — see `reindex_from_file`.
     """
+    if document.kind == "capability" and document.phase == spec_lifecycle.ARCHIVED:
+        # A retired capability (F536) holds no live requirement, whatever its file still lists:
+        # the file stays the record of what it said, and a reindex must not revive it.
+        requirements = [replace(declared, state=RETIRED, anchor="") for declared in requirements]
     result = IndexResult()
     observed = datetime.now(timezone.utc)
     existing = await _existing(session, document.id)

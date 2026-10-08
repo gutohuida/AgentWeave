@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A capability can be retired</title>
+<meta name="aw-spec-kind" content="change-spec">
+<meta name="aw-spec-status" content="approved">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>A capability can be retired</h1>
+<p class="aw-meta"><span class="aw-chip">change-spec</span><span class="aw-chip aw-chip-phase-done">approved</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">5</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">5</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">5</span> criteria<span class="aw-summary-sep">·</span><span class="aw-count">3</span> tasks</p>
+<section id="summary"><h2>Summary</h2><p>The operator can retire a capability that no longer describes the product: with a stated reason, and optionally naming the capability that absorbed it. A retired capability is archived: its requirements are retired, so they leave coverage and nothing can link to them; no merge or fold can write to it; and its file stays as the record of what it said.</p></section><section id="problem"><h2>Problem</h2><p>F536: quiet-hours (a sample), trace-timeline (never built) and opencode-config (runner removed) describe nothing in the code, and two capabilities that overlap cannot be combined: DELETE refuses a capability (delete_capability), `current` has no transition, and a merge can only empty one, leaving an empty `current` capability in the map, the index and coverage.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>A current -&gt; archived edge for capability documents, operator-only, with a required reason and an optional absorbing capability</li><li>Retiring every requirement of a retired capability, and keeping them retired on any later reindex</li><li>Refusing a merge or fold into a retired capability</li><li>A Retire action on a capability in the app</li></ul><h3>Non-goals</h3><ul><li>Deleting a capability or its file: the file and its history stay</li><li>Un-retiring: there is no transition out of archived, as for changes</li><li>Moving the requirements to the absorbing capability: that is a separate, authored merge</li><li>Retiring change, roadmap or system-map documents: they have their own archive rules</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 5</span><p><span class="aw-modal aw-modal-must">MUST</span> The operator MUST be able to move a capability from current to archived, stating a reason and optionally naming the current capability that absorbed it; the move MUST be refused without a reason, when the named capability is not another current capability, when the actor is not the operator, and while a task that is neither approved nor rejected links one of its active requirements.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A corpus that cannot lose a capability keeps describing features that do not exist. Open work against it must be decided first, or that work would serve requirements nobody holds any more.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 5</span><p><span class="aw-modal aw-modal-must">MUST</span> Every requirement of an archived capability MUST be retired when it is archived and MUST stay retired whenever the document is indexed again.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Coverage, linking and evidence all read the requirement index; a retired capability&#x27;s requirements must leave all three at once, and a reindex from the unchanged file must not bring them back.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 5</span><p><span class="aw-modal aw-modal-must">MUST</span> A merge or fold into an archived capability MUST be refused, writing nothing.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The file is the record of what the capability said when it was retired.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 5</span><p><span class="aw-modal aw-modal-must">MUST</span> Retiring MUST record a phase event carrying the reason and the absorbing capability, re-render the file with its archived status, and keep the document in spec/index.json with status archived.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Why a capability left, and where its behaviour went, must be readable later from the document&#x27;s own history.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 5</span><p><span class="aw-modal aw-modal-must">MUST</span> A current capability&#x27;s view in the app MUST offer Retire, asking for the reason and optionally the absorbing capability, and MUST show the Hub&#x27;s refusal when one is returned.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Retiring is an operator decision made where the operator reads the capability.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a current capability</td><td>retiring it is asked with no reason, with itself or a change document as the absorber, by an agent, or while an open task links one of its requirements</td><td>each is refused with its own code and nothing changes</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>an archived capability whose file still lists its requirements</td><td>the project is reindexed</td><td>every one of its requirements is still retired and coverage does not report it unserved</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>an archived capability</td><td>a merge or a fold names it</td><td>the Hub answers 409 and the file is unchanged</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a capability retired with a reason and an absorbing capability</td><td>its history and the index are read</td><td>a phase event from current to archived carries both, the file shows archived, and the index lists it as archived</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>the trial Hub on :8010, a fresh testbed project with capabilities old (2 requirements) and new</td><td>the operator opens old in Chromium, presses Retire, gives a reason and picks new as absorbing it (scripts/drive/d1008_retire_capability_drive.py)</td><td>old is archived with its 2 requirements retired, the phase event names the reason and new, a merge into old is refused, a reindex leaves them retired, and spec/index.json lists old as archived</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>Tier 2: a migration. HAZARD: 0121 recreates spec_documents to relax ck_spec_documents_kind_phase to (capability AND phase IN (current, archived)) OR (not capability AND phase != current); it reaches the operator&#x27;s real :8000 database at their next restart, and the UI bundle reaches :8000&#x27;s app at its next reload. Nothing existing changes value. Rollback: downgrade sets any archived capability back to current, then restores the narrow CHECK (retirements are lost; requirement rows stay retired until the next reindex). Decision (operator 2026-10-08: &#x27;Build retire a capability&#x27;): reuse archived rather than a new phase, so the vocabulary and the index&#x27;s statuses do not grow; the reason and absorbing capability live on the phase event, not a column. Requirements are retired by one rule in the index (archived capability =&gt; retired), not by editing the file, so the file stays the record. Folds into spec-document-authority.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/hub/deletion.py:201 refuses a capability (delete_capability)</li><li>hub/hub/spec_lifecycle.py TRANSITIONS has no edge out of current</li><li>hub/hub/db/models.py ck_spec_documents_kind_phase ties capability to current</li><li>hub/hub/spec_index.py requirements_from_payload indexes every payload requirement as active</li></ul></section><section id="lifecycle"><h2>Lifecycle</h2><p>one-off</p></section><section id="tasks"><h2>Tasks</h2><ul class="aw-task-list"><li class="aw-task"><strong>Acceptance drive, failing on today&#x27;s Hub</strong> — scripts/drive/d1008_retire_capability_drive.py against :8010: the &#x27;drive&#x27; criterion, run before the build.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-5">FR-5</a></span></li><li class="aw-task"><strong>Retire a capability in the Hub</strong> — Failing tests first in hub/tests/test_a_capability_can_be_retired.py. Migration 0121 lets a capability be archived; spec_lifecycle adds the current -&gt; archived edge with its guards; spec_index retires an archived capability&#x27;s requirements; merge and fold refuse an archived capability; the phase route takes absorbed_by.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-2">FR-2</a><a class="aw-chip-ref" href="#FR-3">FR-3</a><a class="aw-chip-ref" href="#FR-4">FR-4</a></span></li><li class="aw-task"><strong>Retire action on a capability in the app</strong> — Vitest first; the capability view offers Retire with a reason and an optional absorbing capability; bundle refreshed; the drive passes on a restarted :8010.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-5">FR-5</a></span></li></ul></section><section id="delivery"><h2>Delivery</h2><p>No flow. The tasks go on the board and are started by hand.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "change-spec",
+  "title": "A capability can be retired",
+  "summary": "The operator can retire a capability that no longer describes the product: with a stated reason, and optionally naming the capability that absorbed it. A retired capability is archived: its requirements are retired, so they leave coverage and nothing can link to them; no merge or fold can write to it; and its file stays as the record of what it said.",
+  "problem": "F536: quiet-hours (a sample), trace-timeline (never built) and opencode-config (runner removed) describe nothing in the code, and two capabilities that overlap cannot be combined: DELETE refuses a capability (delete_capability), `current` has no transition, and a merge can only empty one, leaving an empty `current` capability in the map, the index and coverage.",
+  "scope": {
+    "in_scope": [
+      "A current -> archived edge for capability documents, operator-only, with a required reason and an optional absorbing capability",
+      "Retiring every requirement of a retired capability, and keeping them retired on any later reindex",
+      "Refusing a merge or fold into a retired capability",
+      "A Retire action on a capability in the app"
+    ],
+    "non_goals": [
+      "Deleting a capability or its file: the file and its history stay",
+      "Un-retiring: there is no transition out of archived, as for changes",
+      "Moving the requirements to the absorbing capability: that is a separate, authored merge",
+      "Retiring change, roadmap or system-map documents: they have their own archive rules"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "retire",
+      "statement": "The operator MUST be able to move a capability from current to archived, stating a reason and optionally naming the current capability that absorbed it; the move MUST be refused without a reason, when the named capability is not another current capability, when the actor is not the operator, and while a task that is neither approved nor rejected links one of its active requirements.",
+      "modal": "MUST",
+      "rationale": "A corpus that cannot lose a capability keeps describing features that do not exist. Open work against it must be decided first, or that work would serve requirements nobody holds any more.",
+      "party": null
+    },
+    {
+      "key": "requirements-retire",
+      "statement": "Every requirement of an archived capability MUST be retired when it is archived and MUST stay retired whenever the document is indexed again.",
+      "modal": "MUST",
+      "rationale": "Coverage, linking and evidence all read the requirement index; a retired capability's requirements must leave all three at once, and a reindex from the unchanged file must not bring them back.",
+      "party": null
+    },
+    {
+      "key": "frozen",
+      "statement": "A merge or fold into an archived capability MUST be refused, writing nothing.",
+      "modal": "MUST",
+      "rationale": "The file is the record of what the capability said when it was retired.",
+      "party": null
+    },
+    {
+      "key": "recorded",
+      "statement": "Retiring MUST record a phase event carrying the reason and the absorbing capability, re-render the file with its archived status, and keep the document in spec/index.json with status archived.",
+      "modal": "MUST",
+      "rationale": "Why a capability left, and where its behaviour went, must be readable later from the document's own history.",
+      "party": null
+    },
+    {
+      "key": "app",
+      "statement": "A current capability's view in the app MUST offer Retire, asking for the reason and optionally the absorbing capability, and MUST show the Hub's refusal when one is returned.",
+      "modal": "MUST",
+      "rationale": "Retiring is an operator decision made where the operator reads the capability.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "drive",
+      "requirement": "app",
+      "given": "the trial Hub on :8010, a fresh testbed project with capabilities old (2 requirements) and new",
+      "when": "the operator opens old in Chromium, presses Retire, gives a reason and picks new as absorbing it (scripts/drive/d1008_retire_capability_drive.py)",
+      "then": "old is archived with its 2 requirements retired, the phase event names the reason and new, a merge into old is refused, a reindex leaves them retired, and spec/index.json lists old as archived"
+    },
+    {
+      "key": "refusals",
+      "requirement": "retire",
+      "given": "a current capability",
+      "when": "retiring it is asked with no reason, with itself or a change document as the absorber, by an agent, or while an open task links one of its requirements",
+      "then": "each is refused with its own code and nothing changes"
+    },
+    {
+      "key": "retired-stay",
+      "requirement": "requirements-retire",
+      "given": "an archived capability whose file still lists its requirements",
+      "when": "the project is reindexed",
+      "then": "every one of its requirements is still retired and coverage does not report it unserved"
+    },
+    {
+      "key": "merge-refused",
+      "requirement": "frozen",
+      "given": "an archived capability",
+      "when": "a merge or a fold names it",
+      "then": "the Hub answers 409 and the file is unchanged"
+    },
+    {
+      "key": "event",
+      "requirement": "recorded",
+      "given": "a capability retired with a reason and an absorbing capability",
+      "when": "its history and the index are read",
+      "then": "a phase event from current to archived carries both, the file shows archived, and the index lists it as archived"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "drive-first",
+      "title": "Acceptance drive, failing on today's Hub",
+      "description": "scripts/drive/d1008_retire_capability_drive.py against :8010: the 'drive' criterion, run before the build.",
+      "requirements": [
+        "app"
+      ],
+      "depends_on": [],
+      "files": [
+        "scripts/drive/d1008_retire_capability_drive.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "backend",
+      "title": "Retire a capability in the Hub",
+      "description": "Failing tests first in hub/tests/test_a_capability_can_be_retired.py. Migration 0121 lets a capability be archived; spec_lifecycle adds the current -> archived edge with its guards; spec_index retires an archived capability's requirements; merge and fold refuse an archived capability; the phase route takes absorbed_by.",
+      "requirements": [
+        "retire",
+        "requirements-retire",
+        "frozen",
+        "recorded"
+      ],
+      "depends_on": [
+        "drive-first"
+      ],
+      "files": [
+        "hub/hub/migrations/versions/0121_a_capability_can_be_retired.py",
+        "hub/hub/db/models.py",
+        "hub/hub/spec_lifecycle.py",
+        "hub/hub/spec_index.py",
+        "hub/hub/spec_service.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests/test_a_capability_can_be_retired.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "ui",
+      "title": "Retire action on a capability in the app",
+      "description": "Vitest first; the capability view offers Retire with a reason and an optional absorbing capability; bundle refreshed; the drive passes on a restarted :8010.",
+      "requirements": [
+        "app"
+      ],
+      "depends_on": [
+        "backend"
+      ],
+      "files": [
+        "hub/ui/src/components/spec/SpecPhaseBar.tsx",
+        "hub/ui/src/api/spec.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "reviewer": null
+    }
+  ],
+  "algorithms": [],
+  "design": "Tier 2: a migration. HAZARD: 0121 recreates spec_documents to relax ck_spec_documents_kind_phase to (capability AND phase IN (current, archived)) OR (not capability AND phase != current); it reaches the operator's real :8000 database at their next restart, and the UI bundle reaches :8000's app at its next reload. Nothing existing changes value. Rollback: downgrade sets any archived capability back to current, then restores the narrow CHECK (retirements are lost; requirement rows stay retired until the next reindex). Decision (operator 2026-10-08: 'Build retire a capability'): reuse archived rather than a new phase, so the vocabulary and the index's statuses do not grow; the reason and absorbing capability live on the phase event, not a column. Requirements are retired by one rule in the index (archived capability => retired), not by editing the file, so the file stays the record. Folds into spec-document-authority.",
+  "evidence": {
+    "checked": [
+      "hub/hub/deletion.py:201 refuses a capability (delete_capability)",
+      "hub/hub/spec_lifecycle.py TRANSITIONS has no edge out of current",
+      "hub/hub/db/models.py ck_spec_documents_kind_phase ties capability to current",
+      "hub/hub/spec_index.py requirements_from_payload indexes every payload requirement as active"
+    ],
+    "limits": []
+  },
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "delivery": {
+    "mode": "none",
+    "agent": null,
+    "reviewer": null,
+    "stop_when_queue_empties": false,
+    "stop_at": null,
+    "cron": "*/5 * * * *"
+  },
+  "aw_identity": {
+    "requirements": {
+      "retire": "FR-1",
+      "requirements-retire": "FR-2",
+      "frozen": "FR-3",
+      "recorded": "FR-4",
+      "app": "FR-5"
+    },
+    "high_water": 5,
+    "retired": {},
+    "digests": {
+      "FR-1": "b996538298b2d50ad055cf321ae26dc476123ff378b21b9e1e8504e5fb3ea996",
+      "FR-2": "b8b6cd4aa6e96c8cfaa68e7bef2d2a0de786b3844e6147683e974ff3e93f6d51",
+      "FR-3": "47e41801be1e0485586cb93a728fe495fd27c8aadb3453615b14f5ee2c69cca3",
+      "FR-4": "ef1e050964b6b24292dc0848fe5f97d75c2a00ff2f212eb4d1fb190162b4ef21",
+      "FR-5": "9f81e25709139624aed074c1eb3400156b13ba992fabd3fdf65503410652aaa9"
+    }
+  }
+}
+</script>
+</body>
+</html>

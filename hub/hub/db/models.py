@@ -2032,9 +2032,9 @@ class SpecDocument(Base):
         # The strongest available statement that `current` is where capability documents live and
         # nowhere else — enforced even against a row inserted some other way than
         # `spec_lifecycle.create_document`. Same cross-column shape `0058` uses for
-        # `origin_type`/`origin_agent`.
+        # `origin_type`/`origin_agent`. A capability may also be `archived`: retired (`0121`, F536).
         CheckConstraint(
-            "(kind = 'capability' AND phase = 'current') OR "
+            "(kind = 'capability' AND phase IN ('current', 'archived')) OR "
             "(kind != 'capability' AND phase != 'current')",
             name="ck_spec_documents_kind_phase",
         ),

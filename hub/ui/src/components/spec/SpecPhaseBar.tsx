@@ -4,6 +4,7 @@ import { Icon } from '@/components/common/Icon'
 import { ArchiveConfirmDialog } from '@/components/spec/ArchiveConfirmDialog'
 import { DeleteConfirmDialog } from '@/components/common/DeleteConfirmDialog'
 import { FoldIntoCapabilityDialog } from '@/components/spec/FoldIntoCapabilityDialog'
+import { RetireCapabilityDialog } from '@/components/spec/RetireCapabilityDialog'
 import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
 import { useDocumentFlow, type LoopSummary } from '@/api/loops'
 import { readableApiError } from '@/api/client'
@@ -108,6 +109,8 @@ export function SpecPhaseBar({
   const [startingFlow, setStartingFlow] = useState(false)
   const [folding, setFolding] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [retiring, setRetiring] = useState(false)
+  const [retireRefusal, setRetireRefusal] = useState<string | null>(null)
   const [deleteRefusal, setDeleteRefusal] = useState<string | null>(null)
   const deleteDocument = useDeleteSpecDocument()
   const [deliveryAgentChoice, setDeliveryAgentChoice] = useState(NO_CHOICE)
@@ -211,6 +214,27 @@ export function SpecPhaseBar({
       },
     )
   }
+
+  function onConfirmRetire(reason: string, absorbedBy: string | null) {
+    setRetireRefusal(null)
+    setPhase.mutate(
+      { path, to: 'archived', reason, ...(absorbedBy ? { absorbed_by: absorbedBy } : {}) },
+      {
+        onSuccess: () => setRetiring(false),
+        // Open work on its requirements, or an absorber that is not a current capability.
+        onError: (error: unknown) =>
+          setRetireRefusal(readableApiError(error, 'The Hub refused to retire this capability.')),
+      },
+    )
+  }
+
+  const retirement = specDocError ? undefined : specDoc?.retired
+  const otherCapabilities = (data?.documents ?? [])
+    .filter((entry) => entry.kind === 'capability' && entry.phase === 'current' && entry.path !== path)
+    .map((entry) => ({ path: entry.path, title: entry.title }))
+  const absorberTitle = retirement?.absorbed_by
+    ? (data?.documents.find((entry) => entry.path === retirement.absorbed_by)?.title ?? retirement.absorbed_by)
+    : null
 
   // The route answers oldest first; the history reads newest first, reversed here and only here.
   const history = [...(historyData?.events ?? [])].reverse()
@@ -426,6 +450,19 @@ export function SpecPhaseBar({
             className="rounded-[var(--radius-sm)] px-2 py-1 hover:bg-[var(--row-hover)]"
           >
             Archive
+          </button>
+        )}
+
+        {document.kind === 'capability' && document.phase === 'current' && (
+          <button
+            type="button"
+            data-testid="spec-retire-capability"
+            disabled={busy}
+            onClick={() => { setRetireRefusal(null); setRetiring(true) }}
+            className="rounded-[var(--radius-sm)] px-2 py-1 hover:bg-[var(--row-hover)]"
+            style={{ color: 'var(--text-3)' }}
+          >
+            Retire…
           </button>
         )}
 
@@ -653,6 +690,25 @@ export function SpecPhaseBar({
           error={deleteRefusal}
           onCancel={() => setConfirmingDelete(false)}
           onConfirm={onConfirmDelete}
+        />
+      )}
+
+      {document.kind === 'capability' && document.phase === 'archived' && retirement && (
+        <p data-testid="spec-retired-note" style={{ color: 'var(--text-3)' }}>
+          Retired{retirement.at ? ` ${formatDistanceToNow(hubDate(retirement.at), { addSuffix: true })}` : ''}:{' '}
+          {retirement.reason}
+          {absorberTitle ? ` Absorbed by ${absorberTitle}.` : ''}
+        </p>
+      )}
+
+      {retiring && (
+        <RetireCapabilityDialog
+          title={document.title}
+          capabilities={otherCapabilities}
+          isPending={setPhase.isPending}
+          error={retireRefusal}
+          onCancel={() => setRetiring(false)}
+          onConfirm={onConfirmRetire}
         />
       )}
 

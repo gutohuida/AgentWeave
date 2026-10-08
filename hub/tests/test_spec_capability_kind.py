@@ -86,7 +86,10 @@ async def test_transition_refuses_any_to_phase_for_a_capability_document(
         )
         assert response.status_code == 409, f"to={to_phase} should be refused"
         code = response.json()["detail"]["code"]
-        expected = "unknown_phase" if to_phase == "current" else "illegal_transition"
+        # `archived` is retiring it (F536), refused here only for want of a reason.
+        expected = {"current": "unknown_phase", "archived": "retire_needs_reason"}.get(
+            to_phase, "illegal_transition"
+        )
         assert code == expected, f"to={to_phase} got {code}"
 
 

@@ -162,10 +162,10 @@ class TestLoadManifest:
         assert manifest is not None
         assert manifest.documents[1].status == "archived"
 
-    @pytest.mark.parametrize("phase", ["exploring", "proposed", "approved", "archived"])
-    def test_capability_rejects_every_phase_but_current(self, phase):
-        """A capability is created at `current` and no transition moves it, so any other phase
-        describes a document the product cannot produce — plausible to a reader, unreachable."""
+    @pytest.mark.parametrize("phase", ["exploring", "proposed", "approved"])
+    def test_capability_rejects_every_phase_but_current_and_archived(self, phase):
+        """A capability is created at `current` and leaves it only by being retired to `archived`
+        (F536), so any other phase describes a document the product cannot produce."""
         data = self._valid_manifest()
         data["documents"][0]["kind"] = "capability"
         data["documents"][0]["status"] = phase

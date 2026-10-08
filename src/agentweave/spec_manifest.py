@@ -41,11 +41,11 @@ CURRENT = "current"
 #: Phases reached by walking the Hub's transition table from a document's creation.
 LIFECYCLE_PHASES = {EXPLORING, PROPOSED, APPROVED, ARCHIVED}
 
-#: A capability document is created at `current` and never leaves it — the Hub's transition table
-#: holds no pair whose source is `current`, and refuses it as a destination. So `current` is not
-#: one phase among five for a capability; it is the only one it can ever have.
+#: A capability document is created at `current` and leaves it only by being retired to
+#: `archived` (F536). `current` is never a destination of `transition()`.
 CAPABILITY_KIND = "capability"
-CAPABILITY_PHASES = {CURRENT}
+# A retired capability is archived (F536, migration 0121); nothing else leaves `current`.
+CAPABILITY_PHASES = {CURRENT, ARCHIVED}
 
 VALID_PHASES = LIFECYCLE_PHASES | CAPABILITY_PHASES
 

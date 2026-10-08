@@ -148,7 +148,8 @@ def phase_is_holdable(phase: str, kind: str) -> bool:
     `current`, which is the only phase it could legally have meant.
     """
     if kind == "capability":
-        return phase == spec_lifecycle.CURRENT
+        # A retired capability's file says `archived` (F536); adopting it keeps it retired.
+        return phase in (spec_lifecycle.CURRENT, spec_lifecycle.ARCHIVED)
     return phase != spec_lifecycle.CURRENT
 
 

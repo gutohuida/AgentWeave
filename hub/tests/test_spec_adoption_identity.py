@@ -132,7 +132,6 @@ class TestPhase:
             ("change-spec", "current", "exploring"),
             ("capability", "approved", "current"),
             ("capability", "exploring", "current"),
-            ("capability", "archived", "current"),
         ],
     )
     def test_a_phase_the_kind_cannot_hold_is_defaulted_and_reported(self, kind, status, expected):
@@ -155,7 +154,10 @@ class TestPhase:
         assert spec_adoption.phase_is_holdable("current", "system-map") is False
         for phase in ("exploring", "proposed", "approved", "archived"):
             assert spec_adoption.phase_is_holdable(phase, "change-spec") is True
+        for phase in ("exploring", "proposed", "approved"):
             assert spec_adoption.phase_is_holdable(phase, "capability") is False
+        # A retired capability (F536) is archived, and so is its file.
+        assert spec_adoption.phase_is_holdable("archived", "capability") is True
 
     def test_the_fallback_matches_what_creating_the_document_would_have_done(self):
         """If these two rules ever diverge, an adopted document lands somewhere a

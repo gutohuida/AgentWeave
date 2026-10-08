@@ -296,6 +296,30 @@ async def _approval_outcome(session: AsyncSession, document) -> Optional[Dict[st
     ).scalar_one_or_none()
 
 
+async def _retirement(session: AsyncSession, document) -> Dict[str, Any]:
+    """Why a capability was retired and what absorbed it, from its retiring phase event (F536)."""
+    event = (
+        (
+            await session.execute(
+                select(SpecDocumentEvent)
+                .where(
+                    SpecDocumentEvent.document_id == document.id,
+                    SpecDocumentEvent.kind == "phase",
+                )
+                .order_by(SpecDocumentEvent.created_at.desc())
+            )
+        )
+        .scalars()
+        .first()
+    )
+    detail = (event.detail if event is not None else None) or {}
+    return {
+        "reason": detail.get("reason", ""),
+        "absorbed_by": detail.get("absorbed_by"),
+        "at": event.created_at.isoformat() if event is not None else None,
+    }
+
+
 @router.get("/spec")
 async def get_spec(
     path: str = Query(...),
@@ -336,6 +360,8 @@ async def get_spec(
         fold_state = await _fold_state(session, document)
         if fold_state is not None:
             payload["fold_state"] = fold_state
+        if document.kind == "capability" and document.phase == spec_lifecycle.ARCHIVED:
+            payload["retired"] = await _retirement(session, document)
         # The roadmap slice this document specifies, so the app can offer "Draft the next slice"
         # beside Approve (C1a D7). Absent on every other document.
         link = (spec_payload_module.extract_payload(content) or {}).get("roadmap")
@@ -382,6 +408,9 @@ class PhaseRequest(RequestModel):
     # Archiving an approved change that was folded into no capability, with `reason` saying why
     # (the archive guard in `spec_lifecycle.transition`).
     no_capability_change: bool = False
+    # Retiring a capability (to=archived on a current capability, F536): the current capability
+    # that absorbed what it described, if any. Refused on any other move.
+    absorbed_by: Optional[str] = Field(default=None, max_length=255)
 
 
 class MergeRequest(RequestModel):
@@ -1980,6 +2009,28 @@ async def propose_document(
     return {**_document_view(document), "proposed": True, "blocking": []}
 
 
+async def _refresh_index_entry(
+    session: AsyncSession, workspace, project_id: str, path: str
+) -> List[Dict[str, Any]]:
+    """Rebuild `spec/index.json` when it lists *path*, so its status follows the Hub's phase."""
+    diagnostics: List[Dict[str, Any]] = []
+    existing, _, _ = spec_documents.read_index(workspace)
+    if existing is None or not any(entry.path == path for entry in existing.documents):
+        return diagnostics
+    on_disk, _ = spec_documents.discover(workspace)
+    rows = await spec_lifecycle.list_documents(session, project_id)
+    manifest, index_diagnostics = spec_documents.build_index(
+        on_disk, [(row.path, row.title, row.kind, row.phase) for row in rows], existing
+    )
+    diagnostics.extend(index_diagnostics)
+    if manifest is not None:
+        try:
+            spec_documents.write_index(workspace, manifest)
+        except OSError as exc:
+            diagnostics.append({"code": "index_write_failed", "actual": str(exc)})
+    return diagnostics
+
+
 @router.post("/documents/phase")
 async def set_phase(
     body: Optional[PhaseRequest] = None,
@@ -2031,6 +2082,22 @@ async def set_phase(
                 ),
             )
 
+    retiring = document.kind == "capability" and to == spec_lifecycle.ARCHIVED
+    absorbed_by = body.absorbed_by
+    if absorbed_by is not None:
+        if not retiring:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "absorbed_by names the capability that absorbed one being retired; send it "
+                    "only with to=archived on a capability"
+                ),
+            )
+        try:
+            absorbed_by = validate_spec_path(absorbed_by)
+        except SpecPathError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
     try:
         await spec_lifecycle.transition(
             session,
@@ -2040,6 +2107,7 @@ async def set_phase(
             workspace=workspace,
             reason=body.reason,
             no_capability_change=body.no_capability_change,
+            absorbed_by=absorbed_by,
         )
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
@@ -2099,6 +2167,12 @@ async def set_phase(
         )
 
     await spec_service.rerender_phase(session, workspace, document)
+    if retiring:
+        # Its requirements leave coverage now, not at the next reindex (F536).
+        await spec_index.reindex_from_file(
+            session, workspace, document, actor=_operator(), source=spec_index.SOURCE_HUB
+        )
+        await _refresh_index_entry(session, workspace, project_id, document.path)
     # Staged, not sent (design D6 step 5): `job_created` is persisted uncommitted inside the flow's
     # savepoint, so every frame here waits for the one commit below, in today's order.
     defer_broadcast(
@@ -2359,6 +2433,14 @@ async def merge_document(
             detail={
                 "message": f"{path} is not a capability document",
                 "code": "not_a_capability",
+            },
+        )
+    if document.phase != spec_lifecycle.CURRENT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": f"{path} is retired; nothing is merged into a retired capability",
+                "code": "capability_retired",
             },
         )
 
