@@ -851,6 +851,10 @@ export interface SpecFoldDraft {
   requirements: SpecFoldDraftRequirement[]
   /** Draft keys the capability already holds; folding them as they are is refused. */
   collisions: string[]
+  /** What the capability holds before the fold, in its order, to choose what to retire (F533).
+   *  Absent from a Hub that predates retirement. */
+  capability_requirements?: { key: string; statement: string }[]
+  capability_criteria?: { key: string; requirement: string | null; then: string }[]
 }
 
 /** What folding `path` into the capability `into` would write. Writes nothing. */
@@ -881,7 +885,17 @@ export function useFoldDocument() {
       {
         path,
         ...body
-      }: { path: string; into: string; requirements: SpecFoldItem[]; archive: boolean; note?: string },
+      }: {
+        path: string
+        into: string
+        requirements: SpecFoldItem[]
+        archive: boolean
+        note?: string
+        /** Capability requirements (with their criteria) and single criteria to remove in the same
+         *  merge. Sent only when non-empty, so a Hub without retirement never receives them. */
+        retire?: string[]
+        retire_criteria?: string[]
+      },
     ) =>
       postJson<SpecDocumentRecord & { archived: boolean; merged: number }>(
         `/api/v1/projects/${projectId}/project/documents/${path}/fold`,

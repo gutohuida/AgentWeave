@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -851,6 +851,10 @@ class FoldDraft:
     #: text it lands with, and `replaces` when it overwrites an existing capability requirement.
     requirements: List[Dict[str, Any]]
     collisions: List[str]
+    #: What the capability holds before the fold, in its order, for choosing what to retire:
+    #: `{key, statement}` per requirement, `{key, requirement, then}` per criterion.
+    capability_requirements: List[Dict[str, Any]] = field(default_factory=list)
+    capability_criteria: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def fold_key(change_path: str, key: str) -> str:
@@ -875,6 +879,8 @@ def fold_draft(
     change: SpecDocument,
     capability: SpecDocument,
     items: Optional[List[FoldItem]] = None,
+    retire: Sequence[str] = (),
+    retire_criteria: Sequence[str] = (),
 ) -> FoldDraft:
     """The capability's payload with the change's requirements appended, and what collides.
 
@@ -882,6 +888,11 @@ def fold_draft(
     folds every requirement verbatim under `fold_key`. A draft key the capability already holds is
     a collision, reported and left out of the payload, unless the item names it in `replaces`.
     Criteria follow their requirement, re-pointed at its new key.
+
+    `retire` removes capability requirements the change supersedes, their criteria with them, and
+    `retire_criteria` removes single criteria (F533): amending a criterion is retiring the old one
+    and folding the new. Both name what the capability holds today, and a requirement cannot be
+    replaced and retired in one fold.
     """
     if capability.kind != "capability":
         raise FoldRefusedError(
@@ -951,10 +962,41 @@ def fold_draft(
             continue
         criteria.append({**criterion, "key": key, "requirement": new_requirement})
 
+    unknown = [key for key in retire if key not in existing] + [
+        key for key in retire_criteria if key not in existing_criteria
+    ]
+    if unknown:
+        raise FoldRefusedError(
+            f"{capability.path} has nothing to retire under " + ", ".join(unknown),
+            code="fold_retire_unknown",
+        )
+    replaced = {item.replaces for item in items if item.replaces is not None}
+    both = [key for key in retire if key in replaced]
+    if both:
+        raise FoldRefusedError(
+            ", ".join(both) + " is both replaced and retired by this fold; choose one",
+            code="fold_retire_replaced",
+        )
+    retired = set(retire)
+    requirements = [r for r in requirements if r["key"] not in retired]
+    criteria = [
+        c
+        for c in criteria
+        if c["key"] not in set(retire_criteria) and c.get("requirement") not in retired
+    ]
+
     return FoldDraft(
         payload={**target, "requirements": requirements, "acceptance_criteria": criteria},
         requirements=folded,
         collisions=collisions,
+        capability_requirements=[
+            {"key": r["key"], "statement": r.get("statement", "")}
+            for r in target.get("requirements") or []
+        ],
+        capability_criteria=[
+            {"key": c["key"], "requirement": c.get("requirement"), "then": c.get("then", "")}
+            for c in target.get("acceptance_criteria") or []
+        ],
     )
 
 
@@ -968,6 +1010,8 @@ async def fold(
     actor: spec_lifecycle.Actor,
     archive: bool = True,
     note: str = "",
+    retire: Sequence[str] = (),
+    retire_criteria: Sequence[str] = (),
 ) -> Tuple[SaveResult | ProposeResult, bool]:
     """Fold a finished change into a capability through the merge, then archive the change.
 
@@ -987,7 +1031,7 @@ async def fold(
             "folded once its work is decided",
             code="fold_tasks_open",
         )
-    draft = fold_draft(workspace, change, capability, items)
+    draft = fold_draft(workspace, change, capability, items, retire, retire_criteria)
     if draft.collisions:
         raise FoldRefusedError(
             f"{capability.path} already has " + ", ".join(draft.collisions) + "; rename the folded "

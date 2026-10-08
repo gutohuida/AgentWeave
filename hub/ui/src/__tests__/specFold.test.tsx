@@ -74,6 +74,14 @@ beforeEach(() => {
       { from: 'dim', key: 'widgets-glow-dim', statement: 'A widget SHOULD dim.', modal: 'SHOULD', replaces: null },
     ],
     collisions: [],
+    capability_requirements: [
+      { key: 'widgets-exist', statement: 'A widget MUST exist.' },
+      { key: 'old-rule', statement: 'A widget MUST never glow.' },
+    ],
+    capability_criteria: [
+      { key: 'exist-c', requirement: 'widgets-exist', then: 'dark' },
+      { key: 'old-c', requirement: 'old-rule', then: 'never' },
+    ],
   }
 })
 
@@ -170,5 +178,33 @@ describe('folding a finished change', () => {
     expect(screen.queryByTestId('archive-reason')).not.toBeInTheDocument()
     await userEvent.click(screen.getByTestId('archive-confirm'))
     expect(setPhase).toHaveBeenCalledWith({ path: CHANGE, to: 'archived' }, expect.anything())
+  })
+
+  it('retires what the change supersedes in the same fold (F533)', async () => {
+    renderBar()
+    await userEvent.click(screen.getByTestId('fold-open'))
+    await userEvent.selectOptions(screen.getByTestId('fold-capability'), CAP)
+    await userEvent.click(screen.getByTestId('fold-retire-toggle'))
+    await userEvent.click(screen.getByTestId('fold-retire-req-old-rule'))
+    await userEvent.click(screen.getByTestId('fold-retire-crit-exist-c'))
+
+    // A retired requirement takes its criteria: they show as going with it, not as a choice.
+    expect(screen.getByTestId('fold-retire-crit-old-c')).toBeChecked()
+    expect(screen.getByTestId('fold-retire-crit-old-c')).toBeDisabled()
+    await userEvent.click(screen.getByTestId('fold-confirm'))
+
+    await waitFor(() => expect(fold).toHaveBeenCalledTimes(1))
+    expect(fold.mock.calls[0][0]).toMatchObject({ retire: ['old-rule'], retire_criteria: ['exist-c'] })
+  })
+
+  it('filters what can be retired by text', async () => {
+    renderBar()
+    await userEvent.click(screen.getByTestId('fold-open'))
+    await userEvent.selectOptions(screen.getByTestId('fold-capability'), CAP)
+    await userEvent.click(screen.getByTestId('fold-retire-toggle'))
+    await userEvent.type(screen.getByTestId('fold-retire-filter'), 'never')
+
+    expect(screen.getByTestId('fold-retire-req-old-rule')).toBeInTheDocument()
+    expect(screen.queryByTestId('fold-retire-req-widgets-exist')).not.toBeInTheDocument()
   })
 })

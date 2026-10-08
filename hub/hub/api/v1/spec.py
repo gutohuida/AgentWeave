@@ -412,6 +412,10 @@ class FoldRequest(RequestModel):
     requirements: Optional[list[FoldItemRequest]] = Field(default=None, max_length=64)
     archive: bool = True
     note: str = Field(default="", max_length=2000)
+    # Capability requirements (with their criteria) and single criteria the change supersedes,
+    # removed in the same merge (F533).
+    retire: list[str] = Field(default_factory=list, max_length=256)
+    retire_criteria: list[str] = Field(default_factory=list, max_length=256)
 
 
 def _document_view(document) -> dict:
@@ -2422,6 +2426,8 @@ async def fold_draft(
         "payload": draft.payload,
         "requirements": draft.requirements,
         "collisions": draft.collisions,
+        "capability_requirements": draft.capability_requirements,
+        "capability_criteria": draft.capability_criteria,
     }
 
 
@@ -2454,6 +2460,8 @@ async def fold_document(
             actor=_operator(),
             archive=body.archive,
             note=body.note,
+            retire=body.retire,
+            retire_criteria=body.retire_criteria,
         )
     except (spec_service.FoldRefusedError, spec_lifecycle.PhaseError) as exc:
         raise _fold_refused(exc) from exc
