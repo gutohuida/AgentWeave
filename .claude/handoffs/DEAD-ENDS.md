@@ -2272,3 +2272,22 @@ disappears is indistinguishable from one that was forgotten.
   is `PUT /project/documents/{path}/content` with `{"document": <payload>}`.
 - **2026-10-08 (home) -- `pathlib.write_text` on Windows writes CRLF**; git warns and stores LF, so the commit is
   clean, but a byte comparison against the working copy differs. Pass `newline="\n"` when it matters.
+
+## 2026-10-08 (handoff 0183)
+
+- **Run the Hub suite with `-n auto`.** `py -3.11 -m pytest hub/tests -q -n auto` takes about 4 minutes. Serial took about 40
+  (2378 s), and two serial runs side by side slowed each other further. xdist is installed. (Confirmed 2026-10-08.)
+- **An unquoted heredoc (`<<EOF`) command-substitutes backticks.** A Python edit script fed through `<<EOF` that wrote
+  `` `spec_journey.SIZES` `` into a comment ran it as a shell command and left the comment blank. Use `<<'EOF'`, or the
+  Edit tool, for anything with backticks. A heredoc with an unbalanced quote also failed to parse outright ("unexpected
+  EOF looking for matching `'`"). (Confirmed 2026-10-08.)
+- **A trial-Hub task cannot start until its dependency is `approved`.** `completed` is not enough: the PATCH answers 409
+  `dependency_unmet`. Work hand-built tasks in dependency order, through under_review → approved.
+- **`close_change.py` walked a `completed` task back to `in_progress` (409).** Fixed in `72f39ce`: a completed task now
+  goes straight to `/land`.
+- **A step duty is not the only instruction an agent reads.** The `ask_user` tool's own description (`agents.py`
+  `_operations`, `mcp_server.ask_user`) said "ask everything in one call" and overrode the step's "one question per
+  call", so Haiku sent batches of 3. When a briefing tells an agent to do X, grep the tool-surface text for not-X. Only
+  a real-agent drive shows this; unit tests on the duty text cannot.
+- **Haiku answered through `aw-tool` (the shim: Bash plus Write), not the MCP tools,** in the d1009 drives. So the
+  shim and HTTP renderings of the tool surface are what it reads.
