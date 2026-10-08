@@ -34986,7 +34986,8 @@ silently drop) links to retired requirements.
 or `src/`, absent from `openspec/specs/`); it entered the trial corpus on 2026-08-18 as a sample and was adopted as
 `current` on 2026-10-07. There is no way out: `DELETE /documents/{path}` refuses with `delete_capability` ("a capability
 is the corpus; change it through a merge instead", `hub/hub/deletion.py:201`), `current` has no transition in
-`spec_lifecycle.TRANSITIONS`, and a merge must keep a non-empty requirement list. The same wall stops the overhaul from
+`spec_lifecycle.TRANSITIONS`. A merge can empty it (`validate_payload` accepts a capability with no requirements), but it
+then stays listed in the map and the index as an empty `current` capability. The same wall stops the overhaul from
 merging two overlapping capabilities: the absorbed one is left behind as a shell. Likely fix: a `retired` end state for
 a capability (operator-only, recorded with a reason and, when merged away, the capability that absorbed it), its
 requirements retired with it, dropped from `spec/index.json` and coverage, the file kept as history.
