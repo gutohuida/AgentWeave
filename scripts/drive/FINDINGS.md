@@ -1268,7 +1268,7 @@ together via `py -3.11 -m pytest tests/test_cli.py tests/test_hub_commands.py -v
 
 ## F21 (B) — A Haiku agent cannot reach `record_evidence`, and burns a whole turn trying
 
-**Status:** open, probe run 2026-10-08: **does not reproduce, 12/12 Haiku turns reached `record_evidence`; retirement is the operator's call** (see "Probe 2026-10-08" below). Was: open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** **not retired yet: run one probe first.** Six Haiku turns on a trial Hub (never `:8000`), with three arms: today's argv, `--strict-mcp-config`, and `ENABLE_TOOL_SEARCH=false`. Decision rule and read-outs are in `B11.md` "F21's probe". Was: open — investigated 2026-08-25, the proposed remedy was already shipped and the cause is not here; left open with the cause named
+**Status:** retired 2026-10-08 (operator, after the B11 probe): **does not reproduce on Claude Code 2.1.291, 12/12 Haiku turns reached `record_evidence`; no argv change** (see "Probe 2026-10-08" below). Was: open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** **not retired yet: run one probe first.** Six Haiku turns on a trial Hub (never `:8000`), with three arms: today's argv, `--strict-mcp-config`, and `ENABLE_TOOL_SEARCH=false`. Decision rule and read-outs are in `B11.md` "F21's probe". Was: open — investigated 2026-08-25, the proposed remedy was already shipped and the cause is not here; left open with the cause named
 
 **Observed live 2026-08-24**, during the review-checkout drive (`run-1515a942defc`), not while
 looking for it.
@@ -34919,8 +34919,7 @@ Acceptance: CI green on two consecutive pushes, plus a local `-n 4 --dist loadfi
 
 ## F531 (B) -- a Hub Claude run loads the operator's own claude.ai connectors (Gmail, Drive, Calendar, Docs)
 
-**Status:** open (filed 2026-10-08, interactive, from the F21 probe). Tier is the operator's call: it changes every
-Claude run's argv and is a containment question, so CLAUDE.md's table puts it at Tier 2.
+**Status:** proposed, Tier 2 (operator, 2026-10-08: "fix now"): `spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server` (`spdoc-721c3e827237`, trial project `proj-d85a82bf4216`). Acceptance drive `scripts/drive/d1008_f531_no_connectors_drive.py` 1/3 on today's code (no flag in the argv; the agent named 8 `mcp__claude_ai_Claude_Docs__*` tools). Was: open (filed 2026-10-08, interactive, from the F21 probe).
 
 `runner_commands._build_claude_command` passes `--mcp-config` without `--strict-mcp-config`, so a Hub run also gets
 whatever MCP servers the operator's own Claude Code configuration and account carry. Read from `system/init` of a
