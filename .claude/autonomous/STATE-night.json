@@ -1,40 +1,130 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-10-09-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "0695572",
-    "stop_at":  "2026-10-09T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-10-09-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-10-09-daily",
+    "parent_branch": "master",
+    "parent_sha": "0695572",
+    "stop_at": "2026-10-09T07:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-10-09-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "specjson-t1-impl",
+    "next_action": "Do queue item specjson-t1-impl: write the acceptance drive scripts/drive/d1010_spec_json.py and record it failing on today's Hub (see the change payload task drive-first). Read the payload via hub.spec_payload.extract_payload from hub/.",
+    "queue": [
+        {
+            "id": "specjson-t1-impl",
+            "status": "open",
+            "title": "spec-storage task drive-first: write scripts/drive/d1010_spec_json.py, record it FAILING on today's Hub",
+            "detail": "storage payload change a-spec-document-is-stored-as-its-payload, payload keys tasks: drive-first, storage, convert, corpus (corpus FENCED, not tonight). Scratch Hub own port + fresh db (pattern scripts/drive/d1009_step_journey.py). Log the failing output."
+        },
+        {
+            "id": "specjson-t2-impl",
+            "status": "open",
+            "title": "spec-storage task storage: spec.json storage seam, render on open, json paths",
+            "detail": "storage payload change a-spec-document-is-stored-as-its-payload, payload keys tasks: drive-first, storage, convert, corpus (corpus FENCED, not tonight). Failing Hub tests first; run hub suite with -n auto.",
+            "model": "opus"
+        },
+        {
+            "id": "specjson-t3-impl",
+            "status": "open",
+            "title": "spec-storage task convert: POST /project/spec/convert?to=json|html, 409 while busy",
+            "detail": "storage payload change a-spec-document-is-stored-as-its-payload, payload keys tasks: drive-first, storage, convert, corpus (corpus FENCED, not tonight). Failing Hub tests first."
+        },
+        {
+            "id": "specjson-drive",
+            "status": "open",
+            "title": "Drive spec-storage green on a scratch Hub; log evidence + METRICS row",
+            "detail": "Do NOT run corpus task, do NOT convert :8010 or this repo's spec/. Do not close Hub tasks."
+        },
+        {
+            "id": "project-steps-spec",
+            "status": "open",
+            "title": "Author project-steps slice change document",
+            "detail": "Author the slice change document on trial Hub :8010 (proj-d85a82bf4216) per APPROVALS 2026-10-09 authorisation 1; model on spdoc-06fd85087a9f; propose+approve; commit the file. Slice 'project-steps' from roadmap a-spec-is-written-one-step-at-a-time-roadmap."
+        },
+        {
+            "id": "project-steps-impl",
+            "status": "open",
+            "title": "Build project-steps slice against spec.json storage",
+            "detail": "Only if its -spec is approved. Split by the change's tasks (<id>-t<n>-impl) if one firing cannot finish."
+        },
+        {
+            "id": "project-steps-drive",
+            "status": "open",
+            "title": "Drive project-steps on a scratch Hub; log evidence + METRICS row",
+            "detail": "Own port, fresh db, haiku turns only."
+        },
+        {
+            "id": "approval-warnings-spec",
+            "status": "open",
+            "title": "Author approval-warnings slice change document",
+            "detail": "Author the slice change document on trial Hub :8010 (proj-d85a82bf4216) per APPROVALS 2026-10-09 authorisation 1; model on spdoc-06fd85087a9f; propose+approve; commit the file. Slice 'approval-warnings' from roadmap a-spec-is-written-one-step-at-a-time-roadmap."
+        },
+        {
+            "id": "approval-warnings-impl",
+            "status": "open",
+            "title": "Build approval-warnings slice against spec.json storage",
+            "detail": "Only if its -spec is approved. Split by the change's tasks (<id>-t<n>-impl) if one firing cannot finish."
+        },
+        {
+            "id": "approval-warnings-drive",
+            "status": "open",
+            "title": "Drive approval-warnings on a scratch Hub; log evidence + METRICS row",
+            "detail": "Own port, fresh db, haiku turns only."
+        },
+        {
+            "id": "tester-amends-spec",
+            "status": "open",
+            "title": "Author tester-amends slice change document",
+            "detail": "Author the slice change document on trial Hub :8010 (proj-d85a82bf4216) per APPROVALS 2026-10-09 authorisation 1; model on spdoc-06fd85087a9f; propose+approve; commit the file. Slice 'tester-amends' from roadmap a-spec-is-written-one-step-at-a-time-roadmap."
+        },
+        {
+            "id": "tester-amends-impl",
+            "status": "open",
+            "title": "Build tester-amends slice against spec.json storage",
+            "detail": "Only if its -spec is approved. Split by the change's tasks (<id>-t<n>-impl) if one firing cannot finish. Tier 2: acceptance drive written and failing first.",
+            "model": "opus"
+        },
+        {
+            "id": "tester-amends-drive",
+            "status": "open",
+            "title": "Drive tester-amends on a scratch Hub; log evidence + METRICS row",
+            "detail": "Own port, fresh db, haiku turns only."
+        },
+        {
+            "id": "reconcile-and-measure-spec",
+            "status": "open",
+            "title": "Author reconcile-and-measure slice change document",
+            "detail": "Author the slice change document on trial Hub :8010 (proj-d85a82bf4216) per APPROVALS 2026-10-09 authorisation 1; model on spdoc-06fd85087a9f; propose+approve; commit the file. Slice 'reconcile-and-measure' from roadmap a-spec-is-written-one-step-at-a-time-roadmap."
+        },
+        {
+            "id": "reconcile-and-measure-impl",
+            "status": "open",
+            "title": "Build reconcile-and-measure slice against spec.json storage",
+            "detail": "Only if its -spec is approved. Split by the change's tasks (<id>-t<n>-impl) if one firing cannot finish."
+        },
+        {
+            "id": "reconcile-and-measure-drive",
+            "status": "open",
+            "title": "Drive reconcile-and-measure on a scratch Hub; log evidence + METRICS row",
+            "detail": "Own port, fresh db, haiku turns only."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
 }
