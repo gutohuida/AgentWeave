@@ -23,12 +23,25 @@ const count = (value: number) => value.toLocaleString('en-US')
  */
 export function CollaborationSummary({ onNavigate }: { onNavigate: (page: string) => void }) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
-  const { data: settings } = useProjectSettings(projectId ?? null)
+  const { data: settings, error: settingsError } = useProjectSettings(projectId ?? null)
   const update = useUpdateProjectSettings(projectId ?? '')
-  const { data: accounting } = useAccounting()
-  const { data: agents = [] } = useAgents()
+  const { data: accounting, error: accountingError } = useAccounting()
+  const { data: agents = [], error: agentsError } = useAgents()
   const statuses = useQueueStatuses(agents.map((agent) => agent.name))
 
+  // A failed read is said, never shown as a value: a default here reads as a fact about the project.
+  if (settingsError) {
+    return (
+      <section className="lifted-surface px-4 py-3" aria-labelledby="overview-collaboration" data-testid="collab-summary">
+        <h2 id="overview-collaboration" className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>
+          Collaboration
+        </h2>
+        <p role="alert" className="mt-2 text-xs" style={{ color: 'var(--red)' }}>
+          The project's settings could not be read: {readableApiError(settingsError, 'the Hub did not answer.')}
+        </p>
+      </section>
+    )
+  }
   if (!settings) return null
 
   const held = statuses.filter((status) => status.waiting_reason === HOP_HELD_REASON).length
@@ -63,11 +76,14 @@ export function CollaborationSummary({ onNavigate }: { onNavigate: (page: string
 
         <LinkRow id="hop" label="Hop budget" hint="Agent-to-agent hops before a chain pauses for you" onClick={() => onNavigate('settings')}>
           <Value>{settings.hop_budget} hops</Value>
+          {agentsError && <Value flag>Queues could not be read</Value>}
           {held > 0 && <Value flag>{held} agent{held === 1 ? '' : 's'} held</Value>}
         </LinkRow>
 
         <LinkRow id="token" label="Token budget" hint="Autonomous turns pause once it is spent" onClick={() => onNavigate('budgets')}>
-          {limit == null ? (
+          {accountingError ? (
+            <Value flag>Usage could not be read</Value>
+          ) : limit == null ? (
             <Value flag>No limit{used != null ? ` · ${count(used)} used` : ''}</Value>
           ) : (
             <Value flag={budget?.exhausted ?? false}>
@@ -90,7 +106,11 @@ export function CollaborationSummary({ onNavigate }: { onNavigate: (page: string
           hint="Messages one turn drains · agents an agent may staff the project up to"
           onClick={() => onNavigate('settings')}
         >
-          <Value>{settings.turn_delivery_cap} per turn · {agents.length} of {settings.agent_budget} agents</Value>
+          {agentsError ? (
+            <Value flag>{settings.turn_delivery_cap} per turn · agents could not be read</Value>
+          ) : (
+            <Value>{settings.turn_delivery_cap} per turn · {agents.length} of {settings.agent_budget} agents</Value>
+          )}
         </LinkRow>
       </div>
       {update.error && (

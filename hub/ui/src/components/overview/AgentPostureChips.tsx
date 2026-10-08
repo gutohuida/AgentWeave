@@ -43,8 +43,8 @@ const GRANTS: { grant: Grant; label: string; title: string }[] = [
 export function AgentPostureChips({ agent, onNavigate }: { agent: AgentSummary; onNavigate: (page: string) => void }) {
   const [open, setOpen] = useState(false)
   const grant = useUpdateAgentGrant()
-  const { data: launchability } = useAgentLaunchability()
-  const { data: queue } = useQueueStatus(agent.name)
+  const { data: launchability, error: launchError } = useAgentLaunchability()
+  const { data: queue, error: queueError } = useQueueStatus(agent.name)
   const launch = launchability?.agents[agent.name]
   const cannotRun = !!agent.runner_id && launch?.runnable === false
 
@@ -85,6 +85,13 @@ export function AgentPostureChips({ agent, onNavigate }: { agent: AgentSummary; 
             can't run
           </button>
         )}
+        {/* A failed read is flagged: without it the card reads as an agent with nothing wrong. */}
+        {!!agent.runner_id && launchError && (
+          <span className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} title="Whether this agent's runner can launch could not be read">launch not checked</span>
+        )}
+        {queueError && (
+          <span className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} title="This agent's queue could not be read, so a hold would not show">queue not read</span>
+        )}
         {queue?.waiting_reason === HOP_HELD_REASON && (
           <span className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag}>held by hop budget</span>
         )}
@@ -111,8 +118,8 @@ export function AgentPostureChips({ agent, onNavigate }: { agent: AgentSummary; 
 }
 
 function AgentDetails({ agent, onNavigate }: { agent: AgentSummary; onNavigate: (page: string) => void }) {
-  const { data: catalog } = useModelCatalog()
-  const { data: runners, isLoading: runnersLoading } = useRunners()
+  const { data: catalog, error: catalogError } = useModelCatalog()
+  const { data: runners, isLoading: runnersLoading, error: runnersError } = useRunners()
   const labelFor = (mode: string) => permissionModeValues(catalog).find((option) => option.id === mode)?.label ?? mode
   const builtIn = agent.permission_mode_built_in ? ` (${labelFor(agent.permission_mode_built_in)})` : ''
   const posture = agent.default_permission_mode ? labelFor(agent.default_permission_mode) : `Built-in default${builtIn}`
@@ -123,13 +130,14 @@ function AgentDetails({ agent, onNavigate }: { agent: AgentSummary; onNavigate: 
     ? 'None bound'
     : runner
       ? `${runner.name}${runner.model ? ` · ${runner.model}` : ''}`
-      : runnersLoading ? 'Loading…' : agent.runner_id
+      : runnersError ? `${agent.runner_id} (the runner list could not be read)`
+        : runnersLoading ? 'Loading…' : agent.runner_id
   const wait = (value: number | null | undefined, fallback: number) =>
     value == null ? `${fallback}s (default)` : `${value}s`
 
   return (
     <dl className="posture-details" data-testid={`agent-details-${agent.name}`}>
-      <dt>Default permissions</dt><dd>{posture}</dd>
+      <dt>Default permissions</dt><dd>{posture}{catalogError ? ' (names unavailable: the model catalog could not be read)' : ''}</dd>
       <dt>Runner</dt><dd>{runnerText}</dd>
       <dt>Waits for a permission</dt><dd>{wait(agent.permission_timeout_seconds, PERMISSION_WAIT_FALLBACK_SECONDS)}</dd>
       <dt>Waits for an answer</dt><dd>{wait(agent.question_timeout_seconds, QUESTION_WAIT_FALLBACK_SECONDS)}</dd>

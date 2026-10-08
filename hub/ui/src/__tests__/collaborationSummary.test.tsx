@@ -10,6 +10,9 @@ const mutate = vi.fn()
 let updateError: Error | null = null
 let settings = makeSettings()
 let budget = { limit_tokens: null as number | null, used_tokens: 2_600_000, remaining_tokens: null as number | null, exhausted: false }
+let settingsError: Error | null = null
+let accountingError: Error | null = null
+let agentsError: Error | null = null
 let queueStatuses: Array<{ agent: string; waiting_count: number; running: boolean; waiting_reason: string | null }> = []
 
 function makeSettings() {
@@ -38,14 +41,14 @@ function makeSettings() {
 }
 
 vi.mock('@/api/projects', () => ({
-  useProjectSettings: () => ({ data: settings }),
+  useProjectSettings: () => (settingsError ? { data: undefined, error: settingsError } : { data: settings, error: null }),
   useUpdateProjectSettings: () => ({ mutate, isPending: false, error: updateError }),
 }))
 vi.mock('@/api/accounting', () => ({
-  useAccounting: () => ({ data: { budget } }),
+  useAccounting: () => (accountingError ? { data: undefined, error: accountingError } : { data: { budget }, error: null }),
 }))
 vi.mock('@/api/agents', () => ({
-  useAgents: () => ({ data: [{ name: 'alpha' }, { name: 'beta' }] }),
+  useAgents: () => (agentsError ? { data: undefined, error: agentsError } : { data: [{ name: 'alpha' }, { name: 'beta' }], error: null }),
 }))
 vi.mock('@/api/queue', () => ({
   useQueueStatuses: () => queueStatuses,
@@ -60,6 +63,9 @@ describe('Overview Collaboration block', () => {
     settings = makeSettings()
     budget = { limit_tokens: null, used_tokens: 2_600_000, remaining_tokens: null, exhausted: false }
     queueStatuses = []
+    settingsError = null
+    accountingError = null
+    agentsError = null
     useConfigStore.setState({ selectedProjectId: 'proj-a' })
   })
 
@@ -137,5 +143,27 @@ describe('Overview Collaboration block', () => {
     expect(onNavigate).toHaveBeenLastCalledWith('settings')
     fireEvent.click(row('hop'))
     expect(onNavigate).toHaveBeenLastCalledWith('settings')
+  })
+
+  // A failed read is said, never shown as a value (n11's MISREPORT shape; CI's surface ratchet).
+  it('says the settings could not be read instead of vanishing', () => {
+    settingsError = new ApiError(500, JSON.stringify({ detail: 'database is locked' }))
+    render(<CollaborationSummary onNavigate={vi.fn()} />)
+    expect(screen.getByRole('alert')).toHaveTextContent(/settings could not be read.*database is locked/i)
+  })
+
+  it('does not read zero agents or zero held when the agent list failed', () => {
+    agentsError = new Error('boom')
+    render(<CollaborationSummary onNavigate={vi.fn()} />)
+    expect(row('limits')).not.toHaveTextContent('0 of 8 agents')
+    expect(row('limits')).toHaveTextContent(/agents could not be read/i)
+    expect(row('hop')).toHaveTextContent(/queues could not be read/i)
+  })
+
+  it('does not read No limit when the budget could not be read', () => {
+    accountingError = new Error('boom')
+    render(<CollaborationSummary onNavigate={vi.fn()} />)
+    expect(row('token')).not.toHaveTextContent('No limit')
+    expect(row('token')).toHaveTextContent(/usage could not be read/i)
   })
 })

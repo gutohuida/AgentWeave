@@ -35178,3 +35178,15 @@ an operator question, left open.
 `requirement_evidence.py`). The 2026-10-08 overhaul already dropped the retention clauses from `requirement-traceability`
 as unbuilt. A setting with a writer and no effect: build the cleanup, or remove the column and the route. Kept off the
 Settings page by operator decision (2026-10-08) rather than surfacing a choice that does nothing.
+
+## F559 (C) -- the project-page settings change shipped seven query reads that show a failure as a value
+
+**Status:** fixed 2026-10-08 (Tier 0). Found by CI (`test_surface_ceilings.py`, run 37828650862: unhandled sites 104 >
+ceiling 97, 7 unclassified), not by the change's own checks: R2/F379 changed no backend file, so its build ran vitest
+and the drive but not the Hub suite, and the ratchet lives there.
+
+`CollaborationSummary` and `AgentPostureChips` (`e38f017`) bound no `error` on seven queries. A failed agent list read
+"0 of 8 agents" and hid every hop-held agent; a failed budget read "No limit"; failed settings removed the block without
+a word; a failed launch check or queue removed the "can't run"/"held" flags, so the card said nothing was wrong. Each
+read now says it failed (alert, flagged value or flag chip); five vitest cases failed before the fix. Lesson for UI-only
+changes: `hub/tests/test_surface_ceilings.py` gates `hub/ui/src`, so run it before pushing a component that queries.

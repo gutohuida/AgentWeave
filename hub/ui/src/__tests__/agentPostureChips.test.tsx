@@ -8,26 +8,32 @@ import type { AgentSummary } from '@/api/agents'
 const grant = vi.fn()
 let launchability: Record<string, { present: boolean; authorized: boolean; runnable: boolean; reason?: string | null }> = {}
 let waitingReason: string | null = null
+let launchError: Error | null = null
+let queueError: Error | null = null
+let runnersError: Error | null = null
 
 vi.mock('@/api/agents', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/agents')>()),
   useUpdateAgentGrant: () => ({ mutate: grant, isPending: false, error: null }),
-  useAgentLaunchability: () => ({ data: { agents: launchability } }),
+  useAgentLaunchability: () => (launchError ? { data: undefined, error: launchError } : { data: { agents: launchability }, error: null }),
 }))
 vi.mock('@/api/queue', () => ({
-  useQueueStatus: (agent: string | null) => ({
+  useQueueStatus: (agent: string | null) => (queueError ? { data: undefined, error: queueError } : {
     data: { agent, waiting_count: waitingReason ? 2 : 0, running: false, waiting_reason: waitingReason },
+    error: null,
   }),
 }))
 let runnersLoading = false
 vi.mock('@/api/runners', () => ({
-  useRunners: () => runnersLoading
+  useRunners: () => runnersError
+    ? { data: undefined, isLoading: false, error: runnersError }
+    : runnersLoading
     ? { data: undefined, isLoading: true }
     : { data: [{ id: 'runner-haiku', name: 'Haiku 4.5', cli: 'claude', model: 'claude-haiku-4-5-20251001' }], isLoading: false },
 }))
 vi.mock('@/api/modelCatalog', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/modelCatalog')>()),
-  useModelCatalog: () => ({ data: undefined }),
+  useModelCatalog: () => ({ data: undefined, error: null }),
 }))
 
 const alpha: AgentSummary = {
@@ -47,6 +53,9 @@ describe('agent posture on the Overview card', () => {
     launchability = {}
     waitingReason = null
     runnersLoading = false
+    launchError = null
+    queueError = null
+    runnersError = null
   })
 
   it('shows each grant as a pressed or unpressed chip (FR-4)', () => {
@@ -121,5 +130,21 @@ describe('agent posture on the Overview card', () => {
     render(<AgentPostureChips agent={{ ...beta, runner_id: null }} onNavigate={vi.fn()} />)
     fireEvent.click(screen.getByTestId('agent-details-toggle-beta'))
     expect(screen.getByTestId('agent-details-beta')).toHaveTextContent('None bound')
+  })
+
+  // A failed read is flagged, never shown as an agent with nothing wrong (n11's MISREPORT shape).
+  it('flags that it could not check whether the agent can run, or its queue', () => {
+    launchError = new Error('boom')
+    queueError = new Error('boom')
+    render(<AgentPostureChips agent={alpha} onNavigate={vi.fn()} />)
+    expect(screen.getByText(/launch not checked/i)).toBeInTheDocument()
+    expect(screen.getByText(/queue not read/i)).toBeInTheDocument()
+  })
+
+  it('says the runner list could not be read rather than showing a bare id', () => {
+    runnersError = new Error('boom')
+    render(<AgentPostureChips agent={beta} onNavigate={vi.fn()} />)
+    fireEvent.click(screen.getByTestId('agent-details-toggle-beta'))
+    expect(screen.getByTestId('agent-details-beta')).toHaveTextContent(/runner list could not be read/i)
   })
 })
