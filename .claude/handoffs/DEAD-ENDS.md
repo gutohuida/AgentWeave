@@ -2202,3 +2202,11 @@ disappears is indistinguishable from one that was forgotten.
   `umber-yeti`, ...) sit in this repo's trial project `proj-d85a82bf4216` with no file under `spec/changes/`;
   some have pending tasks. Unexplained (likely early drive leftovers); not archived, operator not yet asked to
   confirm.
+- **2026-10-08 (home) -- `session.get(Model, "<id>")` silently misses on models keyed by `sequence`.** `Conversation` and
+  `InboundQueueEntry` have an integer `sequence` primary key and `id` as a plain column, so `session.get` by id returns
+  None and an "it is gone" assertion passes vacuously. Query `select(Model).where(Model.id == ...)`. Check
+  `Model.__table__.primary_key` before writing a lookup.
+- **2026-10-08 (home) -- `POST /agents` on a `claude` runner checks the CLI is on PATH; CI has none.** A test that
+  creates its agent that way passes here and 409s on CI. Use the `add_agent` fixture plus `PATCH /agents/{name}`
+  `runner_id` (as `test_runners_api._make_runner_bound_agent` does); reproduce CI by stripping
+  `/c/Users/huida/AppData/Roaming/npm` from PATH.
