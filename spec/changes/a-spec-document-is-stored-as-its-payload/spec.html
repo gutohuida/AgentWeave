@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A spec document is stored as its payload</title>
+<meta name="aw-spec-kind" content="change-spec">
+<meta name="aw-spec-status" content="exploring">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>A spec document is stored as its payload</h1>
+<p class="aw-meta"><span class="aw-chip">change-spec</span><span class="aw-chip aw-chip-phase-quiet">exploring</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">10</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">10</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">10</span> criteria<span class="aw-summary-sep">·</span><span class="aw-count">4</span> tasks</p>
+<section id="summary"><h2>Summary</h2><p>Each specification document is stored as spec.json, holding the submitted payload plus the Hub&#x27;s copy of its phase, rigor, step and size. The Hub renders the HTML from it when the app opens the document, so the page beside the composer is unchanged. A one-time, reversible conversion moves an existing corpus across. Decided 2026-10-08 (spec-queue/DECISIONS.md, structure-format).</p></section><section id="problem"><h2>Problem</h2><p>Every document under spec/ stores its content three times: the JSON payload the Hub reads (2.0 MB across this repo&#x27;s 77 files), an HTML rendering of that same payload (2.2 MB), and its own copy of the CSS (0.67 MB). Every save rewrites the whole file, so a one-word edit shows as two changes buried in markup, and &#x27;what changed since I last reviewed&#x27; (needed by approval-warnings and tester-amends) has no clean source to diff. A document&#x27;s step and size live only in the database (migration 0122), so a clone cannot tell where a change stands. The operator reads documents only in the app (SpecFrame renders the HTML), so storing HTML buys nothing visible.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>spec.json as the stored form of every spec document: the payload verbatim plus a hub block (phase, rigor, step, size)</li><li>GET /spec renders the HTML from spec.json with the same render a save uses today</li><li>One storage seam in spec_documents through which every Hub reader gets a document&#x27;s payload</li><li>Path rules, discovery, naming and spec/index.json move from spec.html to spec.json</li><li>A per-project conversion route, html to json and back, that rewrites file, database paths and payload references</li><li>Converting this repository&#x27;s corpus on the trial Hub, and updating scripts and rules that name spec.html paths</li></ul><h3>Non-goals</h3><ul><li>Moving archived changes to spec/changes/archive/ (next change)</li><li>Generated system maps (later change)</li><li>Project-defined steps file (roadmap slice project-steps)</li><li>Reading legacy spec.html documents in place: they are reported and converted, not served (operator, 2026-10-08: the two on :8000 are test documents)</li><li>A Convert button in the app: the route is enough for the one corpus that needs it</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> The Hub MUST store each spec document as a spec.json file holding the submitted payload verbatim (unknown fields kept) and a hub block with the document&#x27;s phase, rigor, step and size, and MUST NOT write an HTML file for it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>One stored copy of the meaning; the database stays the authority for phase, rigor, step and size, and the file&#x27;s copy lets a clone see where each change stands.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> GET /spec MUST return HTML rendered from the stored spec.json by the same render a save produces today (identifiers, anchors, corpus navigation, slice line, phase and rigor chips), so the page the app shows beside the composer is unchanged.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The operator reads specs only in the app; the format change must not be visible there.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> spec.json MUST be written deterministically (stable key order, indented, one value per line, LF, trailing newline), so that rewording one requirement changes only that requirement&#x27;s lines.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Review diffs and tester amendments build on a diff that shows meaning only.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> Every Hub reader of a document&#x27;s payload (reading, indexing, review turns, adoption, agent actions, task transitions, roadmap slices, divergence) MUST obtain it through one storage function in spec_documents; no caller parses a stored file itself.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Twenty call sites parse file content today; one seam is what makes a future format change one edit.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> A document path MUST end in /spec.json: validate_spec_path, discovery, path naming and spec/index.json MUST use it, and creating a document at an .html path MUST be refused with a message naming the .json path.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> Discovery MUST report each legacy .html spec document as a legacy_html_document diagnostic naming the conversion route, and MUST NOT list it as a document.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A document missing from a list looks identical to one never written; the diagnostic says why and what to do.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 7 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> A per-project conversion route MUST turn every legacy .html document into spec.json and rewrite spec_documents.path, undelivered inbound_queue_entries.spec_document, payload references (roadmap.document, a task&#x27;s from.document) and spec/index.json, keeping document ids, requirement identifiers, evidence, events and tasks unchanged; running it again MUST change nothing.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Ids already carry identity everywhere else in the database; only these places hold a path.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span><a class="aw-anchor-copy" href="#FR-8" aria-label="Link to FR-8" title="Link to #FR-8">#</a> <span class="aw-position">Requirement 8 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> The conversion route MUST also convert spec.json back to .html with the same rewrites, so a rollback is the reverse call plus reverting the Hub code.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>No schema migration is involved; the rollback is the converse operation.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span><a class="aw-anchor-copy" href="#FR-9" aria-label="Link to FR-9" title="Link to #FR-9">#</a> <span class="aw-position">Requirement 9 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> The conversion MUST refuse, changing nothing, while any run in the project is active, naming the runs.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A running turn holds a document path in its context; renaming under it breaks the turn&#x27;s next call.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span><a class="aw-anchor-copy" href="#FR-10" aria-label="Link to FR-10" title="Link to #FR-10">#</a> <span class="aw-position">Requirement 10 of 10</span><p><span class="aw-modal aw-modal-must">MUST</span> A journey move (step or size) MUST rewrite the document&#x27;s spec.json hub block in the same request.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a document saved through submit_spec_document with an unknown field</td><td>spec.json is read back</td><td>it holds the payload with the unknown field and a hub block with phase, rigor, step and size, and no spec.html exists beside it</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>the converted scratch project open in Chromium</td><td>the operator opens the change document beside the composer</td><td>the frame shows the requirement statements and the phase chip as before conversion</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a saved spec.json</td><td>the same payload is saved again</td><td>the file&#x27;s bytes are identical</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a converted document</td><td>an agent calls read_spec_document and submit_spec_document on it</td><td>the read returns its requirements and the submit stores spec.json</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>a project</td><td>a document is created at spec/changes/x/spec.html</td><td>the route answers 400 naming spec/changes/x/spec.json</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td>a spec/ holding a legacy .html document</td><td>the documents list is read</td><td>it carries a legacy_html_document diagnostic for that path and no document entry</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>a scratch Hub on its own port with a fresh database, and a project whose spec/ holds a capability, a roadmap and a change linked to the roadmap slice, all created through today&#x27;s routes as .html (scripts/drive/d1010_spec_json.py)</td><td>the drive records the rendered page of each, records evidence on one requirement, calls the conversion route, then reads each document, rewords one requirement, moves the journey, reverses the conversion and converts again</td><td>each step holds: only spec.json files exist; GET /spec&#x27;s HTML body equals the recorded page; ids, identifiers and evidence are unchanged; the reword&#x27;s git diff touches only that requirement&#x27;s lines; the hub block shows the new step; the reverse leaves .html files that read as before; the second conversion changes nothing. Fails on today&#x27;s Hub at the first check (no conversion route).</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-8">FR-8</a></td><td>a converted project</td><td>the reverse conversion runs</td><td>the .html files and database paths read as before conversion</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-9">FR-9</a></td><td>a project with an active run</td><td>the conversion is called</td><td>it answers 409 naming the run, and no file or row changed</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-10">FR-10</a></td><td>a change document at intake</td><td>the operator moves it to requirements</td><td>its spec.json hub block reads step requirements</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>Tier 2: a cross-cutting contract (every reader of a document file, the path rules, the index) and a conversion of the live corpus. No Alembic migration: the database already refers to documents by id except spec_documents.path and inbound_queue_entries.spec_document, which the conversion rewrites. Hazard: a conversion under a running turn; refused while any run is active. :8000 runs this checkout; after its next restart its two .html test documents show as legacy diagnostics (operator: test data). Rollback: the reverse conversion, then revert the code.</p><p>D1. Path keeps the file name (spec/changes/x/spec.json), not the directory. Rejected: directory-as-identity, which would change every path consumer at once for no gain here.
+D2. Render on read, not cached. render_document already runs per save; the per-open cost is one render of one document. Rejected: committing a generated spec.html (keeps the noisy diff the change exists to remove).
+D3. The hub block is a copy, the database the authority, exactly as the HTML head&#x27;s aw-spec-status is today. Rejected: payload fields for step/size (agents could submit them).
+D4. Legacy .html is reported, not read in place. Rejected: a dual reader, kept forever for two test documents.
+D5. Conversion is a route, not a migration: migrations do not touch project files, and only the Hub resolves a project&#x27;s directory (ProjectWorkspace).
+D6. src/agentweave/spec_manifest.py, the CLI twin, has no importer; it is deleted with its agreement test rather than kept in step.</p></section><section id="tasks"><h2>Tasks</h2><ul class="aw-task-list"><li class="aw-task"><strong>Acceptance drive, failing on today&#x27;s Hub</strong> — scripts/drive/d1010_spec_json.py: scratch Hub on its own port and fresh database, documents created through today&#x27;s routes, Chromium for the panel. The &#x27;drive&#x27; and &#x27;app-shows-same-page&#x27; criteria. Must fail at the first check before any build task.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-7">FR-7</a><a class="aw-chip-ref" href="#FR-2">FR-2</a></span></li><li class="aw-task"><strong>spec.json storage, the one seam, render on open, json paths</strong> — spec_documents read_payload/write_payload with deterministic JSON and the hub block; every reader moved onto the seam; GET /spec renders; validate_spec_path, discovery, spec_naming and the index on spec.json; .html creation refused; legacy diagnostic; journey moves write the hub block; delete the CLI twin. Failing Hub tests first.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-2">FR-2</a><a class="aw-chip-ref" href="#FR-3">FR-3</a><a class="aw-chip-ref" href="#FR-4">FR-4</a><a class="aw-chip-ref" href="#FR-5">FR-5</a><a class="aw-chip-ref" href="#FR-6">FR-6</a><a class="aw-chip-ref" href="#FR-10">FR-10</a></span></li><li class="aw-task"><strong>The conversion route, both directions, refused while busy</strong> — POST /project/spec/convert?to=json|html: files, spec_documents.path, undelivered queue entries, payload references, index; idempotent; 409 while a run is active. Failing Hub tests first.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-7">FR-7</a><a class="aw-chip-ref" href="#FR-8">FR-8</a><a class="aw-chip-ref" href="#FR-9">FR-9</a></span></li><li class="aw-task"><strong>Convert this repository&#x27;s corpus and its references</strong> — Run the drive green; convert proj-d85a82bf4216 on the trial Hub with no run active; update scripts/drive/close_change.py, CLAUDE.md, .claude/rules and .claude/reference paths naming spec.html; reindex; commit spec/ and the bundle-free code together.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-7">FR-7</a></span></li></ul></section><section id="delivery"><h2>Delivery</h2><p>No flow. The tasks go on the board and are started by hand.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "change-spec",
+  "title": "A spec document is stored as its payload",
+  "summary": "Each specification document is stored as spec.json, holding the submitted payload plus the Hub's copy of its phase, rigor, step and size. The Hub renders the HTML from it when the app opens the document, so the page beside the composer is unchanged. A one-time, reversible conversion moves an existing corpus across. Decided 2026-10-08 (spec-queue/DECISIONS.md, structure-format).",
+  "problem": "Every document under spec/ stores its content three times: the JSON payload the Hub reads (2.0 MB across this repo's 77 files), an HTML rendering of that same payload (2.2 MB), and its own copy of the CSS (0.67 MB). Every save rewrites the whole file, so a one-word edit shows as two changes buried in markup, and 'what changed since I last reviewed' (needed by approval-warnings and tester-amends) has no clean source to diff. A document's step and size live only in the database (migration 0122), so a clone cannot tell where a change stands. The operator reads documents only in the app (SpecFrame renders the HTML), so storing HTML buys nothing visible.",
+  "scope": {
+    "in_scope": [
+      "spec.json as the stored form of every spec document: the payload verbatim plus a hub block (phase, rigor, step, size)",
+      "GET /spec renders the HTML from spec.json with the same render a save uses today",
+      "One storage seam in spec_documents through which every Hub reader gets a document's payload",
+      "Path rules, discovery, naming and spec/index.json move from spec.html to spec.json",
+      "A per-project conversion route, html to json and back, that rewrites file, database paths and payload references",
+      "Converting this repository's corpus on the trial Hub, and updating scripts and rules that name spec.html paths"
+    ],
+    "non_goals": [
+      "Moving archived changes to spec/changes/archive/ (next change)",
+      "Generated system maps (later change)",
+      "Project-defined steps file (roadmap slice project-steps)",
+      "Reading legacy spec.html documents in place: they are reported and converted, not served (operator, 2026-10-08: the two on :8000 are test documents)",
+      "A Convert button in the app: the route is enough for the one corpus that needs it"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "stored-as-json",
+      "statement": "The Hub MUST store each spec document as a spec.json file holding the submitted payload verbatim (unknown fields kept) and a hub block with the document's phase, rigor, step and size, and MUST NOT write an HTML file for it.",
+      "modal": "MUST",
+      "rationale": "One stored copy of the meaning; the database stays the authority for phase, rigor, step and size, and the file's copy lets a clone see where each change stands.",
+      "party": null
+    },
+    {
+      "key": "rendered-on-open",
+      "statement": "GET /spec MUST return HTML rendered from the stored spec.json by the same render a save produces today (identifiers, anchors, corpus navigation, slice line, phase and rigor chips), so the page the app shows beside the composer is unchanged.",
+      "modal": "MUST",
+      "rationale": "The operator reads specs only in the app; the format change must not be visible there.",
+      "party": null
+    },
+    {
+      "key": "diff-clean",
+      "statement": "spec.json MUST be written deterministically (stable key order, indented, one value per line, LF, trailing newline), so that rewording one requirement changes only that requirement's lines.",
+      "modal": "MUST",
+      "rationale": "Review diffs and tester amendments build on a diff that shows meaning only.",
+      "party": null
+    },
+    {
+      "key": "one-seam",
+      "statement": "Every Hub reader of a document's payload (reading, indexing, review turns, adoption, agent actions, task transitions, roadmap slices, divergence) MUST obtain it through one storage function in spec_documents; no caller parses a stored file itself.",
+      "modal": "MUST",
+      "rationale": "Twenty call sites parse file content today; one seam is what makes a future format change one edit.",
+      "party": null
+    },
+    {
+      "key": "json-paths",
+      "statement": "A document path MUST end in /spec.json: validate_spec_path, discovery, path naming and spec/index.json MUST use it, and creating a document at an .html path MUST be refused with a message naming the .json path.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "legacy-reported",
+      "statement": "Discovery MUST report each legacy .html spec document as a legacy_html_document diagnostic naming the conversion route, and MUST NOT list it as a document.",
+      "modal": "MUST",
+      "rationale": "A document missing from a list looks identical to one never written; the diagnostic says why and what to do.",
+      "party": null
+    },
+    {
+      "key": "conversion",
+      "statement": "A per-project conversion route MUST turn every legacy .html document into spec.json and rewrite spec_documents.path, undelivered inbound_queue_entries.spec_document, payload references (roadmap.document, a task's from.document) and spec/index.json, keeping document ids, requirement identifiers, evidence, events and tasks unchanged; running it again MUST change nothing.",
+      "modal": "MUST",
+      "rationale": "Ids already carry identity everywhere else in the database; only these places hold a path.",
+      "party": null
+    },
+    {
+      "key": "reversible",
+      "statement": "The conversion route MUST also convert spec.json back to .html with the same rewrites, so a rollback is the reverse call plus reverting the Hub code.",
+      "modal": "MUST",
+      "rationale": "No schema migration is involved; the rollback is the converse operation.",
+      "party": null
+    },
+    {
+      "key": "refuses-while-busy",
+      "statement": "The conversion MUST refuse, changing nothing, while any run in the project is active, naming the runs.",
+      "modal": "MUST",
+      "rationale": "A running turn holds a document path in its context; renaming under it breaks the turn's next call.",
+      "party": null
+    },
+    {
+      "key": "journey-written",
+      "statement": "A journey move (step or size) MUST rewrite the document's spec.json hub block in the same request.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "drive",
+      "requirement": "conversion",
+      "given": "a scratch Hub on its own port with a fresh database, and a project whose spec/ holds a capability, a roadmap and a change linked to the roadmap slice, all created through today's routes as .html (scripts/drive/d1010_spec_json.py)",
+      "when": "the drive records the rendered page of each, records evidence on one requirement, calls the conversion route, then reads each document, rewords one requirement, moves the journey, reverses the conversion and converts again",
+      "then": "each step holds: only spec.json files exist; GET /spec's HTML body equals the recorded page; ids, identifiers and evidence are unchanged; the reword's git diff touches only that requirement's lines; the hub block shows the new step; the reverse leaves .html files that read as before; the second conversion changes nothing. Fails on today's Hub at the first check (no conversion route).",
+      "how_to_check": "py -3.11 scripts/drive/d1010_spec_json.py",
+      "checked_by": "agent"
+    },
+    {
+      "key": "app-shows-same-page",
+      "requirement": "rendered-on-open",
+      "given": "the converted scratch project open in Chromium",
+      "when": "the operator opens the change document beside the composer",
+      "then": "the frame shows the requirement statements and the phase chip as before conversion",
+      "how_to_check": "the drive's Chromium step screenshots the document panel before and after conversion",
+      "checked_by": "agent"
+    },
+    {
+      "key": "deterministic-write",
+      "requirement": "diff-clean",
+      "given": "a saved spec.json",
+      "when": "the same payload is saved again",
+      "then": "the file's bytes are identical",
+      "how_to_check": "Hub unit test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "agent-reads",
+      "requirement": "one-seam",
+      "given": "a converted document",
+      "when": "an agent calls read_spec_document and submit_spec_document on it",
+      "then": "the read returns its requirements and the submit stores spec.json",
+      "how_to_check": "Hub route test through the agent-actions routes",
+      "checked_by": "agent"
+    },
+    {
+      "key": "html-create-refused",
+      "requirement": "json-paths",
+      "given": "a project",
+      "when": "a document is created at spec/changes/x/spec.html",
+      "then": "the route answers 400 naming spec/changes/x/spec.json",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "legacy-diagnostic",
+      "requirement": "legacy-reported",
+      "given": "a spec/ holding a legacy .html document",
+      "when": "the documents list is read",
+      "then": "it carries a legacy_html_document diagnostic for that path and no document entry",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "busy-refused",
+      "requirement": "refuses-while-busy",
+      "given": "a project with an active run",
+      "when": "the conversion is called",
+      "then": "it answers 409 naming the run, and no file or row changed",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "reverse",
+      "requirement": "reversible",
+      "given": "a converted project",
+      "when": "the reverse conversion runs",
+      "then": "the .html files and database paths read as before conversion",
+      "how_to_check": "the drive's reverse step",
+      "checked_by": "agent"
+    },
+    {
+      "key": "stored-shape",
+      "requirement": "stored-as-json",
+      "given": "a document saved through submit_spec_document with an unknown field",
+      "when": "spec.json is read back",
+      "then": "it holds the payload with the unknown field and a hub block with phase, rigor, step and size, and no spec.html exists beside it",
+      "how_to_check": "Hub unit test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "journey-in-file",
+      "requirement": "journey-written",
+      "given": "a change document at intake",
+      "when": "the operator moves it to requirements",
+      "then": "its spec.json hub block reads step requirements",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "drive-first",
+      "title": "Acceptance drive, failing on today's Hub",
+      "description": "scripts/drive/d1010_spec_json.py: scratch Hub on its own port and fresh database, documents created through today's routes, Chromium for the panel. The 'drive' and 'app-shows-same-page' criteria. Must fail at the first check before any build task.",
+      "requirements": [
+        "conversion",
+        "rendered-on-open"
+      ],
+      "depends_on": [],
+      "files": [
+        "scripts/drive/d1010_spec_json.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "storage",
+      "title": "spec.json storage, the one seam, render on open, json paths",
+      "description": "spec_documents read_payload/write_payload with deterministic JSON and the hub block; every reader moved onto the seam; GET /spec renders; validate_spec_path, discovery, spec_naming and the index on spec.json; .html creation refused; legacy diagnostic; journey moves write the hub block; delete the CLI twin. Failing Hub tests first.",
+      "requirements": [
+        "stored-as-json",
+        "rendered-on-open",
+        "diff-clean",
+        "one-seam",
+        "json-paths",
+        "legacy-reported",
+        "journey-written"
+      ],
+      "depends_on": [
+        "drive-first"
+      ],
+      "files": [
+        "hub/hub/spec_documents.py",
+        "hub/hub/spec_manifest.py",
+        "hub/hub/spec_naming.py",
+        "hub/hub/spec_service.py",
+        "hub/hub/spec_reading.py",
+        "hub/hub/spec_index.py",
+        "hub/hub/spec_adoption.py",
+        "hub/hub/review_turn.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/spec_journey.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "src/agentweave/spec_manifest.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "convert",
+      "title": "The conversion route, both directions, refused while busy",
+      "description": "POST /project/spec/convert?to=json|html: files, spec_documents.path, undelivered queue entries, payload references, index; idempotent; 409 while a run is active. Failing Hub tests first.",
+      "requirements": [
+        "conversion",
+        "reversible",
+        "refuses-while-busy"
+      ],
+      "depends_on": [
+        "storage"
+      ],
+      "files": [
+        "hub/hub/spec_conversion.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "corpus",
+      "title": "Convert this repository's corpus and its references",
+      "description": "Run the drive green; convert proj-d85a82bf4216 on the trial Hub with no run active; update scripts/drive/close_change.py, CLAUDE.md, .claude/rules and .claude/reference paths naming spec.html; reindex; commit spec/ and the bundle-free code together.",
+      "requirements": [
+        "conversion"
+      ],
+      "depends_on": [
+        "convert"
+      ],
+      "files": [
+        "spec",
+        "scripts/drive/close_change.py",
+        "CLAUDE.md",
+        ".claude/rules",
+        ".claude/reference"
+      ],
+      "from": null,
+      "reviewer": null
+    }
+  ],
+  "algorithms": [],
+  "design": "Tier 2: a cross-cutting contract (every reader of a document file, the path rules, the index) and a conversion of the live corpus. No Alembic migration: the database already refers to documents by id except spec_documents.path and inbound_queue_entries.spec_document, which the conversion rewrites. Hazard: a conversion under a running turn; refused while any run is active. :8000 runs this checkout; after its next restart its two .html test documents show as legacy diagnostics (operator: test data). Rollback: the reverse conversion, then revert the code.\n\nD1. Path keeps the file name (spec/changes/x/spec.json), not the directory. Rejected: directory-as-identity, which would change every path consumer at once for no gain here.\nD2. Render on read, not cached. render_document already runs per save; the per-open cost is one render of one document. Rejected: committing a generated spec.html (keeps the noisy diff the change exists to remove).\nD3. The hub block is a copy, the database the authority, exactly as the HTML head's aw-spec-status is today. Rejected: payload fields for step/size (agents could submit them).\nD4. Legacy .html is reported, not read in place. Rejected: a dual reader, kept forever for two test documents.\nD5. Conversion is a route, not a migration: migrations do not touch project files, and only the Hub resolves a project's directory (ProjectWorkspace).\nD6. src/agentweave/spec_manifest.py, the CLI twin, has no importer; it is deleted with its agreement test rather than kept in step.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "delivery": {
+    "mode": "none",
+    "agent": null,
+    "reviewer": null,
+    "stop_when_queue_empties": false,
+    "stop_at": null,
+    "cron": "*/5 * * * *"
+  },
+  "aw_identity": {
+    "requirements": {
+      "stored-as-json": "FR-1",
+      "rendered-on-open": "FR-2",
+      "diff-clean": "FR-3",
+      "one-seam": "FR-4",
+      "json-paths": "FR-5",
+      "legacy-reported": "FR-6",
+      "conversion": "FR-7",
+      "reversible": "FR-8",
+      "refuses-while-busy": "FR-9",
+      "journey-written": "FR-10"
+    },
+    "high_water": 10,
+    "retired": {},
+    "digests": {
+      "FR-1": "6b3c60610f7182c939f4a7affa27f12e0e51a484067f33be3303851e15027462",
+      "FR-2": "1946f47b1100f5705329928892135f8a09d3eed8223f6a855efcd040d54db1d7",
+      "FR-3": "e3b462e6448f1d50d8bafc426f0f2a16dc2133ee988346f4c10bd5883e6109e7",
+      "FR-4": "512b09642c6cdba89496df7ceddef0b4743f3d72d97db40fc701fff72fda0e78",
+      "FR-5": "330c7f79d1225e6b62e83289d13b907a0f0d8fc015fc99f0f51d2da49c2134f4",
+      "FR-6": "5cebc531668e0a983cee83b2fd0e02647467ce73c3c6628f5dd7d85541166f2c",
+      "FR-7": "d0a4a0ad0df3cb8cac54696dd77484061b701b588a79653bb6738a5ca18ecc1c",
+      "FR-8": "a26eb1932c8ec94fc05e51939b17f89d8a30fa7efd3b66c470449faf3f94f737",
+      "FR-9": "7b56480d6c865c690ead9242a6eb0eddb4753f8ce8b011afc2cfad1e615056df",
+      "FR-10": "5a67ea56cdc5d92ffa6745af22518f2ad8557ccd12f5536143cea4a3e2ceaa08"
+    }
+  }
+}
+</script>
+</body>
+</html>
