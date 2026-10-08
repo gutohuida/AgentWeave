@@ -19,6 +19,7 @@ TESTS = "hub/tests/test_a_decided_task_withdraws_its_waiting_reviews.py"
 CLAIM_TESTS = "hub/tests/test_a_run_claims_only_its_agents_or_nobodys_work.py"
 READ_ONLY_TESTS = "hub/tests/test_a_read_only_agent_holds_no_task_work.py"
 CODEX_SPEC_TESTS = "hub/tests/test_a_codex_app_server_spec_turn_keeps_no_write_tools.py"
+DEFAULT_REVIEWER_TESTS = "hub/tests/test_a_document_names_its_default_reviewer.py"
 
 CHANGES = {
     "f440": {
@@ -96,6 +97,36 @@ CHANGES = {
             ("FR-4", "task-b263ff986238", "test_result", CODEX_SPEC_TESTS,
              "With no document open Full access starts danger-full-access/never and Workspace only "
              "accepts the command (the controls); MCP elicitation is accepted on a spec turn."),
+        ],
+    },
+    "f508": {
+        "document": "spec/changes/a-document-names-its-default-reviewer/spec.html",
+        "tasks": [
+            "task-ca5e972926f9",
+            "task-3a09c1140b1b",
+            "task-cbb027b3387f",
+            "task-80ffa8e8b03d",
+            "task-f0925c46d9dd",
+        ],
+        "evidence": [
+            ("FR-1", "task-3a09c1140b1b", "test_result", DEFAULT_REVIEWER_TESTS,
+             "A task naming no reviewer is staffed from delivery.reviewer (rung declared) over a "
+             "free agent sorting first; an unknown or archived default is unresolved with a reason "
+             "naming the document's default, never substituted (red before the build)."),
+            ("FR-1", "task-f0925c46d9dd", "manual_observation",
+             "scripts/drive/d1008_default_reviewer_drive.py",
+             "Driven on :8010 with real Haiku agents: 0/3 before (the review went to aaa-stub), "
+             "3/3 after (queued to critic, task under_review held by critic)."),
+            ("FR-2", "task-3a09c1140b1b", "test_result", DEFAULT_REVIEWER_TESTS,
+             "A task's own reviewer wins over delivery.reviewer; with neither, rung 2 is unchanged."),
+            ("FR-3", "task-80ffa8e8b03d", "manual_observation",
+             "scripts/drive/d1008_default_reviewer_bar.py",
+             "delivery_status carries reviewer and reviewer_state; in Chromium on the served bundle "
+             "the bar reads 'Reviewed by @critic.' and, for an unknown name, amber with 'its "
+             "reviews will come to you' (4/4); vitest 'who reviews' red before."),
+            ("FR-4", "task-cbb027b3387f", "test_result", DEFAULT_REVIEWER_TESTS,
+             "The exploring duty and submit_spec_document name delivery.reviewer; "
+             "reviewer_undeclared is quiet when it is set and names it otherwise."),
         ],
     },
 }
