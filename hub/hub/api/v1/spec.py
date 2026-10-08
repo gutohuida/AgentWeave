@@ -27,6 +27,7 @@ from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
+    deletion,
     project_workspace,
     requirement_coverage,
     requirement_evidence,
@@ -2395,6 +2396,67 @@ async def merge_document(
         project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
     return response
+
+
+@router.delete("/documents/{path:path}")
+async def delete_document(
+    path: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete a specification document and everything it produced (F532, `deletion`).
+
+    Refused, writing nothing, for a capability, an archived or folded document, one with a run in
+    progress on its tasks, and one whose flow is running. The rows go in one transaction; the file
+    goes after it commits (a transaction rolls back, a file delete does not), and `spec/index.json`
+    is rebuilt without it when it listed the document.
+    """
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    try:
+        deleted = await deletion.delete_document(session, document)
+    except deletion.DeletionRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    await persist_event(
+        session,
+        project_id,
+        "spec_document_deleted",
+        {"path": deleted.path, "tasks": deleted.tasks},
+        commit=False,
+    )
+    # Announced once the rows are committed (F335). The file and the index follow; a reader that
+    # refetches in between sees the document gone from the Hub, which is what decides.
+    defer_broadcast(session, project_id, "spec_updated", {"path": deleted.path})
+    await session.commit()
+
+    diagnostics: List[Dict[str, Any]] = []
+    try:
+        spec_documents.delete_document_file(workspace, deleted.path)
+    except OSError as exc:
+        diagnostics.append({"code": "file_delete_failed", "path": deleted.path, "actual": str(exc)})
+    existing, _, _ = spec_documents.read_index(workspace)
+    if existing is not None and any(entry.path == deleted.path for entry in existing.documents):
+        on_disk, _ = spec_documents.discover(workspace)
+        rows = await spec_lifecycle.list_documents(session, project_id)
+        manifest, index_diagnostics = spec_documents.build_index(
+            on_disk, [(row.path, row.title, row.kind, row.phase) for row in rows], existing
+        )
+        diagnostics.extend(index_diagnostics)
+        if manifest is not None:
+            try:
+                spec_documents.write_index(workspace, manifest)
+            except OSError as exc:
+                diagnostics.append({"code": "index_write_failed", "actual": str(exc)})
+    return {
+        "path": deleted.path,
+        "deleted": True,
+        "tasks": deleted.tasks,
+        "requirements": deleted.requirements,
+        "diagnostics": diagnostics,
+    }
 
 
 def _fold_refused(exc: Exception) -> HTTPException:

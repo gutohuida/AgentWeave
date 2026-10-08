@@ -66,9 +66,9 @@ def archive(agent: Agent) -> None:
 
     Also releases the agent's charter binding (`charter_id = None`): nothing runs an archived
     agent, so a bound charter governs nothing while it only walls off the charter's deletion
-    behind a name the default roster does not show (F185). `runner_id` is deliberately left
-    bound — an archived agent can still be named as a runner's holder (`design.md` D3), and a
-    third site (`runners.py delete_runner`) relies on being able to say so.
+    behind a name the default roster does not show (F185). `runner_id` is left bound, so
+    an unarchived agent comes back on its runner (`design.md` D3); deleting that runner clears it
+    from archived holders instead of refusing (`runners.py delete_runner`, F532).
     """
     agent.lifecycle = "archived"
     agent.archived_at = datetime.now(timezone.utc)

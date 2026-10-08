@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
+    deletion,
     dependency_gate,
     project_workspace,
     spec_lifecycle,
@@ -63,7 +64,7 @@ from ...schemas.tasks import (
     TaskUpdate,
 )
 from ...spec_lifecycle import Actor as SpecActor
-from ...sse import sse_manager
+from ...sse import defer_broadcast, sse_manager
 from ...task_transition_service import (
     GateUnsatisfiedError,
     TransitionRefusedError,
@@ -1360,6 +1361,37 @@ async def retry_task_integration(
     )
     await sse_manager.broadcast(project_id, "task_integration_retried", {"task_id": task_id})
     return view
+
+
+@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_task(
+    task_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete a task and what exists only for it (F532, `deletion.delete_task`).
+
+    Operator-only: the route sits on the project credential, and an agent's task surface has no
+    delete. Refused with 409 while a run bound to the task is in progress.
+    """
+    project_id, _ = project
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    title = task.title
+    try:
+        await deletion.delete_task(session, task)
+    except deletion.DeletionRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    await persist_event(
+        session, project_id, "task_deleted", {"id": task_id, "title": title}, commit=False
+    )
+    # Announced once the delete has committed (F335), never before.
+    defer_broadcast(session, project_id, "task_updated", {"id": task_id, "deleted": True})
+    await session.commit()
+    return None
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

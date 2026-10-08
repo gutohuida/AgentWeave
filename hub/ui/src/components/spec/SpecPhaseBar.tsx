@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { ArchiveConfirmDialog } from '@/components/spec/ArchiveConfirmDialog'
+import { DeleteConfirmDialog } from '@/components/common/DeleteConfirmDialog'
 import { FoldIntoCapabilityDialog } from '@/components/spec/FoldIntoCapabilityDialog'
 import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
 import { useDocumentFlow, type LoopSummary } from '@/api/loops'
@@ -11,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { hubDate } from '@/lib/hubTime'
 import {
   useCloseExploration,
+  useDeleteSpecDocument,
   useProposeSpecDocument,
   useSetSpecPhase,
   useSetSpecRigor,
@@ -105,6 +107,9 @@ export function SpecPhaseBar({
   const [archiveRefusal, setArchiveRefusal] = useState<string | null>(null)
   const [startingFlow, setStartingFlow] = useState(false)
   const [folding, setFolding] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleteRefusal, setDeleteRefusal] = useState<string | null>(null)
+  const deleteDocument = useDeleteSpecDocument()
   const [deliveryAgentChoice, setDeliveryAgentChoice] = useState(NO_CHOICE)
   // On by default (C1a D4): approving a slice usually means "and now the next one".
   const [draftNextSlice, setDraftNextSlice] = useState(true)
@@ -128,6 +133,12 @@ export function SpecPhaseBar({
   const foldState = specDocError ? undefined : specDoc?.fold_state
   // An approved change that no merge names archives only with a reason saying it changes no
   // capability (the Hub's archive guard). A Hub without `fold_state` never asks.
+  // F532: what the corpus or its history depends on is never offered for deletion. The Hub refuses
+  // the rest when a run or a flow is working on it, and the confirm shows that refusal.
+  const deletable =
+    document.kind !== 'capability' &&
+    document.phase !== 'archived' &&
+    foldState?.state !== 'folded'
   const archiveNeedsReason =
     document.kind === 'change-spec' &&
     document.phase === 'approved' &&
@@ -172,6 +183,16 @@ export function SpecPhaseBar({
           setBlocking(findingsFromRefusal(error, 'The Hub refused to approve this document.')),
       },
     )
+  }
+
+  async function onConfirmDelete() {
+    setDeleteRefusal(null)
+    try {
+      await deleteDocument.mutateAsync({ path })
+      setConfirmingDelete(false)
+    } catch (error) {
+      setDeleteRefusal(readableApiError(error, 'The Hub refused to delete this document.'))
+    }
   }
 
   function onConfirmArchive(reason: string) {
@@ -408,6 +429,19 @@ export function SpecPhaseBar({
           </button>
         )}
 
+        {deletable && (
+          <button
+            type="button"
+            data-testid="spec-delete"
+            disabled={busy}
+            onClick={() => { setDeleteRefusal(null); setConfirmingDelete(true) }}
+            className="rounded-[var(--radius-sm)] px-2 py-1 hover:bg-[var(--row-hover)]"
+            style={{ color: 'var(--text-3)' }}
+          >
+            Delete
+          </button>
+        )}
+
         {(document.phase === 'proposed' || document.phase === 'approved') && (
           <button
             type="button"
@@ -607,6 +641,18 @@ export function SpecPhaseBar({
         <StartFlowDialog
           document={{ id: document.id, title: document.title }}
           onClose={() => setStartingFlow(false)}
+        />
+      )}
+
+      {confirmingDelete && (
+        <DeleteConfirmDialog
+          heading={`Delete “${document.title}”?`}
+          body="Its file, its requirements and their evidence, and every task it put on the board go with it."
+          confirmLabel="Delete document"
+          isPending={deleteDocument.isPending}
+          error={deleteRefusal}
+          onCancel={() => setConfirmingDelete(false)}
+          onConfirm={onConfirmDelete}
         />
       )}
 

@@ -25,6 +25,8 @@ let transitionsMap: Record<string, string[]> = {}
 // F125's rename mutation, stubbed so the drawer's own edit/save/cancel mechanics are what these
 // tests exercise, not a real network call (`tasksApi.test.tsx` covers the hook's request shape).
 let renameMutate = vi.fn()
+// F532's delete, overridden per test like `renameMutate`.
+let deleteMutate = vi.fn()
 
 vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
@@ -42,6 +44,11 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     // and cannot be given a provider without changing what it is testing. Behaviour of the button
     // itself belongs to `taskLandingAction.test.tsx`, which does wrap one.
     useLandTask: () => ({ mutate: vi.fn(), isPending: false }),
+    useDeleteTask: () => ({
+      mutate: (vars: { id: string }, opts?: { onSuccess?: () => void; onError?: (e: unknown) => void }) =>
+        deleteMutate(vars, opts),
+      isPending: false,
+    }),
     // The checks row (approval-runs-the-projects-checks), stubbed for the same reason: its
     // behaviour belongs to `taskChecksRow.test.tsx`.
     useTaskChecks: () => ({ data: undefined, error: null }),
@@ -373,5 +380,36 @@ describe('no-clipping (design.md D8, tasks.md 6.5)', () => {
       expect(screen.getByText(new RegExp(link.statement))).toBeInTheDocument()
     }
     expect(screen.getByText(longDescription.trim())).toBeInTheDocument()
+  })
+})
+
+describe('deleting a task (F532)', () => {
+  it('deletes behind a confirm and closes the drawer', async () => {
+    deleteMutate = vi.fn((_vars, opts) => opts?.onSuccess?.())
+    const onClose = vi.fn()
+    renderDrawer(makeTask({ id: 'task-9' }), onClose)
+
+    await userEvent.click(screen.getByTestId('task-delete-task-9'))
+    expect(deleteMutate).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByTestId('delete-confirm'))
+
+    expect(deleteMutate).toHaveBeenCalledWith({ id: 'task-9' }, expect.anything())
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('shows the Hub’s refusal and keeps the drawer open', async () => {
+    deleteMutate = vi.fn((_vars, opts) =>
+      opts?.onError?.(
+        new ApiError(409, JSON.stringify({ detail: { message: 'run run-1 is working on this task', code: 'delete_run_active' } })),
+      ),
+    )
+    const onClose = vi.fn()
+    renderDrawer(makeTask({ id: 'task-9' }), onClose)
+
+    await userEvent.click(screen.getByTestId('task-delete-task-9'))
+    await userEvent.click(screen.getByTestId('delete-confirm'))
+
+    expect(await screen.findByText(/run run-1 is working on this task/)).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
   })
 })

@@ -6,7 +6,7 @@ See openspec/changes/runner-agent-charter-separation/specs/runner-registry/spec.
 from typing import Any, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -241,21 +241,25 @@ async def delete_runner(
         )
     )
     bound_rows = bound.all()
-    if bound_rows:
-        labels = [
-            f"{name} (archived)" if lifecycle == "archived" else name
-            for name, lifecycle in bound_rows
-        ]
-        if any(lifecycle == "archived" for _, lifecycle in bound_rows):
-            detail = (
-                f"Runner is bound to agent(s): {', '.join(labels)}. Unbind before deleting; "
-                "an archived agent is listed under Agents with the archived filter."
-            )
-        else:
-            detail = f"Runner is bound to agent(s): {', '.join(labels)}. Unbind before deleting."
+    open_names = [name for name, lifecycle in bound_rows if lifecycle != "archived"]
+    if open_names:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=detail,
+            detail=f"Runner is bound to agent(s): {', '.join(open_names)}. Unbind before deleting.",
+        )
+
+    # An archived agent runs nothing, so its binding only kept the runner undeletable (F532). The
+    # agent and its history stay; it just no longer names a runner (`agent_lifecycle`: agents are
+    # archived, never deleted).
+    if bound_rows:
+        await session.execute(
+            update(Agent)
+            .where(
+                Agent.project_id == project_id,
+                Agent.runner_id == runner_id,
+                Agent.lifecycle == "archived",
+            )
+            .values(runner_id=None)
         )
 
     await session.delete(runner)

@@ -322,9 +322,11 @@ async def _make_runner_bound_agent(app, auth_headers, add_agent, runner_name, ag
 
 
 @pytest.mark.asyncio
-async def test_delete_runner_bound_to_only_archived_agent_names_it_archived(
+async def test_delete_runner_bound_to_only_archived_agent_deletes_and_unbinds_it(
     app, auth_headers, add_agent
 ):
+    """F532: an archived agent runs nothing, so it no longer keeps its runner undeletable. The
+    agent stays (agents are archived, never deleted) and simply names no runner."""
     runner = await _make_runner_bound_agent(
         app, auth_headers, add_agent, "OnlyArchived", "archived-only"
     )
@@ -336,14 +338,15 @@ async def test_delete_runner_bound_to_only_archived_agent_names_it_archived(
     resp = await app.delete(
         f"/api/v1/projects/proj-test/runners/{runner['id']}", headers=auth_headers
     )
-    assert resp.status_code == 409
-    detail = resp.json()["detail"]
-    assert "archived-only (archived)" in detail
-    assert "an archived agent is listed under Agents with the archived filter" in detail
+    assert resp.status_code == 204, resp.text
+    agents = await app.get("/api/v1/projects/proj-test/agents?lifecycle=all", headers=auth_headers)
+    (agent,) = [a for a in agents.json() if a["name"] == "archived-only"]
+    assert agent["lifecycle"] == "archived"
+    assert agent.get("runner_id") is None
 
 
 @pytest.mark.asyncio
-async def test_delete_runner_bound_to_mixed_holders_qualifies_only_the_archived_one(
+async def test_delete_runner_bound_to_mixed_holders_names_only_the_open_one_and_changes_nothing(
     app, auth_headers, add_agent
 ):
     runner = await _make_runner_bound_agent(app, auth_headers, add_agent, "Mixed", "mixed-open")
@@ -365,9 +368,10 @@ async def test_delete_runner_bound_to_mixed_holders_qualifies_only_the_archived_
     assert resp.status_code == 409
     detail = resp.json()["detail"]
     assert "mixed-open" in detail
-    assert "mixed-open (archived)" not in detail
-    assert "mixed-archived (archived)" in detail
-    assert "an archived agent is listed under Agents with the archived filter" in detail
+    assert "mixed-archived" not in detail
+    agents = await app.get("/api/v1/projects/proj-test/agents?lifecycle=all", headers=auth_headers)
+    (archived,) = [a for a in agents.json() if a["name"] == "mixed-archived"]
+    assert archived.get("runner_id") == runner["id"], "a refused delete unbinds nobody"
 
 
 @pytest.mark.asyncio

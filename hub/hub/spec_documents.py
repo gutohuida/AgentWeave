@@ -188,6 +188,19 @@ def move_document(workspace: ProjectWorkspace, old_path: str, new_path: str) -> 
     return destination
 
 
+def delete_document_file(workspace: ProjectWorkspace, path: str) -> None:
+    """Remove a deleted document's file and the directory it leaves empty.
+
+    A document whose file was never written, or is already gone, is not an error: the row is what
+    was deleted. Called after the delete has committed, since a file delete does not roll back.
+    """
+    validate_spec_path(path)
+    resolved = workspace.resolve_relative(path)
+    if resolved.is_file():
+        resolved.unlink()
+    _prune_if_empty(workspace, resolved.parent)
+
+
 def _prune_if_empty(workspace: ProjectWorkspace, directory: Path) -> None:
     """Remove a directory the move emptied, and never anything else.
 

@@ -9,6 +9,7 @@ import {
   DivergencePolicy,
   Task,
   useAllowedTransitions,
+  useDeleteTask,
   useLandTask,
   useRenameTask,
   useSetDivergenceHandling,
@@ -225,6 +226,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const { data: allowed } = useAllowedTransitions()
   const updateTask = useUpdateTask()
   const landTask = useLandTask()
+  const deleteTask = useDeleteTask()
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const renameTask = useRenameTask()
   const setHandling = useSetDivergenceHandling()
   const { data: agents } = useAgents()
@@ -518,6 +521,17 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                   {landTask.isPending ? 'Landing…' : 'Land it'}
                 </button>
               )}
+              {/* F532: the operator's way to take a task off the board for good, rather than
+                  rejecting it and leaving it counted. Refused by the Hub while a run is on it. */}
+              <button
+                type="button"
+                data-testid={`task-delete-${task.id}`}
+                className="text-[11px] px-2 py-0.5 rounded hover:bg-[var(--row-hover)]"
+                style={{ color: 'var(--text-3)' }}
+                onClick={() => { setRefusal(null); setConfirmingDelete(true) }}
+              >
+                Delete
+              </button>
             </div>
             <ApprovalWritesNote taskId={task.id} canApprove={moves.includes('approved')} />
           </Field>
@@ -563,6 +577,52 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             </Field>
           )}
         </div>
+        {/* Inline rather than a second modal: the drawer closes on a click outside its panel
+            and on Escape, and a nested dialog would take both with it. */}
+        {confirmingDelete && (
+          <div
+            data-testid={`task-delete-confirm-${task.id}`}
+            className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded px-2 py-1.5 text-[11px]"
+            style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+          >
+            <span className="flex-1">
+              Delete this task? Its dependencies, links, transitions and evidence go with it. This
+              cannot be undone.
+            </span>
+            <button
+              type="button"
+              className="px-2 py-0.5 rounded hover:bg-[var(--row-hover)]"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={deleteTask.isPending}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              data-testid="delete-confirm"
+              className="px-2 py-0.5 rounded"
+              style={{ color: 'var(--red)', border: '1px solid color-mix(in srgb, var(--red) 40%, transparent)' }}
+              disabled={deleteTask.isPending}
+              onClick={() =>
+                deleteTask.mutate(
+                  { id: task.id },
+                  {
+                    onSuccess: () => {
+                      setConfirmingDelete(false)
+                      onClose()
+                    },
+                    onError: (error: unknown) => {
+                      setConfirmingDelete(false)
+                      setRefusal(readableApiError(error, 'The Hub refused to delete this task.'))
+                    },
+                  },
+                )
+              }
+            >
+              {deleteTask.isPending ? 'Deleting…' : 'Delete task'}
+            </button>
+          </div>
+        )}
 
         {/* Naming what a hand-set block waits for. Required by the Hub, so the control collects it
             rather than sending a status that would be refused. */}

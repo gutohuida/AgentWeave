@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, getJson, postJson } from './client'
+import { ApiError, deleteJson, getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
 
@@ -901,6 +901,16 @@ export function useFoldDocument() {
         `/api/v1/projects/${projectId}/project/documents/${path}/fold`,
         body,
       ),
+  )
+}
+
+/** Delete a specification document and what it produced (F532). The Hub refuses a capability, an
+ *  archived or folded document, and one with a running flow or a run on its tasks. */
+export function useDeleteSpecDocument() {
+  return useCorpusMutation((projectId, { path }: { path: string }) =>
+    deleteJson<{ path: string; deleted: boolean; tasks: string[] }>(
+      `/api/v1/projects/${projectId}/project/documents/${path}`,
+    ),
   )
 }
 

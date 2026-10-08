@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, getJson, patchJson, postJson } from './client'
+import { ApiError, fetchWithAuth, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { neutraliseFileMentions } from '@/lib/fileMentions'
 
@@ -492,6 +492,21 @@ export function useLandTask() {
       queryClient.invalidateQueries({
         queryKey: ['project', projectId, 'task', id, 'integrations'],
       })
+    },
+  })
+}
+
+/** Delete a task and what exists only for it (F532). 204 carries no body, so this reads none;
+ *  the Hub refuses with 409 while a run bound to the task is in progress. */
+export function useDeleteTask() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      await fetchWithAuth(`/api/v1/projects/${projectId}/tasks/${id}`, { method: 'DELETE' })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
     },
   })
 }

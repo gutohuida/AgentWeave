@@ -12,6 +12,7 @@ import { ApiError } from '@/api/client'
  */
 const setPhase = vi.fn()
 const fold = vi.fn()
+const deleteDocument = vi.fn()
 let documents: unknown[] = []
 let foldState: unknown = undefined
 let draft: unknown = undefined
@@ -30,6 +31,7 @@ vi.mock('@/api/spec', async (importOriginal) => {
     useFoldDraft: (_path: string, into: string | null) =>
       into ? { data: draft, isError: false } : { data: undefined, isError: false },
     useFoldDocument: () => ({ mutateAsync: fold, isPending: false }),
+    useDeleteSpecDocument: () => ({ mutateAsync: deleteDocument, isPending: false }),
   }
 })
 
@@ -206,5 +208,47 @@ describe('folding a finished change', () => {
 
     expect(screen.getByTestId('fold-retire-req-old-rule')).toBeInTheDocument()
     expect(screen.queryByTestId('fold-retire-req-widgets-exist')).not.toBeInTheDocument()
+  })
+
+  it('deletes a document behind a confirm (F532)', async () => {
+    deleteDocument.mockResolvedValue({ path: CHANGE, deleted: true, tasks: ['task-1'] })
+    renderBar()
+    await userEvent.click(screen.getByTestId('spec-delete'))
+
+    expect(screen.getByRole('dialog')).toHaveTextContent(/cannot be undone/)
+    await userEvent.click(screen.getByTestId('delete-confirm'))
+
+    await waitFor(() => expect(deleteDocument).toHaveBeenCalledWith({ path: CHANGE }))
+  })
+
+  it('shows the Hub’s refusal of a delete in the confirm', async () => {
+    deleteDocument.mockRejectedValue(
+      new ApiError(
+        409,
+        JSON.stringify({ detail: { message: 'this document’s flow is still running', code: 'delete_flow_running' } }),
+      ),
+    )
+    renderBar()
+    await userEvent.click(screen.getByTestId('spec-delete'))
+    await userEvent.click(screen.getByTestId('delete-confirm'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/flow is still running/)
+  })
+
+  it('offers no delete for a folded change, an archived one or a capability', () => {
+    foldState = { state: 'folded', open_tasks: [], capabilities: [CAP] }
+    const { unmount } = renderBar()
+    expect(screen.queryByTestId('spec-delete')).not.toBeInTheDocument()
+    unmount()
+
+    foldState = undefined
+    documents = [doc({ phase: 'archived' })]
+    const archived = renderBar()
+    expect(screen.queryByTestId('spec-delete')).not.toBeInTheDocument()
+    archived.unmount()
+
+    documents = [doc({ kind: 'capability', phase: 'current' })]
+    renderBar()
+    expect(screen.queryByTestId('spec-delete')).not.toBeInTheDocument()
   })
 })
