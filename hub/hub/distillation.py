@@ -145,9 +145,13 @@ async def prepare(project_id: str, source_id: str) -> Plan:
     if found is None:
         raise CannotDistilError(f"No source '{source_id}'", status=404)
     if job is None or not job.enabled:
-        raise CannotDistilError("The vault distillation job is disabled. Enable it on the Manager page.")
+        raise CannotDistilError(
+            "The vault distillation job is disabled. Enable it on the Manager page."
+        )
     if runner is None or runner.project_id != project_id:
-        raise CannotDistilError("The vault distillation job has no runner. Choose one on the Manager page.")
+        raise CannotDistilError(
+            "The vault distillation job has no runner. Choose one on the Manager page."
+        )
     meta, text = found
     if text is None:
         holder = meta.get("holder") or "another machine"
