@@ -42,6 +42,8 @@ MANAGER_TESTS = "hub/tests/test_manager_jobs.py"
 MANAGER_DRIVE = "scripts/drive/d1012_manager_framework.py"
 VAULT_TESTS = "hub/tests/test_vault.py"
 VAULT_DRIVE = "scripts/drive/d1015_vault_text_sources.py"
+DISTIL_TESTS = "hub/tests/test_vault_distillation.py"
+DISTIL_DRIVE = "scripts/drive/d1016_distillation.py"
 
 JOURNEY_TESTS = "hub/tests/test_spec_journey.py"
 BRIEFING_TESTS = "hub/tests/test_spec_journey_briefing.py"
@@ -850,6 +852,57 @@ CHANGES = {
              "(GET /vault/settings 404); after d0b863a it passed 10/10."),
         ],
     },
+    "fdistil": {
+        "document": "spec/changes/the-manager-distils-vault-sources-into-cited-facts/spec.json",
+        "commit": "71de7c4",
+        "tasks": ["task-1dc132c1b6f7", "task-d74f390256fd", "task-c067b98297d3"],
+        "evidence": [
+            ("FR-1", "task-d74f390256fd", "test_result", DISTIL_TESTS,
+             "test_the_job_is_listed_disabled_with_nothing_chosen (trigger source_uploaded), "
+             "test_the_jobs_model_wins_over_the_runners, "
+             "test_with_no_runner_nothing_is_spawned_or_recorded (409 naming the runner, no spawn, "
+             "no firing). Drive d1016 check 1 enables it on a Haiku runner."),
+            ("FR-2", "task-d74f390256fd", "test_result", DISTIL_TESTS,
+             "test_a_disabled_job_spawns_nothing_on_upload; every enabled test distils through the "
+             "upload's background task. Drive d1016 check 2: the upload answered 201 in 0.0 s while "
+             "Haiku ran after it; check 7: disabled, no fact and no firing."),
+            ("FR-3", "task-d74f390256fd", "test_result", DISTIL_TESTS,
+             "test_the_route_refuses_what_it_cannot_distil (404 unknown, 409 naming the holder of a "
+             "foreign stub), test_a_disabled_job_spawns_nothing_on_upload (409 disabled), "
+             "test_a_run_that_stores_nothing_keeps_the_facts_and_one_that_stores_replaces "
+             "(written, empty, written: the empty run kept the first fact, the third replaced it)."),
+            ("FR-4", "task-d74f390256fd", "test_result", DISTIL_TESTS,
+             "test_quotes_are_found_in_the_source_and_unfound_ones_drop_the_fact (exact, "
+             "whitespace-collapsed across two lines, and an unfound quote dropped; detail '2 facts "
+             "stored, 1 dropped'), test_locate_spans_and_misses."),
+            ("FR-4", "task-d74f390256fd", "manual_observation", DISTIL_DRIVE,
+             "Drive d1016 check 3 with real Haiku (21:29 and 21:34): the 30-day fact cited line 6 and "
+             "the 437-euro fact line 8, the lines that say them; every quote Haiku gave was found "
+             "(0 dropped in both runs)."),
+            ("FR-5", "task-d74f390256fd", "test_result", DISTIL_TESTS,
+             "test_pieces_are_at_most_the_limit_and_end_at_a_line_break (120,000 chars, 3 pieces "
+             "rejoining exactly), test_each_piece_is_one_spawn_and_one_firing (written, failed, "
+             "written). Drive check 5: a written firing on claude-haiku-4-5 in the activity log."),
+            ("FR-6", "task-d74f390256fd", "test_result", DISTIL_TESTS,
+             "test_a_private_sources_facts_stay_private (record at the private location, a claimless "
+             "stub in knowledge/facts, the canary nowhere in the project), "
+             "test_a_tracked_fact_never_cites_a_private_source. Drive check 6 with real Haiku."),
+            ("FR-7", "task-d74f390256fd", "test_result", DISTIL_TESTS,
+             "test_facts_are_in_the_map_and_read_as_cards: kind on every entry, a fact right after "
+             "its source with its claim as opening, a foreign stub available false, the card through "
+             "the operator route and the agent-actions route. Drive check 4."),
+            ("FR-8", "task-c067b98297d3", "test_result", "hub/ui/src/__tests__/vaultTab.test.tsx",
+             "lists a source's facts under it and highlights a fact's cited lines; distils a source "
+             "on request and shows why the Hub refused (409 reason in an alert)."),
+            ("FR-8", "task-c067b98297d3", "manual_observation", DISTIL_DRIVE,
+             "Drive d1016 checks 8 and 9 in Chromium: Distil on a source added while the job was off "
+             "produced its fact; the refund fact's link highlighted line 8. Screenshots "
+             "testbed/drive1016-distillation/<stamp>/shot_citation.png."),
+            ("FR-4", "task-1dc132c1b6f7", "manual_observation", DISTIL_DRIVE,
+             "Acceptance drive d1016 was committed in 6f86506 before the build and failed at check 1 "
+             "(404, no vault-distillation job); after the build it passed 9/9."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -860,6 +913,7 @@ CHANGE_FOLDS = {
     "ftester": {'agent-flows': ['tester-default', 'test-brief'], 'spec-document-authority': ['amend-who', 'amend-ops', 'amend-record', 'cannot-satisfy', 'unreviewed-gap', 'page'], 'requirement-traceability': ['relax-blocks']},
     "freconcile": 'spec-document-authority',
     "fvault": 'knowledge-vault',
+    "fdistil": 'knowledge-vault',
     "fmanager": {
         'conversation-lifecycle': ['title-is-a-job'],
         'project-environment-settings': [
