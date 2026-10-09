@@ -52,7 +52,7 @@ export function VaultPage() {
           <h2 className="text-base font-semibold">Vault</h2>
           <p className="mt-1 max-w-2xl text-xs" style={{ color: 'var(--text-3)' }}>
             What the business has told this project: meeting transcripts, rules, documents and
-            examples. Agents see a short index of it in every turn and read entries by id.
+            examples. Every agent turn mentions the vault in one line, and agents read entries by id.
           </p>
         </div>
         <Button

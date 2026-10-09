@@ -44,7 +44,6 @@ MAX_NAME_CHARS = 200
 MAX_CONTENT_BYTES = 1_048_576
 PAGE_CHARS = 50_000
 OPENING_CHARS = 300
-TURN_INDEX_CHARS = 2_000
 
 TRACKED_DIRECTORY = "knowledge"
 SOURCES = "sources"
@@ -390,35 +389,16 @@ def _encode(meta: Dict[str, Any]) -> bytes:
 def render_turn_index(entries: List[Dict[str, Any]]) -> List[str]:
     """The Knowledge vault section of a turn's context, or nothing for an empty vault.
 
-    One line per entry, newest first, cut so that the section stays within `TURN_INDEX_CHARS`,
-    with a closing line counting what was left out (decided by the operator 2026-10-09, F573)."""
+    One line that says the vault exists, how many entries it holds and which tools read it. It
+    deliberately names no entry, so its cost does not grow with the vault (the operator's choice,
+    2026-10-09, over an index of entries capped at 2,000 characters)."""
     if not entries:
         return []
-    head = [
+    count = len(entries)
+    noun = "entry" if count == 1 else "entries"
+    return [
         "### Knowledge vault",
-        "- The project's business knowledge: meeting transcripts, rules, documents. "
-        "Read an entry with `vault_read(entry_id)`; `vault_map()` lists every entry with its "
-        "opening lines. Prefer these to guessing at what the business decided.",
+        f"- This project has a knowledge vault with {count} {noun} (meeting transcripts, rules, "
+        "documents): `vault_map()` lists them and `vault_read(entry_id)` reads one. Check it "
+        "before guessing at what the business decided.",
     ]
-    lines = [_index_line(entry) for entry in entries]
-
-    def size(parts: List[str]) -> int:
-        return len("\n".join(parts))
-
-    shown = len(lines)
-    while shown and size(head + lines[:shown] + _left_out(len(lines) - shown)) > TURN_INDEX_CHARS:
-        shown -= 1
-    return head + lines[:shown] + _left_out(len(lines) - shown)
-
-
-def _index_line(entry: Dict[str, Any]) -> str:
-    line = f"- `{entry['id']}` {entry['type']}: {entry['name']}"
-    if not entry["available"]:
-        line += f" (private, held on {entry.get('holder') or 'another machine'})"
-    return line
-
-
-def _left_out(count: int) -> List[str]:
-    if not count:
-        return []
-    return [f"- … and {count} more; `vault_map()` lists them all."]

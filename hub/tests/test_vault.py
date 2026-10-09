@@ -450,23 +450,27 @@ async def test_an_empty_vault_adds_nothing_to_a_turn(app, auth_headers, add_agen
 
 
 @pytest.mark.asyncio
-async def test_a_turn_lists_the_vault_newest_first_in_its_per_turn_part(
+async def test_a_turn_names_the_vault_in_one_line_in_its_per_turn_part(
     app, auth_headers, add_agent
 ) -> None:
+    """The operator's choice (2026-10-09): a one-line pointer, not an index of entries."""
     await add_agent("vaulter")
     first = await _upload(app, auth_headers, name="First meeting")
     second = await _upload(app, auth_headers, name="Refund rules", type="rules")
     rendered = await _context()
     per_turn = rendered["per_turn"]
-    assert "### Knowledge vault" in per_turn
     assert "Knowledge vault" not in rendered["stable"]
-    assert "vault_read" in per_turn
-    assert per_turn.index(second["id"]) < per_turn.index(first["id"])
-    assert f"`{second['id']}` rules: Refund rules" in per_turn
+    section = per_turn[per_turn.index("### Knowledge vault") :].split(chr(10) * 2)[0].splitlines()
+    assert len(section) == 2, section
+    line = section[1]
+    assert "2 entries" in line
+    assert "vault_map()" in line and "vault_read(" in line
+    assert first["id"] not in per_turn and second["id"] not in per_turn
+    assert "Refund rules" not in per_turn
 
 
 @pytest.mark.asyncio
-async def test_a_large_vault_is_cut_to_the_cap_and_counts_what_it_left_out(
+async def test_the_pointer_stays_one_line_however_large_the_vault(
     app, auth_headers, add_agent, tmp_path
 ) -> None:
     await add_agent("vaulter")
@@ -474,17 +478,20 @@ async def test_a_large_vault_is_cut_to_the_cap_and_counts_what_it_left_out(
         vault.add_source(
             tmp_path,
             vault.default_private_location("proj-test"),
-            name=f"Meeting number {i:03d} with a fairly long descriptive name",
+            name=f"Meeting number {i:03d}",
             type="transcript",
-            content=f"Meeting {i}.\n",
+            content=f"Meeting {i}.",
             visibility="tracked",
         )
     rendered = await _context()
-    section = rendered["per_turn"][rendered["per_turn"].index("### Knowledge vault") :]
-    section = section.split("\n\n")[0]
-    assert len(section) <= vault.TURN_INDEX_CHARS
-    last = section.splitlines()[-1]
-    shown = section.count("`src-")
-    assert shown < 200
-    assert f"and {200 - shown} more" in last
-    assert "vault_map()" in last
+    per_turn = rendered["per_turn"]
+    section = per_turn[per_turn.index("### Knowledge vault") :].split(chr(10) * 2)[0].splitlines()
+    assert len(section) == 2, section
+    assert "200 entries" in section[1]
+    assert "src-" not in per_turn
+
+
+def test_one_entry_is_named_in_the_singular() -> None:
+    lines = vault.render_turn_index([{"id": "src-0123456789ab"}])
+    assert "with 1 entry (" in lines[1]
+    assert vault.render_turn_index([]) == []

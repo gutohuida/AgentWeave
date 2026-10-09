@@ -2553,7 +2553,7 @@ async def _render_hub_agent_context(
             )
         lines.append("")
 
-    # The vault's index (`a-vault-the-operator-fills-with-text-and-agents-can-read` D2): per turn,
+    # The vault pointer (`a-vault-the-operator-fills-with-text-and-agents-can-read` D2): per turn,
     # because it changes with every upload; absent when the vault is empty.
     vault_lines = await _vault_index_lines(db, project_id)
     if vault_lines:

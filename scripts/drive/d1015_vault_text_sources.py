@@ -14,8 +14,9 @@ and checks, in order:
      only knowledge/sources/<id>.json, and that stub contains none of the text;
   5. GET /vault/map lists both, the note first (newest first). The transcript's opening is its
      first line;
-  6. the agent is asked what refund limit the meeting agreed. Its run calls vault_read with the
-     transcript's id, and its reply says 437 (a number found only in the transcript);
+  6. the agent is asked what refund limit the meeting agreed. Its turn names the vault in one line
+     and no entry, so it finds the transcript through vault_map. Its run calls vault_read with the
+     transcript's id (437 sits past the map's opening lines), and its reply says 437;
   7. in Chromium, the Vault tab lists both entries and opening the transcript shows its text.
 
 It fails on today's Hub at check 1 (no /vault route). It stops at the first failure, so a red run
@@ -51,7 +52,13 @@ TRANSCRIPT = (
     "Kickoff meeting with Acme Retail, 2026-10-02.\n"
     "Present: Dana (Acme), Luis (us).\n"
     "\n"
-    "Dana: customers may return goods within 30 days.\n"
+    # Agenda and small talk first, so the number sits past the map's 300-character opening and
+    # the agent has to read the entry to find it.
+    "Agenda: introductions, store rollout schedule, returns and refunds, next steps.\n"
+    "Luis: thanks for having us. We plan to start with the three Lisbon stores in November.\n"
+    "Dana: good, the Porto stores follow in January once the Lisbon ones are stable.\n"
+    "Luis: we will send the rollout plan by Friday, with a contact person for each store.\n"
+    "Dana: on to returns. Customers may return goods within 30 days.\n"
     "Luis: and refunds without manager approval?\n"
     "Dana: agreed, the refund limit without approval is 437 euros. Above that a manager signs.\n"
     "Luis: noted, we will build the approval step for anything above it.\n"
@@ -224,7 +231,8 @@ def drive():
     opening = next((e.get("opening") for e in entries if e.get("id") == tid), None) or ""
     (TMP / "map.json").write_text(json.dumps(vault_map, indent=2), encoding="utf-8")
     check("5 the map lists both, newest first, with the transcript's opening lines",
-          code == 200 and ids == [nid, tid] and opening.startswith(first_line),
+          code == 200 and ids == [nid, tid] and opening.startswith(first_line)
+          and "437" not in opening,  # else the map alone answers check 6
           f"{code} ids={ids} opening={opening[:120]!r}")
 
     # 6: a Haiku agent finds the answer through the vault.
