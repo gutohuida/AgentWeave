@@ -98,6 +98,24 @@
       "requirement": "a-vault-the-operator-fills-with-text-and-agents-can-r-vault-view",
       "then": "the list, the entry's text and the upload form read clearly as a wiki",
       "when": "the operator looks at them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "projects whose vaults hold no entries, two entries, one entry, and 200 entries",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault.py",
+      "key": "every-agent-turn-names-the-vault-in-one-line-turn-pointer",
+      "requirement": "a-vault-the-operator-fills-with-text-and-agents-can-map-in-turn",
+      "then": "The empty vault adds no section. The others add a heading and one line in the per-turn part, stating the count (singular for one), naming vault_map and vault_read, and naming no entry id or entry name.",
+      "when": "a test renders an agent's context for each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub with a tracked transcript whose answer (437) sits past the map's 300-character opening, and a Haiku agent",
+      "how_to_check": "py -3.11 scripts/drive/d1015_vault_text_sources.py",
+      "key": "every-agent-turn-names-the-vault-in-one-line-drive",
+      "requirement": "a-vault-the-operator-fills-with-text-and-agents-can-map-in-turn",
+      "then": "the agent calls vault_map, then vault_read with the transcript's id, and answers 437",
+      "when": "drive d1015 asks the agent what refund limit the meeting agreed"
     }
   ],
   "algorithms": [],
@@ -108,7 +126,7 @@
       "FR-3": "e0274a6966c4036d541882b9c664729d8370d1d94cbe147947251de1b927b184",
       "FR-4": "6a4e8d01ffa6b483dc15e52f42bb16db7376dd3dc1c08ea01f5f3f3599cae3d6",
       "FR-5": "ec6d4b7d25f5a9aeb6223834ed5877ac76e75de49077f636eac5b022f5324a39",
-      "FR-6": "4a9a06afff12289d35154f92cc63d1a6d7bdd06d75ce5c3a2691330370ac3c34",
+      "FR-6": "791cb5f62ecc7dd06403d8feb531680b9a75b9213bf36e7fba8f53633baf0812",
       "FR-7": "8854e9978008cfeee475c44a7e3fe72a3268790028901bf5811da93b9ed77b47",
       "FR-8": "c8aab6cb4927a911090490cc9d2c8c268539b152640846216c4adafd492f317b",
       "FR-9": "dcd141a4a6ed7104aad675231554a940069eb75a84c77422a6b3212cffd4d26e"
@@ -182,8 +200,8 @@
       "key": "a-vault-the-operator-fills-with-text-and-agents-can-map-in-turn",
       "modal": "MUST",
       "party": null,
-      "rationale": "Decided by the operator on 2026-10-09 (F573 a): a capped index. With nothing in the turn, agents would not know the vault exists. The whole map would cost more with every upload, on every turn and for every agent.",
-      "statement": "When the project's map holds at least one entry, every turn's context MUST include a Knowledge vault section in its per-turn part. The section names vault_read, then gives one line per entry, newest first: id, type, name, and for an entry not available here, the holder. The lines are cut so that the section stays within 2,000 characters, and a last line then says how many entries were left out and that vault_map lists them all. When the map is empty, the section MUST be absent."
+      "rationale": "The operator's choice on 2026-10-09, over the capped index: the agent only needs to know the vault exists to look in it, and a pointer's cost does not grow with the vault. Drive d1015 showed it is enough: the agent called vault_map, then vault_read with the right id.",
+      "statement": "When the project's map holds at least one entry, every turn's context MUST include, in its per-turn part, a Knowledge vault heading followed by exactly one line. The line states how many entries the vault holds and that vault_map() lists them and vault_read(entry_id) reads one, and it MUST name no entry. When the map is empty, the section MUST be absent."
     },
     {
       "key": "a-vault-the-operator-fills-with-text-and-a-one-storage-interface",

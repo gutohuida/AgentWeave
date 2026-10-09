@@ -619,6 +619,14 @@
       "order": 820
     },
     {
+      "path": "spec/changes/every-agent-turn-names-the-vault-in-one-line/spec.json",
+      "title": "Every agent turn names the vault in one line, not an index of its entries",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 870
+    },
+    {
       "path": "spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks/spec.json",
       "title": "Re-approving an amended document refreshes its open tasks",
       "kind": "change-spec",

@@ -1,0 +1,102 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "projects whose vaults hold no entries, two entries, one entry, and 200 entries",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault.py",
+      "key": "turn-pointer",
+      "requirement": "vault-pointer-in-turn",
+      "then": "The empty vault adds no section. The others add a heading and one line in the per-turn part, stating the count (singular for one), naming vault_map and vault_read, and naming no entry id or entry name.",
+      "when": "a test renders an agent's context for each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub with a tracked transcript whose answer (437) sits past the map's 300-character opening, and a Haiku agent",
+      "how_to_check": "py -3.11 scripts/drive/d1015_vault_text_sources.py",
+      "key": "drive",
+      "requirement": "vault-pointer-in-turn",
+      "then": "the agent calls vault_map, then vault_read with the transcript's id, and answers 437",
+      "when": "drive d1015 asks the agent what refund limit the meeting agreed"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "15eaaac9676eecc1352ee7bfdd03cf02e630c1b4aa6bb187eb7a330eeab157d6"
+    },
+    "high_water": 1,
+    "requirements": {
+      "vault-pointer-in-turn": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 Replaces knowledge-vault FR-6 (map-in-turn) at the fold; no other requirement changes. No hazard: no migration, and the bundle's change is one sentence of copy.\n\nD2 A heading plus one line, not a bare line. The per-turn part is a run of ### sections, and a bullet without a heading would read as part of the section before it. The heading costs about four tokens.",
+  "evidence": {
+    "checked": [
+      "hub/hub/vault.py render_turn_index, called from hub/hub/api/v1/agents.py _vault_index_lines",
+      "Drive d1015 before the fixture change: with the pointer, the agent answered from vault_map's opening alone, because the short transcript kept 437 inside the first 300 characters"
+    ],
+    "limits": [
+      "Built before this document was written: the operator asked for the change directly, and this records it"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Folds into the knowledge-vault capability, replacing its map-in-turn requirement (FR-6).",
+  "open_questions": [],
+  "problem": "The vault-text-sources slice put a list of every entry (id, type, name, newest first, cut at 2,000 characters) into every turn of every agent. That is up to about 500 input tokens per turn, paid on turns that have nothing to do with business knowledge, and it grows with the vault until the cap. Asked what the index costs, the operator chose a one-line pointer instead (2026-10-09).",
+  "requirements": [
+    {
+      "key": "vault-pointer-in-turn",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's choice on 2026-10-09, over the capped index: the agent only needs to know the vault exists to look in it, and a pointer's cost does not grow with the vault. Drive d1015 showed it is enough: the agent called vault_map, then vault_read with the right id.",
+      "statement": "When the project's map holds at least one entry, every turn's context MUST include, in its per-turn part, a Knowledge vault heading followed by exactly one line. The line states how many entries the vault holds and that vault_map() lists them and vault_read(entry_id) reads one, and it MUST name no entry. When the map is empty, the section MUST be absent."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The Knowledge vault section of the per-turn context: a heading and one line, with the entry count and the two tool names",
+      "The Vault tab's description of what agents are told"
+    ],
+    "non_goals": [
+      "Any change to vault_map, vault_read or the map itself",
+      "Turning the pointer off per agent or per kind of turn"
+    ]
+  },
+  "summary": "An agent turn's context now says in one line that the project has a knowledge vault, how many entries it holds, and that vault_map lists them and vault_read reads one. It names no entry. This replaces the capped index of entries (up to 2,000 characters) decided earlier the same day, so the per-turn cost stays at about 40 tokens however large the vault grows.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "render_turn_index returns a heading and one line with the count and the two tools; the turn tests are rewritten first; drive d1015's transcript keeps 437 past the opening. Built in f62f249.",
+      "files": [
+        "hub/hub/vault.py",
+        "hub/tests/test_vault.py",
+        "hub/ui/src/components/vault/VaultPage.tsx",
+        "scripts/drive/d1015_vault_text_sources.py"
+      ],
+      "from": null,
+      "key": "pointer",
+      "requirements": [
+        "vault-pointer-in-turn"
+      ],
+      "reviewer": null,
+      "title": "One-line vault pointer in the per-turn context"
+    }
+  ],
+  "title": "Every agent turn names the vault in one line, not an index of its entries"
+}
