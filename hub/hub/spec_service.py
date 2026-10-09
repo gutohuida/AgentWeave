@@ -22,6 +22,7 @@ from . import (
     spec_documents,
     spec_identity,
     spec_index,
+    spec_journey,
     spec_lifecycle,
     spec_naming,
     spec_rigor,
@@ -1210,23 +1211,26 @@ async def roadmap_states(
     return {row.path: spec_completeness.RoadmapState(row.phase, row.title, keys)}
 
 
-async def phase_blockers(
+@dataclass(frozen=True)
+class PhaseFindings:
+    """What a move to proposed or approved finds: refusals, which nothing passes, and gaps, which
+    the operator may approve over (approve-lists-what-is-missing-and-can-approve-anyway, FR-2/3)."""
+
+    refusals: List[Dict[str, Any]]
+    gaps: List[Dict[str, Any]]
+
+
+async def _completeness(
     session: AsyncSession,
     workspace: ProjectWorkspace,
     document: SpecDocument,
     to_phase: str,
-) -> List[Dict[str, Any]]:
-    """Every reason `to_phase` may not be reached yet, or [] (F207, F113).
-
-    'Not yet' only: a move the phase map forbids, or an actor who may not make it, is not a
-    blocker — `transition()` refuses those first, as the authority it already is.
+) -> Tuple[SpecPayload, List[spec_completeness.Finding]]:
+    """The document's payload and what `spec_completeness.check` finds for `to_phase`.
 
     A document whose file carries no payload, or one that no longer validates, raises
     `SaveRefusedError`: there is nothing to check.
     """
-    if to_phase not in (spec_lifecycle.PROPOSED, spec_lifecycle.APPROVED):
-        return []
-
     stored = spec_documents.read_payload(workspace, document.path)
     if stored is None:
         raise SaveRefusedError(
@@ -1263,7 +1267,67 @@ async def phase_blockers(
 
     # No `explore_not_closed` here any more: the journey step replaced the operator's "exploration
     # is complete" boolean (`a-spec-is-written-one-step-at-a-time` FR-11).
+    return payload, findings
+
+
+async def phase_blockers(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    document: SpecDocument,
+    to_phase: str,
+) -> List[Dict[str, Any]]:
+    """Every reason `to_phase` may not be reached yet, or [] (F207, F113).
+
+    'Not yet' only: a move the phase map forbids, or an actor who may not make it, is not a
+    blocker — `transition()` refuses those first, as the authority it already is.
+    """
+    if to_phase not in (spec_lifecycle.PROPOSED, spec_lifecycle.APPROVED):
+        return []
+    _payload, findings = await _completeness(session, workspace, document, to_phase)
     return [finding.to_dict() for finding in findings]
+
+
+def _steps_skipped(
+    workspace: ProjectWorkspace, document: SpecDocument
+) -> List[spec_completeness.Finding]:
+    """The project's journey steps after a change document's recorded step (FR-2)."""
+    if not spec_journey.has_journey(document):
+        return []
+    ahead = spec_journey.skipped(document.size, document.step, spec_journey.load(workspace))
+    if not ahead:
+        return []
+    sized = f"size {document.size}" if document.size else "no size, so every step"
+    return [
+        spec_completeness.Finding(
+            "steps_skipped",
+            "step",
+            f"the document is at step {document.step!r}; this project's journey ({sized}) goes "
+            f"on to {', '.join(ahead)}, which it never reached",
+        )
+    ]
+
+
+async def phase_findings(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    document: SpecDocument,
+    to_phase: str,
+) -> PhaseFindings:
+    """Every finding for `to_phase`, as refusals and gaps (FR-2, FR-3).
+
+    The gaps add what only proposal and approval report: `spec_completeness.approval_gaps` and
+    `steps_skipped`. A payload that is missing or invalid raises `SaveRefusedError`, a refusal.
+    """
+    if to_phase not in (spec_lifecycle.PROPOSED, spec_lifecycle.APPROVED):
+        return PhaseFindings([], [])
+    payload, findings = await _completeness(session, workspace, document, to_phase)
+    findings = [
+        *findings,
+        *spec_completeness.approval_gaps(payload),
+        *_steps_skipped(workspace, document),
+    ]
+    refusals, gaps = spec_completeness.split(findings)
+    return PhaseFindings([f.to_dict() for f in refusals], [f.to_dict() for f in gaps])
 
 
 async def propose(

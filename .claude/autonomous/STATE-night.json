@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 15,
+    "iteration": 16,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "approval-warnings-t2-impl",
-    "next_action": "approval-warnings-t2-impl: in spec_completeness + spec_service (phase_blockers, spec_service.py:1213-1266), classify findings as gap vs refusal per spec/changes/approve-lists-what-is-missing-and-can-approve-anyway (spdoc-9a9d313a4894; read its payload with hub.spec_payload.extract_payload or testbed/night-1009/approval-warnings.json): requirement_without_criterion only for MUST/SHALL; new criterion_without_check, no_acceptance_drive, steps_skipped (from spec_journey.missing). Write failing Hub tests first (criteria should-not-gap, criterion-check, drive-first, skipped). FR-2, FR-3. Do not yet change propose/approve routes (t3). Hub tasks of approval-warnings stay open.",
+    "current": "approval-warnings-t3-impl",
+    "next_action": "approval-warnings-t3-impl: switch spec_lifecycle.transition (spec_lifecycle.py:381-393) from spec_service.phase_blockers to spec_service.phase_findings: refusals -> 409 document_incomplete (approve_anyway notwithstanding); at approve, gaps without approve_anyway -> 409 {detail:{code:'approval_warnings', message, warnings:[...]}} leaving the document proposed; with approve_anyway approve and record warnings_overridden (list, [] when none) on the approval's phase event detail; propose passes gaps and returns them as warnings beside blocking (spec_service.propose + set_phase route api/v1/spec.py:2241); PhaseRequest.approve_anyway with to != approved -> 400 before anything moves; documents view carries approval_warnings_overridden while approved, none once reopened. Then retire phase_blockers if unused. Failing Hub route tests first (criteria refusal-holds, propose-lists, clean-and-reopen, anyway-400, skipped as a route test). Existing tests that expect propose to refuse a gap will need updating. Run d1012 on scratch :8101 after: checks 1-4 should pass (5 is the page, t4). FR-1, FR-3..6. Hub tasks stay open.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -99,9 +99,9 @@
         },
         {
             "id": "approval-warnings-t2-impl",
-            "status": "open",
+            "status": "done",
             "title": "approval-warnings task gaps: classify findings gap vs refusal; MUST-only criterion gap; criterion_without_check, no_acceptance_drive, steps_skipped",
-            "detail": "spec_completeness + spec_service; failing Hub tests first. FR-2, FR-3.",
+            "detail": "done 2026-10-09 iteration 16: spec_completeness REFUSAL_CODES/split/approval_gaps (criterion_without_check, no_acceptance_drive), MUST-only criterion rule, spec_journey.skipped, spec_service.phase_findings -> PhaseFindings(refusals, gaps) with steps_skipped; 11 tests; F562 filed (drive-first criterion contradicts D3).",
             "model": "opus"
         },
         {

@@ -293,6 +293,26 @@ def next_step(
     return next((s for s in path if order.index(s) > place), None)
 
 
+def skipped(
+    size: Optional[str], step: Optional[str], steps: Optional[ProjectSteps] = None
+) -> List[str]:
+    """The steps of this size's journey after `step`, which a document there never reached.
+
+    A step the journey does not hold counts from its place in the project's order, as `next_step`
+    does; one the project no longer has at all leaves the whole journey ahead. No step, nothing.
+    """
+    if step is None:
+        return []
+    steps = steps or BUILT_IN
+    path = journey(size, steps)
+    if step in path:
+        return path[path.index(step) + 1 :]
+    order = steps.order()
+    if step not in order:
+        return path
+    return [s for s in path if order.index(s) > order.index(step)]
+
+
 def _require_journey(document: SpecDocument) -> None:
     if not has_journey(document):
         raise JourneyError(

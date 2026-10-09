@@ -31,6 +31,24 @@ from .spec_payload import SpecPayload
 # and habits already use it. Matched case-insensitively and tolerant of spacing.
 CLARIFICATION_RE = re.compile(r"\[\s*needs[ _-]?clarification", re.IGNORECASE)
 
+#: The modals whose requirement must be demonstrated by a criterion. A SHOULD or MAY with none is
+#: not a gap (approve-lists-what-is-missing-and-can-approve-anyway, FR-2).
+CRITERION_MODALS = ("MUST", "SHALL")
+
+#: The findings that make approval's own work wrong, so approving anyway cannot pass them: the
+#: board cannot be materialised, the writer is broken, or the roadmap link is false (FR-3, D2).
+#: Every other finding describes completeness, and is a gap the operator may approve over.
+REFUSAL_CODES = frozenset(
+    {
+        "depends_on_unresolved",
+        "dependency_cycle",
+        "unknown_field",
+        "roadmap_not_approved",
+        "roadmap_slice_unknown",
+        "roadmap_without_slices",
+    }
+)
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -213,7 +231,7 @@ def check(
 
     for index, requirement in enumerate(payload.requirements):
         where = f"requirements[{index}]"
-        if requirement.key not in covered:
+        if requirement.modal in CRITERION_MODALS and requirement.key not in covered:
             findings.append(
                 Finding(
                     "requirement_without_criterion",
@@ -305,6 +323,72 @@ def check(
             )
 
     return findings
+
+
+def split(findings: List[Finding]) -> Tuple[List[Finding], List[Finding]]:
+    """`findings` as (refusals, gaps), each in the order given."""
+    refusals = [f for f in findings if f.code in REFUSAL_CODES]
+    return refusals, [f for f in findings if f.code not in REFUSAL_CODES]
+
+
+def approval_gaps(payload: SpecPayload) -> List[Finding]:
+    """The gaps reported at proposal and approval only, never in an agent's save result.
+
+    A criterion nobody is named to check, and a change whose first task is not its acceptance
+    drive (FR-2). Kept out of `check` because the save result is unchanged by this change; the
+    acceptance step's own `spec_journey.missing` already asks the author for the check fields.
+    """
+    gaps: List[Finding] = []
+    for index, criterion in enumerate(payload.acceptance_criteria):
+        absent = [name for name in ("how_to_check", "checked_by") if not getattr(criterion, name)]
+        if absent:
+            gaps.append(
+                Finding(
+                    "criterion_without_check",
+                    f"acceptance_criteria[{index}]",
+                    f"{criterion.key!r} has no {' and no '.join(absent)}, so nobody is named to "
+                    "check it or how",
+                )
+            )
+    if payload.kind == "change-spec":
+        gaps.extend(_acceptance_drive_findings(payload))
+    return gaps
+
+
+def _acceptance_drive_findings(payload: SpecPayload) -> List[Finding]:
+    """A change of two or more tasks whose first is not the drive every other task waits on (D3).
+
+    Structural: the first local task depends on nothing, and every other local task depends on it
+    directly or transitively. Imported entries are another document's work and are not counted.
+    """
+    local = [t for t in payload.tasks if t.from_ is None]
+    if len(local) < 2:
+        return []
+    first = local[0]
+    edges = {t.key: list(t.depends_on) for t in payload.tasks}
+
+    def waits_on_first(key: str) -> bool:
+        seen, todo = set(), list(edges.get(key, []))
+        while todo:
+            dep = todo.pop()
+            if dep == first.key:
+                return True
+            if dep not in seen:
+                seen.add(dep)
+                todo.extend(edges.get(dep, []))
+        return False
+
+    if not first.depends_on and all(waits_on_first(t.key) for t in local[1:]):
+        return []
+    return [
+        Finding(
+            "no_acceptance_drive",
+            "tasks[0]",
+            f"the first task {first.key!r} is not an acceptance drive every other task waits on: "
+            "it should depend on nothing, and every other task should depend on it, so the drive "
+            "is written and failing before the build",
+        )
+    ]
 
 
 def _normalise_path(path: str) -> str:
