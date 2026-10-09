@@ -7,6 +7,7 @@ const SECTION_ICONS: Record<string, string> = {
   Instructions: 'description',
   Runners: 'terminal',
   Charters: 'menu_book',
+  Manager: 'schedule',
   Worktrees: 'file_vcs',
   Diagnostics: 'monitoring',
   Budgets: 'bar_chart',

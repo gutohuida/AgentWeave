@@ -21,7 +21,7 @@ import { RecencyView } from './RecencyView'
 
 export type SidebarPage =
   | 'tasks' | 'questions' | 'activity' | 'logs' | 'jobs' | 'quality' | 'instructions' | 'spec'
-  | 'runners' | 'charters' | 'worktrees' | 'diagnostics' | 'budgets' | 'settings'
+  | 'runners' | 'charters' | 'manager' | 'worktrees' | 'diagnostics' | 'budgets' | 'settings'
 
 interface SidebarProps {
   destination?: WorkspaceDestination
@@ -87,6 +87,7 @@ const SECTION_LABELS: Record<EnvironmentSection, string> = {
   instructions: 'Instructions',
   runners: 'Runners',
   charters: 'Charters',
+  manager: 'Manager',
   worktrees: 'Worktrees',
   diagnostics: 'Diagnostics',
   budgets: 'Budgets',
@@ -97,6 +98,7 @@ const SECTION_ICONS: Record<EnvironmentSection, string> = {
   instructions: 'description',
   runners: 'terminal',
   charters: 'menu_book',
+  manager: 'schedule',
   worktrees: 'file_vcs',
   diagnostics: 'monitoring',
   budgets: 'bar_chart',

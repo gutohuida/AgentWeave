@@ -119,10 +119,18 @@ export function ProjectSettingsPanel({ onNavigate }: { onNavigate?: (page: strin
     const notes = toCanonical(thresholdMode, notesEntry)
     // A threshold is a mode and a value together, or neither — never half, which would read as a
     // number in a unit nobody chose.
-    // Everything it was given except `token_budget`: Budgets is that field's one editor, and a copy
-    // this form loaded earlier would overwrite a limit set there since.
-    const { token_budget: _tokenBudget, ...rest } = form
+    // Everything it was given except the fields another section edits, since a copy this form
+    // loaded earlier would overwrite a change made there since: `token_budget` (Budgets) and the
+    // two conversation title fields (Manager, whose conversation-titles job they now report).
+    const {
+      token_budget: _tokenBudget,
+      conversation_title_mode: _titleMode,
+      conversation_title_runner_id: _titleRunner,
+      ...rest
+    } = form
     void _tokenBudget
+    void _titleMode
+    void _titleRunner
     update.mutate({
       ...rest,
       name: form.name.trim(),
@@ -326,34 +334,6 @@ export function ProjectSettingsPanel({ onNavigate }: { onNavigate?: (page: strin
               ))}
             </optgroup>
           )}
-        </Select>
-      </SettingsRow>
-
-      <GroupHeading>Conversations</GroupHeading>
-      <SettingsRow label="Conversation titles" description="Truncate the first message, or have a runner generate a short title.">
-        <Select
-          aria-label="Conversation titles"
-          value={form.conversation_title_mode}
-          onChange={(event) => set('conversation_title_mode', event.target.value as ProjectSettings['conversation_title_mode'])}
-          wrapperClassName="w-48"
-          className="px-2 py-1.5 text-xs"
-        >
-          <option value="truncate">Truncate the first message</option>
-          <option value="generate">Generate one</option>
-        </Select>
-      </SettingsRow>
-      <SettingsRow label="Conversation title runner" description="Which runner generates a title. None falls back to the conversation's own agent's bound runner.">
-        <Select
-          aria-label="Conversation title runner"
-          value={form.conversation_title_runner_id ?? ''}
-          onChange={(event) => set('conversation_title_runner_id', event.target.value || null)}
-          wrapperClassName="w-48"
-          className="px-2 py-1.5 text-xs"
-        >
-          <option value="">None</option>
-          {runners.map((runner) => (
-            <option key={runner.id} value={runner.id}>{runnerOptionLabel(runner, catalog)}</option>
-          ))}
         </Select>
       </SettingsRow>
 

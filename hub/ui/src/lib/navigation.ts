@@ -31,6 +31,7 @@ export const ENVIRONMENT_SECTIONS = [
   'instructions',
   'runners',
   'charters',
+  'manager',
   'worktrees',
   'diagnostics',
   'budgets',

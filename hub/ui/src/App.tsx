@@ -11,6 +11,7 @@ import { InstructionsPage } from '@/components/instructions/InstructionsPage'
 import { JobsPage } from '@/components/jobs/JobsPage'
 import { LogsView } from '@/components/logs/LogsView'
 import { DiagnosticsPanel } from '@/components/environment/DiagnosticsPanel'
+import { ManagerPanel } from '@/components/environment/ManagerPanel'
 import { ProjectSettingsPanel } from '@/components/environment/ProjectSettingsPanel'
 import { SpecStepsSection } from '@/components/environment/SpecStepsSection'
 import { WorktreesPanel } from '@/components/environment/WorktreesPanel'
@@ -511,6 +512,7 @@ export default function App() {
         instructions: <InstructionsPage />,
         runners: <RunnersPage />,
         charters: <ChartersPage />,
+        manager: <ManagerPanel />,
         worktrees: <WorktreesPanel />,
         diagnostics: <DiagnosticsPanel />,
         budgets: <AccountingPanel />,

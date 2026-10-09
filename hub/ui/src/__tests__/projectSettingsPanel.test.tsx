@@ -198,7 +198,7 @@ describe('phase 5 project settings and locate repair', () => {
   it('groups its rows under headings, Collaboration first and Project last', () => {
     render(<ProjectSettingsPanel />)
     expect(screen.getAllByTestId('settings-group-heading').map((h) => h.textContent)).toEqual([
-      'Collaboration', 'Integration', 'Checkpointing', 'Conversations', 'Project',
+      'Collaboration', 'Integration', 'Checkpointing', 'Project',
     ])
     const rows = Array.from(document.querySelectorAll('.settings-row'))
     expect(rows[rows.length - 1]).toHaveTextContent('Delete project')
@@ -249,9 +249,17 @@ describe('phase 5 project settings and locate repair', () => {
       checkpoint_notes_value: 120_000,
       checkpoint_runner_id: 'runner-haiku',
       checkpoint_model: 'claude-haiku-4-5-20251001',
-      conversation_title_mode: 'generate',
-      conversation_title_runner_id: 'runner-titles',
     }))
+  })
+
+  it('leaves the conversation title fields to Environment > Manager', () => {
+    // Their editor moved to the manager's conversation-titles job; a copy this form loaded earlier
+    // would otherwise switch titling back to what it was when the panel opened.
+    render(<ProjectSettingsPanel />)
+    fireEvent.click(screen.getByText('Save settings'))
+    const sent = update.mock.calls[0][0]
+    expect(sent).not.toHaveProperty('conversation_title_mode')
+    expect(sent).not.toHaveProperty('conversation_title_runner_id')
   })
 
   it('collects a token threshold in thousands and stores it canonically', () => {
@@ -285,26 +293,10 @@ describe('phase 5 project settings and locate repair', () => {
     }))
   })
 
-  it('reflects the stored conversation title mode', () => {
+  it('shows no conversation title controls: they moved to Environment > Manager', () => {
     render(<ProjectSettingsPanel />)
-    expect(screen.getByLabelText('Conversation titles')).toHaveValue('generate')
-  })
-
-  it('changes the conversation title mode and saves it', () => {
-    settings.conversation_title_mode = 'truncate'
-    render(<ProjectSettingsPanel />)
-    fireEvent.change(screen.getByLabelText('Conversation titles'), { target: { value: 'generate' } })
-    fireEvent.click(screen.getByText('Save settings'))
-    expect(update).toHaveBeenCalledWith(expect.objectContaining({
-      conversation_title_mode: 'generate',
-    }))
-  })
-
-  it('names each runner by its own model in the title-runner select (F268)', () => {
-    render(<ProjectSettingsPanel />)
-    const select = screen.getByLabelText('Conversation title runner')
-    expect(within(select).getByRole('option', { name: 'Haiku 4.5 — Provider default (claude)' })).toBeInTheDocument()
-    expect(within(select).getByRole('option', { name: 'Titler — Opus 5 (claude)' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Conversation titles')).toBeNull()
+    expect(screen.queryByLabelText('Conversation title runner')).toBeNull()
   })
 
   it("names the project's checkpoint model in the checkpoint-runner select, whatever each runner records (F268)", () => {
