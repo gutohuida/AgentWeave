@@ -160,8 +160,18 @@ def main():
 
 
 def document(base):
+    """The drive's change document. The agent may rename it from its title mid-turn (a `renamed`
+    event), so with the path gone this follows the project's one change document and keeps its
+    new path."""
+    global DOC
     _, listed = api("GET", f"{base}/project/documents")
-    return next((d for d in listed.get("documents", []) if d.get("path") == DOC), {})
+    documents = listed.get("documents", [])
+    found = next((d for d in documents if d.get("path") == DOC), None)
+    if found is None:
+        changes = [d for d in documents if d.get("kind") == "change-spec"]
+        found = changes[0] if len(changes) == 1 else {}
+        DOC = found.get("path", DOC)
+    return found
 
 
 def preview(base):
@@ -174,6 +184,11 @@ def answer_for(question):
     """The operator's side: continue here and advance, else the first option."""
     text = (question.get("question") or "").lower()
     labels = [o.get("label", "") for o in question.get("options") or []]
+    # The ask-to-advance after the custom step is written: stop there, so the drive reads the
+    # document where the turn left it (the advance onto the custom step already happened).
+    stop = next((label for label in labels if "stop" in label.lower()), None)
+    if stop and "threat" in text and any("continue" in label.lower() for label in labels):
+        return stop, [stop]
     for wanted in ("here", "advance", "next", "continue", "yes"):
         hit = next((label for label in labels if wanted in label.lower()), None)
         if hit:

@@ -12,6 +12,7 @@ import json
 import pytest
 
 from hub import spec_journey
+from hub import sse as sse_module
 from hub.project_workspace import ProjectWorkspace
 
 from .test_spec_documents_api import (
@@ -253,5 +254,162 @@ async def test_the_documents_view_lists_the_projects_journey(app, auth_headers, 
 
     listed = await app.get(f"{BASE}/documents", headers=auth_headers)
 
+    (view,) = [d for d in listed.json()["documents"] if d["path"] == PATH]
+    assert view["journey"] == LARGE
+
+
+# routes (FR-5, FR-6, FR-7): GET/PUT /project/journey
+JOURNEY = f"{BASE}/journey"
+
+
+def _published(monkeypatch):
+    frames: list = []
+    real = sse_module.sse_manager.publish
+
+    def spy(project_id, event_type, payload):
+        frames.append((event_type, payload))
+        return real(project_id, event_type, payload)
+
+    monkeypatch.setattr(sse_module.sse_manager, "publish", spy)
+    return frames
+
+
+def test_a_step_names_only_what_it_carries_on_the_wire():
+    assert spec_journey.Step("intake").to_entry() == {"key": "intake"}
+    assert spec_journey.Step("intake", append="more").to_entry() == {
+        "key": "intake",
+        "append": "more",
+    }
+    custom = spec_journey.Step("threat-model", "Threat model", "Think.", ("large",), "also")
+    assert list(custom.to_entry()) == ["key", "title", "instructions", "sizes", "append"]
+    assert custom.to_entry()["sizes"] == ["large"]
+    assert "sizes" not in spec_journey.Step("threat-model", "T", "I").to_entry()
+
+
+@pytest.mark.asyncio
+async def test_get_answers_the_built_ins_with_no_file_and_the_diagnostic_for_a_broken_one(
+    app, auth_headers, tmp_path
+):
+    bare = await app.get(JOURNEY, headers=auth_headers)
+    _write(tmp_path, "{ not json")
+    broken = await app.get(JOURNEY, headers=auth_headers)
+
+    assert bare.status_code == 200, bare.text
+    assert [s["key"] for s in bare.json()["steps"]] == BUILTINS
+    assert bare.json()["diagnostics"] == []
+    assert broken.status_code == 200
+    assert [s["key"] for s in broken.json()["steps"]] == BUILTINS
+    assert [d["code"] for d in broken.json()["diagnostics"]] == ["journey_file_invalid"]
+
+
+@pytest.mark.asyncio
+async def test_put_saves_the_steps_and_get_returns_them_in_that_order(app, auth_headers, tmp_path):
+    body = _steps({**THREAT, "sizes": ["large"]}, append=f"Confirm {SENTINEL}.")
+
+    put = await app.put(JOURNEY, json=body, headers=auth_headers)
+    got = await app.get(JOURNEY, headers=auth_headers)
+
+    assert put.status_code == 200, put.text
+    assert put.json() == {"steps": body["steps"], "diagnostics": []}
+    assert got.json() == put.json()
+    assert json.loads((tmp_path / "spec" / "journey.json").read_text("utf-8")) == body
+
+
+@pytest.mark.asyncio
+async def test_put_writes_the_same_bytes_for_the_same_journey_however_the_body_is_ordered(
+    app, auth_headers, tmp_path
+):
+    file = tmp_path / "spec" / "journey.json"
+    scrambled = _steps({"instructions": THREAT_MD, "title": "Threat model", "key": "threat-model"})
+    scrambled["steps"][0] = {"append": "x", "key": "intake"}
+    tidy = _steps(THREAT)
+    tidy["steps"][0] = {"key": "intake", "append": "x"}
+
+    await app.put(JOURNEY, json=scrambled, headers=auth_headers)
+    first = file.read_bytes()
+    await app.put(JOURNEY, json=tidy, headers=auth_headers)
+    second = file.read_bytes()
+    await app.put(JOURNEY, json=tidy, headers=auth_headers)
+
+    assert first == second == file.read_bytes()
+    assert first.endswith(b"\n") and not first.endswith(b"\n\n")
+    assert b"\r" not in first
+    assert first.startswith(b'{\n  "steps": [\n    {\n      "key": "intake"')
+    assert [p.name for p in file.parent.iterdir() if p.name.startswith("journey")] == [
+        "journey.json"
+    ], "no temporary file is left beside it"
+
+
+@pytest.mark.asyncio
+async def test_put_refuses_an_over_long_text_naming_the_step_and_the_cap_and_writes_nothing(
+    app, auth_headers, tmp_path
+):
+    file = tmp_path / "spec" / "journey.json"
+    over = _steps({**THREAT, "instructions": "x" * (spec_journey.TEXT_CAP + 1)})
+
+    refused = await app.put(JOURNEY, json=over, headers=auth_headers)
+    assert refused.status_code == 422, refused.text
+    detail = refused.json()["detail"]
+    assert detail["code"] == "journey_invalid"
+    assert "threat-model" in detail["message"] and "2,000" in detail["message"]
+    assert not file.exists()
+
+    exact = _steps({**THREAT, "instructions": "x" * spec_journey.TEXT_CAP})
+    assert (await app.put(JOURNEY, json=exact, headers=auth_headers)).status_code == 200
+    before = file.read_bytes()
+    refused = await app.put(JOURNEY, json=over, headers=auth_headers)
+    assert refused.status_code == 422
+    assert file.read_bytes() == before, "a refused save leaves the saved journey as it was"
+
+
+@pytest.mark.asyncio
+async def test_put_refuses_a_journey_that_breaks_a_rule_and_writes_nothing(
+    app, auth_headers, tmp_path
+):
+    refused = await app.put(JOURNEY, json={"steps": [{"key": "intake"}]}, headers=auth_headers)
+
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"]["code"] == "journey_invalid"
+    assert not (tmp_path / "spec" / "journey.json").exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body, named",
+    [
+        ({"steps": "intake"}, "steps"),
+        ({"nothing": []}, "nothing"),
+        (["intake"], "object"),
+        ({"steps": [{"key": "intake", "instruction": "typo"}]}, "instruction"),
+        ({"steps": [{"title": "no key"}]}, "key"),
+    ],
+)
+async def test_put_names_the_field_it_cannot_honour_and_writes_nothing(
+    app, auth_headers, tmp_path, body, named
+):
+    refused = await app.put(JOURNEY, json=body, headers=auth_headers)
+
+    assert refused.status_code == 422, refused.text
+    assert named in refused.text
+    assert not (tmp_path / "spec" / "journey.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_put_announces_journey_updated_and_the_saved_steps_reach_the_next_briefing(
+    app, auth_headers, tmp_path, monkeypatch
+):
+    frames = _published(monkeypatch)
+    await _create(app, auth_headers)
+    await _place(step="intake", size="large")
+    frames.clear()
+
+    put = await app.put(
+        JOURNEY, json=_steps(THREAT, append=f"Confirm {SENTINEL}."), headers=auth_headers
+    )
+
+    assert put.status_code == 200
+    assert [kind for kind, _ in frames if kind == "journey_updated"] == ["journey_updated"]
+    assert SENTINEL in await _briefing(app, auth_headers)
+    listed = await app.get(f"{BASE}/documents", headers=auth_headers)
     (view,) = [d for d in listed.json()["documents"] if d["path"] == PATH]
     assert view["journey"] == LARGE

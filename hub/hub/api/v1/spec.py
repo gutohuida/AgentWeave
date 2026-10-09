@@ -2081,6 +2081,70 @@ async def set_journey(
     return _document_view(document, steps)
 
 
+def _journey_view(steps: spec_journey.ProjectSteps) -> Dict[str, Any]:
+    return {
+        "steps": [step.to_entry() for step in steps.steps],
+        "diagnostics": list(steps.diagnostics),
+    }
+
+
+@router.get("/journey")
+async def get_project_journey(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The project's spec steps (`a-project-orders-its-own-spec-steps` FR-6): the built-ins with no
+    `spec/journey.json`; with a broken file, the built-ins and what is wrong with it (FR-7)."""
+    project_id, _ = project
+    return _journey_view(spec_journey.load(await _workspace(session, project_id)))
+
+
+class JourneyStepBody(RequestModel):
+    """One step of the saved journey. Lengths are left to `spec_journey.parse`, whose refusal
+    names the step and the cap; this model names a field it does not know."""
+
+    key: str
+    title: Optional[str] = None
+    instructions: Optional[str] = None
+    sizes: Optional[List[str]] = None
+    append: Optional[str] = None
+
+
+class JourneyBody(RequestModel):
+    steps: List[JourneyStepBody]
+
+
+@router.put("/journey")
+async def put_project_journey(
+    body: JourneyBody,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Save the project's spec steps to `spec/journey.json` (FR-5, FR-6). A journey that breaks a
+    rule (a text over 2,000 characters, a built-in missing or out of order, a bad custom key) is
+    refused with 422 naming the step, and nothing is written. The same journey saved twice leaves
+    the same bytes. Takes effect from the next turn: every briefing reads the file."""
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    try:
+        steps = spec_journey.save(workspace, body.model_dump(exclude_unset=True))
+    except spec_journey.JourneyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code},
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": f"could not write {spec_journey.JOURNEY_FILE}: {exc}",
+                "code": "write_failed",
+            },
+        ) from exc
+    await sse_manager.broadcast(project_id, "journey_updated", {"steps": steps.order()})
+    return _journey_view(steps)
+
+
 @router.post("/documents/close-exploration")
 async def close_exploration(
     path: str = Query(...),

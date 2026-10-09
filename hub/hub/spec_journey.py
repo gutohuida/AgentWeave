@@ -12,7 +12,9 @@ reported by the agent's advance tool and is the approval warnings' input.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
@@ -98,6 +100,18 @@ class Step:
         if not self.custom:
             return self.key in JOURNEYS[size if size in JOURNEYS else None]
         return (size if size in SIZES else "large") in (self.sizes or DEFAULT_CUSTOM_SIZES)
+
+    def to_entry(self) -> Dict[str, Any]:
+        """The step as the file and the routes carry it: only what it holds, in a fixed key order."""
+        entry: Dict[str, Any] = {"key": self.key}
+        if self.custom:
+            entry["title"] = self.title
+            entry["instructions"] = self.instructions
+            if self.sizes:
+                entry["sizes"] = list(self.sizes)
+        if self.append:
+            entry["append"] = self.append
+        return entry
 
 
 @dataclass(frozen=True)
@@ -204,6 +218,34 @@ def load(workspace: project_workspace.ProjectWorkspace) -> ProjectSteps:
     return ProjectSteps(
         BUILT_IN.steps, tuple({"code": INVALID, "message": message} for message in problems)
     )
+
+
+def dump(steps: ProjectSteps) -> str:
+    """The file's text for these steps: stable key order, indented, LF, one trailing newline, so
+    saving the same journey twice leaves identical bytes (FR-5)."""
+    document = {"steps": [step.to_entry() for step in steps.steps]}
+    return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
+
+
+def save(workspace: project_workspace.ProjectWorkspace, document: Any) -> ProjectSteps:
+    """Validate `document` and write it to `spec/journey.json`; nothing is written when it breaks a
+    rule (FR-5). Atomic: written beside the file and moved over it, so a failed write leaves the
+    saved journey as it was. Raises `JourneyError` (code `journey_invalid`) naming every problem,
+    and `OSError` when the file cannot be written."""
+    steps, problems = parse(document)
+    if problems:
+        raise JourneyError("; ".join(problems), code="journey_invalid")
+    target = workspace.resolve_relative(JOURNEY_FILE)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + ".tmp")
+    try:
+        temporary.write_text(dump(steps), encoding="utf-8", newline="\n")
+        os.replace(temporary, target)
+    except OSError:
+        with contextlib.suppress(OSError):
+            temporary.unlink()
+        raise
+    return steps
 
 
 async def project_steps(session: AsyncSession, project_id: str) -> ProjectSteps:

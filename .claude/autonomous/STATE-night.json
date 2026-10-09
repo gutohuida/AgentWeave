@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "project-steps-t3-impl",
-    "next_action": "project-steps-t3-impl: failing Hub tests first, then GET/PUT /projects/{id}/project/journey on the spec router (FR-5, FR-6, FR-7 of spdoc-3759e366caf1): GET answers {steps, diagnostics} from spec_journey.load (built-ins with no file; diagnostics journey_file_invalid); PUT validates with spec_journey.parse (422 naming step and 2,000 cap, nothing written), writes spec/journey.json deterministically (stable key order, indented, LF, trailing newline; a re-PUT of the same journey leaves identical bytes), broadcasts journey_updated. Wire shape in the iteration 8 log entry; Step needs a to_entry(). Do not close Hub tasks task-09f97da0049e, task-847b1c1b7810, task-2800a1609906, task-80a919c0cc4c. Then run d1011: it should pass checks 1-5 and stop at 6 (page, t4).",
+    "current": "project-steps-t4-impl",
+    "next_action": "project-steps-t4-impl: the Spec steps section on the project page (Environment > Settings), FR-5/FR-9 of spdoc-3759e366caf1. Failing UI test first (vitest), then the section with the testids d1011 fixes: spec-steps, spec-steps-row-<key>, spec-steps-add-after|new-title|new-markdown|add, spec-steps-save; it reads GET and saves PUT /project/journey (wire shape in the iteration 8 log entry; GET answers {steps, diagnostics}, PUT 422 detail.message names step and the 2,000 cap). Add 'journey_updated' to the SSE event list in hub/ui/src/hooks/useSSE.ts so the page and the phase bar (data-testid spec-journey, spec-journey-step-<key>, reads the documents view's journey) refetch. Commit hub/ui/src and hub/hub/static/ui together (make ui / scripts/refresh_ui_bundle.py); run test_surface_ceilings.py and the Hub suite (it gates hub/ui/src). Do not close Hub tasks task-09f97da0049e, task-847b1c1b7810, task-2800a1609906, task-80a919c0cc4c. Then run d1011: it should pass all checks. Then project-steps-drive (log evidence + METRICS row).",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -69,9 +69,9 @@
         },
         {
             "id": "project-steps-t3-impl",
-            "status": "open",
+            "status": "done",
             "title": "project-steps task routes: GET/PUT /project/journey, deterministic write, 2,000-char cap",
-            "detail": "FR-5, FR-6, FR-7. Failing Hub tests first."
+            "detail": "done 2026-10-09 iteration 11: GET/PUT /project/journey (typed JourneyBody), spec_journey.dump/save/Step.to_entry, journey_updated broadcast; 34 tests; d1011 passes checks 1-5, stops at 6."
         },
         {
             "id": "project-steps-t4-impl",
