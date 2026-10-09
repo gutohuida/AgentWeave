@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "specjson-t3-impl",
-    "next_action": "Do queue item specjson-t3-impl: POST /project/spec/convert?to=json|html (new hub/hub/spec_conversion.py): files, spec_documents.path, undelivered inbound_queue_entries.spec_document, payload refs (roadmap.document, task from.document), spec/index.json; idempotent; 409 naming active runs. Failing Hub tests first, same commit. Then restructure scripts/drive/d1010_spec_json.py (setup creates .json, converts to html to make the legacy corpus) and fix its check 7b (statement pair + FR-1 digest pair); see night log iteration 4.",
+    "current": "specjson-drive",
+    "next_action": "Do queue item specjson-drive: on a scratch Hub (own port, fresh db), run scripts/drive/d1010_spec_json.py once more as the record, then convert a COPY of this repo's spec/ (pre-change .html corpus, rowless in a fresh db) to json and back in a throwaway git project: every file converts, no skipped, GET /spec renders, reverse restores the .html set. Never convert this repo's spec/ or :8010. Log evidence and append a spec-queue/METRICS.md row (Tier 2, spec/build/drive time, which stage caught each defect; see night log iterations 2-5). Do not close Hub tasks.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -37,9 +37,9 @@
         },
         {
             "id": "specjson-t3-impl",
-            "status": "open",
+            "status": "done",
             "title": "spec-storage task convert: POST /project/spec/convert?to=json|html, 409 while busy",
-            "detail": "POST /project/spec/convert?to=json|html, 409 while busy. Use spec_manifest.json_path_for/html_path_for; legacy read via spec_payload.extract_payload inside spec_documents (seam guard allows it there); html write = render_page output. d1010 setup now 400s at .html create: restructure it; check 7b must allow the FR-1 digest line (log it4).",
+            "detail": "done 2026-10-09 iteration 5: POST /project/spec/convert?to=json|html (spec_conversion.py), 6 tests, d1010 restructured and 11/11 PASS on scratch :8097.",
             "model": "opus"
         },
         {

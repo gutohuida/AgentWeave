@@ -35,6 +35,7 @@ from ... import (
     run_liveness,
     slice_drafting,
     spec_adoption,
+    spec_conversion,
     spec_documents,
     spec_index,
     spec_journey,
@@ -1720,6 +1721,50 @@ async def reindex(
             "rerendered": rerendered,
             "skipped": rerender_skipped,
         },
+    }
+
+
+@router.post("/spec/convert")
+async def convert_corpus(
+    to: str = Query(..., pattern="^(json|html)$"),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Convert every spec document between legacy `.html` and `spec.json`, either way.
+
+    `a-spec-document-is-stored-as-its-payload` FR-7/8/9: the files, the rows' paths, undelivered
+    queue entries, payload references and `spec/index.json`, keeping every id. `to=html` is the
+    rollback (with the code reverted). A second call changes nothing. Refused with 409, changing
+    nothing, while any run in the project is active, or when a target path is already held.
+    """
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    try:
+        result = await spec_conversion.convert(session, workspace, project_id, to)
+    except spec_conversion.ConversionRefusedError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": str(exc), "code": exc.code, "runs": exc.runs},
+        ) from exc
+    except OSError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": f"could not write a converted document: {exc}",
+                "code": "write_failed",
+            },
+        ) from exc
+    await session.commit()
+    if result.converted:
+        await sse_manager.broadcast(project_id, "spec_updated", {"path": None})
+    return {
+        "to": result.to,
+        "converted": result.converted,
+        "skipped": result.skipped,
+        "index": {"rewritten": result.index_rewritten},
+        "queue_entries": result.queue_entries,
     }
 
 

@@ -2,7 +2,7 @@
 
 `a-spec-document-is-stored-as-its-payload` FR-1/2/3/5/6/10, the criteria `stored-shape`,
 `deterministic-write`, `html-create-refused`, `legacy-diagnostic`, `journey-in-file` and
-`agent-reads`. The conversion route (FR-7..9) is the next task. The acceptance drive is
+`agent-reads`. The conversion route (FR-7..9) is `test_spec_conversion.py`. The acceptance drive is
 `scripts/drive/d1010_spec_json.py`.
 """
 

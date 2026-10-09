@@ -3,18 +3,23 @@
 The change's `drive` and `app-shows-same-page` criteria, written before the build and recorded
 failing. Starts its own Hub on :8097 with a fresh database (never :8000 or :8010) serving the bundle
 built into hub/hub/static/ui, opens a throwaway git project, and creates a capability, a roadmap
-and a change linked to the roadmap's slice through today's routes, as .html. Setup records, for each,
-the page GET /spec returns, and records evidence on one requirement. Then it checks, in order:
+and a change linked to the roadmap's slice, indexed under a home, and records evidence on one
+requirement. The Hub that recorded this failing (2026-10-09 iteration 2) created them as .html; the
+Hub this drive accepts refuses an .html create (FR-5), so setup creates them as spec.json and turns
+them into the legacy corpus with `convert?to=html` (FR-8), the files a pre-change Hub wrote. The
+legacy page of each is its .html file's bytes (a legacy document is not served, design D4); the
+Chromium baseline is taken before that, since the app does not list a legacy document. Then:
 
   1. POST /project/spec/convert?to=json answers 200 (no such route on a Hub before the build);
   2. only spec.json files exist under spec/, one per document, none with a spec.html beside it;
   3. the document list holds the same ids at .json paths and no legacy diagnostic;
-  4. GET /spec for each returns the recorded page (compared with spec.json read as spec.html:
+  4. GET /spec for each returns the legacy page (compared with spec.json read as spec.html:
      the corpus navigation names paths, which are the one difference conversion makes);
   5. requirement identifiers and the recorded evidence are unchanged;
   6. Chromium: the change document, open beside the composer, shows its requirement statement and
      phase chip as before conversion (screenshots before and after);
-  7. rewording one requirement and committing changes exactly that requirement's line in git;
+  7. rewording one requirement and committing changes only that requirement's lines in git: its
+     statement, and its digest in the identity block;
   8. moving the journey rewrites the file's hub block (step);
   9. converting back leaves only spec.html files, the original paths and unchanged capability and
      roadmap pages;
@@ -29,6 +34,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import secrets
 import sqlite3
 import subprocess
@@ -185,12 +191,28 @@ def pages(base, ext):
     return out
 
 
+def legacy_diagnostics(base):
+    """The `legacy_html_document` diagnostics the spec tree listing reports (FR-6)."""
+    _, body = api("GET", f"{base}/project/specs")
+    return [d["path"] for d in body["diagnostics"] if d.get("code") == "legacy_html_document"]
+
+
+def legacy_pages(root):
+    """Each document's legacy page: its .html file's bytes (a legacy document is not served, D4)."""
+    out = {}
+    for stem in (CAP, ROADMAP, CHANGE):
+        file = root / f"{stem}.html"
+        out[stem] = file.read_text(encoding="utf-8") if file.is_file() else f"missing {file.name}"
+    return out
+
+
 def evidence(base):
     code, body = api("GET", f"{base}/project/spec/evidence")
     if code != 200:
         return []
     rows = body if isinstance(body, list) else body.get("evidence", [])
-    return sorted((r.get("identifier"), r.get("summary")) for r in rows)
+    return sorted((r.get("id"), r.get("requirement_id"), r.get("digest"), r.get("summary"))
+                  for r in rows)
 
 
 def identifiers(base):
@@ -215,8 +237,9 @@ def drive():
     pid = project["id"]
     base = f"/projects/{pid}"
 
-    # Setup: today's routes, .html paths. Not checks of the change, so a refusal here is a broken drive.
-    for path, (kind, body) in payloads("html").items():
+    # Setup: not checks of the change, so a refusal here is a broken drive. Created as spec.json (an
+    # .html create is refused now, FR-5), indexed under a home so the pages carry corpus navigation.
+    for path, (kind, body) in payloads("json").items():
         code, out = api("POST", f"{base}/project/documents",
                         {"title": body["title"], "kind": kind, "path": path})
         assert code == 201, (path, code, out)
@@ -226,24 +249,17 @@ def drive():
         else:
             code, out = api("PUT", f"{base}/project/documents/{quoted}/content", {"document": body})
         assert code == 200, (path, code, out)
+    code, out = api("POST", f"{base}/project/spec/reindex", {"home": CAP + ".json"})
+    assert code == 200 and out["index"]["written"], (code, out)
     ids = {row["path"]: row["id"] for row in doc_rows(base)[1]["documents"]}
     assert len(ids) == 3, ids
-    before_pages = pages(base, "html")
-    assert all(page.startswith("<") for page in before_pages.values()), before_pages
     cap_ident = next(r["identifier"] for r in api(
-        "GET", f"{base}/project/spec/requirements?document={urllib.parse.quote(CAP + '.html')}"
+        "GET", f"{base}/project/spec/requirements?document={urllib.parse.quote(CAP + '.json')}"
     )[1]["requirements"])
     code, out = api("POST", f"{base}/project/spec/evidence",
                     {"identifier": cap_ident, "kind": "manual_observation",
-                     "summary": "drove GET /ping by hand", "document": CAP + ".html"})
+                     "summary": "drove GET /ping by hand", "document": CAP + ".json"})
     assert code == 201, (code, out)
-    before_ids = identifiers(base)
-    before_evidence = evidence(base)
-    assert before_evidence, "setup recorded no evidence"
-    git(root, "add", "spec")
-    git(root, "commit", "-q", "-m", "documents as html")
-    print(f"setup ok: {len(ids)} documents, requirements {before_ids}, evidence {before_evidence}",
-          flush=True)
 
     seed = ("sessionStorage.setItem('agentweave-session', JSON.stringify({apiKey: %r, hubUrl: %r}));"
             "localStorage.setItem('agentweave-selected-project', %r);" % (KEY, HUB, pid))
@@ -275,8 +291,25 @@ def drive():
             browser.close()
         return shown, "exploring" in text.lower()
 
-    panel_before = panel("html", "before")
+    panel_before = panel("json", "before")
     print(f"baseline panel (statement shown, phase chip shown): {panel_before}", flush=True)
+
+    # The legacy corpus: what a Hub before this change wrote, files and rows at .html paths.
+    code, out = api("POST", f"{base}/project/spec/convert?to=html")
+    assert code == 200 and len(out["converted"]) == 3, (code, out)
+    assert not [f for f in tree(root) if f.endswith("spec.json")], tree(root)
+    assert all(p.endswith("/spec.html") for p in db_paths()), db_paths()
+    assert len(legacy_diagnostics(base)) == 3, legacy_diagnostics(base)  # FR-6, so check 3 can see one
+    ids = {path.replace(".json", ".html"): doc_id for path, doc_id in ids.items()}
+    before_pages = legacy_pages(root)
+    assert all(page.startswith("<!DOCTYPE html>") for page in before_pages.values()), before_pages
+    before_ids = identifiers(base)
+    before_evidence = evidence(base)
+    assert before_evidence, "setup recorded no evidence"
+    git(root, "add", "spec")
+    git(root, "commit", "-q", "-m", "documents as html")
+    print(f"setup ok: {len(ids)} documents, requirements {before_ids}, evidence {before_evidence}",
+          flush=True)
 
     # 1: the conversion exists and runs.
     code, out = api("POST", f"{base}/project/spec/convert?to=json")
@@ -293,8 +326,8 @@ def drive():
     check("3 the document list holds the same ids at .json paths, with no legacy diagnostic",
           sorted(after_ids.values()) == sorted(ids.values())
           and all(p.endswith("/spec.json") for p in after_ids)
-          and not [d for d in listed.get("diagnostics", []) if d.get("code") == "legacy_html_document"],
-          f"{after_ids} diagnostics={listed.get('diagnostics')}")
+          and not legacy_diagnostics(base),
+          f"{after_ids} legacy={legacy_diagnostics(base)}")
 
     # 4: the app's page is the page it had.
     after_pages = pages(base, "json")
@@ -323,8 +356,16 @@ def drive():
     check("7a the reword is accepted", code == 200, f"{code} {str(out)[:300]}")
     diff = [line for line in git(root, "diff", "-U0", "--", "spec").splitlines()
             if line[:1] in "+-" and not line.startswith(("+++", "---"))]
-    check("7b the diff holds exactly the requirement's old and new line",
-          len(diff) == 2 and OLD in diff[0] and NEW in diff[1], str(diff))
+    # The reworded requirement's lines: its statement, and its semantic digest in the identity
+    # block (`aw_identity.digests`), the one other value that is about that requirement alone.
+    statement = [line for line in diff if OLD in line or NEW in line]
+    digest = [line for line in diff if line not in statement]
+    check("7b the diff holds only the requirement's lines: its statement and its digest",
+          len(diff) == 4 and statement[0].startswith("-") and OLD in statement[0]
+          and statement[1].startswith("+") and NEW in statement[1]
+          and [line[0] for line in digest] == ["-", "+"]
+          and all(re.match(r'"[A-Z]+-\d+": "', line[1:].strip()) for line in digest),
+          str(diff))
 
     # 8: the journey is in the file.
     journey = f"{base}/project/documents/journey?path={urllib.parse.quote(CHANGE + '.json')}"
@@ -338,7 +379,7 @@ def drive():
     # 9: and back.
     code, out = api("POST", f"{base}/project/spec/convert?to=html")
     files = tree(root)
-    back = pages(base, "html")
+    back = legacy_pages(root)
     check("9 the reverse leaves only spec.html files at the original paths, capability and roadmap "
           "pages as before",
           code == 200 and not [f for f in files if f.endswith("spec.json")]

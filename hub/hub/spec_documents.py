@@ -23,7 +23,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .project_workspace import ProjectPathError, ProjectWorkspace
 from .spec_manifest import (
@@ -40,6 +40,7 @@ from .spec_manifest import (
     load_manifest,
     validate_spec_path,
 )
+from .spec_payload import extract_payload
 from .spec_render import CorpusChild, CorpusContext
 
 SPEC_DIR = "spec"
@@ -226,6 +227,52 @@ def read_payload(workspace: ProjectWorkspace, path: str) -> Optional[Dict[str, A
     Raises what `read_document` raises: a caller decides what an unreadable file means to it.
     """
     return parse_stored(read_document(workspace, path))
+
+
+def _legacy_file(workspace: ProjectWorkspace, path: str) -> Path:
+    """A legacy `.html` document's file, held to the rules of the `.json` path it converts to."""
+    if not path.endswith(LEGACY_SUFFIX):
+        raise SpecPathError(f"not a legacy .html document path: {path!r}")
+    validate_spec_path(json_path_for(path))
+    return workspace.resolve_relative(path)
+
+
+def read_legacy(workspace: ProjectWorkspace, path: str) -> Optional[str]:
+    """A legacy `.html` document's text, or ``None`` when there is no such file.
+
+    For the conversion only (FR-7): a legacy document is reported and converted, never served
+    (design D4).
+    """
+    resolved = _legacy_file(workspace, path)
+    if not resolved.is_file():
+        return None
+    return resolved.read_text(encoding="utf-8")
+
+
+def parse_legacy(content: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The payload a legacy `.html` document embeds, or ``None`` when it embeds none."""
+    return extract_payload(content) if content else None
+
+
+def write_legacy(workspace: ProjectWorkspace, path: str, content: str) -> Path:
+    """Write a legacy `.html` document: the reverse conversion's output (FR-8)."""
+    resolved = _legacy_file(workspace, path)
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    resolved.write_text(content, encoding="utf-8", newline="\n")
+    return resolved
+
+
+def remove_converted(workspace: ProjectWorkspace, path: str) -> None:
+    """Remove a document file the conversion has just rewritten under its other extension.
+
+    Its directory is never pruned: the converted file now lives in it.
+    """
+    if path.endswith(LEGACY_SUFFIX):
+        resolved = _legacy_file(workspace, path)
+    else:
+        resolved = workspace.resolve_relative(validate_spec_path(path))
+    if resolved.is_file():
+        resolved.unlink()
 
 
 def document_updated_at(workspace: ProjectWorkspace, path: str) -> str:
@@ -446,17 +493,53 @@ def write_index(workspace: ProjectWorkspace, manifest: Manifest) -> Path:
     file) leaves the previous index exactly as it was. The temporary file is removed, and the
     `OSError` re-raised for the caller to report.
     """
+    return _write_index_text(workspace, dump_manifest(manifest))
+
+
+def _write_index_text(workspace: ProjectWorkspace, text: str) -> Path:
     resolved = workspace.resolve_relative(INDEX_RELATIVE)
     resolved.parent.mkdir(parents=True, exist_ok=True)
     temporary = resolved.with_name(resolved.name + ".tmp")
     try:
-        temporary.write_text(dump_manifest(manifest), encoding="utf-8", newline="\n")
+        temporary.write_text(text, encoding="utf-8", newline="\n")
         os.replace(temporary, resolved)
     except OSError:
         with contextlib.suppress(OSError):
             temporary.unlink()
         raise
     return resolved
+
+
+def repoint_index(workspace: ProjectWorkspace, swap: Callable[[str], str]) -> bool:
+    """Rewrite the paths `spec/index.json` names (home, each path and parent) through `swap`.
+
+    The conversion's index step (FR-7). Read as JSON rather than through `load_manifest`, which
+    refuses the `.html` paths a legacy index holds; written in `dump_manifest`'s layout and
+    atomically. Returns whether anything changed; an absent or unparsable index is left alone.
+    """
+    try:
+        resolved = workspace.resolve_relative(INDEX_RELATIVE)
+        if not resolved.is_file():
+            return False
+        raw = json.loads(resolved.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(raw, dict):
+        return False
+
+    def _swapped(value: Any) -> Any:
+        return swap(value) if isinstance(value, str) else value
+
+    before = json.dumps(raw)
+    raw["home"] = _swapped(raw.get("home"))
+    for entry in raw.get("documents") or []:
+        if isinstance(entry, dict):
+            entry["path"] = _swapped(entry.get("path"))
+            entry["parent"] = _swapped(entry.get("parent"))
+    if json.dumps(raw) == before:
+        return False
+    _write_index_text(workspace, json.dumps(raw, indent=2, ensure_ascii=False) + "\n")
+    return True
 
 
 def corpus_summaries(workspace: ProjectWorkspace, manifest: Manifest) -> Dict[str, str]:
