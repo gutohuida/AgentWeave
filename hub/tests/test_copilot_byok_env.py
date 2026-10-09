@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy import func, select
 
+from hub import manager
 from hub.conversation_titles import generate_conversation_title
 from hub.conversations import get_conversation_by_id
 from hub.copilot_acp import TurnOutcome
@@ -708,9 +709,7 @@ async def test_a_handover_on_a_provider_checkpoint_runner_gets_its_variables(
 
 async def _title_mode(runner_id) -> None:
     async with async_session_factory() as db:
-        project = await db.get(Project, PROJECT)
-        project.conversation_title_mode = "generate"
-        project.conversation_title_runner_id = runner_id
+        await manager.set_job(db, PROJECT, manager.TITLES, enabled=True, runner_id=runner_id)
         await db.commit()
 
 

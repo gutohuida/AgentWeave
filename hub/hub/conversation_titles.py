@@ -11,6 +11,10 @@ would break the agent: `turn_scheduler.schedule_agent` and `trigger_agent_direct
 agent's name makes the agent look busy and stalls its queue until the title returns. The spawn is
 not a turn — it produces no output rows, no timeline entry, and no context cost — so it is
 recorded as an event instead.
+
+Since `the-hubs-background-jobs-are-configured-on-a-manager-page` this is the manager's first job
+(`manager.TITLES`): its row says whether it runs, on which runner and with which model, and every
+spawn is recorded as one `manager_job_fired` event -- written, empty or failed.
 """
 
 from __future__ import annotations
@@ -19,11 +23,12 @@ import asyncio
 import hashlib
 import logging
 import subprocess
+import time
 from typing import Dict, List, Optional
 
 from sqlalchemy import select
 
-from . import project_workspace
+from . import manager, project_workspace
 from .conversations import get_conversation_by_id, title_from_message
 from .db.engine import async_session_factory
 from .db.models import (
@@ -106,8 +111,11 @@ def title_from_output(output: str) -> str:
     return title_from_message(candidate)
 
 
-def _run_titler(cmd: List[str], cwd: str, env: Optional[Dict[str, str]] = None) -> str:
-    """Blocking spawn. Returns "" on any failure — this never raises into the caller."""
+def _run_titler(cmd: List[str], cwd: str, env: Optional[Dict[str, str]] = None) -> Optional[str]:
+    """Blocking spawn. Returns None on any failure — this never raises into the caller.
+
+    None rather than "": the firing it is recorded as tells a failed spawn from one that printed
+    nothing usable."""
     try:
         completed = subprocess.run(  # noqa: S603 — argv list, no shell
             resolve_executable(cmd),
@@ -123,10 +131,10 @@ def _run_titler(cmd: List[str], cwd: str, env: Optional[Dict[str, str]] = None) 
         )
     except (OSError, subprocess.SubprocessError) as exc:
         logger.debug("conversation titling spawn failed: %s", exc)
-        return ""
+        return None
     if completed.returncode != 0:
         logger.debug("conversation titling exited %s", completed.returncode)
-        return ""
+        return None
     return completed.stdout or ""
 
 
@@ -197,10 +205,12 @@ async def _already_titled_from(db, conversation: Conversation, digest: str) -> b
     return isinstance(latest, dict) and latest.get("excerpt_digest") == digest
 
 
-async def _resolve_runner(db, project: Project, agent_name: str) -> Optional[Runner]:
-    """The runner that does the titling: the project's choice, else the agent's own."""
-    if project.conversation_title_runner_id:
-        runner = await db.get(Runner, project.conversation_title_runner_id)
+async def _resolve_runner(
+    db, project: Project, job_runner_id: Optional[str], agent_name: str
+) -> Optional[Runner]:
+    """The runner that does the titling: the job's choice, else the agent's own."""
+    if job_runner_id:
+        runner = await db.get(Runner, job_runner_id)
         if runner is not None and runner.project_id == project.id:
             return runner
     agent = (
@@ -232,7 +242,8 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
             return None
 
         project = await db.get(Project, project_id)
-        if project is None or project.conversation_title_mode != "generate":
+        job = await manager.get_job_row(db, project_id, manager.TITLES)
+        if project is None or job is None or not job.enabled:
             return None
 
         excerpt = await _excerpt(db, conversation)
@@ -244,7 +255,7 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
         if await _already_titled_from(db, conversation, digest):
             return None
 
-        runner = await _resolve_runner(db, project, conversation.agent)
+        runner = await _resolve_runner(db, project, job.runner_id, conversation.agent)
         if runner is None or get_adapter(runner.cli) is None:
             return None
         if damaged_provider(runner.provider_config):
@@ -252,6 +263,9 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
             # the floor, as for any runner that cannot spawn.
             return None
         agent_name = conversation.agent
+        # The job's model, else the runner's (title-is-a-job): titling need not cost what the
+        # runner's turns cost.
+        model = job.model or runner.model
 
         # F195: the project's own directory, resolved here rather than passed in. A `cwd`
         # parameter existed and no caller ever supplied it, so every titling spawn inherited the
@@ -270,7 +284,7 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
 
     try:
         cmd = build_title_command(
-            cli=runner.cli, model=runner.model, prompt=_PROMPT.format(excerpt=excerpt)
+            cli=runner.cli, model=model, prompt=_PROMPT.format(excerpt=excerpt)
         )
         # The runner's own model provider, or none (slice 5 D7, finding 1).
         env = one_shot_env(runner.cli, runner_probe_config(runner))
@@ -282,25 +296,53 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
         return None
 
     async with _gate:
+        started = time.monotonic()
         output = await asyncio.to_thread(_run_titler, cmd, cwd, env)
-    if runner.cli == "copilot":
+        duration_ms = int((time.monotonic() - started) * 1000)
+    usage = None
+    failed = output is None
+    if runner.cli == "copilot" and output is not None:
         # `--output-format json` prints JSONL; titled from its last line, every Copilot
         # conversation would be named after a fragment of JSON (R2). An unparseable envelope
         # titles nothing, the titler's existing floor.
-        answer, _usage, _error = parse_copilot_envelope(output)
+        answer, envelope_usage, error = parse_copilot_envelope(output)
+        usage = manager.usage_record(envelope_usage)
+        failed = error is not None
         output = answer or ""
 
-    title = title_from_output(restore_file_mentions(output))
+    title = "" if failed else title_from_output(restore_file_mentions(output or ""))
+
+    async def _fired(db, outcome: str, detail: Optional[str]) -> None:
+        await manager.record_firing(
+            db,
+            project_id,
+            job=manager.TITLES,
+            trigger="turn_completed",
+            subject={"conversation_id": conversation_id},
+            runner_id=runner.id,
+            cli=runner.cli,
+            model=model,
+            outcome=outcome,
+            detail=detail,
+            duration_ms=duration_ms,
+            usage=usage,
+        )
+
     if not title:
+        async with async_session_factory() as db:
+            await _fired(db, "failed" if failed else "empty", None)
         return None
 
     async with async_session_factory() as db:
         conversation = await get_conversation_by_id(db, conversation_id)
         # Re-read rather than reuse: the operator may have renamed it while the model thought.
+        # The spawn still happened, so it is still recorded, as producing nothing that was kept.
         if conversation is None or conversation.title_set_by_operator:
+            await _fired(db, "empty", None)
             return None
         conversation.title = title
         await db.commit()
+        await _fired(db, "written", title)
         await persist_event(
             db,
             project_id,

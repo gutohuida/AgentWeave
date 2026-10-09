@@ -1085,6 +1085,32 @@ class EventLog(Base):
     )
 
 
+class ManagerJob(Base):
+    """What the operator chose for one of the Hub's background jobs, in one project (migration 0123).
+
+    The jobs themselves are code (`hub/hub/manager.py`'s `JOBS`); this row holds only the choice.
+    A job with no row is disabled with nothing chosen. `runner_id` is not a ForeignKey, for the
+    same reason `Project.conversation_title_runner_id` is not; it is validated where it is set.
+    Null `runner_id` falls back to the job's own default (for titles, the conversation's agent's
+    runner), null `model` to that runner's model.
+    """
+
+    __tablename__ = "manager_jobs"
+
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    job: Mapped[str] = mapped_column(String(64), nullable=False)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
+    )
+
+    __table_args__ = (PrimaryKeyConstraint("project_id", "job", name="pk_manager_jobs"),)
+
+
 class AgentHeartbeat(Base):
     __tablename__ = "agent_heartbeats"
 

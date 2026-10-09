@@ -15,6 +15,7 @@ from pydantic.fields import FieldInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import manager
 from ...agent_activity import latest_activity_by_agent
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_operator, get_operator_project
@@ -435,13 +436,33 @@ async def get_project_detail(
     return await _project_summary(session, project)
 
 
+# Kept on the settings body, backed by the conversation-titles job row since 0123
+# (`the-hubs-background-jobs-are-configured-on-a-manager-page` D3): the body forbids unknown fields,
+# so removing them would break every settings save from an app window still on the old bundle. The
+# project columns of the same names are no longer read or written; the downgrade restores them.
+_TITLE_FIELDS = ("conversation_title_mode", "conversation_title_runner_id")
+
+
+async def _project_settings(session: AsyncSession, project: Project) -> ProjectSettings:
+    stored = ProjectSettings.model_validate(project, from_attributes=True)
+    job = await manager.get_job_row(session, project.id, manager.TITLES)
+    return stored.model_copy(
+        update={
+            "conversation_title_mode": (
+                "generate" if job is not None and job.enabled else "truncate"
+            ),
+            "conversation_title_runner_id": job.runner_id if job is not None else None,
+        }
+    )
+
+
 @router.get("/{project_id}/settings", response_model=ProjectSettings)
 async def get_project_settings(
     project_identity: Tuple[str, str] = Depends(get_operator_project),
     session: AsyncSession = Depends(get_session),
 ) -> ProjectSettings:
     project = await _operator_project_row(project_identity[0], session)
-    return ProjectSettings.model_validate(project, from_attributes=True)
+    return await _project_settings(session, project)
 
 
 @router.get("/{project_id}/main-branch-suggestion")
@@ -494,7 +515,7 @@ async def update_project_settings(
     #
     # `exclude_unset` distinguishes "not sent" from "sent as null", so omission means unchanged
     # and a deliberate clear is still expressible.
-    current = ProjectSettings.model_validate(project, from_attributes=True)
+    current = await _project_settings(session, project)
     submitted = body.model_dump(exclude_unset=True)
     try:
         # Validated against the *merged* state, not the fragment. Validating the fragment would
@@ -568,13 +589,23 @@ async def update_project_settings(
             )
 
     settings_now = merged.model_dump()
+    before = current.model_dump()
     changed = {
-        field: {"was": getattr(project, field), "now": value}
+        field: {"was": before[field], "now": value}
         for field, value in settings_now.items()
-        if getattr(project, field) != value
+        if before[field] != value
     }
     for field, value in settings_now.items():
-        setattr(project, field, value)
+        if field not in _TITLE_FIELDS:
+            setattr(project, field, value)
+    if any(field in changed for field in _TITLE_FIELDS):
+        await manager.set_job(
+            session,
+            resolved_project_id,
+            manager.TITLES,
+            enabled=merged.conversation_title_mode == "generate",
+            runner_id=merged.conversation_title_runner_id,
+        )
     await session.commit()
 
     if main_branch_newly_named:

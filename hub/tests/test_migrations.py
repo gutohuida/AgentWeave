@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0122"
+HEAD_REVISION = "0123"
 
 
 # ---------------------------------------------------------------------------
@@ -4953,3 +4953,98 @@ def test_migration_0122_downgrades_to_the_schema_before_it(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         assert [r[1] for r in conn.execute("PRAGMA table_info(spec_documents)")] == before
+
+
+# ---------------------------------------------------------------------------------------------
+# 0123 -- the Hub's background jobs: manager_jobs. Every project that generated titles, or had
+# chosen a title runner, gets a conversation-titles row; the downgrade writes the rows back to the
+# project columns, which 0123 leaves in place unread, and drops the table.
+# ---------------------------------------------------------------------------------------------
+
+
+def _database_at_0122(tmp_path, name: str) -> tuple:
+    """Every table from the models, minus what 0123 adds, stamped at 0122."""
+    db_file = tmp_path / name
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("DROP TABLE manager_jobs")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0122')")
+        conn.commit()
+    return db_file, db_url
+
+
+def _insert_titled_project(conn, project_id: str, mode: str, runner_id) -> None:
+    conn.execute(
+        "INSERT INTO projects (id, name, created_at, conversation_title_mode, "
+        "conversation_title_runner_id) VALUES (?, ?, '2026-01-01T00:00:00Z', ?, ?)",
+        (project_id, project_id, mode, runner_id),
+    )
+
+
+def _title_columns(db_file: Path) -> dict:
+    with sqlite3.connect(db_file) as conn:
+        return {
+            row[0]: row[1:]
+            for row in conn.execute(
+                "SELECT id, conversation_title_mode, conversation_title_runner_id FROM projects"
+            )
+        }
+
+
+def test_migration_manager_jobs_copies_each_projects_title_setting(tmp_path) -> None:
+    db_file, db_url = _database_at_0122(tmp_path, "manager.db")
+    with sqlite3.connect(db_file) as conn:
+        _insert_titled_project(conn, "gen", "generate", "runner-a")
+        _insert_titled_project(conn, "chosen", "truncate", "runner-b")
+        _insert_titled_project(conn, "plain", "truncate", None)
+        conn.commit()
+
+    _upgrade_to(db_url, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        rows = {
+            row[0]: row[1:]
+            for row in conn.execute(
+                "SELECT project_id, job, enabled, runner_id, model FROM manager_jobs"
+            )
+        }
+    assert rows == {
+        "gen": ("conversation-titles", 1, "runner-a", None),
+        "chosen": ("conversation-titles", 0, "runner-b", None),
+    }
+
+
+def test_migration_manager_jobs_downgrade_writes_the_rows_back(tmp_path) -> None:
+    db_file, db_url = _database_at_0122(tmp_path, "manager_down.db")
+    with sqlite3.connect(db_file) as conn:
+        _insert_titled_project(conn, "gen", "generate", "runner-a")
+        _insert_titled_project(conn, "chosen", "truncate", "runner-b")
+        _insert_titled_project(conn, "plain", "truncate", None)
+        conn.commit()
+    original = _title_columns(db_file)
+
+    _upgrade_to(db_url, "head")
+    _downgrade_to(db_url, "0122")
+
+    assert _title_columns(db_file) == original
+    with sqlite3.connect(db_file) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "manager_jobs" not in tables
+
+
+def test_migration_manager_jobs_downgrade_keeps_what_the_job_became(tmp_path) -> None:
+    """What the operator chose after the upgrade is what a downgraded Hub titles by."""
+    db_file, db_url = _database_at_0122(tmp_path, "manager_changed.db")
+    with sqlite3.connect(db_file) as conn:
+        _insert_titled_project(conn, "gen", "generate", "runner-a")
+        conn.commit()
+
+    _upgrade_to(db_url, "head")
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("UPDATE manager_jobs SET enabled = 0, runner_id = 'runner-c'")
+        conn.commit()
+    _downgrade_to(db_url, "0122")
+
+    assert _title_columns(db_file) == {"gen": ("truncate", "runner-c")}

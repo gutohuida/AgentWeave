@@ -8,10 +8,10 @@ title is a live check (tasks 11.9), not something a mock can establish.
 import pytest
 
 import hub.conversation_titles as conversation_titles
+from hub import manager
 from hub.conversation_titles import build_title_command, title_from_output
 from hub.conversations import get_conversation_by_id
 from hub.db.engine import async_session_factory
-from hub.db.models import Project
 from hub.runner_adapters import get_adapter
 
 # ---------------------------------------------------------------------------
@@ -109,9 +109,10 @@ async def _conversation(
 
 async def _set_mode(mode: str, runner_id=None) -> None:
     async with async_session_factory() as session:
-        project = await session.get(Project, "proj-test")
-        project.conversation_title_mode = mode
-        project.conversation_title_runner_id = runner_id
+        # The conversation-titles job row since 0123; the project columns are no longer read.
+        await manager.set_job(
+            session, "proj-test", manager.TITLES, enabled=mode == "generate", runner_id=runner_id
+        )
         await session.commit()
 
 
@@ -200,7 +201,7 @@ async def test_a_failed_spawn_leaves_the_truncated_title(
     await _sync_agent(app, auth_headers)
     conversation_id = await _conversation(app, auth_headers, bind_runner)
     await _set_mode("generate")
-    _fake_spawn(monkeypatch, "")  # what `_run_titler` returns for a crash, non-zero exit, timeout
+    _fake_spawn(monkeypatch, None)  # what `_run_titler` returns for a crash, non-zero exit, timeout
 
     assert (
         await conversation_titles.generate_conversation_title(
