@@ -1,40 +1,205 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-10-09-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "ceca911",
-    "stop_at":  "2026-10-10T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-10-09-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-10-09-daily",
+    "parent_branch": "master",
+    "parent_sha": "ceca911",
+    "stop_at": "2026-10-10T07:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-10-09-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "f552-impl",
+    "next_action": "Do queue item f552-impl: spec-queue/APPROVALS.md (section 2026-10-09, night window) describes it; read F552 in scripts/drive/FINDINGS.md and correct every stale sentence it lists as Tier 0 (test first, fix, lint, set Status). Full ORDER and the item notes are in APPROVALS.md.",
+    "queue": [
+        {
+            "id": "f552-impl",
+            "status": "open",
+            "title": "Tier 0 fix F552: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "f553-impl",
+            "status": "open",
+            "title": "Tier 0 fix F553: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "f568-impl",
+            "status": "open",
+            "title": "Tier 0 fix F568: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "f569-impl",
+            "status": "open",
+            "title": "Tier 0 fix F569: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "f558-impl",
+            "status": "open",
+            "title": "Tier 0 fix F558: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "f564-impl",
+            "status": "open",
+            "title": "Tier 0 fix F564: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "f565-impl",
+            "status": "open",
+            "title": "Tier 0 fix F565: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "f566-impl",
+            "status": "open",
+            "title": "Tier 0 fix F566: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "f543-impl",
+            "status": "open",
+            "title": "Tier 0 fix F543: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "f556-impl",
+            "status": "open",
+            "title": "Tier 0 fix F556: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "f541-impl",
+            "status": "open",
+            "title": "Tier 0 fix F541: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "f540-impl",
+            "status": "open",
+            "title": "Tier 0 fix F540: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "f567-impl",
+            "status": "open",
+            "title": "Tier 0 fix F567: read its FINDINGS.md section and the DECISIONS.md row; test failing at the seam first, fix, lint, drive where named, set Status"
+        },
+        {
+            "id": "header-rules-spec",
+            "status": "open",
+            "title": "Author header-rules-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)"
+        },
+        {
+            "id": "codex-label-spec",
+            "status": "open",
+            "title": "Author codex-label-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)"
+        },
+        {
+            "id": "loop-history-spec",
+            "status": "open",
+            "title": "Author loop-history-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)"
+        },
+        {
+            "id": "loop-history-impl",
+            "status": "open",
+            "title": "loop-history-impl"
+        },
+        {
+            "id": "loop-history-drive",
+            "status": "open",
+            "title": "loop-history-drive"
+        },
+        {
+            "id": "task-depends-on-spec",
+            "status": "open",
+            "title": "Author task-depends-on-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)"
+        },
+        {
+            "id": "task-depends-on-impl",
+            "status": "open",
+            "title": "task-depends-on-impl"
+        },
+        {
+            "id": "task-depends-on-drive",
+            "status": "open",
+            "title": "task-depends-on-drive"
+        },
+        {
+            "id": "exploring-prose-spec",
+            "status": "open",
+            "title": "Author exploring-prose-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)"
+        },
+        {
+            "id": "exploring-prose-impl",
+            "status": "open",
+            "title": "exploring-prose-impl",
+            "model": "opus"
+        },
+        {
+            "id": "exploring-prose-drive",
+            "status": "open",
+            "title": "exploring-prose-drive"
+        },
+        {
+            "id": "route-shadow-names-spec",
+            "status": "open",
+            "title": "Author route-shadow-names-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)"
+        },
+        {
+            "id": "route-shadow-names-impl",
+            "status": "open",
+            "title": "route-shadow-names-impl"
+        },
+        {
+            "id": "route-shadow-names-drive",
+            "status": "open",
+            "title": "route-shadow-names-drive"
+        },
+        {
+            "id": "thinking-ui-spec",
+            "status": "open",
+            "title": "Author thinking-ui-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)"
+        },
+        {
+            "id": "thinking-ui-impl",
+            "status": "open",
+            "title": "thinking-ui-impl"
+        },
+        {
+            "id": "thinking-ui-drive",
+            "status": "open",
+            "title": "thinking-ui-drive"
+        },
+        {
+            "id": "run-cap-spec",
+            "status": "open",
+            "title": "Author run-cap-spec on trial Hub :8010 per APPROVALS.md authorisations 1-3 (night 2026-10-09 section)",
+            "model": "opus"
+        },
+        {
+            "id": "run-cap-drive-first",
+            "status": "open",
+            "title": "run-cap-drive-first"
+        },
+        {
+            "id": "run-cap-impl",
+            "status": "open",
+            "title": "run-cap-impl",
+            "model": "opus"
+        },
+        {
+            "id": "run-cap-drive",
+            "status": "open",
+            "title": "run-cap-drive"
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
 }
