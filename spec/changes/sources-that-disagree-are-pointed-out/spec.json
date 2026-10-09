@@ -1,0 +1,305 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8099 with a fresh database, a scratch git repository, a Haiku runner with vault-distillation enabled, and a Haiku agent (scripts/drive/d1017_contradictions.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1017_contradictions.py",
+      "key": "drive",
+      "requirement": "contradiction-recorded",
+      "then": "One open contradiction cites the two refund facts with the 300-euro fact presumed, although it was uploaded first. Both facts are disputed in the map, and the 437 fact's card says it is disputed and that the 300 one is presumed. A facts_written firing is written. The agent's run calls vault_read and its reply says 300. After resolving: the contradiction is resolved, a decision source exists, the 437 fact is superseded by it, and neither fact is disputed. The drive fails on today's Hub at its first check (no dated field).",
+      "when": "the drive uploads first a transcript dated 2026-10-01 setting the refund limit without approval to 300 euros, then one dated 2026-09-01 setting it to 437 euros, asks the agent what the refund limit is, and then resolves the contradiction in the Vault tab choosing the 300-euro fact"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub test client",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "dated-upload",
+      "requirement": "source-dated",
+      "then": "the first lists dated 2026-09-01, the second dated null, the last two answer 400 and write nothing",
+      "when": "a test uploads with dated 2026-09-01, without dated, and with dated '01/09/2026' and '2026-13-01'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake worker answering the distillation and then the check, an existing fact from another source",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "check-firing",
+      "requirement": "check-after-distil",
+      "then": "firings facts_written written, empty, failed; the distillation that stored nothing makes no check",
+      "when": "a source is distilled, once with the check naming a contradiction, once naming none, once failing, and once with a distillation that stores nothing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "3,000 existing facts of other sources",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "cap",
+      "requirement": "compared-set",
+      "then": "the claims sent total at most 50,000 characters, latest-dated first, none from the source itself, and the detail names the number left out",
+      "when": "a source is distilled and the check's prompt is captured"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake check answering a valid pair, a pair with an unknown id, a pair of two new facts, and the valid pair reversed",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "ids-checked",
+      "requirement": "contradiction-recorded",
+      "then": "exactly one contradiction file, presumed the later-dated fact even though its source was uploaded first",
+      "when": "a source is distilled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a private source contradicting a tracked one, with a canary in the private claim",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "private-stub",
+      "requirement": "private-contradictions",
+      "then": "the record is at the private location, a claimless stub is in the project, and no project file holds the canary",
+      "when": "the private source is distilled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one open contradiction",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "derived-flags",
+      "requirement": "disputed-shown",
+      "then": "both disputed, one presumed; each card names the other and the presumed one; the list holds it",
+      "when": "a test reads the map, both cards through the operator and the agent-actions routes, and the contradictions list"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open contradiction",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "resolve-route",
+      "requirement": "resolve",
+      "then": "400, 400, 404, 200 with a decision source written and the loser superseded and nothing disputed, then 409; the decision source spawns no distillation",
+      "when": "a test resolves it with a fact not in it, an empty note, an unknown id, then validly, then again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one open and one resolved contradiction on a source's facts",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_contradictions.py",
+      "key": "redistil",
+      "requirement": "replaced-facts",
+      "then": "the open one is gone and the resolved one remains",
+      "when": "the source is distilled again and stores new facts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Vault tab against a map with two disputed facts, a contradictions list, and a resolve route answering 409",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/vaultTab.test.tsx",
+      "key": "tab",
+      "requirement": "contradictions-in-tab",
+      "then": "the section lists the contradiction with both claims and the presumed one; disputed marks show; the request carries stands and note; the 409 reason shows; the upload body carries dated",
+      "when": "a vitest renders it, resolves choosing a fact with a note, and uploads with a date"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the drive's screenshots",
+      "how_to_check": "open testbed/drive1017-contradictions/<stamp>/shot_*.png",
+      "key": "tab-look",
+      "requirement": "contradictions-in-tab",
+      "then": "the contradiction, which side is presumed, and how to resolve it are clear at a glance",
+      "when": "the operator looks at them"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "f50ee95a1eb83638fc3e12a5a190bfc97f3e9a10a534fce3e3aa904afc635305",
+      "FR-2": "180e00d7c74d647d71ca3aa8082437dd4fbcc4e78ad76d71cb51cb068b168fe3",
+      "FR-3": "20df626c78fca139b4a87adc88079a8f444fda34347f32f3cef7577ff5043298",
+      "FR-4": "f53782049392b93410c0f7130a8bab54f5c72ebbcb62cf591381558b032b6d65",
+      "FR-5": "c97c6c7e6a2115ca27aa0d97e15b11bd7760d7f356725a147a99207f59136673",
+      "FR-6": "39745bdef1e4077f2146f58df49492849cda291acbbe14ec58288be7a29d1d90",
+      "FR-7": "cbfa6cb1302ab84dd2924525092756cc67519c1b6befa5307599369a4e6c77bc",
+      "FR-8": "fe48bf3838f922f665c45d0f3361c67cc98805d22549e1a8949c14cf8de4a903",
+      "FR-9": "cfcf09444f461822a1eacd33a0f67cb3b534f1884c2b4d242d0ce18b37062342"
+    },
+    "high_water": 9,
+    "requirements": {
+      "check-after-distil": "FR-2",
+      "compared-set": "FR-3",
+      "contradiction-recorded": "FR-4",
+      "contradictions-in-tab": "FR-9",
+      "disputed-shown": "FR-6",
+      "private-contradictions": "FR-5",
+      "replaced-facts": "FR-8",
+      "resolve": "FR-7",
+      "source-dated": "FR-1"
+    },
+    "retired": {}
+  },
+  "design": "D1 Hazard and rollback (Tier 2). A model compares untrusted claims; its answer becomes files in the working tree, and a new operator route writes a source. No migration: dated is a metadata field, contradictions are files, and the check is a step of an existing job. Rollback is a revert. Contradiction files left behind are plain JSON under knowledge/contradictions, which the previous Hub never reads; a decision source reads as an unknown type there, which the map already lists. The bundle reaches :8000's app on its next reload; before its Hub restarts, the contradictions route answers 404 and the section reads as empty.\n\nD2 Inside distillation (operator, 2026-10-09). The same runner and model, one more spawn after a distillation that stored facts, recorded with trigger facts_written. Rejected: a separate job, which would be a second switch whose off state silently hides contradictions.\n\nD3 All facts, capped (operator, 2026-10-09). Claims of other sources' facts, latest-dated first, to 50,000 characters, the leftovers counted in the detail. Rejected: a shared-word prefilter, which misses the same rule phrased differently.\n\nD4 Newer by when it was said (operator, 2026-10-09). An optional dated on the source; a fact's date is its source's dated, else its source's created_at date; created_at breaks a tie. Rejected: upload order, wrong for a backlog.\n\nD5 Derived, never rewritten. disputed, presumed and superseded_by are computed from contradiction files on each read, as the map is from the files. A fact record is never edited after it is written.\n\nD6 Pick one plus a note (operator, 2026-10-09). The resolution writes a decision source (new type decision) whose text states both facts, the choice and the note, and the contradiction records stands and the decision's id. Rejected: free text alone, which leaves the choice to a model reading it. Decision sources are not distilled: their content restates facts already in the vault.\n\nD7 The model names ids, the Hub checks them. The answer is a list of {new, existing, explanation}; a pair whose ids are not one new and one sent fact, or that is already recorded either way round, is dropped. Within-source contradictions are out of scope.\n\nD8 Privacy follows the facts (roadmap D3): private when either fact is, with a claimless stub naming the two fact ids.",
+  "evidence": {
+    "checked": [
+      "hub/hub/distillation.py: distil() stores facts, then deletes the source's earlier ones on success; the check runs after that",
+      "hub/hub/vault.py: _facts() merges private records over stubs; build_map and _read_fact render facts; add_source writes metadata and a stub",
+      "hub/hub/worker.py:311-400: run_worker validates the answer against a Pydantic model",
+      "hub/hub/api/v1/vault.py: the upload route and the distil route",
+      "spec/capabilities/knowledge-vault/spec.json: FR-10..FR-17 are distillation's requirements"
+    ],
+    "limits": [
+      "Nothing driven yet",
+      "Only Claude (Haiku) will be driven"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "When closed, this change folds into the knowledge-vault capability, and the roadmap's contradictions slice is then done.",
+  "open_questions": [],
+  "problem": "Distillation (knowledge-vault FR-10..FR-17) writes facts from each source independently. When two meetings disagree, say on a refund limit, both facts sit in the vault as equals, and an agent that reads one is not told the other exists. The operator's rule (2026-10-09): 'A meeting transcipt is authoritative evend if two meetings contradict we should point that out', and 'Yes show both presume the newer one.' Roadmap D4 makes contradictions first-class records, the newer presumed and both marked disputed until the operator resolves it with a recorded decision.",
+  "requirements": [
+    {
+      "key": "source-dated",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-09: newer means when it was said. A backlog of old transcripts uploaded today must not override a newer decision.",
+      "statement": "POST /vault/sources MUST accept an optional dated (YYYY-MM-DD), store it in the source's metadata and stub, and list it in the map; it MUST answer 400 for any other format. A source's date is dated when present, else the date of its created_at."
+    },
+    {
+      "key": "check-after-distil",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-09: inside distillation, so nothing extra to enable. Manager D4: every spawn is one firing.",
+      "statement": "When a distillation stores at least one fact, the vault-distillation job MUST make one more spawn comparing the newly stored facts with the existing facts of other sources, and record it as one manager_job_fired event with trigger facts_written, subject {\"source\": <id>}, and outcome written when it recorded at least one contradiction, empty when none, failed when the spawn failed or its answer did not parse."
+    },
+    {
+      "key": "compared-set",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-09: all facts, capped. About 25 tokens a claim; the cap is about 2,000 facts.",
+      "statement": "The check MUST send every existing fact of other sources whose claim is on this machine, as its id and claim, latest-dated first, up to 50,000 characters of claims. Facts beyond the cap MUST be left out, and the firing's detail MUST say how many were."
+    },
+    {
+      "key": "contradiction-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D2 and D4: one file per contradiction, citing both facts; the newer is presumed. The model names ids; the Hub checks them, so a contradiction can only cite facts that exist.",
+      "statement": "Each contradiction the model names MUST be stored as contradictions/<id>.json (id ctr- followed by 12 hex characters) holding id, kind, facts (the two fact ids), presumed, explanation, status open, visibility, created_at and found_by (job and model), but only when one fact is among the new ones, the other among those sent, and no contradiction between the same two facts exists already. presumed MUST be the fact whose source's date is later, the later created_at breaking a tie."
+    },
+    {
+      "key": "private-contradictions",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D3: a contradiction reveals both claims, so it is private whenever either fact is.",
+      "statement": "A contradiction involving a private fact MUST be private: its record written at the effective private location, and only a stub (id, kind, visibility, holder, created_at, facts) written as knowledge/contradictions/<id>.json, holding no claim and no explanation."
+    },
+    {
+      "key": "disputed-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D4: an agent reading a disputed fact is told it is disputed rather than handed a guess. Derived on read, so fact files are never rewritten.",
+      "statement": "A fact in an open contradiction MUST be listed in the map with disputed true and presumed true or false, and a fact that lost a resolved one with superseded_by naming the decision source. vault_read of such a fact MUST say, in its content, that it is disputed, the other fact's id and claim, and which one is presumed, or that it was superseded and by which decision. GET /vault/contradictions MUST list every contradiction, open first."
+    },
+    {
+      "key": "resolve",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-09: pick one plus a note. Roadmap D4: the resolution is a decision record with a source.",
+      "statement": "POST /vault/contradictions/{id}/resolve with stands (one of its two fact ids, or null for neither) and note MUST write a source of type decision, whose text names both facts, which stands and the note, with the contradiction's visibility; MUST mark the contradiction resolved with stands, note, the decision's id and the time; and MUST answer the contradiction. It MUST answer 404 for an unknown id, 400 when stands is neither fact nor null or the note is empty, and 409 when it is already resolved. A decision source MUST NOT be distilled."
+    },
+    {
+      "key": "replaced-facts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Distillation replaces a source's facts on success; an open contradiction on a fact that no longer exists would point at nothing.",
+      "statement": "When a distillation deletes a source's earlier facts, every open contradiction citing one of them MUST be deleted; a resolved one MUST be kept."
+    },
+    {
+      "key": "contradictions-in-tab",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator resolves contradictions where they read the vault.",
+      "statement": "The Vault tab MUST show a Contradictions section listing the open ones, each with both claims, their sources' dates and which is presumed, and a form to choose the fact that stands or neither, write a note and resolve; a refusal shows the Hub's reason. A disputed fact MUST carry a disputed mark and a superseded one a superseded mark wherever facts are listed. The upload form MUST offer the date."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/the-knowledge-vault-and-its-manager-roadmap/spec.json",
+    "slice": "contradictions"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "An optional dated field on sources, set at upload, deciding which side of a contradiction is newer",
+      "A contradiction check inside the vault-distillation job, after it stores facts, recorded as its own firing",
+      "Contradiction records: one file each, private when either fact is",
+      "Disputed, presumed and superseded, derived on read and shown in the map, the fact card and the Vault tab",
+      "Resolving: the operator picks the fact that stands or neither, with a note, stored as a decision source",
+      "A Contradictions section in the Vault tab, and a date field in the upload form"
+    ],
+    "non_goals": [
+      "Contradictions within one source: a source is checked against the others, not itself",
+      "Agent reports about wrong facts (agent-reports slice)",
+      "Warnings on requirements that contradict a fact (specs-against-the-vault slice)",
+      "Re-checking the whole vault on demand: only new facts are compared",
+      "Editing a source's date after upload",
+      "Distilling decision sources into facts"
+    ]
+  },
+  "summary": "After the manager distils a source, it makes one more call comparing the new facts with the facts already in the vault, and records each contradiction it finds as a file citing both facts. The fact from the later-dated source is presumed; both are marked disputed in the Vault tab, in the map and in vault_read, so an agent is told the newer claim and that it is disputed rather than handed a guess. Sources gain an optional date (when the meeting happened), so a backlog uploaded out of order still presumes the right fact. The operator resolves a contradiction by picking the fact that stands, or neither, with a note; the Hub stores that as a decision source, and the losing fact reads as superseded. Tier 2: a model on untrusted text, new records written into the working tree, and an operator route that writes.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1017_contradictions.py, copied from d1016: a scratch Hub on :8099, Haiku runner and agent, Chromium for the resolve. Recorded failing at its first check before any build task.",
+      "files": [
+        "scripts/drive/d1017_contradictions.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "contradiction-recorded"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "vault.py: dated, the decision type, contradiction records and stubs, derived flags in the map and cards, resolve. distillation.py: the check after a storing distillation, its cap and firing, removing open contradictions on replaced facts. api/v1/vault.py: dated on upload, GET /vault/contradictions, POST /vault/contradictions/{id}/resolve. Failing tests first in test_vault_contradictions.py.",
+      "files": [
+        "hub/hub/vault.py",
+        "hub/hub/distillation.py",
+        "hub/hub/api/v1/vault.py",
+        "hub/tests/test_vault_contradictions.py"
+      ],
+      "from": null,
+      "key": "contradictions-backend",
+      "requirements": [
+        "source-dated",
+        "check-after-distil",
+        "compared-set",
+        "contradiction-recorded",
+        "private-contradictions",
+        "disputed-shown",
+        "resolve",
+        "replaced-facts"
+      ],
+      "reviewer": null,
+      "title": "Dated sources, the contradiction check, records, flags and the resolve route"
+    },
+    {
+      "depends_on": [
+        "contradictions-backend"
+      ],
+      "description": "A Contradictions section (vault-contradiction-<id>, vault-resolve-<id>-stands, -note, -submit), disputed and superseded marks on facts (vault-fact-<id> data-disputed), and a date field in the upload form (vault-upload-dated). The vitest comes first; the bundle is committed with the source.",
+      "files": [
+        "hub/ui/src/components/vault/VaultPage.tsx",
+        "hub/ui/src/api/vault.ts",
+        "hub/ui/src/__tests__/vaultTab.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "tab-contradictions",
+      "requirements": [
+        "contradictions-in-tab"
+      ],
+      "reviewer": null,
+      "title": "Contradictions in the Vault tab, marks on facts, and the upload date"
+    }
+  ],
+  "title": "Sources that disagree are pointed out, and the operator decides"
+}
