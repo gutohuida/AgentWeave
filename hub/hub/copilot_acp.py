@@ -211,6 +211,7 @@ _ALWAYS_REMOVED_FLAGS = ("--config-dir",)
 HUB_MCP_TOOLS = frozenset(
     {
         "advance_spec_step",
+        "amend_spec_document",
         "approve_tool_call",
         "archive_job",
         "ask_user",
@@ -228,6 +229,7 @@ HUB_MCP_TOOLS = frozenset(
         "read_checkpoint",
         "read_spec_document",
         "recall",
+        "report_cannot_satisfy",
         "record_evidence",
         "rename_spec_document",
         "request_agent",

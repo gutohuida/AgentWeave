@@ -383,6 +383,7 @@ def test_the_precedence_is_the_one_the_specification_states():
 
     assert requirement_coverage.PRECEDENCE == (
         "drifting",
+        "amendment_unreviewed",
         "stale",
         "evidence_awaiting_review",
         "verified",

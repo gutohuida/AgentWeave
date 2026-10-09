@@ -1382,6 +1382,41 @@ def _operations() -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="amend_spec_document",
+            args="path, op, reason, how_to_check, criterion, requirement, task, change",
+            method="POST",
+            path="/spec/documents/amend",
+            fields=(
+                "path",
+                "op",
+                "reason",
+                "how_to_check",
+                "criterion",
+                "requirement",
+                "task",
+                "change",
+            ),
+            required=("path", "op"),
+            text=(
+                "amend an approved document with what testing it found: `op` is `add_task`, "
+                "`add_criterion`, `change_criterion` or `remove_criterion`, within the document's "
+                "stated requirements. Only on a turn testing one of its tasks; recorded with you "
+                "and this run, not reviewed until the operator reviews it."
+            ),
+        ),
+        _Operation(
+            tool="report_cannot_satisfy",
+            args="path, criterion, reason",
+            method="POST",
+            path="/spec/documents/cannot-satisfy",
+            fields=("path", "criterion", "reason"),
+            required=("path", "criterion", "reason"),
+            text=(
+                "say a criterion cannot be satisfied as written, and why, instead of bending the "
+                "work or the check; the operator decides, and a task you are working is blocked."
+            ),
+        ),
+        _Operation(
             tool="list_checkpoints",
             args="agent=None",
             method="GET",
@@ -2039,6 +2074,13 @@ async def _render_hub_agent_context(
                 "if it is not. Leaving it where it is ends your turn without a review having "
                 "happened, and the work waits for a person."
             )
+            # tester-amends: the same lines the loop briefing carries (`review_turn.test_duty_lines`).
+            from ...db.models import Task as _Task
+            from ...review_turn import test_duty_lines
+
+            reviewed_task = await db.get(_Task, review.task_id)
+            if reviewed_task is not None:
+                lines.extend(f"- {line}" for line in await test_duty_lines(db, reviewed_task))
             # Design D8. Copilot's own built-in review agents, consulted only on a Copilot runner
             # (the setting has no effect for any other CLI) and only when the operator turned at
             # least one on. The renderer filters the stored value to the closed vocabulary and

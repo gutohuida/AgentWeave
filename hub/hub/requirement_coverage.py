@@ -47,6 +47,10 @@ from .db.models import (
 from .requirement_evidence import ACCEPTED, AWAITING, REJECTED, open_drift_for
 
 DRIFTING = "drifting"
+# A tester changed or removed one of its criteria, or reported one cannot be satisfied, and the
+# operator has not reviewed it yet (`spec_amendments`, design D3 of tester-amends): its evidence
+# cannot count while the check that judges it was relaxed by an agent nobody has looked at.
+AMENDMENT_UNREVIEWED = "amendment_unreviewed"
 STALE = "stale"
 AWAITING_REVIEW = "evidence_awaiting_review"
 VERIFIED = "verified"
@@ -65,6 +69,7 @@ RETIRED = "retired"
 # it as a chain of conditionals whose order could drift from this list.
 PRECEDENCE = (
     DRIFTING,
+    AMENDMENT_UNREVIEWED,
     STALE,
     AWAITING_REVIEW,
     VERIFIED,
@@ -188,6 +193,7 @@ def _state(
     digest: str,
     linked: List[Task],
     retired: bool = False,
+    amendment_unreviewed: bool = False,
 ) -> str:
     current = [item for item in evidence if item.digest == digest]
     accepted = [item for item in current if item.review_state == ACCEPTED]
@@ -196,6 +202,8 @@ def _state(
 
     if drifting:
         return DRIFTING
+    if amendment_unreviewed:
+        return AMENDMENT_UNREVIEWED
     if evidence and not current:
         # Evidence exists and none of it applies to what the requirement now says. This is the
         # state `requirement_digests` was recorded to expose and that nothing ever read.
@@ -276,6 +284,9 @@ async def requirement_coverage(
         tasks_by_requirement.setdefault(requirement_id, []).append(task)
 
     drifting = await open_drift_for(session, ids)
+    from .spec_amendments import unreviewed_relaxing
+
+    held = await unreviewed_relaxing(session, {r.document_id for r in requirements})
 
     for requirement in requirements:
         if not requirement.identifier or not requirement.digest:
@@ -303,6 +314,7 @@ async def requirement_coverage(
             digest=requirement.digest,
             linked=linked,
             retired=requirement.state == "retired",
+            amendment_unreviewed=(requirement.document_id, requirement.identifier) in held,
         )
         accepted = [
             item

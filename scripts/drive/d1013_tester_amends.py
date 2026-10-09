@@ -23,9 +23,9 @@ the scratch database, as the Hub tests do), not a Haiku turn choosing to relax a
 The contract it fixes for the build: agent routes `POST /agent-actions/spec/documents/amend`
 `{path, op, requirement?, criterion?, task?, change?, reason, how_to_check}` and
 `POST /agent-actions/spec/documents/cannot-satisfy`; operator routes
-`GET /projects/{id}/project/documents/amendments?path=` -> `{"amendments": [{id, op, target, reason,
+`GET /projects/{id}/project/documents/{path}/amendments` -> `{"amendments": [{id, op, target, reason,
 how_to_check, author, run_id, reviewed, created_at}]}` and
-`POST /projects/{id}/project/documents/amendments/review?path=` `{ids?}`; `delivery.tester`;
+`POST /projects/{id}/project/documents/{path}/amendments/review` `{ids?}`; `delivery.tester`;
 coverage state `amendment_unreviewed`.
 
 Fails on today's Hub at check 1. Stops at the first failure. Spends Haiku turns from check 3 on.
@@ -112,7 +112,7 @@ def status(task_id):
 
 
 def amendments(base):
-    code, out = d.api("GET", f"{base}/project/documents/amendments?path={urllib.parse.quote(DOC)}")
+    code, out = d.api("GET", f"{base}/project/documents/{DOC}/amendments")
     return out.get("amendments", []) if code == 200 and isinstance(out, dict) else []
 
 
@@ -266,7 +266,7 @@ def drive():
         d.check("8 accepted evidence with a not-reviewed relaxing amendment reads amendment_unreviewed",
                 state == "amendment_unreviewed", f"{state} {str(detail)[:300]}")
         # 9: reviewed, the evidence counts.
-        code, out = d.api("POST", f"{base}/project/documents/amendments/review?path={quoted}", {})
+        code, out = d.api("POST", f"{base}/project/documents/{DOC}/amendments/review", {})
         state, detail = coverage_state(base, identifier)
         d.check("9 once the operator marks them reviewed the requirement is verified",
                 code == 200 and state == "verified" and all(a.get("reviewed") for a in amendments(base)),

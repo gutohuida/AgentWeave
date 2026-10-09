@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "tester-amends-t2-impl",
-    "next_action": "tester-amends-t2-impl: spec_amendments + agent routes + MCP tools.",
+    "current": "tester-amends-drive",
+    "next_action": "tester-amends-drive: d1013 on :8102 with Haiku; then METRICS row; then reconcile-and-measure-spec.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -137,27 +137,27 @@
         },
         {
             "id": "tester-amends-t2-impl",
-            "status": "open",
+            "status": "done",
             "title": "tester-amends amend: spec_amendments, agent route + MCP amend_spec_document/report_cannot_satisfy, testing-run rule, add_task materialised",
-            "detail": "Failing tests first."
+            "detail": "done 2026-10-09 morning: built with t2-t5 together; hub/tests/test_tester_amendments.py 17 (11 of the first 12 failed on the pre-change source), specAmendmentsPanel.test.tsx 5 (failed first: no component)."
         },
         {
             "id": "tester-amends-t3-impl",
-            "status": "open",
+            "status": "done",
             "title": "tester-amends review: operator list/mark-reviewed routes, coverage amendment_unreviewed, gap amendments_unreviewed",
-            "detail": "Failing tests first."
+            "detail": "done 2026-10-09 morning: built with t2-t5 together; hub/tests/test_tester_amendments.py 17 (11 of the first 12 failed on the pre-change source), specAmendmentsPanel.test.tsx 5 (failed first: no component)."
         },
         {
             "id": "tester-amends-t4-impl",
-            "status": "open",
+            "status": "done",
             "title": "tester-amends tester: delivery.tester staffing and the test briefing",
-            "detail": "Failing tests first."
+            "detail": "done 2026-10-09 morning: built with t2-t5 together; hub/tests/test_tester_amendments.py 17 (11 of the first 12 failed on the pre-change source), specAmendmentsPanel.test.tsx 5 (failed first: no component)."
         },
         {
             "id": "tester-amends-t5-impl",
-            "status": "open",
+            "status": "done",
             "title": "tester-amends page: SpecAmendmentsPanel, bundle refreshed",
-            "detail": "Failing tests first."
+            "detail": "done 2026-10-09 morning: built with t2-t5 together; hub/tests/test_tester_amendments.py 17 (11 of the first 12 failed on the pre-change source), specAmendmentsPanel.test.tsx 5 (failed first: no component)."
         },
         {
             "id": "tester-amends-drive",

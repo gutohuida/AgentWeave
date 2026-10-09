@@ -3162,6 +3162,12 @@ async def _compose_loop_briefing(
             else _briefing_completion_lines(claimed_task, is_flow=bool(loop.spec_document_id))
         )
         lines.extend(await _briefing_evidence_lines(session, claimed_task, is_review=is_review))
+        if is_review:
+            from . import review_turn
+
+            duty = await review_turn.test_duty_lines(session, claimed_task)
+            if duty:
+                lines.extend([*duty, ""])
         if not is_review:
             lines.extend(await _briefing_revision_lines(session, claimed_task))
 

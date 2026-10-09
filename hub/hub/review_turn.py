@@ -122,7 +122,10 @@ async def resolve_declared_reviewer(
         return ReviewerResolution()
     # The task's own field, or its document's `delivery.reviewer` standing in for it (F508). Both
     # are declarations and get the same never-substitute rule; only the sentence says which.
-    whose = "this task's reviewer" if named_by == "task" else "this document's default reviewer"
+    whose = {
+        "task": "this task's reviewer",
+        "tester": "this document's tester",
+    }.get(named_by or "", "this document's default reviewer")
 
     row = (
         (
@@ -192,9 +195,51 @@ async def _declared_reviewer_name(
         if reviewer:
             return reviewer, "task"
         delivery = payload.get("delivery")
+        # tester-amends D4: a named tester tests every task that names no reviewer of its own,
+        # ahead of the document's default reviewer.
+        tester = _name(delivery.get("tester")) if isinstance(delivery, dict) else None
+        if tester:
+            return tester, "tester"
         default = _name(delivery.get("reviewer")) if isinstance(delivery, dict) else None
         return (default, "document") if default else nobody
     return nobody
+
+
+async def test_duty_lines(session: AsyncSession, task: Task) -> List[str]:
+    """The test duty a flow's review turn carries while its document's testing is on (tester-amends).
+
+    Empty for a hand-made task, a document that is not delivered by a flow, or `delivery.tester:
+    false` (D4). Both briefing channels render these same lines, so they cannot drift apart.
+    """
+    from .spec_amendments import testing_on
+
+    if not task.spec_document_id:
+        return []
+    document = await session.get(SpecDocument, task.spec_document_id)
+    if document is None:
+        return []
+    try:
+        workspace = await resolve_project_workspace(session, task.project_id)
+        payload = parse_stored(read_document(workspace, document.path))
+    except (ProjectWorkspaceError, SpecPathError, OSError):
+        return []
+    delivery = payload.get("delivery") if isinstance(payload, dict) else None
+    if not isinstance(delivery, dict) or delivery.get("mode") != "flow" or not testing_on(payload):
+        return []
+    path = document.path
+    return [
+        "**This review is also a test.** Drive the running product against the task's acceptance "
+        "criteria (run it, call it, click it, as each criterion's `how_to_check` says) as well as "
+        "reading the code and the evidence.",
+        f"When the product does not meet a criterion, amend the document: "
+        f'`amend_spec_document(path="{path}", op="add_task", task={{key, title, description, '
+        "requirements}}, reason=..., how_to_check=...)`. The fix joins the flow at once and the "
+        "implementer picks it up; say in `reason` what you ran and what it showed. Then give your "
+        "verdict on the task under review.",
+        "Stay within the document's stated criteria. A problem outside them is a side finding: put "
+        "it in a task outside the flow (`create_task`), never in the spec. A criterion the work "
+        "cannot meet as written is `report_cannot_satisfy`, never a weakened criterion.",
+    ]
 
 
 def _name(value: object) -> Optional[str]:

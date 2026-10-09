@@ -239,6 +239,9 @@ export interface CoverageEntry {
   document_id: string
   state:
     | 'drifting'
+    // A tester changed or removed one of its criteria and the operator has not reviewed it yet
+    // (tester-amends): its evidence cannot count until they do.
+    | 'amendment_unreviewed'
     | 'stale'
     | 'evidence_awaiting_review'
     | 'verified'
@@ -474,6 +477,9 @@ export interface SpecDocumentRecord {
    *  (`approve-lists-what-is-missing-and-can-approve-anyway` FR-5). Absent otherwise, and from a Hub
    *  that predates it. */
   approval_warnings_overridden?: SpecBlockingFinding[]
+  /** A tester's amendments to the approved document, and how many the operator has not reviewed
+   *  (`a-tester-drives-the-built-product-and-keeps-the-spec-true`). Absent when there are none. */
+  amendments?: { total: number; unreviewed: number }
   updated_at: string
 }
 
@@ -654,6 +660,52 @@ export function useSpecRigorHistory(path: string | null) {
       ),
     enabled: isConfigured && !!projectId && !!path,
   })
+}
+
+/** One amendment a tester made to an approved document, oldest first from the route. */
+export interface SpecAmendment {
+  id: string
+  op: 'add_task' | 'add_criterion' | 'change_criterion' | 'remove_criterion' | 'cannot_satisfy'
+  target: string
+  requirement: string | null
+  identifier: string | null
+  reason: string
+  how_to_check: string
+  author: string
+  run_id: string | null
+  created_at: string
+  reviewed: boolean
+  reviewed_at: string | null
+  reviewed_by: string | null
+  /** A change or removal of a criterion, or a cannot-satisfy report: its requirement cannot be
+   *  verified until the operator reviews it. */
+  relaxing: boolean
+  change: Record<string, unknown> | null
+  before: Record<string, unknown> | null
+}
+
+export function useSpecAmendments(path: string | null, enabled = true) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ amendments: SpecAmendment[] }>({
+    // Under `specs`, so every mutation and `spec_updated` that refreshes the document refreshes this.
+    queryKey: ['project', projectId, 'specs', 'amendments', path],
+    queryFn: () =>
+      getJson<{ amendments: SpecAmendment[] }>(
+        `/api/v1/projects/${projectId}/project/documents/${path}/amendments`,
+      ),
+    enabled: isConfigured && !!projectId && !!path && enabled,
+  })
+}
+
+/** Mark amendments reviewed: the ids given, or every one not reviewed when `ids` is omitted. */
+export function useReviewSpecAmendments() {
+  return useSpecMutation<{ path: string; ids?: string[] }, { marked: string[] }>(
+    (projectId, { path, ids }) =>
+      postJson(
+        `/api/v1/projects/${projectId}/project/documents/${path}/amendments/review`,
+        ids ? { ids } : {},
+      ),
+  )
 }
 
 /** A requirement as the index holds it. A removed requirement is retired, not deleted, so its

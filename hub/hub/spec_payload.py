@@ -28,9 +28,16 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    field_validator,
+)
 
 # The contract is versioned rather than final. Gates and traceability have not
 # yet stated their requirements on it, so freezing it now would ship a schema
@@ -200,6 +207,12 @@ class Delivery(_Part):
         default=None,
         max_length=32,
         description="The agent that reviews every task whose own `reviewer` is empty, by name. A name that is not an open agent stops the review rather than giving it to someone else. Empty: any free agent reviews.",
+    )
+    tester: Optional[Literal[False] | Annotated[str, StringConstraints(max_length=32)]] = (
+        Field(
+            default=None,
+            description="Who tests each finished task by driving the running product, by name; tests every task whose own `reviewer` is empty, ahead of `reviewer`. Empty: testing is on and the reviewer (or any free agent) tests. false: no testing, review only.",
+        )
     )
     stop_when_queue_empties: bool = Field(
         default=False,
@@ -604,6 +617,10 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
     for key in ("delivery", "roadmap"):
         if data.get(key) is None:
             data.pop(key, None)
+    # An unset tester (on by default, tester-amends D4) must not change the bytes of every stored
+    # delivery either.
+    if isinstance(data.get("delivery"), dict) and data["delivery"].get("tester") is None:
+        data["delivery"].pop("tester", None)
     if not data.get("slices"):
         data.pop("slices", None)
     # An undeclared `files` is dropped for the same reason: it must not change the bytes of every

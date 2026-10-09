@@ -467,7 +467,9 @@ STEP_DUTIES: Dict[str, str] = {
         "splits into tasks: a flow starts every task whose prerequisites are met, has finished work "
         "reviewed when there is another agent, and can stop when its queue empties. If the "
         "operator wants one, ask which agent works it, who reviews, when it stops and how often it "
-        "fires (every 5 minutes unless they say otherwise). Record the answer as `delivery`, and "
+        "fires (every 5 minutes unless they say otherwise). Each review also tests the running "
+        "product unless the operator turns it off (`tester: false`); ask whether a particular "
+        "agent should test (`tester`). Record the answer as `delivery`, and "
         "include `delivery` in every later submission. 'No flow' is a valid answer. The document is "
         "then ready for the operator to propose."
     ),

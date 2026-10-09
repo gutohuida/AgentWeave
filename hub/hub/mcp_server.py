@@ -4128,6 +4128,80 @@ def record_evidence(
 
 
 @_tool()
+def amend_spec_document(
+    path: str,
+    op: str,
+    reason: str,
+    how_to_check: str,
+    criterion: str = "",
+    requirement: str = "",
+    task: Optional[Dict[str, Any]] = None,
+    change: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Amend an approved specification document with what testing it found. Test turns only.
+
+    Only a turn testing a task of this document may call this: the builder never amends, because it
+    is the work being judged. The amendment is applied at once, recorded with you as its author and
+    this run, and stays **not reviewed** until the operator reviews it.
+
+    Stay within the document's stated requirements and criteria. Something outside them is a side
+    finding: put it in a task outside the flow (`create_task` with no loop), never in the spec.
+
+    Args:
+        path: The document, e.g. `spec/changes/<name>/spec.json`.
+        op: One of
+            `add_task` — a fix the product needs to meet a criterion; `task` is
+              `{key, title, description, requirements: [<requirement key>], depends_on?, files?}`.
+              It joins the flow at once and the implementer picks it up.
+            `add_criterion` — a check the document lacks; `requirement` is its requirement key,
+              `criterion` its new key, `change` is `{given, when, then, how_to_check?, checked_by?}`.
+            `change_criterion` — `criterion` and the fields to change in `change`.
+            `remove_criterion` — `criterion`.
+          A change or removal of a criterion means its requirement cannot be verified until the
+          operator has reviewed it. Do not use it to make work pass.
+        reason: What you found and how — what you ran and what it showed.
+        how_to_check: How somebody else checks the amendment holds (a command, a click path).
+        criterion, requirement, task, change: As the op needs them.
+
+    Returns the amendment's `id`, `op`, `target` and, for `add_task`, `task_created`.
+    """
+    return _hub_request(
+        "POST",
+        "/spec/documents/amend",
+        {
+            "path": path,
+            "op": op,
+            "reason": reason,
+            "how_to_check": how_to_check,
+            **({"criterion": criterion} if criterion else {}),
+            **({"requirement": requirement} if requirement else {}),
+            **({"task": task} if task else {}),
+            **({"change": change} if change else {}),
+        },
+    )
+
+
+@_tool()
+def report_cannot_satisfy(path: str, criterion: str, reason: str) -> Dict[str, Any]:
+    """Say that a criterion of the document cannot be satisfied as written, and why.
+
+    Use this instead of bending the work or the check to pass: the operator decides what follows.
+    It is recorded against the criterion as not reviewed, its requirement cannot be verified until
+    the operator has looked, and a task you are working on is blocked with your reason.
+
+    Args:
+        path: The document, e.g. `spec/changes/<name>/spec.json`.
+        criterion: The criterion's key.
+        reason: Why it cannot be met: what you tried and what stands in the way.
+    """
+    return _hub_request(
+        "POST",
+        "/spec/documents/cannot-satisfy",
+        {"path": path, "criterion": criterion, "reason": reason},
+    )
+
+
+@_tool()
 def list_evidence(
     identifier: str = "", document: str = "", review_state: str = ""
 ) -> Dict[str, Any]:

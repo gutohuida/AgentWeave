@@ -1982,6 +1982,117 @@ class SpecDocumentSubmission(RequestModel):
     document: Any
 
 
+class SpecAmendment(RequestModel):
+    """One amendment to an approved document, from a run testing one of its tasks
+    (`a-tester-drives-the-built-product-and-keeps-the-spec-true`)."""
+
+    path: str = Field(max_length=255)
+    op: str = Field(max_length=32)
+    reason: Optional[str] = Field(default=None, max_length=2000)
+    how_to_check: Optional[str] = Field(default=None, max_length=2000)
+    criterion: Optional[str] = Field(default=None, max_length=128)
+    requirement: Optional[str] = Field(default=None, max_length=128)
+    task: Optional[Dict[str, Any]] = None
+    change: Optional[Dict[str, Any]] = None
+
+
+class CannotSatisfyReport(RequestModel):
+    """A criterion the run's task cannot satisfy as written, and why."""
+
+    path: str = Field(max_length=255)
+    criterion: str = Field(max_length=128)
+    reason: str = Field(max_length=2000)
+
+
+async def _amendable_document(session: AsyncSession, actor: AgentActor, raw_path: str):
+    from ... import project_workspace, spec_lifecycle
+    from ...spec_manifest import SpecPathError, validate_spec_path
+
+    try:
+        path = validate_spec_path(raw_path)
+    except SpecPathError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, actor.project_id)
+    except project_workspace.ProjectWorkspaceError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    document = await spec_lifecycle.get_document(session, actor.project_id, path)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"no specification document at {path}"
+        )
+    return workspace, document
+
+
+def _amendment_refused(exc) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status,
+        detail={"message": str(exc), "code": exc.code, "field": exc.field},
+    )
+
+
+@router.post("/spec/documents/amend", status_code=status.HTTP_201_CREATED)
+async def amend_spec_document(
+    body: SpecAmendment,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Amend an approved document from a test turn. Applied at once, recorded not reviewed."""
+    from ... import spec_amendments, spec_lifecycle
+
+    workspace, document = await _amendable_document(session, actor, body.path)
+    try:
+        result = await spec_amendments.amend(
+            session,
+            workspace,
+            document,
+            op=body.op,
+            reason=body.reason,
+            how_to_check=body.how_to_check,
+            criterion=body.criterion,
+            requirement=body.requirement,
+            task=body.task,
+            change=body.change,
+            # Identity is the run's, never the request body's.
+            actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+        )
+    except spec_amendments.AmendmentRefused as exc:
+        raise _amendment_refused(exc) from exc
+    await session.commit()
+    await sse_manager.broadcast(
+        actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    return result
+
+
+@router.post("/spec/documents/cannot-satisfy", status_code=status.HTTP_201_CREATED)
+async def report_cannot_satisfy(
+    body: CannotSatisfyReport,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Record that a criterion cannot be satisfied as written; the operator decides what follows."""
+    from ... import spec_amendments, spec_lifecycle
+
+    workspace, document = await _amendable_document(session, actor, body.path)
+    try:
+        result = await spec_amendments.report_cannot_satisfy(
+            session,
+            workspace,
+            document,
+            criterion=body.criterion,
+            reason=body.reason,
+            actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+        )
+    except spec_amendments.AmendmentRefused as exc:
+        raise _amendment_refused(exc) from exc
+    await session.commit()
+    await sse_manager.broadcast(
+        actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    return result
+
+
 @router.post("/spec/documents")
 async def submit_spec_document(
     body: SpecDocumentSubmission,

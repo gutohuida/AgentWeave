@@ -61,6 +61,10 @@ REMEDY = {
         "its evidence was produced against an earlier wording — record evidence for what it "
         "says now"
     ),
+    requirement_coverage.AMENDMENT_UNREVIEWED: (
+        "a tester changed or removed one of its criteria, or reported it cannot be satisfied, and "
+        "the operator has not reviewed that yet — the operator reviews the document's amendments"
+    ),
     requirement_coverage.DRIFTING: (
         "the implementation changed after it was verified — the operator answers the drift "
         "candidate on the document, saying whether the specification or the implementation was "

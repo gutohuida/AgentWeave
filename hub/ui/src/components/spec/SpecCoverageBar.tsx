@@ -14,6 +14,12 @@ const STATES: Array<{ key: CoverageEntry['state']; label: string; tone: string; 
     why: 'The implementation changed after this was verified. Say which one was wrong — answer it under Drifting, below.',
   },
   {
+    key: 'amendment_unreviewed',
+    label: 'Amendment not reviewed',
+    tone: 'var(--amber)',
+    why: 'A tester changed or removed one of its criteria, or said it cannot be met. Its evidence does not count until you review that amendment, under Amendments above.',
+  },
+  {
     key: 'stale',
     label: 'Stale',
     tone: 'var(--amber)',

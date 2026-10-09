@@ -1290,6 +1290,29 @@ def _steps_skipped(
     ]
 
 
+async def _amendments_unreviewed(
+    session: AsyncSession, document: SpecDocument
+) -> List[spec_completeness.Finding]:
+    """Amendments a tester made that the operator has not reviewed (tester-amends FR-8): a gap."""
+    from . import spec_amendments
+
+    pending = [
+        a for a in await spec_amendments.list_amendments(session, document) if not a.reviewed
+    ]
+    if not pending:
+        return []
+    named = ", ".join(f"{a.op} {a.target}" for a in pending[:3])
+    more = f" and {len(pending) - 3} more" if len(pending) > 3 else ""
+    return [
+        spec_completeness.Finding(
+            "amendments_unreviewed",
+            "amendments",
+            f"{len(pending)} amendment{'s' if len(pending) != 1 else ''} not reviewed by the "
+            f"operator: {named}{more}",
+        )
+    ]
+
+
 async def phase_findings(
     session: AsyncSession,
     workspace: ProjectWorkspace,
@@ -1308,6 +1331,7 @@ async def phase_findings(
         *findings,
         *spec_completeness.approval_gaps(payload),
         *_steps_skipped(workspace, document),
+        *await _amendments_unreviewed(session, document),
     ]
     refusals, gaps = spec_completeness.split(findings)
     return PhaseFindings([f.to_dict() for f in refusals], [f.to_dict() for f in gaps])

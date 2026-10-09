@@ -581,11 +581,17 @@ async def list_documents(
 
     steps = spec_journey.load(workspace) if workspace is not None else spec_journey.BUILT_IN
     overridden = await _approval_overrides(session, documents)
+    from ... import spec_amendments
+
+    amended = await spec_amendments.counts(session, [document.id for document in documents])
     views = []
     for document in documents:
         view = _document_view(document, steps)
         if document.id in overridden:
             view["approval_warnings_overridden"] = overridden[document.id]
+        if document.id in amended:
+            # tester-amends: what a tester changed and how much the operator has yet to review.
+            view["amendments"] = amended[document.id]
         if workspace is not None:
             with contextlib.suppress(OSError, SpecPathError, project_workspace.ProjectPathError):
                 on_disk = spec_documents.read_document(workspace, document.path)
@@ -836,6 +842,64 @@ async def rigor_history(
             }
             for event in events
         ]
+    }
+
+
+class AmendmentReviewRequest(RequestModel):
+    """Which amendments the operator has reviewed: the ids, or every not-reviewed one when absent."""
+
+    ids: Optional[List[str]] = None
+
+
+@router.get("/documents/{path:path}/amendments")
+async def list_amendments(
+    path: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """A document's amendments, oldest first, each with its author, run and whether reviewed."""
+    from ... import spec_amendments
+
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    return {
+        "amendments": [
+            amendment.to_dict()
+            for amendment in await spec_amendments.list_amendments(session, document)
+        ]
+    }
+
+
+@router.post("/documents/{path:path}/amendments/review")
+async def review_amendments(
+    path: str,
+    body: AmendmentReviewRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Mark amendments reviewed, per item (`ids`) or for the whole document. The operator's only."""
+    from ... import spec_amendments
+
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    try:
+        marked = await spec_amendments.mark_reviewed(
+            session, document, ids=body.ids, actor=_operator()
+        )
+    except spec_amendments.AmendmentRefused as exc:
+        raise HTTPException(
+            status_code=exc.status, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    await session.commit()
+    await sse_manager.broadcast(
+        project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    return {
+        "marked": marked,
+        "amendments": [
+            amendment.to_dict()
+            for amendment in await spec_amendments.list_amendments(session, document)
+        ],
     }
 
 
