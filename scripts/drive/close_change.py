@@ -38,6 +38,8 @@ COLLAB_TESTS = "hub/ui/src/__tests__/collaborationSummary.test.tsx"
 CHIP_TESTS = "hub/ui/src/__tests__/agentPostureChips.test.tsx"
 SETTINGS_TESTS = "hub/ui/src/__tests__/projectSettingsPanel.test.tsx"
 PROJECT_PAGE_DRIVE = "scripts/drive/d1008_project_page_settings.py"
+MANAGER_TESTS = "hub/tests/test_manager_jobs.py"
+MANAGER_DRIVE = "scripts/drive/d1012_manager_framework.py"
 
 JOURNEY_TESTS = "hub/tests/test_spec_journey.py"
 BRIEFING_TESTS = "hub/tests/test_spec_journey_briefing.py"
@@ -753,6 +755,51 @@ CHANGES = {
              'result, defects report, Chromium page).'),
         ],
     },
+    "fmanager": {
+        "document": "spec/changes/the-hubs-background-jobs-are-configured-on-a-manager-page/spec.json",
+        "commit": "a04c01c",
+        "tasks": ["task-305e02593119", "task-d0ebb045d2d4", "task-402d75406e76", "task-7e3f1410556f"],
+        "evidence": [
+            ("FR-1", "task-d0ebb045d2d4", "test_result", MANAGER_TESTS,
+             "test_a_project_with_no_rows_lists_the_title_job_disabled: conversation-titles listed in "
+             "registry order, enabled false, runner_id and model null. Red at collection before 9db8fe6."),
+            ("FR-2", "task-d0ebb045d2d4", "test_result", MANAGER_TESTS,
+             "test_patching_refuses_unknown_jobs_and_foreign_runners: 404 for an unknown job, 400 for a "
+             "foreign runner with the job unchanged, 200 with the job as listed; a patch changes only "
+             "the fields it sends."),
+            ("FR-3", "task-402d75406e76", "manual_observation", MANAGER_DRIVE,
+             "Drive d1012 (scratch Hub, real Haiku turn): with the job on the Sonnet runner and model "
+             "Haiku, the conversation was titled 'Sourdough bakery naming suggestions' by a Haiku spawn; "
+             "disabled, the second kept its message. 0/1 before the build, 13/13 after."),
+            ("FR-4", "task-402d75406e76", "test_result", MANAGER_TESTS,
+             "test_each_spawn_records_one_firing_and_no_run: written and empty firings with every field, "
+             "none for the excerpt already titled; test_a_failed_spawn_is_recorded_as_failed."),
+            ("FR-5", "task-d0ebb045d2d4", "test_result", MANAGER_TESTS,
+             "test_activity_is_newest_first_bounded_and_filterable: newest first, limit 2, filtered by "
+             "job; a limit over 200 refused 422."),
+            ("FR-6", "task-402d75406e76", "test_result", MANAGER_TESTS,
+             "test_each_spawn_records_one_firing_and_no_run: Run count unchanged by titling; the "
+             "firing's agent column is null and its payload holds no agent. Drive check 3c: one Run row."),
+            ("FR-7", "task-d0ebb045d2d4", "test_result", MANAGER_TESTS,
+             "test_the_settings_fields_read_and_write_the_job and "
+             "test_a_settings_save_that_omits_the_title_fields_leaves_the_job_alone; drive check 2b."),
+            ("FR-8", "task-d0ebb045d2d4", "test_result", "hub/tests/test_migrations.py",
+             "-k manager: generate/truncate-with-runner/plain projects give two rows (enabled, disabled) "
+             "and none; downgrade restores the original columns and drops the table, and keeps what the "
+             "job became after the upgrade."),
+            ("FR-9", "task-7e3f1410556f", "test_result", "hub/ui/src/__tests__/managerSection.test.tsx",
+             "A 404 from the routes reads 'This Hub has no manager yet' with no alert; jobs, selects and "
+             "firings render with their testids; a control sends only its field. Settings shows no title "
+             "control (projectSettingsPanel.test.tsx)."),
+            ("FR-9", "task-7e3f1410556f", "manual_observation", MANAGER_DRIVE,
+             "Drive d1012 check 5 in Chromium: Environment > Manager showed the job and the firing; "
+             "Settings had no 'Conversation title runner' control. Screenshot "
+             "testbed/drive1012-manager-framework/145608/shot_manager.png."),
+            ("FR-3", "task-305e02593119", "manual_observation", MANAGER_DRIVE,
+             "Acceptance drive d1012 was committed in e04403e before the build and failed at check 1 "
+             "(GET /manager/jobs 404) at 14:27; after a04c01c it passed 13/13."),
+        ],
+    },
 }
 
 # Where each roadmap change folds (2026-10-09): one capability, or {capability: [keys]} split.
@@ -762,6 +809,13 @@ CHANGE_FOLDS = {
     "fwarn": 'spec-document-authority',
     "ftester": {'agent-flows': ['tester-default', 'test-brief'], 'spec-document-authority': ['amend-who', 'amend-ops', 'amend-record', 'cannot-satisfy', 'unreviewed-gap', 'page'], 'requirement-traceability': ['relax-blocks']},
     "freconcile": 'spec-document-authority',
+    "fmanager": {
+        'conversation-lifecycle': ['title-is-a-job'],
+        'project-environment-settings': [
+            'jobs-listed', 'job-configured', 'firing-recorded', 'activity-listed', 'not-an-agent',
+            'settings-compatible', 'migration-keeps-behaviour', 'manager-section',
+        ],
+    },
 }
 
 
