@@ -2345,3 +2345,13 @@ disappears is indistinguishable from one that was forgotten.
   the trial database path and pid. Stopping the old instance meant killing both the `py.exe` launcher and its
   `python.exe` child. The old instance's background launcher then reported "failed" in this session (exit
   127). That is expected, not a problem.
+
+### 2026-10-09 (afternoon session, handoff 0186)
+
+- **The Hub's `claude` model catalog has no `claude-sonnet-5-5`.** Creating a runner with it answers 400 ("not a model 'claude' declares"), and the list offers `claude-sonnet-5` / `sonnet`. Drives use `claude-sonnet-5`. (Confirmed 2026-10-09; not yet a finding.)
+- **Operator approval route:** `POST /projects/{P}/project/documents/phase?path=<path>&to=approved` with body `{}`. To approve over warnings, send `{"approve_anyway": true}`.
+- **A document written in one PUT always gets 409 `approval_warnings` / `steps_skipped`,** because its recorded step stays `intake`. Approve anyway; this is filed as F574. (Confirmed 2026-10-09.)
+- **Proposing a roadmap slice's change document is refused (`roadmap_not_approved`) until the roadmap itself is approved.** This is by design.
+- **On a roadmap, any `open_questions` entry with `resolved: false` blocks proposing it** (F573). Put slice-level questions in that slice's `intent`.
+- **`ruff` is not on Git Bash's PATH.** Use `py -3.11 -m ruff`.
+- **`GET /projects/{P}/tasks?limit=500` rows carry `spec_document_id` and `spec_task_key`.** Filter on those to find a change document's tasks.
