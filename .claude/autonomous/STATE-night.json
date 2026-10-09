@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "tester-amends-spec",
-    "next_action": "tester-amends-spec: author the tester-amends slice change document on :8010 (see queue detail).",
+    "current": "tester-amends-t1-impl",
+    "next_action": "tester-amends-t1-impl: write d1013 and record it failing.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -125,16 +125,39 @@
         },
         {
             "id": "tester-amends-spec",
-            "status": "open",
+            "status": "done",
             "title": "Author tester-amends slice change document",
-            "detail": "Author the slice change document on trial Hub :8010 (proj-d85a82bf4216) per APPROVALS 2026-10-09 authorisation 1; model on spdoc-06fd85087a9f; propose+approve; commit the file. Slice 'tester-amends' from roadmap a-spec-is-written-one-step-at-a-time-roadmap."
+            "detail": "done 2026-10-09 morning session: spec/changes/a-tester-drives-the-built-product-and-keeps-the-spec-true/spec.html (spdoc-622cf1b3b011, approved on :8010; Hub tasks task-36601c1e6a66 drive-first, task-86c06ee69d17 amend, task-9bcf48c030b9 review, task-9b392e629ebb tester, task-2a8589108daf page -- do not close them); 9 FR, 11 criteria, 5 tasks; decisions morning-1009-1..6 OPEN."
         },
         {
-            "id": "tester-amends-impl",
+            "id": "tester-amends-t1-impl",
             "status": "open",
-            "title": "Build tester-amends slice against spec.json storage",
-            "detail": "Only if its -spec is approved. Split by the change's tasks (<id>-t<n>-impl) if one firing cannot finish. Tier 2: acceptance drive written and failing first.",
-            "model": "opus"
+            "title": "tester-amends drive-first: scripts/drive/d1013_tester_amends.py on :8102, recorded FAILING",
+            "detail": "Tier 2: acceptance drive written and failing before the build."
+        },
+        {
+            "id": "tester-amends-t2-impl",
+            "status": "open",
+            "title": "tester-amends amend: spec_amendments, agent route + MCP amend_spec_document/report_cannot_satisfy, testing-run rule, add_task materialised",
+            "detail": "Failing tests first."
+        },
+        {
+            "id": "tester-amends-t3-impl",
+            "status": "open",
+            "title": "tester-amends review: operator list/mark-reviewed routes, coverage amendment_unreviewed, gap amendments_unreviewed",
+            "detail": "Failing tests first."
+        },
+        {
+            "id": "tester-amends-t4-impl",
+            "status": "open",
+            "title": "tester-amends tester: delivery.tester staffing and the test briefing",
+            "detail": "Failing tests first."
+        },
+        {
+            "id": "tester-amends-t5-impl",
+            "status": "open",
+            "title": "tester-amends page: SpecAmendmentsPanel, bundle refreshed",
+            "detail": "Failing tests first."
         },
         {
             "id": "tester-amends-drive",
@@ -169,7 +192,13 @@
         "night-1009-5",
         "night-1009-6",
         "night-1009-7",
-        "night-1009-8"
+        "night-1009-8",
+        "morning-1009-1",
+        "morning-1009-2",
+        "morning-1009-3",
+        "morning-1009-4",
+        "morning-1009-5",
+        "morning-1009-6"
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
