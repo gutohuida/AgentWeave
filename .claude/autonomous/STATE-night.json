@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "tester-amends-t1-impl",
-    "next_action": "tester-amends-t1-impl: write d1013 and record it failing.",
+    "current": "tester-amends-t2-impl",
+    "next_action": "tester-amends-t2-impl: spec_amendments + agent routes + MCP tools.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -131,9 +131,9 @@
         },
         {
             "id": "tester-amends-t1-impl",
-            "status": "open",
+            "status": "done",
             "title": "tester-amends drive-first: scripts/drive/d1013_tester_amends.py on :8102, recorded FAILING",
-            "detail": "Tier 2: acceptance drive written and failing before the build."
+            "detail": "done 2026-10-09 morning: scripts/drive/d1013_tester_amends.py recorded failing at check 1 (405, no amend route); artefacts testbed/drive1013-tester-amends/091616."
         },
         {
             "id": "tester-amends-t2-impl",
