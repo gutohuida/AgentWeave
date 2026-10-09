@@ -392,11 +392,13 @@ async def test_no_agent_route_writes_to_the_vault(app) -> None:
     """Only the operator (and later the manager) writes: every agent-actions vault route is a GET."""
     from hub.main import app as fastapi_app
 
+    from ._routing import iter_api_routes
+
     methods = {
         method
-        for route in fastapi_app.routes
-        if "/agent-actions/vault" in getattr(route, "path", "")
-        for method in getattr(route, "methods", set())
+        for path, route in iter_api_routes(fastapi_app)
+        if "/agent-actions/vault" in path
+        for method in route.methods
     }
     assert methods and methods <= {"GET", "HEAD"}
 
