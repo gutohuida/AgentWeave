@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "project-steps-t1-impl",
-    "next_action": "project-steps-t1-impl: write scripts/drive/d1011_project_steps.py (model on d1009_step_journey.py; scratch Hub :8099, fresh db) per the 'drive' and 'page-edits' criteria of spec/changes/a-project-orders-its-own-spec-steps/spec.html (spdoc-3759e366caf1, approved on :8010; Hub tasks task-09f97da0049e, task-847b1c1b7810, task-2800a1609906, task-80a919c0cc4c -- do not close them), run it and record it FAILING at check 1; commit.",
+    "current": "project-steps-t2-impl",
+    "next_action": "project-steps-t2-impl: failing Hub tests first, then spec/journey.json read+validated in hub/hub/spec_journey.py (FR-1..4, FR-7..9 of spdoc-3759e366caf1 / spec/changes/a-project-orders-its-own-spec-steps/spec.html; criteria no-file-unchanged, custom-sizes, append-scoped, hand-edit-broken, removed-step, bar): journey/next_step/duty/set_step take the project's steps; briefing (agents.py), advance (agent_actions.py), operator step move and GET /project/documents use them. Wire shape: see iteration 8 log entry. Do not close Hub tasks task-09f97da0049e, task-847b1c1b7810, task-2800a1609906, task-80a919c0cc4c. Run Hub suite -n auto; drive d1011 stays red past check 1 until t3.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -56,9 +56,9 @@
         },
         {
             "id": "project-steps-t1-impl",
-            "status": "open",
+            "status": "done",
             "title": "project-steps task drive-first: write scripts/drive/d1011_project_steps.py, record it FAILING",
-            "detail": "Scratch Hub :8099, fresh db, one Haiku turn, Chromium for bar + project page; criteria 'drive' and 'page-edits'. Must fail at check 1 (no /project/journey route). Read the payload of spec/changes/a-project-orders-its-own-spec-steps/spec.html (spdoc-3759e366caf1, approved on :8010; Hub tasks task-09f97da0049e, task-847b1c1b7810, task-2800a1609906, task-80a919c0cc4c -- do not close them)"
+            "detail": "done 2026-10-09 iteration 8: scripts/drive/d1011_project_steps.py recorded failing at check 1 (404, no /project/journey). Wire shape and page testids it fixes are in the iteration 8 log entry."
         },
         {
             "id": "project-steps-t2-impl",
