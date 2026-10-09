@@ -1,0 +1,345 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "",
+      "key": "ac254",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "then": "no turn starts for the agent before the reset time the message is still queued",
+      "when": "an agent's turn is refused by the allowance with a reset time an hour away another agent sends it a message"
+    },
+    {
+      "given": "",
+      "key": "ac257",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "then": "no turn starts for the agent for at least one minute after the refusal",
+      "when": "a turn is refused by the allowance with a reset time already past"
+    },
+    {
+      "given": "",
+      "key": "ac258",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "then": "the queue is still held",
+      "when": "an agent's queue is held and the Hub records a run for it that never started its runtime"
+    },
+    {
+      "given": "",
+      "key": "ac259",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "then": "the queue is no longer held",
+      "when": "an agent's queue is held and a turn for it is served by the provider"
+    },
+    {
+      "given": "",
+      "key": "ac261",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "then": "the agent's queue status names the hold as the reason it is waiting, and the time the hold ends an event recording the hold was persisted when the refusal arrived",
+      "when": "an agent's queue is held"
+    },
+    {
+      "given": "",
+      "key": "ac265",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "then": "the agent's queue is held a turn starts for the agent at the reset without any operator action",
+      "when": "a turn completes but the provider's reading for it says the allowance is refused, with a reset time"
+    },
+    {
+      "given": "",
+      "key": "ac266",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "then": "the agent's queue status does not name the hold as the reason it is waiting",
+      "when": "an agent's hold has ended and input the refusal returned is still queued"
+    },
+    {
+      "given": "",
+      "key": "acn15",
+      "requirement": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "then": "no turn starts for the agent before the reset; the message stays queued",
+      "when": "an agent's turn is refused by the allowance with a reset an hour away and another agent sends it a message"
+    },
+    {
+      "given": "",
+      "key": "ac275",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "then": "the agent's queue is held until that time the hold is reported with its end the refused input is queued again, not counted as a delivery attempt, even when Copilot ended the turn with an ordinary stop reason",
+      "when": "a Copilot turn fails with a quota error whose code says the quota is exceeded Copilot's latest quota reading for the agent resets at the start of next month"
+    },
+    {
+      "given": "",
+      "key": "ac276",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "then": "the turn ends failed, its input is queued again uncounted, and the queue is held until that time",
+      "when": "Copilot answers a turn's prompt with an error response whose structured fields say the Copilot's latest quota reading for the agent resets at a future time"
+    },
+    {
+      "given": "",
+      "key": "ac277",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "then": "the allowance is shown as exhausted the queue is not held the input is returned counted as a delivery attempt, like any failed turn's input",
+      "when": "a Copilot turn fails with a quota-exceeded error no quota reading with a future reset date is known for the project"
+    },
+    {
+      "given": "",
+      "key": "ac278",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "then": "the refused agent's queue is held until that reset",
+      "when": "a Copilot agent's turn is refused on its first model call, so it reported no quota another Copilot agent of the same project recorded a reading whose reset is ahead"
+    },
+    {
+      "given": "",
+      "key": "ac279",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "then": "that turn records no refusal and does not renew the hold",
+      "when": "an agent's queue was held by a Copilot quota refusal a later Copilot turn of that agent fails for a reason other than the quota, reporting no quota reading"
+    },
+    {
+      "given": "",
+      "key": "ac280",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "then": "no refusal is recorded and the queue is not held",
+      "when": "a Copilot turn fails with an error whose message mentions a quota but whose category is not quota"
+    },
+    {
+      "given": "",
+      "key": "ac281",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "then": "the queue is not held",
+      "when": "a Copilot turn fails because its session's own credit cap was reached"
+    },
+    {
+      "given": "",
+      "key": "ac285",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "then": "the queue is no longer held",
+      "when": "an agent's queue is held by a Copilot refusal and a later Copilot turn for it is served"
+    },
+    {
+      "given": "",
+      "key": "acn16",
+      "requirement": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "then": "the agent's queue is held until that reset and the input is requeued uncounted",
+      "when": "a Copilot turn fails with `errorType: quota` and `errorCode: quota_exceeded` and the run reported a quota reset next month"
+    },
+    {
+      "given": "",
+      "key": "ac144",
+      "requirement": "an-allowance-refusal-returns-input-uncounted",
+      "then": "its input returns to the queue the input's failed-delivery count is unchanged the input records one more allowance refusal",
+      "when": "a run fails and the provider's reading for that turn says the allowance is refused, with a reset time"
+    },
+    {
+      "given": "",
+      "key": "ac145",
+      "requirement": "an-allowance-refusal-returns-input-uncounted",
+      "then": "the conversation's provider session is still bound the input is still queued",
+      "when": "an input's delivery is refused by the allowance three times in a row"
+    },
+    {
+      "given": "",
+      "key": "ac146",
+      "requirement": "an-allowance-refusal-returns-input-uncounted",
+      "then": "the input records that a delivery attempt failed",
+      "when": "a run fails and the provider's reading says the allowance is refused but states no reset time"
+    },
+    {
+      "given": "",
+      "key": "ac147",
+      "requirement": "an-allowance-refusal-returns-input-uncounted",
+      "then": "the input records that a delivery attempt failed repeated such refusals give up the input as any repeated failure does",
+      "when": "a run fails and the provider's reading says the allowance is refused with a reset time no later than the refusal"
+    },
+    {
+      "given": "",
+      "key": "acn28",
+      "requirement": "an-allowance-refusal-returns-input-uncounted",
+      "then": "its failed-delivery count is still 0, its provider session is still bound, and it is still queued",
+      "when": "the same input's delivery is refused by the allowance with a reset ahead three times"
+    },
+    {
+      "given": "",
+      "key": "ac260",
+      "requirement": "a-held-queue-lets-one-operator-turn-through",
+      "then": "one turn starts for the agent if the provider refuses that turn, no further turn starts before the new reset time",
+      "when": "an agent's queue is held and the operator sends it a message"
+    },
+    {
+      "given": "",
+      "key": "ac255",
+      "requirement": "a-held-queue-is-retried-at-the-reset",
+      "then": "a turn starts for the agent without any operator action",
+      "when": "an agent's queue is held and the reset time passes"
+    },
+    {
+      "given": "",
+      "key": "ac256",
+      "requirement": "a-held-queue-is-retried-at-the-reset",
+      "then": "a turn starts for the agent once the Hub is serving requests",
+      "when": "an agent's queue is held, the Hub stops, and it starts again after the reset time"
+    },
+    {
+      "given": "",
+      "key": "acn29",
+      "requirement": "a-held-queue-is-retried-at-the-reset",
+      "then": "an operator-visible hold event is recorded naming its end",
+      "when": "a refusal starts a hold"
+    },
+    {
+      "given": "",
+      "key": "ac262",
+      "requirement": "a-job-firing-waiting-on-a-hold-stays-in-progress",
+      "then": "the firing is recorded as in progress, not failed",
+      "when": "a job's firing queues input for an agent whose queue is held"
+    },
+    {
+      "given": "",
+      "key": "ac263",
+      "requirement": "a-job-firing-waiting-on-a-hold-stays-in-progress",
+      "then": "the firing is recorded as in progress, not failed when its input is delivered after the reset, the firing takes that turn's outcome",
+      "when": "a job's firing starts a turn and the provider's allowance refuses it"
+    },
+    {
+      "given": "",
+      "key": "ac264",
+      "requirement": "a-job-firing-waiting-on-a-hold-stays-in-progress",
+      "then": "the firing is still recorded as in progress",
+      "when": "a job's firing is waiting on a held queue and the Hub restarts"
+    },
+    {
+      "given": "",
+      "key": "ac282",
+      "requirement": "a-copilot-hold-notice-states-its-end-and-the-way-out",
+      "then": "the reason the agent is not running names 2026-10-01 and 00:00 UTC it says to bind the agent to another runner and then send it a message it says that rebinding alone does not end the hold, and that its loops and jobs stay blocked until then",
+      "when": "an agent's queue is held by a Copilot refusal whose reset is 00:00 UTC on 2026-10-01"
+    },
+    {
+      "given": "",
+      "key": "ac283",
+      "requirement": "a-copilot-hold-notice-states-its-end-and-the-way-out",
+      "then": "the queue is still held and its loops and jobs stay blocked",
+      "when": "an agent's queue is held by a Copilot refusal the agent is bound to another runner and no message is sent to it"
+    },
+    {
+      "given": "",
+      "key": "ac284",
+      "requirement": "a-copilot-hold-notice-states-its-end-and-the-way-out",
+      "then": "the reason the agent is not running reads exactly as it did before this change",
+      "when": "an agent's queue is held by a refusal from a provider other than Copilot"
+    },
+    {
+      "given": "",
+      "key": "acn30",
+      "requirement": "a-copilot-hold-notice-states-its-end-and-the-way-out",
+      "then": "the hold notice states the date and time it ends and says to bind another runner and then send a message",
+      "when": "an agent is held by a Copilot quota refusal"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "0a7b5c2b6021964690fd22da8159e12292b37b7af32af86f57fb99b1fbf24078",
+      "FR-2": "74ef377f3147639ba2dc5173e3350f97de04c4c3ba5bdbff1ebc26ce3069cd5d",
+      "FR-3": "90a40f79b082487ee9facb46eadf37afcd2183d8fb4ed58d1cd3f8c00c67bd9e",
+      "FR-4": "e07518d5e50f0d7fb5add7f3c091b002b08ab5523cc030659d694ee7c561d0ab",
+      "FR-5": "3339d79350a5b751939507e13bd7de5dbb6affe77dbe1953ad26ccb40495954f",
+      "FR-6": "f92520773aac2481c8af793080c68bc5dc05f61f8b3eaf6cc7a7b72d80281d17",
+      "FR-7": "4c4cf724f5a1a3b2716fded7dea63d35abd810b4863529e23bd728e6697fbbdf"
+    },
+    "high_water": 7,
+    "requirements": {
+      "a-copilot-hold-notice-states-its-end-and-the-way-out": "FR-7",
+      "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it": "FR-2",
+      "a-held-queue-is-retried-at-the-reset": "FR-5",
+      "a-held-queue-lets-one-operator-turn-through": "FR-4",
+      "a-job-firing-waiting-on-a-hold-stays-in-progress": "FR-6",
+      "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu": "FR-1",
+      "an-allowance-refusal-returns-input-uncounted": "FR-3"
+    },
+    "retired": {}
+  },
+  "design": "D1. Allowance holds are separate from usage-accounting: they govern the delivery queue, not measurement, and their trigger is a provider's word, not a Hub budget.\n\nD2. Separate from inbound-queue-delivery because a hold suspends the attempt counting that capability defines: an allowance refusal with a reset ahead is counted apart and never trips the delivery limits.\n\nD3. A hold is derived, not stored: it is read from the newest informative turn outcome (in inserted order), floored at one minute after the refusal, with a scheduled wake at its end that is re-armed at startup.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Split out of agent-conversation-workspace in the 2026-10-08 spec overhaul.",
+  "open_questions": [],
+  "problem": "A spent allowance refuses every turn until its reset, so without a hold the queue keeps starting turns that are refused the same way, burns its delivery attempts and gives up on input that would have succeeded after the reset, and jobs report failures that are only waiting.",
+  "requirements": [
+    {
+      "key": "a-turn-the-provider-s-allowance-refused-holds-the-agent-s-qu",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Every turn before the reset would be refused the same way; the one-minute floor stops a reset already in the past from becoming a cycle of refused turns, and deriving it lets a served turn end it.",
+      "statement": "The system SHALL hold an agent's queue, starting no turn for agent or job input, while the provider's most recent word about that agent (the newest turn outcome carrying an allowance reading or served tokens) is a refusal of its usage allowance, until the later of the stated reset time and one minute after the refusal; the hold SHALL be derived from recorded outcomes, not stored."
+    },
+    {
+      "key": "a-copilot-turn-refused-for-its-plan-quota-is-a-refusal-of-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The quota belongs to the account, so another agent's reading states the same reset; recognising refusals from message wording, session caps, billing errors or rate limits would hold queues nobody decided to hold.",
+      "statement": "The system SHALL treat a Copilot turn as refused by its usage allowance only when Copilot reports a structured error with `errorType` `quota` and `errorCode` `quota_exceeded` (as a session event or prompt error response), taking the reset from the run's own quota reading or else the project's newest Copilot reading whose reset is still ahead; with no reset known the refusal SHALL be recorded as an exhausted allowance and SHALL NOT hold the queue."
+    },
+    {
+      "key": "an-allowance-refusal-returns-input-uncounted",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The session and the input are both sound and the provider has said when it will serve them; a reset already past states no wait with an end, so the limits must still bound it.",
+      "statement": "A run that failed because the provider refused the agent's usage allowance with a reset time later than the run's end SHALL return its input counting an allowance refusal instead of a failed delivery, and SHALL keep the conversation's provider session; a refusal whose reset is not later than the run's end SHALL count as a failed delivery."
+    },
+    {
+      "key": "a-held-queue-lets-one-operator-turn-through",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Only the operator can change the allowance (overage, credit, another runner), and a hold derived from the provider's last word cannot see that they did.",
+      "statement": "While an agent's queue is held, operator input that arrived after the refusal SHALL let one turn start; if the provider refuses it too, the renewed hold SHALL stop input that arrived before it from starting another."
+    },
+    {
+      "key": "a-held-queue-is-retried-at-the-reset",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Nothing re-evaluates a queue on a timer, so the hold arms its own wake and startup re-arms every held queue.",
+      "statement": "When a hold's end passes, the system SHALL attempt the agent's queue again without operator action, including a hold whose end passed while the Hub was stopped, and SHALL record an operator-visible event each time a refusal starts or renews a hold."
+    },
+    {
+      "key": "a-job-firing-waiting-on-a-hold-stays-in-progress",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Its input is waiting for a stated time, not refused.",
+      "statement": "A job firing whose input waits on a held queue, including the firing whose own turn was refused and one held across a Hub restart, SHALL be reported as in progress, not failed, and SHALL take the outcome of the turn that finally delivers it."
+    },
+    {
+      "key": "a-copilot-hold-notice-states-its-end-and-the-way-out",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A Copilot plan quota resets monthly, so a time of day alone is ambiguous, and rebinding without a served turn changes nothing the hold can see.",
+      "statement": "While a Copilot quota refusal holds an agent's queue, the hold notice SHALL state the date and time it ends and the way out — bind the agent to another runner and then send it a message, since rebinding alone does not end the hold and its loops and jobs stay blocked — and the notices given to blocked loops and jobs SHALL state the date, not only the time."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Deriving a hold from the provider's most recent word about an agent, with its one-minute floor",
+      "Recognising a Copilot plan-quota refusal as an allowance refusal",
+      "Returning refused input uncounted and keeping the conversation's provider session",
+      "Letting one operator turn through a held queue",
+      "Retrying the queue at the hold's end, including across a Hub restart, and the operator events for each hold",
+      "Job firings that wait on a hold",
+      "The Copilot hold notice: its end time and the way out"
+    ],
+    "non_goals": [
+      "Ordinary delivery: attempt counting, retries, give-up and refusal attribution (inbound-queue-delivery)",
+      "Token budgets and usage measurement (usage-accounting)",
+      "Binding an agent to another runner, and Copilot sign-in or version failures (runner-registry)",
+      "Job scheduling and firing records beyond the hold (agent-loops, loop-firing-accountability)"
+    ]
+  },
+  "summary": "What the Hub does when a provider refuses an agent's turn because its usage allowance or plan quota is spent. The agent's queue is held until the stated reset, the refused input goes back uncounted, one operator turn may still pass, the queue is retried at the reset, job firings wait instead of failing, and the operator is told when the hold ends and how to get out of it.",
+  "tasks": [],
+  "title": "Provider allowance holds"
+}

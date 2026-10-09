@@ -1,0 +1,823 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a run is started by the Hub",
+      "key": "cr1",
+      "requirement": "a-live-run-credential-is-the-only-agent-authentication",
+      "then": "only a SHA-256 digest of an `aw_run_` credential is stored, and the plaintext exists only in the spawned process environment",
+      "when": "the run row is written"
+    },
+    {
+      "given": "a run has ended",
+      "key": "cr2",
+      "requirement": "a-live-run-credential-is-the-only-agent-authentication",
+      "then": "it is refused 401 as an invalid or inactive run credential",
+      "when": "a request presents that run's credential"
+    },
+    {
+      "given": "a run row records a different Hub instance id than the one serving the request",
+      "key": "cr3",
+      "requirement": "a-live-run-credential-is-the-only-agent-authentication",
+      "then": "it is refused 401 naming a credential issued by a different Hub instance",
+      "when": "the run's credential is presented"
+    },
+    {
+      "given": "",
+      "key": "cr4",
+      "requirement": "a-live-run-credential-is-the-only-agent-authentication",
+      "then": "it names the environment variable at most, never the credential's value",
+      "when": "the turn prompt, tool notice or any API response is produced"
+    },
+    {
+      "given": "",
+      "key": "cr5",
+      "requirement": "the-agent-api-is-a-least-privilege-allowlist",
+      "then": "every route belongs to one of the listed groups and none reads an inbound queue, the roster, settings, agent configuration, charters or credentials",
+      "when": "the routes mounted under `/api/v1/agent-actions` are enumerated"
+    },
+    {
+      "given": "an agent run holds a valid credential",
+      "key": "cr6",
+      "requirement": "the-agent-api-is-a-least-privilege-allowlist",
+      "then": "the call is refused because no operator route accepts a run credential",
+      "when": "it calls an operator route such as project settings with that credential"
+    },
+    {
+      "given": "",
+      "key": "cr7",
+      "requirement": "actor-identity-cannot-be-supplied-or-overridden",
+      "then": "the request is rejected 422 and nothing is written",
+      "when": "an agent-action body includes `sender`, `assigner`, `project_id` or any other undeclared field"
+    },
+    {
+      "given": "",
+      "key": "cr8",
+      "requirement": "actor-identity-cannot-be-supplied-or-overridden",
+      "then": "the stored sender or assigner is the authenticated run's agent",
+      "when": "an agent sends a message or creates a task"
+    },
+    {
+      "given": "",
+      "key": "cr9",
+      "requirement": "every-agent-caused-effect-retains-run-attribution",
+      "then": "the created row carries `created_by_run_id` (or the message's `run_id`) of the calling run",
+      "when": "an agent creates a task, sends a message, asks a question, creates a job or requests an agent"
+    },
+    {
+      "given": "a task has moved through several statuses",
+      "key": "cr10",
+      "requirement": "every-agent-caused-effect-retains-run-attribution",
+      "then": "one row per accepted transition exists, each naming the run or operator that caused it",
+      "when": "its transitions are read"
+    },
+    {
+      "given": "",
+      "key": "cr11",
+      "requirement": "http-and-mcp-access-have-equal-capability",
+      "then": "it is refused with `operator_direction_required` and a permission request id exactly as the MCP tool is, because the rule is the route's",
+      "when": "an agent archives scheduled work over HTTP"
+    },
+    {
+      "given": "",
+      "key": "cr12",
+      "requirement": "http-and-mcp-access-have-equal-capability",
+      "then": "the response carries each question's `wait_expires_at`, the deadline the Hub will hold it to",
+      "when": "an agent asks a blocking question over HTTP"
+    },
+    {
+      "given": "",
+      "key": "cr13",
+      "requirement": "http-and-mcp-access-have-equal-capability",
+      "then": "it executes the same tool function the MCP server serves, from the same pinned file",
+      "when": "the call command runs a tool"
+    },
+    {
+      "given": "",
+      "key": "cr14",
+      "requirement": "http-and-mcp-access-have-equal-capability",
+      "then": "the adapter reports the rejection with its status and detail rather than an empty or successful result",
+      "when": "the Hub rejects an adapter's request"
+    },
+    {
+      "given": "an agent's latest tested run recorded `failed` after earlier `connected` runs",
+      "key": "cr17",
+      "requirement": "a-run-is-told-the-access-path-it-actually-has",
+      "then": "that run is told the call command",
+      "when": "its next run is composed"
+    },
+    {
+      "given": "an agent has no tested run and no declaration",
+      "key": "cr18",
+      "requirement": "a-run-is-told-the-access-path-it-actually-has",
+      "then": "it is told the call command, and neither text asserts the MCP surface is present or absent",
+      "when": "its run is composed"
+    },
+    {
+      "given": "a Copilot run's own pre-prompt test found the server absent",
+      "key": "cr19",
+      "requirement": "a-run-is-told-the-access-path-it-actually-has",
+      "then": "it is told the call command even though the agent is declared `hub_client: mcp`",
+      "when": "its prompt is composed"
+    },
+    {
+      "given": "",
+      "key": "cr20",
+      "requirement": "a-run-is-told-the-access-path-it-actually-has",
+      "then": "the tool server it is given and its permission posture are unchanged",
+      "when": "what a run is told changes"
+    },
+    {
+      "given": "",
+      "key": "cr23",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "then": "the whole batch is rejected and no question is stored",
+      "when": "an agent asks a batch with an entry missing its options or header"
+    },
+    {
+      "given": "a batch of three was asked by a run that has ended",
+      "key": "cr24",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "then": "nothing is delivered yet",
+      "when": "the operator answers the first two"
+    },
+    {
+      "given": "the same batch",
+      "key": "cr25",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "then": "one queued delivery carries all three in asked order, two answered and one declined",
+      "when": "the operator declines the third"
+    },
+    {
+      "given": "a run's wait expired with one question answered unseen",
+      "key": "cr26",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "then": "that answer is delivered as queued input once its batch is complete",
+      "when": "the run reports the wait ended"
+    },
+    {
+      "given": "a batch of three is pending",
+      "key": "cr27",
+      "requirement": "the-operator-answers-a-batch-one-question-at-a-time",
+      "then": "only the first question is shown, labelled 1/3",
+      "when": "the operator opens it"
+    },
+    {
+      "given": "the asking run is no longer waiting",
+      "key": "cr28",
+      "requirement": "the-operator-answers-a-batch-one-question-at-a-time",
+      "then": "the card says the answers reach the agent together once all three are finished",
+      "when": "the operator answers the first of three"
+    },
+    {
+      "given": "a recipient's conversation is archived",
+      "key": "cr32",
+      "requirement": "a-send-to-an-archived-conversation-fails-with-a-recoverable-",
+      "then": "the response is 409 carrying the three parts and the content verbatim, and no message or queue entry exists",
+      "when": "an agent sends to it by id"
+    },
+    {
+      "given": "",
+      "key": "cr33",
+      "requirement": "no-capability-may-exist-only-in-a-hook",
+      "then": "each is still refused at the route",
+      "when": "the rules on task status, identity and blocked status are exercised with no runner hook present"
+    },
+    {
+      "given": "a managed Copilot home contains a hook file the Hub did not write",
+      "key": "cr34",
+      "requirement": "no-capability-may-exist-only-in-a-hook",
+      "then": "the file is removed and the removal logged",
+      "when": "a turn is prepared"
+    },
+    {
+      "given": "",
+      "key": "cr35",
+      "requirement": "a-task-named-on-a-delegation-is-runtime-state-not-message-de",
+      "then": "the send is refused and nothing is queued",
+      "when": "an agent sends a message naming a task of another project or a task that does not exist"
+    },
+    {
+      "given": "an agent delegates naming a task",
+      "key": "cr36",
+      "requirement": "a-task-named-on-a-delegation-is-runtime-state-not-message-de",
+      "then": "the run is bound to the named task",
+      "when": "the recipient's run starts from that entry"
+    },
+    {
+      "given": "",
+      "key": "cr37",
+      "requirement": "an-agent-cannot-declare-its-own-work-blocked-or-unblocked",
+      "then": "the update is refused 403 and the task is unchanged",
+      "when": "an agent updates its task to `blocked`"
+    },
+    {
+      "given": "",
+      "key": "cr38",
+      "requirement": "an-agent-cannot-declare-its-own-work-blocked-or-unblocked",
+      "then": "its status enum omits `blocked`",
+      "when": "the MCP `update_task` schema is read"
+    },
+    {
+      "given": "a task is `blocked` on a question",
+      "key": "cr39",
+      "requirement": "an-agent-cannot-declare-its-own-work-blocked-or-unblocked",
+      "then": "the move is refused",
+      "when": "the agent moves it to another status"
+    },
+    {
+      "given": "",
+      "key": "cr40",
+      "requirement": "the-operator-may-decline-a-question",
+      "then": "it is recorded as declined and leaves the outstanding list",
+      "when": "the operator declines an outstanding question"
+    },
+    {
+      "given": "",
+      "key": "cr41",
+      "requirement": "the-operator-may-decline-a-question",
+      "then": "the decline is refused 409",
+      "when": "the operator declines an answered question"
+    },
+    {
+      "given": "",
+      "key": "cr42",
+      "requirement": "the-operator-may-decline-a-question",
+      "then": "it has no route that declines a question",
+      "when": "the agent API is enumerated"
+    },
+    {
+      "given": "an agent is waiting on a question",
+      "key": "cr43",
+      "requirement": "a-waiting-agent-is-told-that-its-question-was-declined",
+      "then": "the wait ends before the deadline and the result marks it `declined: true, answered: false`",
+      "when": "the operator declines it"
+    },
+    {
+      "given": "",
+      "key": "cr44",
+      "requirement": "a-waiting-agent-is-told-that-its-question-was-declined",
+      "then": "the result marks it `answered: false, declined: false`",
+      "when": "a question expires unanswered"
+    },
+    {
+      "given": "`allow_agent_jobs` is off",
+      "key": "cr55",
+      "requirement": "a-capability-refused-for-project-state-reaches-the-operator-",
+      "then": "it is refused 403 at once and a question of record with no run or conversation is opened",
+      "when": "an agent calls `create_flow`"
+    },
+    {
+      "given": "that record was answered",
+      "key": "cr56",
+      "requirement": "a-capability-refused-for-project-state-reaches-the-operator-",
+      "then": "one more record is opened saying it is the last",
+      "when": "an agent is refused again"
+    },
+    {
+      "given": "the last record was resolved",
+      "key": "cr57",
+      "requirement": "a-capability-refused-for-project-state-reaches-the-operator-",
+      "then": "no further record is opened",
+      "when": "an agent is refused again"
+    },
+    {
+      "given": "opening the record fails",
+      "key": "cr58",
+      "requirement": "a-capability-refused-for-project-state-reaches-the-operator-",
+      "then": "it names the setting and where to change it and does not claim a record exists",
+      "when": "the refusal is returned"
+    },
+    {
+      "given": "",
+      "key": "cr59",
+      "requirement": "a-refusal-names-the-state-that-caused-it-never-an-approval-n",
+      "then": "the detail has the code, the setting, its value and the record id in the message",
+      "when": "a scheduled-work call is refused for `allow_agent_jobs`"
+    },
+    {
+      "given": "",
+      "key": "cr60",
+      "requirement": "a-message-addressed-to-the-operator-is-refused-with-where-th",
+      "then": "the send is refused 404 naming reply, task notes and `ask_user`, and an `agent_action_rejected` event is recorded",
+      "when": "an agent sends to `operator`"
+    },
+    {
+      "given": "",
+      "key": "cr61",
+      "requirement": "an-agent-writes-to-a-task-only-the-fields-its-tool-carries",
+      "then": "it is refused 403 and the task is unchanged",
+      "when": "an agent's update includes `assignee`"
+    },
+    {
+      "given": "",
+      "key": "cr62",
+      "requirement": "an-agent-writes-to-a-task-only-the-fields-its-tool-carries",
+      "then": "the links are recorded and the status is unchanged",
+      "when": "an agent's update carries only `requirement_ids`"
+    },
+    {
+      "given": "",
+      "key": "cr63",
+      "requirement": "an-agent-writes-to-a-task-only-the-fields-its-tool-carries",
+      "then": "it is refused 403 and nothing is persisted",
+      "when": "an agent's update sets `divergence_policy`"
+    },
+    {
+      "given": "a harness reported `failed`",
+      "key": "cr66",
+      "requirement": "whether-a-run-s-harness-started-the-hub-s-tool-server-is-rec",
+      "then": "the run stays `failed`",
+      "when": "the adapter's online report arrives after it"
+    },
+    {
+      "given": "",
+      "key": "cr67",
+      "requirement": "whether-a-run-s-harness-started-the-hub-s-tool-server-is-rec",
+      "then": "no adapter-online report is sent",
+      "when": "`aw-tool` runs a tool"
+    },
+    {
+      "given": "a run ended before any report",
+      "key": "cr68",
+      "requirement": "whether-a-run-s-harness-started-the-hub-s-tool-server-is-rec",
+      "then": "it is untested (null), not `absent`",
+      "when": "its status is read"
+    },
+    {
+      "given": "a Copilot provider run has a registered key",
+      "key": "cr71",
+      "requirement": "n1",
+      "then": "the stored message holds the scrubbed form, not the key",
+      "when": "its agent sends that key in a `send_message` content"
+    },
+    {
+      "given": "`allow_agent_jobs` is on",
+      "key": "cr72",
+      "requirement": "n2",
+      "then": "it is refused 409 `operator_direction_required` with a permission request id",
+      "when": "an agent archives a job with no loop"
+    },
+    {
+      "given": "the operator allowed that request",
+      "key": "cr73",
+      "requirement": "n2",
+      "then": "the job is archived",
+      "when": "the agent repeats the archive"
+    },
+    {
+      "given": "a job has a loop",
+      "key": "cr74",
+      "requirement": "n2",
+      "then": "it is refused without a direction request",
+      "when": "an agent archives it"
+    },
+    {
+      "given": "",
+      "key": "cr75",
+      "requirement": "n3",
+      "then": "the send is refused 400 and nothing is queued",
+      "when": "an agent sends to its own name with no conversation id"
+    },
+    {
+      "given": "an agent has a second conversation",
+      "key": "cr76",
+      "requirement": "n3",
+      "then": "the message is delivered there",
+      "when": "it sends to its own name naming that conversation"
+    },
+    {
+      "given": "an agent is archived",
+      "key": "cr77",
+      "requirement": "n4",
+      "then": "the send is refused 409 with the content restated, and no queue entry exists",
+      "when": "a peer sends it a message"
+    },
+    {
+      "given": "a peer's checkpoint exists and the agent has no grant",
+      "key": "cr78",
+      "requirement": "n5",
+      "then": "the answer is 404 exactly as for an unknown id",
+      "when": "the agent reads it by id"
+    },
+    {
+      "given": "a project has 150 tasks",
+      "key": "cr79",
+      "requirement": "n6",
+      "then": "it receives 100 with `total: 150` and `has_more: true`",
+      "when": "an agent lists tasks with no arguments"
+    },
+    {
+      "given": "",
+      "key": "ac66",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "then": "the answer is queued for the agent",
+      "when": "a blocking question is answered after its asking run has ended"
+    },
+    {
+      "given": "a blocking question whose asking run reported its wait expired without an answer that run is still running",
+      "key": "ac67",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "then": "the answer is queued for the agent it is delivered as a new turn once the agent is free",
+      "when": "the operator answers the question"
+    },
+    {
+      "given": "a blocking question that the operator answered after the asking run last checked for it",
+      "key": "ac68",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "then": "the report is accepted the answer is queued for the agent",
+      "when": "the asking run then reports that its wait expired without an answer to it"
+    },
+    {
+      "given": "a batch of blocking questions, two of which were answered after the asking run last checked for them",
+      "key": "ac69",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "then": "exactly one delivery carrying the whole batch is queued",
+      "when": "the asking run reports both as expired in one report and the batch is complete"
+    },
+    {
+      "given": "a blocking question whose asking run's expiry report has read it unanswered the operator's answer is recorded before that report records the wait's end",
+      "key": "ac70",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "then": "the answer is queued for the agent",
+      "when": "both have been recorded"
+    },
+    {
+      "given": "a batch of two blocking questions, one answered after the asking run last checked for it an expiry report naming both, which has recorded the wait's end on the answered one",
+      "key": "ac71",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "then": "exactly one delivery carrying the batch's answer is queued",
+      "when": "the operator declines the other before the report records the wait's end on it"
+    },
+    {
+      "given": "a blocking question whose asking run's expiry report has read it unresolved the operator's decline is recorded before that report records the wait's end",
+      "key": "ac72",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "then": "the question does not record that its wait ended the task it was bound to does not say it proceeded without the operator's answer",
+      "when": "both have been recorded"
+    },
+    {
+      "given": "a bound run that has ended, whose end check has read its blocking question unresolved the operator's decline is recorded before that check records the wait's end",
+      "key": "ac73",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "then": "the question does not record that its wait ended the task it was bound to does not say it proceeded without the operator's answer",
+      "when": "both have been recorded"
+    },
+    {
+      "given": "",
+      "key": "ac74",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "then": "the answer is not also queued",
+      "when": "a blocking question is answered while its asking run is still waiting for it"
+    },
+    {
+      "given": "a blocking question answered after the system's deadline for its wait but before the asking run's final check for it",
+      "key": "ac75",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "then": "the answer is not also queued",
+      "when": "the asking run receives the answer as its result and reports nothing expired for it"
+    },
+    {
+      "given": "a blocking question whose asking run reported its wait expired that run is still running",
+      "key": "ac76",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "then": "both state that nobody is waiting for it",
+      "when": "the operator's view lists the question, and when it shows that question alone"
+    },
+    {
+      "given": "A run credential",
+      "key": "ac14",
+      "requirement": "a-live-run-credential-is-the-only-agent-authentication",
+      "then": "The operation stays bound to the run's recorded project.",
+      "when": "It calls an agent operation naming another project"
+    },
+    {
+      "given": "an archived agent",
+      "key": "ac-ac14",
+      "requirement": "n4",
+      "then": "409 states it is archived, says to ask the operator to unarchive it or send elsewhere, restates the content, and no queue entry exists",
+      "when": "another agent sends it a message"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-22": "7d67c4b6ff11d7f231ad5740e1b3dd6f728351108f0069d44a1cb0aff9c4e519",
+      "FR-23": "6d40c17a5b26452e94a39d508d4552f0cd191f1819e32dcaedf00027cb5cd957",
+      "FR-24": "e0e61debe6813ac2f004d2d12a68ac5737a4d9f884eb9211c5b201047a82f4c6",
+      "FR-25": "06affcb4a19e8fb8f92f508a6b733a236678e1acfdd6b7d965d6c5b6f0736a5b",
+      "FR-26": "b2a9b4c48ec10b29f0354a77ada86feb4a18e8a88bdddb18ee4d4b8414b21679",
+      "FR-27": "77fc56dd6cce24e0d1afe06691be717423c12fb74dc3fa0e7454b27d76e6b245",
+      "FR-28": "2d6a262cf5f5f2040201a48ac733facd0392a4d9b399df84a0cc5190c8e4d6b0",
+      "FR-29": "a279e4dd2ade0011906f0669998eb348876a6f595529058412ca8b3a6b63f9fc",
+      "FR-30": "68faf94d05da22d61b9c86e459e5cb7e145bcf31d7a84aef495757aeabf1754a",
+      "FR-31": "0bce76100b61da08d76abfc38a6d75c401cf71e969789061bebdbf8b07eff25f",
+      "FR-32": "78be143139d22879453e156f01e5366b5e0fc253c254dd22a6a862f8116064ac",
+      "FR-33": "97462155ac0697f9f2a12eb35759487394b6f4436dea79bf667a63304808fc24",
+      "FR-34": "11b9c2bda17be046c081933a974b97eed11be7045a567a6e0749f5bb8f5a098b",
+      "FR-35": "5222ca0aebedcb7156764b73ffd459e2bd804a89a304cda810f5100d61a0d18a",
+      "FR-36": "dc4006ca0087f22e6e7b35b4a53cc0499d93709ded8fced7071c36e38d67f730",
+      "FR-37": "44f2508f20538a213062c6f0146489af21f93ec2f2ac727e278567395e2fc22f",
+      "FR-38": "a0807dd86966c9beb645cc49b77a7dacec40619f0c6934014c5c5c8ce68fbcf8",
+      "FR-39": "179e9bd970f221810a74391497a07174080021b1dc1b20bab16af701316442a4",
+      "FR-40": "edb76eaa4ed828f9fb763600f549dfd703ba1f355c927dbf0391a1423b45b0af",
+      "FR-41": "4ca12dd15fb92bf64dcfddc992c99871e52bc1a40fe167146fed6358f8c3664f",
+      "FR-42": "0307ef49b75fa9dd4f0c2195227e33b9a27373b9a917f6d39858e58f95887200",
+      "FR-43": "7448a022ec6614e77fa97dd701376935125f82353e4536de52b28d642269080d",
+      "FR-44": "048f79c29f8e5c724f266fa4976054677f2ece4ceefa718333f260529b4ae64d",
+      "FR-45": "c1939ac574783c74740e9c3a97f0dfd156135e0a566220eb2db47be77bef93e1",
+      "FR-46": "c670befa01a62721fe8a13c0603c712c5154dd6e8f7a7ad9481bd2909ca937e3",
+      "FR-47": "bcd83ac3cf20e0e255c51ee7b30f2c4ce5d7eef6613e4c0f57d08cbf6f045d30",
+      "FR-48": "ca0785dde43434e0ba105a4ee5e13129cf479fd9bce4b29f0f05f3201bf766d4",
+      "FR-49": "791ee5d61ae7bbcf9371cc57046636aebb6ff92f34752cd1aa68c80d4e47fa32",
+      "FR-50": "2c69041d77f1d7295db757e64257c46ab66eb11ae9e1d889bd8b24a4e2b138b4",
+      "FR-51": "f34ef4682a0379a1b75ee47d973b45775d872dca98cf8ab9fc2315e1fe7bbe27",
+      "FR-52": "68e7d3e458e67ba76e72f906a3ebd70625f7b013f0fef6cdea090858d014439e",
+      "FR-53": "dd9ef6db8f9dcbfdfdcfdff57c0adaef9447101d87ca4e1aa50c99cd35083e75",
+      "FR-54": "1d5b2c3fc16bc97fa9a7948504b4dc8deba7214e7e899a54ce57c8bd9d8dcebc",
+      "FR-55": "dbce54fa831c5910d4659f0b7a74fbc0c3692fe8789ecaf6ec4e700363dbc720",
+      "FR-56": "667cd5e1900623744bba0c9a97eb70b58795f45e81aebf37e0ac7313d26e11bf",
+      "FR-57": "86dec95f49aafa435461a1b284f7a7b5d1915d5d8e03ba870b3239867c55e596",
+      "FR-58": "4c1f1fa17438478a43ce11b9219fd36227726344b187cc06e029199485baa759",
+      "FR-6": "14a250e27dcbdd9a245fce16ae743c18326e2891803c944e760673e6fd2aee14",
+      "FR-7": "6730fae64b673cfdf001fcc4f023e3fa23332aa70177e59a4bb8096c8b2e4e17"
+    },
+    "high_water": 58,
+    "requirements": {
+      "a-capability-refused-for-project-state-reaches-the-operator-": "FR-45",
+      "a-live-run-credential-is-the-only-agent-authentication": "FR-22",
+      "a-message-addressed-to-the-operator-is-refused-with-where-th": "FR-47",
+      "a-refusal-names-the-state-that-caused-it-never-an-approval-n": "FR-46",
+      "a-run-is-told-the-access-path-it-actually-has": "FR-28",
+      "a-send-to-an-archived-conversation-fails-with-a-recoverable-": "FR-34",
+      "a-task-named-on-a-delegation-is-runtime-state-not-message-de": "FR-36",
+      "a-waiting-agent-is-told-that-its-question-was-declined": "FR-39",
+      "actor-identity-cannot-be-supplied-or-overridden": "FR-24",
+      "an-agent-can-ask-several-questions-in-one-turn": "FR-30",
+      "an-agent-cannot-declare-its-own-work-blocked-or-unblocked": "FR-37",
+      "an-agent-writes-to-a-task-only-the-fields-its-tool-carries": "FR-48",
+      "an-answer-reaches-an-asker-whose-run-has-ended": "FR-58",
+      "every-agent-caused-effect-retains-run-attribution": "FR-25",
+      "http-and-mcp-access-have-equal-capability": "FR-26",
+      "n1": "FR-52",
+      "n2": "FR-53",
+      "n3": "FR-54",
+      "n4": "FR-55",
+      "n5": "FR-56",
+      "n6": "FR-57",
+      "no-capability-may-exist-only-in-a-hook": "FR-35",
+      "the-agent-api-is-a-least-privilege-allowlist": "FR-23",
+      "the-operator-answers-a-batch-one-question-at-a-time": "FR-31",
+      "the-operator-may-decline-a-question": "FR-38",
+      "whether-a-run-s-harness-started-the-hub-s-tool-server-is-rec": "FR-50"
+    },
+    "retired": {
+      "a-run-s-tool-surface-approval-channel-and-plane-access-are-d": "FR-49",
+      "a-run-whose-harness-cannot-use-mcp-is-told-how-to-reach-the-": "FR-27",
+      "a-task-states-what-its-requirements-say": "FR-41",
+      "a-turn-that-ends-on-an-unasked-question-is-surfaced-to-the-o": "FR-6",
+      "an-agent-can-read-a-specification-document": "FR-40",
+      "an-agent-can-record-read-and-decide-requirement-evidence": "FR-42",
+      "creating-a-document-is-not-gated-by-a-standing-project-allow": "FR-44",
+      "document-creation-is-a-plane-operation-with-the-plane-s-iden": "FR-43",
+      "durable-per-agent-settings-are-edited-on-the-agent-not-in-th": "FR-33",
+      "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett": "FR-32",
+      "operator-facing-severity-values-are-the-ones-the-operator-s-": "FR-29",
+      "the-call-command-carries-the-run-s-authority-without-showing": "FR-51",
+      "the-operator-can-convert-an-unasked-question-into-a-real-one": "FR-7"
+    }
+  },
+  "design": "D1 One namespace. Every agent operation is under `/api/v1/agent-actions` (hub/hub/api/v1/agent_actions.py), the only routes that accept an `aw_run_` credential (hub/hub/agent_auth.py). Identity is the matched Run row; request models forbid extra fields.\n\nD2 HTTP is the contract. Every operation and its refusals are defined by its agent-actions route; the adapters (agent-tool-surface) add no rule of their own, so a rule holds identically on every access path.\n\nD3 Waiting is a poll over contract routes. `ask_user` and `archive_job` poll `/questions/{id}` and `/permission-requests/{id}`; the deadline is stamped by the Hub and returned (`wait_expires_at`), and `/questions/wait-ended` is a report the Hub checks against its own deadline. Holding a request open was rejected because it pins a pooled connection for minutes.\n\nD4 Rules that need a person live in the route: archive direction (hub/hub/operator_direction.py) and project-setting refusals (hub/hub/refused_capability.py). A setting refusal opens a question of record with no run or conversation, at most two per setting.\n\nD5 What a run is told is decided apart from what it is given. `described_access_path` (hub/hub/launchability.py) reads the operator's declaration or the latest tested run's `harness_mcp_status`, never the access axes the run is given (runner-registry), so honesty fixes cannot move containment.\n\nD6 Secrets are scrubbed once, in middleware over the agent-actions prefix (hub/hub/agent_action_scrub.py), not per route.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_agent_capability_auth.py - credential, actor derivation, identity refusal",
+      "hub/tests/test_instance_identity.py - a credential from another Hub instance is refused",
+      "hub/tests/test_agent_actions_governed.py, test_refused_capability.py - scheduled-work governance, archive direction, project-setting records",
+      "hub/tests/test_question_batches.py, test_question_batch_delivery.py, test_question_declined.py, test_question_wait_resolution.py",
+      "hub/tests/test_access_axes.py, test_mcp_adapter_online.py - access axes and harness status precedence",
+      "hub/tests/test_archived_send_refusal.py, test_a_message_to_oneself.py, test_agent_writes_are_scrubbed.py, test_checkpoint_access.py, test_event_severity.py",
+      "hub/ui/src/__tests__/agentQuestionCard.test.tsx, batchedQuestionComposer.test.tsx - one question at a time"
+    ],
+    "limits": [
+      "Loop/flow creation refusals (stop condition required, document means flow, flow refuses work_needs_evidence) live only in the adapter (hub/hub/mcp_server.py:822-940); `POST /agent-actions/jobs` with a purpose and no stop condition creates a loop (hub/hub/api/v1/jobs.py:722). This contradicts http-and-mcp-access-have-equal-capability and is reported as a finding.",
+      "Many criteria still carry an empty GIVEN from the openspec import."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "An agent that can name its own identity, set fields that are the operator's, or reach a rule only through one adapter is not governed. The plane makes every agent effect attributable to a live run and governed identically however the agent connected.",
+  "requirements": [
+    {
+      "key": "a-live-run-credential-is-the-only-agent-authentication",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A credential that outlives its run, or that a second Hub sharing the database could honour, lets an ended or foreign run cause effects nobody can attribute to live work.",
+      "statement": "The system SHALL mint an unguessable credential for each Hub-owned run, store only a non-reversible digest of it, and accept it only while that exact run is running and, where the run records the Hub instance that issued it, only by that instance. Authentication SHALL derive the project, agent and run from the matched run row. The credential MUST NOT appear in output, events, turn text, command arguments or API responses."
+    },
+    {
+      "key": "the-agent-api-is-a-least-privilege-allowlist",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Turn-start state is injected by the Hub, so a read is offered only where the agent needs it for its own work and is scoped to its project; everything that governs the agent stays the operator's.",
+      "statement": "The agent application API SHALL expose only: peer messaging; the shared task ledger (create, paged list, read, update, transition history, integration outcome and retry); operator questions (single, batch, reading one's own question, reporting a wait that ended); checkpoint notes, and reading checkpoints and recalled observations the agent is granted; governed agent requests; governed scheduled work (create, toggle, run, archive, delete); specification documents (create, rename, submit, read); requirement evidence (record, list, decide); and the runtime's own permission-request, permission-decision and adapter-online reports. It MUST NOT expose any agent's inbound queue, the roster, project settings, agent configuration, charters, credentials, or other operator capabilities."
+    },
+    {
+      "key": "actor-identity-cannot-be-supplied-or-overridden",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent able to name its own identity could cause an effect attributed to another agent, which defeats every review and attribution rule built on top.",
+      "statement": "Agent-action request bodies SHALL carry no project, agent, sender, assigner, requester or run identity field, SHALL reject unknown fields, and every service they call SHALL use only the authenticated actor. Caller headers or extra body fields MUST NOT change attribution."
+    },
+    {
+      "key": "every-agent-caused-effect-retains-run-attribution",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approval is a judgement about work a different run performed; a single mutable 'last updated by' field cannot say whether author and reviewer differ.",
+      "statement": "Every message, task creation and transition, question, scheduled-work mutation, agent request, specification write and evidence record caused through the agent API SHALL durably identify the responsible agent and run in its own row, not only in an event log. Task status attribution SHALL be an append-only record of every accepted transition, each naming its own run. Operator effects MAY carry no run."
+    },
+    {
+      "key": "http-and-mcp-access-have-equal-capability",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Some deployments forbid MCP servers but allow ordinary commands; if a rule lives in one adapter, which rules bind an agent depends on how it connected.",
+      "statement": "Direct HTTP SHALL be the application contract. The MCP server and the call command SHALL be one adapter program over that contract, offering the same operations with the same validation, governance, attribution and failure meaning. An adapter MUST NOT hold a governance or waiting rule the contract does not impose on every caller, MUST NOT duplicate queue, budget, identity or lifecycle rules, and MUST NOT turn a failure into an empty or successful result. Any deadline the contract enforces on a caller SHALL be disclosed to that caller."
+    },
+    {
+      "key": "a-run-is-told-the-access-path-it-actually-has",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Being given an MCP configuration is not the same as a harness offering it; telling a run tools it lacks, or denying tools it holds, both send it down a path that fails.",
+      "statement": "The system SHALL tell a run it has the MCP tools only when the operator declared `hub_client: mcp` or the agent's most recent tested run recorded the harness connected, and SHALL otherwise describe the call command, in both the turn notice and the canonical context, from one decision. A run that tested itself before its first prompt and found the server absent SHALL be told the call command whatever the operator declared. What a run is told SHALL NOT change what it is given or its containment."
+    },
+    {
+      "key": "an-agent-can-ask-several-questions-in-one-turn",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Asking together is one interruption and one wait; delivering answers one at a time would have the agent act on part of a decision while the operator is still making the rest.",
+      "statement": "The question operation SHALL accept one to four questions in one call, each with a header, two to eight options and a multi-select flag, and a blocking call SHALL wait until every question is answered or declined or the shared deadline passes. Where the asking run is no longer waiting, the answers SHALL reach the agent as one queued delivery per batch, only once every question is answered or declined, in asked order, each marked answered or declined, including any answer recorded during the wait but never received; a batch with no answers delivers nothing. Each answer SHALL be persisted and SHALL release any task it parked when it is given."
+    },
+    {
+      "key": "the-operator-answers-a-batch-one-question-at-a-time",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Showing a batch at once turns a conversation into a form; without the 'together' note a part-answered batch looks like answers were discarded.",
+      "statement": "The operator SHALL be shown one question of a batch at a time with a step counter (`step/total`), advanced to the next once the current one is answered, and, where nobody is waiting on the batch, told that the answers reach the agent together once all are finished."
+    },
+    {
+      "key": "a-send-to-an-archived-conversation-fails-with-a-recoverable-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Returning the content makes the retry mechanical for an agent that has moved past its own context; redirecting would decide for it where its message goes.",
+      "statement": "An agent's message naming an archived conversation of the recipient SHALL be refused 409 with a detail stating that the conversation is archived, that the agent should send to a new conversation by omitting `conversation_id`, and the submitted content verbatim. No message or queue entry SHALL be created, and the message SHALL NOT be redirected to another conversation."
+    },
+    {
+      "key": "no-capability-may-exist-only-in-a-hook",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Hooks are per-machine, uneven across runners and absent from some; a rule living only in one would be missing wherever the hook is.",
+      "statement": "Every rule the system enforces on agent behaviour SHALL be enforced at a boundary the Hub owns (the agent API, the run boundary, or the data model), independently of any runner hook; the Hub SHALL install no runner hook that decides a call, and SHALL remove hooks it did not write from homes it manages."
+    },
+    {
+      "key": "a-task-named-on-a-delegation-is-runtime-state-not-message-de",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A task carried only as a field on a message cannot govern the run that does the work, and a caller must not be able to assert on whose behalf a binding is made.",
+      "statement": "When an agent sends a message naming a task, the system SHALL validate the task against the sending run's project at the time of the call and SHALL bind the run that does the delegated work to that task; the binding's attribution SHALL derive from the authenticated run."
+    },
+    {
+      "key": "an-agent-cannot-declare-its-own-work-blocked-or-unblocked",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A state the subject can assert does not constrain it, and `blocked` is the status an agent under a completion gate most wants, because it excuses unfinished work.",
+      "statement": "No agent-facing operation SHALL move a task into or out of `blocked`. That status SHALL be reached only when the system observes a blocking question unanswered, or by the operator."
+    },
+    {
+      "key": "the-operator-may-decline-a-question",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent able to close its own question could clear the record of having asked without anyone deciding anything.",
+      "statement": "The system SHALL let the operator close an outstanding question without answering it and SHALL record that they did. No agent-facing operation SHALL decline a question, and an answered question SHALL NOT be declinable."
+    },
+    {
+      "key": "a-waiting-agent-is-told-that-its-question-was-declined",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An expiry means nobody was there; a decline means someone was and handed the decision back, which the agent can act on immediately.",
+      "statement": "Where an agent is waiting on a question, the system SHALL end that wait when the question is declined and SHALL report the decline distinctly from an answer and from an expiry, without requiring any particular response to it."
+    },
+    {
+      "key": "a-capability-refused-for-project-state-reaches-the-operator-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A refusal that exists only in the agent's transcript reaches nobody; a record bound to the refused run would be swept with it.",
+      "statement": "Where the Hub refuses an agent capability because of project state the agent cannot change (today: `allow_agent_jobs` off), it SHALL open a question of record on the operator's Questions destination that names the setting, its value, what enabling it allows and where it is changed; the record SHALL carry no run or conversation, SHALL NOT make any run, conversation or loop read as waiting, and its answer SHALL be queued to the refused agent and wake it even after the run ended. After the latest record for that state is resolved the Hub SHALL open at most one further record, stating it is the last, and none after that, counting records rather than reading answers. If the record cannot be opened the refusal SHALL still be returned without claiming the operator was asked. The call SHALL NOT wait and the rule SHALL live in the contract, not an adapter."
+    },
+    {
+      "key": "a-refusal-names-the-state-that-caused-it-never-an-approval-n",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Only the sentence reaches the refused agent's turn, and a sentence promising an approval nobody was asked for sends the operator looking for something that does not exist.",
+      "statement": "A refusal caused by project state SHALL carry the code `project_setting_blocks_capability`, name the setting and its current value, include the record's id in the sentence itself where one was opened and say plainly where none was, state what the caller may do instead and that the operator's answer arrives as input rather than as this call's result, and SHALL NOT describe an approval or allowance the system has not opened."
+    },
+    {
+      "key": "a-message-addressed-to-the-operator-is-refused-with-where-th",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "No agent can hold the reserved names, so such a message is never a mistyped peer; 'no agent by that name' leaves the agent guessing.",
+      "statement": "A message an agent addresses to a reserved operator name SHALL be refused 404 with a reason stating the operator is not a message recipient, that the agent's reply is what the operator reads, that a result is recorded on a task's notes, and that a question needing an answer goes through `ask_user`. The system SHALL NOT read an agent's text to decide it was addressed to the operator."
+    },
+    {
+      "key": "an-agent-writes-to-a-task-only-the-fields-its-tool-carries",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Who holds a task, its priority and its description are the operator's statements about the work; an agent able to set the holder could take another's work or name itself on finished work.",
+      "statement": "An agent's task update SHALL accept only status, notes and requirement links (`requirement_ids`, `spec_document`), and SHALL refuse, before anything is persisted and whichever access path is used, any of assignee, priority, description, title, loop, divergence policy, escalation agent or check override, with a reason saying an agent moves its task with status and notes and links requirements, and that the other fields are the operator's. An agent SHALL be able to link requirements without restating status."
+    },
+    {
+      "key": "whether-a-run-s-harness-started-the-hub-s-tool-server-is-rec",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The adapter reports online when its process starts, before the harness connects, so it proves the program started, not that the tools are offered; and this record is the grounds for what the next run is told.",
+      "statement": "For every run given the MCP server the system SHALL record whether its harness started it as `connected`, `failed` or `absent`, with the harness's own recognised report deciding over the adapter's online report, and that over a pre-prompt wait that ended without it, whatever order they arrive in; a run with no report stays untested. The call command SHALL never produce the online report, and recording SHALL never fail the run."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent that reads a key in its environment and passes it to any tool would otherwise store it in the database and send it to the app; one middleware covers every route, including ones added later.",
+      "statement": "Before any agent-action route parses a write, the Hub SHALL replace, in the request body, every secret registered for the calling run (such as a provider key placed in its environment), so that no agent-action write stores it."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The standing allowance grants the capability to manage scheduled work, not direction to retire this job now; a loop is retired only by the operator.",
+      "statement": "Archiving scheduled work through the agent API SHALL require the operator's direction for that job every time, regardless of the run's permission posture or the `allow_agent_jobs` setting: the route SHALL refuse 409 with code `operator_direction_required` and a permission request id until the operator allows that request, and SHALL refuse outright a job that has a loop."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent asked to 'message me' reaches for the nearest name, its own, and would otherwise spend a model turn acknowledging itself.",
+      "statement": "A message an agent addresses to itself without naming one of its other conversations SHALL be refused before any message, queue entry or turn exists, with a reason naming where the operator reads its reply; a message to one of its own other conversations by id SHALL be accepted."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An archived agent never runs, so a queued entry would wait forever while the sender believed it delivered.",
+      "statement": "A message to an archived agent SHALL be refused 409 with a detail that names the agent as archived, says how to proceed, and restates the submitted content; nothing SHALL be queued for it."
+    },
+    {
+      "key": "n5",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A refusal distinguishable from absence discloses that the record exists.",
+      "statement": "Reading a checkpoint or recalling an observation the agent is not granted SHALL answer 404, indistinguishable from an id that does not exist, and a filter argument SHALL only narrow what the agent may read."
+    },
+    {
+      "key": "n6",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A real board in one result spills past a tool result's size, and an agent not told more remain believes it has seen the newest work.",
+      "statement": "Listing the task ledger SHALL return a page (100 by default, at most 1000, oldest first) with the total and whether more remain."
+    },
+    {
+      "key": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An answer that reaches no one leaves the operator believing work is unblocked. The decision is taken after the answer or the wait's end is recorded and against recorded state, so an answer racing an expiry report is delivered at least once; a duplicate costs a turn, a lost answer costs the operator's decision. A question declined before its wait's end is recorded is not marked as gone ahead without an answer. The operator's view says nobody is waiting from the moment the wait ends.",
+      "statement": "Where a blocking question is answered after the asking run has ended, or after that run's wait for it has ended, the system SHALL deliver the answer as queued input; where the asking run is still waiting it SHALL NOT also queue it, and where it cannot establish that the wait ended it SHALL assume the asker is still waiting."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Run credential authentication, actor derivation, and scrubbing a run's registered secrets from agent-action writes.",
+      "The set of agent operations, task-ledger paging, and the refusals the contract states (messages to the operator, to oneself, to an archived agent or conversation; checkpoints and recall the agent is not granted).",
+      "Attribution of every agent-caused effect, and a task named on a delegation as runtime state.",
+      "Rules that must hold for every access path: operator direction for archiving jobs, project-setting refusals, blocked status, task field ownership, and no rule held only in a hook.",
+      "Operator questions: batches, declines, and delivering an answer to an asker whose run or wait has ended.",
+      "What a run is told about its access path, and the record of whether its harness started the tool server."
+    ],
+    "non_goals": [
+      "The MCP tool schemas, the `aw-tool` command, its notice and how it carries the run's authority: agent-tool-surface.",
+      "Which tool surface, approval channel and plane access a run is given: runner-registry.",
+      "Per-agent limits on how long a run waits for the operator: agent-configuration.",
+      "Operator-facing severity values: runtime-diagnostics.",
+      "Reading specification documents: spec-document-authority; creating them: agent-document-creation.",
+      "Requirement wording on tasks and recording or deciding evidence: requirement-traceability.",
+      "Permission postures and path judging of a run's own tools: agent-run-sandboxing.",
+      "Task transition legality: task-lifecycle-governance."
+    ]
+  },
+  "summary": "The least-privilege, run-authenticated HTTP contract (`/api/v1/agent-actions`) through which an agent causes effects and makes scoped reads: messages, the task ledger, operator questions and their answers, checkpoints and recall, governed agent requests and scheduled work, and specification and evidence writes. It fixes how a run is authenticated and attributed, which rules the contract itself enforces so that no adapter or hook can hold them, and what a run is told about the access path it actually has. The adapters that expose it are agent-tool-surface.",
+  "tasks": [],
+  "title": "Agent capability plane"
+}

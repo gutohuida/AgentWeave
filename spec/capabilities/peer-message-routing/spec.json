@@ -1,0 +1,220 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "",
+      "key": "ac111",
+      "requirement": "the-queue-routing-contract-binds-peer-delivery-to-the-sender",
+      "then": "a recipient conversation is created and bound to the sending conversation the queue entry carries that recipient conversation",
+      "when": "an agent sends a peer message from a conversation that has no binding to that recipient"
+    },
+    {
+      "given": "",
+      "key": "ac112",
+      "requirement": "the-queue-routing-contract-binds-peer-delivery-to-the-sender",
+      "then": "the queue entry carries the previously bound recipient conversation no further recipient conversation is created",
+      "when": "the same sending conversation sends another message to the same recipient"
+    },
+    {
+      "given": "",
+      "key": "ac113",
+      "requirement": "the-queue-routing-contract-binds-peer-delivery-to-the-sender",
+      "then": "each is delivered to a different recipient conversation neither is selected by which conversation the recipient touched most recently",
+      "when": "one agent sends peer messages to the same recipient from two different conversations"
+    },
+    {
+      "given": "",
+      "key": "ac114",
+      "requirement": "the-queue-routing-contract-binds-peer-delivery-to-the-sender",
+      "then": "delivery still reaches the bound recipient conversation",
+      "when": "the recipient becomes active in a conversation unrelated to the binding the sender then sends another message from the bound sending conversation"
+    },
+    {
+      "given": "",
+      "key": "ac115",
+      "requirement": "the-queue-routing-contract-binds-peer-delivery-to-the-sender",
+      "then": "delivery reaches the already-bound recipient conversation no further recipient conversation is created",
+      "when": "a sending conversation bound to a recipient thread is cut over to a successor the agent sends a further message to that recipient from the successor"
+    },
+    {
+      "given": "",
+      "key": "ac116",
+      "requirement": "traffic-with-no-sending-conversation-binds-to-its-sender-ide",
+      "then": "it is delivered to the recipient conversation bound to that source later messages from that source reach the same conversation",
+      "when": "the Hub or the scheduler sends a message to an agent"
+    },
+    {
+      "given": "",
+      "key": "ac117",
+      "requirement": "an-archived-thread-is-handled-according-to-who-selected-it",
+      "then": "the send is refused the refusal returns the message content",
+      "when": "a sender names a recipient conversation that is archived"
+    },
+    {
+      "given": "",
+      "key": "ac118",
+      "requirement": "an-archived-thread-is-handled-according-to-who-selected-it",
+      "then": "a successor recipient conversation is created with `origin: peer` the binding moves to that successor the message is delivered rather than refused",
+      "when": "the binding resolves to a recipient conversation the operator archived"
+    },
+    {
+      "given": "",
+      "key": "ac166",
+      "requirement": "a-reply-continues-the-conversation-it-is-replying-to",
+      "then": "the reply is delivered into the sending agent's original conversation no conversation is created",
+      "when": "an agent receives a peer message into a bound conversation replies to the sender from that conversation, naming no recipient conversation"
+    },
+    {
+      "given": "",
+      "key": "ac167",
+      "requirement": "a-reply-continues-the-conversation-it-is-replying-to",
+      "then": "every message after the first reaches an existing conversation exactly two conversations exist for the exchange",
+      "when": "two agents exchange several messages, each replying from the conversation it received in"
+    },
+    {
+      "given": "",
+      "key": "ac168",
+      "requirement": "a-reply-continues-the-conversation-it-is-replying-to",
+      "then": "the reverse rule does not apply, because the bound conversation is not owned by the a conversation is created for the second agent, bound to the sending conversation",
+      "when": "an agent receives a message from a first agent into a bound conversation sends a message to a second agent from that conversation"
+    },
+    {
+      "given": "",
+      "key": "ac169",
+      "requirement": "a-reply-continues-the-conversation-it-is-replying-to",
+      "then": "the reply is delivered into that operator-origin conversation the entry records the second agent as its originating agent",
+      "when": "an agent is asked something in a conversation the operator started delegates to a second agent, which replies naming no recipient conversation"
+    },
+    {
+      "given": "",
+      "key": "ac170",
+      "requirement": "a-reply-continues-the-conversation-it-is-replying-to",
+      "then": "the reply is delivered into the newest open conversation of that line of work no conversation is created",
+      "when": "the conversation a reply would continue into has been cut over to a successor"
+    },
+    {
+      "given": "",
+      "key": "ac171",
+      "requirement": "a-reply-continues-the-conversation-it-is-replying-to",
+      "then": "the reverse rule does not resolve a conversation is created, bound to the sending conversation",
+      "when": "the conversation a reply would continue into is archived and has no open successor"
+    },
+    {
+      "given": "",
+      "key": "ac172",
+      "requirement": "an-agent-can-start-a-new-thread-deliberately",
+      "then": "a conversation is created and bound to the sending conversation the message is delivered into it rather than into the previously bound conversation",
+      "when": "an agent sends a peer message asking for a new thread a binding to that recipient already exists"
+    },
+    {
+      "given": "",
+      "key": "ac173",
+      "requirement": "an-agent-can-start-a-new-thread-deliberately",
+      "then": "delivery reaches the most recently created conversation no conversation is created",
+      "when": "an agent has started a new thread with a recipient sends a further message to that recipient from the same conversation, without asking again"
+    },
+    {
+      "given": "",
+      "key": "ac174",
+      "requirement": "an-agent-can-start-a-new-thread-deliberately",
+      "then": "delivery resolves by binding, forward then reverse a conversation is created only when neither resolves",
+      "when": "an agent sends a peer message without asking for a new thread"
+    },
+    {
+      "given": "",
+      "key": "ac175",
+      "requirement": "an-agent-can-start-a-new-thread-deliberately",
+      "then": "the message is refused no conversation is created and no message is delivered",
+      "when": "an agent sends a peer message that both names a recipient conversation and asks for a new thread"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "8371241825dec68f01580d668c53d6d682a5350213cee1abfe7e99ed5b00cd6d",
+      "FR-2": "9ffe451370e02cc015bb0bad4b84ebb6698273355db33a1050c26f976a1b4c29",
+      "FR-3": "67cdd78ee21462ebaf3c9cda2701e02cebaf9e27a93130aee827c2e8788a5175",
+      "FR-4": "77b7286386a01865641d55f3625a81b8302215d7eca579c387f804f995d1cf74",
+      "FR-5": "dd7ded530c33a81fdfea600676b16128b16d3d6134aff52ae11ad55225402441"
+    },
+    "high_water": 5,
+    "requirements": {
+      "a-reply-continues-the-conversation-it-is-replying-to": "FR-4",
+      "an-agent-can-start-a-new-thread-deliberately": "FR-5",
+      "an-archived-thread-is-handled-according-to-who-selected-it": "FR-3",
+      "the-queue-routing-contract-binds-peer-delivery-to-the-sender": "FR-1",
+      "traffic-with-no-sending-conversation-binds-to-its-sender-ide": "FR-2"
+    },
+    "retired": {}
+  },
+  "design": "D1. Routing is decided once at send time from bindings, independent of how the entry is later delivered or displayed, and is specified apart from delivery so each rule set stays small enough to check against its code.\n\nD2. Resolution order: a named conversation, the forward binding on the sender's line of work (the sender's identity when there is no sending conversation), the reverse binding, then a new bound conversation. Never recency.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Split out of agent-conversation-workspace in the 2026-10-08 spec overhaul.",
+  "open_questions": [],
+  "problem": "Senders do not hold recipient conversation ids. If routing chose by recency, a correspondent's messages would scatter across whatever conversation the recipient touched last, and a reply would not reach the thread it answers.",
+  "requirements": [
+    {
+      "key": "the-queue-routing-contract-binds-peer-delivery-to-the-sender",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Senders do not hold recipient conversation ids, so this rule governs almost all peer traffic; matching the line rather than one id keeps a correspondent on the same thread across a cutover.",
+      "statement": "A peer message that names no recipient conversation SHALL be delivered to the recipient conversation bound to the sending conversation's line of work (the conversation plus every predecessor and successor linked by checkpoint cutover), creating that binding, with `origin: peer`, on first use; delivery MUST NOT be selected by the recipient's recency."
+    },
+    {
+      "key": "traffic-with-no-sending-conversation-binds-to-its-sender-ide",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One durable thread per source and recipient leaves no path on which recency routing survives.",
+      "statement": "A message from a source that has no conversation (the Hub or the scheduler) SHALL be delivered to a recipient conversation bound to that source's identity."
+    },
+    {
+      "key": "an-archived-thread-is-handled-according-to-who-selected-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A sender that named an archived thread made a correctable error; a thread the operator archived is not the sender's doing.",
+      "statement": "Delivery to an archived recipient conversation SHALL be refused, with the message content returned, when the sender named it, and SHALL continue into a newly bound successor conversation when the binding resolved it."
+    },
+    {
+      "key": "a-reply-continues-the-conversation-it-is-replying-to",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Resolution order is named conversation, forward binding, reverse binding, then creation, so every delivery the forward binding resolves is unchanged and a reply finds the thread it answers.",
+      "statement": "When a peer message names no recipient conversation and no forward binding resolves, delivery SHALL follow the sending conversation's own binding in reverse: if it is bound to a conversation owned by the recipient, the message SHALL be delivered into the newest open conversation of that conversation's line of work rather than into a new conversation."
+    },
+    {
+      "key": "an-agent-can-start-a-new-thread-deliberately",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent needs a way to separate a genuinely new line of work outside a checkpoint cutover; honouring either half of a contradictory request would discard the caller's intent.",
+      "statement": "The outbound message surface (`POST /messages`, MCP `send_message`) SHALL accept `start_new_thread`, defaulting to false, which creates a recipient conversation bound to the sending conversation without consulting either binding, so later messages on that line reach it; combining it with a named `conversation_id` SHALL be refused with the content returned."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The forward binding from the sending conversation's line of work, across checkpoint cutovers",
+      "The reverse binding that carries a reply into the thread it answers",
+      "Traffic from sources with no conversation (the Hub, the scheduler)",
+      "Archived recipient threads, by whether the sender named it or a binding resolved it",
+      "`start_new_thread` on `POST /messages` and MCP `send_message`"
+    ],
+    "non_goals": [
+      "Delivering the queued entry once routed, and the hop budget: inbound-queue-delivery",
+      "Archiving conversations and their origin marking: conversation-lifecycle",
+      "Rendering peer messages in the transcript: agent-conversation-workspace",
+      "The checkpoint cutover that links a line of work: agent-conversation-handoff"
+    ]
+  },
+  "summary": "Which conversation an agent-to-agent message lands in. A message that names no conversation follows the forward binding from the sending conversation's line of work, falls back to the reverse binding so a reply continues the thread it answers, binds to the sender's identity when the source has no conversation, is refused or redirected at an archived thread depending on who chose it, and can deliberately start a new thread.",
+  "tasks": [],
+  "title": "Peer message routing"
+}

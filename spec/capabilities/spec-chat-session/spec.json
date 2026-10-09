@@ -1,0 +1,617 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a conversation with a specification document attached",
+      "key": "ac1",
+      "requirement": "the-specification-workspace-uses-the-one-composer",
+      "then": "the question is shown on that surface and the operator's answer returns to the waiting run",
+      "when": "the agent calls `ask_user`"
+    },
+    {
+      "given": "a conversation with a document attached and a run in a permission posture that routes approvals",
+      "key": "ac2",
+      "requirement": "the-specification-workspace-uses-the-one-composer",
+      "then": "the request is shown on that surface and the operator's decision resolves the run",
+      "when": "the run requests approval"
+    },
+    {
+      "given": "a conversation with a document attached",
+      "key": "ac3",
+      "requirement": "the-specification-workspace-uses-the-one-composer",
+      "then": "it goes through the same trigger route every other conversation uses, with `spec_document` as its only difference",
+      "when": "the operator sends a message"
+    },
+    {
+      "given": "a conversation with a document attached",
+      "key": "ac4",
+      "requirement": "the-specification-workspace-uses-the-one-composer",
+      "then": "the surface offers no agent selector; the agent is changed through navigation",
+      "when": "the operator looks for a way to change agent"
+    },
+    {
+      "given": "an agent and no conversation named by the destination",
+      "key": "ac5",
+      "requirement": "the-specification-workspace-reuses-the-agent-s-conversation",
+      "then": "a conversation with origin `operator` is created by that message",
+      "when": "the operator sends the first message with a document attached"
+    },
+    {
+      "given": "an open conversation",
+      "key": "ac6",
+      "requirement": "the-specification-workspace-reuses-the-agent-s-conversation",
+      "then": "they pick a document without leaving the conversation",
+      "when": "the operator uses the composer's specification control"
+    },
+    {
+      "given": "a document that exists in the project",
+      "key": "ac7",
+      "requirement": "the-agent-is-told-which-document-the-operator-is-viewing",
+      "then": "the turn context names the document and its phase, and the stored message is exactly what the operator typed",
+      "when": "a run is triggered with it as `spec_document`"
+    },
+    {
+      "given": "",
+      "key": "ac8",
+      "requirement": "the-agent-is-told-which-document-the-operator-is-viewing",
+      "then": "the turn context names no document",
+      "when": "a run is triggered with no `spec_document`"
+    },
+    {
+      "given": "an agent with no charter bound",
+      "key": "ac9",
+      "requirement": "the-agent-is-told-which-document-the-operator-is-viewing",
+      "then": "the turn context still names the document, its phase and the obligation",
+      "when": "a run is triggered with a document attached"
+    },
+    {
+      "given": "a `spec_document` path that this project has no document for",
+      "key": "ac22",
+      "requirement": "the-agent-is-told-which-document-the-operator-is-viewing",
+      "then": "the turn context names no document",
+      "when": "a run is triggered"
+    },
+    {
+      "given": "an open conversation",
+      "key": "ac10",
+      "requirement": "a-specification-document-opens-beside-a-conversation",
+      "then": "it opens in a tab of the panel shell beside the conversation and the conversation stays usable",
+      "when": "the operator attaches a specification document"
+    },
+    {
+      "given": "a conversation with a document attached",
+      "key": "ac11",
+      "requirement": "a-specification-document-opens-beside-a-conversation",
+      "then": "the same conversation is open with the same document attached",
+      "when": "the operator reloads the page"
+    },
+    {
+      "given": "a conversation with a document attached and its tab open",
+      "key": "ac12",
+      "requirement": "a-specification-document-opens-beside-a-conversation",
+      "then": "the composer still names the document as attached",
+      "when": "the operator closes the tab"
+    },
+    {
+      "given": "a conversation with a document attached",
+      "key": "ac14",
+      "requirement": "a-specification-document-opens-beside-a-conversation",
+      "then": "the document is no longer attached, the shell closes, and the document still exists",
+      "when": "the operator uses the composer's detach control"
+    },
+    {
+      "given": "an open conversation with no document attached",
+      "key": "ac19",
+      "requirement": "the-operator-can-start-an-exploration-by-creating-a-document",
+      "then": "an empty `exploring` document is created under a minted placeholder path and opens attached beside the conversation",
+      "when": "the operator presses Explore"
+    },
+    {
+      "given": "an exploration started this way",
+      "key": "ac20",
+      "requirement": "the-operator-can-start-an-exploration-by-creating-a-document",
+      "then": "the subject of that action is the document created at the start",
+      "when": "the operator later closes exploration or proposes"
+    },
+    {
+      "given": "a conversation discussing a change with no document attached",
+      "key": "ac21",
+      "requirement": "the-operator-can-start-an-exploration-by-creating-a-document",
+      "then": "no document is created and the turn context names no phase",
+      "when": "turns run"
+    },
+    {
+      "given": "the new-conversation surface with Explore armed",
+      "key": "ac23",
+      "requirement": "n1",
+      "then": "the document is created first and the trigger carries its path as `spec_document`",
+      "when": "the operator sends the first message"
+    },
+    {
+      "given": "the new-conversation surface with Explore armed",
+      "key": "ac24",
+      "requirement": "n1",
+      "then": "the client deletes the document it created and shows the Hub's refusal",
+      "when": "the trigger is refused"
+    },
+    {
+      "given": "an `exploring` document with no requirements",
+      "key": "ac25",
+      "requirement": "n2",
+      "then": "the turn context says this document is what the agent is interviewing for and to submit to its path, not create another",
+      "when": "a run is triggered with it attached"
+    },
+    {
+      "given": "",
+      "key": "ac26",
+      "requirement": "n3",
+      "then": "the request is refused with a validation error and no run starts",
+      "when": "a trigger names an unsafe `spec_document` path"
+    },
+    {
+      "given": "",
+      "key": "ac27",
+      "requirement": "n3",
+      "then": "the queued entry records the document and its message text does not contain it",
+      "when": "a trigger carries a `spec_document`"
+    },
+    {
+      "given": "a conversation with a document attached",
+      "key": "ac28",
+      "requirement": "n4",
+      "then": "the new conversation opens with the same document attached",
+      "when": "the operator selects another agent in the same project"
+    },
+    {
+      "given": "a conversation with a document attached",
+      "key": "ac29",
+      "requirement": "n4",
+      "then": "the document is still attached",
+      "when": "the operator opens agent settings and goes back"
+    },
+    {
+      "given": "a conversation with one document attached",
+      "key": "ac13",
+      "requirement": "n5",
+      "then": "both are readable in tabs and the attached document is unchanged",
+      "when": "the operator opens a different document from the specification index tab"
+    },
+    {
+      "given": "",
+      "key": "ac35",
+      "requirement": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "then": "the turn context names the document, its phase, and the obligation that phase carries",
+      "when": "a run is triggered while a specification document is open"
+    },
+    {
+      "given": "",
+      "key": "ac36",
+      "requirement": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "then": "the document is subject to the same validation and the same phase conditions its validity does not depend on charter content",
+      "when": "an agent with no charter bound authors a document"
+    },
+    {
+      "given": "",
+      "key": "ac37",
+      "requirement": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "then": "the turn context states that no specification workflow other than the Hub's applies, without naming a particular product, so a workflow it has never heard of is covered too",
+      "when": "a run is triggered while a specification document is open"
+    },
+    {
+      "given": "",
+      "key": "ac38",
+      "requirement": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "then": "the turn context directs it to tell the operator what it found to author the document through the Hub regardless",
+      "when": "the agent has another specification workflow available to it"
+    },
+    {
+      "given": "",
+      "key": "ac39",
+      "requirement": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "then": "the precedence statement is present",
+      "when": "a run is triggered with a document open and no charter bound"
+    },
+    {
+      "given": "",
+      "key": "ac40",
+      "requirement": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "then": "the turn context makes no statement about specification procedure",
+      "when": "a run is triggered with no specification document open"
+    },
+    {
+      "given": "",
+      "key": "ac88",
+      "requirement": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "then": "the prompt delivered with the operator's message states that the Hub's procedure governs and that no other specification workflow applies",
+      "when": "a run is triggered with a specification document open"
+    },
+    {
+      "given": "",
+      "key": "ac89",
+      "requirement": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "then": "the prompt directs the agent to interview in that reply and stop for the operator's answer directs it not to answer its own unanswered questions",
+      "when": "a run is triggered with a document in the exploring phase"
+    },
+    {
+      "given": "",
+      "key": "ac90",
+      "requirement": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "then": "the prompt directs the agent to rename the document once it knows what it is about",
+      "when": "a run is triggered with a document in the exploring phase"
+    },
+    {
+      "given": "",
+      "key": "ac91",
+      "requirement": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "then": "the message stored for that turn is what the operator wrote, without it",
+      "when": "a turn carries the notice"
+    },
+    {
+      "given": "",
+      "key": "ac92",
+      "requirement": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "then": "the prompt carries no specification notice",
+      "when": "a run is triggered with no specification document open"
+    },
+    {
+      "given": "",
+      "key": "ac93",
+      "requirement": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "then": "the prompt names how to write the document but does not direct an interview",
+      "when": "a run is triggered with an approved document open"
+    },
+    {
+      "given": "",
+      "key": "ac127",
+      "requirement": "authoring-assistance-is-scoped-away-from-performing-discover",
+      "then": "the run has no file-edit tool for that turn, and its notice says to record the discovery with create_task",
+      "when": "an agent is triggered with a specification document open and, during the turn, finds code that needs changing"
+    },
+    {
+      "given": "",
+      "key": "ac128",
+      "requirement": "authoring-assistance-is-scoped-away-from-performing-discover",
+      "then": "the run still has no file-write tool available for that turn",
+      "when": "an agent told the tool-protocol surface is triggered with a specification document open and a permission posture that would otherwise let every tool call proceed without a prompt"
+    },
+    {
+      "given": "",
+      "key": "ac129",
+      "requirement": "authoring-assistance-is-scoped-away-from-performing-discover",
+      "then": "that write is allowed where the system answers the run's write requests, and a write anywhere else in the turn is refused",
+      "when": "an agent told the call command is triggered with a specification document open, and writes an arguments file in its calls directory"
+    },
+    {
+      "given": "",
+      "key": "ac130",
+      "requirement": "authoring-assistance-is-scoped-away-from-performing-discover",
+      "then": "its tool surface is exactly what it would be without this requirement in effect",
+      "when": "an agent is triggered with no specification document open"
+    },
+    {
+      "given": "a Codex agent on its default app-server transport, in any permission posture",
+      "key": "a-codex-app-server-spec-turn-keeps-no-write-tools",
+      "requirement": "authoring-assistance-is-scoped-away-from-performing-discover",
+      "then": "its thread starts read-only and never under the never approval policy; a file change or a sandbox escape it asks for is declined (under Ask me a command still goes to the operator), except a .json arguments file in its calls directory and exactly one aw-tool invocation, which are accepted; its MCP tool calls to the Hub are unchanged",
+      "when": "its turn is triggered with a specification document open"
+    },
+    {
+      "given": "a project whose only open agent is the author",
+      "key": "ac222",
+      "requirement": "the-exploring-interview-asks-how-the-change-will-be-built",
+      "then": "its context names the project's open agents, the author among them it is instructed to ask how the change will be built",
+      "when": "the author's exploring turn starts"
+    },
+    {
+      "given": "a roadmap document being explored",
+      "key": "ac223",
+      "requirement": "the-exploring-interview-asks-how-the-change-will-be-built",
+      "then": "its context and its turn notice do not ask how the work will be built",
+      "when": "its author's exploring turn starts"
+    },
+    {
+      "given": "the tool description, the exploring duty, and the shim/MCP/HTTP tool sections",
+      "key": "f509-taught",
+      "requirement": "the-planner-is-taught-files-and-ordering",
+      "then": "each names `files` and `depends_on` and the same-path chaining rule",
+      "when": "each is read"
+    },
+    {
+      "given": "a scratch Hub on its own port and fresh database with a Haiku agent and a new change document (scripts/drive/d1009_step_journey.py)",
+      "key": "a-spec-is-written-one-step-at-a-time-drive",
+      "requirement": "a-spec-is-written-one-step-at-a-time-one-step-briefing",
+      "then": "intake's briefing holds intake's instructions and not acceptance's; the agent asked one question per ask_user; the document records size small and step requirements-and-acceptance after the move; the fresh conversation's briefing is that step's and its turn writes requirements with criteria. Fails on today's Hub at the first check (no step).",
+      "when": "the drive reads /agent-context for the document, asks the agent for a /ping route, answers each ask_user, says the work is small, then chooses continue in a fresh conversation"
+    },
+    {
+      "given": "a document at each step",
+      "key": "a-spec-is-written-one-step-at-a-time-only-current",
+      "requirement": "a-spec-is-written-one-step-at-a-time-one-step-briefing",
+      "then": "it contains that step's duty marker and no other step's",
+      "when": "the briefing is rendered"
+    },
+    {
+      "given": "every step's duty",
+      "key": "a-spec-is-written-one-step-at-a-time-asks",
+      "requirement": "a-spec-is-written-one-step-at-a-time-step-asks-to-advance",
+      "then": "it names what the step writes and the three choices through ask_user",
+      "when": "it is read"
+    },
+    {
+      "given": "a document moved to tasks in one conversation",
+      "key": "a-spec-is-written-one-step-at-a-time-fresh",
+      "requirement": "a-spec-is-written-one-step-at-a-time-resume-anywhere",
+      "then": "its briefing is the tasks step's",
+      "when": "a turn starts in a new conversation, with another agent"
+    },
+    {
+      "given": "the intake duty",
+      "key": "a-spec-is-written-one-step-at-a-time-size-told",
+      "requirement": "a-spec-is-written-one-step-at-a-time-intake-sizes",
+      "then": "it asks one question per ask_user and requires the size and reason before advancing",
+      "when": "it is read"
+    },
+    {
+      "given": "the acceptance and tasks duties",
+      "key": "a-spec-is-written-one-step-at-a-time-acceptance-duty",
+      "requirement": "a-spec-is-written-one-step-at-a-time-acceptance-step",
+      "then": "acceptance asks for how-to-check, who checks and the drive per MUST; tasks makes task 1 the drive, recorded failing",
+      "when": "they are read"
+    },
+    {
+      "given": "a document at acceptance",
+      "key": "a-spec-is-written-one-step-at-a-time-preview",
+      "requirement": "a-spec-is-written-one-step-at-a-time-context-preview",
+      "then": "the answer equals the briefing a turn on that document receives",
+      "when": "GET /agent-context?agent=a&spec_document=<path>"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "9c1ed2bb4fe225f5d4576ea4a9f3bc1601b0ce939e8d7cd13deebf21cb59253e",
+      "FR-10": "80378a850a20ccd96cc387f3174e8572636c596372f3abd9058f232571209085",
+      "FR-11": "7b42e8765249329ca1e5dcf82d0abd081fc62b3ecfd235d6fd8cdda00b926ecb",
+      "FR-12": "9728f82ef31d86e8138b5a2506e4136cb3ebeb9de89e433da5b89cfecafa54fd",
+      "FR-13": "73ec5c755dca04d7f763aa116b191292cae2ab86466bcea54e7bc285a6caf567",
+      "FR-14": "cf32fd3254e7ac5cf09b5cabeea27e9e07b424640f2bc1aaad478b81c4f69dfa",
+      "FR-15": "e365b04d0fe26c8f2f4f9e23e5beb8c365c67579590dc4a8c386b37e88705f98",
+      "FR-16": "7d22e76b0e02a5857390169250b8db55fadcb08caeac8b41c7ad1b0080386c89",
+      "FR-17": "dd756c373055d79fd1459e8ebff331831041457f1fc2f9775be5ca859048f7fc",
+      "FR-18": "543cd5269c55c654fd1828847d4edbaa09cb6ee6732e5107dad6512327f96034",
+      "FR-19": "5c8a8d7ebce83f1932f83cb176d348997c0ae3a7b2dd86286848f8e3ac4ba368",
+      "FR-2": "68edec3be0ca259f2ad52c1cf67997b26c9f3316f38a0aa017276288f5bc829e",
+      "FR-20": "a61e594b40d809f137f681625c33ebffb8bd59fa87376ddbb96733b63801ac1c",
+      "FR-21": "a0bec4a6d5eb568c08f4620a764da10f4bf2602dc2928c9272aa468d54b1973c",
+      "FR-22": "1ca8d3a245a31f95b4eaf938642989889399c328d9349cc6a7da45f4fd2a4b95",
+      "FR-3": "ffc6f55ce539912c79844a531cce01507c3f7c1b6fcbb66c06d9a357db9a8142",
+      "FR-4": "6aa65cdc5ffa3cfb23055e4fd59c66406d6649b949b3965d1924f4649b6dcc74",
+      "FR-5": "50527755b7316342bccd5d8f365c1afec72cce261b6d331edd54293326ddfd72",
+      "FR-6": "a641ad895bfcba9557fe391d0be0835f46631cbb14a639ac8940a997dee6dd7f",
+      "FR-7": "8b34e837992210b26bf8ed4339a1db9b075b845f1165adffa54a50718380a6b6",
+      "FR-8": "b2fcffc5ae0e9dfc3171dcad2628cd28b3285bffd501001745b2beeef5905af0",
+      "FR-9": "3f0d78af3319472281c1f2eefe4ca1fc55af248d6248f2349e787a5b60b202bf"
+    },
+    "high_water": 22,
+    "requirements": {
+      "a-spec-is-written-one-step-at-a-time-acceptance-step": "FR-21",
+      "a-spec-is-written-one-step-at-a-time-context-preview": "FR-22",
+      "a-spec-is-written-one-step-at-a-time-intake-sizes": "FR-20",
+      "a-spec-is-written-one-step-at-a-time-one-step-briefing": "FR-17",
+      "a-spec-is-written-one-step-at-a-time-resume-anywhere": "FR-19",
+      "a-spec-is-written-one-step-at-a-time-step-asks-to-advance": "FR-18",
+      "a-specification-document-opens-beside-a-conversation": "FR-4",
+      "a-specification-turn-is-announced-with-the-turn-not-only-bef": "FR-13",
+      "authoring-assistance-is-scoped-away-from-performing-discover": "FR-14",
+      "n1": "FR-7",
+      "n2": "FR-8",
+      "n3": "FR-9",
+      "n4": "FR-10",
+      "n5": "FR-11",
+      "the-agent-is-told-which-document-the-operator-is-viewing": "FR-3",
+      "the-exploring-interview-asks-how-the-change-will-be-built": "FR-15",
+      "the-operator-can-start-an-exploration-by-creating-a-document": "FR-6",
+      "the-planner-is-taught-files-and-ordering": "FR-16",
+      "the-specification-workspace-reuses-the-agent-s-conversation": "FR-2",
+      "the-specification-workspace-uses-the-one-composer": "FR-1",
+      "the-turn-context-states-the-phase-and-holds-without-a-charte": "FR-12"
+    },
+    "retired": {
+      "the-conversation-surface-is-legible-at-every-width-it-is-off": "FR-5"
+    }
+  },
+  "design": "D1 One surface. Specification work is a property of the ordinary conversation, not a screen: a separate chat could not render question, permission or checkpoint cards, and the authoring flow needs all three.\n\nD2 Document as turn context. The attached document travels as `spec_document` on the trigger, is stored on the queued entry, and is rendered into the turn context (plus a short notice in the turn's own prompt). It is never written into the operator's message, which is the durable record of what they said.\n\nD3 Attachment lives in the URL. The attached document is part of the conversation destination, so reload and links restore it, and it follows the operator across agents in a project. Reading tabs are separate from the attachment; closing a tab never detaches.\n\nD4 Exploration is declared. One press creates an empty `exploring` document under a Hub-minted placeholder name and attaches it; the agent renames it once the subject is known. A refused first send withdraws the document it created.\n\nD5 Authoring, not discovery. A turn with a document open is told its phase and duty and that the Hub's procedure alone governs the document, and is given no file-edit tools for that turn; the document changes only through submission.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/__tests__/specChatSurface.test.tsx — one composer, questions/permissions, no agent selector, spec control, closing a tab does not detach",
+      "hub/tests/test_spec_document_context.py — document named / omitted / unknown path / stored on queued entry / unsafe path refused",
+      "hub/tests/test_spec_procedure_precedence.py — holds without a charter",
+      "hub/tests/browser/test_panel_shell.py and test_human_only_halves.py — shell placement, tab close, width bounds",
+      "hub/ui/src/__tests__/newConversationSurface.test.tsx — armed exploration and F330 withdrawal",
+      "hub/tests/test_spec_naming.py — placeholder path minting"
+    ],
+    "limits": [
+      "No automated check that every composer control is unclipped at the minimum width; the browser test checks the shell's bounds and horizontal overflow only."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "An operator authoring or reading a specification needs the agent working with them to know which document they mean and what phase it is in, and needs to answer the agent's questions and permission requests while doing so. A separate specification chat surface could not show those cards and duplicated the composer, so this capability defines the specification work as a property of the ordinary conversation surface.",
+  "requirements": [
+    {
+      "key": "the-specification-workspace-uses-the-one-composer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The authoring flow depends on the agent being able to ask the operator questions and request permissions; only the shared surface renders those cards. The agent is whichever conversation the operator is in, so a second agent picker would contradict navigation.",
+      "statement": "A conversation with a specification document attached or open SHALL use the same composer, banner stack and conversation transcript as any other agent conversation, and MUST NOT provide its own message input, run trigger, output rendering or agent selector."
+    },
+    {
+      "key": "the-specification-workspace-reuses-the-agent-s-conversation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A thread's relationship to a document is the attachment the operator makes, not a category the thread was born into. The `spec` origin value is accepted by the schema but has no defined scope, so nothing produces it.",
+      "statement": "Specification work SHALL happen in the conversation the destination names; a message sent with no conversation named SHALL create an ordinary conversation with origin `operator`, and the Hub MUST NOT create a conversation with the `spec` origin."
+    },
+    {
+      "key": "the-agent-is-told-which-document-the-operator-is-viewing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The message is the durable record of what the operator said; turn context is rebuilt each turn and read identically by every runner. A path that resolves to nothing is a stale client value, and naming it would be a guess. The phase statement is code-owned so that it holds with no charter bound.",
+      "statement": "When a turn is triggered with a specification document attached, the Hub SHALL name that document in the canonical turn context, with its phase and that phase's obligation, and MUST NOT add it to the stored operator message; when no document is attached, or the path names no document in this project, the context SHALL name none."
+    },
+    {
+      "key": "a-specification-document-opens-beside-a-conversation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Tidying the reading pane is not an edit to what the agent is working against: the attachment decides the next turn's context and restricts the agent's file writes. An exploration leaves an artifact, so a detach that discarded it would be a trap.",
+      "statement": "The attached specification document SHALL open in a tab of the panel shell beside the conversation, SHALL be part of the conversation's URL destination so a reload restores it, and closing its tab MUST NOT detach it; only the composer's own detach control detaches it, and detaching MUST NOT delete the document."
+    },
+    {
+      "key": "the-operator-can-start-an-exploration-by-creating-a-document",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An exploration is declared, not detected. Creating the document up front gives later propose and approve actions a subject, and the Hub mints the path because nobody yet knows the subject; the agent renames it once the interview settles it.",
+      "statement": "The operator SHALL be able to start an exploration from the composer with one action that creates an empty `exploring` document under a Hub-minted placeholder path and attaches it to the conversation; the Hub MUST NOT infer an exploration from conversation content."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The first message decides how the agent frames the exploration, so it must already carry the document; a refused send must not leave an empty placeholder behind on each retry.",
+      "statement": "When a new conversation is started with an exploration armed, the document SHALL be created before the first turn is triggered and sent with it, and if the trigger is refused or fails the client SHALL delete that document."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The general framing — an open document is context, not an instruction — is wrong for a freshly started exploration, and following it produced a second, orphaned document every time.",
+      "statement": "When the attached document is an `exploring` document with no requirements yet, the turn context SHALL tell the agent that this document is the one it is interviewing for and that it must submit to that path rather than create another document."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One definition of a legal specification path serves both writes and reads, and a queued message must not lose the context the operator sent it with.",
+      "statement": "The trigger SHALL validate `spec_document` against the specification path contract, refusing an unsafe path, SHALL treat an empty string as no document, and SHALL store the document on the queued entry so a message delivered later still carries it."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A document is what the operator is working on, not a property of the thread; but arriving from project-level work should open nothing, because the memory is of what is on screen.",
+      "statement": "The attached document SHALL stay attached when the operator moves to another agent or conversation in the same project, SHALL stay detached when they move with none attached, SHALL survive a round trip through agent settings, and SHALL NOT be carried in from a project-level page."
+    },
+    {
+      "key": "n5",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Reading a document and directing the agent at it are different acts; only attaching changes what the next turn is written against.",
+      "statement": "Opening a document from the panel's specification index for reading SHALL NOT change which document is attached to the conversation, and more than one document MAY be open for reading at once."
+    },
+    {
+      "key": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A project with no charter is the most exposed case, so precedence cannot depend on a charter; and an agent told only what not to do has nowhere to put what it found.",
+      "statement": "With a document open, the code-owned turn context SHALL name the document, its phase and that phase's duty, SHALL say that the Hub's procedure alone governs the document and that another specification workflow the agent finds is to be raised with the operator rather than followed, naming no product, and SHALL do so whether or not a charter is bound; with no document open it SHALL say nothing about specification procedure."
+    },
+    {
+      "key": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A competing procedure is matched against the operator's words when they arrive; a countermeasure only in standing context loses to it.",
+      "statement": "With a document open, the turn's own prompt SHALL carry a short notice beside the operator's message that the Hub's procedure overrides any other specification workflow and that the turn has no file-write tool; in `exploring` it SHALL also direct the agent to interview in that reply and stop, not to answer its own questions, and to rename the document once its subject is known; the notice SHALL NOT become part of the operator's recorded message, and a turn with no document open SHALL carry none."
+    },
+    {
+      "key": "authoring-assistance-is-scoped-away-from-performing-discover",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Authoring a specification is not implementing it. Shell tools are not removed, so on a runner whose writes nothing answers this is a strong nudge rather than a sandbox, stated rather than hidden.",
+      "statement": "A run triggered with a document open SHALL NOT be given its harness's file-edit tools for that turn, whatever its permission posture, except that a run told to reach the plane through the call command MAY write its arguments files in its calls directory; the turn SHALL be told to record discovered implementation work as a task."
+    },
+    {
+      "key": "the-exploring-interview-asks-how-the-change-will-be-built",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Only a change document is required to answer, and a submission replaces the whole document, so an answer left out of a later submission is lost.",
+      "statement": "While a change document is explored, the turn SHALL list the project's open agents by name and SHALL instruct the author to ask how the change will be built (recommending a flow when the work splits into tasks, and asking its default agent, stop condition and schedule) and to include the answer as `delivery` in every later submission; an author exploring any other kind SHALL NOT be asked."
+    },
+    {
+      "key": "the-planner-is-taught-files-and-ordering",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A planner on the call command never saw the text that taught it, so the overlap warning could not fire for it (F509).",
+      "statement": "The `submit_spec_document` tool description, the exploring-phase duty text and the run prompt's tool section (shim, MCP and HTTP renderings alike) MUST state that a task lists the repo-relative paths it will edit in `files` and that tasks sharing a path are chained with `depends_on`."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-one-step-briefing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Instruction adherence falls as instructions grow; each step gets only what it needs.",
+      "statement": "A turn on an exploring change document MUST be briefed with the current step's instructions and one line naming the journey's steps and the current one, and MUST NOT carry another step's instructions."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-step-asks-to-advance",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The agent proposes advancing; the operator decides (2026-10-08).",
+      "statement": "Every step's instructions MUST say what the step writes into the document and MUST tell the agent, once that is written, to ask the operator through ask_user whether to continue here, continue in a fresh conversation, or stop, and to advance only on either continue."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-resume-anywhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Drop it today, continue another day.",
+      "statement": "A turn in any conversation on the document, including a new one or another agent's, MUST be briefed from the document's recorded step and size."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-intake-sizes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Sizing is announced so it can be overridden.",
+      "statement": "The intake step's instructions MUST have the agent ask one question at a time through ask_user, offering choices where it can, and record the size with its reason before asking to advance; the size MUST be told to the operator."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-acceptance-step",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Acceptance is the high-attention step; the drive-first habit becomes the product's.",
+      "statement": "The acceptance step's instructions MUST have the agent agree with the operator, for each MUST requirement, at least one criterion with how to check it and whether an agent or only the operator can, and name the acceptance drive; the tasks step's instructions MUST make the first task write that drive and record it failing."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-context-preview",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "What an agent is told becomes observable, by the drive and by the operator.",
+      "statement": "GET /agent-context MUST accept a spec_document and return the briefing a turn on that document receives."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The conversation surface used while a specification document is attached or open",
+      "The `spec_document` carried by a trigger, how it is stored on the queued entry and reaches the turn context",
+      "Attaching, detaching and reading specification documents beside a conversation",
+      "Starting an exploration from the composer or the new-conversation surface",
+      "What a turn with a document open is told (phase, duty, the procedure's precedence, the turn notice) and the tools it is denied",
+      "The exploring interview's questions about how the change will be built, and teaching the planner task files and ordering"
+    ],
+    "non_goals": [
+      "The project-level Spec page and the corpus navigation it hosts (spec-corpus-map)",
+      "Phase transitions, payload validation and the submission's warnings (spec-document-authority)",
+      "An agent creating its own document (agent-document-creation)",
+      "The conversation transcript, drafts and the surface's legibility at every width (agent-conversation-workspace)",
+      "Composer triggers and the model picker (agent-composer); the panel shell's tabs and resizing (conversation-side-panel)",
+      "The rest of the canonical turn context (agent-context-onboarding)"
+    ]
+  },
+  "summary": "Working on a specification document from inside an agent conversation. A specification document opens in a tab beside the ordinary conversation and uses its one composer; the document the operator has attached travels with each message as turn context, never as message text; and the operator starts an exploration by creating an empty document from the composer. It also fixes what such a turn is told and given: the document's phase and duty, that the Hub's procedure overrides any other specification workflow, no file-edit tools, and, while a change is explored, how it will be built and how tasks declare their files.",
+  "tasks": [],
+  "title": "Spec chat session"
+}

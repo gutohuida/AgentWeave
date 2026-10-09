@@ -1,0 +1,412 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "an untracked file under `spec/` whose payload declares a title and kind",
+      "key": "ac1",
+      "requirement": "adopting-a-document-that-already-exists-on-disk",
+      "then": "the Hub answers 201 with a row whose title and kind are the payload's, the response carries the document id, the path, and the requirement-index counts",
+      "when": "the operator adopts its path"
+    },
+    {
+      "given": "an untracked document declaring requirements",
+      "key": "ac2",
+      "requirement": "adopting-a-document-that-already-exists-on-disk",
+      "then": "each requirement resolves by its identifier through the requirement lookup against the new row",
+      "when": "it is adopted"
+    },
+    {
+      "given": "an untracked change document whose file records phase `exploring`",
+      "key": "ac3",
+      "requirement": "adopting-a-document-that-already-exists-on-disk",
+      "then": "the transition succeeds against the adopted row",
+      "when": "it is adopted and the operator then closes exploration"
+    },
+    {
+      "given": "a document on disk",
+      "key": "ac4",
+      "requirement": "adoption-never-modifies-the-file",
+      "then": "its bytes are identical to what they were before the call",
+      "when": "it is adopted successfully"
+    },
+    {
+      "given": "a file adoption will refuse (no payload, already tracked, or any other reason)",
+      "key": "ac5",
+      "requirement": "adoption-never-modifies-the-file",
+      "then": "its bytes are identical to what they were before the call",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a path with no file",
+      "key": "ac6",
+      "requirement": "adoption-never-modifies-the-file",
+      "then": "the adoption is refused and no file is created",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a `spec/` tree of documents",
+      "key": "ac7",
+      "requirement": "adoption-never-modifies-the-file",
+      "then": "every file in the tree is byte-identical to what it was before the call",
+      "when": "corpus-wide adoption runs"
+    },
+    {
+      "given": "a file whose status is `approved` and whose kind is `change-spec`",
+      "key": "ac8",
+      "requirement": "phase-is-derived-from-the-document-s-own-status",
+      "then": "the row's phase is `approved` and `phase_source` is `read`",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a file with a valid payload and no `aw-spec-status`",
+      "key": "ac9",
+      "requirement": "phase-is-derived-from-the-document-s-own-status",
+      "then": "the phase is `current` for a capability and `exploring` otherwise, `phase_source` is `defaulted`, and `unrecognised_phase` is null",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a file whose status names no known phase",
+      "key": "ac10",
+      "requirement": "phase-is-derived-from-the-document-s-own-status",
+      "then": "the phase is the kind's default and `unrecognised_phase` carries the value the file held",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a capability file whose status reads `approved`, or a non-capability file whose status reads `current`",
+      "key": "ac11",
+      "requirement": "phase-is-derived-from-the-document-s-own-status",
+      "then": "it is adopted rather than refused, at the kind's default phase, with the file's value reported in `unrecognised_phase`",
+      "when": "it is adopted"
+    },
+    {
+      "given": "an HTML file under `spec/` with no payload block",
+      "key": "ac12",
+      "requirement": "a-file-with-no-readable-payload-is-refused",
+      "then": "the Hub answers 422 with code `payload_absent` and no row exists for the path",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a payload block that is not valid JSON or not an object",
+      "key": "ac13",
+      "requirement": "a-file-with-no-readable-payload-is-refused",
+      "then": "the Hub answers 422 with code `payload_unreadable` and no row exists for the path",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a payload with a blank or missing title, or an unknown kind",
+      "key": "ac14",
+      "requirement": "a-file-with-no-readable-payload-is-refused",
+      "then": "the Hub answers 422 with code `payload_identity_missing`, naming the allowed kinds where the kind is wrong, and no row is created",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a path that already has a row",
+      "key": "ac15",
+      "requirement": "an-already-tracked-path-is-refused-with-its-disagreements-re",
+      "then": "the Hub answers 409 `document_exists` and the row and the file are unchanged",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a tracked document whose file's title, kind or phase differs from its row",
+      "key": "ac16",
+      "requirement": "an-already-tracked-path-is-refused-with-its-disagreements-re",
+      "then": "`differences` names each differing field with the file's value and the row's value",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a tracked capability whose file status was hand-edited to `exploring`",
+      "key": "ac17",
+      "requirement": "an-already-tracked-path-is-refused-with-its-disagreements-re",
+      "then": "`differences` reports phase file `exploring` against row `current`",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a tracked document whose file agrees with its row",
+      "key": "ac18",
+      "requirement": "an-already-tracked-path-is-refused-with-its-disagreements-re",
+      "then": "the refusal carries an empty `differences` list",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a `spec/` tree of untracked documents with payloads",
+      "key": "ac19",
+      "requirement": "a-corpus-is-adoptable-in-one-operation",
+      "then": "a row is created for each, and each path is listed in `adopted`",
+      "when": "corpus-wide adoption runs"
+    },
+    {
+      "given": "a tree that also holds a file with no payload",
+      "key": "ac20",
+      "requirement": "a-corpus-is-adoptable-in-one-operation",
+      "then": "that path is in `skipped` with its reason and the other documents are still adopted",
+      "when": "corpus-wide adoption runs"
+    },
+    {
+      "given": "a corpus already adopted",
+      "key": "ac21",
+      "requirement": "a-corpus-is-adoptable-in-one-operation",
+      "then": "nothing is adopted, every path is skipped as `document_exists`, and no duplicate row is created",
+      "when": "corpus-wide adoption runs again"
+    },
+    {
+      "given": "discovery truncates the tree",
+      "key": "ac22",
+      "requirement": "a-corpus-is-adoptable-in-one-operation",
+      "then": "the truncation diagnostic is returned in `diagnostics`",
+      "when": "corpus-wide adoption runs"
+    },
+    {
+      "given": "a path outside `spec/`",
+      "key": "ac23",
+      "requirement": "adoption-only-reaches-documents-inside-the-project-s-spec-tr",
+      "then": "the Hub answers 400 `unsafe_document_path` and no row is created",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a path that traverses outside the workspace",
+      "key": "ac24",
+      "requirement": "adoption-only-reaches-documents-inside-the-project-s-spec-tr",
+      "then": "it is refused before the file is read",
+      "when": "it is adopted"
+    },
+    {
+      "given": "a document reindex reported as `unindexable_document`",
+      "key": "ac25",
+      "requirement": "an-adopted-document-becomes-indexable",
+      "then": "it appears in `spec/index.json` with its payload's title and kind and is no longer reported as unindexable",
+      "when": "it is adopted and the corpus is reindexed"
+    },
+    {
+      "given": "an adopted document",
+      "key": "ac26",
+      "requirement": "an-adopted-document-becomes-indexable",
+      "then": "its entry carries a non-null document id and its phase",
+      "when": "the specification tree is listed"
+    },
+    {
+      "given": "the browser lists a file with no document record",
+      "key": "ac27",
+      "requirement": "an-untracked-document-is-adoptable-from-where-it-is-listed",
+      "then": "a record exists for it, the row no longer offers Adopt, and the strip says a rebuild files it with Rebuild as the primary action",
+      "when": "the operator presses Adopt on its row"
+    },
+    {
+      "given": "an adopt that is refused as `document_exists` with differences",
+      "key": "ac28",
+      "requirement": "an-untracked-document-is-adoptable-from-where-it-is-listed",
+      "then": "the row shows the Hub's message and each field as file value versus record value",
+      "when": "the refusal arrives"
+    },
+    {
+      "given": "several untracked files",
+      "key": "ac29",
+      "requirement": "an-untracked-document-is-adoptable-from-where-it-is-listed",
+      "then": "the result counts what was adopted and what was already tracked, lists each other skip with its reason, and shows each diagnostic",
+      "when": "the operator presses Adopt all"
+    },
+    {
+      "given": "a run-scoped credential",
+      "key": "ac30",
+      "requirement": "n1",
+      "then": "the request is refused and no row is created",
+      "when": "it calls either adoption route"
+    },
+    {
+      "given": "an operator request whose body adds a `title` or `kind`",
+      "key": "ac31",
+      "requirement": "n1",
+      "then": "the Hub answers 422 and no row is created",
+      "when": "it is sent to `POST /documents/adopt`"
+    },
+    {
+      "given": "an untracked document",
+      "key": "ac32",
+      "requirement": "n2",
+      "then": "the row's `content_digest` equals the digest of the file as found and the history holds an `adopted` event",
+      "when": "it is adopted"
+    },
+    {
+      "given": "an untracked document",
+      "key": "ac33",
+      "requirement": "n2",
+      "then": "a `spec_updated` event is broadcast for the project",
+      "when": "it is adopted"
+    },
+    {
+      "given": "",
+      "key": "ac181",
+      "requirement": "adopting-a-document-that-already-exists-on-disk",
+      "then": "a row is created and a starter file is written at that path the document's title and kind are those the caller supplied",
+      "when": "the operator creates a new document at a path where no file exists"
+    },
+    {
+      "given": "",
+      "key": "ac183",
+      "requirement": "adopting-a-document-that-already-exists-on-disk",
+      "then": "the creation is refused, as it is today",
+      "when": "the operator creates a document at a path that already has a row"
+    },
+    {
+      "given": "",
+      "key": "ac184",
+      "requirement": "adopting-a-document-that-already-exists-on-disk",
+      "then": "each document is tracked with the title, kind and phase recorded in its own file",
+      "when": "a project's spec/ tree is present with no spec_documents rows, and the operator adopts the corpus"
+    },
+    {
+      "given": "",
+      "key": "ac185",
+      "requirement": "adopting-a-document-that-already-exists-on-disk",
+      "then": "the row's phase is unchanged the difference is reported as drift rather than applied",
+      "when": "an adopted document's file is edited outside the Hub so that its recorded phase differs from the row's"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "cabc662022494944a01e6ff1dde65db8a7e8c627c02af164dc6b302f25f9859c",
+      "FR-10": "337b42098d051f9221f8033f106b6e351d70466c4ba75b1cc6c444cba1b6a615",
+      "FR-11": "b68cd3135997f7e2b39e59124e46aa10dd9ef2a96e8cddbcc8e5dd3bb00d614b",
+      "FR-2": "7d510a9c2b0fbcad3e5058e8a356240997968f85db50de0e734952b50a41345e",
+      "FR-3": "99bd6f3a01a45d84af9baf466680c5a8d7f8d0a866781f90aecd870518abe743",
+      "FR-4": "a08f8b1096762f0446821a7a16e58146a9c83632c7013ca2eb82e2569609052d",
+      "FR-5": "c0fc0fd6aae66a0836afbab6f0982a57ede934669a4194880d6be61ff915962b",
+      "FR-6": "899b89400f7d3eba398ee69932f77c052b81c93e9928d6d50220ba7f03ad0c2e",
+      "FR-7": "5d439d254f5ee86780e4e13eb704ce5037730e8937d5ba5b5d917e0f70edbb00",
+      "FR-8": "d26593f629818249de08c53be2e235f845efc7942c9b0dbe773165db02b7c673",
+      "FR-9": "91b22fdb4279bbf1a8d9e278be4009872fb6d6edf097f6c3ff17586e69cc5dc3"
+    },
+    "high_water": 11,
+    "requirements": {
+      "a-corpus-is-adoptable-in-one-operation": "FR-6",
+      "a-file-with-no-readable-payload-is-refused": "FR-4",
+      "adopting-a-document-that-already-exists-on-disk": "FR-1",
+      "adoption-never-modifies-the-file": "FR-2",
+      "adoption-only-reaches-documents-inside-the-project-s-spec-tr": "FR-7",
+      "an-adopted-document-becomes-indexable": "FR-8",
+      "an-already-tracked-path-is-refused-with-its-disagreements-re": "FR-5",
+      "an-untracked-document-is-adoptable-from-where-it-is-listed": "FR-9",
+      "n1": "FR-10",
+      "n2": "FR-11",
+      "phase-is-derived-from-the-document-s-own-status": "FR-3"
+    },
+    "retired": {}
+  },
+  "design": "D1 Separate route. Adoption is `POST /documents/adopt`, not a flag on `POST /documents`: creation renders a starter file over its path, so a missing flag would destroy the document it was meant to adopt.\n\nD2 Identity from the file. Title and kind come from the `aw-spec-payload` block (payload wins over the meta tag for kind; the meta tag fills a kind the payload omits); phase comes from the `aw-spec-status` meta tag because the payload carries none. The request carries only a path.\n\nD3 Default, report, never refuse over phase. An absent, unknown or kind-incompatible status falls back to the kind's creation default and is reported as `defaulted`, with the file's value in `unrecognised_phase`.\n\nD4 Refuse rather than update. An already-tracked path is refused with a field-by-field difference list; choosing whose version wins is left to the operator. Phase is compared as declared, not as defaulted.\n\nD5 A sweep never fails as a whole. Each discovered path is adopted or skipped independently, discovery diagnostics are passed through, and re-running is idempotent because a tracked path is refused.\n\nD6 Baseline digest. The digest of the bytes adoption read becomes the row's `content_digest`, so later outside edits are detectable.\n\nRefusal status mapping (`hub/hub/api/v1/spec.py`): `unsafe_document_path` 400; `document_exists` 409; `file_missing`, `file_unreadable`, `payload_absent`, `payload_unreadable`, `payload_identity_missing` 422.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_spec_adoption_identity.py — identity, phase defaulting, refusal codes",
+      "hub/tests/test_spec_adoption_api.py — single adoption route, refusals, differences, operator-only",
+      "hub/tests/test_spec_adoption_corpus.py — sweep, idempotence, byte-identical files, no writer imported",
+      "hub/tests/test_spec_adoption_downstream.py — requirements resolve, transitions, reindex files the document",
+      "hub/ui/src/__tests__/specCorpusStrip.test.tsx — Adopt / Adopt all surface (1.6, 1.7, 1.11)"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "A specification document is a committed file plus a machine-local `spec_documents` row. A clone, a migration or a restored machine yields files with no rows, and every lifecycle, requirement, coverage and task operation is keyed on the row, so such a corpus is readable but inert.",
+  "requirements": [
+    {
+      "key": "adopting-a-document-that-already-exists-on-disk",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The file is committed and travels between machines; the row is machine-local. Every lifecycle, requirement, coverage and task operation is keyed on the row, so a file without one is readable but inert.",
+      "statement": "The Hub SHALL create a `spec_documents` row for a specification file under `spec/` that has no row (`POST /documents/adopt`), taking the row's title and kind from the file's `aw-spec-payload` block and indexing the file's requirements against the new row, so that the adopted document is thereafter indistinguishable from one created through the Hub."
+    },
+    {
+      "key": "adoption-never-modifies-the-file",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Adoption exists to believe the file; a recovery operation that rewrites what it recovers would destroy the evidence it relies on. The adoption module imports no writer, so the property is structural.",
+      "statement": "Adoption SHALL be read-only on disk: no adoption path, single or corpus-wide, successful or refused, may write, truncate, create, rename or delete a specification file."
+    },
+    {
+      "key": "phase-is-derived-from-the-document-s-own-status",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The payload has no status key, so the rendered metadata is the only record of a lifecycle this machine never saw. Refusing over a bad status would strand a corpus over a value the operator cannot easily see; defaulting silently would pass a guess off as a reading.",
+      "statement": "Adoption SHALL take the row's phase from the file's `aw-spec-status` metadata. Where that metadata is absent, names no known phase, or names a phase the document's kind cannot hold (only a `capability` may be `current`, and a `capability` may only be `current`), adoption SHALL use the phase a newly created document of that kind receives (`current` for `capability`, `exploring` otherwise) and SHALL report the phase as defaulted, together with any value the file carried."
+    },
+    {
+      "key": "a-file-with-no-readable-payload-is-refused",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A guessed name would enter a committed file that outlives the machine that guessed it. The two missing-payload cases are refused distinctly because their remedies differ: write the document through the Hub, or repair a block that is already there.",
+      "statement": "Adoption SHALL refuse, without creating a row, a file that does not declare its own identity: one with no `aw-spec-payload` block (`payload_absent`), one whose block is not a JSON object (`payload_unreadable`), or one whose payload declares no title or a kind that is not a known document kind (`payload_identity_missing`). Adoption MUST NOT derive a title from the path."
+    },
+    {
+      "key": "an-already-tracked-path-is-refused-with-its-disagreements-re",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Which side wins is an operator decision; adoption supplies the diagnostic without taking it. Comparing the defaulted phase would report a hand-edited capability file as agreeing with its row.",
+      "statement": "Where the path already has a row, adoption MUST refuse with `document_exists` (409), MUST NOT change the row, and SHALL report every field among title, kind and phase on which the file and the row disagree, with both values; the file's phase is compared as the file declares it, not as adoption would have defaulted it. Agreement SHALL be reported as an empty difference list."
+    },
+    {
+      "key": "a-corpus-is-adoptable-in-one-operation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A clone, a migration or a restored machine produces a corpus whose files predate its rows; one call per document is not a recovery procedure, and one hand-written file must not block the rest. A truncated sweep presented as complete is the worst outcome.",
+      "statement": "The Hub SHALL adopt every adoptable document discovered beneath `spec/` in one operation (`POST /spec/adopt`) that never fails as a whole: each discovered path SHALL be reported as adopted or skipped with its reason, discovery's diagnostics (including truncation) SHALL be returned, and a repeated run SHALL adopt nothing and create no duplicates."
+    },
+    {
+      "key": "adoption-only-reaches-documents-inside-the-project-s-spec-tr",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Adoption reads files the caller names; it must not become a way to read outside the project's specification tree.",
+      "statement": "Adoption SHALL validate the path as a spec path (beginning `spec/`, ending `.html`, no dot, hidden or empty segment) and resolve it through the project workspace before reading the file, refusing anything else as `unsafe_document_path` (400)."
+    },
+    {
+      "key": "an-adopted-document-becomes-indexable",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Before adoption a file is reported as `unindexable_document`; adoption is what makes it indexable, while writing the index stays the reindex operation's job so adoption remains read-only.",
+      "statement": "An adopted document SHALL be filed into `spec/index.json` with its real title and kind by the next reindex, and SHALL appear in the specification listing with its document id and phase. Adoption itself SHALL NOT write the index."
+    },
+    {
+      "key": "an-untracked-document-is-adoptable-from-where-it-is-listed",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The browser already shows those files; showing them without a way to track them leaves documents the Hub cannot move through any phase. Listing every agreeing tracked document buries the skips that matter.",
+      "statement": "The operator's document browser SHALL offer Adopt beside each listed file that has no document record, and an \"Adopt all\" action naming how many are untracked. Each refusal SHALL be shown in the Hub's words with any field differences; a sweep's result SHALL count adopted documents, count (not list) already-tracked documents whose record agrees, list every other skip with its reason, show discovery diagnostics, and prompt the operator to rebuild the index to file what was adopted."
+    },
+    {
+      "key": "n1",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Everything about the document is read from the file. A caller able to state its identity could state it differently from the file, and a run should not bring a document into existence by writing a file next to itself.",
+      "statement": "Adoption SHALL be an operator action whose request carries only the path; a run-scoped credential MUST be refused, and a body naming any other field (title, kind, phase) MUST be refused."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Without a baseline the first outside edit after adoption would be undetectable; the digest is taken from the bytes already read so it cannot straddle an edit landing between two reads.",
+      "statement": "A successful adoption SHALL record the content digest of the bytes it read as the document's baseline, SHALL record an `adopted` event in the document's history carrying the identity it read, and SHALL broadcast `spec_updated` so open views refresh."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Adopting one document (`POST /documents/adopt`) and a whole corpus (`POST /spec/adopt`), as an operator action",
+      "Reading title, kind and phase from the file, and the refusals when it cannot",
+      "Reporting disagreement between a file and an existing row",
+      "The baseline digest, the `adopted` event and the broadcast a successful adoption records",
+      "The Adopt and Adopt-all surface in the document browser"
+    ],
+    "non_goals": [
+      "Updating an existing row from its file (an operator decision, not adoption)",
+      "Discovering documents and writing `spec/index.json` (spec-corpus-map)",
+      "Creating a new document through the Hub (spec-document-authority, agent-document-creation)"
+    ]
+  },
+  "summary": "How a specification file that exists on disk without a Hub record becomes a tracked document, one at a time or for a whole corpus, read-only and with its identity taken from the file itself.",
+  "tasks": [],
+  "title": "Spec document adoption"
+}

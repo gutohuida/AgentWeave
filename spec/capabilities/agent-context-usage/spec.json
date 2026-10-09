@@ -1,0 +1,433 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "context tokens 50,000 and a limit of 200,000",
+      "key": "ac1",
+      "requirement": "canonical-context-usage-sample",
+      "then": "its percent is 25.0, derived from the operands",
+      "when": "a measured sample is built"
+    },
+    {
+      "given": "known tokens and no trustworthy limit",
+      "key": "ac2",
+      "requirement": "canonical-context-usage-sample",
+      "then": "it keeps `context_tokens` and has no `limit_tokens` or `percent`, never zero",
+      "when": "a sample is built"
+    },
+    {
+      "given": "two Claude requests in one turn",
+      "key": "ac3",
+      "requirement": "latest-observation-replaces-rather-than-accumulates",
+      "then": "the reading is the second request's figure, not the sum",
+      "when": "both report usage"
+    },
+    {
+      "given": "a Codex report with `cachedInputTokens` inside `inputTokens`",
+      "key": "ac4",
+      "requirement": "cache-breakdowns-are-counted-according-to-provider-semantics",
+      "then": "the cache figure is in the breakdown and not added to context tokens",
+      "when": "it is mapped"
+    },
+    {
+      "given": "a Claude assistant message with input 10, cache read 1,000 and cache creation 200 on `claude-sonnet-5`",
+      "key": "ac5",
+      "requirement": "claude-context-mapping",
+      "then": "the sample is measured, `latest_request_input`, 1,210 tokens, model `claude-sonnet-5`",
+      "when": "it is parsed"
+    },
+    {
+      "given": "a `result` whose `modelUsage` lists Sonnet 5 (1,000,000) and Haiku 4.5 (200,000)",
+      "key": "ac6",
+      "requirement": "claude-context-mapping",
+      "then": "the sample's window is 1,000,000 and its model is Sonnet 5",
+      "when": "it is parsed"
+    },
+    {
+      "given": "an app-server `thread/tokenUsage/updated` with `last` input 9,000, output 1,000 and `modelContextWindow` 272,000",
+      "key": "ac7",
+      "requirement": "codex-context-mapping",
+      "then": "the sample is measured `provider_context` with 10,000 tokens against 272,000",
+      "when": "it is mapped"
+    },
+    {
+      "given": "an exec `turn.completed` on a model the catalog declares",
+      "key": "ac8",
+      "requirement": "codex-context-mapping",
+      "then": "the sample is estimated, `cumulative_delta`, against the catalog window; on an undeclared model it is unavailable",
+      "when": "it is parsed"
+    },
+    {
+      "given": "a Copilot `usage_update` with `used` 12210 and `size` 128000",
+      "key": "ac9",
+      "requirement": "copilot-context-mapping",
+      "then": "the sample is measured with 12,210 tokens against 128,000",
+      "when": "it is mapped"
+    },
+    {
+      "given": "a Copilot `usage_update` with no `size` on `claude-sonnet-5`",
+      "key": "ac10",
+      "requirement": "copilot-context-mapping",
+      "then": "the stored reading is unavailable, carries `used`, and names no limit or percent",
+      "when": "it is recorded"
+    },
+    {
+      "given": "a Copilot turn on Auto where Copilot reported it chose `mai-code-1.1-flash`",
+      "key": "ac11",
+      "requirement": "copilot-context-mapping",
+      "then": "it names `mai-code-1.1-flash`",
+      "when": "the sample is built"
+    },
+    {
+      "given": "a sample with tokens and model `claude-haiku-4-5-20251001` and no limit",
+      "key": "ac12",
+      "requirement": "context-window-size-is-resolved-in-a-stated-order",
+      "then": "it takes the catalog's 200,000 window",
+      "when": "it is recorded"
+    },
+    {
+      "given": "a sample whose provider reported a window",
+      "key": "ac13",
+      "requirement": "context-window-size-is-resolved-in-a-stated-order",
+      "then": "the reported window is kept and the catalog is not consulted",
+      "when": "it is recorded"
+    },
+    {
+      "given": "a Claude assistant message naming its model",
+      "key": "ac14",
+      "requirement": "a-measured-sample-identifies-the-model-it-measured",
+      "then": "the sample carries that model",
+      "when": "its sample is built"
+    },
+    {
+      "given": "a reading whose window cannot be resolved",
+      "key": "ac15",
+      "requirement": "unknown-context-usage-is-reported-as-unknown",
+      "then": "the app shows tokens without a bar and no warning, critical or checkpoint threshold fires",
+      "when": "it is shown and evaluated by the checkpoint policy"
+    },
+    {
+      "given": "a conversation whose model changes from Haiku 4.5 to Sonnet 5",
+      "key": "ac16",
+      "requirement": "a-conversation-whose-model-changed-reports-usage-per-turn",
+      "then": "its reading is expressed against Sonnet 5's window",
+      "when": "the next turn reports usage"
+    },
+    {
+      "given": "a session whose newest reading has no percent and an older one in the same session has one",
+      "key": "ac17",
+      "requirement": "window-metadata-observed-for-a-session-persists-across-later",
+      "then": "the older same-session reading is reported; a reading from a different session is never used",
+      "when": "the agent's reading is chosen"
+    },
+    {
+      "given": "a stored reading observed at T",
+      "key": "ac19",
+      "requirement": "session-isolation-and-reset",
+      "then": "it is ignored and not broadcast",
+      "when": "a reading for the same agent observed at or before T arrives"
+    },
+    {
+      "given": "a reading naming a provider session that belongs to a conversation",
+      "key": "ac20",
+      "requirement": "session-isolation-and-reset",
+      "then": "it is attributed to that conversation",
+      "when": "it is recorded"
+    },
+    {
+      "given": "a valid reading",
+      "key": "ac21",
+      "requirement": "canonical-context-persistence-and-delivery",
+      "then": "a `context_warning` event is stored and broadcast, and the agent summary and conversation expose the same fields",
+      "when": "it is recorded"
+    },
+    {
+      "given": "`POST /agents/{name}/context-usage`",
+      "key": "ac22",
+      "requirement": "canonical-context-persistence-and-delivery",
+      "then": "it is refused",
+      "when": "a sample with percent 150, or one contradicting its operands, is posted"
+    },
+    {
+      "given": "a stored reading",
+      "key": "ac23",
+      "requirement": "n1",
+      "then": "no new event is stored or broadcast",
+      "when": "the same measurement arrives with a newer `observed_at`"
+    },
+    {
+      "given": "a legacy `{\"percent\": 0}` with no tokens",
+      "key": "ac24",
+      "requirement": "legacy-context-compatibility",
+      "then": "it is unavailable, not a 0% bar",
+      "when": "it is normalized"
+    },
+    {
+      "given": "an estimated reading at 85%",
+      "key": "ac25",
+      "requirement": "context-state-presentation",
+      "then": "it is labelled estimated and is not shown as warning or critical",
+      "when": "it is shown"
+    },
+    {
+      "given": "a measured reading at 92%",
+      "key": "ac26",
+      "requirement": "context-state-presentation",
+      "then": "every surface shows the critical state",
+      "when": "it is shown on any context surface"
+    },
+    {
+      "given": "a runner line that yields both a text event and a context sample",
+      "key": "ac27",
+      "requirement": "context-usage-is-not-a-stream-event",
+      "then": "the text goes to the run's output and the sample only to context delivery",
+      "when": "it is recorded"
+    },
+    {
+      "given": "the open conversation has a context-usage reading",
+      "key": "acn4",
+      "requirement": "context-window-usage-is-shown-in-the-composer",
+      "then": "the header's indicator reflects that conversation's reading, not another conversation's of the same agent",
+      "when": "the conversation header renders"
+    },
+    {
+      "given": "the open conversation has no context-usage reading",
+      "key": "acn5",
+      "requirement": "context-window-usage-is-shown-in-the-composer",
+      "then": "no usage indicator and no zero value is shown",
+      "when": "the conversation header renders"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Recording a context reading",
+      "steps": [
+        "If the sample has no limit and no percent but has tokens and a model, fill the limit from the catalog (`context_window_for_model`) and derive the percent.",
+        "Attribute it to the conversation whose provider session it names, else the agent's latest open conversation.",
+        "If its `observed_at` is not newer than the agent's latest stored reading, ignore it.",
+        "If it equals the latest stored reading apart from `observed_at`, do not store or broadcast it.",
+        "Otherwise store it as a `context_warning` event and broadcast it.",
+        "Pass it to the checkpoint policy."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-19": "46c9c7309d8404bfad5727d8fa3531fef3c7269bcccf7fac652a17b0222bdbe0",
+      "FR-20": "a987832647edc3da010d640d970e429bdaeca22b21c92376d2730bc84d641dca",
+      "FR-21": "35e9aad787bb913d7c553104b0f6d13e356307670cc29c8ea8d9520095f17cee",
+      "FR-22": "9f482ad587ad96e5cd9950367818151558e6da6b15569ea2d0f52cce5f9b73e0",
+      "FR-23": "6714ccd926ff4f266c135efffe4ff76f37059c96f274d1e8276c9911dd82eecb",
+      "FR-24": "1f9f22838930be7a5865d6a6ef12cd08df625949dd385e8feffad8eae1f11436",
+      "FR-25": "1b46127774e9f4174f7736f0426ccf3b72283ac85a956809bc46269ae0343e0b",
+      "FR-26": "fd9d63c956ef3842fd04cf7457e79b333994ae8482db9d612f0723bd784662e6",
+      "FR-27": "ee4c6363e01a3c6a0c514207081d1126099bcf80f2910f9c66296c49c5ec6118",
+      "FR-28": "5e2cf5b7c10494bba0b2e7a8cfd358db51c1ea11caac727187b22a09705ecf76",
+      "FR-29": "d40eb3ae589231e090d77d4ea656ec65543581fc09712f812c43fb24c7bc3f88",
+      "FR-30": "06755d1644188ff968ea6d73294dd5f07bc41d868bf613e1ed755b55e6348f02",
+      "FR-31": "93612e8f3edd41212d0a695d036ca4e9a5bbea67d2c8619a6ae34a08ea12c4b3",
+      "FR-32": "aaa0eedd56435e88f18ec794f32ab08fc4e56dcb0deb12c6ba2554c8e05e1c8e",
+      "FR-33": "ad91bfa2a221d2046a680e5966f10125cb334e14d1484702c0d32fa977ecbe1b",
+      "FR-34": "249466e5191d602aa514d8d9421be1fda878c37e4639a81b653048d5028731a7",
+      "FR-35": "819e0ec0aa970275cbfb48b1ba3f96bad477e1fde21d67254eddc40defc3cc07",
+      "FR-36": "c4c2e676e5cb995ab4f00bc33a6bf3b85e9f8b76ad90bc6850a396ee890d5a10",
+      "FR-37": "3bc7d114e7ccb55e2dc5cb0896ca3f83818cb12913a1a05dc7df46a00adf7992",
+      "FR-38": "9a4182640ae4038958c4a7854b3dec7fa819511a085a2cdff06a50af65074683",
+      "FR-39": "7c97dbe762251e7914ab9a1cd1f763b2176dc780078d01d987ef21a10dfc8601"
+    },
+    "high_water": 39,
+    "requirements": {
+      "a-conversation-whose-model-changed-reports-usage-per-turn": "FR-33",
+      "a-measured-sample-identifies-the-model-it-measured": "FR-34",
+      "cache-breakdowns-are-counted-according-to-provider-semantics": "FR-21",
+      "canonical-context-persistence-and-delivery": "FR-26",
+      "canonical-context-usage-sample": "FR-19",
+      "claude-context-mapping": "FR-22",
+      "codex-context-mapping": "FR-23",
+      "context-state-presentation": "FR-28",
+      "context-usage-is-not-a-stream-event": "FR-29",
+      "context-window-size-is-resolved-in-a-stated-order": "FR-31",
+      "context-window-usage-is-shown-in-the-composer": "FR-39",
+      "copilot-context-mapping": "FR-37",
+      "latest-observation-replaces-rather-than-accumulates": "FR-20",
+      "legacy-context-compatibility": "FR-27",
+      "n1": "FR-38",
+      "session-isolation-and-reset": "FR-25",
+      "unknown-context-usage-is-reported-as-unknown": "FR-32",
+      "window-metadata-observed-for-a-session-persists-across-later": "FR-35"
+    },
+    "retired": {
+      "auxiliary-collectors-are-invocation-and-session-bound": "FR-24",
+      "context-conformance-and-pipeline-tests": "FR-30",
+      "every-model-the-catalog-offers-declares-a-context-window-or-": "FR-36"
+    }
+  },
+  "design": "**Snapshots, not stream events.** Readings live in `EventLog` as `context_warning` rows and are chosen per agent and per conversation by `usable_context_reading`, the single place that decides which reading is current.\n\n**Complete the reading where it lands.** Claude reports tokens and window in different messages; rather than waiting for them to meet, `resolve_usage_limit` completes a sample from the catalog by its model at the one point every write path passes through.\n\n**Provider report first.** Codex app-server and Copilot report their own window; Claude reports it at turn end; Codex exec reports none, so its readings are catalog-based and labelled estimated.\n\n**Codex remains mapped** even though Codex is no longer driven; both of its transports are still built.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_context_usage.py, test_context_usage_measurement.py, test_conversation_context_usage.py — mapping, window resolution, recording, projection.",
+      "hub/tests/test_runner_parsing.py — Claude and Codex exec parsing.",
+      "hub/tests/test_copilot_acp_run_turn.py — Copilot `usage_update`.",
+      "hub/ui/src/__tests__/contextPresentation.test.tsx — presentation states."
+    ],
+    "limits": [
+      "`resolve_usage_limit` fills a catalog window into any sample with tokens and a model, including one whose status is `unavailable`: a Copilot `usage_update` with no `size` on `claude-sonnet-5` is stored with a 1,000,000 limit and a percent (run 2026-10-08), against `copilot-context-mapping`, and the checkpoint trigger reads `percent` without checking `status`.",
+      "Hub-internal samples are not validated by `ContextUsageCreate`; an unavailable sample carrying `context_tokens`, which the Hub records for Copilot and Codex, would be refused by the POST route.",
+      "`POST /agents/{name}/context-usage` has no caller in the repository outside tests."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Context pressure that is summed across calls, measured against a window that belongs to a different model, or shown as 0% when nothing was measured misleads the operator and the checkpoint policy alike.",
+  "requirements": [
+    {
+      "key": "canonical-context-usage-sample",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One shape from runner to screen prevents field-name drift, and a percentage derived from its operands cannot contradict them.",
+      "statement": "A context reading SHALL be one sample with `status` (`measured`, `estimated`, `unsupported`, `unavailable`), `source`, `basis` (`provider_context`, `latest_request_input`, `provider_reported_ratio`, `cumulative_delta`) for a measured or estimated sample, optional non-negative `context_tokens`, optional positive `limit_tokens`, `percent` derived from tokens and limit (or reported directly as a ratio), optional `model` and `session_id`, `observed_at`, and an optional numeric breakdown limited to known keys."
+    },
+    {
+      "key": "latest-observation-replaces-rather-than-accumulates",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Each request re-sends the conversation, so summing requests counts the same context many times.",
+      "statement": "A reading SHALL describe the latest non-cumulative observation, and a later reading SHALL replace an earlier one; readings from separate calls, steps or turns SHALL NOT be summed."
+    },
+    {
+      "key": "cache-breakdowns-are-counted-according-to-provider-semantics",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Adding an inclusive cache figure double-counts it.",
+      "statement": "Cache token fields SHALL be added to context tokens only where the provider reports them as exclusive of input (Claude), and SHALL be kept as breakdown only where the provider's input already includes them (Codex, Copilot)."
+    },
+    {
+      "key": "claude-context-mapping",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Claude reports tokens per request and the window only at the end of the turn; the primary model is the one with the largest window, not an auxiliary one used by subagents.",
+      "statement": "For Claude, each assistant message's usage SHALL yield a measured `latest_request_input` sample of `input_tokens + cache_read_input_tokens + cache_creation_input_tokens` naming the message's model, and the end-of-turn `result` SHALL yield the window from `modelUsage.<model>.contextWindow` of the model with the largest window."
+    },
+    {
+      "key": "codex-context-mapping",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "App-server reports the per-request figure and its window itself; exec reports figures that can be cumulative across a resumed session, so they are labelled estimated rather than presented as a measurement.",
+      "statement": "For Codex over its app-server transport, each `thread/tokenUsage/updated` SHALL yield a sample of `last.inputTokens + last.outputTokens` against `modelContextWindow`, measured with basis `provider_context`, or unavailable when no window is reported; over the exec transport, `turn.completed.usage` SHALL yield an estimated `cumulative_delta` sample against the catalog's window, or unavailable when the catalog declares none."
+    },
+    {
+      "key": "copilot-context-mapping",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Copilot reports the window of the model it actually ran (which under Auto may differ from any catalog entry); its prompt-level usage is cumulative for the session.",
+      "statement": "For Copilot, the latest `usage_update` of a turn SHALL yield a measured `provider_context` sample with context tokens `used` and limit `size`, naming the model Copilot reports it ran (else the requested model); an update with no positive `size` SHALL yield an unavailable sample carrying `used` and SHALL NOT borrow a window from the catalog or another model; the prompt response's `usage` SHALL NOT be used as a context reading."
+    },
+    {
+      "key": "context-window-size-is-resolved-in-a-stated-order",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Providers report dated snapshot ids the catalog may hold undated; a window right for the model family beats none, and a default for a different model is worse than none.",
+      "statement": "The window a reading is expressed against SHALL be, in order: the window the provider reported for that reading; else the catalog's window for the reading's model (exact id, then alias, then the longest declared id the reported one starts with); else unknown, never a default that does not describe the model."
+    },
+    {
+      "key": "a-measured-sample-identifies-the-model-it-measured",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The catalog is keyed by model; an unidentified sample can only resolve to unknown, which is how Claude agents once reported no percentage in 329 samples.",
+      "statement": "A measured sample SHALL carry the model that ran the turn it measured."
+    },
+    {
+      "key": "unknown-context-usage-is-reported-as-unknown",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A percentage of an unresolved window is invented, and a checkpoint or pause triggered by it acts on a number nobody measured.",
+      "statement": "When no window can be resolved, the reading SHALL carry no limit and no percentage, the app SHALL show the token count (if any) without a bar, and no context-pressure condition (warning, critical, or checkpoint threshold) SHALL be raised from it."
+    },
+    {
+      "key": "a-conversation-whose-model-changed-reports-usage-per-turn",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Turns in one conversation may run on models with different windows.",
+      "statement": "Each reading SHALL be expressed against the window of the model that ran its turn, so a conversation whose model changed reports pressure for the model now in use."
+    },
+    {
+      "key": "window-metadata-observed-for-a-session-persists-across-later",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A runner may report tokens and window in separate messages, so the last message can carry no percentage; a reset or new session makes an older session's percentage untrue.",
+      "statement": "When the newest reading for an agent or conversation carries no percentage, the Hub SHALL report the newest reading from the same provider session that does, and SHALL NOT fall back across sessions."
+    },
+    {
+      "key": "session-isolation-and-reset",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A late reading from an earlier invocation must not overwrite the current one, and a new conversation starts with no reading rather than its predecessor's.",
+      "statement": "A reading SHALL be attributed to the conversation whose provider session it names (else the agent's latest open conversation), and a reading whose `observed_at` is not newer than the agent's latest stored reading SHALL be ignored."
+    },
+    {
+      "key": "canonical-context-persistence-and-delivery",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Every surface reads one stored record, so none can disagree; an unvalidated dictionary would let any shape reach the screen.",
+      "statement": "Each reading SHALL be stored as a `context_warning` event, broadcast over SSE as `context_warning`, and projected into `AgentSummary.context_usage` and each conversation's context reading, carrying the same fields; `POST /agents/{name}/context-usage` SHALL validate a submitted sample (enums, ranges, breakdown keys, percent consistency) and refuse an invalid one."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Repeated samples of an unchanged measurement once made two thirds of an activity log; readings differing only in model are not identical.",
+      "statement": "A reading identical to the agent's latest stored reading except for a newer `observed_at` SHALL NOT be stored or broadcast again, while still counting as fresh for the checkpoint policy."
+    },
+    {
+      "key": "legacy-context-compatibility",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Older stored rows and clients wrote a 0% on every reset; trusting it paints a bar for an unmeasured session.",
+      "statement": "Readers SHALL normalize unambiguous legacy fields (`tokens_used`, `tokens_limit`, `input_tokens`, `context_limit`, ratio `context_usage`) into the canonical sample, and contradictory or incomplete legacy values SHALL become unavailable or token-only rather than a zero percentage."
+    },
+    {
+      "key": "context-state-presentation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The same reading must look the same in the status bar, the rail and the conversation, and an estimate must not alarm like a measurement.",
+      "statement": "Every surface that shows context SHALL use one normalizer and render measured, estimated, token-only, unavailable and unsupported states consistently, with warning at 70% and critical at 90% for measured readings only, and estimated readings labelled as estimated."
+    },
+    {
+      "key": "context-usage-is-not-a-stream-event",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reading supersedes the last one; a stream event is a permanent entry in the run's record.",
+      "statement": "Context readings SHALL be delivered as replaceable snapshots and SHALL NOT be stored as `AgentOutput`, given a stream event kind, or rendered by the stream-event renderer."
+    },
+    {
+      "key": "context-window-usage-is-shown-in-the-composer",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A per-agent reading showed whichever thread last reported; a zero would assert a measurement that was never taken.",
+      "statement": "The conversation header SHALL display the open conversation's own most recent context-usage reading, and SHALL render no indicator, rather than a zero, where no reading exists."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Mapping each runner's usage reports to a context sample (`runner_parsing.py`, `codex_appserver.py`, `copilot_acp.py`).",
+      "Recording, choosing and projecting readings (`output_recording.record_context_usage`, `context_readings.usable_context_reading`, `POST /agents/{name}/context-usage`).",
+      "Presenting a reading in the app (`hub/ui/src/components/context/contextPresentation.ts`), including the conversation header's indicator for the open conversation."
+    ],
+    "non_goals": [
+      "Token and cost accounting per turn: usage-accounting.",
+      "Which window the catalog declares for each model: model-catalog.",
+      "When a reading triggers a checkpoint: conversation-checkpoint.",
+      "The header's other controls: agent-conversation-workspace."
+    ]
+  },
+  "summary": "How full an agent's context window is, measured from what each runner reports, expressed as one canonical sample per reading, and shown on every surface the same way, including the open conversation's header. A reading replaces the previous one and is never summed. It names the model it measured. It is expressed against a window the provider reported or the catalog declares for that model, and is reported as unknown otherwise. Readings are stored as `context_warning` events, attributed to a conversation, broadcast to open clients, and kept apart from the run's output stream.",
+  "tasks": [],
+  "title": "Agent context usage"
+}

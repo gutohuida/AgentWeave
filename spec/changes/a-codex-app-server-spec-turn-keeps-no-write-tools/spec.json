@@ -1,0 +1,213 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a codex agent with no runner flags (app-server)",
+      "key": "dispatch",
+      "requirement": "read-only-thread",
+      "then": "run_turn receives restrict_spec_writes True, and False",
+      "when": "POST /agent/trigger with spec_document set, and without it"
+    },
+    {
+      "given": "each posture: default, Ask me, Workspace only, Full access",
+      "key": "thread",
+      "requirement": "read-only-thread",
+      "then": "thread/start carries sandbox read-only and approvalPolicy untrusted (Ask me) or on-request",
+      "when": "a spec turn starts"
+    },
+    {
+      "given": "Full access",
+      "key": "control",
+      "requirement": "elsewhere-unchanged",
+      "then": "danger-full-access / never, as today",
+      "when": "a turn with no document starts"
+    },
+    {
+      "given": "Workspace only and a command inside the workspace",
+      "key": "command",
+      "requirement": "writes-declined",
+      "then": "declined on a spec turn; accepted with no document open",
+      "when": "Codex asks to run it"
+    },
+    {
+      "given": "default, Workspace only, Full access and Ask me",
+      "key": "file-change",
+      "requirement": "writes-declined",
+      "then": "declined; under Ask me no card is shown",
+      "when": "Codex asks to change a file in the workspace"
+    },
+    {
+      "given": "Ask me",
+      "key": "ask-me-command",
+      "requirement": "writes-declined",
+      "then": "the operator is asked, as today",
+      "when": "Codex asks to run another command"
+    },
+    {
+      "given": "every posture",
+      "key": "hub-own",
+      "requirement": "hub-own-kept",
+      "then": "both accepted",
+      "when": "Codex asks to write .agentweave/calls/1.json and then to run aw-tool submit_spec_document .agentweave/calls/1.json"
+    },
+    {
+      "given": "Full access",
+      "key": "mixed",
+      "requirement": "hub-own-kept",
+      "then": "declined",
+      "when": "a file change names a calls file and a workspace file"
+    },
+    {
+      "given": "a spec turn",
+      "key": "mcp",
+      "requirement": "elsewhere-unchanged",
+      "then": "accepted",
+      "when": "Codex elicits a tool call on the Hub's own server"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "2e8a76dbd784e25965f5e02b73e6ce3978ee7eca5130cf943ccf25e5ade7217d",
+      "FR-2": "9455ba67e4be236ee20a577373fd0e18c78b18875a3e1e5e2c6d4665ec8c40d3",
+      "FR-3": "c753cc4ef879b68daf9463119d45de0d4fd1b4646529ff6d51a3561095a0374a",
+      "FR-4": "b7521182bf7ff9aa41d4aca54fa195a4b02a33020d0d438f40a2a672851466ea"
+    },
+    "high_water": 4,
+    "requirements": {
+      "elsewhere-unchanged": "FR-4",
+      "hub-own-kept": "FR-3",
+      "read-only-thread": "FR-1",
+      "writes-declined": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2 (a permission boundary). Operator approved the design in chat on 2026-10-07 (Approve (Recommended)). Hazard: none to data or the running Hub; no migration, nothing restarts. The behavioural risk is a real Codex binary treating the policy differently from the scripted session (a wrapped command text, or a read-only sandbox blocking aw-tool's network before it asks), which fails closed: the spec turn cannot reach the Hub through the call command, and the MCP form is unaffected. Rollback: revert the commit. Same rules as Copilot's spec turn (copilot_acp._decide_permission: the Hub's own call first, every other edit refused), stricter on commands because Codex has a real sandbox and an approval is a request to leave it. The shell dialect given to _hub_own_call follows the platform Codex runs on (PowerShell on Windows, Bash elsewhere).",
+  "evidence": {
+    "checked": [
+      "runner_adapters/codex.py CodexAppServerTransport.run_turn passes no restrict_spec_writes to codex_appserver.run_turn, although RpcTurnRequest carries it",
+      "codex_appserver._thread_policy reads only yolo and posture",
+      "codex_appserver.decide_approval answers sandbox approvals by posture alone",
+      "In the test environment a Codex spec turn is told the shim (aw-tool) access path, so a bare read-only sandbox would cut it off from the Hub"
+    ],
+    "limits": [
+      "Codex is not drivable on this machine; the real binary's handling of the policy is not observed"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F4's rule, that a turn triggered with a specification document open loses file-write tools regardless of phase, rigor or posture, is applied as restrict_spec_writes=bool(spec_document) on the runner request. codex exec honours it with --sandbox read-only (runner_commands.py). app-server reads no argv, and CodexAppServerTransport.run_turn passes neither the flag nor anything derived from it, so the thread starts under the posture's own sandbox (workspace-write, or danger-full-access under Full access) and a Codex agent on a spec turn can write files. Found from code in each-runner-cli-is-one-adapter R2 (D11), confirmed by its Opus review, never driven.",
+  "requirements": [
+    {
+      "key": "read-only-thread",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The sandbox is Codex's real write barrier. never is excluded because under it Codex refuses the Hub's own arguments-file write silently instead of asking, and a turn told the call command could not submit the document it was opened on.",
+      "statement": "A Codex app-server turn opened on a specification document MUST start its thread with sandbox read-only in every permission posture, with approval policy untrusted under Ask me and on-request otherwise."
+    },
+    {
+      "key": "writes-declined",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An approval is the only way out of a read-only sandbox, so answering it by the posture would hand back what the sandbox took away. Under Ask me a command still goes to the operator, who answers it as today.",
+      "statement": "On such a turn the system MUST decline every file-change approval, and every command-execution approval outside Ask me, that is not the Hub's own call, in every posture and without an operator card for a file change."
+    },
+    {
+      "key": "hub-own-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The one write a spec turn keeps (a-run-reaches-the-hub-without-mcp D16); it is bounded by the run's own credential.",
+      "statement": "On such a turn the system MUST accept a file change whose every path is a .json file inside the calls root, and a command that is exactly one aw-tool invocation, as mcp_server._hub_own_call defines them, in every posture."
+    },
+    {
+      "key": "elsewhere-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The restriction is the document's, not a narrowing of any posture.",
+      "statement": "A turn with no specification document open, and the answer to an MCP elicitation on any turn, MUST behave as before."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The thread policy a Codex app-server turn starts under when a specification document is open",
+      "The Hub's answers to that thread's sandbox approval requests (command execution, file change)"
+    ],
+    "non_goals": [
+      "codex exec, which already starts --sandbox read-only",
+      "Claude and Copilot spec turns, governed by their own adapters",
+      "MCP elicitation, whose answer (the Hub's own server only) is unchanged",
+      "Proving what a real Codex binary does with the policy: Codex is not drivable on this machine (plan cancelled 2026-08-29)"
+    ]
+  },
+  "summary": "A turn opened on a specification document starts its Codex app-server thread read-only in every posture, declines every file change and sandbox escape that is not the Hub's own call, and keeps the Hub's own call (the arguments file and aw-tool) and its MCP tools. Today the restriction never reaches app-server, Codex's default transport (F462).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "hub/tests/test_a_codex_app_server_spec_turn_keeps_no_write_tools.py: the dispatch seam (run_turn patched, as F99) and the real run_turn over a scripted app-server session; every restriction with a no-document control.",
+      "files": [
+        "hub/tests/test_a_codex_app_server_spec_turn_keeps_no_write_tools.py"
+      ],
+      "from": null,
+      "key": "tests",
+      "requirements": [
+        "read-only-thread",
+        "writes-declined",
+        "hub-own-kept",
+        "elsewhere-unchanged"
+      ],
+      "reviewer": null,
+      "title": "Failing tests for the app-server spec turn"
+    },
+    {
+      "depends_on": [
+        "tests"
+      ],
+      "description": "runner_adapters/codex.py passes req.restrict_spec_writes; codex_appserver.run_turn takes it, _thread_policy returns read-only with untrusted/on-request, and decide_approval (given the approval's subject) accepts the Hub's own call and declines other file changes and, outside Ask me, other commands.",
+      "files": [
+        "hub/hub/codex_appserver.py",
+        "hub/hub/runner_adapters/codex.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "read-only-thread",
+        "writes-declined",
+        "hub-own-kept",
+        "elsewhere-unchanged"
+      ],
+      "reviewer": null,
+      "title": "Carry the restriction to the thread and its approvals"
+    },
+    {
+      "depends_on": [
+        "build"
+      ],
+      "description": "Codex is not drivable here; the acceptance is the test file at the real run_turn, run red before the build and green after, plus CI.",
+      "files": [
+        "hub/tests/test_a_codex_app_server_spec_turn_keeps_no_write_tools.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "read-only-thread"
+      ],
+      "reviewer": null,
+      "title": "Acceptance: the scripted app-server tests, not a live drive"
+    }
+  ],
+  "title": "A Codex app-server specification turn keeps no write tools"
+}

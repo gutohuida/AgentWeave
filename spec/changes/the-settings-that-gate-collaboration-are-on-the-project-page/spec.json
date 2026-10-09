@@ -1,0 +1,285 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a scratch Hub on its own port serving the built bundle, a fresh project with two agents, Chromium on the Overview (scripts/drive/d1008_project_page_settings.py)",
+      "key": "drive",
+      "requirement": "collab-block",
+      "then": "the block shows Off then On with no reload; the Hub row reads can_accept_evidence=1 for that agent only; details show 'built-in default' and 120s/240s; Settings shows the five groups in order and no token budget input. Fails on today's tree at the first check (no block).",
+      "when": "the drive runs: reads the block; PUTs allow_agent_jobs=true over the API (another surface); clicks the evidence chip of one agent; expands one agent's details; opens Settings"
+    },
+    {
+      "given": "a project with token_budget null and main_branch null",
+      "key": "off-flagged",
+      "requirement": "collab-block",
+      "then": "the token row reads 'No limit' and the branch row 'Not set', both flagged; each row's link opens its editor",
+      "when": "the Overview renders"
+    },
+    {
+      "given": "a project with hop_budget 9 and checkpoint_mode 'offered'",
+      "key": "toggle-one-field",
+      "requirement": "flows-toggle",
+      "then": "the PUT body is exactly {allow_agent_jobs: true}; hop_budget and checkpoint_mode are unchanged",
+      "when": "the operator switches agents may start flows on from the Overview"
+    },
+    {
+      "given": "PUT /settings answers 422",
+      "key": "toggle-refused",
+      "requirement": "flows-toggle",
+      "then": "the Hub's message is shown and the switch shows the stored value",
+      "when": "the operator flips the switch"
+    },
+    {
+      "given": "one agent's queue status reads waiting_reason 'hop budget exhausted'",
+      "key": "hop-held-shown",
+      "requirement": "hop-held",
+      "then": "the hop row says 1 agent is held and that agent's card says it is held by the hop budget",
+      "when": "the Overview renders"
+    },
+    {
+      "given": "agent A with can_accept_evidence true and agent B with all grants false and no charter",
+      "key": "chips-reflect-and-toggle",
+      "requirement": "agent-chips",
+      "then": "A's evidence chip is on, B's three are off and B is flagged 'no charter'; the click sends {can_accept_evidence: true} for B only",
+      "when": "the Overview renders and the operator clicks B's evidence chip"
+    },
+    {
+      "given": "launchability reports agent B cannot run, with a sentence",
+      "key": "unlaunchable-flagged",
+      "requirement": "agent-chips",
+      "then": "B's card carries a flag with that sentence",
+      "when": "the Overview renders"
+    },
+    {
+      "given": "an agent with default_permission_mode null and no timeouts set",
+      "key": "details-collapsed",
+      "requirement": "agent-details",
+      "then": "details are hidden at first; expanded, they read built-in default, the runner name, 120s and 240s marked default; other agents stay collapsed",
+      "when": "the Overview renders, then the operator expands that agent's details"
+    },
+    {
+      "given": "Environment > Settings",
+      "key": "groups-order",
+      "requirement": "settings-groups",
+      "then": "group headings read Collaboration, Integration, Checkpointing, Conversations, Project in that order, and Delete project is the last control",
+      "when": "it renders"
+    },
+    {
+      "given": "Environment > Settings with a project token_budget of 5000",
+      "key": "no-token-in-settings",
+      "requirement": "one-token-editor",
+      "then": "no token budget input is rendered, the PUT body has no token_budget key, and a link to Budgets is shown",
+      "when": "the operator saves the hop budget"
+    },
+    {
+      "given": "Settings and Overview",
+      "key": "budget-label",
+      "requirement": "agent-budget-truth",
+      "then": "the agent budget text mentions agents staffing agents and does not contain 'at the same time'",
+      "when": "they render"
+    },
+    {
+      "given": "the Overview rendered with allow_agent_jobs false",
+      "key": "live-invalidates",
+      "requirement": "live",
+      "then": "the settings query is invalidated and refetched (unit: useSSE invalidates ['project', pid, 'settings'])",
+      "when": "a project_settings_updated event arrives"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "48a0390556d16f8cdc7dfef562b64a0bada3a281f57ee984a7a9e65b2fbdc4ba",
+      "FR-10": "baacaf3c6ffca91b8c9ffbd5229ae8d5ea59d4b8a409d1a3d254982c9b2e35fb",
+      "FR-2": "d43821cecaed9d02bdaf18855917787be0efd3cdd22b5e31a4fe7c20b8cef24f",
+      "FR-3": "0fc51e7ca2fc5a368091feb2f3b2d87d9ec3598b2b179dc76e8c2494e3fc0cce",
+      "FR-4": "f347d09c4e3d4d1c5ddface4468862184da2128c846ce644c8b25192acb3f34b",
+      "FR-5": "e3baf96572606d2aa782f9c39d52df9cc6f0ffc3632d8bdd6ad97695ef4418f5",
+      "FR-6": "bac1d28331c5ade740d470a108ce08b108f84b9219da0077d12fccd105ead1e6",
+      "FR-7": "cb3d09c3cb2f85f48b6423bcc7cf2ffc3daa0feac2dd25c8f68bcf754db3c85b",
+      "FR-8": "6ced368e9aa03ce8304bb2f777aeb74698517ab70e9cfd8df6c594325baa5ac2",
+      "FR-9": "d1f85f7c3d3a7ced5fff14935015b930b383fdd7a4849f4c2068fa2c03064253"
+    },
+    "high_water": 10,
+    "requirements": {
+      "agent-budget-truth": "FR-8",
+      "agent-chips": "FR-4",
+      "agent-details": "FR-5",
+      "collab-block": "FR-1",
+      "flows-toggle": "FR-2",
+      "hop-held": "FR-3",
+      "live": "FR-10",
+      "one-token-editor": "FR-7",
+      "settings-groups": "FR-6"
+    },
+    "retired": {
+      "retention": "FR-9"
+    }
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1 (UI only; no backend or migration). Hazard: a committed bundle reaches :8000 on its next reload.\n\nD1 Read, then link. Overview shows values; numbers are typed in Settings. The only in-place writes are booleans with no side effects beyond themselves: allow_agent_jobs and the three grants. PUT /settings merges a partial body (projects.py:477), so the toggle sends one field.\nD2 Sources already loaded: useProjectSettings (flows, hop, cap, agent budget, main branch, checks), useAccounting().budget (token used/limit, the same source Budgets edits), useAgents (grants, charter, posture, timeouts), useAgentLaunchability, useQueueStatus per agent (hop hold). No new route.\nD3 Token budget has one editor (Budgets). Settings stops rendering and sending it, so a stale form cannot overwrite a limit set in Budgets.\nD4 Evidence retention stays out: nothing applies the policy (F558).\nD5 Agent budget is relabelled to what the Hub enforces; what it should enforce is F557's question, not this change's.\nD6 Details are collapsed per agent (operator, 2026-10-08), expansion state local to the card.",
+  "evidence": {
+    "checked": [
+      "ProjectSettingsPanel renders 18 SettingsRows in one SettingsSection (ProjectSettingsPanel.tsx:123-354)",
+      "agent_budget is read only by request_agent (agents.py:2556) and the queue settings view",
+      "PUT /settings merges submitted fields onto stored ones (projects.py:477-500)",
+      "project_settings_updated invalidates ['projects'] and accounting only (useSSE.ts:611)",
+      "evidence_retention: written only by PUT /project/spec/evidence-retention (spec.py:1484); nothing reads it",
+      "AgentSummary already carries the grants, charter_id, default_permission_mode and timeouts (api/agents.ts:10-59)",
+      "queue status waiting_reason 'hop budget exhausted' (inbound_queue.py:196)"
+    ],
+    "limits": [
+      "Agent grants changed in another window do not refresh the Overview (agent PATCH broadcasts nothing)"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "Every setting that gates a multi-agent run already exists and is editable, but sits in the 8th of 8 Environment sections as one flat list of 18 rows, at the same weight as the title-style picker; per-agent grants sit in the 6th of 7 agent sections and vary silently between agents. On 2026-09-17 (LoopEngine_2) allow_agent_jobs off refused the Architect's create_flow, six messages froze on hop_budget 6, only one of four agents could accept evidence (each decision cost two hops), one agent ran with no charter, and $26.81 was spent against no token limit; Overview showed none of it. Reading code on 2026-10-08 also found: the Settings label for agent_budget says it limits concurrent agents, but the Hub checks it only in request_agent (api/v1/agents.py:2556); token_budget has two editors (Settings and Budgets); project_settings_updated does not invalidate the settings query (useSSE.ts:611).",
+  "requirements": [
+    {
+      "key": "collab-block",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "These are the settings whose defaults stopped a real run without saying why; read at a glance, and edited where they already are.",
+      "statement": "The Overview MUST show a Collaboration block, above Attention, with the current value of: agents may start flows (On/Off), hop budget, token budget (used of limit, or 'No limit' with the used figure), the branch approval merges into ('Not set' when unset), the number of checks approval runs, the per-turn delivery cap, and agent budget (agents in the project of the budget); 'No limit' and 'Not set' MUST be visually flagged, and each row MUST link to the control that edits it."
+    },
+    {
+      "key": "flows-toggle",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Off is the commonest reason a planned build never starts, and the fix is one bit; PUT /settings merges a partial body onto what is stored (projects.py:477), so sending one field changes one field.",
+      "statement": "The Overview MUST let the operator switch 'agents may start flows' on and off in place, by sending only allow_agent_jobs to PUT /projects/{id}/settings; a refused save MUST show the Hub's message and leave the switch showing the stored value."
+    },
+    {
+      "key": "hop-held",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A chain paused on the hop budget looks like an idle project; the Hub already derives the reason (inbound_queue.py:196).",
+      "statement": "When one or more agents' queues are held because every waiting entry is past the hop budget (queue status waiting_reason 'hop budget exhausted'), the Collaboration block's hop row MUST say how many agents are held, and each such agent's card MUST say it is held by the hop budget."
+    },
+    {
+      "key": "agent-chips",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Grants vary silently between agents; a difference is visible only when the agents sit side by side.",
+      "statement": "Each agent card on the Overview MUST show three chips, evidence, checkpoints and recall, reflecting can_accept_evidence, can_read_checkpoints and can_recall, each switchable in place through the existing per-agent grant update; it MUST flag an agent with no charter (linking to its Charter section) and an agent that cannot launch (no runner, or the Hub's launchability sentence)."
+    },
+    {
+      "key": "agent-details",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator decision 2026-10-08: posture details are wanted on the page but collapsed, so the cards stay scannable.",
+      "statement": "Each agent card MUST carry a details row, collapsed by default and expanded per agent, showing the agent's default permissions (or 'built-in default'), its runner, and its permission and question wait times (the stored value, or the Hub's fallback of 120s and 240s marked as default), linking to the agent's settings."
+    },
+    {
+      "key": "settings-groups",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The flat list of 18 is why the five gating rows are hard to find; nothing moves out of Settings.",
+      "statement": "Environment > Settings MUST render its rows under headed groups in this order: Collaboration (agents may start flows, hop budget, per-turn delivery cap, agent budget), Integration (main branch, checks), Checkpointing (the checkpoint rows), Conversations (title mode, title runner), Project (name, directory, then delete set apart last)."
+    },
+    {
+      "key": "one-token-editor",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Two editors for one field is the F237 shape; a Settings form holding a stale token_budget would overwrite a limit just set in Budgets.",
+      "statement": "Environment > Settings MUST NOT render a token budget input and MUST NOT send token_budget in its save; its Collaboration group MUST link to Budgets, which stays the one editor."
+    },
+    {
+      "key": "agent-budget-truth",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The Hub checks it only in request_agent (api/v1/agents.py:2556); the current label promises a limit that does not exist (F557).",
+      "statement": "Wherever agent budget is labelled (Settings and Overview), the text MUST say it caps how many agents the project may hold when an agent staffs a new one, and MUST NOT say it limits agents running at the same time."
+    },
+    {
+      "key": "live",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today only ['projects'] and accounting are invalidated (useSSE.ts:611); a value read from useProjectSettings would stay stale.",
+      "statement": "The Overview's Collaboration values MUST follow a settings change made from any surface without a reload: project_settings_updated MUST invalidate the project's settings query as well as the keys it invalidates today."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Overview: a Collaboration block (live values, one inline switch, links to editors)",
+      "Overview: per-agent grant chips (inline switches), charter and runner flags, a collapsed details row",
+      "Environment > Settings: headed groups, token_budget removed (Budgets is its one editor), agent budget label corrected",
+      "useSSE: project_settings_updated also invalidates ['project', id, 'settings']"
+    ],
+    "non_goals": [
+      "Changing any setting's default or behaviour (allow_agent_jobs stays off by default)",
+      "Making agent_budget a concurrency limit, or checking it on operator agent creation (F557 records the label; what the budget should mean is a separate decision)",
+      "request_agent and agent templates (F378 owns them)",
+      "Numeric settings edited on Overview: they are typed in Settings; Overview links there",
+      "Live refresh of agent grants changed in another window: agent PATCH broadcasts nothing today; the operator's own toggles invalidate the agents query in this client",
+      "Evidence retention: stored, never applied, no cleanup exists; a control would do nothing (operator 2026-10-08: leave it out; F558)"
+    ]
+  },
+  "summary": "The project's Overview gains a Collaboration block showing, as live values, the settings that decide whether agents can work together (agents may start flows, hop budget, token budget, main branch, checks, delivery cap, agent budget), with the on/off one switchable in place. Each agent card gains chips for its three grants (switchable in place) and flags for a missing charter or an unlaunchable runner, plus a collapsed details row (default permissions, runner, wait timeouts). Environment > Settings is regrouped into headed groups, loses its duplicate token-budget editor, and says truthfully what agent budget caps. Request R2, finding F379; the inventory is the 'Project Settings Map' page (2026-10-08).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1008_project_page_settings.py: scratch Hub on its own port and fresh DB, built bundle, Chromium. The 'drive' criterion. Run before the build; it must fail at the first check (no Collaboration block).",
+      "files": [
+        "scripts/drive/d1008_project_page_settings.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "collab-block"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's tree"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "Failing vitest first for every UI criterion. New components under components/overview/ (CollaborationSummary, AgentPostureChips); OverviewPage mounts them; ProjectSettingsPanel regrouped, token row removed from form and body, agent budget label corrected; projects.ts types; useSSE invalidates the settings key. Bundle refreshed (make ui) and committed with src.",
+      "files": [
+        "hub/ui/src/components/overview/OverviewPage.tsx",
+        "hub/ui/src/components/overview/CollaborationSummary.tsx",
+        "hub/ui/src/components/overview/AgentPostureChips.tsx",
+        "hub/ui/src/components/environment/ProjectSettingsPanel.tsx",
+        "hub/ui/src/api/projects.ts",
+        "hub/ui/src/hooks/useSSE.ts",
+        "hub/ui/src/__tests__/collaborationSummary.test.tsx",
+        "hub/ui/src/__tests__/agentPostureChips.test.tsx",
+        "hub/ui/src/__tests__/projectSettingsPanel.test.tsx",
+        "hub/ui/src/__tests__/overviewPage.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "collab-block",
+        "flows-toggle",
+        "hop-held",
+        "agent-chips",
+        "agent-details",
+        "settings-groups",
+        "one-token-editor",
+        "agent-budget-truth",
+        "live"
+      ],
+      "reviewer": null,
+      "title": "Overview Collaboration block, agent chips and details; Settings regrouped; SSE invalidation"
+    }
+  ],
+  "title": "The settings that gate collaboration are on the project page"
+}

@@ -1,0 +1,738 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a project is open at a desktop width",
+      "key": "ac1",
+      "requirement": "the-running-workspace-shell-follows-the-approved-full-design",
+      "then": "a rail, a project header, the project view tabs and bounded content are shown and no permanent status strip competes with them",
+      "when": "the shell renders"
+    },
+    {
+      "given": "the running shell",
+      "key": "ac3",
+      "requirement": "the-running-workspace-shell-follows-the-approved-full-design",
+      "then": "hierarchy and density correspond, and the planes use the neutral graphite ramp rather than the mock's indigo",
+      "when": "it is compared with the mock"
+    },
+    {
+      "given": "the rail beside the content",
+      "key": "ac5",
+      "requirement": "navigation-and-content-use-distinct-but-related-planes",
+      "then": "their adjacent neutral fills distinguish them and the boundary is fainter than any control outline",
+      "when": "they are displayed in either mode"
+    },
+    {
+      "given": "a project dialog",
+      "key": "ac6",
+      "requirement": "lifted-surfaces-are-opaque-and-token-defined",
+      "then": "its panel has an opaque token-defined fill and the page shows only through the scrim around it",
+      "when": "it is opened in either mode"
+    },
+    {
+      "given": "the stylesheet",
+      "key": "ac7",
+      "requirement": "lifted-surfaces-are-opaque-and-token-defined",
+      "then": "every surface token used by dialogs is defined for both modes",
+      "when": "it is checked"
+    },
+    {
+      "given": "the rail",
+      "key": "ac8",
+      "requirement": "project-actions-use-the-shared-icon-system-and-readable-labe",
+      "then": "its actions render named SVG icons and no literal or corrupted glyph text",
+      "when": "it is inspected"
+    },
+    {
+      "given": "an icon-only rail control",
+      "key": "ac9",
+      "requirement": "project-actions-use-the-shared-icon-system-and-readable-labe",
+      "then": "its accessible name states the action, for example `Configure Website`",
+      "when": "assistive technology inspects it"
+    },
+    {
+      "given": "a control with no border at rest",
+      "key": "ac11",
+      "requirement": "a-quiet-control-never-gains-an-outline-on-hover",
+      "then": "no border appears and its fill or text prominence changes instead",
+      "when": "the operator hovers it"
+    },
+    {
+      "given": "a control bordered at rest",
+      "key": "ac12",
+      "requirement": "a-quiet-control-never-gains-an-outline-on-hover",
+      "then": "its border may change colour",
+      "when": "the operator hovers it"
+    },
+    {
+      "given": "any control",
+      "key": "ac13",
+      "requirement": "a-quiet-control-never-gains-an-outline-on-hover",
+      "then": "its focus indicator is shown",
+      "when": "it receives keyboard focus"
+    },
+    {
+      "given": "a project with a multi-segment directory",
+      "key": "ac14",
+      "requirement": "a-project-s-location-is-displayed-as-structure-not-as-a-sent",
+      "then": "each segment is its own element and the path is on a different line element from the agent count",
+      "when": "the header renders"
+    },
+    {
+      "given": "a directory too long for the header",
+      "key": "ac16",
+      "requirement": "a-project-s-location-is-displayed-as-structure-not-as-a-sent",
+      "then": "it is elided in the middle, its first and last segments stay visible, and hovering shows the full path",
+      "when": "it renders"
+    },
+    {
+      "given": "a project whose directory is unavailable",
+      "key": "ac16a",
+      "requirement": "a-project-s-location-is-displayed-as-structure-not-as-a-sent",
+      "then": "it shows `Directory unavailable` and no path row",
+      "when": "the header renders"
+    },
+    {
+      "given": "the project view tabs above content",
+      "key": "ac18",
+      "requirement": "the-project-view-switcher-is-separated-by-its-plane-alone",
+      "then": "the strip has no fill of its own and no rule is drawn beneath it",
+      "when": "they are displayed in either mode"
+    },
+    {
+      "given": "the operator left the rail expanded",
+      "key": "ac20",
+      "requirement": "navigation-collapses-only-when-the-operator-asks-and-stays-n",
+      "then": "the rail stays expanded",
+      "when": "they open any destination"
+    },
+    {
+      "given": "the rail is collapsed",
+      "key": "ac21",
+      "requirement": "navigation-collapses-only-when-the-operator-asks-and-stays-n",
+      "then": "every project and agent is reachable by name, the active ones are indicated, and the rail can be expanded from within it",
+      "when": "it renders"
+    },
+    {
+      "given": "the operator collapsed the rail",
+      "key": "ac22",
+      "requirement": "navigation-collapses-only-when-the-operator-asks-and-stays-n",
+      "then": "the rail is still collapsed",
+      "when": "the page reloads"
+    },
+    {
+      "given": "the expanded rail",
+      "key": "n1-ac1",
+      "requirement": "n1-the-rail-width-is-the-operator-s-and-is-remembered",
+      "then": "the rail keeps the dragged width, within its minimum and maximum",
+      "when": "the operator drags its edge and reloads"
+    },
+    {
+      "given": "the collapsed rail",
+      "key": "n1-ac2",
+      "requirement": "n1-the-rail-width-is-the-operator-s-and-is-remembered",
+      "then": "no drag handle is shown",
+      "when": "it renders"
+    },
+    {
+      "given": "either mode",
+      "key": "ac23",
+      "requirement": "the-chrome-is-neutral-and-hue-is-reserved-for-meaning",
+      "then": "the ground, rail, elevated surfaces and borders read as neutral greys while agent colours and status colours stay distinguishable",
+      "when": "the workspace is displayed"
+    },
+    {
+      "given": "the component sources",
+      "key": "ac25",
+      "requirement": "the-chrome-is-neutral-and-hue-is-reserved-for-meaning",
+      "then": "no file outside the two exemptions declares a raw hex colour",
+      "when": "they are scanned"
+    },
+    {
+      "given": "any text level or status hue on the ground or any elevated surface, in either mode",
+      "key": "ac26",
+      "requirement": "the-text-ramp-keeps-three-levels-and-every-level-clears-a-st",
+      "then": "it is at least 3.0",
+      "when": "its contrast is measured"
+    },
+    {
+      "given": "the primary and secondary text levels",
+      "key": "ac27",
+      "requirement": "the-text-ramp-keeps-three-levels-and-every-level-clears-a-st",
+      "then": "each reaches at least 4.5",
+      "when": "they are measured against every surface in either mode"
+    },
+    {
+      "given": "the ramp",
+      "key": "ac28",
+      "requirement": "the-text-ramp-keeps-three-levels-and-every-level-clears-a-st",
+      "then": "each is perceptibly separated from the one above it",
+      "when": "levels are compared with each other"
+    },
+    {
+      "given": "a palette token changed so a level falls below its bar",
+      "key": "ac30",
+      "requirement": "the-text-ramp-keeps-three-levels-and-every-level-clears-a-st",
+      "then": "the contrast test fails naming the token, surface and ratio",
+      "when": "the test suite runs"
+    },
+    {
+      "given": "a primary control",
+      "key": "ac31",
+      "requirement": "emphasis-is-monochrome-and-the-accent-marks-state-only",
+      "then": "its fill is monochrome and its label meets contrast against it",
+      "when": "it is displayed in either mode"
+    },
+    {
+      "given": "controls at rest",
+      "key": "ac32",
+      "requirement": "emphasis-is-monochrome-and-the-accent-marks-state-only",
+      "then": "the accent hue appears only as a focus ring or a selection, never as a fill",
+      "when": "they are displayed"
+    },
+    {
+      "given": "a conversation is open",
+      "key": "ac33",
+      "requirement": "the-active-navigation-row-is-marked-without-a-resting-fill",
+      "then": "its project, agent and conversation rows all report `data-active=\"true\"`, the conversation row reports `aria-current=\"page\"`, and only the conversation row carries a resting fill",
+      "when": "the rail renders"
+    },
+    {
+      "given": "the open conversation's row",
+      "key": "ac34",
+      "requirement": "the-active-navigation-row-is-marked-without-a-resting-fill",
+      "then": "it shows the hover fill",
+      "when": "the operator hovers it"
+    },
+    {
+      "given": "a conversation is open",
+      "key": "ac35",
+      "requirement": "the-active-navigation-row-is-marked-without-a-resting-fill",
+      "then": "no row carries a leading accent bar",
+      "when": "the rail renders"
+    },
+    {
+      "given": "a project is open",
+      "key": "ac37",
+      "requirement": "the-project-header-is-not-a-box",
+      "then": "it has no fill distinct from the ground and no rule beneath it",
+      "when": "the header renders"
+    },
+    {
+      "given": "two registered projects",
+      "key": "n2-ac1",
+      "requirement": "n2-the-project-header-carries-project-switching-and-appearance",
+      "then": "the Hub navigates to that project",
+      "when": "the operator picks the other one in the header's switcher"
+    },
+    {
+      "given": "light mode",
+      "key": "n2-ac2",
+      "requirement": "n2-the-project-header-carries-project-switching-and-appearance",
+      "then": "the application renders in dark mode",
+      "when": "the operator presses the header's mode toggle"
+    },
+    {
+      "given": "Hub setup",
+      "key": "ac40",
+      "requirement": "the-application-offers-light-and-dark-modes-only",
+      "then": "the only appearance choice is light or dark, and choosing one changes the rendered application",
+      "when": "the operator opens it"
+    },
+    {
+      "given": "a project",
+      "key": "ac41",
+      "requirement": "the-navigation-region-carries-the-navigation-of-whatever-the",
+      "then": "the rail lists the configuration sections and the content shows only the selected section",
+      "when": "the operator opens its configuration"
+    },
+    {
+      "given": "the rail is showing configuration sections",
+      "key": "ac42",
+      "requirement": "the-navigation-region-carries-the-navigation-of-whatever-the",
+      "then": "the rail shows the project tree again in one action",
+      "when": "the operator presses its back control"
+    },
+    {
+      "given": "a link addressing a configuration section",
+      "key": "ac43",
+      "requirement": "the-navigation-region-carries-the-navigation-of-whatever-the",
+      "then": "the rail shows that area's sections with the addressed one current, as if reached from within the app",
+      "when": "the operator loads it directly"
+    },
+    {
+      "given": "a project",
+      "key": "ac43a",
+      "requirement": "the-navigation-region-carries-the-navigation-of-whatever-the",
+      "then": "the rail shows the specification tree instead of the project tree, and one press gives the project tree back",
+      "when": "the operator opens the Spec screen"
+    },
+    {
+      "given": "the active project",
+      "key": "ac45",
+      "requirement": "project-configuration-has-exactly-one-affordance-attached-to",
+      "then": "exactly one control, on that project's rail row, leads to its configuration",
+      "when": "the operator surveys the workspace"
+    },
+    {
+      "given": "several projects",
+      "key": "ac46",
+      "requirement": "project-configuration-has-exactly-one-affordance-attached-to",
+      "then": "configuration opens for that project",
+      "when": "the operator activates the Configure control on one project's row"
+    },
+    {
+      "given": "a project expanded in the rail",
+      "key": "ac48",
+      "requirement": "agent-creation-is-offered-where-agents-are-listed",
+      "then": "the Hub navigates to that project and opens agent creation scoped to it",
+      "when": "the operator activates the create-agent control after its agents"
+    },
+    {
+      "given": "the project header",
+      "key": "ac49",
+      "requirement": "agent-creation-is-offered-where-agents-are-listed",
+      "then": "it offers no agent-creation control",
+      "when": "it renders"
+    },
+    {
+      "given": "the rail",
+      "key": "n3-ac1",
+      "requirement": "n3-one-action-adds-a-project",
+      "then": "it offers one Add project action and no separate open-existing or create-new action",
+      "when": "it renders"
+    },
+    {
+      "given": "anywhere in the Hub",
+      "key": "ac50",
+      "requirement": "a-command-palette-reaches-conversations-agents-documents-and",
+      "then": "a named dialog opens listing the project's conversations, agents, specification documents and tasks",
+      "when": "the operator presses Ctrl+K or Cmd+K"
+    },
+    {
+      "given": "focus in a text field",
+      "key": "ac51",
+      "requirement": "a-command-palette-reaches-conversations-agents-documents-and",
+      "then": "the palette does not open and the character reaches the field",
+      "when": "the operator types `k` without a modifier"
+    },
+    {
+      "given": "the palette is open",
+      "key": "ac52",
+      "requirement": "a-command-palette-reaches-conversations-agents-documents-and",
+      "then": "the Hub navigates to it and the palette closes",
+      "when": "the operator selects a conversation, agent, document or task"
+    },
+    {
+      "given": "the palette is open",
+      "key": "ac53",
+      "requirement": "a-command-palette-reaches-conversations-agents-documents-and",
+      "then": "the palette closes and the displayed destination is unchanged",
+      "when": "the operator presses Escape"
+    },
+    {
+      "given": "Two registered projects",
+      "key": "lpw-ac23",
+      "requirement": "project-views-live-inside-the-selected-project",
+      "then": "Both appear with their agents, and opening either shows only its own views and data.",
+      "when": "The rail is shown"
+    },
+    {
+      "given": "A selected project",
+      "key": "ac24",
+      "requirement": "project-views-live-inside-the-selected-project",
+      "then": "They are reached through the project's Environment destination, not the rail.",
+      "when": "The operator looks for quality, instructions, runners, charters, worktrees, diagnostics, budgets or settings"
+    },
+    {
+      "given": "An agent",
+      "key": "lpw-ac25",
+      "requirement": "agent-identity-color-remains-project-consistent",
+      "then": "Each shows the same colour together with the agent's name.",
+      "when": "It appears in the rail, its conversation, a task assignee and Activity"
+    },
+    {
+      "given": "a scratch Hub on its own port serving the built bundle, a fresh project with two agents, Chromium on the Overview (scripts/drive/d1008_project_page_settings.py)",
+      "key": "the-settings-that-gate-collaboration-are-on-the-project-pa-drive",
+      "requirement": "the-overview-shows-the-settings-that-gate-collaboration",
+      "then": "the block shows Off then On with no reload; the Hub row reads can_accept_evidence=1 for that agent only; details show 'built-in default' and 120s/240s; Settings shows the five groups in order and no token budget input. Fails on today's tree at the first check (no block).",
+      "when": "the drive runs: reads the block; PUTs allow_agent_jobs=true over the API (another surface); clicks the evidence chip of one agent; expands one agent's details; opens Settings"
+    },
+    {
+      "given": "a project with token_budget null and main_branch null",
+      "key": "the-settings-that-gate-collaboration-are-on-the-proj-off-flagged",
+      "requirement": "the-overview-shows-the-settings-that-gate-collaboration",
+      "then": "the token row reads 'No limit' and the branch row 'Not set', both flagged; each row's link opens its editor",
+      "when": "the Overview renders"
+    },
+    {
+      "given": "a project with hop_budget 9 and checkpoint_mode 'offered'",
+      "key": "the-settings-that-gate-collaboration-are-on-the-toggle-one-field",
+      "requirement": "the-overview-switches-agent-flows-in-place",
+      "then": "the PUT body is exactly {allow_agent_jobs: true}; hop_budget and checkpoint_mode are unchanged",
+      "when": "the operator switches agents may start flows on from the Overview"
+    },
+    {
+      "given": "PUT /settings answers 422",
+      "key": "the-settings-that-gate-collaboration-are-on-the-p-toggle-refused",
+      "requirement": "the-overview-switches-agent-flows-in-place",
+      "then": "the Hub's message is shown and the switch shows the stored value",
+      "when": "the operator flips the switch"
+    },
+    {
+      "given": "one agent's queue status reads waiting_reason 'hop budget exhausted'",
+      "key": "the-settings-that-gate-collaboration-are-on-the-p-hop-held-shown",
+      "requirement": "the-overview-names-agents-held-by-the-hop-budget",
+      "then": "the hop row says 1 agent is held and that agent's card says it is held by the hop budget",
+      "when": "the Overview renders"
+    },
+    {
+      "given": "agent A with can_accept_evidence true and agent B with all grants false and no charter",
+      "key": "the-settings-that-gate-collaboration-ar-chips-reflect-and-toggle",
+      "requirement": "an-agent-card-shows-its-grants-as-chips",
+      "then": "A's evidence chip is on, B's three are off and B is flagged 'no charter'; the click sends {can_accept_evidence: true} for B only",
+      "when": "the Overview renders and the operator clicks B's evidence chip"
+    },
+    {
+      "given": "launchability reports agent B cannot run, with a sentence",
+      "key": "the-settings-that-gate-collaboration-are-on-unlaunchable-flagged",
+      "requirement": "an-agent-card-shows-its-grants-as-chips",
+      "then": "B's card carries a flag with that sentence",
+      "when": "the Overview renders"
+    },
+    {
+      "given": "an agent with default_permission_mode null and no timeouts set",
+      "key": "the-settings-that-gate-collaboration-are-on-th-details-collapsed",
+      "requirement": "an-agent-card-keeps-its-details-collapsed",
+      "then": "details are hidden at first; expanded, they read built-in default, the runner name, 120s and 240s marked default; other agents stay collapsed",
+      "when": "the Overview renders, then the operator expands that agent's details"
+    },
+    {
+      "given": "the Overview rendered with allow_agent_jobs false",
+      "key": "the-settings-that-gate-collaboration-are-on-the-live-invalidates",
+      "requirement": "the-overview-settings-follow-changes-live",
+      "then": "the settings query is invalidated and refetched (unit: useSSE invalidates ['project', pid, 'settings'])",
+      "when": "a project_settings_updated event arrives"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "af8463ca967b0906883a4d6f0669d82c6c248416b18286feb46aefd1eed4dd37",
+      "FR-10": "a9db2afc22fa06c67f75251e6bd39f0f11722aed740e9f78763fffbb124ef630",
+      "FR-11": "6c93f080e89715c94ef97f453eb4fd4c824dbc832fe3c9d9543760a4becf7e82",
+      "FR-12": "aee0fbb06bed176433306b3c1bec2cdc142f0f6bf4b22bfde6cf6c80873c491a",
+      "FR-13": "4de12e65ecaa9eb06e1f7372909f4e9bc9b000080b6662c3fd4ee8b0ef21c32b",
+      "FR-14": "99787c3d4d5d2ecfb434662e4fa74b72d3f54b3b8ed6e1d9fb8f4b6ab09c3906",
+      "FR-15": "f011509d92e7cf34327c683b1e5d6be7f1c7918931401fa8c6f715ab07f726d6",
+      "FR-16": "d455f82dc1f4b1a9439bf05e3cf04da12922ef675f396573f41c1c568ff7bfc6",
+      "FR-17": "62bec955d769927a09a1078d429d802a8bdc1ef249a863a33eb478c94879ce8f",
+      "FR-18": "4eb5f3017fe08eb8ae980f6d0d0f49158788312585cbcfe854986c95566a51c9",
+      "FR-19": "120b1a484ef57233e4c9490eb77997398b708c1f2b3479226680dd6f2a6b190d",
+      "FR-2": "c4eb3f9b370c8aa71d4663de92489882235724861fc85e56c324820475fc62fa",
+      "FR-20": "ca8db5518443a69fce39ee86972b0ea4fccde588cba9caa03b1cad6033090309",
+      "FR-21": "8174ba3cad603c7a9e1da804e6a052a17f4893ab82dcbb615731fb3ab23a6c58",
+      "FR-22": "0032ec1f21bad0fe83c3035217ff5531ce1eeb877e2703300fc1b13eac559017",
+      "FR-23": "47cde3309c2fe7617e6cf387458475bc35152a5f732317b9bb90f0898975b3c7",
+      "FR-24": "4d83ddaecc8bedb5605263103dabfd12fc27b91dbab199e25bd7896e96cd3bee",
+      "FR-25": "48a0390556d16f8cdc7dfef562b64a0bada3a281f57ee984a7a9e65b2fbdc4ba",
+      "FR-26": "d43821cecaed9d02bdaf18855917787be0efd3cdd22b5e31a4fe7c20b8cef24f",
+      "FR-27": "0fc51e7ca2fc5a368091feb2f3b2d87d9ec3598b2b179dc76e8c2494e3fc0cce",
+      "FR-28": "f347d09c4e3d4d1c5ddface4468862184da2128c846ce644c8b25192acb3f34b",
+      "FR-29": "e3baf96572606d2aa782f9c39d52df9cc6f0ffc3632d8bdd6ad97695ef4418f5",
+      "FR-3": "6de0cd4b2eabf8d4c00320e1fd4014ff85b0f34d9ed3db0326bcea9f8411ec5a",
+      "FR-30": "baacaf3c6ffca91b8c9ffbd5229ae8d5ea59d4b8a409d1a3d254982c9b2e35fb",
+      "FR-4": "c20307737b2be63a36d8a6be55c4bf8df041e0d2a068c209107c4469aa4d9b7c",
+      "FR-5": "1bb948151f8ae106e732cd9258426d4f948132b741efac608c594cda44d4d766",
+      "FR-6": "7c824bd6168c0ada0e9207b7461fb154ddc2b1d3f888f1a8af3414f2a8a2b09b",
+      "FR-7": "6ed0388bcf6b36a3947e7bfc996030bd93ccdc5a980f95098cdc26cd0edc3048",
+      "FR-8": "826b87911a01569820cd47246928d2b19509a960b7faffc86cbfb5ecf6afc2bd",
+      "FR-9": "a2ef8f77a1b1581d7d9c091ece09a0659a68025ee84e1186e36cfc0d10fcaf4b"
+    },
+    "high_water": 30,
+    "requirements": {
+      "a-command-palette-reaches-conversations-agents-documents-and": "FR-19",
+      "a-project-s-location-is-displayed-as-structure-not-as-a-sent": "FR-6",
+      "a-quiet-control-never-gains-an-outline-on-hover": "FR-5",
+      "agent-creation-is-offered-where-agents-are-listed": "FR-18",
+      "agent-identity-color-remains-project-consistent": "FR-24",
+      "an-agent-card-keeps-its-details-collapsed": "FR-29",
+      "an-agent-card-shows-its-grants-as-chips": "FR-28",
+      "emphasis-is-monochrome-and-the-accent-marks-state-only": "FR-11",
+      "lifted-surfaces-are-opaque-and-token-defined": "FR-3",
+      "n1-the-rail-width-is-the-operator-s-and-is-remembered": "FR-20",
+      "n2-the-project-header-carries-project-switching-and-appearance": "FR-21",
+      "n3-one-action-adds-a-project": "FR-22",
+      "navigation-and-content-use-distinct-but-related-planes": "FR-2",
+      "navigation-collapses-only-when-the-operator-asks-and-stays-n": "FR-8",
+      "project-actions-use-the-shared-icon-system-and-readable-labe": "FR-4",
+      "project-configuration-has-exactly-one-affordance-attached-to": "FR-17",
+      "project-views-live-inside-the-selected-project": "FR-23",
+      "the-active-navigation-row-is-marked-without-a-resting-fill": "FR-12",
+      "the-application-offers-light-and-dark-modes-only": "FR-15",
+      "the-chrome-is-neutral-and-hue-is-reserved-for-meaning": "FR-9",
+      "the-navigation-region-carries-the-navigation-of-whatever-the": "FR-16",
+      "the-overview-names-agents-held-by-the-hop-budget": "FR-27",
+      "the-overview-settings-follow-changes-live": "FR-30",
+      "the-overview-shows-the-settings-that-gate-collaboration": "FR-25",
+      "the-overview-switches-agent-flows-in-place": "FR-26",
+      "the-project-header-is-not-a-box": "FR-13",
+      "the-project-view-switcher-is-separated-by-its-plane-alone": "FR-7",
+      "the-running-workspace-shell-follows-the-approved-full-design": "FR-1",
+      "the-text-ramp-keeps-three-levels-and-every-level-clears-a-st": "FR-10"
+    },
+    "retired": {
+      "a-project-s-directory-is-presented-as-readable-segments": "FR-14"
+    }
+  },
+  "design": "D1. One neutral graphite ramp (`--bg`, `--rail`, `--surface`, `--surface-2`, `--surface-3`) per mode; hue only for agent identity, status and the `--ring` accent.\n\nD2. Emphasis is monochrome: `--primary` is near-white on dark and near-black on light; the accent never fills a control.\n\nD3. The third text level holds 3.0 rather than 4.5 so the ramp keeps three levels; `contrastRamp.test.ts` enforces every bar.\n\nD4. Rail selection is a depth ladder (project, agent, conversation) with the conversation as the only filled row; the leading accent bar was removed at the operator's request and a test keeps it removed.\n\nD5. Navigation lives in the rail; entering configuration, agent settings or the Spec screen swaps the rail's content, derived from the destination. A new project view is a tab, never a rail destination.\n\nD6. Rail collapse and width are operator preferences in localStorage; no destination writes them.\n\nD7. An agent's colour is looked up by project and agent together, so agents of the same name in two projects are never conflated.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/__tests__/hubVisualLanguage.test.ts (palette, dialog surfaces, icons, no raw hex, header, tab strip)",
+      "hub/ui/src/__tests__/contrastRamp.test.ts (3.0 / 4.5 bars, three levels)",
+      "hub/ui/src/__tests__/projectRail.test.tsx (collapsed rail, configure and create-agent placement, section mode, spec tree, single Add project)",
+      "hub/ui/src/__tests__/railHierarchy.test.tsx (depth ladder, no accent bar)",
+      "hub/ui/src/__tests__/projectHeaderPath.test.tsx, commandPalette.test.tsx"
+    ],
+    "limits": [
+      "index.css:812 and :831 draw a `--border-region` rule under `.project-header` and `.project-tabs` (commit b92d7de), contradicting the two no-rule requirements; the tests that assert no rule inspect the TSX sources only, so they pass. Kept as requirements; see report.",
+      "The approved mock is a structural reference only and is not machine-checked."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Without one set of rules for planes, colour, emphasis and where navigation lives, each page invented its own chrome: competing fills and rules, accent-filled buttons, a rail that collapsed itself, configuration reachable from several places, and text levels that failed contrast.",
+  "requirements": [
+    {
+      "key": "the-running-workspace-shell-follows-the-approved-full-design",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "The mock remains the reference for structure; its hue was replaced on purpose.",
+      "statement": "The running shell SHOULD follow the approved mock (`openspec/changes/archive/2026-08-18-2026-07-30-hub-native-experience/mock-full.html`) for hierarchy, density, typography, radii and interaction states: a rail beside a project header, compact project view tabs (Overview, Tasks, Spec, Jobs, Activity) and bounded content, with no permanent global status strip. The mock's indigo and ink palette is superseded by the neutral graphite ramp, and AgentWeave keeps its own branding."
+    },
+    {
+      "key": "navigation-and-content-use-distinct-but-related-planes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Two related planes read as one application; a heavy line on top of a fill change reads as two.",
+      "statement": "The rail and the content ground SHALL use adjacent steps of the same neutral ramp (`--rail` and `--bg`), so their roles differ by luminance alone, and their boundary MUST NOT combine a strong fill contrast with a strong dividing line."
+    },
+    {
+      "key": "lifted-surfaces-are-opaque-and-token-defined",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An undefined or transparent panel fill exposes the page beneath and makes text unreadable.",
+      "statement": "Every menu, popover, dialog, composer and other lifted surface SHALL take its background from a semantic token defined for both modes, and a modal dialog SHALL render an opaque panel over a separate scrim."
+    },
+    {
+      "key": "project-actions-use-the-shared-icon-system-and-readable-labe",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Typed symbols rendered as mojibake on some systems; an unnamed icon button is unusable with assistive technology.",
+      "statement": "Shell actions (add project, configure, create agent, expand, collapse, back) SHALL draw their icons from the application's single icon module (Lucide glyphs) and MUST NOT use literal geometric characters, icon-font text or corrupted glyphs; every icon-only control SHALL have an accessible name, and Add project and agent creation SHALL be available as readable text."
+    },
+    {
+      "key": "a-quiet-control-never-gains-an-outline-on-hover",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An outline appearing on hover reads as a state change the control does not have.",
+      "statement": "A control that draws no border at rest MUST NOT gain one on hover; hover SHALL be expressed by fill, text or icon prominence. A control bordered at rest MAY change its border colour on hover, and keyboard focus indication is unaffected."
+    },
+    {
+      "key": "a-project-s-location-is-displayed-as-structure-not-as-a-sent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The tail of a path is what identifies a project; a segment that navigates nowhere must not look clickable.",
+      "statement": "The project header SHALL show the project's directory on its own line, below and separate from the agent count, as distinct path-segment elements (not one joined string), elided in the middle when too long so the leading and trailing segments stay visible, with the complete path available as the line's tooltip. Segments are not interactive and MUST NOT be styled as links. When the directory is unavailable the header SHALL say so instead."
+    },
+    {
+      "key": "the-project-view-switcher-is-separated-by-its-plane-alone",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator read a filled strip as a band laid over the screen; the active tab's own treatment marks position.",
+      "statement": "The project view tabs SHALL sit on the ground plane with no fill of their own, and the boundary below them MUST NOT be drawn as a dividing rule."
+    },
+    {
+      "key": "navigation-collapses-only-when-the-operator-asks-and-stays-n",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A rail that renders no destinations is hidden, not collapsed; a page that needed width once took it from navigation and left no way back.",
+      "statement": "The rail SHALL change between expanded and collapsed only at the operator's request, and that choice SHALL persist across reloads. While collapsed it SHALL still reach every project and agent by accessible name, indicate the active ones, offer Add project, and offer the control that expands it again."
+    },
+    {
+      "key": "n1-the-rail-width-is-the-operator-s-and-is-remembered",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Project and conversation names vary in length; the operator decides how much room navigation gets.",
+      "statement": "The expanded rail's width SHALL be adjustable by dragging its edge within fixed minimum and maximum widths and SHALL persist across reloads; the collapsed rail has one width and offers no drag handle."
+    },
+    {
+      "key": "the-chrome-is-neutral-and-hue-is-reserved-for-meaning",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A hex literal survives a palette swap unchanged and silently keeps the old palette alive.",
+      "statement": "Every background, surface and border token of the chrome SHALL be neutral or near-neutral in both modes; hue SHALL be reserved for agent identity colours, semantic status colours and the single state accent. Components MUST NOT declare raw hex colours, except the light/dark preview swatches in setup and the sandboxed spec frame."
+    },
+    {
+      "key": "the-text-ramp-keeps-three-levels-and-every-level-clears-a-st",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Raising the third level to 4.5 collapses it into the second; 3.0 for incidental metadata and status hues is a recorded exemption, enforced rather than documented.",
+      "statement": "The text ramp SHALL provide three distinguishable levels in both modes; every level and every status hue SHALL reach a contrast ratio of at least 3.0 on the ground plane and every elevated surface, the two primary levels SHALL reach 4.5, and an automated test against the stylesheet SHALL fail when any falls below its bar."
+    },
+    {
+      "key": "emphasis-is-monochrome-and-the-accent-marks-state-only",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Colour that fills controls competes with colour that carries meaning.",
+      "statement": "The primary control fill SHALL be monochrome (near-white on dark, near-black on light). Exactly one accent hue per mode SHALL be defined and used only for state such as the focus ring and selection, never as a control's fill."
+    },
+    {
+      "key": "the-active-navigation-row-is-marked-without-a-resting-fill",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The conversation is the thing being read and the only row that needs to stand out; the leading bar was removed at the operator's request.",
+      "statement": "Every rail row on the open path (project, agent, conversation) SHALL expose `data-active=\"true\"` and `aria-current`, and SHALL be graded by depth: the project row by weight only, the agent row by weight and full-strength text, and the open conversation row by weight, text and the only resting fill in navigation. No row SHALL carry a leading accent bar, and hover and press fills SHALL still apply over the selected state."
+    },
+    {
+      "key": "the-project-header-is-not-a-box",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A filled, ruled header reads as a box stacked on the page rather than part of it.",
+      "statement": "The project header SHALL sit on the ground plane with no fill distinct from it and MUST NOT be closed by a dividing rule."
+    },
+    {
+      "key": "n2-the-project-header-carries-project-switching-and-appearance",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Switching project and mode are frequent and belong where the project is named.",
+      "statement": "The project header SHALL offer a project switcher listing every registered project, a control that toggles light and dark mode, and a control that opens Hub setup."
+    },
+    {
+      "key": "the-application-offers-light-and-dark-modes-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The former five-theme picker offered choices that changed nothing.",
+      "statement": "The application SHALL offer exactly two appearance choices, light and dark, and MUST NOT present a theme, palette or accent selector that does not change the rendered application."
+    },
+    {
+      "key": "the-navigation-region-carries-the-navigation-of-whatever-the",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Two navigation columns compete for width and attention; deriving the mode from the URL keeps reloads and links consistent.",
+      "statement": "Navigation SHALL live in the rail only. Entering an area with its own navigation (a project's configuration sections, an agent's settings sections, the Spec screen's document tree) SHALL replace the rail's project tree with that area's navigation, identify the project, and offer one control that returns to the project tree. The content area MUST NOT render its own navigation column, and the rail's mode SHALL be derived from the current destination so a direct link, history navigation and an in-app control give the same result."
+    },
+    {
+      "key": "project-configuration-has-exactly-one-affordance-attached-to",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One route that sits on the thing it configures is findable; several routes compete.",
+      "statement": "Each project's configuration SHALL be reachable from exactly one control, a Configure button on that project's rail row (shown on hover or focus, and always for the active project, and keyboard reachable); no other control in the workspace SHALL lead to that project's configuration."
+    },
+    {
+      "key": "agent-creation-is-offered-where-agents-are-listed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agent creation reads the selected project, so opening it without navigating created the agent in the wrong project.",
+      "statement": "The control that creates an agent SHALL be at the end of each project's agent list in the rail, and activating it SHALL navigate to that project before opening agent creation scoped to it; the project header MUST NOT offer agent creation."
+    },
+    {
+      "key": "n3-one-action-adds-a-project",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Both entry points opened the same picker, and asking the operator to choose between them came when they knew least.",
+      "statement": "The rail SHALL offer a single Add project action that opens a folder picker and registers the chosen folder, opening an existing project, adopting a marked directory, or initialising a plain folder; it MUST NOT offer separate open-existing and create-new actions."
+    },
+    {
+      "key": "a-command-palette-reaches-conversations-agents-documents-and",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator should reach any thread, agent, document or task without walking the tree.",
+      "statement": "Ctrl+K or Cmd+K SHALL open, from anywhere in the Hub, a named dialog that searches the current project's conversations, agents, specification documents and tasks, showing each result's status and recency, and navigates to the selected one. Typing the key without its modifier in a text field MUST NOT open it, and dismissing it with Escape without a selection MUST NOT change what is displayed."
+    },
+    {
+      "key": "project-views-live-inside-the-selected-project",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The rail is for choosing a project or an agent; everything about a project lives inside it.",
+      "statement": "The rail SHALL list registered projects and their open agents; a project SHALL offer Overview, Tasks, Spec, Jobs and Activity tabs and an Environment destination (quality, instructions, runners, charters, worktrees, diagnostics, budgets, settings), and adding a project view MUST NOT add a rail destination."
+    },
+    {
+      "key": "agent-identity-color-remains-project-consistent",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Two projects may each have an agent called `dev`; colour alone must never be the identifier.",
+      "statement": "An agent's colour SHALL be the same on every surface within its project, SHALL always be shown with the agent's name, and SHALL be looked up by project and agent together."
+    },
+    {
+      "key": "the-overview-shows-the-settings-that-gate-collaboration",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "These are the settings whose defaults stopped a real run without saying why; read at a glance, and edited where they already are.",
+      "statement": "The Overview MUST show a Collaboration block, above Attention, with the current value of: agents may start flows (On/Off), hop budget, token budget (used of limit, or 'No limit' with the used figure), the branch approval merges into ('Not set' when unset), the number of checks approval runs, the per-turn delivery cap, and agent budget (agents in the project of the budget); 'No limit' and 'Not set' MUST be visually flagged, and each row MUST link to the control that edits it."
+    },
+    {
+      "key": "the-overview-switches-agent-flows-in-place",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Off is the commonest reason a planned build never starts, and the fix is one bit; PUT /settings merges a partial body onto what is stored (projects.py:477), so sending one field changes one field.",
+      "statement": "The Overview MUST let the operator switch 'agents may start flows' on and off in place, by sending only allow_agent_jobs to PUT /projects/{id}/settings; a refused save MUST show the Hub's message and leave the switch showing the stored value."
+    },
+    {
+      "key": "the-overview-names-agents-held-by-the-hop-budget",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A chain paused on the hop budget looks like an idle project; the Hub already derives the reason (inbound_queue.py:196).",
+      "statement": "When one or more agents' queues are held because every waiting entry is past the hop budget (queue status waiting_reason 'hop budget exhausted'), the Collaboration block's hop row MUST say how many agents are held, and each such agent's card MUST say it is held by the hop budget."
+    },
+    {
+      "key": "an-agent-card-shows-its-grants-as-chips",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Grants vary silently between agents; a difference is visible only when the agents sit side by side.",
+      "statement": "Each agent card on the Overview MUST show three chips, evidence, checkpoints and recall, reflecting can_accept_evidence, can_read_checkpoints and can_recall, each switchable in place through the existing per-agent grant update; it MUST flag an agent with no charter (linking to its Charter section) and an agent that cannot launch (no runner, or the Hub's launchability sentence)."
+    },
+    {
+      "key": "an-agent-card-keeps-its-details-collapsed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator decision 2026-10-08: posture details are wanted on the page but collapsed, so the cards stay scannable.",
+      "statement": "Each agent card MUST carry a details row, collapsed by default and expanded per agent, showing the agent's default permissions (or 'built-in default'), its runner, and its permission and question wait times (the stored value, or the Hub's fallback of 120s and 240s marked as default), linking to the agent's settings."
+    },
+    {
+      "key": "the-overview-settings-follow-changes-live",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today only ['projects'] and accounting are invalidated (useSSE.ts:611); a value read from useProjectSettings would stay stale.",
+      "statement": "The Overview's Collaboration values MUST follow a settings change made from any surface without a reload: project_settings_updated MUST invalidate the project's settings query as well as the keys it invalidates today."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Shell layout: rail, project header, project view tabs, content area",
+      "The project views (Overview, Tasks, Spec, Jobs, Activity) and the Environment destination",
+      "Palette, text ramp, accent and emphasis rules for the chrome",
+      "Rail collapse, width, active-row marking, and the rail swapping to an area's own navigation",
+      "Project header: location display, project switcher, appearance toggle, Hub setup",
+      "Add project, project configuration and agent creation entry points",
+      "Agent identity colour, consistent per project",
+      "The command palette"
+    ],
+    "non_goals": [
+      "The project, agent and conversation tree inside the rail and how a conversation is reached: conversation-navigation",
+      "Per-control hover, press and focus treatment: hub-interaction-feedback",
+      "The composer's own controls: agent-composer",
+      "How a chosen folder is opened, created or registered: local-project-workspace"
+    ]
+  },
+  "summary": "The Hub's outer frame: a navigation rail beside a content area under a project header and project view tabs, drawn from one neutral graphite palette in light and dark modes with hue reserved for meaning, a contrast-checked text ramp and opaque lifted surfaces. It fixes where each project's views, configuration and agent creation are reached, keeps an agent's colour consistent across the project, and offers a keyboard command palette.",
+  "tasks": [],
+  "title": "Hub workspace shell"
+}

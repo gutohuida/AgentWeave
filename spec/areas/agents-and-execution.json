@@ -1,0 +1,34 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "system-map",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "How an agent comes to exist and run inside a project: the roster identity, the runner it is bound to, the charter that shapes its behavior, the model it calls, the tool surface it is offered, how it onboards into a turn's context and uses that context once running, and the sandbox its run executes inside.",
+  "tasks": [],
+  "title": "Agents and execution"
+}

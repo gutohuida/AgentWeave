@@ -1,0 +1,164 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the trial Hub on :8010, a capability holding old-rule and widgets-exist with criterion widgets-exist-c, and an approved change whose task is approved",
+      "key": "drive",
+      "requirement": "app",
+      "then": "the capability's file holds the folded requirement and widgets-exist, and neither old-rule nor widgets-exist-c; on today's Hub the retire section does not exist",
+      "when": "the operator folds it in Chromium, retiring old-rule and widgets-exist-c (scripts/drive/d1008_fold_retire_drive.py)"
+    },
+    {
+      "given": "a capability with two requirements, one with two criteria",
+      "key": "retire-writes",
+      "requirement": "retire",
+      "then": "the retired requirement and its criteria are gone, the other criterion stays, one merge row names the change",
+      "when": "a fold retires one requirement and one criterion of the other"
+    },
+    {
+      "given": "an unknown requirement key, an unknown criterion key, a requirement both replaced and retired",
+      "key": "retire-refusals",
+      "requirement": "retire",
+      "then": "each is refused with its own code and the capability's digest is unchanged",
+      "when": "each is folded"
+    },
+    {
+      "given": "a capability with requirements and criteria",
+      "key": "lists",
+      "requirement": "draft-lists",
+      "then": "it lists every requirement with its statement and every criterion with its requirement, in the capability's order",
+      "when": "the draft is requested"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "8391cf867d4cc4e603306eb0458bcf42b7d8f1f4fea4251aee369b55b24b93b0",
+      "FR-2": "9d0ace041394dc73bbe8e522f1efff17fd7d6365581a6a4db7074b42e2088746",
+      "FR-3": "9953a9bc47db23090eb2e9ad8ef9f3cc236b11d73229d9bf4d8ac7f7eda643f4"
+    },
+    "high_water": 3,
+    "requirements": {
+      "app": "FR-3",
+      "draft-lists": "FR-2",
+      "retire": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1, no migration. Retirement is applied to the draft's payload before the merge, so the merge's validation (a criterion naming a missing requirement is refused) and its audit row cover it. Retiring a requirement drops its criteria; retiring a criterion leaves its requirement. HAZARD: the UI bundle reaches :8000's app at its next reload. Rollback: revert.",
+  "evidence": {
+    "checked": [
+      "spec_service.fold_draft (a-finished-change-is-folded-into-its-capability) appends and replaces only",
+      "a504858: ac136 restated by a separate merge naming no change"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F533: the fold appends and can replace a whole requirement, but cannot remove a requirement or touch an existing criterion. Restating spec-document-authority's ac136, which a-finished-change-is-folded-into-its-capability contradicts, took a second hand-built merge naming no change (a504858), and a change that narrows or retires behaviour has no fold path at all.",
+  "requirements": [
+    {
+      "key": "retire",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A change that narrows or supersedes behaviour must be able to say so in the corpus through the same audited step that adds what it brings.",
+      "statement": "A fold MUST accept capability requirement keys to retire and capability criterion keys to retire, and write the capability without them in the same merge as the folded requirements: a retired requirement takes its criteria with it. A key the capability does not hold, or a requirement both replaced and retired, MUST be refused before anything is written."
+    },
+    {
+      "key": "draft-lists",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator retires by key; the keys have to be in front of them.",
+      "statement": "The fold draft MUST list the capability's current requirements (key and statement) and criteria (key, requirement and then), so the operator can choose what to retire."
+    },
+    {
+      "key": "app",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The close-out stays something the operator does in the app.",
+      "statement": "The fold dialog MUST offer the capability's requirements and criteria for retirement, filterable by text, and send the chosen keys with the fold."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "retire and retire_criteria on the fold request, applied in the same merge",
+      "The fold draft listing the capability's requirements and criteria",
+      "The fold dialog's retire section"
+    ],
+    "non_goals": [
+      "A change document declaring what it retires in its own payload: the fold is where the operator reconciles a change with the capability",
+      "Retiring through an agent: folds stay operator-only",
+      "Editing an existing criterion's text in place: retire it and fold the new one"
+    ]
+  },
+  "summary": "Folding a change can also remove capability requirements (with their criteria) and individual criteria that the change supersedes, in the same audited merge. Amending a criterion is retiring the old one and folding the new. The fold dialog lists the capability's requirements and criteria to retire.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1008_fold_retire_drive.py against :8010: the 'drive' criterion, run before the build.",
+      "files": [
+        "scripts/drive/d1008_fold_retire_drive.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "app"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "Failing tests first in hub/tests/test_a_fold_can_retire_what_the_change_supersedes.py. spec_service.fold_draft takes the retirements and lists the capability's requirements and criteria; the fold route accepts them.",
+      "files": [
+        "hub/hub/spec_service.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests/test_a_fold_can_retire_what_the_change_supersedes.py"
+      ],
+      "from": null,
+      "key": "backend",
+      "requirements": [
+        "retire",
+        "draft-lists"
+      ],
+      "reviewer": null,
+      "title": "retire and retire_criteria on the fold; the draft lists the capability"
+    },
+    {
+      "depends_on": [
+        "backend"
+      ],
+      "description": "Vitest first in specFold.test.tsx; bundle refreshed; the drive passes on a restarted :8010.",
+      "files": [
+        "hub/ui/src/components/spec/FoldIntoCapabilityDialog.tsx",
+        "hub/ui/src/api/spec.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "app"
+      ],
+      "reviewer": null,
+      "title": "Retire section in the fold dialog"
+    }
+  ],
+  "title": "A fold can retire what the change supersedes in the capability"
+}

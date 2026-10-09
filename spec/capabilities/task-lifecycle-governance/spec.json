@@ -1,0 +1,1233 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a task in `in_progress`",
+      "key": "ac1",
+      "requirement": "task-status-moves-only-along-declared-transitions",
+      "then": "the status becomes `completed` and one transition is recorded",
+      "when": "a caller moves it to `completed`"
+    },
+    {
+      "given": "a task in `in_progress`",
+      "key": "ac2",
+      "requirement": "task-status-moves-only-along-declared-transitions",
+      "then": "the request is refused with HTTP 409 naming `in_progress` and the statuses reachable from it; the task is unchanged and no transition is recorded",
+      "when": "an agent run asks for `approved`"
+    },
+    {
+      "given": "",
+      "key": "ac3",
+      "requirement": "task-status-moves-only-along-declared-transitions",
+      "then": "the request succeeds and no transition is recorded",
+      "when": "a caller sets a task's status to the status it already holds"
+    },
+    {
+      "given": "",
+      "key": "ac4",
+      "requirement": "task-status-moves-only-along-declared-transitions",
+      "then": "a test fails if they differ, and the MCP status type is the map's statuses minus `blocked`",
+      "when": "the Hub schema's and the CLI's status declarations are compared with the declared map"
+    },
+    {
+      "given": "",
+      "key": "ac5",
+      "requirement": "a-task-may-only-be-created-in-an-entry-status",
+      "then": "the request is refused with HTTP 409 and no task is created",
+      "when": "a caller creates a task with status `approved`, `completed` or `under_review`"
+    },
+    {
+      "given": "",
+      "key": "ac6",
+      "requirement": "a-task-may-only-be-created-in-an-entry-status",
+      "then": "the task is created and no transition is recorded",
+      "when": "a caller creates a task in `pending` or `assigned`, or names no status"
+    },
+    {
+      "given": "",
+      "key": "ac7",
+      "requirement": "a-task-may-only-be-created-in-an-entry-status",
+      "then": "the tool offers no status parameter, so the task starts in `pending`",
+      "when": "an agent creates a task through the MCP `create_task` tool"
+    },
+    {
+      "given": "a task in `in_progress`",
+      "key": "ac10",
+      "requirement": "some-transitions-are-the-operator-s-alone",
+      "then": "the request is refused and the status is unchanged",
+      "when": "an agent run moves it to `rejected`"
+    },
+    {
+      "given": "",
+      "key": "ac11",
+      "requirement": "some-transitions-are-the-operator-s-alone",
+      "then": "the request succeeds and is recorded as an operator transition",
+      "when": "the operator moves a task to `rejected` from `pending`, `assigned`, `in_progress`, `blocked`, `completed` or `revision_needed`"
+    },
+    {
+      "given": "",
+      "key": "ac13",
+      "requirement": "some-transitions-are-the-operator-s-alone",
+      "then": "the request succeeds and the earlier transitions remain in the history",
+      "when": "the operator moves `approved` to `revision_needed`, or `rejected` to `pending`"
+    },
+    {
+      "given": "",
+      "key": "ac14",
+      "requirement": "some-transitions-are-the-operator-s-alone",
+      "then": "the request is refused",
+      "when": "an agent run tries to move a task out of `approved` or `rejected`"
+    },
+    {
+      "given": "a task in `completed`",
+      "key": "ac15",
+      "requirement": "some-transitions-are-the-operator-s-alone",
+      "then": "the request is refused as an undeclared move, exactly as for an agent run",
+      "when": "the operator asks for `approved` directly"
+    },
+    {
+      "given": "",
+      "key": "ac8",
+      "requirement": "the-operator-can-perform-every-transition-reserved-to-them",
+      "then": "the status control offers exactly the targets the allowed map lists for the operator from that status",
+      "when": "the operator opens a task in a given status"
+    },
+    {
+      "given": "",
+      "key": "ac9",
+      "requirement": "the-operator-can-perform-every-transition-reserved-to-them",
+      "then": "the task view offers that move",
+      "when": "the operator wants to reject a `pending` task or reopen an `approved` one"
+    },
+    {
+      "given": "",
+      "key": "ac16",
+      "requirement": "every-accepted-transition-is-recorded-append-only",
+      "then": "the history holds both transitions, each naming its own run and agent, and neither overwrote the other",
+      "when": "one agent completes a task and another later approves it"
+    },
+    {
+      "given": "",
+      "key": "ac17",
+      "requirement": "every-accepted-transition-is-recorded-append-only",
+      "then": "the transition is recorded with actor kind `operator`, no run and no agent",
+      "when": "the operator changes a task's status"
+    },
+    {
+      "given": "",
+      "key": "ac18",
+      "requirement": "every-accepted-transition-is-recorded-append-only",
+      "then": "none exists other than deleting the whole task",
+      "when": "the Hub's routes and tools are searched for a path that edits or removes a transition row"
+    },
+    {
+      "given": "",
+      "key": "ac20",
+      "requirement": "every-accepted-transition-is-recorded-append-only",
+      "then": "the transition's cause is `runtime` and it still names that run and agent",
+      "when": "the runtime moves a task to `in_progress` because a run bound to it"
+    },
+    {
+      "given": "agent A moved the task to `completed`",
+      "key": "ac22",
+      "requirement": "an-agent-cannot-approve-the-work-it-produced",
+      "then": "the request is refused with HTTP 403 saying a different actor is required and that a new run does not make A a different actor; the task is unchanged",
+      "when": "A requests `approved` from a later run"
+    },
+    {
+      "given": "agent A completed the task and B recorded no evidence for it",
+      "key": "ac24",
+      "requirement": "an-agent-cannot-approve-the-work-it-produced",
+      "then": "the request succeeds",
+      "when": "B requests `approved`"
+    },
+    {
+      "given": "the operator completed the task and agent B recorded evidence for it (accepted, awaiting or rejected)",
+      "key": "ac25",
+      "requirement": "an-agent-cannot-approve-the-work-it-produced",
+      "then": "the request is refused, naming the evidence as the reason and not claiming any agent completed the task",
+      "when": "B requests `approved`"
+    },
+    {
+      "given": "agent A completed the task and agent B recorded evidence for it",
+      "key": "ac32",
+      "requirement": "an-agent-cannot-approve-the-work-it-produced",
+      "then": "the request is refused naming the evidence, and names A as the completer",
+      "when": "B requests `approved`"
+    },
+    {
+      "given": "the operator completed the task and the only evidence was recorded by the operator",
+      "key": "ac28",
+      "requirement": "an-agent-cannot-approve-the-work-it-produced",
+      "then": "the request succeeds",
+      "when": "an agent requests `approved`"
+    },
+    {
+      "given": "agent A completed the task",
+      "key": "ac30",
+      "requirement": "an-agent-cannot-approve-the-work-it-produced",
+      "then": "the request is refused on the same grounds",
+      "when": "A requests `rejected` or `revision_needed`"
+    },
+    {
+      "given": "",
+      "key": "ac29",
+      "requirement": "an-agent-cannot-approve-the-work-it-produced",
+      "then": "the request succeeds and is recorded as an operator transition",
+      "when": "the operator approves a task they completed themselves"
+    },
+    {
+      "given": "agent A completed the task and still holds it",
+      "key": "ac33",
+      "requirement": "a-task-entering-review-must-not-still-name-its-author-as-its",
+      "then": "the request is refused with HTTP 403 and the task is unchanged",
+      "when": "anyone moves it to `under_review`"
+    },
+    {
+      "given": "agent A completed the task and still holds it",
+      "key": "ac35",
+      "requirement": "a-task-entering-review-must-not-still-name-its-author-as-its",
+      "then": "the refusal names landing the task and dispatching another agent's review turn, and does not say landing approves it",
+      "when": "the operator's move to `under_review` is refused"
+    },
+    {
+      "given": "agent A completed the task and still holds it",
+      "key": "ac37",
+      "requirement": "a-task-entering-review-must-not-still-name-its-author-as-its",
+      "then": "the refusal says none of the agent's task tools reassigns a task and that the operator can move it on",
+      "when": "an agent's move to `under_review` is refused"
+    },
+    {
+      "given": "agent A completed the task and still holds it",
+      "key": "ac41",
+      "requirement": "a-task-entering-review-must-not-still-name-its-author-as-its",
+      "then": "the request succeeds",
+      "when": "one operator request sets the assignee to agent B and the status to `under_review`"
+    },
+    {
+      "given": "",
+      "key": "ac43",
+      "requirement": "a-task-entering-review-must-not-still-name-its-author-as-its",
+      "then": "the request succeeds",
+      "when": "a completed task with no assignee is moved to `under_review`"
+    },
+    {
+      "given": "the operator completed the task and its assignee recorded evidence for it",
+      "key": "ac45",
+      "requirement": "a-task-entering-review-must-not-still-name-its-author-as-its",
+      "then": "the request is refused naming the evidence",
+      "when": "the task is moved to `under_review`"
+    },
+    {
+      "given": "",
+      "key": "ac56",
+      "requirement": "governance-holds-identically-over-http-and-mcp",
+      "then": "both are refused with the same status code and reason",
+      "when": "the same illegal move is attempted over the operator API and over the agent plane"
+    },
+    {
+      "given": "",
+      "key": "ac57",
+      "requirement": "governance-holds-identically-over-http-and-mcp",
+      "then": "the tool call reports a failure naming the reason",
+      "when": "the MCP `update_task` tool receives a refused transition"
+    },
+    {
+      "given": "",
+      "key": "ac58",
+      "requirement": "the-system-may-cause-a-transition-without-becoming-an-actor",
+      "then": "no transition occurs and the task is unchanged",
+      "when": "the runtime would move a task on a run's behalf along an edge that run may not take"
+    },
+    {
+      "given": "",
+      "key": "ac59",
+      "requirement": "the-system-may-cause-a-transition-without-becoming-an-actor",
+      "then": "the recorded agent is the run's agent, and later review of the task is judged against that agent as if it had asked",
+      "when": "a runtime move is made on behalf of a run"
+    },
+    {
+      "given": "",
+      "key": "ac61",
+      "requirement": "the-system-may-cause-a-transition-without-becoming-an-actor",
+      "then": "they are `run` and `operator` and nothing else",
+      "when": "the actor kinds are enumerated"
+    },
+    {
+      "given": "",
+      "key": "ac266",
+      "requirement": "a-move-a-scheduled-firing-makes-is-recorded-as-that-firing-s",
+      "then": "the transition has actor kind `operator`, cause `job` and the flow's job id, and the history route names the flow",
+      "when": "a flow's firing moves a pending task to `assigned`"
+    },
+    {
+      "given": "a flow queued a review of a task",
+      "key": "ac268",
+      "requirement": "a-move-a-scheduled-firing-makes-is-recorded-as-that-firing-s",
+      "then": "the transition's cause names that flow's job",
+      "when": "the queued review is delivered and moves the task to `under_review`"
+    },
+    {
+      "given": "",
+      "key": "ac269",
+      "requirement": "a-move-a-scheduled-firing-makes-is-recorded-as-that-firing-s",
+      "then": "the transition's cause is `actor` and names no job",
+      "when": "the operator dispatches a review by hand"
+    },
+    {
+      "given": "",
+      "key": "ac270",
+      "requirement": "a-move-a-scheduled-firing-makes-is-recorded-as-that-firing-s",
+      "then": "it is refused on the same grounds",
+      "when": "a job-caused move would be refused for the operator"
+    },
+    {
+      "given": "a task moved by an agent, the operator and a flow",
+      "key": "c-n3-1",
+      "requirement": "n3",
+      "then": "every move is listed in sequence order with its actor, cause and, for the flow's move, the flow's name and kind `flow`",
+      "when": "`GET /tasks/{id}/transitions` is read"
+    },
+    {
+      "given": "",
+      "key": "c-n3-2",
+      "requirement": "n3",
+      "then": "the route answers 404",
+      "when": "the history of a task id that does not exist is read"
+    },
+    {
+      "given": "a run bound to no task",
+      "key": "ac179",
+      "requirement": "a-run-may-only-complete-the-task-it-holds",
+      "then": "the move is refused, stating the run is not working any task",
+      "when": "it moves a task to `completed`"
+    },
+    {
+      "given": "a run bound to task A",
+      "key": "ac181",
+      "requirement": "a-run-may-only-complete-the-task-it-holds",
+      "then": "the move is refused, naming task A",
+      "when": "it moves task B to `completed`"
+    },
+    {
+      "given": "an unbound run",
+      "key": "ac183",
+      "requirement": "a-run-may-only-complete-the-task-it-holds",
+      "then": "both moves are permitted",
+      "when": "it claims a `pending` task and later completes it"
+    },
+    {
+      "given": "",
+      "key": "ac182",
+      "requirement": "a-run-may-only-complete-the-task-it-holds",
+      "then": "the move is permitted with no binding",
+      "when": "the operator moves a task to `completed`"
+    },
+    {
+      "given": "agent A completed a task and reviewer B holds it in `under_review`",
+      "key": "c-n1-1",
+      "requirement": "n1",
+      "then": "the task's assignee is A",
+      "when": "B moves it to `revision_needed`"
+    },
+    {
+      "given": "the operator completed a task that reviewer B holds in `under_review`",
+      "key": "c-n1-2",
+      "requirement": "n1",
+      "then": "the assignee is still B",
+      "when": "it is moved to `revision_needed`"
+    },
+    {
+      "given": "",
+      "key": "c-n4-1",
+      "requirement": "n4",
+      "then": "the request is refused with HTTP 403 and the task's status and assignee are unchanged",
+      "when": "an agent's request sets a task's assignee together with `under_review`"
+    },
+    {
+      "given": "",
+      "key": "c-n4-2",
+      "requirement": "n4",
+      "then": "the request is refused with HTTP 403",
+      "when": "an agent's request changes a task's priority or description"
+    },
+    {
+      "given": "",
+      "key": "ac276",
+      "requirement": "the-operator-can-rename-a-task",
+      "then": "the task shows the new title and its status and history are unchanged",
+      "when": "the operator changes a task's title"
+    },
+    {
+      "given": "",
+      "key": "ac277",
+      "requirement": "the-operator-can-rename-a-task",
+      "then": "the change is refused and the title is unchanged",
+      "when": "the operator submits a title that is empty after trimming"
+    },
+    {
+      "given": "a `blocked` task",
+      "key": "ac278",
+      "requirement": "the-operator-can-rename-a-task",
+      "then": "the title changes and it is still `blocked` with its reason",
+      "when": "the operator renames it"
+    },
+    {
+      "given": "",
+      "key": "ac279",
+      "requirement": "the-operator-can-rename-a-task",
+      "then": "the request is refused and no part of it is applied",
+      "when": "an agent's run submits a title, with or without a status"
+    },
+    {
+      "given": "a task in `in_progress`",
+      "key": "ac64",
+      "requirement": "a-task-can-be-waiting-on-a-person",
+      "then": "the transition is recorded",
+      "when": "it is moved to `blocked` by an allowed route"
+    },
+    {
+      "given": "a `pending` task",
+      "key": "ac65",
+      "requirement": "a-task-can-be-waiting-on-a-person",
+      "then": "the move is refused as illegal, naming what is reachable",
+      "when": "it is moved to `blocked`"
+    },
+    {
+      "given": "a `blocked` task",
+      "key": "ac66",
+      "requirement": "a-task-can-be-waiting-on-a-person",
+      "then": "the move is refused",
+      "when": "it is moved to `completed`"
+    },
+    {
+      "given": "a `blocked` task",
+      "key": "ac67",
+      "requirement": "a-task-can-be-waiting-on-a-person",
+      "then": "the move is accepted",
+      "when": "the operator reassigns or rejects it"
+    },
+    {
+      "given": "a run bound to an `in_progress` task",
+      "key": "ac68",
+      "requirement": "a-task-is-recorded-as-waiting-because-the-system-observed-it",
+      "then": "the task is `blocked` before the run ends, by a `runtime` transition naming the run",
+      "when": "it asks a blocking question"
+    },
+    {
+      "given": "a run bound to a task not in `in_progress`",
+      "key": "ac70",
+      "requirement": "a-task-is-recorded-as-waiting-because-the-system-observed-it",
+      "then": "the task is `blocked`",
+      "when": "it asks a blocking question, the task later reaches `in_progress`, and the run ends with the question unanswered"
+    },
+    {
+      "given": "a task blocked on a question",
+      "key": "ac71",
+      "requirement": "a-task-is-recorded-as-waiting-because-the-system-observed-it",
+      "then": "the task returns to `in_progress`",
+      "when": "the question is answered"
+    },
+    {
+      "given": "",
+      "key": "ac72",
+      "requirement": "a-task-is-recorded-as-waiting-because-the-system-observed-it",
+      "then": "the request is refused with HTTP 403",
+      "when": "an agent asks for `blocked` on its own task"
+    },
+    {
+      "given": "a `blocked` task",
+      "key": "ac73",
+      "requirement": "a-task-is-recorded-as-waiting-because-the-system-observed-it",
+      "then": "the request is refused with HTTP 403 naming what does end a wait",
+      "when": "the agent bound to it asks for `in_progress`"
+    },
+    {
+      "given": "",
+      "key": "ac75",
+      "requirement": "a-task-is-recorded-as-waiting-because-the-system-observed-it",
+      "then": "the move is accepted and recorded as an operator transition",
+      "when": "the operator moves a task into or out of `blocked`"
+    },
+    {
+      "given": "",
+      "key": "ac81",
+      "requirement": "only-an-unanswered-blocking-question-makes-a-task-wait",
+      "then": "the task is not `blocked` and the run is divergent as normal",
+      "when": "a run ends having asked only a non-blocking question, without moving its task"
+    },
+    {
+      "given": "",
+      "key": "ac83",
+      "requirement": "only-an-unanswered-blocking-question-makes-a-task-wait",
+      "then": "the task is not `blocked`",
+      "when": "a run ends without moving its task and the only unanswered blocking question was asked by another run"
+    },
+    {
+      "given": "",
+      "key": "ac84",
+      "requirement": "only-an-unanswered-blocking-question-makes-a-task-wait",
+      "then": "the task is not `blocked` and the run is divergent as normal",
+      "when": "a run ends without moving its task and its only outstanding blocking question's wait already ended"
+    },
+    {
+      "given": "",
+      "key": "ac76",
+      "requirement": "a-waiting-task-names-what-it-is-waiting-for",
+      "then": "its `blocked_reason` identifies the question",
+      "when": "a task is parked on a question"
+    },
+    {
+      "given": "",
+      "key": "ac77",
+      "requirement": "a-waiting-task-names-what-it-is-waiting-for",
+      "then": "the move is refused with HTTP 422 and the task is unchanged",
+      "when": "the operator moves a task to `blocked` with no reason"
+    },
+    {
+      "given": "a `blocked` task",
+      "key": "ac78",
+      "requirement": "a-waiting-task-names-what-it-is-waiting-for",
+      "then": "it no longer carries a `blocked_reason`",
+      "when": "it moves to any other status"
+    },
+    {
+      "given": "",
+      "key": "ac80",
+      "requirement": "a-waiting-task-names-what-it-is-waiting-for",
+      "then": "focus is in the reason field and the move can be confirmed with what they type",
+      "when": "the operator chooses `blocked` from the task view using the keyboard"
+    },
+    {
+      "given": "a task blocked on a question",
+      "key": "ac86",
+      "requirement": "declining-a-question-releases-the-task-it-parked",
+      "then": "the task returns to `in_progress` with no `blocked_reason`",
+      "when": "the operator declines the question"
+    },
+    {
+      "given": "",
+      "key": "ac87",
+      "requirement": "declining-a-question-releases-the-task-it-parked",
+      "then": "the task is not `blocked`",
+      "when": "a run ends without moving its task and its only blocking question was declined"
+    },
+    {
+      "given": "",
+      "key": "ac89",
+      "requirement": "declining-a-question-releases-the-task-it-parked",
+      "then": "no task changes status",
+      "when": "the operator declines a question that never parked a task"
+    },
+    {
+      "given": "a task blocked on a question",
+      "key": "ac206",
+      "requirement": "a-wait-that-ends-without-an-answer-returns-the-task-to-its-w",
+      "then": "the task returns to `in_progress` and the question records that its wait ended",
+      "when": "the asking run reports its wait expired after the deadline"
+    },
+    {
+      "given": "",
+      "key": "ac208",
+      "requirement": "a-wait-that-ends-without-an-answer-returns-the-task-to-its-w",
+      "then": "the report is refused and the task is unchanged",
+      "when": "a run reports an expired wait before the recorded deadline"
+    },
+    {
+      "given": "",
+      "key": "ac209",
+      "requirement": "a-wait-that-ends-without-an-answer-returns-the-task-to-its-w",
+      "then": "the report is refused",
+      "when": "a run reports an expired wait for a question another run asked"
+    },
+    {
+      "given": "a blocked task whose question's deadline has passed, unanswered and undeclined",
+      "key": "ac211",
+      "requirement": "a-wait-that-ends-without-an-answer-returns-the-task-to-its-w",
+      "then": "the question records that its wait ended and the task returns to `in_progress`",
+      "when": "the asking run ends having reported nothing"
+    },
+    {
+      "given": "",
+      "key": "ac213",
+      "requirement": "a-wait-that-ends-without-an-answer-returns-the-task-to-its-w",
+      "then": "the question is not recorded as having ended unanswered",
+      "when": "the operator declines a question"
+    },
+    {
+      "given": "a task whose run's wait ended unanswered",
+      "key": "ac214",
+      "requirement": "work-that-proceeded-without-an-answer-says-so-for-good",
+      "then": "the task states it proceeded without the operator's answer, naming the question",
+      "when": "the agent completes it"
+    },
+    {
+      "given": "such a task",
+      "key": "ac216",
+      "requirement": "work-that-proceeded-without-an-answer-says-so-for-good",
+      "then": "the task still states it proceeded without the answer",
+      "when": "the operator answers the question afterwards and the task is approved"
+    },
+    {
+      "given": "",
+      "key": "ac217",
+      "requirement": "work-that-proceeded-without-an-answer-says-so-for-good",
+      "then": "the task states nothing about proceeding without an answer",
+      "when": "a task's blocking question is answered before its wait ends"
+    },
+    {
+      "given": "a run bound to a task that could not be parked",
+      "key": "ac219",
+      "requirement": "work-that-proceeded-without-an-answer-says-so-for-good",
+      "then": "the task still states it proceeded without the answer",
+      "when": "its wait ends unanswered"
+    },
+    {
+      "given": "",
+      "key": "ac171",
+      "requirement": "every-task-status-is-classified-into-exactly-one-lifecycle-b",
+      "then": "each appears in exactly one band",
+      "when": "the map's statuses are compared with the classification"
+    },
+    {
+      "given": "",
+      "key": "ac172",
+      "requirement": "every-task-status-is-classified-into-exactly-one-lifecycle-b",
+      "then": "importing the transition module raises, naming the status",
+      "when": "a status is added to the map without a band"
+    },
+    {
+      "given": "",
+      "key": "ac175",
+      "requirement": "status-sets-are-derived-from-the-classification-not-listed-i",
+      "then": "they read the same derived set",
+      "when": "two call sites ask whether a task is live"
+    },
+    {
+      "given": "",
+      "key": "ac176",
+      "requirement": "status-sets-are-derived-from-the-classification-not-listed-i",
+      "then": "`blocked` is in the current-item set and not in the claimable set",
+      "when": "the claimable set and the current-item set are compared"
+    },
+    {
+      "given": "",
+      "key": "ac178",
+      "requirement": "status-sets-are-derived-from-the-classification-not-listed-i",
+      "then": "every derived set including that band includes it with no further edit",
+      "when": "a status is added to the map and classified into a band"
+    },
+    {
+      "given": "a task serving a `gate` requirement with no accepted evidence",
+      "key": "ac135",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "then": "the move is refused with HTTP 409 and code `gate_unsatisfied`, naming the requirement and its remedy; no transition is recorded",
+      "when": "approval is requested"
+    },
+    {
+      "given": "that requirement's evidence is then accepted",
+      "key": "ac137",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "then": "the move succeeds",
+      "when": "approval is requested again"
+    },
+    {
+      "given": "a task serving a `rejected` requirement on a `sketch` document",
+      "key": "ac139",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "then": "the move is refused naming the requirement as `rejected`",
+      "when": "approval is requested"
+    },
+    {
+      "given": "a task serving unverified `contract` requirements",
+      "key": "ac142",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "then": "the move succeeds and the unverified requirements are reported on the approval",
+      "when": "approval is requested"
+    },
+    {
+      "given": "a `gate` document with a requirement that has no identifier",
+      "key": "ac146",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "then": "the move is refused reporting the diagnostic",
+      "when": "approval is requested for a task linking it"
+    },
+    {
+      "given": "a task serving an unverified `gate` requirement",
+      "key": "ac144",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "then": "the move succeeds",
+      "when": "it is moved to `completed`"
+    },
+    {
+      "given": "a task approved under a gate",
+      "key": "ac147",
+      "requirement": "a-transition-records-the-policy-that-governed-it",
+      "then": "the recorded transition still states the policy that applied",
+      "when": "the document's rigor is later changed"
+    },
+    {
+      "given": "",
+      "key": "ac149",
+      "requirement": "a-transition-records-the-policy-that-governed-it",
+      "then": "the transition's `policy_digest` is null",
+      "when": "a task serving no requirement is approved"
+    },
+    {
+      "given": "a `completed` task held by its author that passes the gate",
+      "key": "c-n5-1",
+      "requirement": "n5",
+      "then": "it is `approved` with two operator transitions and no assignee",
+      "when": "the operator lands it"
+    },
+    {
+      "given": "a `completed` task the gate refuses",
+      "key": "c-n5-2",
+      "requirement": "n5",
+      "then": "the refusal is the approval's own and the task is still `completed` with its holder",
+      "when": "the operator lands it"
+    },
+    {
+      "given": "an `under_review` task",
+      "key": "c-n5-3",
+      "requirement": "n5",
+      "then": "the request is refused with HTTP 409",
+      "when": "the operator lands it"
+    },
+    {
+      "given": "",
+      "key": "ac131",
+      "requirement": "a-task-reports-the-requirement-identifiers-it-was-given",
+      "then": "it reports those identifiers",
+      "when": "a task is created naming requirement identifiers and read back"
+    },
+    {
+      "given": "",
+      "key": "ac132",
+      "requirement": "a-task-reports-the-requirement-identifiers-it-was-given",
+      "then": "it is reported as unresolved and not among the linked identifiers",
+      "when": "a task names an identifier that matches nothing"
+    },
+    {
+      "given": "",
+      "key": "ac133",
+      "requirement": "a-task-reports-the-requirement-identifiers-it-was-given",
+      "then": "they are reported in that order",
+      "when": "a task links requirements 1, 2 and 11"
+    },
+    {
+      "given": "",
+      "key": "ac150",
+      "requirement": "a-task-list-can-be-scoped-to-one-loop-s-queue",
+      "then": "every task naming that loop is returned and no other",
+      "when": "the task list is scoped to one loop"
+    },
+    {
+      "given": "a loop owning a terminal task",
+      "key": "ac151",
+      "requirement": "a-task-list-can-be-scoped-to-one-loop-s-queue",
+      "then": "that task is included",
+      "when": "the list is scoped to it"
+    },
+    {
+      "given": "",
+      "key": "ac152",
+      "requirement": "a-task-list-can-be-scoped-to-one-specification-document-s-de",
+      "then": "every task it declared is returned and no other",
+      "when": "the task list is scoped to one document"
+    },
+    {
+      "given": "an archived document that declared a terminal task",
+      "key": "ac153",
+      "requirement": "a-task-list-can-be-scoped-to-one-specification-document-s-de",
+      "then": "that task is included",
+      "when": "the list is scoped to it"
+    },
+    {
+      "given": "a terminal task whose document is archived",
+      "key": "ac154",
+      "requirement": "the-task-list-s-default-view-retires-completed-work-from-arc",
+      "then": "the task is absent",
+      "when": "the mode is requested"
+    },
+    {
+      "given": "an open task whose document is archived",
+      "key": "ac155",
+      "requirement": "the-task-list-s-default-view-retires-completed-work-from-arc",
+      "then": "the task is present",
+      "when": "the mode is requested"
+    },
+    {
+      "given": "a task with no declaring document",
+      "key": "ac156",
+      "requirement": "the-task-list-s-default-view-retires-completed-work-from-arc",
+      "then": "the task is present whatever its status",
+      "when": "the mode is requested"
+    },
+    {
+      "given": "",
+      "key": "ac157",
+      "requirement": "the-task-list-s-default-view-retires-completed-work-from-arc",
+      "then": "every task is returned",
+      "when": "the list is requested without the mode"
+    },
+    {
+      "given": "a task with a long description, several criteria and links",
+      "key": "ac161",
+      "requirement": "a-task-s-full-detail-opens-in-a-view-sized-to-hold-it",
+      "then": "every part renders unclipped in the task drawer",
+      "when": "the operator opens it"
+    },
+    {
+      "given": "a task with a dependency, a transition, evidence, a queued entry, a finished run and a conversation bound to it",
+      "key": "the-operator-can-delete-a-document-a-task-or-an-arc-task-cascade",
+      "requirement": "the-operator-can-delete-a-document-a-task-or-an-archived-ag-task",
+      "then": "the dependency, transition, evidence and queued entry are gone; the run and conversation remain with the task pointer cleared",
+      "when": "it is deleted"
+    },
+    {
+      "given": "a task with an active bound run",
+      "key": "c-56-1",
+      "requirement": "the-operator-can-delete-a-document-a-task-or-an-archived-ag-task",
+      "then": "the request is refused with HTTP 409 and nothing is removed",
+      "when": "the operator deletes it"
+    },
+    {
+      "given": "a loop's completed task whose turn has ended",
+      "key": "al-ac152",
+      "requirement": "n5",
+      "then": "it reaches approved, its work is integrated, and its history records under_review and approved, each by the operator",
+      "when": "the operator lands it"
+    },
+    {
+      "given": "",
+      "key": "al-ac154",
+      "requirement": "n5",
+      "then": "the task still names its earlier holder and no transition is recorded",
+      "when": "a later step is refused after the first succeeds"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-33": "7c740474881186d7a0e928ab0150619be41407ca2768ef98b31ee72ba673aef9",
+      "FR-34": "8a8faac0eea8d9531c99a6f9bc479c464c90c9eee149933bce352537b1e5a451",
+      "FR-35": "c4e50307b122c0e1381d35e14907fc5c648a211171aaff447c7b90087fb37af2",
+      "FR-36": "20e9dac661b6601d772dc9ba80be680f9925e9d4bbdffb24be7ac15ae3b9e1d5",
+      "FR-37": "417d41a5fdcd3308f66b5a4795e7c0eee78ae6c4cf47d6c87662b1ae2c89dd46",
+      "FR-38": "48a9c4f027146bd4f43c8b5ce2ea26c8f8c4bd76cc76aa224b55a3608e30b759",
+      "FR-39": "a05e735c695ba410901b672535b2e90de8e2fdfb5059988139804f05bba13be7",
+      "FR-40": "746a5262c7af8c984b0a036572567368aaac8e652762bd20d4c389f3657bee69",
+      "FR-41": "cb9dab51e3e53aa7f0cb1410f8533e7282aa15bc54e7c373a13550d8f43c5664",
+      "FR-42": "40e6cf885b7208278f728acbda6ca42468d137de4c76a155e50ebef316d3a9b9",
+      "FR-43": "de8259da2b4b28ca649c62d966cbfb73d1575a9b58abe1fdb22a072f53c0fce7",
+      "FR-44": "85e43319b2a91575df4ccc52926fb94aaf95a7524b55d7f747fe552d90aa63b3",
+      "FR-45": "03a94dbd5e92263ce7a310c512458e9e49326013c950fe081a79eaa572c4338e",
+      "FR-46": "de866e3ae635c97e1d53481e9c4d4d7aea17ff319e82bc0dd9dcc385b5ec2f58",
+      "FR-47": "7f154734ecac3a21581dfe5daa05e5c9d3a54c484511628db4f618c6ea881668",
+      "FR-48": "e88ba1290c42e7b8aa5c17be7db2c4322ef149656cc1043f0818622c3e880a8f",
+      "FR-49": "90347f76e5a35bc61d0254a4ce076bb5c436fe229f9dba78c59332186da09972",
+      "FR-50": "29fcc5dfa17eabebcc5121d3f7d04d71b8b976d99f0471f3a9fab1d4172b4eb7",
+      "FR-51": "ea10ae2d13ef75727bc347849a7e6b3da5a375f39022387639c3c47473f491da",
+      "FR-52": "dedd86d802dec61781970f2c835757f62db654878b4c88a6b804e1553605cdd3",
+      "FR-53": "01a4e34bc4cb9b1aa638c304b0ae3bdbcb9d4a6af9be3940c48cd438f0c1de34",
+      "FR-54": "b7f4fbf5e260b9465c58358fbc09e9d57b933f5908272419646cea31497365ca",
+      "FR-55": "e22da2893e7a213bae7794f43adfd996034c54876854cc3e5a52201d923ec8d2",
+      "FR-56": "ce47a1bd84b1dd97d95f6c02a56f7d119df84fa4f01252e4a73e599d04c1d09f",
+      "FR-57": "b10365250624abd66df24d9083ddcb5f7e4ac2d8069a8111e0812acdb286929f",
+      "FR-58": "57cecfdd39778e2bb55b41be53bf03f9cb36acef608653b10f482b6930e21f6c",
+      "FR-59": "0fb6decc995d9ac27e6cb1099d6c21b24ee8c7c327e7d013bb82b3a22b1834bd",
+      "FR-60": "9b8ed0d586ef94f2906bb87d5ba0a43b245c6a0c190bbb3812f8dc263a54e097",
+      "FR-61": "cbfaa6761b2160e96984da8daff9f4ce39b7e8e44ecbbb739d3b33aa657fc2e1",
+      "FR-62": "1b8b56dbfd9bcdb0a6062c803a84344f96e09e34a3dd4e6292ee056ccfdee20a",
+      "FR-63": "a76715801d7f4200247922a3ec8b7a8e69278cdb446c76709292a0b30d6b3c08",
+      "FR-64": "ed6970bc682a923d3b5bd00fae573bc10c4fa04fead8191c68ca2e47d620e9cc",
+      "FR-65": "622693ecfd71eb41c716dd7569416feef3b534ca73a9ee0285036bca39b89892",
+      "FR-66": "e54f02a901edff7a1b8a51e20469452bb566ec76c82f08a6ffbab2c31fe30949",
+      "FR-67": "268984afd6fbfa38bfee2e4469e19897c7d6e273a333da751b4dc18dc075bcd6",
+      "FR-68": "6c7622f87e5bbc6ba83d294157516ad6269b3065c46240c7ab8776adc0455b18",
+      "FR-69": "9081f0dfbe81ba59754a39d8b46f03a5c8abbf8b046d994a926d0bb4ea5272f4",
+      "FR-70": "d33536e749a899b30ad225c6c8dbb6ccfe9f59ba054e962034310133f338efe0",
+      "FR-71": "49db0686f2f5b6c4fe9b1e84ba73bb763de911ed71fddd87aa7acf173cfdfe81",
+      "FR-72": "32a393c80dc881f79e53e0e34c56dc9dbc39c6bef9d99422ace3816ed31bd7c9",
+      "FR-73": "ebf742db2897fc3b4822d0303b61d3cb7fab182df213ea51506fb868ce14eb75",
+      "FR-74": "a68e5c680bd0d79ac76ab7aacd0eb80fb9b307a12e881b340b13b84b88baed28",
+      "FR-75": "83808ee33caea72e906cb068f0972113e639e9c136052a432724c300f7bc1ab6",
+      "FR-76": "4e87ef866fa27defa19e43cd2af82dd2e16dfa695392a013688ad048e59a8a9a",
+      "FR-77": "c83866d2addda80b7e8b19a54949421736b865b200977b576eb0272189c4cfb5",
+      "FR-78": "7c80dbc29dd118fbdf21c717ee65e5f6276b4709fe25d233e35d2e13e39795e1",
+      "FR-79": "03a6d83abcaa4ffd5c02c5e0a25399fb75ce0644436c6949405f9f9bffdcf95b",
+      "FR-80": "6fd53c789afe39be13a8ea2194f05b787e9729d509c1b621a17150e6b4810303",
+      "FR-81": "b7af8a7e4cb5cfe683f3002b89f20a763de898b8fffdc08d2a23f85d3f5a299f",
+      "FR-82": "764bcc853fbc34ef17c7e9bd54b0b55a144c65e0f4f1c932588fbf7d2148e21d",
+      "FR-83": "1a066b1b3d161548bf214c6390b61bab2a6df5478d212c6631cae4ca55de9ed4",
+      "FR-84": "9fe225e70175aaf9bae303f1c970a1177cd21a434a1118ca59c777d4c862c230",
+      "FR-85": "864854bf0d8b1dd811b4438775a98fae0886a08d66a6591f3322f9617a81e6fc",
+      "FR-86": "7bc72d7624b35a5488a5ee62f7ce886e8a9e6404069ad07de36c358a29fa1969",
+      "FR-87": "1b3c9f5f5df007b8c2b74b6417266022ad56baab0f5528b437cc81ce501ee379",
+      "FR-88": "4939ed5efebf7e8ef18bc1f2fff3d5ecab0164f5cdf414494049d05f97be0e17",
+      "FR-89": "e2190ebdcd71972be144f059b2aee02d5459f258c72b2ae2ce346785248520d6",
+      "FR-90": "b759383ecf720558381d4977d8efa820501f1a8ba058bed7bcb6f4718456f0ae",
+      "FR-91": "2a45fb322c9f0adf00095baaa91169a3a2efe14c449a3bbbb1dd36c89e91f273",
+      "FR-92": "e29c57f9a0d35a137a2a4cda177ede8ca9b8e9d317b7cb30323b2bc492c28fe5",
+      "FR-93": "7fad02f06ce5fc7ce6108e9f21d9ab23bb05ed2a678b9d28866ec9ae8dd0bf21",
+      "FR-94": "1d5bbc4ac6dfcdbc14539dee52f8e0c5a05649da1082e66b321e4002d7132708",
+      "FR-95": "2656989617ac091e71878662426606cab59f08aa8c64d86727b5003f33d981eb",
+      "FR-96": "ca4a685440a460ec85aff1138f2c40d6b84f12363b0bd367a0de7088ecaa19e1",
+      "FR-97": "97d51715c724b52b3ad5c9e56482cff95d31a600deebc6bfbccfca3df6b8aaae",
+      "FR-98": "6fd361c52514449bab9c7e50f5b55ac9ef41f4d90d4ef7c6ad650e916a947525"
+    },
+    "high_water": 98,
+    "requirements": {
+      "a-move-a-scheduled-firing-makes-is-recorded-as-that-firing-s": "FR-82",
+      "a-run-may-only-complete-the-task-it-holds": "FR-72",
+      "a-task-can-be-waiting-on-a-person": "FR-44",
+      "a-task-entering-review-must-not-still-name-its-author-as-its": "FR-39",
+      "a-task-is-recorded-as-waiting-because-the-system-observed-it": "FR-45",
+      "a-task-list-can-be-scoped-to-one-loop-s-queue": "FR-60",
+      "a-task-list-can-be-scoped-to-one-specification-document-s-de": "FR-61",
+      "a-task-may-only-be-created-in-an-entry-status": "FR-34",
+      "a-task-reports-the-requirement-identifiers-it-was-given": "FR-57",
+      "a-task-s-full-detail-opens-in-a-view-sized-to-hold-it": "FR-64",
+      "a-transition-records-the-policy-that-governed-it": "FR-59",
+      "a-wait-that-ends-without-an-answer-returns-the-task-to-its-w": "FR-75",
+      "a-waiting-task-names-what-it-is-waiting-for": "FR-46",
+      "an-agent-cannot-approve-the-work-it-produced": "FR-38",
+      "approval-is-refused-while-a-gated-requirement-is-unverified": "FR-58",
+      "declining-a-question-releases-the-task-it-parked": "FR-48",
+      "every-accepted-transition-is-recorded-append-only": "FR-37",
+      "every-task-status-is-classified-into-exactly-one-lifecycle-b": "FR-70",
+      "governance-holds-identically-over-http-and-mcp": "FR-41",
+      "n1": "FR-95",
+      "n3": "FR-94",
+      "n4": "FR-96",
+      "n5": "FR-98",
+      "only-an-unanswered-blocking-question-makes-a-task-wait": "FR-47",
+      "some-transitions-are-the-operator-s-alone": "FR-36",
+      "status-sets-are-derived-from-the-classification-not-listed-i": "FR-71",
+      "task-status-moves-only-along-declared-transitions": "FR-33",
+      "the-operator-can-delete-a-document-a-task-or-an-archived-ag-task": "FR-89",
+      "the-operator-can-perform-every-transition-reserved-to-them": "FR-35",
+      "the-operator-can-rename-a-task": "FR-84",
+      "the-system-may-cause-a-transition-without-becoming-an-actor": "FR-42",
+      "the-task-list-s-default-view-retires-completed-work-from-arc": "FR-62",
+      "work-that-proceeded-without-an-answer-says-so-for-good": "FR-76"
+    },
+    "retired": {
+      "a-finished-task-s-checkout-is-released-and-its-branch-is-not": "FR-73",
+      "a-refused-review-dispatch-leaves-the-task-as-it-was-before-t": "FR-81",
+      "a-review-a-flow-cannot-staff-is-not-reported-as-staffed": "FR-40",
+      "a-task-carries-how-its-neglect-should-be-answered": "FR-43",
+      "a-task-s-loop-is-set-by-a-named-writer-when-the-task-is-crea": "FR-66",
+      "a-task-s-requirement-links-are-visible-where-the-operator-ma": "FR-63",
+      "a-task-with-no-declared-dependencies-is-unaffected": "FR-69",
+      "accepting-evidence-attempts-the-integrations-that-wanted-it": "FR-80",
+      "an-integration-that-cannot-proceed-does-not-block-approval": "FR-51",
+      "an-integration-that-was-skipped-can-be-attempted-again": "FR-55",
+      "another-task-s-evidence-lands-through-that-task-s-own-approv": "FR-88",
+      "approval-creates-the-work-its-document-declares": "FR-54",
+      "approval-integrates-the-approved-work": "FR-49",
+      "approval-is-refused-unless-the-project-s-checks-passed-on-th": "FR-86",
+      "approval-is-refused-when-the-work-cannot-be-merged-cleanly": "FR-50",
+      "approval-is-refused-while-evidence-that-would-merge-sits-una": "FR-79",
+      "approval-is-refused-while-the-work-is-still-being-produced": "FR-78",
+      "approval-reports-what-it-created-and-what-it-could-not": "FR-83",
+      "dispatching-a-review-staffs-the-task-whichever-path-dispatch": "FR-74",
+      "every-integration-attempt-is-recorded": "FR-52",
+      "gating-start-does-not-gate-assignment": "FR-68",
+      "n2": "FR-97",
+      "naming-the-main-branch-attempts-the-integrations-that-wanted": "FR-56",
+      "navigating-from-a-task-s-requirement-link-reaches-that-requi": "FR-65",
+      "re-approving-an-amended-document-refreshes-its-ope-closed-frozen": "FR-91",
+      "re-approving-an-amended-document-refreshes-its-open-task-refresh": "FR-90",
+      "re-approving-an-amended-document-refreshes-its-open-tasks-app": "FR-93",
+      "re-approving-an-amended-document-refreshes-its-open-tasks-report": "FR-92",
+      "starting-work-is-gated-on-its-prerequisites-and-the-gate-liv": "FR-67",
+      "the-approval-preview-says-whether-the-work-would-merge-clean": "FR-85",
+      "the-operator-may-approve-over-failing-checks-with-a-recorded": "FR-87",
+      "work-already-in-the-main-line-is-not-reported-as-merged": "FR-53",
+      "work-that-no-evidence-governs-is-integrated-from-the-task-s-": "FR-77"
+    }
+  },
+  "design": "## D1. One declared map; operator authority is extra edges\n\n`hub/hub/task_transitions.py` declares `TRANSITIONS` (from -> to -> actor kinds) and `ENTRY_STATUSES`; it does no I/O. The operator's extra power (rejecting before review, reassigning a blocked task, reopening `approved`/`rejected`) is extra edges, not a bypass, so every history is a legal sequence and no forced-move override exists. `completed -> approved` is deliberately absent; landing composes the two declared edges instead.\n\n## D2. Two actor kinds, three causes\n\nActors are `run` (always with run id and agent) and `operator`. There is no system actor: the runtime acts *as* the run (cause `runtime`), a scheduled job acts *as* the operator (cause `job` + job id), and both pass every rule the same actor's own request would. Only the run-to-task binding records `runtime`, enforced by a source scan in the tests.\n\n## D3. One choke point, fixed order\n\nEvery status write goes through `task_transition_service.apply_transition`. Order: no-op restatement -> map legality (409) -> author/reviewer separation (403) -> review-entry holder rule (403) -> run holds the task (403) -> dependency gate on starting edges (409) -> approval gate on `approved` (409, typed `gate_unsatisfied`) -> write status and history row -> resolve open divergences -> integrate (on `approved`) -> schedule checks (operator completion) -> release checkout and slice hook (terminal). The dependency gate, the merge-related and check gates, integration and release are specified in their own capabilities; this one fixes the order. 409 means the task's state forbids it; 403 means this asker may not.\n\n## D4. Authorship is read from records reviewing does not create\n\nSeparation compares agents, never runs. The completer is the last `-> completed` transition by sequence. Evidence authorship (agent-recorded evidence rows, any review state) is the fallback and the F505 widening; the wider union (transitions, assignee, bound runs, evidence) is used only to *exclude candidates* when staffing a review, never to refuse a verdict, because by then the staffed reviewer is assignee and bound. The wedged-review predicate (`assignee_produced_the_work`) is shared by the flow's recovery and the dispatch's holder check so they cannot disagree.\n\n## D5. `blocked` is observed, never asserted\n\nAgents may not move into or out of `blocked`; the MCP status type omits it. The runtime parks at ask time and at run end, and releases on answer, decline or a verified expired wait. The Hub records the wait deadline from its own configured wait. `blocked -> in_progress` is exempt from the dependency gate because it resumes started work.\n\n## D8. Lifecycle bands\n\nEvery status is in exactly one band (`STATUS_BANDS`), checked against the map at import. Each status set (claimable, reviewable, with-reviewer, current item, live, terminal) is a union of bands for its own question; sets are never merged because their members overlap.\n\n## D9. Field ownership\n\nAn agent changes a task only through status, notes and requirement links; assignee, priority, description, title, divergence policy, escalation agent, loop and checks overrides are the operator's, refused before anything is applied. `revision_needed` returns the task to its recorded completer. `loop_id` is write-once at creation.\n",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_task_transitions.py, test_task_transition_service.py, test_task_transitions_api.py: map, entry statuses, separation, history, causes",
+      "hub/tests/test_reviewer_is_not_the_author.py, test_revision_returns_to_the_author.py, test_an_agent_updates_a_task_with_what_its_tool_carries.py, test_the_operator_can_rename_a_task.py",
+      "hub/tests/test_task_blocked.py, test_a_task_waits_while_its_run_waits.py, test_question_wait_resolution.py: the waiting status",
+      "hub/tests/test_requirement_gate.py, test_approval_waits_for_the_turn.py, test_approval_refuses_unaccepted_evidence.py, test_project_checks_gate.py, test_a_git_that_cannot_be_asked_refuses_approval.py: approval gates",
+      "hub/tests/test_task_integration.py, test_task_integration_retry.py, test_sibling_evidence_waits_for_its_task.py, test_the_preview_asks_the_merge_question.py, test_one_action_lands_the_work.py: integration and landing",
+      "hub/tests/test_task_lifecycle_bands.py, test_task_release.py, test_review_dispatch_staffs_the_task.py, test_a_refused_review_leaves_nothing_behind.py, test_a_review_nobody_is_doing.py, test_re_approving_refreshes_open_tasks.py, test_the_operator_can_delete_a_document_a_task_or_an_archived_agent.py"
+    ],
+    "limits": [
+      "Criteria were rewritten 2026-10-08 against the code at e25e059; not every criterion has its own named test."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059 (requirements restated as current behaviour, review-round narrative removed, five missing behaviours added).",
+  "open_questions": [],
+  "problem": "Without a declared machine a task's status is whatever the last writer said: a run could move its own work to `approved` in one call, and a single mutable column could not show that author and approver were the same. This capability makes every recorded move legal, attributed and made by an entitled actor; whether a move happens when reality changes is `run-task-binding`'s.",
+  "requirements": [
+    {
+      "key": "task-status-moves-only-along-declared-transitions",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A status that is whatever the last writer said cannot be governed. Naming what is reachable lets a refused caller correct itself; making a restatement a no-op stops a retried call from manufacturing a transition (and a false answer to who completed the task).",
+      "statement": "The Hub SHALL declare, in one place, every legal move between the nine task statuses (`pending`, `assigned`, `in_progress`, `blocked`, `completed`, `under_review`, `revision_needed`, `approved`, `rejected`) and SHALL refuse any status change that is not a declared move. A refusal SHALL name the task's current status and the statuses reachable from it for the requesting actor, and SHALL leave the task and its history unchanged. Restating the status a task already holds SHALL succeed as a no-op that records nothing."
+    },
+    {
+      "key": "a-task-may-only-be-created-in-an-entry-status",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A lifecycle that can be entered anywhere is not a lifecycle: without this a caller reaches `approved` by creating the task there. The history begins with the first move; the entry status is stated by the task itself.",
+      "statement": "The Hub SHALL let a task be created only in an entry status, `pending` or `assigned`, and SHALL refuse creation in any other status over every route. Creation SHALL NOT record a transition."
+    },
+    {
+      "key": "some-transitions-are-the-operator-s-alone",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Operator authority is extra legal edges rather than a bypass, so every recorded history is a legal sequence. Rejecting from `under_review` is a review outcome and open to agents; rejecting elsewhere is abandoning the work, which is the operator's.",
+      "statement": "The transition map SHALL declare, per edge, which actor kinds may take it, and SHALL give the operator edges no agent run has: rejecting from any non-terminal status other than `under_review`, reassigning a `blocked` task, and reopening `approved` (to `revision_needed`) or `rejected` (to `pending`). The operator SHALL NOT be able to make a move the map does not declare."
+    },
+    {
+      "key": "the-operator-can-perform-every-transition-reserved-to-them",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Exclusive operator authority with no surface to exercise it grants nothing; offering only legal moves means nothing is presented and then refused, and the client never holds a second copy of the map.",
+      "statement": "The app SHALL let the operator take every transition the map grants them from a task's view, and SHALL offer only the moves legal for the operator from the task's current status, read from the Hub's own declaration (`GET /tasks/transitions/allowed`)."
+    },
+    {
+      "key": "every-accepted-transition-is-recorded-append-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "`Task.status` is the materialised current value; the history is the durable account of how it got there, and author/reviewer separation reads it. The cause distinguishes a move an actor asked for from one the runtime or a scheduled job made on someone's behalf, so a check like \"did this run advance its task?\" is not satisfied by the system's own bookkeeping.",
+      "statement": "The Hub SHALL record one immutable row per accepted transition naming the task, the from and to status, the actor kind, the run and agent where an agent run acted, the cause (`actor`, `runtime` or `job`, with the job id for `job`), the policy that governed it and any checks-override reason, ordered by a sequence number. No application path SHALL update a transition row; rows are removed only when the operator deletes the task itself."
+    },
+    {
+      "key": "an-agent-cannot-approve-the-work-it-produced",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Distinctness is on agent identity, not run: every turn is a new run, so a run check forbids nothing. Evidence is the one authorship record that reviewing does not create, so it catches an agent judging its own work where the completion names nobody (an operator completion) or names a different agent (F505). Evidence keyed on its review state would make the authority to review depend on the review's outcome. The operator is exempt so a single-operator project can approve anything; the history says an operator did it.",
+      "statement": "The Hub SHALL refuse an agent run's move to `approved`, `rejected` or `revision_needed` when that run's agent is the agent recorded as moving the task to `completed`, or is an agent that recorded evidence for the task (whatever that evidence's review state, and whoever completed the task). Evidence the operator recorded SHALL refuse no agent. The operator SHALL be permitted every review outcome regardless of who produced the work."
+    },
+    {
+      "key": "a-task-entering-review-must-not-still-name-its-author-as-its",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "This is about the state the move produces, not authority: `under_review` held by its author claims a reviewer holds work its author holds, and such a task is claimable by nobody and strands its assignee (F70). An evidence author holding the review could not finish it, because its verdict is refused. Applying the assignee first lets one operator request name a reviewer and enter review together.",
+      "statement": "The Hub SHALL refuse, for every actor including the operator, a move to `under_review` while the task's assignee is the agent recorded as completing it or an agent that recorded evidence for it. A task with no assignee, or whose assignee is neither, SHALL be permitted. Where one request sets both the assignee and the status, the assignee SHALL be applied first. The refusal SHALL name a remedy the refused actor has: to the operator, landing the task or dispatching another agent's review turn (`POST /agent/trigger` with `review_task_id`); to an agent, that none of its task tools reassigns a task and the operator can move it on."
+    },
+    {
+      "key": "governance-holds-identically-over-http-and-mcp",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A rule enforced at one route holds only for the callers somebody remembered. One choke point means a surface gets every gate without knowing it exists.",
+      "statement": "Transition legality, actor separation, the completion and approval gates, and history recording SHALL be enforced in the single transition service every status write passes through, so they hold identically for the operator API, the agent HTTP plane, the MCP adapter, scheduled jobs and runtime moves. The MCP adapter MUST surface a refusal as a failed tool call carrying the reason, never as an empty or successful result."
+    },
+    {
+      "key": "the-system-may-cause-a-transition-without-becoming-an-actor",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Actor kind is what the map and author/reviewer separation key on; a third \"system\" kind would need every edge to declare whether the system may take it and would admit moves nobody is accountable for.",
+      "statement": "When the Hub moves a task because of something it observed, it SHALL act as the responsible run, and a scheduled job's firing SHALL act as the operator; each such move SHALL be subject to every rule the same actor's own request is, and only its recorded cause (`runtime` or `job`) SHALL distinguish it. There SHALL be exactly two actor kinds, agent run and operator."
+    },
+    {
+      "key": "a-move-a-scheduled-firing-makes-is-recorded-as-that-firing-s",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The firing holds the operator's authority because the operator created the job, but the history must not say the operator asked for a move made while they were asleep. The job id outlives the firing's own records.",
+      "statement": "A transition made by a loop or flow firing, including the dispatch of a review the firing queued, SHALL be recorded with the operator as actor and cause `job` naming that job; a move the operator makes by hand, including dispatching a review themselves, SHALL be recorded as cause `actor`."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The history was append-only and complete but unreadable without opening the database (F203). \"No history\" and \"no such task\" are different answers.",
+      "statement": "The Hub SHALL let the operator and agents read a task's full transition history, oldest first, each row naming its statuses, actor kind, agent, run, cause, the job's name and kind (`loop` or `flow`) where a job made it, the recorded policy and any checks-override reason; an unknown task SHALL answer 404 rather than an empty history."
+    },
+    {
+      "key": "a-run-may-only-complete-the-task-it-holds",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "`completed` puts work in the reviewable pool, so a false completion is reviewed by an agent that finds the code correct (someone else wrote it), approved and merged with no human on the path (F27). Every legitimate completion has already passed the claim into `in_progress`, so the run is bound. Completion deliberately requires no evidence: evidence is judged after review.",
+      "statement": "An agent run SHALL move a task to `completed` only while that run is bound to the task; a run bound to another task, or to none, SHALL be refused with HTTP 403 naming what it holds. The operator SHALL need no binding."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reviewer is the assignee while it reviews; without this the reviewer reworked what it reviewed, became the completer, and the author was staffed to review the reviewer's fix (F495). An operator completion names no agent, so nothing is guessed.",
+      "statement": "When a task moves to `revision_needed`, the Hub SHALL make the agent recorded as completing it the task's assignee again; where no agent is recorded as completing it, the assignee SHALL be left unchanged."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Who holds a task and how it is described are the operator's statements. An agent able to unassign or self-assign a task bypasses the holder rules above (F366); one able to set its own divergence policy could disarm the check that catches it dropping work.",
+      "statement": "An agent's update to a task SHALL be refused, before anything in the request is applied, when it names the task's assignee, priority, description, title, divergence policy, escalation agent, loop or a checks-override reason; an agent changes a task only through its status, notes and requirement links."
+    },
+    {
+      "key": "the-operator-can-rename-a-task",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A title written once at creation goes stale as the work moves; without a rename the only remedy is replacing the task and losing its history.",
+      "statement": "The operator SHALL be able to change a task's title after creation; an agent SHALL NOT. A blank title SHALL be refused, a request that omits the title SHALL leave it unchanged, and a rename SHALL record no transition and need no status."
+    },
+    {
+      "key": "a-task-can-be-waiting-on-a-person",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A task nobody started is pending, not waiting. Forcing finished work back through `in_progress` keeps any history from saying a task was completed while still waiting on an answer that never came.",
+      "statement": "The `blocked` status SHALL mean work began and cannot proceed until a person supplies something. It SHALL be reachable only from `in_progress`, SHALL have no edge to `completed`, and SHALL leave by `in_progress` (either actor) or, for the operator only, by `assigned` or `rejected`."
+    },
+    {
+      "key": "a-task-is-recorded-as-waiting-because-the-system-observed-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The wait matters during the ask, so the board must say so then. The run-end check covers a task that was not `in_progress` at the ask, or a park that failed (a failed park never costs the agent its question). An agent that could declare itself blocked could claim a wait it never asked for; one that could unblock itself could finish the work with no record that it proceeded without an answer.",
+      "statement": "The Hub SHALL move a task to `blocked` when a run bound to it asks a blocking question, at the moment of asking, as a runtime move attributed to that run; and, at the end of such a run, for a task not yet blocked whose run left a qualifying question unanswered. It SHALL move the task back to `in_progress` when that question is answered. An agent SHALL be refused (HTTP 403) when it asks to move its own task into or out of `blocked`."
+    },
+    {
+      "key": "only-an-unanswered-blocking-question-makes-a-task-wait",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A non-blocking question is a note; a question another run left open is not evidence this run stopped for it; a question whose wait ended is waited on by nobody, and parking on it would hide a real divergence.",
+      "statement": "A task SHALL be recorded as waiting only on a question that is marked blocking, unanswered, not declined, whose wait has not already ended, and that was asked by the run whose ask or end is being evaluated."
+    },
+    {
+      "key": "a-waiting-task-names-what-it-is-waiting-for",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The status answers \"why is nothing moving\"; only the statement answers \"what do you need from me\". A mandatory field reachable only by pointer makes the move unavailable from the keyboard with nothing saying why.",
+      "statement": "A `blocked` task SHALL carry a statement of what it is waiting for: derived from the question where the Hub parked it, and required of the operator (HTTP 422 without it) where they set it. The statement SHALL be cleared whenever the task leaves `blocked`. The app's control that collects it SHALL take keyboard focus once the operator chooses the move."
+    },
+    {
+      "key": "declining-a-question-releases-the-task-it-parked",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator has said the answer is not coming, so nothing is being waited on; re-parking on the declined question at run end would undo the release.",
+      "statement": "Declining the question that parked a task SHALL return the task to `in_progress` and clear its reason, as an operator transition; a declined question SHALL never park a task."
+    },
+    {
+      "key": "a-wait-that-ends-without-an-answer-returns-the-task-to-its-w",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Nobody is waiting any longer, and a `blocked` task cannot reach `completed`. A deadline supplied by the reporting party would let it choose the threshold it is checked against; the run-end sweep handles a report that was sent and lost, and can never end a wait early.",
+      "statement": "When a bounded wait for an answer ends without one and the asking run carries on, the Hub SHALL record that the wait ended unanswered and return the blocked task to `in_progress`. It SHALL accept the run's report only for its own questions whose Hub-recorded deadline (the Hub's own configured wait, not a duration sent with the ask) has passed and that are neither answered nor declined, refusing any other report. Where no report arrives, the run's end SHALL do the same if the deadline has passed. A wait ended by the operator answering or declining SHALL NOT be recorded as unanswered."
+    },
+    {
+      "key": "work-that-proceeded-without-an-answer-says-so-for-good",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent that waited out its question and decided alone otherwise leaves a task that reads clean (F60). Clearing the statement when a late answer arrives would hide the unilateral call exactly when it may contradict what shipped.",
+      "statement": "Where a run's wait for an answer ended unanswered, the task it was bound to SHALL state that its work proceeded without the operator's answer, naming the question, in every later status, even after the question is answered. The statement SHALL be derived from the recorded wait, not stored a second time."
+    },
+    {
+      "key": "every-task-status-is-classified-into-exactly-one-lifecycle-b",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Status sets scattered as literals drifted apart and caused stalls (`completed` and `revision_needed` fell between sets). A gap found at import cannot be found at 3am by a loop firing forever.",
+      "statement": "Every status the transition map defines SHALL be classified into exactly one lifecycle band (agent-actionable, awaiting a person, awaiting hand-off, with a reviewer, terminal), checked against the map itself, and the Hub SHALL fail to start when a status is unclassified, classified into an unknown band, or classified without being in the map."
+    },
+    {
+      "key": "status-sets-are-derived-from-the-classification-not-listed-i",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Deriving makes a new status reach every set that includes its band; keeping one set per question stops the classification from re-merging questions that differ (`blocked` is not claimable but is a loop's current work).",
+      "statement": "Every set of statuses the Hub uses to answer whether a task is claimable, reviewable, with a reviewer, a queue's current item, live, or terminal SHALL be derived from the band classification, one set per question; two questions SHALL NOT share a set because their members overlap."
+    },
+    {
+      "key": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A gate that computed its own answer could disagree with the document beside it. A `rejected` requirement means its only proof was judged not to prove it; approving over it records as done what was refused (the FR-11 incident). An unactionable gate gets turned off.",
+      "statement": "The Hub SHALL refuse a move to `approved` while a requirement the task serves on a `gate`-rigor document is not verified, or is structurally invalid; and, at every rigor, while a requirement it serves is `rejected`. `contract` requirements SHALL be reported on the approval and SHALL NOT block; `sketch` ones SHALL block only when rejected. Verification SHALL be read from the same coverage computation the document surfaces use, and the typed refusal SHALL name each requirement with its state and remedy."
+    },
+    {
+      "key": "a-transition-records-the-policy-that-governed-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Rigor is editable, so a gate that passed last month cannot be explained today without the policy it ran under.",
+      "statement": "A transition into `approved` SHALL record the policy that governed it: the state, integration and rigor of every requirement the task serves, `sketch` included; a task serving no requirement SHALL record none."
+    },
+    {
+      "key": "n5",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Landing otherwise cost three calls, two of them refusals (F163). Composing declared edges keeps the map unwidened, so `completed -> approved` never becomes a way to skip review.",
+      "statement": "The operator SHALL be able to carry a `completed` task to `approved` in one action (`POST /tasks/{id}/land`), which clears the holder and takes the two declared moves `completed -> under_review -> approved`, each recorded as an operator transition; it SHALL evaluate the approval gate first and leave the task unchanged when any step is refused, and SHALL refuse a task not in `completed`."
+    },
+    {
+      "key": "a-task-reports-the-requirement-identifiers-it-was-given",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A write-only field makes a task look tied to nothing while links govern its merge. Plain-text order puts FR-11 between FR-1 and FR-2.",
+      "statement": "A task's representation SHALL report the requirement identifiers it is linked to, in the form they were supplied, sorted with numeric parts compared by value (deterministically where there is none), and SHALL NOT include references that resolved to no requirement, which are reported separately as unresolved."
+    },
+    {
+      "key": "a-task-list-can-be-scoped-to-one-loop-s-queue",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A loop's queue is the tasks that name it, including finished ones, and the caller must see all of it.",
+      "statement": "The task list SHALL accept a loop scope that returns every task naming that loop, whatever its status, and no other task; a loop with no tasks SHALL return an empty list."
+    },
+    {
+      "key": "a-task-list-can-be-scoped-to-one-specification-document-s-de",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A document's board must show all of its work, finished or not, archived or not.",
+      "statement": "The task list SHALL accept a document scope that returns every task that document declared, whatever its status or the document's phase; a document with no tasks SHALL return an empty list."
+    },
+    {
+      "key": "the-task-list-s-default-view-retires-completed-work-from-arc",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Finished work from tidied-away documents clutters the board; open work and tasks with no document are never hidden.",
+      "statement": "The task list SHALL offer an opt-in mode that hides a task only when its declaring document is `archived` and its own status is terminal; it SHALL NOT apply when not asked for or when a loop or document scope is given, and SHALL change no task."
+    },
+    {
+      "key": "a-task-s-full-detail-opens-in-a-view-sized-to-hold-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A board column cannot hold a long task without clipping it.",
+      "statement": "The app SHALL show a task's full detail (description, acceptance criteria, deliverables, notes, requirement links) in a drawer sized independently of the board's columns."
+    },
+    {
+      "key": "the-operator-can-delete-a-document-a-task-or-an-archived-ag-task",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A task nobody should work is otherwise only ever rejected and stays counted. Deleting is the one path that removes transition and integration rows, because they exist only for the task.",
+      "statement": "The operator MUST be able to delete a task (`DELETE /tasks/{id}`), removing its dependencies, requirement links, transitions, integrations, check runs, evidence and queued entries, and clearing the task pointer on rows that only mention it (runs, conversations, messages, questions); the delete MUST be refused (HTTP 409) while a run bound to the task is active. No agent surface deletes a task."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The transition map, entry statuses, actor kinds, causes and status bands",
+      "The transition history and its read routes",
+      "Author/reviewer separation, the review-entry holder rule and the completion binding gate",
+      "Which task fields only the operator may set; rename and delete",
+      "The `blocked` status: entry, release and what it records",
+      "The approval gate on requirement rigor, the policy a transition records, and landing a completed task",
+      "Task list scoping, the requirement identifiers a task reports, and the task detail view"
+    ],
+    "non_goals": [
+      "Binding runs to tasks and divergence handling (run-task-binding)",
+      "Dependency declaration and the start gate (task-dependencies)",
+      "Merging approved work and the merge-related approval gates (approval-integration)",
+      "Running project checks, the check gate and its override (project-checks)",
+      "Review dispatch and staffing (agent-flows)",
+      "Creating tasks from an approved document (spec-document-authority)",
+      "Releasing a finished task's checkout (workspace-isolation)",
+      "Evidence, coverage and navigation from a task to its requirements (requirement-traceability)"
+    ]
+  },
+  "summary": "Which task status moves are legal and who may make them; the append-only record of every accepted move; who may change a task's other fields; the waiting (`blocked`) status; author/reviewer separation and the completion binding gate; the requirement-rigor approval gate and one-action landing; and how tasks are listed, shown and deleted.",
+  "tasks": [],
+  "title": "Task lifecycle governance"
+}

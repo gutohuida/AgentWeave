@@ -1,0 +1,34 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "system-map",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "The operator-facing surface for talking with an agent: the composer that starts a turn, the conversation workspace a chat lives in, how a conversation hands off between agents or sessions, the stream of events a running turn emits, the checkpoint that closes a chunk of work, and the side panel that shows what's happening alongside the chat itself.",
+  "tasks": [],
+  "title": "Conversations"
+}

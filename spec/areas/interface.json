@@ -1,0 +1,34 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "system-map",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "The shell the whole product lives inside: the workspace layout that holds every other surface, and the feedback the interface gives an operator about what the Hub is doing while it's doing it.",
+  "tasks": [],
+  "title": "Interface"
+}

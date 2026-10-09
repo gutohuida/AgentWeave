@@ -1,0 +1,34 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "system-map",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "How work is tracked once it leaves the conversation: a task's lifecycle and who governs its transitions, how a run binds to the task it is doing, how a recurring loop notices and reacts to what's in front of it, and the trace timeline that ties a run's actions back to the task and requirement they served.",
+  "tasks": [],
+  "title": "Work and traceability"
+}

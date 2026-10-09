@@ -1,0 +1,193 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the exploring duty text as rendered into a specification turn's prompt",
+      "key": "duty-step-present",
+      "requirement": "duty-states-the-step",
+      "then": "it instructs the planner, per task, to list `files` and to chain tasks sharing a path with `depends_on`; a test asserts this and fails on the unchanged text, which never mentions `files`",
+      "when": "it is searched"
+    },
+    {
+      "given": "the tool section rendered for a shim run, an MCP run and an HTTP rendering",
+      "key": "section-names-fields",
+      "requirement": "tool-section-names-task-fields",
+      "then": "each names `depends_on` and `files`; a test asserts it for all three and fails before the change",
+      "when": "the `submit_spec_document` entry is read"
+    },
+    {
+      "given": "`aw-tool --help submit_spec_document` run through call mode",
+      "key": "help-full-text",
+      "requirement": "help-prints-full-description",
+      "then": "it is `ok` and carries the tool's whole description, including `depends_on` and `files`; fails before, when the extra argument is ignored and a fixed usage text is printed",
+      "when": "its output is read"
+    },
+    {
+      "given": "`aw-tool --help not_a_tool`",
+      "key": "help-unknown-tool",
+      "requirement": "help-prints-full-description",
+      "then": "it fails as a usage error naming `not_a_tool`",
+      "when": "it runs"
+    },
+    {
+      "given": "`aw-tool --help` with no tool, and `aw-tool --list`",
+      "key": "help-and-list-unchanged",
+      "requirement": "help-prints-full-description",
+      "then": "the usage text and the listing (name, parameters, required, first-line summary per tool) are exactly what they were",
+      "when": "each runs"
+    },
+    {
+      "given": "the tool-access notice composed for a shim run",
+      "key": "notice-names-help",
+      "requirement": "run-is-told-help-exists",
+      "then": "it contains `--help <tool>` and says `--list` gives only a first line; fails before",
+      "when": "it is searched"
+    },
+    {
+      "given": "the diff of the finished slice",
+      "key": "no-migration-file",
+      "requirement": "no-migration",
+      "then": "it is unchanged",
+      "when": "hub/hub/migrations/versions is compared with master"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "816f2bdc85d1825fb4207f0b73f721e23318ee8a35f93112634fbfb0b543b581",
+      "FR-2": "63fe2186dc72920447e988974582533673a586ff58a4c0dce0fcfd4fd48fbef9",
+      "FR-3": "7ed0bf535d80ca06b94c4d5d8c01880f2a10787617c37cce6a61d6c6565e52b3",
+      "FR-4": "79794eaa875c8254520b3259e685500ad75f9b5c8e6ed51cc9ce57eaacefa584",
+      "FR-5": "c758c3e8d67f3d9f66916853f729cb47386499668dd7e03ecd738505fc078993"
+    },
+    "high_water": 5,
+    "requirements": {
+      "duty-states-the-step": "FR-1",
+      "help-prints-full-description": "FR-3",
+      "no-migration": "FR-5",
+      "run-is-told-help-exists": "FR-4",
+      "tool-section-names-task-fields": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "aw-builder",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decisions, each with its reason.\n\nD1. Two places the planner always reads get the rule: the exploring duty, and the `submit_spec_document` entry in the tool section (`_operations()` text, shared by the MCP, shim and HTTP renderings, so one edit covers every access path). Reason: a planner follows what is in its prompt; it does not go looking. Slice 1's own evidence is that the duty sentence was read and ignored, so the wording changes too: from a principle to a per-task step (\"for each task you write, list in `files` the repo-relative paths it will edit; where two tasks share a path, chain them with `depends_on`\"), placed where the planner decides its tasks.\n\nD2. `aw-tool --help <tool>` prints that tool's complete description; `--list` keeps its shape. Alternative considered: put every full description into `--list`. Rejected: it multiplies the size of the one listing every run may call, and it changes a payload that is read for names and arguments. The recommendation can be overturned at approval. The run's tool-access notice (hub/hub/launchability.py) is told the form exists and that `--list` shows only a first line, because nothing else tells a planner to ask.\n\nD3. No restart while the slice builds. Edits to mcp_server.py and agents.py reach agents only on a Hub's next start (the tool server is pinned per Hub); the build touches code and tests only, and the end-to-end drive runs on a fresh Hub after merge.\n\nAcceptance drive (the operator's, after merge, not run inside this slice): a fresh Hub, a real Haiku planner on the shim path, asked to draft a slice of three features that all edit one file. Pass condition: those tasks are chained with `depends_on`, or the submission's response carries an `unordered_file_overlap` warning naming them. It fails today (F509: two of two runs left them parallel and declared no `files`).\n\nThe two tasks are disjoint by file (agents.py; mcp_server.py and launchability.py), so neither needs ordering. Their files are named in each description because the Hub serving this authoring turn predates slice 1 and refuses a `files` field; they carry no `files` list for that reason only. Each names aw-reviewer as reviewer, and each is to run `black --check --target-version py311` and `ruff check` on the files it touched before completing.",
+  "evidence": {
+    "checked": [
+      "hub/hub/mcp_server.py `_call_listing` and `call_main`: `--list` keeps only the first docstring line; `--help` returns a fixed usage text and ignores a following tool name",
+      "hub/hub/api/v1/agents.py `_shim_lines`, `_operations()` (submit_spec_document text) and `SPEC_PHASE_DUTIES['exploring']`: the shim's tool section carries no mention of `depends_on` or `files`; the duty states ordering as a principle",
+      "hub/hub/launchability.py tool-access notice: names `--list` as listing every tool and its arguments, and no `--help <tool>`",
+      "scripts/drive/FINDINGS.md F509 (on master): two of two real Haiku runs left same-file tasks parallel with no `files`; the duty sentence was present in the transcript and not followed"
+    ],
+    "limits": [
+      "Tests prove the text reaches the planner's prompt and that `--help <tool>` works; they do not show a model follows the step. Only the acceptance drive shows that, and it is the operator's after merge.",
+      "Whether the planner would ever run `aw-tool --help <tool>` unprompted is untested; D1 does not rely on it, and FR-4 only tells it the form exists.",
+      "Agents read the new text only after a Hub restart (pinned tool server, duty text loaded at start); this was not exercised here.",
+      "My worktree predates slice 1 (it lacks the `files` field and F509); I read the merged code and F509 from master with git show, not from a running Hub."
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Slice 1's acceptance drive failed (scripts/drive/FINDINGS.md F509). On a fresh Hub with the merged code, a real Haiku planner was asked twice for three features that all edit one file. Both times it left the tasks unordered and declared no `files`; the response carried `\"warnings\": []`, so the plumbing works and nothing could trigger it. Reading the code shows three places a shim planner can learn about the tool, and slice 1 reached only the one it does not read. (1) `aw-tool --list` prints only the first line of each tool's description (`_call_listing`, hub/hub/mcp_server.py), so the full `submit_spec_document` docstring, which holds the `depends_on` rule and the only documentation of `files`, is unreachable; `aw-tool --help` ignores any further argument and prints one fixed usage text. (2) The tool section of the turn prompt, rendered for the shim by `_shim_lines` from `_operations()` (hub/hub/api/v1/agents.py), lists `tasks` as an argument name and says nothing of `depends_on` or `files`. (3) The exploring duty (`SPEC_PHASE_DUTIES[\"exploring\"]`) does reach the planner and carries slice 1's \"Order the tasks\" sentence, which the planner did not follow: it states a principle (\"may name... chained\") not a step the planner performs for each task.",
+  "requirements": [
+    {
+      "key": "duty-states-the-step",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice 1's drive showed the principle-worded sentence was read and not followed; a step the planner carries out for each task is the wording not yet tried.",
+      "statement": "The exploring-phase duty text rendered into a specification turn tells the planner, for each task it writes, to list the repo-relative paths the task will edit in `files`, and to chain with `depends_on` any two tasks that share a path."
+    },
+    {
+      "key": "tool-section-names-task-fields",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A shim planner sees the tool only through this section; it listed `tasks` and nothing about the fields that order and declare them.",
+      "statement": "The tool section rendered into a run's prompt names `depends_on` and `files` in the entry for `submit_spec_document`, for the shim, MCP and HTTP renderings alike."
+    },
+    {
+      "key": "help-prints-full-description",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "`--list` keeps only the first line, so the documentation of a tool's arguments is unreachable from the shim; keeping `--list` unchanged protects what already reads it.",
+      "statement": "`aw-tool --help <tool>` prints the complete description of that tool; a name that is not a callable tool is refused with a usage error naming it; `aw-tool --help` alone and `aw-tool --list` behave as they did."
+    },
+    {
+      "key": "run-is-told-help-exists",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A planner asks for what it has been told exists; nothing in a run's prompt names the form.",
+      "statement": "The tool-access notice given to a run that reaches the Hub through `aw-tool` states that `aw-tool --list` shows only the first line of each tool's description and that `aw-tool --help <tool>` shows the whole."
+    },
+    {
+      "key": "no-migration",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This repository runs the Hub that orchestrates the build; a migration runs at its next restart on live data.",
+      "statement": "The change adds no database migration."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/same-file-tasks-run-in-order-roadmap/spec.json",
+    "slice": "declare-and-warn"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Exploring duty text restated as a per-task step covering `files` and chaining shared-file tasks with `depends_on`",
+      "The `submit_spec_document` entry of the rendered tool section names `depends_on` and `files`",
+      "`aw-tool --help <tool>` prints a tool's complete description",
+      "The run's tool-access notice tells a shim run that `--help <tool>` exists",
+      "Tests at the seam where the text is produced; the end-to-end drive is named but run by the operator after merge"
+    ],
+    "non_goals": [
+      "Changing the overlap check, the `files` validation, dependency_gate, the scheduler or merge behaviour",
+      "Refusing a proposal because of an overlap (warn only, as in slice 1)",
+      "Changing the shape or content of `aw-tool --list`",
+      "Inferring files from descriptions (roadmap slice flag-missed-overlap)",
+      "A database migration, or any need to restart the Hub that is orchestrating the build",
+      "Running the end-to-end drive inside this slice",
+      "Guaranteeing that a given model follows the text: the tests show the text reaches the planner, the drive shows whether it acts on it"
+    ]
+  },
+  "summary": "Slice 1 shipped `files` and the overlap warning, but a planner that reaches the Hub through `aw-tool` never reads the text that teaches them. This follow-up puts the rule, worded as a per-task step, where that planner reads, and lets it ask `aw-tool` for a tool's whole description.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Files: hub/hub/api/v1/agents.py and a new hub/tests/test_spec_prompt_teaches_files.py. In agents.py, restate the exploring duty's ordering sentence as a per-task step (list `files`; chain any two tasks that share a path with `depends_on`), and name `depends_on` and `files` in the `submit_spec_document` `_operations()` text so the shim, MCP and HTTP renderings all carry them. Tests that fail on the unchanged text for every acceptance criterion of both requirements; keep test_tool_surface_matches_server green. Before completing, run `black --check --target-version py311` and `ruff check` on every file you touched.",
+      "from": null,
+      "key": "teach-step-in-prompt",
+      "requirements": [
+        "duty-states-the-step",
+        "tool-section-names-task-fields"
+      ],
+      "reviewer": "aw-reviewer",
+      "title": "Teach the files step in the duty and tool section"
+    },
+    {
+      "depends_on": [],
+      "description": "Files: hub/hub/mcp_server.py, hub/hub/launchability.py and a new hub/tests/test_aw_tool_help.py. In mcp_server.py call mode, make `--help <tool>` print that tool's complete description (usage error naming an unknown tool; `--help` alone and `--list` unchanged), and in launchability.py have the shim tool-access notice say `--list` shows only a first line and `--help <tool>` the whole. Tests at call_main and at the notice for every acceptance criterion, and a check that hub/hub/migrations/versions is unchanged from master. Edits mcp_server.py: obey .claude/rules/mcp-server.md (stdlib-only imports). Before completing, run `black --check --target-version py311` and `ruff check` on every file you touched.",
+      "from": null,
+      "key": "aw-tool-help-tool",
+      "requirements": [
+        "help-prints-full-description",
+        "run-is-told-help-exists",
+        "no-migration"
+      ],
+      "reviewer": "aw-reviewer",
+      "title": "Add aw-tool --help <tool> and announce it"
+    }
+  ],
+  "title": "Slice 1b: a planner on the aw-tool path is told about files and same-file ordering"
+}

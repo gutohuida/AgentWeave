@@ -1,0 +1,606 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a task with accepted evidence naming a commit, in a project with a main branch",
+      "key": "ac90",
+      "requirement": "approval-integrates-the-approved-work",
+      "then": "that commit is merged into the main branch and coverage reports its requirements integrated",
+      "when": "it is approved"
+    },
+    {
+      "given": "a task whose branch carries commits after the commit its accepted evidence names",
+      "key": "ac91",
+      "requirement": "approval-integrates-the-approved-work",
+      "then": "the later commits are not merged",
+      "when": "it is approved"
+    },
+    {
+      "given": "a task serving only `sketch` requirements",
+      "key": "ac94",
+      "requirement": "approval-integrates-the-approved-work",
+      "then": "its work is integrated as it would be at `gate`",
+      "when": "it is approved"
+    },
+    {
+      "given": "",
+      "key": "ac95",
+      "requirement": "approval-integrates-the-approved-work",
+      "then": "no remote operation is attempted",
+      "when": "any approval integrates work"
+    },
+    {
+      "given": "a task whose accepted evidence commit conflicts with main",
+      "key": "ac97",
+      "requirement": "approval-is-refused-when-the-work-cannot-be-merged-cleanly",
+      "then": "the move is refused naming the paths and the commit; the task is unchanged and no merge is attempted",
+      "when": "approval is requested"
+    },
+    {
+      "given": "the same task with only `sketch` documents",
+      "key": "ac98",
+      "requirement": "approval-is-refused-when-the-work-cannot-be-merged-cleanly",
+      "then": "the move is refused",
+      "when": "approval is requested"
+    },
+    {
+      "given": "a conflict on a commit named by accepted evidence",
+      "key": "ac100",
+      "requirement": "approval-is-refused-when-the-work-cannot-be-merged-cleanly",
+      "then": "it does not tell the reader to resolve and re-approve; it says to record evidence for the resolved commit from that branch and have it accepted, which is the operator's unless an agent is granted it",
+      "when": "the refusal is read"
+    },
+    {
+      "given": "a conflict on a task's own branch tip",
+      "key": "ac106",
+      "requirement": "approval-is-refused-when-the-work-cannot-be-merged-cleanly",
+      "then": "it says to resolve on the branch and approve again",
+      "when": "the refusal is read"
+    },
+    {
+      "given": "the conflicting commit was recorded by another task sharing the requirement",
+      "key": "ac104",
+      "requirement": "approval-is-refused-when-the-work-cannot-be-merged-cleanly",
+      "then": "it names that task",
+      "when": "the refusal is read"
+    },
+    {
+      "given": "",
+      "key": "ac96",
+      "requirement": "approval-is-refused-when-the-work-cannot-be-merged-cleanly",
+      "then": "the refusal ends by telling it to move the task to `revision_needed` with notes",
+      "when": "a reviewer's approval is refused for a conflict"
+    },
+    {
+      "given": "a project with no main branch",
+      "key": "ac109",
+      "requirement": "an-integration-that-cannot-proceed-does-not-block-approval",
+      "then": "the move succeeds and a skipped integration is recorded with its reason",
+      "when": "a task is approved"
+    },
+    {
+      "given": "a checkout with uncommitted changes to tracked files",
+      "key": "ac110",
+      "requirement": "an-integration-that-cannot-proceed-does-not-block-approval",
+      "then": "the move succeeds, no merge is attempted, and the reason is recorded",
+      "when": "a task is approved"
+    },
+    {
+      "given": "a project directory holding untracked files",
+      "key": "ac111",
+      "requirement": "an-integration-that-cannot-proceed-does-not-block-approval",
+      "then": "the work is merged",
+      "when": "a task is approved"
+    },
+    {
+      "given": "a tracked document whose file still matches what the Hub last wrote",
+      "key": "c-18-1",
+      "requirement": "an-integration-that-cannot-proceed-does-not-block-approval",
+      "then": "the work is merged",
+      "when": "a task is approved"
+    },
+    {
+      "given": "",
+      "key": "ac112",
+      "requirement": "an-integration-that-cannot-proceed-does-not-block-approval",
+      "then": "the task stays `approved`, the attempt is recorded as `failed`, and coverage reports `verified, not integrated`",
+      "when": "the merge itself fails"
+    },
+    {
+      "given": "",
+      "key": "ac116",
+      "requirement": "every-integration-attempt-is-recorded",
+      "then": "`GET /tasks/{id}/integrations` lists a record naming the commit, branches, outcome, riders, mechanism and actor",
+      "when": "an approval integrates work"
+    },
+    {
+      "given": "",
+      "key": "ac117",
+      "requirement": "every-integration-attempt-is-recorded",
+      "then": "none exists other than deleting the task",
+      "when": "the routes are searched for one that edits or deletes an integration record"
+    },
+    {
+      "given": "a task whose accepted commit is already in main",
+      "key": "ac118",
+      "requirement": "work-already-in-the-main-line-is-not-reported-as-merged",
+      "then": "the integration is skipped with a reason saying it is already there, and main is unchanged",
+      "when": "it is approved"
+    },
+    {
+      "given": "the commit is already in main and the checkout has uncommitted changes",
+      "key": "ac119",
+      "requirement": "work-already-in-the-main-line-is-not-reported-as-merged",
+      "then": "the reason is that the work is already integrated",
+      "when": "it is approved"
+    },
+    {
+      "given": "an approved task skipped for a dirty checkout",
+      "key": "ac124",
+      "requirement": "an-integration-that-was-skipped-can-be-attempted-again",
+      "then": "the attempt is `retryable` and the app offers Try again",
+      "when": "its integrations are read"
+    },
+    {
+      "given": "an approved task skipped because nothing accepted names a commit",
+      "key": "ac125",
+      "requirement": "an-integration-that-was-skipped-can-be-attempted-again",
+      "then": "the attempt is not `retryable` and no retry is offered",
+      "when": "its integrations are read"
+    },
+    {
+      "given": "an approved task whose last skip is not retryable",
+      "key": "ac127",
+      "requirement": "an-integration-that-was-skipped-can-be-attempted-again",
+      "then": "integration is attempted and recorded",
+      "when": "a retry is requested directly"
+    },
+    {
+      "given": "a task in `completed`",
+      "key": "c-22-1",
+      "requirement": "an-integration-that-was-skipped-can-be-attempted-again",
+      "then": "the request is refused with HTTP 409",
+      "when": "a retry is requested"
+    },
+    {
+      "given": "an approved task skipped for want of a main branch",
+      "key": "ac128",
+      "requirement": "naming-the-main-branch-attempts-the-integrations-that-wanted",
+      "then": "the work is merged without reopening the task",
+      "when": "the operator sets the main branch"
+    },
+    {
+      "given": "an approved task skipped for a dirty checkout",
+      "key": "ac129",
+      "requirement": "naming-the-main-branch-attempts-the-integrations-that-wanted",
+      "then": "that task's integration is not attempted",
+      "when": "the operator sets the main branch"
+    },
+    {
+      "given": "",
+      "key": "ac130",
+      "requirement": "naming-the-main-branch-attempts-the-integrations-that-wanted",
+      "then": "the main branch is still saved",
+      "when": "an attempt triggered by saving the branch raises"
+    },
+    {
+      "given": "a task on a loop that declares its work needs no evidence, with its own branch",
+      "key": "ac222",
+      "requirement": "work-that-no-evidence-governs-is-integrated-from-the-task-s-",
+      "then": "the tip of that branch is merged and the record names that commit and branch",
+      "when": "it is approved"
+    },
+    {
+      "given": "such a task with no branch of its own",
+      "key": "ac223",
+      "requirement": "work-that-no-evidence-governs-is-integrated-from-the-task-s-",
+      "then": "the approval succeeds, nothing is merged, and the reason says the task has no branch of its own",
+      "when": "it is approved"
+    },
+    {
+      "given": "a task on a flow that made no declaration",
+      "key": "ac221",
+      "requirement": "work-that-no-evidence-governs-is-integrated-from-the-task-s-",
+      "then": "the commit its accepted evidence names is merged, not its branch tip",
+      "when": "it is approved"
+    },
+    {
+      "given": "such a task whose branch tip conflicts with main",
+      "key": "ac224",
+      "requirement": "work-that-no-evidence-governs-is-integrated-from-the-task-s-",
+      "then": "the move is refused naming the conflicting paths",
+      "when": "approval is requested"
+    },
+    {
+      "given": "an approved task skipped because nothing accepted named a commit",
+      "key": "ac248",
+      "requirement": "accepting-evidence-attempts-the-integrations-that-wanted-it",
+      "then": "the work is merged without reopening the task",
+      "when": "that evidence is accepted"
+    },
+    {
+      "given": "an approved task that merged one accepted piece and left another awaiting",
+      "key": "ac250",
+      "requirement": "accepting-evidence-attempts-the-integrations-that-wanted-it",
+      "then": "its commit is merged",
+      "when": "the second is accepted"
+    },
+    {
+      "given": "an approved task that already merged this commit",
+      "key": "ac251",
+      "requirement": "accepting-evidence-attempts-the-integrations-that-wanted-it",
+      "then": "no attempt is made",
+      "when": "the evidence is accepted"
+    },
+    {
+      "given": "",
+      "key": "ac254",
+      "requirement": "accepting-evidence-attempts-the-integrations-that-wanted-it",
+      "then": "no integration is attempted",
+      "when": "evidence for an approved task is rejected"
+    },
+    {
+      "given": "",
+      "key": "ac255",
+      "requirement": "accepting-evidence-attempts-the-integrations-that-wanted-it",
+      "then": "the evidence is still accepted",
+      "when": "accepting evidence triggers an attempt that raises"
+    },
+    {
+      "given": "a task whose work conflicts with main",
+      "key": "ac280",
+      "requirement": "the-approval-preview-says-whether-the-work-would-merge-clean",
+      "then": "it says approval would be refused, naming the paths and commit, and nothing in the repository changed",
+      "when": "the operator opens the preview"
+    },
+    {
+      "given": "a task whose work merges cleanly",
+      "key": "ac282",
+      "requirement": "the-approval-preview-says-whether-the-work-would-merge-clean",
+      "then": "it says so with the number of commits approval would merge",
+      "when": "the preview is read"
+    },
+    {
+      "given": "a task for which approval would merge nothing",
+      "key": "ac283",
+      "requirement": "the-approval-preview-says-whether-the-work-would-merge-clean",
+      "then": "it does not say the work merges cleanly",
+      "when": "the preview is read"
+    },
+    {
+      "given": "a project with no main branch",
+      "key": "ac284",
+      "requirement": "the-approval-preview-says-whether-the-work-would-merge-clean",
+      "then": "it answers successfully and says the merge is checked at approval",
+      "when": "the preview is read"
+    },
+    {
+      "given": "",
+      "key": "ac285",
+      "requirement": "the-approval-preview-says-whether-the-work-would-merge-clean",
+      "then": "it answers successfully saying the Hub could not ask git",
+      "when": "a git call raises while the preview works out what approval would merge"
+    },
+    {
+      "given": "two tasks serve one requirement; the first is approved and merged",
+      "key": "ac293",
+      "requirement": "another-task-s-evidence-lands-through-that-task-s-own-approv",
+      "then": "the second's commit is not on main and no integration of the first names it",
+      "when": "the operator accepts evidence the second recorded while it is `under_review`"
+    },
+    {
+      "given": "",
+      "key": "ac294",
+      "requirement": "another-task-s-evidence-lands-through-that-task-s-own-approv",
+      "then": "its commit is merged, recorded under the second task",
+      "when": "the second task is then approved"
+    },
+    {
+      "given": "the agent that completed a task still has a running turn bound to it",
+      "key": "ac227",
+      "requirement": "approval-is-refused-while-the-work-is-still-being-produced",
+      "then": "the move is refused naming the agent; nothing is merged",
+      "when": "the operator approves it"
+    },
+    {
+      "given": "",
+      "key": "ac229",
+      "requirement": "approval-is-refused-while-the-work-is-still-being-produced",
+      "then": "the move is permitted and the turn's commit is what merges",
+      "when": "the same task is approved after the turn ends"
+    },
+    {
+      "given": "a run recorded as running whose process has died",
+      "key": "ac230",
+      "requirement": "approval-is-refused-while-the-work-is-still-being-produced",
+      "then": "approval is not refused on account of that run",
+      "when": "the task is approved"
+    },
+    {
+      "given": "",
+      "key": "ac231",
+      "requirement": "approval-is-refused-while-the-work-is-still-being-produced",
+      "then": "that run does not refuse it; any other live bound run does",
+      "when": "an agent approves from within a run bound to that task"
+    },
+    {
+      "given": "a project with no main branch",
+      "key": "ac226",
+      "requirement": "approval-is-refused-while-the-work-is-still-being-produced",
+      "then": "the move is refused",
+      "when": "a task is approved while its turn is live"
+    },
+    {
+      "given": "a task whose only evidence names a commit and is awaiting review",
+      "key": "ac235",
+      "requirement": "approval-is-refused-while-evidence-that-would-merge-sits-una",
+      "then": "the move is refused naming that evidence and both remedies; nothing is merged",
+      "when": "approval is requested"
+    },
+    {
+      "given": "",
+      "key": "ac237",
+      "requirement": "approval-is-refused-while-evidence-that-would-merge-sits-una",
+      "then": "the move succeeds",
+      "when": "a task with no evidence is approved"
+    },
+    {
+      "given": "a task whose only commit-naming evidence was rejected",
+      "key": "ac239",
+      "requirement": "approval-is-refused-while-evidence-that-would-merge-sits-una",
+      "then": "the move succeeds and nothing is merged",
+      "when": "approval is requested"
+    },
+    {
+      "given": "awaiting evidence in a project with no main branch",
+      "key": "ac243",
+      "requirement": "approval-is-refused-while-evidence-that-would-merge-sits-una",
+      "then": "the move succeeds and the integration is recorded as skipped",
+      "when": "approval is requested"
+    },
+    {
+      "given": "a task with accepted evidence naming a new commit and more evidence awaiting",
+      "key": "ac246",
+      "requirement": "approval-is-refused-while-evidence-that-would-merge-sits-una",
+      "then": "the move succeeds, merges the accepted commit and reports the waiting evidence",
+      "when": "approval is requested"
+    },
+    {
+      "given": "the task's own evidence awaits review and the only accepted commit is already in main",
+      "key": "ac247",
+      "requirement": "approval-is-refused-while-evidence-that-would-merge-sits-una",
+      "then": "the move is refused naming the waiting evidence",
+      "when": "approval is requested"
+    },
+    {
+      "given": "git times out while the gate tests a task's merge",
+      "key": "c-n2-1",
+      "requirement": "n2",
+      "then": "the response is HTTP 409 saying git could not be asked, and the task is unchanged",
+      "when": "the operator approves the task"
+    },
+    {
+      "given": "the same condition",
+      "key": "c-n2-2",
+      "requirement": "n2",
+      "then": "the response is HTTP 409 and the task is unchanged",
+      "when": "the operator lands the task"
+    },
+    {
+      "given": "",
+      "key": "ac213",
+      "requirement": "within-one-line-of-work-the-later-commit-is-the-one-merged",
+      "then": "approval integrates the author's commit",
+      "when": "an author's accepted footprint names a commit and a reviewer's accepted footprint, recorded later on the same line of work, names that commit's parent"
+    },
+    {
+      "given": "",
+      "key": "ac214",
+      "requirement": "within-one-line-of-work-the-later-commit-is-the-one-merged",
+      "then": "approval integrates the one recorded later",
+      "when": "two accepted footprints on the same line of work name commits neither of which contains the other"
+    },
+    {
+      "given": "",
+      "key": "ac215",
+      "requirement": "within-one-line-of-work-the-later-commit-is-the-one-merged",
+      "then": "approval integrates both commits neither is dropped because the other was recorded later",
+      "when": "two accepted footprints that name no line of work name commits neither of which contains the other"
+    },
+    {
+      "given": "",
+      "key": "ac216",
+      "requirement": "within-one-line-of-work-the-later-commit-is-the-one-merged",
+      "then": "approval integrates the descendant only",
+      "when": "two accepted footprints that name no line of work name a commit and its descendant, the ancestor recorded later"
+    },
+    {
+      "given": "",
+      "key": "ac217",
+      "requirement": "within-one-line-of-work-the-later-commit-is-the-one-merged",
+      "then": "the preview lists the author's commit, not its parent",
+      "when": "the operator opens the approval preview for a task whose accepted footprints are an author's commit and a later-recorded reviewer's footprint of its parent, on the same line of work"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "90347f76e5a35bc61d0254a4ce076bb5c436fe229f9dba78c59332186da09972",
+      "FR-10": "864854bf0d8b1dd811b4438775a98fae0886a08d66a6591f3322f9617a81e6fc",
+      "FR-11": "4939ed5efebf7e8ef18bc1f2fff3d5ecab0164f5cdf414494049d05f97be0e17",
+      "FR-12": "7c80dbc29dd118fbdf21c717ee65e5f6276b4709fe25d233e35d2e13e39795e1",
+      "FR-13": "03a6d83abcaa4ffd5c02c5e0a25399fb75ce0644436c6949405f9f9bffdcf95b",
+      "FR-14": "97d51715c724b52b3ad5c9e56482cff95d31a600deebc6bfbccfca3df6b8aaae",
+      "FR-15": "d60b4096b6e56a0ff6f7d32a686d005a80f72f0f5b082afe029f554d73291a76",
+      "FR-2": "29fcc5dfa17eabebcc5121d3f7d04d71b8b976d99f0471f3a9fab1d4172b4eb7",
+      "FR-3": "ea10ae2d13ef75727bc347849a7e6b3da5a375f39022387639c3c47473f491da",
+      "FR-4": "dedd86d802dec61781970f2c835757f62db654878b4c88a6b804e1553605cdd3",
+      "FR-5": "01a4e34bc4cb9b1aa638c304b0ae3bdbcb9d4a6af9be3940c48cd438f0c1de34",
+      "FR-6": "e22da2893e7a213bae7794f43adfd996034c54876854cc3e5a52201d923ec8d2",
+      "FR-7": "ce47a1bd84b1dd97d95f6c02a56f7d119df84fa4f01252e4a73e599d04c1d09f",
+      "FR-8": "c83866d2addda80b7e8b19a54949421736b865b200977b576eb0272189c4cfb5",
+      "FR-9": "6fd53c789afe39be13a8ea2194f05b787e9729d509c1b621a17150e6b4810303"
+    },
+    "high_water": 15,
+    "requirements": {
+      "accepting-evidence-attempts-the-integrations-that-wanted-it": "FR-9",
+      "an-integration-that-cannot-proceed-does-not-block-approval": "FR-3",
+      "an-integration-that-was-skipped-can-be-attempted-again": "FR-6",
+      "another-task-s-evidence-lands-through-that-task-s-own-approv": "FR-11",
+      "approval-integrates-the-approved-work": "FR-1",
+      "approval-is-refused-when-the-work-cannot-be-merged-cleanly": "FR-2",
+      "approval-is-refused-while-evidence-that-would-merge-sits-una": "FR-13",
+      "approval-is-refused-while-the-work-is-still-being-produced": "FR-12",
+      "every-integration-attempt-is-recorded": "FR-4",
+      "n2": "FR-14",
+      "naming-the-main-branch-attempts-the-integrations-that-wanted": "FR-7",
+      "the-approval-preview-says-whether-the-work-would-merge-clean": "FR-10",
+      "within-one-line-of-work-the-later-commit-is-the-one-merged": "FR-15",
+      "work-already-in-the-main-line-is-not-reported-as-merged": "FR-5",
+      "work-that-no-evidence-governs-is-integrated-from-the-task-s-": "FR-8"
+    },
+    "retired": {}
+  },
+  "design": "D1. Integration is specified apart from the transition machine: the merge and the status map are tested and fail differently. Gates that refuse approval because of what would be merged live here; gates about who may approve stay in task-lifecycle-governance.\n\nD2. Approval means integration. Approving merges, locally and in the same operation, the commits accepted evidence names (reduced by ancestry per line of work), or the task's own branch tip where evidence does not govern; never an agent branch, never a remote.\n\nD3. Integration never rolls back the approval. Preconditions that make it impossible are recorded skips; a failed merge is aborted and recorded. Each attempt is an append-only `task_integrations` row with outcome, reason, riders, mechanism `local`, and `retryable` decided by `task_integration.is_retryable`.\n\nD4. Gates that ask \"what would merge\" (conflict, unaccepted evidence) run only when `merge_situation` resolves (main branch set and existing, workspace resolvable, a repository). The live-turn refusal is not about the repository and applies everywhere. A git call that raises is a refusal (`GitUnavailableError`), not a 500 and not an approval.\n\nD5. The preview asks the same `merge_situation` and test merge as the gate, so the two cannot disagree, but it never refuses and moves nothing.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Split out of task-lifecycle-governance in the 2026-10-08 spec overhaul.",
+  "open_questions": [],
+  "problem": "Approval is the moment work reaches the main line. If it merges the wrong commit, merges over a conflict, or quietly records nothing, an approved task does not mean the code is in.",
+  "requirements": [
+    {
+      "key": "approval-integrates-the-approved-work",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Approval is what places work in the product; a terminal state with no such meaning cannot answer whether anything approved shipped. Naming commits rather than branches narrows what lands to the approved work; per-task branches make the ancestry match the task, and riders are recorded where it does not.",
+      "statement": "The move into `approved` SHALL merge the approved work into the project's configured main branch, locally, in the same operation that records the transition, at every rigor. Where evidence governs the task, what merges SHALL be the commits named by its accepted evidence footprints, reduced per line of work so that a commit another kept commit contains is dropped; evidence awaiting review or rejected SHALL contribute nothing. The Hub SHALL NOT merge an agent's branch, contact a remote, push, or need a credential, and SHALL record the commits that rode along with each merge."
+    },
+    {
+      "key": "approval-is-refused-when-the-work-cannot-be-merged-cleanly",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A conflict found mid-merge would leave a task recorded approved and a repository half-changed. The two remedies differ because re-approving re-judges a branch tip but not a commit evidence names (F155). A reviewer is not the one to resolve the author's conflict (F504).",
+      "statement": "The Hub SHALL refuse a move to `approved` when a commit approval would merge conflicts with the main branch, tested by a merge that touches neither working tree nor index, at every rigor. The refusal SHALL name the conflicting paths, the judged commit and the branch it was recorded on (distinct from the target branch), say when another task recorded that evidence, say when the commit is no longer on that branch (and nothing when that cannot be determined), and state the remedy for its source: for a commit named by accepted evidence, resolve on that branch, record evidence from a checkout of that branch and have it accepted (the operator's unless an agent is granted it); for a task's own branch tip, resolve on the branch and approve again. It SHALL end by telling a reviewer to send the task back with `revision_needed`."
+    },
+    {
+      "key": "an-integration-that-cannot-proceed-does-not-block-approval",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Approval is a judgement that the work is good; a repository condition is not a reason to reverse it, and coverage then says `verified, not integrated`. The Hub writes documents into the project, so its own writes must not block the document's own task merges (F515).",
+      "statement": "The move into `approved` SHALL still succeed, with the integration recorded as skipped and its reason, when the project has no main branch (or none by the configured name), its workspace cannot be resolved, it is not a repository, the checkout has uncommitted changes to tracked files, the checkout is on another branch, nothing accepted names a commit where evidence governs, or the task has no branch of its own where it does not. Untracked files, and tracked document files whose content is exactly what the Hub last wrote, SHALL NOT count as uncommitted changes. A merge that fails SHALL be aborted and recorded as `failed` without rolling back the approval."
+    },
+    {
+      "key": "every-integration-attempt-is-recorded",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The account of what the Hub wrote into the operator's repository must not be editable by the thing that wrote it, and the mechanism keeps a future integration mode distinguishable.",
+      "statement": "The Hub SHALL record every integration attempt with the task, commit, source and target branches, outcome (`merged`, `skipped` or `failed`), reason, the commits that rode along, the mechanism (`local`), the actor and the time, and SHALL offer no route that edits or removes one; a record goes only when its task is deleted."
+    },
+    {
+      "key": "work-already-in-the-main-line-is-not-reported-as-merged",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A merge of an ancestor succeeds and changes nothing; recording it as merged makes a no-op look like work reaching the product. An operator mid-edit deserves the true reason.",
+      "statement": "Where the commit to integrate is already reachable from the main branch, the Hub SHALL record the attempt as skipped with that reason, not as merged, and SHALL decide this before checking the working tree."
+    },
+    {
+      "key": "an-integration-that-was-skipped-can-be-attempted-again",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Restating `approved` is a no-op, so without a retry the remedy a skip asks for does nothing. The classification lives with the reasons, so the app never derives behaviour from a sentence, and an unclassified reason gets no button by default.",
+      "statement": "The Hub SHALL let the operator and agents retry integration for an approved task, refusing (HTTP 409) a task that is not approved, and SHALL mark each recorded attempt `retryable` when a retry could change it: a failed merge, a dirty checkout, a checkout on another branch, or an unavailable workspace. No main branch, not a repository, nothing to merge, no task branch and already-integrated SHALL NOT be offered a retry. A retry requested directly SHALL be attempted and recorded whatever the last reason was."
+    },
+    {
+      "key": "naming-the-main-branch-attempts-the-integrations-that-wanted",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The skip told the operator to choose a branch; discharging that at the moment they do makes the instruction true. Other skip reasons are not changed by naming a branch.",
+      "statement": "Saving a project's main branch SHALL attempt integration again for each approved task whose most recent attempt was skipped for want of one, and only those; the setting SHALL save even if an attempt fails."
+    },
+    {
+      "key": "work-that-no-evidence-governs-is-integrated-from-the-task-s-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A task's own branch carries only its work; an agent's branch carries every task the agent touched, and merging it is a defect already recorded at the highest severity. A flow, or a task linked to a requirement, has not asked to stop being governed by its requirements, and only evidence can carry another task's commit on a shared requirement.",
+      "statement": "Where evidence does not govern a task (its loop declared its work needs no evidence, or it is on a loop with no document and links no requirement), approval SHALL merge the commit at the tip of the task's own branch, tested for conflicts first like an evidence commit; with no branch of its own nothing SHALL merge and the reason SHALL say so. Evidence governs a task with no loop, on a loop whose id does not resolve, on a loop that declared it needs evidence, on a flow (a loop with a document) that made no declaration, or that links a requirement."
+    },
+    {
+      "key": "accepting-evidence-attempts-the-integrations-that-wanted-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The unaccepted-evidence refusal tells the reader to accept; doing so must land the work, including the mixed case where approval already merged other accepted evidence. Whether the commit is in main is asked of the repository, so a commit already there is recorded as already integrated.",
+      "statement": "Accepting evidence that names a commit SHALL attempt integration for every approved task linked to that evidence's requirement that has not already recorded a merge of that commit, attributed to whoever accepted it, recording a skip where the repository cannot take it; rejecting evidence SHALL attempt nothing, and the acceptance SHALL stand even if the attempt fails."
+    },
+    {
+      "key": "the-approval-preview-says-whether-the-work-would-merge-clean",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The refusal is otherwise the only place a conflict is stated, and it cannot be read before the first approval or after it. Asking the same question as the gate keeps the two from disagreeing.",
+      "statement": "The integration preview (`GET /tasks/{id}/integration-preview`) SHALL say what approval would merge and whether it merges cleanly, using the same test merge as the approval refusal, naming conflicting paths and commit when it does not; it SHALL move no branch, change no working tree or index, record nothing, and be computed on request. It SHALL not claim a clean merge when approval would merge nothing, SHALL state the real commit count, SHALL say the merge is checked at approval where the Hub cannot ask (no main branch, workspace, repository or configured branch), and SHALL answer successfully, saying git could not be asked, when a git call fails."
+    },
+    {
+      "key": "another-task-s-evidence-lands-through-that-task-s-own-approv",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Otherwise accepting a sibling's evidence merged it through another approved task, bypassing the sibling's own review and checks (F520).",
+      "statement": "Evidence recorded by a different task SHALL count toward a task's merge targets, and toward its unaccepted-evidence refusal, only once that recording task is `approved`; evidence recorded by the task itself or by no task SHALL count as before."
+    },
+    {
+      "key": "approval-is-refused-while-the-work-is-still-being-produced",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Until the turn ends its edits are uncommitted, so whatever approval would merge contains none of the work (F162). A reviewer approving from inside its own bound turn must not be refused by itself. A dead process with a stale status must not block approval forever.",
+      "statement": "The Hub SHALL refuse a move to `approved` while a run bound to the task, other than the run requesting the move, has a live process, naming the agent whose turn is running and stating that the refusal clears itself when the turn ends. Liveness SHALL be tested on the process, not the recorded run status. The refusal SHALL apply at every rigor and whether or not the project can integrate."
+    },
+    {
+      "key": "approval-is-refused-while-evidence-that-would-merge-sits-una",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Approving there records the work as good and merges nothing while a commit waits unjudged. A task with no evidence (research, decisions) stays approvable. A commit already in main through another task does not count as new (F499); an unknown counts as new so it never refuses.",
+      "statement": "The Hub SHALL refuse a move to `approved` where evidence for the task naming a commit is awaiting review and nothing approval would merge is new to the main branch. Each waiting piece SHALL be named with the task that recorded it, and the refusal SHALL name both remedies (accept it, or grant an agent the capability to accept it). Rejected evidence and evidence naming no commit SHALL NOT cause it, and it SHALL NOT fire where integration could not be attempted (no main branch, unresolvable workspace, not a repository, or no branch by the configured name). Where something new would merge, the waiting evidence SHALL be reported on the approval instead."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The gate exists so nothing is approved that might not merge; an unanswered question is not a yes (F424). The operator can retry once git answers.",
+      "statement": "Where the approval gate cannot ask git (a timeout or an OS error), the Hub SHALL refuse the move to `approved` with HTTP 409 and a sentence saying git could not be asked, on every approving surface including landing, rather than answering a server error or approving."
+    },
+    {
+      "key": "within-one-line-of-work-the-later-commit-is-the-one-merged",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Merging a commit merges its ancestors, so the descendant is the whole of the work; recording order alone would let a review of an earlier commit displace newer work.",
+      "statement": "Where two accepted footprints name the same line of work, approval SHALL integrate the one whose commit contains the other, else the later recorded; footprints naming no line of work SHALL each be integrated unless another contains them, with a shared commit integrated once and an undecidable pair both integrated."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Merging approved work into the configured main branch, locally, in the approval transition",
+      "Choosing the commit: accepted evidence footprints reduced per line of work, other tasks' evidence once they are approved, or the task branch tip where evidence does not govern",
+      "Approval refusals about what would merge: conflicts, a live turn still producing the work, unaccepted evidence, git unavailable",
+      "Recording every attempt (merged, skipped, failed), work already in the main line, and retryability",
+      "Re-attempting integration on retry, on naming the main branch, and on accepting evidence",
+      "The integration preview"
+    ],
+    "non_goals": [
+      "The task status machine, actor separation and field ownership: task-lifecycle-governance",
+      "Running project checks and the check gate with its operator override: project-checks",
+      "Setting and detecting the project's main branch: local-project-workspace",
+      "Recording and reviewing evidence, and coverage: requirement-traceability",
+      "Releasing a finished task's checkout: workspace-isolation"
+    ]
+  },
+  "summary": "What approving a task does to the code. Approval merges the approved work into the project's main branch in the same operation, choosing which commit to merge; it is refused when that merge would conflict, when the work is still being produced, when evidence that would merge is unaccepted, or when git cannot be asked. Every integration attempt is recorded, a skipped one can be retried, and a preview says what approval would merge.",
+  "tasks": [],
+  "title": "Approval integration"
+}

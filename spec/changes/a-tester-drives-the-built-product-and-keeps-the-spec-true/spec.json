@@ -1,0 +1,357 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8102 with a fresh database, a project whose calc.py adds wrongly when the first number is negative, Haiku agents alice (builder) and tess (tester), and an approved flow document whose criterion says python calc.py -2 3 prints 1 and whose one task asks only for a README usage line (scripts/drive/d1013_tester_amends.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1013_tester_amends.py",
+      "key": "drive",
+      "requirement": "amend-ops",
+      "then": "tess's turn records an add_task amendment by tess with its run, not reviewed; the new task is on the flow's board; the next firing gives it to alice and calc.py -2 3 prints 1 on her branch; a change_criterion amendment from a run testing a task of the document leaves the requirement amendment_unreviewed despite accepted evidence, and marking it reviewed makes it verified. Fails on today's Hub at the first check (no amendment tool, review briefing has no test duty).",
+      "when": "the flow runs alice's task, then tess's test turn, then the next firing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow document whose delivery names tester tess and reviewer rev, one task naming no reviewer and one naming rev",
+      "how_to_check": "Hub unit test on scheduler review staffing",
+      "key": "named-tester",
+      "requirement": "tester-default",
+      "then": "the first review goes to tess and the second to rev",
+      "when": "each task is completed and the flow stages its review"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a review turn of a flow document with tester absent, and one with tester false",
+      "how_to_check": "Hub unit test on the composed briefing",
+      "key": "brief",
+      "requirement": "test-brief",
+      "then": "the first carries the drive-the-product, within-criteria and side-findings lines and names amend_spec_document; the second carries none of them",
+      "when": "the briefings are composed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved flow document, a run working its task and a run testing it",
+      "how_to_check": "Hub route test",
+      "key": "builder-refused",
+      "requirement": "amend-who",
+      "then": "the working run gets 403 amend_not_tester and the document is unchanged; the testing run's amendment is applied",
+      "when": "each calls amend with add_criterion"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a testing run",
+      "how_to_check": "Hub route test",
+      "key": "ops-scope",
+      "requirement": "amend-ops",
+      "then": "the first two are refused with 422 naming the field and the third adds the task to the payload and a pending task in the live loop",
+      "when": "it amends with an unknown requirement key, with no how_to_check, and with add_task naming an existing requirement"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with three not-reviewed amendments",
+      "how_to_check": "Hub route test",
+      "key": "review-marks",
+      "requirement": "amend-record",
+      "then": "the list shows one reviewed after the first call and all reviewed after the second, each with author and run",
+      "when": "the operator marks one by id, then the rest for the document"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a requirement with accepted evidence at its current digest and a not-reviewed change_criterion amendment",
+      "how_to_check": "Hub unit test on requirement_coverage",
+      "key": "relax-state",
+      "requirement": "relax-blocks",
+      "then": "it is amendment_unreviewed before and verified after; an add_criterion amendment alone never makes it amendment_unreviewed",
+      "when": "coverage is read before and after the operator marks the amendment reviewed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a builder run on a task in progress",
+      "how_to_check": "Hub route test",
+      "key": "cannot",
+      "requirement": "cannot-satisfy",
+      "then": "the task is blocked with the reason, and a cannot_satisfy amendment by that run is listed not reviewed",
+      "when": "it reports criterion c cannot be satisfied"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a reopened document with one not-reviewed amendment, proposed",
+      "how_to_check": "Hub route test",
+      "key": "gap",
+      "requirement": "unreviewed-gap",
+      "then": "the 409 approval_warnings lists amendments_unreviewed",
+      "when": "it is approved without approve_anyway"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document with one reviewed and one not-reviewed amendment",
+      "how_to_check": "vitest",
+      "key": "page-lists",
+      "requirement": "page",
+      "then": "both are listed with author and run, only the second offers Mark reviewed, and the click sends its id",
+      "when": "the amendments panel renders and Mark reviewed is clicked"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator's own project after a flow with a tester",
+      "how_to_check": "operator reads the amendments panel",
+      "key": "reads-well",
+      "requirement": "page",
+      "then": "they can tell what the tester changed and why, and how to check it, without reading the run",
+      "when": "they open the document"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "8ab4a178948ebfba1be6250c6036bb6adf93cf309356c58f22a1246a6bf094bf",
+      "FR-2": "462329d752d9d87f935ad2a618aafb5a8f73b27b3405c1d70ac4e285903ac1dc",
+      "FR-3": "725ad0c869ad9e52aeb1013b6a9b498575643369aad67afd2243da59ae283d18",
+      "FR-4": "9ceb40d62fd10fe59cc82a346e7b92ac48d091dcfdaa6f38fb16cd46edc5dc1a",
+      "FR-5": "d747525c888a331e394347ec962e4dd7b96a61ed3169c6c8d5976d61c5ad7df4",
+      "FR-6": "9342c0f5200146de894696b56a8b5c00f32810d87b540571440629b8c0759249",
+      "FR-7": "1f998e5c40993ff3d755e8766f69a6df4c0e7f5e87f6b4f40e2f2045d66f96ff",
+      "FR-8": "acb118b3f691e6c2d7206bc78925334d079264373bd63c8cd3125d118bdd273a",
+      "FR-9": "9a73c7cef034148e1c96668be7cf4dc0921200eb3bb09bfdd6552ecdf7309d94"
+    },
+    "high_water": 9,
+    "requirements": {
+      "amend-ops": "FR-4",
+      "amend-record": "FR-5",
+      "amend-who": "FR-3",
+      "cannot-satisfy": "FR-7",
+      "page": "FR-9",
+      "relax-blocks": "FR-6",
+      "test-brief": "FR-2",
+      "tester-default": "FR-1",
+      "unreviewed-gap": "FR-8"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2: a new agent write path to approved documents and a change to what counts as verified (cross-cutting, trust-bearing). No migration: amendments are spec-document events (kind free, detail JSON, append-only, hub/hub/db/models.py:2128-2167). No Hub-restart hazard beyond the code itself. Rollback: revert; the events stay inert.\n\nD1. Amendments are structured operations through their own agent tool, applied to the approved document at once and recorded as Hub-owned amendment events; review is an amendment_reviewed event naming the ids. Rejected: a new table (a migration for what the event log already is), marks in the payload (agents write the payload and could erase the operator's record), and SpecEditProposal (pending until accepted, the opposite of taking effect at once). (morning-1009-1)\nD2. Only a run delivered to test a task of this document may amend, read from the run's queue entries (run_task_binding.review_task_for_run). Rejected: matching the caller's name to delivery.tester (a name is not the turn) and letting any agent amend. (morning-1009-2)\nD3. Relaxing is structural: every change_criterion, remove_criterion and cannot_satisfy blocks verification until reviewed; additions never do. Rejected: judging stricter-or-looser by reading, which is a guess the motivated agent writes. (morning-1009-3)\nD4. Testing is on by default without a stored field: absent or null tester means the review turn is a test turn, staffed by the existing reviewer ladder; a name goes before delivery.reviewer; false turns it off. Rejected: a separate test turn after the review (doubles turns per task) and a required field (rewrites every stored payload, spec_payload.py:592-598). (morning-1009-4)\nD5. Amendments stay within stated criteria: they name existing requirements and criteria only; a new requirement is a reopen. Side findings go to a task outside the flow. (morning-1009-5)\nD6. cannot_satisfy is its own tool and an amendment kind: recorded, not reviewed, blocks the requirement's verification and blocks the builder's task in progress. Rejected: ask_user, which asks rather than records a judgement the evidence rule can read. (morning-1009-6)\nD7. Amendments bypass contract/gate edit proposals: they have their own review. The operator's own edits still go through reopen.",
+  "evidence": {
+    "checked": [
+      "hub/hub/spec_service.py:195-199: save_document refuses every submission to an approved document",
+      "hub/hub/spec_tasks.py:249-442: materialise is idempotent by (document, key) and takes the live loop; called only at approval (api/v1/spec.py:2380)",
+      "hub/hub/run_task_binding.py:227-251: review_task_for_run reads the run's delivered review entries",
+      "hub/hub/agent_auth.py:40-80: AgentActor(project, agent, run) from the run credential",
+      "hub/hub/review_turn.py:155-197: the declared reviewer is read from the stored payload per call",
+      "hub/hub/scheduler.py:1493, 2104-2205: resolve_reviewer ladder and the flow's review arm; author excluded",
+      "hub/hub/scheduler.py:3061-3132 and api/v1/agents.py:1997-2025: the two review briefing channels",
+      "hub/hub/requirement_coverage.py:184-216: _state precedence; verified needs accepted current-digest evidence",
+      "hub/hub/spec_payload.py:182-216: Delivery allows extra keys; payload_to_dict drops absent delivery",
+      "hub/hub/task_transitions.py:112-133: in_progress to blocked with blocked_reason"
+    ],
+    "limits": [
+      "Whether Haiku as tester finds the planted bug on every run is model-dependent; the drive allows up to three test turns",
+      "The relaxing check in the drive uses a run the drive starts for the purpose, not a Haiku turn choosing to relax a criterion"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": "large",
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "After approval nothing can change a document: save_document refuses every submission to an approved document (hub/hub/spec_service.py:195-199), so what a reviewer learns never reaches the spec and the spec drifts from what was built. A flow's review turn reads code and evidence (scheduler._compose_loop_briefing, hub/hub/scheduler.py:3127-3132; the review turn-context, hub/hub/api/v1/agents.py:1997-2025) but is never asked to drive the running product. Tasks enter a flow only at approval (spec_tasks.materialise, called only from api/v1/spec.py:2380). The research the roadmap rests on finds that agents game the checks they can edit: Claude models cheated mainly by modifying tests, and prompts barely help (testbed/research/reports/Spec driven development with agents.md, ImpossibleBench and METR), so a tester allowed to amend criteria must not be able to pass the criteria it relaxed. There is no cannot-satisfy outcome anywhere (task blocked with a free-text reason is the nearest, task_transitions.py:112-133).",
+  "requirements": [
+    {
+      "key": "tester-default",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On by default (roadmap slice); absent means on, so no stored payload changes.",
+      "statement": "A flow document's review turns MUST be test turns unless its delivery sets tester to false; when delivery.tester names an agent, the flow MUST staff a task's review with that agent before delivery.reviewer, and a task's own reviewer MUST still come first."
+    },
+    {
+      "key": "test-brief",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A reviewer prompted to find gaps reports some (research, over-reporting).",
+      "statement": "A test turn's briefing MUST tell the agent to drive the running product against the task's criteria as well as review code and evidence, to amend the document only within its stated criteria, and to put side findings in a task outside the flow; a review turn with testing off MUST NOT carry it."
+    },
+    {
+      "key": "amend-who",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The builder never edits criteria: it is the agent being judged (ImpossibleBench).",
+      "statement": "An amendment MUST be accepted only from a run delivered to test a task of the amended document while its testing is on; any other caller, the task's builder included, MUST be refused with 403 amend_not_tester and nothing changes."
+    },
+    {
+      "key": "amend-ops",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Additions take effect at once and become tasks the implementer picks up (roadmap slice).",
+      "statement": "An amendment MUST be one of add_task, add_criterion, change_criterion or remove_criterion; it MUST name only requirements and criteria the document already holds, carry a reason and a how_to_check, and be applied to the approved document at once; an added task MUST be materialised into the document's live flow."
+    },
+    {
+      "key": "amend-record",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agent-amendment provenance; mark reviewed per item or per document (roadmap slice).",
+      "statement": "Each amendment MUST be recorded with its operation, target, reason, how_to_check, author and run, as not reviewed, and MUST stay not reviewed until the operator marks it reviewed, either by its id or for the whole document."
+    },
+    {
+      "key": "relax-blocks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Marking alone is not enough: a relaxing amendment cannot satisfy until a human has looked (research).",
+      "statement": "A requirement with a not-reviewed change_criterion, remove_criterion or cannot_satisfy amendment MUST NOT be verified, whatever evidence it holds, and MUST report the state amendment_unreviewed; once the operator marks the amendment reviewed its evidence MUST count again."
+    },
+    {
+      "key": "cannot-satisfy",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An explicit flag-for-human exit cut cheating from 54% to 9% (ImpossibleBench).",
+      "statement": "A run working or testing a task of the document MUST be able to report that a named criterion cannot be satisfied, with a reason; the report MUST be recorded as a not-reviewed cannot_satisfy amendment and a builder's task in progress MUST move to blocked with that reason."
+    },
+    {
+      "key": "unreviewed-gap",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The approval-warnings slice left this gap to this slice.",
+      "statement": "Approving a document that holds not-reviewed amendments MUST list them as the gap amendments_unreviewed."
+    },
+    {
+      "key": "page",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In the app, an approved document MUST list its amendments with operation, target, author, run, reason, how to check and whether reviewed, and MUST offer Mark reviewed per amendment and for all."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/a-spec-is-written-one-step-at-a-time-roadmap/spec.json",
+    "slice": "tester-amends"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "delivery.tester: absent or null means testing is on and staffed like the reviewer; an agent name staffs the flow's review turns with that agent first; false turns testing off",
+      "The test turn's briefing: drive the running product against the task's criteria, review code and evidence, amend within the stated criteria, side findings outside the flow",
+      "An agent tool to amend an approved document with structured operations (add a task, add a criterion, change a criterion, remove a criterion), each with a reason and how to check it, allowed only to a run delivered to test a task of that document",
+      "Amendments recorded as Hub-owned events with author and run, not reviewed until the operator marks them reviewed per item or per document",
+      "Additions take effect at once; an added task is materialised into the document's live flow",
+      "A change or removal of a criterion is a relaxing amendment: its requirement cannot be verified while it is not reviewed",
+      "An agent tool to report that a criterion cannot be satisfied, recorded as an amendment, blocking the builder's task",
+      "Unreviewed amendments as an approval gap",
+      "The document page lists the amendments with author, run, how to check, reviewed or not, and marks them reviewed"
+    ],
+    "non_goals": [
+      "Adding a new requirement by amendment: findings stay within the stated criteria; a new requirement is a reopen and a new approval",
+      "Judging whether a criterion change is stricter or looser by reading it: every change or removal counts as relaxing",
+      "A separate test turn beside the review turn",
+      "Reconciling code with the spec before fold (slice reconcile-and-measure)",
+      "Changing an operator's edits: the operator still reopens to edit an approved document"
+    ]
+  },
+  "summary": "A flow's review turn becomes a test turn by default: the tester drives the running product as well as reading code and evidence, and what it finds becomes amendments to the approved spec. Each amendment records its author and run, says how to check it, and stays not reviewed until the operator marks it reviewed, per item or for the whole document. Additions take effect at once and a new task joins the flow for the implementer; a change or removal of a criterion cannot count as passing until reviewed; the builder never amends; cannot-satisfy is a recorded outcome. Roadmap slice tester-amends.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1013_tester_amends.py: scratch Hub on :8102, fresh database, Haiku agents, a planted bug in calc.py. The 'drive' criterion. Must fail at the first check before any build task.",
+      "files": [
+        "scripts/drive/d1013_tester_amends.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "amend-ops"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "spec_amendments: apply add_task/add_criterion/change_criterion/remove_criterion to an approved payload, record an amendment event with author and run, materialise an added task into the live loop; agent route + MCP tools amend_spec_document and report_cannot_satisfy; the testing-run rule. Failing Hub tests first.",
+      "files": [
+        "hub/hub/spec_amendments.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/mcp_server.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "amend",
+      "requirements": [
+        "amend-who",
+        "amend-ops",
+        "amend-record",
+        "cannot-satisfy"
+      ],
+      "reviewer": null,
+      "title": "Amendments: the tool, who may call it, the operations, the record"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "Operator routes to list amendments and mark them reviewed (by id or all); coverage state amendment_unreviewed; gap amendments_unreviewed. Failing Hub tests first.",
+      "files": [
+        "hub/hub/requirement_coverage.py",
+        "hub/hub/spec_completeness.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "review",
+      "requirements": [
+        "amend-record",
+        "relax-blocks",
+        "unreviewed-gap"
+      ],
+      "reviewer": null,
+      "title": "Operator review, the relaxing rule, the approval gap"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "Delivery gains tester (absent/null on, name, false off); review staffing puts a named tester before delivery.reviewer; the review briefing and turn-context carry the test duty when testing is on. Failing Hub tests first.",
+      "files": [
+        "hub/hub/spec_payload.py",
+        "hub/hub/review_turn.py",
+        "hub/hub/scheduler.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "tester",
+      "requirements": [
+        "tester-default",
+        "test-brief"
+      ],
+      "reviewer": null,
+      "title": "delivery.tester: staffing and the test briefing"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "SpecAmendmentsPanel on the document page: list, Mark reviewed per item and for all; bundle refreshed with the source.",
+      "files": [
+        "hub/ui/src/components/spec",
+        "hub/ui/src/api/spec.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "page",
+      "requirements": [
+        "page"
+      ],
+      "reviewer": null,
+      "title": "The amendments panel"
+    }
+  ],
+  "title": "A tester drives the built product and keeps the spec true"
+}

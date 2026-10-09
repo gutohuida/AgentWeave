@@ -1,0 +1,1457 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "",
+      "key": "ac1",
+      "requirement": "a-non-yolo-claude-run-s-sandbox-posture-is-set-by-the-hub-no",
+      "then": "its command line carries one `--permission-mode` that is not `bypassPermissions`",
+      "when": "the Hub spawns a non-yolo Claude run"
+    },
+    {
+      "given": "",
+      "key": "ac2",
+      "requirement": "a-non-yolo-claude-run-s-sandbox-posture-is-set-by-the-hub-no",
+      "then": "its command line carries `--dangerously-skip-permissions` and no `--permission-mode`",
+      "when": "the Hub spawns a yolo Claude run"
+    },
+    {
+      "given": "",
+      "key": "ac3",
+      "requirement": "a-sandboxed-non-yolo-claude-agent-can-still-use-the-hub-s-ow",
+      "then": "`--allowedTools` includes `mcp__agentweave__*`, and other tools are still decided by the posture",
+      "when": "the Hub spawns a non-yolo Claude run with its MCP server"
+    },
+    {
+      "given": "",
+      "key": "ac4",
+      "requirement": "a-sandboxed-non-yolo-claude-agent-can-still-use-the-hub-s-ow",
+      "then": "`--allowedTools` carries only the call-command rules, with no `mcp__agentweave__*` entry",
+      "when": "the Hub spawns a non-yolo Claude run with no MCP server"
+    },
+    {
+      "given": "",
+      "key": "ac193",
+      "requirement": "a-claude-run-pre-allows-the-hub-s-call-command",
+      "then": "the command line allows `aw-tool` in both the Bash and PowerShell tools",
+      "when": "the Hub spawns a non-yolo Claude run, with or without its MCP server"
+    },
+    {
+      "given": "",
+      "key": "ac194",
+      "requirement": "a-claude-run-pre-allows-the-hub-s-call-command",
+      "then": "it is decided by the posture as it would be without the rule",
+      "when": "such a run runs a shell command that is not `aw-tool`"
+    },
+    {
+      "given": "",
+      "key": "a-hub-claude-run-gets-only-the-hubs-tool-server-drive",
+      "requirement": "a-hub-claude-run-gets-only-the-hubs-tool-server",
+      "then": "its argv carries `--strict-mcp-config` and its tools include no `mcp__claude_ai` tool",
+      "when": "a Hub agent turn runs"
+    },
+    {
+      "given": "a runner whose flags add one MCP server",
+      "key": "a-hub-claude-run-gets-only-the-hubs-tool-server-runner-flag",
+      "requirement": "a-hub-claude-run-gets-only-the-hubs-tool-server",
+      "then": "it loads exactly the Hub's server and that one",
+      "when": "a runner's flags name a server with `--mcp-config` and the run starts"
+    },
+    {
+      "given": "",
+      "key": "ac8",
+      "requirement": "the-operator-chooses-a-conversation-s-permission-posture",
+      "then": "the spawned command carries that posture and not the built-in one",
+      "when": "the operator selects a posture for a conversation and sends a message"
+    },
+    {
+      "given": "",
+      "key": "ac9",
+      "requirement": "the-operator-chooses-a-conversation-s-permission-posture",
+      "then": "the write waits for the operator's answer instead of being decided by the Hub",
+      "when": "the operator selects Ask me and the agent attempts a write"
+    },
+    {
+      "given": "",
+      "key": "ac10",
+      "requirement": "the-operator-chooses-a-conversation-s-permission-posture",
+      "then": "they are labelled Edit files, Workspace only, Ask me and Full access, not by flag values",
+      "when": "the postures are presented"
+    },
+    {
+      "given": "",
+      "key": "ac167",
+      "requirement": "the-built-in-posture-a-run-receives-is-the-posture-shown-for",
+      "then": "it gets its provider's built-in posture, which is the posture the app showed",
+      "when": "a non-yolo run is spawned with no posture chosen"
+    },
+    {
+      "given": "",
+      "key": "ac168",
+      "requirement": "the-built-in-posture-a-run-receives-is-the-posture-shown-for",
+      "then": "its command carries no `--permission-prompt-tool`",
+      "when": "a run uses a posture other than Workspace only or Ask me"
+    },
+    {
+      "given": "",
+      "key": "ac169",
+      "requirement": "the-built-in-posture-a-run-receives-is-the-posture-shown-for",
+      "then": "its command carries no `--permission-prompt-tool`",
+      "when": "a Claude run has Workspace only chosen but no MCP server configured to answer it"
+    },
+    {
+      "given": "",
+      "key": "asb-no-approver-default",
+      "requirement": "the-built-in-posture-a-run-receives-is-the-posture-shown-for",
+      "then": "it gets `--permission-mode acceptEdits` (Edit files)",
+      "when": "a non-yolo Claude run with no MCP server is spawned with no posture chosen"
+    },
+    {
+      "given": "",
+      "key": "ac5",
+      "requirement": "the-default-posture-lets-an-agent-work-inside-its-own-worksp",
+      "then": "the write succeeds with no operator approval",
+      "when": "a non-yolo agent with no permission configuration writes a file inside its workspace"
+    },
+    {
+      "given": "",
+      "key": "ac6",
+      "requirement": "the-default-posture-lets-an-agent-work-inside-its-own-worksp",
+      "then": "the run does not default to a posture that waits on an operator",
+      "when": "no approver can be reached for a run"
+    },
+    {
+      "given": "",
+      "key": "ac7",
+      "requirement": "the-default-posture-lets-an-agent-work-inside-its-own-worksp",
+      "then": "the call is refused",
+      "when": "a Claude run under the built-in Workspace only posture names a path outside its workspace"
+    },
+    {
+      "given": "",
+      "key": "n1-ac1",
+      "requirement": "n1",
+      "then": "a pending request appears for the operator and the call proceeds only when they allow it",
+      "when": "a Claude run under Ask me asks to run a shell command"
+    },
+    {
+      "given": "",
+      "key": "n1-ac2",
+      "requirement": "n1",
+      "then": "the call is denied with a reason naming the wait, and the request reaches `expired`",
+      "when": "no one answers within the wait"
+    },
+    {
+      "given": "",
+      "key": "n1-ac3",
+      "requirement": "n1",
+      "then": "the call is denied rather than left waiting",
+      "when": "the Hub cannot be reached to open the request"
+    },
+    {
+      "given": "",
+      "key": "ac11",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "then": "the call is allowed",
+      "when": "Under Workspace only, a run names a path inside its workspace"
+    },
+    {
+      "given": "",
+      "key": "ac12",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "then": "the call is refused with a reason naming the path and saying it is outside the workspace",
+      "when": "Under Workspace only, a run names a path outside its workspace"
+    },
+    {
+      "given": "",
+      "key": "ac13",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "then": "the call is refused",
+      "when": "Under Workspace only, a path reaches outside the workspace only after `..` or link resolution"
+    },
+    {
+      "given": "",
+      "key": "ac14",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "then": "the call is refused; a link to a directory whose parent is inside does not make it refused",
+      "when": "Under Workspace only, a path names a link inside the workspace followed by `..`, and the link's target's parent is outside"
+    },
+    {
+      "given": "",
+      "key": "ac15",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "then": "the command is refused and the reason names where the matched entry resolves",
+      "when": "Under Workspace only, a shell command names a glob that would match a link pointing outside the workspace"
+    },
+    {
+      "given": "",
+      "key": "ac16",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "then": "the command is refused as uncheckable and the request is still answered",
+      "when": "Under Workspace only, a glob would need more directory entries examined than the check allows"
+    },
+    {
+      "given": "",
+      "key": "ac17",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "then": "every call except the Hub's own is refused",
+      "when": "Under Workspace only, the run's workspace cannot be determined"
+    },
+    {
+      "given": "",
+      "key": "ac18",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "then": "the calls are allowed",
+      "when": "Under Workspace only, a run calls the Hub's own MCP tools"
+    },
+    {
+      "given": "",
+      "key": "n3-ac1",
+      "requirement": "n3",
+      "then": "the command is refused without the path being resolved",
+      "when": "Under Workspace only, a Windows run's command names `\\\\host\\share\\x`"
+    },
+    {
+      "given": "",
+      "key": "ac52",
+      "requirement": "a-network-address-in-a-shell-command-is-decided-as-a-network",
+      "then": "the command is allowed",
+      "when": "Under Workspace only, a command names the run's own Hub, literally or as `$HUB_URL`"
+    },
+    {
+      "given": "",
+      "key": "ac53",
+      "requirement": "a-network-address-in-a-shell-command-is-decided-as-a-network",
+      "then": "the command is refused",
+      "when": "Under Workspace only, a command names the run's own Hub followed by enough `..` segments to climb out of the workspace as a relative path"
+    },
+    {
+      "given": "",
+      "key": "ac54",
+      "requirement": "a-network-address-in-a-shell-command-is-decided-as-a-network",
+      "then": "the command is refused as a network address",
+      "when": "Under Workspace only, a command names an address differing from the run's Hub in scheme, host or port"
+    },
+    {
+      "given": "",
+      "key": "ac55",
+      "requirement": "a-network-address-in-a-shell-command-is-decided-as-a-network",
+      "then": "the reference is not treated as the run's own Hub",
+      "when": "Under Workspace only, a command assigns `HUB_URL` and then uses it"
+    },
+    {
+      "given": "",
+      "key": "ac56",
+      "requirement": "a-network-address-in-a-shell-command-is-decided-as-a-network",
+      "then": "it is refused with a reason that names a network address, not the workspace, and names asking the operator",
+      "when": "Under Workspace only, a command names `https://example.com/x`"
+    },
+    {
+      "given": "",
+      "key": "ac58",
+      "requirement": "a-network-address-in-a-shell-command-is-decided-as-a-network",
+      "then": "it is judged as the path it names",
+      "when": "Under Workspace only, a command names a `file://` URL"
+    },
+    {
+      "given": "",
+      "key": "ac59",
+      "requirement": "a-network-address-in-a-shell-command-is-decided-as-a-network",
+      "then": "it is refused as a network address",
+      "when": "Under Workspace only, a command names `git@github.com:org/repo`"
+    },
+    {
+      "given": "",
+      "key": "ac61",
+      "requirement": "a-network-address-in-a-shell-command-is-decided-as-a-network",
+      "then": "the word is judged as the paths it spells, not as an address",
+      "when": "Under Workspace only, a command names `HEAD:src/x.py`"
+    },
+    {
+      "given": "",
+      "key": "ac63",
+      "requirement": "a-path-in-a-shell-command-is-judged-by-where-it-resolves",
+      "then": "the command is allowed",
+      "when": "Under Workspace only, a command names `sub/hello.py` inside the workspace"
+    },
+    {
+      "given": "",
+      "key": "ac64",
+      "requirement": "a-path-in-a-shell-command-is-judged-by-where-it-resolves",
+      "then": "the command is refused and the reason names `../stray.txt`",
+      "when": "Under Workspace only, a command names `../stray.txt`"
+    },
+    {
+      "given": "",
+      "key": "ac65",
+      "requirement": "a-path-in-a-shell-command-is-judged-by-where-it-resolves",
+      "then": "the command is refused",
+      "when": "Under Workspace only, a command assembles a traversal from quoted pieces, such as `'.'.'/'x`"
+    },
+    {
+      "given": "",
+      "key": "ac66",
+      "requirement": "a-path-in-a-shell-command-is-judged-by-where-it-resolves",
+      "then": "the command is refused and the reason names the decoded path `../x`",
+      "when": "Under Workspace only, a command names `$'\\x2e\\x2e/x'`"
+    },
+    {
+      "given": "",
+      "key": "ac68",
+      "requirement": "a-path-in-a-shell-command-is-judged-by-where-it-resolves",
+      "then": "the command is refused saying where the path points cannot be checked, not that it is outside",
+      "when": "Under Workspace only, a command names `$HOME/x`, `$(pwd)/x` or `~/x`"
+    },
+    {
+      "given": "",
+      "key": "ac69",
+      "requirement": "a-path-in-a-shell-command-is-judged-by-where-it-resolves",
+      "then": "the command is refused as the path alone would be",
+      "when": "Under Workspace only, a word glues an absolute outside path to an option, such as `--out=/etc/x`"
+    },
+    {
+      "given": "",
+      "key": "ac73",
+      "requirement": "a-path-in-a-shell-command-is-judged-by-where-it-resolves",
+      "then": "the call is refused with a reason and the request is answered",
+      "when": "Under Workspace only, a word cannot be resolved as a path at all"
+    },
+    {
+      "given": "",
+      "key": "ac76",
+      "requirement": "a-path-in-a-shell-command-is-judged-by-where-it-resolves",
+      "then": "the command is refused and the reason names where it resolves",
+      "when": "Under Workspace only, a relative word passes through a link that resolves outside"
+    },
+    {
+      "given": "",
+      "key": "ac79",
+      "requirement": "a-path-in-a-shell-command-is-judged-by-where-it-resolves",
+      "then": "that word does not refuse the command",
+      "when": "Under Workspace only, a bash command redirects to `/dev/null`"
+    },
+    {
+      "given": "",
+      "key": "ac89",
+      "requirement": "a-path-in-a-shell-command-is-judged-by-where-it-resolves",
+      "then": "the command is refused",
+      "when": "Under Workspace only, a PowerShell command names `Microsoft.PowerShell.Core\\FileSystem::C:\\x` outside the workspace"
+    },
+    {
+      "given": "",
+      "key": "ac90",
+      "requirement": "a-word-with-no-path-separator-is-still-judged-when-it-names-",
+      "then": "the command is refused saying the word is outside and naming it",
+      "when": "Under Workspace only, a command names `..` as a word of its own and the workspace's parent is outside"
+    },
+    {
+      "given": "",
+      "key": "ac91",
+      "requirement": "a-word-with-no-path-separator-is-still-judged-when-it-names-",
+      "then": "both get the same decision",
+      "when": "Under Workspace only, one command names `..` and another `../`"
+    },
+    {
+      "given": "",
+      "key": "ac93",
+      "requirement": "a-word-with-no-path-separator-is-still-judged-when-it-names-",
+      "then": "the command is refused naming the whole word",
+      "when": "Under Workspace only, a command passes `..` as an option value, such as `-C..`"
+    },
+    {
+      "given": "",
+      "key": "ac95",
+      "requirement": "a-word-with-no-path-separator-is-still-judged-when-it-names-",
+      "then": "the command is refused as uncheckable, not as outside",
+      "when": "Under Workspace only, a command names `~` or `~user` alone"
+    },
+    {
+      "given": "",
+      "key": "ac97",
+      "requirement": "a-word-with-no-path-separator-is-still-judged-when-it-names-",
+      "then": "the command is allowed",
+      "when": "Under Workspace only, a command names only ordinary words such as `ls -la file.txt`"
+    },
+    {
+      "given": "",
+      "key": "ac100",
+      "requirement": "a-word-with-no-path-separator-is-still-judged-when-it-names-",
+      "then": "the command is refused as uncheckable",
+      "when": "Under Workspace only, a command names `$HOME` or `$env:USERPROFILE` as a word"
+    },
+    {
+      "given": "",
+      "key": "ac105",
+      "requirement": "a-word-with-no-path-separator-is-still-judged-when-it-names-",
+      "then": "that word does not refuse the command",
+      "when": "Under Workspace only, a command names `$tmp` set by the command itself"
+    },
+    {
+      "given": "",
+      "key": "ac107",
+      "requirement": "a-word-with-no-path-separator-is-still-judged-when-it-names-",
+      "then": "the command is refused and the reason names where the link resolves",
+      "when": "Under Workspace only, a command names, with no separator, an entry of the workspace that is a link out of it"
+    },
+    {
+      "given": "",
+      "key": "ac112",
+      "requirement": "a-word-with-no-path-separator-is-still-judged-when-it-names-",
+      "then": "the command is refused naming the word with its colon",
+      "when": "Under Workspace only, a PowerShell command on Windows names `D:` where D is another existing drive"
+    },
+    {
+      "given": "",
+      "key": "ac117",
+      "requirement": "a-word-with-no-path-separator-is-still-judged-when-it-names-",
+      "then": "the drive is judged as existing and a word naming it is refused",
+      "when": "Under Workspace only, the check of whether a drive exists fails for a reason other than absence"
+    },
+    {
+      "given": "",
+      "key": "ac195",
+      "requirement": "a-brace-pattern-is-judged-as-the-words-it-expands-to",
+      "then": "the command is refused and the reason names the outside alternative",
+      "when": "Under Workspace only, a command names `x/{a,../../out}`"
+    },
+    {
+      "given": "",
+      "key": "ac196",
+      "requirement": "a-brace-pattern-is-judged-as-the-words-it-expands-to",
+      "then": "that pattern does not refuse the command",
+      "when": "Under Workspace only, a command names `src/{a,b}`"
+    },
+    {
+      "given": "",
+      "key": "ac197",
+      "requirement": "a-brace-pattern-is-judged-as-the-words-it-expands-to",
+      "then": "the command is refused",
+      "when": "Under Workspace only, a command hands `bash -c` a quoted pattern with an outside alternative"
+    },
+    {
+      "given": "",
+      "key": "ac198",
+      "requirement": "a-brace-pattern-is-judged-as-the-words-it-expands-to",
+      "then": "that text does not refuse the command",
+      "when": "Under Workspace only, a command names a quoted awk program or JSON value with braces"
+    },
+    {
+      "given": "",
+      "key": "ac199",
+      "requirement": "a-brace-pattern-is-judged-as-the-words-it-expands-to",
+      "then": "the command is refused and the request is answered",
+      "when": "Under Workspace only, a pattern expands past the judge's bound"
+    },
+    {
+      "given": "",
+      "key": "ac121",
+      "requirement": "a-refusal-s-reason-fits-the-record-that-carries-it",
+      "then": "the reason quotes a bounded part of the word and the refusal is recorded",
+      "when": "a call is refused over a word longer than the Hub accepts"
+    },
+    {
+      "given": "",
+      "key": "ac122",
+      "requirement": "a-refusal-s-reason-fits-the-record-that-carries-it",
+      "then": "the reason sent is within the bound and the refusal is recorded",
+      "when": "a call is refused over a word of characters rendered as escapes"
+    },
+    {
+      "given": "",
+      "key": "ac19",
+      "requirement": "every-permission-decision-is-answered-and-answering-never-de",
+      "then": "it is refused rather than left unanswered",
+      "when": "a permission request of an unrecognised shape is raised"
+    },
+    {
+      "given": "",
+      "key": "ac20",
+      "requirement": "every-permission-decision-is-answered-and-answering-never-de",
+      "then": "the request is still answered",
+      "when": "the Hub cannot be reached while a Workspace only run decides a request"
+    },
+    {
+      "given": "",
+      "key": "asb-judge-raises",
+      "requirement": "every-permission-decision-is-answered-and-answering-never-de",
+      "then": "the call is refused with a reason naming the failure and suggesting `ask_user`",
+      "when": "the workspace judge raises while deciding a call"
+    },
+    {
+      "given": "",
+      "key": "ac21",
+      "requirement": "a-refusal-is-recorded-wherever-it-is-decided",
+      "then": "the operator sees a `permission_denied` event for it",
+      "when": "an action is refused under Workspace only"
+    },
+    {
+      "given": "",
+      "key": "ac22",
+      "requirement": "a-refusal-is-recorded-wherever-it-is-decided",
+      "then": "the decision is unchanged and the run continues",
+      "when": "a refusal cannot be reported to the Hub"
+    },
+    {
+      "given": "",
+      "key": "ac35",
+      "requirement": "a-refusal-is-recorded-wherever-it-is-decided",
+      "then": "the refusal appears in the project's activity",
+      "when": "a runtime refuses an action without asking the operator"
+    },
+    {
+      "given": "",
+      "key": "ac36",
+      "requirement": "a-refusal-is-recorded-wherever-it-is-decided",
+      "then": "exactly one refusal is recorded",
+      "when": "the operator is asked about an action and denies it"
+    },
+    {
+      "given": "",
+      "key": "ac37",
+      "requirement": "a-refusal-is-recorded-wherever-it-is-decided",
+      "then": "no refusal is recorded",
+      "when": "a runtime allows an action"
+    },
+    {
+      "given": "",
+      "key": "ac38",
+      "requirement": "a-refusal-is-recorded-wherever-it-is-decided",
+      "then": "it names the action readably, not by an internal method name",
+      "when": "a refusal is recorded"
+    },
+    {
+      "given": "",
+      "key": "ac23",
+      "requirement": "a-permission-request-does-not-outlive-the-wait-it-represents",
+      "then": "the request becomes `expired`",
+      "when": "a run's wait for an operator decision runs out"
+    },
+    {
+      "given": "",
+      "key": "ac24",
+      "requirement": "a-permission-request-does-not-outlive-the-wait-it-represents",
+      "then": "the request becomes `expired`",
+      "when": "a run ends while a request it raised is pending"
+    },
+    {
+      "given": "",
+      "key": "ac25",
+      "requirement": "a-permission-request-does-not-outlive-the-wait-it-represents",
+      "then": "its pending requests are still closed by the run-end sweep",
+      "when": "a run dies without reporting its wait ended"
+    },
+    {
+      "given": "",
+      "key": "ac26",
+      "requirement": "a-permission-request-does-not-outlive-the-wait-it-represents",
+      "then": "the request is unchanged and no error reaches the run",
+      "when": "a wait is reported ended for a request already closed"
+    },
+    {
+      "given": "",
+      "key": "ac27",
+      "requirement": "a-decision-is-refused-once-nobody-is-waiting-for-it",
+      "then": "the response is 409 saying the run has moved on",
+      "when": "an operator decides a request that is already terminal"
+    },
+    {
+      "given": "",
+      "key": "ac28",
+      "requirement": "a-decision-is-refused-once-nobody-is-waiting-for-it",
+      "then": "the request's status, decision time and decider are unchanged",
+      "when": "such a decision is refused"
+    },
+    {
+      "given": "",
+      "key": "ac29",
+      "requirement": "the-operator-can-see-that-an-agent-stopped-waiting",
+      "then": "it remains listed (`include_expired`) and is marked expired",
+      "when": "a request expires without a decision"
+    },
+    {
+      "given": "",
+      "key": "ac30",
+      "requirement": "the-operator-can-see-that-an-agent-stopped-waiting",
+      "then": "it offers no allow or deny control",
+      "when": "the operator views an expired request"
+    },
+    {
+      "given": "",
+      "key": "ac31",
+      "requirement": "the-operator-can-see-that-an-agent-stopped-waiting",
+      "then": "the two are visibly different",
+      "when": "the operator views an expired request and one they decided"
+    },
+    {
+      "given": "",
+      "key": "ac32",
+      "requirement": "the-operator-can-clear-an-expired-request-they-have-seen",
+      "then": "it is no longer listed and its status and decision record are unchanged",
+      "when": "the operator dismisses an expired request"
+    },
+    {
+      "given": "",
+      "key": "ac33",
+      "requirement": "the-operator-can-clear-an-expired-request-they-have-seen",
+      "then": "the response is 409 and the request stays listed for a decision",
+      "when": "the operator dismisses a pending request"
+    },
+    {
+      "given": "",
+      "key": "ac34",
+      "requirement": "the-operator-can-clear-an-expired-request-they-have-seen",
+      "then": "it is unchanged and no error is returned",
+      "when": "an already-dismissed request is dismissed again"
+    },
+    {
+      "given": "",
+      "key": "ac170",
+      "requirement": "an-operator-asked-to-decide-a-call-is-shown-what-the-workspa",
+      "then": "the card states Workspace only would refuse it, with the reason, and the operator can still allow it",
+      "when": "a run under Ask me asks to write a path outside its workspace"
+    },
+    {
+      "given": "",
+      "key": "ac171",
+      "requirement": "an-operator-asked-to-decide-a-call-is-shown-what-the-workspa",
+      "then": "the card says it would be allowed and that a shell command is read, not sandboxed",
+      "when": "a run under Ask me asks to run a shell command Workspace only would allow"
+    },
+    {
+      "given": "",
+      "key": "ac172",
+      "requirement": "an-operator-asked-to-decide-a-call-is-shown-what-the-workspa",
+      "then": "the advice says it was checked by working directory only",
+      "when": "a Codex run under Ask me asks to run a command"
+    },
+    {
+      "given": "",
+      "key": "ac173",
+      "requirement": "an-operator-asked-to-decide-a-call-is-shown-what-the-workspa",
+      "then": "the card says nothing about the workspace boundary",
+      "when": "a request was opened without advice"
+    },
+    {
+      "given": "",
+      "key": "ac174",
+      "requirement": "an-operator-asked-to-decide-a-call-is-shown-what-the-workspa",
+      "then": "the request is opened again without it and the operator is still asked",
+      "when": "the Hub rejects the advice field with 422"
+    },
+    {
+      "given": "",
+      "key": "ac39",
+      "requirement": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "then": "the run's record names the tool, the path and the destination kind and name",
+      "when": "a file-writing call names a path outside the run's workspace"
+    },
+    {
+      "given": "",
+      "key": "ac40",
+      "requirement": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "then": "the write is recorded",
+      "when": "a run under Ask me writes outside after the operator allowed it"
+    },
+    {
+      "given": "",
+      "key": "ac41",
+      "requirement": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "then": "the write is recorded",
+      "when": "a run under Full access writes outside its workspace"
+    },
+    {
+      "given": "",
+      "key": "ac42",
+      "requirement": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "then": "the record names that checkout's kind and name",
+      "when": "a run writes into another agent's or a task's checkout"
+    },
+    {
+      "given": "",
+      "key": "asb-hub-kind",
+      "requirement": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "then": "the destination kind is `hub`, not `project`",
+      "when": "a run writes under the project's `.agentweave/` outside any checkout"
+    },
+    {
+      "given": "",
+      "key": "ac43",
+      "requirement": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "then": "its record is `[]`, distinct from an unobserved run's `NULL`",
+      "when": "all of a run's file writes are inside its workspace"
+    },
+    {
+      "given": "",
+      "key": "ac45",
+      "requirement": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "then": "nothing presents it as refused or prevented",
+      "when": "an outside write is recorded"
+    },
+    {
+      "given": "",
+      "key": "ac46",
+      "requirement": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "then": "nothing is recorded, and nothing presents that as confinement",
+      "when": "a run whose workspace is the project directory writes anywhere in the project"
+    },
+    {
+      "given": "",
+      "key": "ac47",
+      "requirement": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "then": "nothing is recorded",
+      "when": "a run reads a file outside its workspace"
+    },
+    {
+      "given": "",
+      "key": "ac48",
+      "requirement": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "then": "its record stays `NULL` and no outside write is reported",
+      "when": "a run's workspace cannot be resolved"
+    },
+    {
+      "given": "",
+      "key": "ac49",
+      "requirement": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "then": "the record counts the calls and the operator is notified once",
+      "when": "a run writes several times to one destination"
+    },
+    {
+      "given": "",
+      "key": "ac50",
+      "requirement": "the-product-states-which-postures-confine-a-run-and-which-do",
+      "then": "each posture states whether writes are checked against the workspace",
+      "when": "`docs/reference/permission-postures.md` is read"
+    },
+    {
+      "given": "",
+      "key": "ac51",
+      "requirement": "the-product-states-which-postures-confine-a-run-and-which-do",
+      "then": "it claims neither that native mode confines writes nor that it checks nothing",
+      "when": "the documentation describes native execution"
+    },
+    {
+      "given": "",
+      "key": "ac175",
+      "requirement": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
+      "then": "it is allowed without the operator and reported like any decision",
+      "when": "a run under Ask me runs `aw-tool create_task .agentweave/calls/1.json`"
+    },
+    {
+      "given": "",
+      "key": "ac176",
+      "requirement": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
+      "then": "it is allowed without the operator",
+      "when": "a run under Ask me writes `.agentweave/calls/1.json` with `Write`"
+    },
+    {
+      "given": "",
+      "key": "ac177",
+      "requirement": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
+      "then": "it is decided as without this rule",
+      "when": "the command is `aw-tool create_task .agentweave/calls/1.json; rm x`"
+    },
+    {
+      "given": "",
+      "key": "ac178",
+      "requirement": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
+      "then": "it is decided as without this rule",
+      "when": "a PowerShell command is `aw-tool list_tasks (.agentweave/calls/1.json)`"
+    },
+    {
+      "given": "",
+      "key": "ac179",
+      "requirement": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
+      "then": "it is decided as without this rule",
+      "when": "the arguments file is outside the calls directory or reached through `..`"
+    },
+    {
+      "given": "",
+      "key": "ac182",
+      "requirement": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
+      "then": "it is decided as without this rule",
+      "when": "the command names `./aw-tool` or a full path"
+    },
+    {
+      "given": "",
+      "key": "ac184",
+      "requirement": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
+      "then": "it is decided as without this rule, and `aw-tool` given that file reports a usage error",
+      "when": "the calls directory or `.agentweave` is a link or junction"
+    },
+    {
+      "given": "",
+      "key": "ac186",
+      "requirement": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
+      "then": "it is allowed without asking, under Workspace only too",
+      "when": "a run runs `Set-Content -Path .agentweave/calls/1.json -Value '{...}' -Encoding utf8`"
+    },
+    {
+      "given": "",
+      "key": "ac188",
+      "requirement": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
+      "then": "it is decided as without this rule",
+      "when": "the PowerShell value holds a typographic single quote"
+    },
+    {
+      "given": "",
+      "key": "ac189",
+      "requirement": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
+      "then": "it is decided as without this rule",
+      "when": "the write abbreviates a parameter, adds another, or double-quotes the value"
+    },
+    {
+      "given": "",
+      "key": "ac138",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "the Hub refuses it and records a runtime refusal",
+      "when": "a Copilot run under Workspace only asks to run a PowerShell command writing outside its workspace"
+    },
+    {
+      "given": "",
+      "key": "ac139",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "the Hub answers with a one-time allow",
+      "when": "a Copilot run under Workspace only asks to edit a file inside its workspace"
+    },
+    {
+      "given": "",
+      "key": "ac140",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "it is allowed without a card",
+      "when": "a Copilot run under Ask me calls the Hub's `send_message`"
+    },
+    {
+      "given": "",
+      "key": "ac141",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "a card opens and the request is held until the operator decides or the wait runs out, which refuses it",
+      "when": "a Copilot run under Ask me asks to run a shell command"
+    },
+    {
+      "given": "",
+      "key": "ac142",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "it decides each request as Workspace only and its timeline quotes Copilot's reason",
+      "when": "a Copilot run under Full access cannot get Copilot's allow-all mode"
+    },
+    {
+      "given": "",
+      "key": "ac144",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "the Hub refuses it",
+      "when": "a Copilot run under Workspace only raises a URL request for `https://example.com` from a shell command"
+    },
+    {
+      "given": "",
+      "key": "ac145",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "the Hub allows it once",
+      "when": "a Copilot run under Workspace only raises a URL request from its fetch tool without a sandbox bypass"
+    },
+    {
+      "given": "",
+      "key": "ac146",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "the Hub refuses it",
+      "when": "a URL request asks to bypass Copilot's sandbox"
+    },
+    {
+      "given": "",
+      "key": "ac148",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "the Hub turns it off before prompting, or fails the turn with the reason and sends no prompt",
+      "when": "a Copilot run under Workspace only loads a session whose allow-all mode is on"
+    },
+    {
+      "given": "",
+      "key": "ac149",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "the spawned command lacks the option and the timeline names it",
+      "when": "a Copilot runner's options include `--yolo` or `--allow-tool` and the run is under Workspace only"
+    },
+    {
+      "given": "",
+      "key": "ac152",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "the call is judged as a foreign server's",
+      "when": "a Copilot run calls a tool on a server named `agentweave-x`"
+    },
+    {
+      "given": "",
+      "key": "ac154",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "no call to it is allowed as the Hub's own and the timeline says why",
+      "when": "Copilot reports the `agentweave` server as loaded from the workspace or a plugin"
+    },
+    {
+      "given": "",
+      "key": "ac156",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "the Hub refuses it saying the server was not reported",
+      "when": "a Copilot run under Workspace only asks for a tool call whose server Copilot did not report"
+    },
+    {
+      "given": "",
+      "key": "ac158",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "the Hub refuses it",
+      "when": "a Copilot run raises a request kind the Hub does not recognise"
+    },
+    {
+      "given": "",
+      "key": "ac159",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "its editing tools other than file creation are removed, allow-all is off, a file-creation request is refused and recorded, and it is not put in plan mode",
+      "when": "a Copilot specification turn runs under Full access"
+    },
+    {
+      "given": "",
+      "key": "ac161",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "its permission requests are still answered under its posture",
+      "when": "a Copilot run's `agentweave` MCP server fails to start"
+    },
+    {
+      "given": "",
+      "key": "asb-copilot-github",
+      "requirement": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "then": "the request goes to the operator as a card",
+      "when": "a Copilot agent with its GitHub server toggle on, under Workspace only, calls a GitHub MCP tool"
+    },
+    {
+      "given": "",
+      "key": "ac162",
+      "requirement": "a-copilot-run-receives-no-github-token-or-permission-overrid",
+      "then": "the Copilot process has no `GH_TOKEN`",
+      "when": "the Hub has `GH_TOKEN` set and the agent does not name it"
+    },
+    {
+      "given": "",
+      "key": "ac163",
+      "requirement": "a-copilot-run-receives-no-github-token-or-permission-overrid",
+      "then": "the Copilot process receives it as configured",
+      "when": "the agent's environment names `COPILOT_GITHUB_TOKEN`"
+    },
+    {
+      "given": "",
+      "key": "ac164",
+      "requirement": "a-copilot-run-receives-no-github-token-or-permission-overrid",
+      "then": "the Copilot process lacks it and the Hub still decides its requests",
+      "when": "the Hub has `COPILOT_ALLOW_ALL=true` and a run is under Workspace only"
+    },
+    {
+      "given": "",
+      "key": "ac165",
+      "requirement": "a-copilot-run-receives-no-github-token-or-permission-overrid",
+      "then": "the Copilot process has neither, nor any `COPILOT_PROVIDER_*` variable",
+      "when": "the Hub has `COPILOT_PROVIDER_BASE_URL` and `COPILOT_MODEL` set"
+    },
+    {
+      "given": "",
+      "key": "ac166",
+      "requirement": "a-copilot-run-receives-no-github-token-or-permission-overrid",
+      "then": "the process lacks it and the timeline says it was removed and names Full access",
+      "when": "the agent's environment names `COPILOT_ALLOW_ALL`"
+    },
+    {
+      "given": "",
+      "key": "ac200",
+      "requirement": "no-copilot-hook-decides-a-call-or-a-turn",
+      "then": "it holds no permission, pre-tool, stop or subagent-stop hook",
+      "when": "the Hub writes a Copilot agent's home"
+    },
+    {
+      "given": "",
+      "key": "ac201",
+      "requirement": "no-copilot-hook-decides-a-call-or-a-turn",
+      "then": "the request reaches the Hub and is recorded like every other decision",
+      "when": "a Copilot run under a posture the Hub answers asks to write a file"
+    },
+    {
+      "given": "",
+      "key": "ac202",
+      "requirement": "no-copilot-hook-decides-a-call-or-a-turn",
+      "then": "the turn ends and nothing the Hub installed continues it",
+      "when": "a Copilot agent ends its turn without asking anything"
+    },
+    {
+      "given": "",
+      "key": "ac203",
+      "requirement": "no-copilot-hook-decides-a-call-or-a-turn",
+      "then": "the workspace is not marked trusted and the home names no trusted folder",
+      "when": "a Copilot run starts in a repository with its own hooks"
+    },
+    {
+      "given": "",
+      "key": "asb-home-sweep",
+      "requirement": "no-copilot-hook-decides-a-call-or-a-turn",
+      "then": "it is removed before the next spawn and the timeline lists what was removed",
+      "when": "an earlier run left a hook or a `trustedFolders` entry in the agent's Copilot home"
+    },
+    {
+      "given": "",
+      "key": "n2-ac1",
+      "requirement": "n2",
+      "then": "the Hub declines it",
+      "when": "a Codex run under Workspace only asks to run a command whose working directory is outside the workspace"
+    },
+    {
+      "given": "",
+      "key": "n2-ac2",
+      "requirement": "n2",
+      "then": "the Hub declines the elicitation",
+      "when": "a Codex run asks to call a tool on an MCP server other than the Hub's"
+    },
+    {
+      "given": "",
+      "key": "n2-ac3",
+      "requirement": "n2",
+      "then": "the Hub declines it",
+      "when": "a Codex run raises a request method the Hub does not recognise"
+    },
+    {
+      "given": "",
+      "key": "ac123",
+      "requirement": "text-the-operator-did-not-write-reaches-a-run-without-a-file",
+      "then": "the recipient's harness attaches no file and the turn states how the text was changed",
+      "when": "an agent sends another agent a message mentioning `@/etc/x`"
+    },
+    {
+      "given": "",
+      "key": "ac124",
+      "requirement": "text-the-operator-did-not-write-reaches-a-run-without-a-file",
+      "then": "it reaches the run unchanged and the file is attached",
+      "when": "the operator sends a composer message mentioning a workspace file"
+    },
+    {
+      "given": "",
+      "key": "ac125",
+      "requirement": "text-the-operator-did-not-write-reaches-a-run-without-a-file",
+      "then": "only the peer's mention is neutralised",
+      "when": "one turn delivers an operator message and a peer message, each with a mention"
+    },
+    {
+      "given": "",
+      "key": "ac128",
+      "requirement": "text-the-operator-did-not-write-reaches-a-run-without-a-file",
+      "then": "the delivered answer is neutralised and the stored question keeps its options as written",
+      "when": "the operator answers by choosing an option whose text mentions a file"
+    },
+    {
+      "given": "",
+      "key": "ac130",
+      "requirement": "text-the-operator-did-not-write-reaches-a-run-without-a-file",
+      "then": "the delivered message is neutralised and the stored job keeps its message as written",
+      "when": "a job whose operator-written message contains a mention fires"
+    },
+    {
+      "given": "",
+      "key": "ac132",
+      "requirement": "text-the-operator-did-not-write-reaches-a-run-without-a-file",
+      "then": "the worker attaches no file and the stored checkpoint does not contain that file's contents",
+      "when": "a checkpoint is written for a conversation whose agent output mentions an outside file"
+    },
+    {
+      "given": "",
+      "key": "ac137",
+      "requirement": "text-the-operator-did-not-write-reaches-a-run-without-a-file",
+      "then": "the stored checkpoint shows the mention as originally written",
+      "when": "a checkpoint worker's answer repeats a neutralised mention"
+    },
+    {
+      "given": "a provider run whose agent echoed the key in a message, a tool call and a failure",
+      "key": "rr-ac46",
+      "requirement": "n10",
+      "then": "the key's value appears in none of them",
+      "when": "its events, runner response and context are read"
+    },
+    {
+      "given": "the GitHub server enabled under Workspace only",
+      "key": "ac-ac35",
+      "requirement": "n12",
+      "then": "the first is a card saying it acts on GitHub as the operator and is not allowed by the Hub; the second is refused with no card",
+      "when": "Copilot asks the Hub to decide a GitHub tool call, and separately an MCP call with no reported server"
+    },
+    {
+      "given": "the GitHub server enabled",
+      "key": "ac-ac36",
+      "requirement": "n12",
+      "then": "the run records it unavailable in the first case only",
+      "when": "Copilot reports it failed, and separately reports it still starting"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "How a shell command's text is judged (Workspace only)",
+      "steps": [
+        "Read the command in the dialect of the tool carrying it (Bash: bash; PowerShell: powershell; unknown: both), twice per dialect for locale-dependent `$'...'` escapes; any refusal in any reading refuses the command.",
+        "Lex into words as the shell produces them: remove quotes and escapes, join adjacent pieces, decode `$'...'`, and read nested `bash -c`/`powershell -Command` text as an inner shell would, including quoted braces and globs that inner shell would expand.",
+        "Expand bash brace patterns into every alternative (bounded at 256 words per argument, 1024 per decision; past that, refuse as uncheckable).",
+        "For each word: a network address is decided by the network rule (own Hub only) and is then still judged as the path it spells.",
+        "A word holding a variable, a substitution, or `~` together with a separator, or a separator-less `~`, `~user`, `~+`/`~-`, or a variable that names a directory for every process (home, profile, temp, app data, program and system directories, PowerShell's `$HOME`/`$PWD`/`$PSHOME`/`$PROFILE`), in any spelling the dialect accepts, including quoted or escaped: refuse as uncheckable.",
+        "A word whose text before its first expansion, or with every expansion removed, is `..`: refuse as uncheckable.",
+        "Split a word into pieces only where a path can start: after a shell boundary character, a quote, a colon gluing a path to a host, revision or field name, or a leading short option. Judge each piece, and the whole word's value with and without inner-shell quotes, as a path resolved against the workspace.",
+        "On a platform without drive letters, also judge a word with backslashes at each escape-removal level.",
+        "On a platform with drive letters, a letter and colon starting a word or piece name that drive; a drive that exists (or whose existence check fails) is judged at its current location; a non-existent drive is an ordinary name. PowerShell's `temp:` is the temporary directory. `Provider::path` is judged by the path.",
+        "Judge `..` alone, `..` as an option value (`-C..`, `/x:..`), `..*`-style globs and extglob groups with a dot alternative as the parent directory; a separator-less `.*` is not.",
+        "Judge globs by their text and by the filesystem entries they match (bounded at 8192 entries; past that, refuse); a matched link and a `..` after it are judged where the link points.",
+        "Judge a separator-less word that names a link in the shell's directory where the link resolves.",
+        "A UNC or device path on a drive-letter platform is decided on its spelling without being resolved.",
+        "`/dev/null` and the standard streams are not destinations in bash; on Windows only as a whole word or redirect target.",
+        "Allow with a reason saying the shell decides some value at run time when any word expands; otherwise allow as inside the workspace."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-14": "45e05faccb16f2c013d5e2858bc5da9d621595a1fa593b0db10ec8a40e793c62",
+      "FR-15": "756169054c9265066c0d19d69c76521e52f6e85aae6b9e0d5c8374e1215bd4bd",
+      "FR-16": "9ef8eac15e3ab7cb2f8a44128770ee0a9c65f04c5863e3d6525be78e1449e4ed",
+      "FR-17": "aba1de78f3b2afebdc50931024266b90952154d167f767524261bb90c75e53fb",
+      "FR-18": "b5ef63482c5c4aecc5e93b14e966a7e36e78d67d7813a884e93d12b04fff470f",
+      "FR-19": "b8eba0c3afd1e460c2e03a2283081e104075a8187ae333627884efe7c06d919c",
+      "FR-20": "86ae246c05aceab934db47167628f214d201d9ddf7fb87c16dbdd1bb79b5d578",
+      "FR-21": "0835b9e4754910b1abaa95a70c65ca3920c0edae5215d5a72380f258c577b1c5",
+      "FR-22": "96cbc190f50781d71ff401cfbb9a4d4eac47e4a7ee4448e3f98e435813f6063e",
+      "FR-23": "f3f3950a011162b8c81417b6dddde8e635176f5647180f5a382607144f2225e4",
+      "FR-24": "ffa8c00e37e2b733a8b556950e22ca28cf3ec5fde032355da57e35bcad74479c",
+      "FR-25": "b8a1d6739605f80cfcce14016dcbafb934355b95e62fd9b9aae3e17d104d3ee4",
+      "FR-26": "4efed8b3ba2c6b68790c1422552eb3e6367945b05fc5d26f5e502d09f4221834",
+      "FR-27": "f3f3bc6aa82ec25060524e0d4e7270a3082f28eddeaa08385ea1fef22beaf33e",
+      "FR-28": "3286b4d86f8ea53574e1c10cc5a11458d900bcc06ae94c67bd578179fce7570a",
+      "FR-29": "c6396d5f487b932aec4e56c497804ac85d7e6c158b5443b9adfd2820f4536095",
+      "FR-30": "41e4c0886b1b630882bf942ec9a097cb33e825dc783e56aaf02a1cd02283c1af",
+      "FR-31": "de9f54f634fc8581297fdadf32c0e6d187af71816e299b9011b12fbf27b8efa5",
+      "FR-32": "b1f17f7e9f7a7dd004c378de8b926c0942c1a0e64da6bbd965dcf3b39eb42023",
+      "FR-33": "14d26c8a9ad98dfd54736f375fd344c45e47b25629d7ba55f885a1965e517d8e",
+      "FR-34": "8357fd03d539c66f4e7ef2a0d77a616f9949fbd7faf846a903c2ec62221948ad",
+      "FR-35": "6984ff8e558207c48405d5031e0f693ed39b3f39dd3c6f4f94f1916649fcbace",
+      "FR-36": "ba0e9a7c2a6bdc56638beed549b5cfb24cb26c28a86eb8c5b2acac54a9b82375",
+      "FR-37": "c3272682c81ab6635d5468e3b900a071684e9a5640834abf4ab4a5ec23b5b953",
+      "FR-38": "4b4e7939ba4d975eb9cc031d49fd8a12c16a0087d5b0f608ea5646b927f3e4af",
+      "FR-39": "7fd160cd6c58755971ec538e0e58b33990fa68d509311e01ba6b03178a026ef2",
+      "FR-40": "7802ecac2dda88d68b43422f5b01f3aa23f842156b91396735a06408c7f34dc9",
+      "FR-41": "9b3f5409248511de197716d8ab8a1c75cc182376449a1cde1cc5f94a745f69d7",
+      "FR-42": "034a2fd300caa6a123bbdd4620b7d200bff1ac1c00cd3d68d2c1ecbbe38dd356",
+      "FR-43": "38c5110e055c9f15b520aa872b9cb745f6b5326cf9967010b5b16e4d389ae9e6",
+      "FR-44": "37660ad56bded784afce5be61b76ee1ed89d501f9b4f08cb5756ad99d2ad0036",
+      "FR-45": "90e25ec458f5a899838661dd2fec118e094be3889369ef1e7376822b2fd78b99",
+      "FR-46": "46c8e11d1d0b78a0ee7880d6ccb2007dcd85596bec4c6dbd7c174be58d4a9786",
+      "FR-8": "8cfbe18bf3d8194ee817d7c2752711d6c5a3e8e6fc3922082df2174afb6c9b6b"
+    },
+    "high_water": 46,
+    "requirements": {
+      "a-brace-pattern-is-judged-as-the-words-it-expands-to": "FR-39",
+      "a-claude-run-pre-allows-the-hub-s-call-command": "FR-38",
+      "a-copilot-run-receives-no-github-token-or-permission-overrid": "FR-34",
+      "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp": "FR-33",
+      "a-decision-is-refused-once-nobody-is-waiting-for-it": "FR-22",
+      "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-": "FR-26",
+      "a-hub-claude-run-gets-only-the-hubs-tool-server": "FR-41",
+      "a-network-address-in-a-shell-command-is-decided-as-a-network": "FR-28",
+      "a-non-yolo-claude-run-s-sandbox-posture-is-set-by-the-hub-no": "FR-14",
+      "a-path-in-a-shell-command-is-judged-by-where-it-resolves": "FR-29",
+      "a-permission-request-does-not-outlive-the-wait-it-represents": "FR-21",
+      "a-posture-exists-in-which-the-workspace-boundary-is-enforced": "FR-18",
+      "a-refusal-is-recorded-wherever-it-is-decided": "FR-25",
+      "a-refusal-s-reason-fits-the-record-that-carries-it": "FR-31",
+      "a-sandboxed-non-yolo-claude-agent-can-still-use-the-hub-s-ow": "FR-15",
+      "a-word-with-no-path-separator-is-still-judged-when-it-names-": "FR-30",
+      "an-operator-asked-to-decide-a-call-is-shown-what-the-workspa": "FR-36",
+      "every-permission-decision-is-answered-and-answering-never-de": "FR-19",
+      "n1": "FR-42",
+      "n10": "FR-45",
+      "n12": "FR-46",
+      "n2": "FR-44",
+      "n3": "FR-43",
+      "no-copilot-hook-decides-a-call-or-a-turn": "FR-40",
+      "text-the-operator-did-not-write-reaches-a-run-without-a-file": "FR-32",
+      "the-built-in-posture-a-run-receives-is-the-posture-shown-for": "FR-35",
+      "the-default-posture-lets-an-agent-work-inside-its-own-worksp": "FR-16",
+      "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too": "FR-37",
+      "the-operator-can-clear-an-expired-request-they-have-seen": "FR-24",
+      "the-operator-can-see-that-an-agent-stopped-waiting": "FR-23",
+      "the-operator-chooses-a-conversation-s-permission-posture": "FR-17",
+      "the-product-states-which-postures-confine-a-run-and-which-do": "FR-27"
+    },
+    "retired": {
+      "a-refused-action-is-visible-to-the-operator": "FR-20",
+      "introducing-an-enforced-posture-does-not-change-existing-run": "FR-8"
+    }
+  },
+  "design": "D1 One judge. `mcp_server._decide` is the Workspace only decision for Claude (inside the spawned MCP server's `approve_tool_call`) and for Copilot (called in the Hub with the run's workspace and Hub URL); the Ask me advice calls the same function, so advice and enforcement cannot disagree. Codex is judged by working directory only (`codex_appserver.workspace_verdict`).\n\nD2 Total and fail-closed. Every decision function maps every input to an answer; unknown shapes, unresolvable paths, an unestablished workspace and a judge that raises all refuse. Reporting a decision or a wait's end is best-effort and cannot change or delay the answer.\n\nD3 Claude postures on the command line. Workspace only is `--permission-mode manual` plus `--permission-prompt-tool mcp__agentweave__approve_tool_call`; Ask me is the same plus `AW_PERMISSION_POSTURE=operator`. The approver flag is emitted only when the MCP server is configured; without it the built-in posture is `acceptEdits`.\n\nD4 Allow-lists, not deny-lists, for standing. The Hub's own call command and its arguments-file write are matched by allowed characters and exact forms; anything else falls through to the normal decision.\n\nD5 Observe writes where the transcript is built. `workspace_writes.classify` and `OutsideWriteRecorder` record destinations on first sight from every runner's tool events, so killed runs keep their record.\n\nD6 No harness bypass. `--strict-mcp-config`, Copilot environment filtering, the Copilot home sweep, and at-sign neutralisation each close a path by which a harness would act before or around the Hub's decision.\n\nD7 Provider keys are registered per run. A provider runner's key lives in the Hub's environment and is registered with `run_secrets` when the run starts, so every recorder removes its exact value.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_permission_approver.py - Claude flags, postures at rest, the decided table, Ask me waits, Codex postures",
+      "hub/tests/test_the_shell_judge_reads_a_word_whole.py, test_a_network_path_is_refused_before_it_is_resolved.py - shell text reading",
+      "hub/tests/test_hub_own_call.py - the call command's standing",
+      "hub/tests/test_copilot_acp_decide.py, test_copilot_home_has_no_deciding_hook.py - Copilot decisions and home",
+      "hub/tests/test_permission_request_lifecycle.py, test_ask_me_card_verdicts.py - request lifecycle and advice",
+      "hub/tests/test_outside_write_record.py, test_a_write_outside_the_workspace_is_recorded.py, test_workspace_writes.py - outside writes",
+      "hub/tests/test_a_hub_run_gets_only_the_hubs_tool_server.py, test_worker_at_mention.py - strict MCP config, mentions",
+      "Ran 2026-10-08 at e25e059: the files above plus test_agent_default_permission_mode.py, 994 passed, 7 skipped"
+    ],
+    "limits": [
+      "The shell judge reads text; a path computed at run time, a `cd` in an earlier call, or a persistent-shell redefinition of `aw-tool` is not seen.",
+      "The criteria here sample the shell-judge rules; the exhaustive matrix is `test_permission_approver.py::test_the_decided_table` and `test_the_shell_judge_reads_a_word_whole.py`."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "a-non-yolo-claude-run-s-sandbox-posture-is-set-by-the-hub-no",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A run's permission behaviour must not depend on whatever Claude configuration exists on the machine the Hub process runs on.",
+      "statement": "Every Claude agent run the Hub spawns SHALL carry an explicit permission posture on its command line: `--dangerously-skip-permissions` for a yolo run, otherwise the operator's chosen `--permission-mode` or the built-in one, never a bypass mode by default."
+    },
+    {
+      "key": "a-sandboxed-non-yolo-claude-agent-can-still-use-the-hub-s-ow",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The Hub's own tools are bounded by the run's credential; a posture that put each `send_message` to a prompt would make collaboration unusable.",
+      "statement": "When a non-yolo Claude run is given the Hub's MCP server, the Hub SHALL add `mcp__agentweave__*` to the run's `--allowedTools`."
+    },
+    {
+      "key": "a-claude-run-pre-allows-the-hub-s-call-command",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Where no approver answers (the `cli` access path) every shell command needing approval is denied, and a plane reachable only through the call command would be unreachable (F301). The rule names only the command; the command itself reads only an arguments file inside the run's calls directory.",
+      "statement": "Every non-yolo Claude run SHALL carry `Bash(aw-tool:*)` and `PowerShell(aw-tool:*)` in `--allowedTools`, whether or not the Hub's MCP server is configured."
+    },
+    {
+      "key": "a-hub-claude-run-gets-only-the-hubs-tool-server",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Without it Claude Code merges the operator's claude.ai account connectors and user or project MCP servers into every run: tools no Hub surface granted, described or recorded (F531).",
+      "statement": "Every Claude agent run and Claude one-shot worker the Hub spawns SHALL pass `--strict-mcp-config`, whether or not the Hub's server is injected, while a server a runner's own flags name with `--mcp-config` still loads."
+    },
+    {
+      "key": "the-operator-chooses-a-conversation-s-permission-posture",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A control that is displayed but does not change what the run receives is a defect. Claude spells Workspace only and Ask me both `--permission-mode manual`; the Hub tells them apart by `--permission-prompt-tool` and `AW_PERMISSION_POSTURE`.",
+      "statement": "The operator SHALL be able to choose a conversation's or agent's permission posture from Edit files, Workspace only, Ask me and Full access, labelled by what each allows, and the choice SHALL reach the next run's command or session."
+    },
+    {
+      "key": "the-built-in-posture-a-run-receives-is-the-posture-shown-for",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A pill that says one thing while the run does another is the worst failure (F283). Approver flags are emitted only for a posture that uses them and only when the approver is present.",
+      "statement": "The posture a run receives when neither its conversation nor its agent states one SHALL be decided in one place per provider (`posture_at_rest`), and every surface that shows a posture at rest SHALL show it: Workspace only for a Claude run the Hub can answer and for Copilot, Edit files for a Claude run with no approver and for Codex, Full access under yolo."
+    },
+    {
+      "key": "the-default-posture-lets-an-agent-work-inside-its-own-worksp",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A posture whose every decision waits on an absent answerer denies everything and looks like a broken run. Isolation is carried by the workspace boundary, not by withholding permission inside it.",
+      "statement": "The built-in posture SHALL let an agent work inside its own workspace without an operator prompt, and SHALL NOT widen what it can affect outside it."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The run blocks while it waits, so the wait is bounded: `AW_DECISION_TIMEOUT`, the agent's setting of 10-600 s, else 120 s. An operator who was away gets a denied action and a record, not a stuck agent. The operator's answer is allow or deny only; a free-text reply would be a second channel nothing reads.",
+      "statement": "Under Ask me, every tool call of a Claude run except the Hub's own SHALL be opened as a permission request for the operator and held until they allow or deny it or the wait runs out, and a wait that runs out SHALL deny the call."
+    },
+    {
+      "key": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Paths are compared fully resolved, so `..` and symbolic links cannot escape; a traversal through a link is judged both physically and as written, and is inside only if both are. The boundary enforced is the one the agent is told it works in. An unknown boundary is not an absent one. A shell command's paths are read from its text (see the algorithm *How a shell command's text is judged*); a path computed only when the command runs is not judged, and the decision says so.",
+      "statement": "Under Workspace only the Hub SHALL decide each tool call against the run's own recorded workspace: a call confined to it is allowed, a call reaching outside it is refused with a reason naming what was refused, and a call whose workspace cannot be established or resolved is refused."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Resolving a UNC path makes the platform contact the host, about 21 s for an unreachable one, stalling the deciding process per word (F464).",
+      "statement": "On a platform with drive letters, the workspace judge SHALL decide a path that begins with two separators (a UNC or device path) from its spelling, without resolving it, refusing it unless the workspace itself is such a path."
+    },
+    {
+      "key": "a-network-address-in-a-shell-command-is-decided-as-a-network",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Reading an address as a path refused requests for a false reason and refused the one request the Hub tells a run to make. This rules only on which address a command's text may name; it is not network containment and the refusal does not claim the network is unavailable. An accepted Hub address is still judged as the path it spells. A `user@host:` word and a `host:port/path` word are addresses; any other colon word is judged as paths.",
+      "statement": "Under Workspace only, a shell command that names a network address SHALL be allowed only when the address is the run's own Hub (named literally with matching scheme, host and port, or by the `HUB_URL` reference the command does not reassign), and SHALL otherwise be refused with a reason that names network access and the way out (asking the operator), not the workspace."
+    },
+    {
+      "key": "a-path-in-a-shell-command-is-judged-by-where-it-resolves",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Reading paths from the middle of words refused `sub/hello.py` as `/hello.py` and refused `../stray.txt` for the wrong reason. The path judged is the one the shell produces after removing quotes and escapes and decoding `$'...'`. A word whose destination is decided only when the shell runs (a variable, substitution or `~` plus a separator) is refused as uncheckable, never as outside and never allowed. A word that cannot be resolved is refused and still answered. The detailed reading rules are in the algorithm *How a shell command's text is judged*.",
+      "statement": "Under Workspace only, each path in a shell command SHALL be judged by where it resolves against the run's workspace as the shell that runs the command will read it, in the dialect of the tool carrying it (both bash and PowerShell when unknown, refusing if either refuses), and a refusal SHALL name the whole path."
+    },
+    {
+      "key": "a-word-with-no-path-separator-is-still-judged-when-it-names-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "`..` and `../` name the same directory, so a boundary that refuses one must refuse the other. `~` and variables set for every process to one directory (`$HOME`, `$env:TEMP`, `%CD%`, ...) name a directory by themselves and are refused as uncheckable. A drive word is judged as that drive's location when the drive exists. Other variables and substitutions are not judged, and an allow for them is not a claim they stay inside. The full list is in the algorithm *How a shell command's text is judged*.",
+      "statement": "Under Workspace only, a separator-less word that names the parent directory, the home shorthand, a directory variable, a link or a glob matching one, or a drive, alone or as an option's value, SHALL be judged rather than exempted, while an ordinary separator-less word SHALL be allowed."
+    },
+    {
+      "key": "a-brace-pattern-is-judged-as-the-words-it-expands-to",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Judging the text errs both ways: it allows `.{,.}` and refuses `src/{a,b}`. A brace the shell leaves literal is read as a literal character. The bounds are 256 words per argument and 1024 per decision.",
+      "statement": "Under Workspace only, a bash brace pattern SHALL be judged as every word it expands to, including one an inner shell would expand from quoted text, and a pattern expanding to more words than the judge examines SHALL be refused as uncheckable."
+    },
+    {
+      "key": "a-refusal-s-reason-fits-the-record-that-carries-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reason longer than the Hub accepts is rejected, the rejection is swallowed so reporting cannot change a decision, and the refusal goes unrecorded. Rendering escapes can lengthen a word several times, so the bound applies after rendering.",
+      "statement": "A refusal's reason SHALL be bounded, as rendered and sent, to what the Hub accepts in a recorded reason (1000 characters), quoting at most a bounded part of a long word."
+    },
+    {
+      "key": "every-permission-decision-is-answered-and-answering-never-de",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An unanswered request does not fail a run, it suspends it indefinitely; a decision path that can time out, be refused a connection or wait on a restart can hang a turn forever.",
+      "statement": "The Hub SHALL answer every permission request a run raises, refusing any whose shape it does not recognise or that its judge fails on, and SHALL reach that answer without depending on another process responding."
+    },
+    {
+      "key": "a-refusal-is-recorded-wherever-it-is-decided",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A refusal that exists only in the agent's prose is one the operator will not find, and the operator is the one who can widen a boundary. An operator's own denial is already recorded, so the run's report of it is not recorded again. Allowed actions are not recorded as refusals, which would bury them. Reporting is observation only: a Hub that cannot be told does not change the answer.",
+      "statement": "Every refusal of an agent's action, whichever runtime or person decided it, SHALL be recorded once as a `permission_denied` event the operator sees, naming the action readably, and recording SHALL NOT alter or delay the decision."
+    },
+    {
+      "key": "a-permission-request-does-not-outlive-the-wait-it-represents",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A card that stays pending once nobody waits offers the operator a decision that reaches no one. The run reports its own timeout, and the Hub sweeps a run's pending requests when the run ends or is reconciled, so closing does not depend on the run reporting it. An expiry leaves `decided_at` empty, which is what tells it from an answer.",
+      "statement": "A permission request SHALL reach a terminal status (`allowed`, `denied` or `expired`) whenever the run that raised it stops waiting, including when the run is killed or cannot reach the Hub."
+    },
+    {
+      "key": "a-decision-is-refused-once-nobody-is-waiting-for-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Recording an approval for a call that already proceeded or was refused states an authority that was never exercised.",
+      "statement": "The Hub SHALL refuse with 409 an operator decision on a permission request that is no longer pending, saying the run has moved on, and SHALL leave the request unchanged."
+    },
+    {
+      "key": "the-operator-can-see-that-an-agent-stopped-waiting",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator learns their agent gave up without them only if the card does not vanish.",
+      "statement": "A permission request that ended without an operator decision SHALL stay visible to the operator, marked as expired and with no way to allow or deny it."
+    },
+    {
+      "key": "the-operator-can-clear-an-expired-request-they-have-seen",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Expired cards pile up on purpose, and a pile that cannot be cleared stops being a signal. A pending request is still being waited on, and clearing it would refuse it by neglect; an answered one was never on the list (F232).",
+      "statement": "The Hub SHALL let the operator dismiss an expired permission request, after which it is no longer listed, SHALL refuse with 409 dismissing a pending or answered request, and dismissing SHALL NOT change the request's status or decision record."
+    },
+    {
+      "key": "an-operator-asked-to-decide-a-call-is-shown-what-the-workspa",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator decides in seconds under a timeout, and the boundary is the input they most need. An allow for a shell command says the text was read, not that the command was sandboxed; Codex's advice says it checked the working directory only. Advice that cannot be computed is omitted, and a Hub that rejects the field is asked again without it.",
+      "statement": "A permission request shown to the operator SHALL carry, as advice, the decision Workspace only would reach for the same call with its reason, from the same check that answers under Workspace only for that provider, and the advice SHALL NOT answer the request."
+    },
+    {
+      "key": "a-file-tool-writing-outside-the-run-s-workspace-is-recorded-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Detection happens where tool calls are observed for the transcript, so it runs in every posture, including ones that check nothing and calls the operator approved. The Hub's own `.agentweave/` subtree is its own kind because it is hidden from `git status`, unlike the tracked tree. The record (`Run.outside_workspace_writes`) is written on first sight, bounded at 20 destinations plus an overflow entry, and is not a refusal. `NULL` means not observed (workspace unresolvable) and `[]` observed and clean. It covers only declared file-tool paths: a shell redirect and a link inside the workspace pointing out are not seen, and a run whose workspace is the project directory records nothing because everything is inside it.",
+      "statement": "The Hub SHALL record against the run every file-writing tool call (Claude `Write`/`Edit`/`MultiEdit`/`NotebookEdit`, Codex `apply_patch`, Copilot edit/delete/move) whose path resolves outside the run's recorded workspace, in every posture, naming the destination as a kind (`agent`, `task`, `review`, `hub`, `project` or `outside`) and a name, and SHALL notify the operator once per destination per run."
+    },
+    {
+      "key": "the-product-states-which-postures-confine-a-run-and-which-do",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Stating it per execution mode would be false both ways: native mode has a checking posture and non-checking ones, while Docker mode confines at the mount whatever the posture.",
+      "statement": "The documentation SHALL state, per posture, whether a run's file writes are checked against its workspace, that a workspace is a working directory rather than a wall, that the operator is the boundary where no posture checks, and that a write leaving the workspace is recorded rather than prevented."
+    },
+    {
+      "key": "the-hub-s-own-call-command-is-decided-like-the-hub-s-own-too",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The call command reaches the same operations as the Hub's MCP tools under the same run credential, so it has their standing. The forms are matched against allow-lists of characters and parameters, never against a list of refused syntax, which fails open (a parenthesised path did). The calls directory counts only if neither it nor `.agentweave` is a link or junction, and the Hub makes it a real directory each turn. Only the PowerShell write can allow what the workspace judge would refuse, because the judge reads the literal as paths and PowerShell writes it verbatim. Accepted residual: in a persistent shell an earlier command could redefine `aw-tool` or `Set-Content`; that command was itself decided under the posture. Codex's ordinary command approvals are not read this way.",
+      "statement": "Wherever the Hub answers a Claude or Copilot permission request, and on a Codex specification turn, it SHALL allow without asking, in every posture: exactly one `aw-tool` invocation in the harness's Bash or PowerShell tool, exactly one PowerShell `Set-Content` of an arguments file from one single-quoted literal, and a write tool naming only `.json` files inside the run's own `.agentweave/calls` directory; every other request SHALL be decided exactly as without this rule."
+    },
+    {
+      "key": "a-copilot-run-s-posture-is-decided-by-the-hub-over-acp",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Copilot runs commands it classes read-only without asking, so the Hub judges only what it is asked and does not claim more. Workspace only (also the posture at rest): commands judged in the reported shell's dialect (both when unknown), edits and outside reads judged path by path, a request naming nothing refused, a web fetch from Copilot's own fetch tool allowed unless it asks to bypass Copilot's sandbox, other addresses judged like command text, unidentified MCP servers and unknown request kinds refused, and with the agent's GitHub server toggle on a call to another reported MCP server goes to the operator. A call is the Hub's own only when Copilot's report names the `agentweave` server, a tool it serves, loaded once from no workspace or plugin source. Ask me: everything but the Hub's own goes to a card, refused when the wait runs out. Edit files: edits and reads judged against the workspace, everything else refused. Full access: Copilot's allow-all mode; if Copilot withholds it the run falls back to Workspace only and says why. Outside Full access the Hub sets the session mode each turn and confirms allow-all is off before prompting, and strips approval-widening runner flags. A specification turn removes Copilot's editing tools except file creation, refuses every file change but the Hub's own call, never enters allow-all, and under Full access is decided as Workspace only. Deciding runs off the event loop.",
+      "statement": "The Hub SHALL answer every permission request a Copilot run raises over ACP exactly once, by the run's posture and with the workspace judge Claude runs use, without depending on the Hub's MCP server and without granting session-wide approvals."
+    },
+    {
+      "key": "a-copilot-run-receives-no-github-token-or-permission-overrid",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An inherited token silently replaces the operator's Copilot sign-in; an allow-all or trust variable would be a hidden fifth posture; an inherited provider variable would send a subscription run to another provider. When the agent's configuration names a removed variable the timeline says so (`copilot.permission_override_removed`), pointing to Full access or to the runner.",
+      "statement": "Every Copilot process the Hub starts SHALL lack `GH_TOKEN`, `GITHUB_TOKEN` and `COPILOT_GITHUB_TOKEN` unless the agent's own environment names them, and SHALL always lack Copilot's allow-all and folder-trust variables, its `COPILOT_PROVIDER_*`, `COPILOT_MODEL` and `COPILOT_OFFLINE` variables and any `COPILOT_HOME` but the Hub's."
+    },
+    {
+      "key": "no-copilot-hook-decides-a-call-or-a-turn",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A hook that answers a permission pre-empts the approval protocol, taking the decision from the Hub's judge, the operator's cards and the record. A hook that forces continuation is a backstop, which the operator-in-the-loop design deliberately lacks. Trusting the folder would load the repository's own hooks and servers. The sweep is reported as `copilot.home_repaired`.",
+      "statement": "The Hub SHALL NOT install a Copilot hook that allows, denies or rewrites a tool call or forces a turn to continue, SHALL remove from the agent's Copilot home before every spawn any hook or permission-granting setting it did not write, and SHALL NOT trust the agent's workspace folder on Copilot's behalf."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Codex's thread policy decides what it asks: Ask me starts `read-only`/`untrusted` so every effectful action is asked, Full access `danger-full-access`/`never`, the rest `workspace-write`/`on-request`. Workspace only for Codex reads the working directory only, never the command, and says so. A specification turn starts `read-only` in every posture and accepts only the Hub's own call.",
+      "statement": "The Hub SHALL answer every approval a Codex app-server run raises: accepting an MCP elicitation only when it is a tool call on the Hub's own registered server, deciding sandbox approvals by posture (Workspace only by whether the request's working directory is inside the workspace, Ask me by the operator, Full access and yolo by accepting, otherwise declining), and declining anything unrecognised."
+    },
+    {
+      "key": "text-the-operator-did-not-write-reaches-a-run-without-a-file",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A harness reads a file named by an `@path` mention before the model runs, past every posture (F409). Neutralised sources include peer messages, job firings (whole, including the operator's own job text), questions and chosen option labels, task titles composed into an operator's message, and system-added paths. Only the delivered text changes; stored and displayed text keeps its original, and a worker's stored output has the escape removed. The composer offers no path that would itself carry a mention.",
+      "statement": "Text the operator did not write SHALL reach an agent's run, and every prompt of a one-shot worker SHALL reach it, with each at-sign escaped so the harness attaches no file, together with a plain statement of that change; the operator's own direct messages and typed answers SHALL reach the run unchanged."
+    },
+    {
+      "key": "n10",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The key is in the run's environment where the CLI needs it, so the agent can see and repeat it.",
+      "statement": "The Hub SHALL remove the exact value of a provider runner's key from everything it records or sends to the app for that run (runner responses, agent context, run events, permission cards, failure text, diagnostics), without relying on the key's shape."
+    },
+    {
+      "key": "n12",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The Hub's workspace judgement finds nothing to refuse in a GitHub action, so it has no ground to allow one on the operator's behalf.",
+      "statement": "With the GitHub server enabled, under Workspace only a call Copilot asks the Hub to decide for any MCP server other than the Hub's own SHALL be put to the operator on a card naming that server (saying it acts on GitHub as the operator only for the GitHub server), a call whose server Copilot did not report SHALL be refused, runner settings that add write tools or servers SHALL be removed from a run without full access with the removal stated in the run, and an unavailable server SHALL be recorded as such (one still starting SHALL NOT)."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Posture flags on Claude command lines; Copilot ACP and Codex app-server answers",
+      "The Workspace only judge (`mcp_server._decide`) for file tools and shell text",
+      "Ask me permission requests: open, wait, expire, decide, dismiss",
+      "Copilot's calls to its GitHub server under Workspace only",
+      "Refusal records and the outside-workspace write record",
+      "The Hub's own call command's standing",
+      "File-mention neutralisation and Copilot environment and home hygiene",
+      "Removing a provider runner's key from everything recorded or sent to the app for its run"
+    ],
+    "non_goals": [
+      "Network containment: the judge rules only on addresses a command's text names",
+      "Sandboxing a shell command's runtime effects; the judge reads text",
+      "Where a run's workspace is and how it is provisioned: workspace-isolation",
+      "Whether an agent's Copilot GitHub server is enabled: agent-configuration",
+      "Where a provider runner's key is configured: runner-registry"
+    ]
+  },
+  "summary": "The permission posture the Hub imposes on every agent run, independent of the machine's own harness configuration: the four postures (Edit files, Workspace only, Ask me, Full access), how the Hub decides each tool call under them for Claude, Copilot and Codex (including calls to Copilot's GitHub server), the operator's permission cards and their lifecycle, how refusals and outside-workspace writes are recorded, and what text and environment a run receives so that no harness feature bypasses the posture and no provider runner's key leaks into what is recorded.",
+  "tasks": [],
+  "title": "Agent run sandboxing"
+}

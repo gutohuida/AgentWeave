@@ -1,0 +1,206 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the submit_spec_document tool description and the exploring duty text as shipped",
+      "key": "docs-name-depends-on",
+      "requirement": "tool-docs-teach-ordering",
+      "then": "both contain depends_on and a sentence saying same-file tasks are chained; a test that fails on the unchanged text and passes on the new text asserts it",
+      "when": "each is searched for `depends_on` and the shared-file rule"
+    },
+    {
+      "given": "a payload whose tasks carry `files` lists",
+      "key": "files-accepted",
+      "requirement": "task-declares-files",
+      "then": "it is accepted and the lists are present when the document is read back",
+      "when": "it is validated and stored"
+    },
+    {
+      "given": "a task with an empty or absolute path in `files`",
+      "key": "bad-path-refused",
+      "requirement": "task-declares-files",
+      "then": "it is refused and the message names the task",
+      "when": "the payload is validated"
+    },
+    {
+      "given": "one task declaring `hub/hub` and another declaring `hub/hub/scheduler.py`",
+      "key": "directory-covers",
+      "requirement": "task-declares-files",
+      "then": "they overlap",
+      "when": "overlap is evaluated"
+    },
+    {
+      "given": "two tasks both declaring `hub/hub/mcp_server.py` and no depends_on between them",
+      "key": "unordered-overlap-warned",
+      "requirement": "overlap-warns",
+      "then": "the response carries a warning naming both task keys and the path, and ready_to_propose is unchanged by it; the test fails before the change and passes after",
+      "when": "the document is submitted"
+    },
+    {
+      "given": "the same two tasks, one depending on the other directly, or through a third task",
+      "key": "ordered-silent",
+      "requirement": "overlap-warns",
+      "then": "no overlap warning is given",
+      "when": "the document is submitted"
+    },
+    {
+      "given": "a task with no `files` beside tasks that declare files, and an imported entry",
+      "key": "undeclared-and-imported-silent",
+      "requirement": "overlap-warns",
+      "then": "no overlap warning names the task without files or the imported entry",
+      "when": "the document is submitted"
+    },
+    {
+      "given": "the diff of the finished slice",
+      "key": "no-migration-file",
+      "requirement": "no-migration",
+      "then": "it is unchanged",
+      "when": "hub/hub/migrations/versions is compared with master"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Overlap check",
+      "steps": [
+        "Take the locally declared tasks that declare at least one file.",
+        "Compute, for each task, the set of tasks reachable through depends_on, transitively.",
+        "For each pair neither of which reaches the other, find a path in one list equal to, or beneath, a path in the other.",
+        "For each such pair report one warning with both keys and one overlapping path."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "2fca6c0bf92739fed0c76426ca85fe4a6a089b6ebb4a0a91068dddf7e4aa9920",
+      "FR-2": "06d591c0ef442921852777d6f0b748a34bf9a87f1425158e66681cd3905d40c2",
+      "FR-3": "d2bcc0f15f20dcfc8a78085f379594d7d8428a8a2c0960f6164b8823d239b4fa",
+      "FR-4": "d813465fc04524a94b7b0bc4cb051723a60d7c5ae123f4b0e9beac35c00b7d62",
+      "FR-5": "c758c3e8d67f3d9f66916853f729cb47386499668dd7e03ecd738505fc078993"
+    },
+    "high_water": 5,
+    "requirements": {
+      "no-migration": "FR-5",
+      "overlap-warns": "FR-3",
+      "task-declares-files": "FR-2",
+      "tool-docs-teach-ordering": "FR-1"
+    },
+    "retired": {
+      "ordered-or-undeclared-is-silent": "FR-4"
+    }
+  },
+  "delivery": {
+    "agent": "aw-builder",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Guidance and a warning, not enforcement. The planner is told in the two places it reads (the tool description and the exploring duty) that tasks expected to edit the same file are chained. A task may declare the files it expects to edit; at submission the Hub reports any pair of tasks whose files overlap with no dependency path between them. The report is a warning because declared files are the planner's estimate, and a wrong estimate must not block a legitimate plan (operator decision, 2026-10-06). The files list lives in the stored document payload, so no migration is needed. Python changes, including the tool server copy in mcp_server.py, take effect at each Hub's next restart; nothing here needs a restart while the slice is being built. The new tool text and the overlap warning reach agents only after a Hub restarts on the merged code, and the Hub orchestrating this build must not restart, so the end-to-end drive is not a task of this slice: the operator runs it after both tasks merge, on a fresh Hub. Drive: a planner drafts a slice whose tasks share a file; the submission must either chain them or return the overlap warning, and the review rounds per task are recorded against F504. Open follow-ups, recorded in the roadmap and not built here: counting conflict-caused rounds, and flagging overlaps from real changed files.",
+  "evidence": {
+    "checked": [
+      "hub/hub/mcp_server.py: the tasks description omits depends_on (grep finds no occurrence in the file)",
+      "hub/hub/spec_payload.py:128: depends_on explained only in a field description; the tool takes untyped dicts",
+      "hub/hub/api/v1/agents.py:1712: exploring duty text has no ordering guidance",
+      "hub/hub/dependency_gate.py and hub/hub/scheduler.py:733: a task cannot start until its prerequisites are approved, in the flow claim as well",
+      "hub/hub/task_workspace.py:160: a task's workspace is cut from the integration base at start, so a dependent starts after its prerequisite merged",
+      "hub/hub/spec_tasks.py:202: tasks are read from the payload dict, so a payload field needs no column"
+    ],
+    "limits": [
+      "Proposed coverage only: every acceptance criterion is derived from this document, none from behaviour watched running",
+      "The end-to-end drive cannot pass inside this slice: the new tool text and warning reach agents only after a Hub restarts on the merged code, and the orchestrating Hub must not restart during the build; the operator runs the drive on a fresh Hub after both tasks merge",
+      "Declared files are the planner's estimate; an overlap it did not predict is not caught here (roadmap slice flag-missed-overlap)",
+      "Whether the tool server copy of mcp_server.py reaches agents only after a restart is taken from .claude/rules/mcp-server.md, not tested",
+      "Chaining tasks trades wall-clock time for fewer review rounds; that trade is not measured here (roadmap slice measure-conflict-rounds)"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Parallel tasks of one slice that edit the same files conflict after the first merges (F504, F506: review rounds per task 1/4/2, the extras being merge conflicts). The ordering mechanism exists (depends_on, gated by dependency_gate and the flow claim) but the planner is not told about it: the submit_spec_document description of `tasks` lists key, description, requirements and title only (hub/hub/mcp_server.py), the only explanation of depends_on is a schema field description the untyped tool never shows (hub/hub/spec_payload.py), and the exploring duty text (hub/hub/api/v1/agents.py SPEC_PHASE_DUTIES) says nothing of ordering. Nothing records which files a task expects to touch, so nothing can notice an unordered overlap.",
+  "requirements": [
+    {
+      "key": "tool-docs-teach-ordering",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The planner cannot use an ordering mechanism it was never shown; today neither place mentions depends_on.",
+      "statement": "The submit_spec_document tool description and the exploring-phase duty text each state that a task may name sibling tasks in `depends_on`, and that tasks expected to edit the same file are chained with it rather than left parallel."
+    },
+    {
+      "key": "task-declares-files",
+      "modal": "MAY",
+      "party": null,
+      "rationale": "Without a declared set nothing can notice an unordered overlap. Directory coverage is chosen so that two tasks editing different files in one package are still reported.",
+      "statement": "A task declared in a document may carry a `files` list of repo-relative paths it expects to edit. A document with `files` on its tasks is accepted and stored unchanged, and a path that is empty or absolute is refused naming the task. A directory path covers every path beneath it."
+    },
+    {
+      "key": "overlap-warns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Warn rather than refuse: declared files are an estimate, and a wrong one must not block a legitimate plan. A warning that fires on correct plans teaches the planner to ignore it.",
+      "statement": "When two tasks declared in one document have overlapping `files` and neither can reach the other through `depends_on`, directly or transitively, the submit_spec_document response carries a warning naming both task keys and an overlapping path, and `ready_to_propose` is not made false by it. No warning is given for a pair that is ordered by `depends_on`, for a task that declares no `files`, or for an imported task entry."
+    },
+    {
+      "key": "no-migration",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This repository runs the Hub that orchestrates the build; a migration runs at its next restart on live data.",
+      "statement": "The change adds no database migration."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/same-file-tasks-run-in-order-roadmap/spec.json",
+    "slice": "declare-and-warn"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Documenting depends_on and the shared-file rule in the submit_spec_document tool description and the exploring duty text",
+      "An optional per-task list of expected files",
+      "A non-blocking overlap warning in the submission response",
+      "Tests at the validation seam; the end-to-end drive is specified but run by the operator after merge"
+    ],
+    "non_goals": [
+      "Refusing a proposal because of an overlap (warn only)",
+      "Inferring files from task descriptions or from real changes (roadmap slice flag-missed-overlap)",
+      "Counting conflict-caused review rounds (roadmap slice measure-conflict-rounds)",
+      "Changing dependency_gate, the scheduler, or merge behaviour",
+      "A database migration, or any need to restart the Hub that is orchestrating the build",
+      "Running the end-to-end drive inside this slice"
+    ]
+  },
+  "summary": "A planner drafting a slice is told to chain tasks that edit the same files with depends_on, can declare each task's expected files, and gets a non-blocking warning when two unordered tasks overlap.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Edit the submit_spec_document `tasks` description in hub/hub/mcp_server.py and the exploring entry of SPEC_PHASE_DUTIES in hub/hub/api/v1/agents.py to state that tasks may name siblings in depends_on and that tasks expected to edit the same file are chained. Add the failing-then-passing test of the text. Files: hub/hub/mcp_server.py, hub/hub/api/v1/agents.py.",
+      "from": null,
+      "key": "teach-ordering",
+      "requirements": [
+        "tool-docs-teach-ordering"
+      ],
+      "reviewer": null,
+      "title": "Teach depends_on and the shared-file rule"
+    },
+    {
+      "depends_on": [
+        "teach-ordering"
+      ],
+      "description": "Add the optional `files` list to the task in hub/hub/spec_payload.py with the empty/absolute-path refusal, the overlap check (directory coverage, transitive ordering, imports and file-less tasks excluded) as a non-blocking warning in the submit response, and a line documenting `files` in the same tool description. Tests at the validation seam for every acceptance criterion above, and a check that hub/hub/migrations/versions is unchanged. Files: hub/hub/spec_payload.py, hub/hub/spec_completeness.py, hub/hub/mcp_server.py, the submit route. Edits mcp_server.py, so it builds after teach-ordering.",
+      "from": null,
+      "key": "files-and-overlap-warning",
+      "requirements": [
+        "task-declares-files",
+        "overlap-warns",
+        "no-migration"
+      ],
+      "reviewer": null,
+      "title": "Declare files and warn on unordered overlap"
+    }
+  ],
+  "title": "Tasks of one slice that edit the same files build in order"
+}

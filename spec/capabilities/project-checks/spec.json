@@ -1,0 +1,360 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a project with no checks",
+      "key": "ac1",
+      "requirement": "a-project-s-checks-are-configured-by-the-operator-only",
+      "then": "reading the settings returns both, in order, with their timeouts (900 where none was given) and other settings unchanged",
+      "when": "the operator saves two checks in its settings"
+    },
+    {
+      "given": "a running agent's run credential",
+      "key": "ac2",
+      "requirement": "a-project-s-checks-are-configured-by-the-operator-only",
+      "then": "the request is refused and the checks are unchanged",
+      "when": "it calls the project settings route to set checks"
+    },
+    {
+      "given": "a project with no checks",
+      "key": "ac3",
+      "requirement": "a-project-s-checks-are-configured-by-the-operator-only",
+      "then": "no check run is recorded and approval is unaffected by checks",
+      "when": "one of its tasks moves to `completed` and is then approved"
+    },
+    {
+      "given": "the operator's settings",
+      "key": "ac11",
+      "requirement": "a-project-s-checks-are-configured-by-the-operator-only",
+      "then": "the save is refused with 422 naming the problem and nothing is stored",
+      "when": "they save two checks with the same name, a blank command, or a timeout below 10"
+    },
+    {
+      "given": "main has advanced since the task branched",
+      "key": "ac5",
+      "requirement": "checks-run-in-the-background-on-the-work-approval-would-merg",
+      "then": "the checked tree is main's with the task's changes applied",
+      "when": "the task's commit merges cleanly and its checks run"
+    },
+    {
+      "given": "a check that writes files",
+      "key": "ac7",
+      "requirement": "checks-run-in-the-background-on-the-work-approval-would-merg",
+      "then": "the project's root checkout has no new or changed files",
+      "when": "it runs"
+    },
+    {
+      "given": "a project with checks",
+      "key": "ac12",
+      "requirement": "n1",
+      "then": "the move returns before the run finishes and a run is recorded",
+      "when": "the operator moves a task to `completed`"
+    },
+    {
+      "given": "a turn bound to a task the agent moved to `completed`",
+      "key": "ac13",
+      "requirement": "n1",
+      "then": "a run starts on the work that turn committed",
+      "when": "the turn ends"
+    },
+    {
+      "given": "a task whose work makes a configured check exit non-zero",
+      "key": "ac4",
+      "requirement": "n2",
+      "then": "the run is recorded `failed`, naming that check, its exit code and the tail of its output",
+      "when": "its run finishes"
+    },
+    {
+      "given": "a check that runs past its timeout",
+      "key": "ac6",
+      "requirement": "n2",
+      "then": "its process tree is ended and the run is recorded `failed`, the output naming the timeout",
+      "when": "the timeout passes"
+    },
+    {
+      "given": "a merge target that conflicts with main",
+      "key": "ac14",
+      "requirement": "n3",
+      "then": "the run is recorded `error` naming the target and the conflicting paths",
+      "when": "a run starts"
+    },
+    {
+      "given": "a task whose latest run is `error`",
+      "key": "ac15",
+      "requirement": "n3",
+      "then": "a new run starts",
+      "when": "its approval is requested"
+    },
+    {
+      "given": "a task whose only merge target is already on main",
+      "key": "ac16",
+      "requirement": "n4",
+      "then": "no run is recorded",
+      "when": "a run is requested"
+    },
+    {
+      "given": "a run in progress",
+      "key": "ac8",
+      "requirement": "a-check-run-is-never-lost-silently",
+      "then": "the old run reads `interrupted`, a new run starts, and approval is refused as still running",
+      "when": "the Hub restarts and the task's approval is then requested"
+    },
+    {
+      "given": "a task whose checks passed",
+      "key": "ac9",
+      "requirement": "a-check-run-is-never-lost-silently",
+      "then": "a new run starts instead of the old result being trusted",
+      "when": "main advances and approval is requested"
+    },
+    {
+      "given": "a task whose latest run passed on the current main tip and targets",
+      "key": "ac17",
+      "requirement": "n5",
+      "then": "that run's id is returned and no new run is recorded",
+      "when": "a run is requested without force"
+    },
+    {
+      "given": "the Hub environment holds `AW_RUN_TOKEN`, `HUB_API_KEY`, `DATABASE_URL` and a value beginning `aw_live_`",
+      "key": "ac10",
+      "requirement": "a-check-runs-with-the-hub-s-environment-minus-the-hub-s-cred",
+      "then": "none of them appears in the recorded output",
+      "when": "a check prints its environment"
+    },
+    {
+      "given": "a task with a failed run",
+      "key": "ac18",
+      "requirement": "n6",
+      "then": "the route answers 202 with a new run id and the checks list shows it first",
+      "when": "the operator re-runs its checks"
+    },
+    {
+      "given": "a task whose checks failed",
+      "key": "ac19",
+      "requirement": "n7",
+      "then": "the briefing quotes the failing check and tells the reviewer to return the task with `revision_needed`, and no run is started",
+      "when": "a reviewer's turn is briefed"
+    },
+    {
+      "given": "a task whose latest check run failed",
+      "key": "ac286",
+      "requirement": "approval-is-refused-unless-the-project-s-checks-passed-on-th",
+      "then": "the move is refused naming the failing check, its output tail and `revision_needed`; nothing merges",
+      "when": "a reviewer requests `approved`"
+    },
+    {
+      "given": "a task whose latest run passed on the current main tip and targets",
+      "key": "ac287",
+      "requirement": "approval-is-refused-unless-the-project-s-checks-passed-on-th",
+      "then": "the move proceeds and merges",
+      "when": "approval is requested"
+    },
+    {
+      "given": "a task with no check result",
+      "key": "ac288",
+      "requirement": "approval-is-refused-unless-the-project-s-checks-passed-on-th",
+      "then": "a run starts and the move is refused as checks still running",
+      "when": "approval is requested"
+    },
+    {
+      "given": "a task whose latest check run errored",
+      "key": "c-53-1",
+      "requirement": "approval-is-refused-unless-the-project-s-checks-passed-on-th",
+      "then": "a new run is scheduled and the refusal says the checks are running",
+      "when": "approval is requested"
+    },
+    {
+      "given": "",
+      "key": "ac289",
+      "requirement": "approval-is-refused-unless-the-project-s-checks-passed-on-th",
+      "then": "no run starts",
+      "when": "a review turn is briefed for a task with no check result"
+    },
+    {
+      "given": "a task whose checks failed",
+      "key": "ac290",
+      "requirement": "the-operator-may-approve-over-failing-checks-with-a-recorded",
+      "then": "the task is approved and merged and its transition shows the reason",
+      "when": "the operator approves with the reason \"flaky on this machine only\""
+    },
+    {
+      "given": "",
+      "key": "ac291",
+      "requirement": "the-operator-may-approve-over-failing-checks-with-a-recorded",
+      "then": "the request is refused with HTTP 403 and the task is unchanged",
+      "when": "an agent requests `approved` with an override reason"
+    },
+    {
+      "given": "a task whose checks failed",
+      "key": "ac292",
+      "requirement": "the-operator-may-approve-over-failing-checks-with-a-recorded",
+      "then": "the move is refused naming the failing checks",
+      "when": "the operator approves with no reason"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "48c3cbc116c27c38bc2b5d08acfb51464aef5450c63a5a110dfc0869a79df494",
+      "FR-10": "09886282149ce16082f67c56de5065f75d60c2d7cbeb077988566c52516c4b4f",
+      "FR-11": "701c505c04f3800e6bc0005738caeed17a8938393694546a2a3259665497c206",
+      "FR-12": "7bc72d7624b35a5488a5ee62f7ce886e8a9e6404069ad07de36c358a29fa1969",
+      "FR-13": "1b3c9f5f5df007b8c2b74b6417266022ad56baab0f5528b437cc81ce501ee379",
+      "FR-2": "b413f57ebcba36139e13ec83c9178aae38d9e4375281f710036602898530effa",
+      "FR-3": "c90e76333fc87d07bd6ceb18b914cf94e00dbc30ede4de0b5209945bc76859f5",
+      "FR-4": "b74b03cef2a76c22c2aa71334059cdf8cbe93c4f414646b91be3719f342b8015",
+      "FR-5": "2d28561ac45d97f18654f91b15d058c3bdaa1fe6023e8641861eee028409e1e6",
+      "FR-6": "b8ec3b0958c5304e2c6d751bb6bb38f54953c10e451ff04928e9af78a47380ae",
+      "FR-7": "f8dbfe815021d0ebcaf23e418fef4b51b7053e10e4bf307fc8d6943e16042a8c",
+      "FR-8": "8aea269a27df923c8e3cec427fe2eabafe42d6d7de4cfdeff6eb4cb9980825f9",
+      "FR-9": "854991160e82881901ab1fac712c64fd0b2d738ebf6882854911a222d5105cf6"
+    },
+    "high_water": 13,
+    "requirements": {
+      "a-check-run-is-never-lost-silently": "FR-3",
+      "a-check-runs-with-the-hub-s-environment-minus-the-hub-s-cred": "FR-4",
+      "a-project-s-checks-are-configured-by-the-operator-only": "FR-1",
+      "approval-is-refused-unless-the-project-s-checks-passed-on-th": "FR-12",
+      "checks-run-in-the-background-on-the-work-approval-would-merg": "FR-2",
+      "n1": "FR-5",
+      "n2": "FR-6",
+      "n3": "FR-7",
+      "n4": "FR-8",
+      "n5": "FR-9",
+      "n6": "FR-10",
+      "n7": "FR-11",
+      "the-operator-may-approve-over-failing-checks-with-a-recorded": "FR-13"
+    },
+    "retired": {}
+  },
+  "design": "D1 Merged commit by plumbing. The commit approval would produce is built with `git merge-tree --write-tree` and `commit-tree`, one target at a time onto the main tip, skipping targets already in the base. No branch, index or checkout moves, so building it is safe while agents and the operator work.\n\nD2 Scratch worktree per task. The merged commit is checked out detached at `.agentweave/checks/<task_id>` under the project root (gitignored), with the repository's shared dependency directories symlinked in when the OS allows. It is removed after the run; a leftover locked registration is unlocked and force-removed before the next. Adding and removing it may take up to 900 s, since it writes the whole tree.\n\nD3 One record per run (`task_check_runs`). Results are written after each check, so a reader sees progress. Deleting a task deletes its runs.\n\nD4 Bounded, per-task queue. Two runs per Hub, one per task, in-process. A restart marks leftover `running` rows `interrupted` at startup.\n\nD5 Never inside a request. Completion outside a turn, the end of a turn bound to a completed task, and an approval request with no current result each schedule a background run; the approval gate itself only reads (`project_checks.view`). Only callers that are approving may schedule.\n\nD6 The gate asks only when the merge situation resolves (main branch set and existing, workspace resolvable, a repository), like the other what-would-merge gates. The override is the operator's alone, refused from any agent, and its reason is kept on the approval transition.\n\nD8 Hub configuration stays in the Hub. A check's environment drops the Hub's own variables by prefix and by credential-shaped value, and output is scrubbed of anything removed, because check output is quoted to agents.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_project_checks_settings.py — operator-only configuration, validation, run credential refused",
+      "hub/tests/test_project_checks_run.py — merged commit, timeouts, environment scrub, triggers, restart, re-run, error retry, already-merged targets, locked checkout",
+      "hub/tests/test_project_checks_gate.py — approval reads the result, stale/missing start runs, reviewer briefing"
+    ],
+    "limits": [
+      "Concurrency limit (two per Hub, one per task) is held in process memory; not exercised by a dedicated test."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "A task can pass its own evidence and still break the project once merged onto a main branch that has moved. Running the project's own checks on main-plus-the-task's-work, before approval, catches that without trusting anything an agent says.",
+  "requirements": [
+    {
+      "key": "a-project-s-checks-are-configured-by-the-operator-only",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The Hub executes these commands, so only the operator may write them. A project with no checks (null or empty list) records no runs and approval ignores checks entirely.",
+      "statement": "A project SHALL carry an ordered list of at most 20 checks, each with a non-blank name unique within the project, a non-blank shell command and a timeout of 10 to 3600 seconds (default 900), set only through the operator's project settings; no run credential SHALL be able to change it."
+    },
+    {
+      "key": "checks-run-in-the-background-on-the-work-approval-would-merg",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Checking the task branch alone misses breakage caused by main having moved; checking in a shared checkout would disturb the operator or an agent. The merged commit is built with git plumbing, so no branch, index or checkout changes.",
+      "statement": "A check run SHALL execute every configured check, in order, in a Hub-owned scratch worktree detached at a commit whose tree is the project's main branch tip with every merge target of the task's approval merged in, and SHALL never run in the project's root checkout or an agent's worktree."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Work an agent completes mid-turn is only committed when its turn ends, so checking at completion would check the wrong commit. A check can take minutes; no transition waits for it.",
+      "statement": "The Hub SHALL start a check run in the background, never inside the request that triggers it, when a task is moved to `completed` outside a turn, when a turn bound to a task that is `completed` ends, and when approval is requested and the latest result is missing, stale, interrupted or `error`."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The record is what approval, the reviewer briefing and the operator read; a timed-out check left running would hold the scratch worktree and leak processes.",
+      "statement": "A check run SHALL be recorded with the main tip it was built on, the merge targets, the merged commit, a state (`running`, `passed`, `failed`, `error` or `interrupted`) and, per check, its exit code, whether it timed out, its duration and the last 4000 characters of its combined output; a check that exits non-zero or exceeds its timeout SHALL fail the run, and a timed-out check SHALL have its whole process tree ended."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "`error` is the Hub failing to check, not the work failing its checks, so it must not stand as a result the way `failed` does.",
+      "statement": "When a merge target does not merge cleanly onto the main tip, or the Hub otherwise fails to produce a result, the run SHALL be recorded `error` with the reason, and an `error` result SHALL be treated as no verdict and run again when approval is requested."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A target already on main would re-check main and blame its failures on this task.",
+      "statement": "Merge targets already reachable from the main tip SHALL be excluded from a run; a project with no main branch, or a task with nothing left to merge, SHALL record no run."
+    },
+    {
+      "key": "a-check-run-is-never-lost-silently",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A restart kills in-flight checks; leaving them `running` would block approval forever, and a pass on an older main says nothing about the work approval would merge now.",
+      "statement": "A Hub that starts and finds runs still `running` SHALL record them `interrupted`, and a result whose main tip or merge targets no longer match the current ones SHALL be treated as stale rather than trusted."
+    },
+    {
+      "key": "n5",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Checks are often whole test suites; unbounded parallel runs would starve the machine and the agents on it.",
+      "statement": "No more than two check runs SHALL execute at once per Hub, at most one per task; a request for a task whose run is already executing SHALL start nothing new, and a request whose latest `passed` or `failed` result is current SHALL return that result instead of running again."
+    },
+    {
+      "key": "a-check-runs-with-the-hub-s-environment-minus-the-hub-s-cred",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A check runs the project's commands, which may be changed by the very agents being checked; the Hub's credentials and database must not reach them or be echoed into records agents read.",
+      "statement": "A check SHALL run with the Hub process's environment minus the Hub's own configuration: every variable whose name starts with `AW_`, `HUB_` or `AGENTWEAVE_`, `DATABASE_URL`, and any variable whose value starts with `aw_live_` or `aw_run_`; any removed value or credential-shaped string (`aw_live_…`, `aw_run_…`) appearing in its output SHALL be recorded as `[redacted]`."
+    },
+    {
+      "key": "n6",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "When checks fail for a reason outside the work (a flaky test, a fixed environment), the operator needs to see why and re-run without touching the task.",
+      "statement": "The operator SHALL be able to read a task's last 10 check runs, newest first, with whether checks are configured and whether a run is executing (`GET /tasks/{task_id}/checks`), and to start a run even over a current result (`POST /tasks/{task_id}/checks/run`); the task drawer SHALL show the latest run's state and offer that re-run."
+    },
+    {
+      "key": "n7",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reviewer who does not know the checks failed approves into a refusal, or fixes the author's work itself.",
+      "statement": "A reviewer's turn briefing SHALL state the task's recorded check result (passed, failed with the failing checks and output tail, could not run, or not finished) and that fixing a failure is the author's work, returned with `revision_needed`; reading it SHALL start no run."
+    },
+    {
+      "key": "approval-is-refused-unless-the-project-s-checks-passed-on-th",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Approval would otherwise land work that breaks the project. An errored run is the Hub failing to produce a result, not a verdict, so approving retries it (F516).",
+      "statement": "In a project with checks configured, the Hub SHALL refuse a move to `approved` unless the latest check run for the task passed on the current main tip and the current merge targets. Approving SHALL start a run where the result is missing, stale, interrupted or errored and report the checks as running; a failed result SHALL be refused naming each failing check with its output tail and ending with the reviewer's move (`revision_needed`). Of the gate's callers only the approval transition and the land route start a run; the others (the review briefing, the scheduler, run divergence, the integration preview) read the recorded result."
+    },
+    {
+      "key": "the-operator-may-approve-over-failing-checks-with-a-recorded",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The override covers a known failure the operator accepts, not an unknown, and it is an operator judgement recorded where the history can show it.",
+      "statement": "The operator SHALL be able to approve over a failed or errored check result by giving a non-empty reason, which the approval transition keeps; any override reason sent by an agent SHALL be refused, and a running result SHALL NOT be overridable."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Operator-only configuration of a project's checks",
+      "When a check run starts, what commit it runs on, where, and with what environment",
+      "How a run is recorded, read, re-run, interrupted, treated as stale and retried",
+      "What a reviewer's briefing says about the result",
+      "The check gate on approval and the operator's recorded override"
+    ],
+    "non_goals": [
+      "Running anything an agent supplies: every command comes from the operator's settings",
+      "The merge approval performs and the other approval refusals (conflicts, live turn, unaccepted evidence): approval-integration",
+      "The task status machine and who may approve: task-lifecycle-governance"
+    ]
+  },
+  "summary": "The operator configures shell commands (tests, linters) that the Hub runs, in the background, on the exact commit a task's approval would merge, and records the result. Approval is refused until the checks passed on the current main tip and merge targets, unless the operator approves over a failure with a recorded reason.",
+  "tasks": [],
+  "title": "Project checks"
+}

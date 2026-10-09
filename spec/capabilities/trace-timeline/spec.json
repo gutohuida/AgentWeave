@@ -1,0 +1,210 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "",
+      "key": "ac1",
+      "requirement": "persistent-trace-records",
+      "then": "the Hub creates a trace with root type `task` and root ID equal to the task ID",
+      "when": "a task-related activity is created without an existing trace"
+    },
+    {
+      "given": "",
+      "key": "ac2",
+      "requirement": "persistent-trace-records",
+      "then": "the Hub assigns or resolves the trace ID instead of requiring the agent to provide one",
+      "when": "an agent sends a message or updates a task"
+    },
+    {
+      "given": "",
+      "key": "ac3",
+      "requirement": "persistent-span-records",
+      "then": "the Hub records a message span linked to the task trace",
+      "when": "a task-linked message is created"
+    },
+    {
+      "given": "",
+      "key": "ac4",
+      "requirement": "persistent-span-records",
+      "then": "the Hub records an agent-run span linked to the resolved trace",
+      "when": "an agent is triggered through the Hub for a traced message or session"
+    },
+    {
+      "given": "",
+      "key": "ac5",
+      "requirement": "trace-correlation",
+      "then": "the message is linked to the trace rooted at that task",
+      "when": "a message is created with a `task_id`"
+    },
+    {
+      "given": "",
+      "key": "ac6",
+      "requirement": "trace-correlation",
+      "then": "the output is linked to a trace rooted at that session",
+      "when": "agent output is received with a `session_id` and no task trace can be resolved"
+    },
+    {
+      "given": "",
+      "key": "ac7",
+      "requirement": "trace-correlation",
+      "then": "job-run activity is linked to a trace rooted at that job run",
+      "when": "a scheduled AI job fires"
+    },
+    {
+      "given": "",
+      "key": "ac8",
+      "requirement": "trace-list-api",
+      "then": "the Hub returns traces for only the authenticated project",
+      "when": "an authenticated user requests the trace list"
+    },
+    {
+      "given": "",
+      "key": "ac9",
+      "requirement": "trace-list-api",
+      "then": "the Hub returns only traces matching those filters",
+      "when": "an authenticated user filters traces by root type, status, agent, or search text"
+    },
+    {
+      "given": "",
+      "key": "ac10",
+      "requirement": "trace-detail-api",
+      "then": "the Hub returns the trace, ordered spans, related events, and source references for the authenticated project",
+      "when": "an authenticated user requests a trace by ID"
+    },
+    {
+      "given": "",
+      "key": "ac11",
+      "requirement": "trace-detail-api",
+      "then": "the Hub denies access or returns not found",
+      "when": "an authenticated user requests a trace outside their project"
+    },
+    {
+      "given": "",
+      "key": "ac12",
+      "requirement": "timeline-ui",
+      "then": "the UI displays the trace summary and chronological timeline of spans and related activity",
+      "when": "a user opens a trace detail page"
+    },
+    {
+      "given": "",
+      "key": "ac13",
+      "requirement": "timeline-ui",
+      "then": "the UI provides a way to open the related trace",
+      "when": "a user views a task, session, job run, log row, or agent activity that has trace context"
+    },
+    {
+      "given": "",
+      "key": "ac14",
+      "requirement": "agent-traceability-instructions",
+      "then": "the instructions tell agents to pass task IDs for task-related messages, update task status at meaningful boundaries, use Hub/MCP tools when available, include verification commands, and not invent trace or span IDs",
+      "when": "AgentWeave generates AI context or collaboration protocol instructions"
+    },
+    {
+      "given": "",
+      "key": "ac15",
+      "requirement": "agent-traceability-instructions",
+      "then": "the message remains linkable to the same task trace through the provided task ID",
+      "when": "an agent delegates or completes task-related work using the instructed handoff format"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "779b630d9f4e60d06ca743bc6773910103bf46b9ef387dc2cb1a7ebac46964ee",
+      "FR-2": "8dc542e1422779434d10a36ccce88f32c8233340a467b9ba31ca5169557597a1",
+      "FR-3": "4dca16c0ab2ebedb3ed5cb58ee9f10ad066795023a8ec7ca2304c25f7a3940ae",
+      "FR-4": "c3d9ad39084e5ce87045223fc9b1c386d970d11fc9520a32d06c50af74661e49",
+      "FR-5": "c4867130637896694e4bdad716a73283f8b0a805dc9972dd623581df13d4d409",
+      "FR-6": "8e724ba02ed4f847383b01d6053a43838c5b5ab50707267e21b28703cf2db390",
+      "FR-7": "1a742bd79574a8433a87c43cf27089b9e48f870a0e93970b43811203710731e2"
+    },
+    "high_water": 7,
+    "requirements": {
+      "agent-traceability-instructions": "FR-7",
+      "persistent-span-records": "FR-2",
+      "persistent-trace-records": "FR-1",
+      "timeline-ui": "FR-6",
+      "trace-correlation": "FR-3",
+      "trace-detail-api": "FR-5",
+      "trace-list-api": "FR-4"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/trace-timeline/spec.md (7 requirements, 15 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 15 of 15 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "persistent-trace-records",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "The Hub SHALL persist trace records that group related multi-agent activity under a system-assigned trace identifier."
+    },
+    {
+      "key": "persistent-span-records",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "The Hub SHALL persist span records that describe ordered units of work inside a trace."
+    },
+    {
+      "key": "trace-correlation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "The Hub SHALL correlate activity to traces using existing AgentWeave identifiers including task ID, session ID, message ID, and job run ID."
+    },
+    {
+      "key": "trace-list-api",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "The Hub SHALL expose an authenticated API that lists traces for the current project."
+    },
+    {
+      "key": "trace-detail-api",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "The Hub SHALL expose an authenticated API that returns one trace with its spans and related source records."
+    },
+    {
+      "key": "timeline-ui",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "The Hub UI SHALL render trace timelines that show correlated activity in chronological order."
+    },
+    {
+      "key": "agent-traceability-instructions",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Generated AgentWeave instructions SHALL explain how agents preserve trace continuity without manually creating trace identifiers."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "Persistent trace/span timelines for multi-agent work in Hub-backed projects, including automatic correlation of tasks, messages, agent runs, and jobs, trace list/detail APIs, a Hub UI timeline view, and agent traceability instructions.",
+  "tasks": [],
+  "title": "Trace timeline"
+}

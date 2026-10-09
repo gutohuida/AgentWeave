@@ -1,0 +1,1436 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "",
+      "key": "ac1",
+      "requirement": "a-recurring-job-may-be-named-as-a-loop-with-a-purpose-and-a-",
+      "then": "it carries no loop state and fires on its cron as a plain job",
+      "when": "a job is created with none of purpose, stop time or stop-when-empty"
+    },
+    {
+      "given": "a plain job",
+      "key": "ac2",
+      "requirement": "a-recurring-job-may-be-named-as-a-loop-with-a-purpose-and-a-",
+      "then": "the job becomes a loop; its cron, message, agent and run history are unchanged",
+      "when": "an update supplies a purpose"
+    },
+    {
+      "given": "a plain job",
+      "key": "ac3",
+      "requirement": "a-recurring-job-may-be-named-as-a-loop-with-a-purpose-and-a-",
+      "then": "the request is refused with 400 and no loop row is created",
+      "when": "an update supplies only a stop reason or a specification document"
+    },
+    {
+      "given": "",
+      "key": "ac4",
+      "requirement": "a-recurring-job-may-be-named-as-a-loop-with-a-purpose-and-a-",
+      "then": "the request is refused with 400 naming a purpose or stop condition as what makes it a loop; no job is created",
+      "when": "a job is created naming a specification document or the evidence declaration but no purpose or stop condition"
+    },
+    {
+      "given": "an unarchived loop declaring document D",
+      "key": "ac5",
+      "requirement": "a-loop-may-declare-one-specification-document-as-its-queue-s",
+      "then": "the request is refused with 409 naming the first loop",
+      "when": "a second loop is created or updated declaring D"
+    },
+    {
+      "given": "a loop declaring D that has ended but is not archived",
+      "key": "ac6",
+      "requirement": "a-loop-may-declare-one-specification-document-as-its-queue-s",
+      "then": "it is refused; once the first loop is archived the same declaration is accepted",
+      "when": "a second loop declares D"
+    },
+    {
+      "given": "",
+      "key": "ac7",
+      "requirement": "a-loop-may-declare-one-specification-document-as-its-queue-s",
+      "then": "the loop stores D's id, and a path naming no document is refused with 422",
+      "when": "a loop is created naming D by its `spec/` path"
+    },
+    {
+      "given": "a loop declaring D",
+      "key": "ac8",
+      "requirement": "a-loop-may-declare-one-specification-document-as-its-queue-s",
+      "then": "every task created carries that loop's id; with no unarchived loop declaring D they carry none",
+      "when": "D is approved and its declared tasks are created"
+    },
+    {
+      "given": "",
+      "key": "ac9",
+      "requirement": "a-loop-s-queue-is-the-tasks-that-name-it-and-each-write-name",
+      "then": "every task naming L is returned, including terminal ones, and no other task",
+      "when": "the task list is requested with `loop_id` L"
+    },
+    {
+      "given": "an existing task",
+      "key": "ac10",
+      "requirement": "a-loop-s-queue-is-the-tasks-that-name-it-and-each-write-name",
+      "then": "the update is refused with 403 and the task is unchanged",
+      "when": "an update supplies a `loop_id`"
+    },
+    {
+      "given": "",
+      "key": "ac11",
+      "requirement": "a-loop-s-queue-is-the-tasks-that-name-it-and-each-write-name",
+      "then": "its `loop_id` is empty and it appears in no loop's queue",
+      "when": "a task is created with no `loop_id` outside any document a loop declares"
+    },
+    {
+      "given": "loop L whose job names agent A, before L has fired",
+      "key": "ac16",
+      "requirement": "only-a-loop-s-creator-or-the-operator-may-add-to-its-queue-d",
+      "then": "the task is created naming L",
+      "when": "A creates a task with L's id"
+    },
+    {
+      "given": "",
+      "key": "ac17",
+      "requirement": "only-a-loop-s-creator-or-the-operator-may-add-to-its-queue-d",
+      "then": "the task is created naming that loop",
+      "when": "the operator creates a task with any loop's id"
+    },
+    {
+      "given": "loop L whose job names agent A",
+      "key": "ac18",
+      "requirement": "only-a-loop-s-creator-or-the-operator-may-add-to-its-queue-d",
+      "then": "it is refused with 403 naming send_message to A",
+      "when": "agent B creates a task with L's id"
+    },
+    {
+      "given": "",
+      "key": "ac19",
+      "requirement": "a-loop-has-a-controller-defaulting-to-the-operator-which-may",
+      "then": "its controller is the operator",
+      "when": "a loop is created"
+    },
+    {
+      "given": "a loop whose job names A that has fired once, control not delegated",
+      "key": "ac20",
+      "requirement": "a-loop-has-a-controller-defaulting-to-the-operator-which-may",
+      "then": "it is refused with 403 naming ask_user",
+      "when": "A adds a task directly"
+    },
+    {
+      "given": "the same loop",
+      "key": "ac21",
+      "requirement": "a-loop-has-a-controller-defaulting-to-the-operator-which-may",
+      "then": "the task is added; a `loop_control_changed` event records the change",
+      "when": "the operator delegates control and A adds a task"
+    },
+    {
+      "given": "a loop with control delegated, job naming A, a change to B staged",
+      "key": "ac22",
+      "requirement": "a-loop-has-a-controller-defaulting-to-the-operator-which-may",
+      "then": "control is the operator's again, recorded in the applied edit; additions by A and by B are refused naming operator approval",
+      "when": "the change is applied at the next firing"
+    },
+    {
+      "given": "a loop with control delegated",
+      "key": "ac23",
+      "requirement": "a-loop-has-a-controller-defaulting-to-the-operator-which-may",
+      "then": "the app says that control returns to the operator when the change applies",
+      "when": "the operator edits the default agent in the loop's settings"
+    },
+    {
+      "given": "a loop that ended because its queue drained",
+      "key": "ac24",
+      "requirement": "a-task-offered-to-a-stopped-loop-is-refused-and-offered-to-a",
+      "then": "it is refused with 403, code `loop_stopped`, naming the reason and time and carrying the task back as `offered_task`",
+      "when": "a task is added with its id"
+    },
+    {
+      "given": "",
+      "key": "ac25",
+      "requirement": "a-task-offered-to-a-stopped-loop-is-refused-and-offered-to-a",
+      "then": "the loop stays ended and no new loop is created",
+      "when": "such a refusal is returned"
+    },
+    {
+      "given": "a loop whose first firing produced a checkpoint",
+      "key": "ac26",
+      "requirement": "a-loop-s-continuity-across-firings-is-by-checkpoint-not-by-r",
+      "then": "the briefing carries that checkpoint",
+      "when": "it fires again in a new conversation"
+    },
+    {
+      "given": "",
+      "key": "ac27",
+      "requirement": "a-loop-s-continuity-across-firings-is-by-checkpoint-not-by-r",
+      "then": "the briefing has no prior-checkpoint section and the firing proceeds",
+      "when": "a loop fires for the first time"
+    },
+    {
+      "given": "a loop's job",
+      "key": "ac28",
+      "requirement": "a-loop-s-continuity-across-firings-is-by-checkpoint-not-by-r",
+      "then": "it is refused with 400 naming continuity by checkpoint",
+      "when": "an update sets session_mode to resume"
+    },
+    {
+      "given": "a prior checkpoint within the bound",
+      "key": "ac29",
+      "requirement": "a-firing-s-briefing-is-bounded",
+      "then": "the briefing includes it in full",
+      "when": "the loop fires"
+    },
+    {
+      "given": "a prior checkpoint over the bound",
+      "key": "ac30",
+      "requirement": "a-firing-s-briefing-is-bounded",
+      "then": "the briefing includes it truncated to exactly the bound, not omitted",
+      "when": "the loop fires"
+    },
+    {
+      "given": "",
+      "key": "ac31",
+      "requirement": "a-loop-declares-at-creation-whether-its-work-needs-evidence",
+      "then": "none is recorded and approval resolves it from the default",
+      "when": "a loop is created without the declaration"
+    },
+    {
+      "given": "a loop declaring its work needs no evidence",
+      "key": "ac32",
+      "requirement": "a-loop-declares-at-creation-whether-its-work-needs-evidence",
+      "then": "the tip of the task's own branch is integrated, even if the task links requirements",
+      "when": "one of its tasks is approved"
+    },
+    {
+      "given": "a documentless loop with no declaration",
+      "key": "ac33",
+      "requirement": "a-loop-declares-at-creation-whether-its-work-needs-evidence",
+      "then": "the commit the evidence names is integrated",
+      "when": "a task linked to a requirement with accepted evidence is approved"
+    },
+    {
+      "given": "a loop declaring a document and no preference",
+      "key": "ac34",
+      "requirement": "a-loop-declares-at-creation-whether-its-work-needs-evidence",
+      "then": "what is integrated is what its accepted evidence names",
+      "when": "a task is approved"
+    },
+    {
+      "given": "an existing loop",
+      "key": "ac35",
+      "requirement": "a-loop-declares-at-creation-whether-its-work-needs-evidence",
+      "then": "it is refused with 400 and the recorded declaration is unchanged",
+      "when": "an update supplies the declaration"
+    },
+    {
+      "given": "a loop whose stop time has passed",
+      "key": "ac36",
+      "requirement": "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-",
+      "then": "the firing is skipped, the loop ends with a reason naming the stop time, and the job no longer fires",
+      "when": "its cron fires it"
+    },
+    {
+      "given": "a loop with stop-when-empty whose tasks are all approved or rejected",
+      "key": "ac37",
+      "requirement": "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-",
+      "then": "the firing is skipped and the loop ends as completed with reason `loop queue is empty`",
+      "when": "it fires"
+    },
+    {
+      "given": "a loop with stop-when-empty that has never had a task",
+      "key": "ac38",
+      "requirement": "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-",
+      "then": "the firing proceeds and the loop stays enabled",
+      "when": "it fires"
+    },
+    {
+      "given": "a loop with no stop time and stop-when-empty off",
+      "key": "ac39",
+      "requirement": "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-",
+      "then": "no firing is ever skipped for a stop-condition reason",
+      "when": "it fires"
+    },
+    {
+      "given": "",
+      "key": "ac40",
+      "requirement": "an-empty-queue-with-a-request-still-in-flight-terminates-and",
+      "then": "the loop stops and the event's pending request is empty",
+      "when": "the queue drains with nothing outstanding"
+    },
+    {
+      "given": "a message from the loop's agent to its creator still queued",
+      "key": "ac41",
+      "requirement": "an-empty-queue-with-a-request-still-in-flight-terminates-and",
+      "then": "the loop stops and the event names that message",
+      "when": "the queue drains"
+    },
+    {
+      "given": "such a message delivered into a creator turn that has ended, or withdrawn",
+      "key": "ac42",
+      "requirement": "an-empty-queue-with-a-request-still-in-flight-terminates-and",
+      "then": "the event names no pending request on its account",
+      "when": "the queue drains"
+    },
+    {
+      "given": "an unanswered question and an undelivered message both outstanding",
+      "key": "ac43",
+      "requirement": "an-empty-queue-with-a-request-still-in-flight-terminates-and",
+      "then": "the event names the question",
+      "when": "the queue drains"
+    },
+    {
+      "given": "a loop whose agent is running a turn and no other agent is free",
+      "key": "ac44",
+      "requirement": "a-firing-is-refused-while-its-loop-s-agent-is-already-runnin",
+      "then": "every firing is refused and no queue entry or run record is created",
+      "when": "the job fires several times"
+    },
+    {
+      "given": "a documentless loop whose agent is running, another agent free",
+      "key": "ac45",
+      "requirement": "a-firing-is-refused-while-its-loop-s-agent-is-already-runnin",
+      "then": "it is refused and nothing is queued for anybody",
+      "when": "the job fires"
+    },
+    {
+      "given": "a flow whose job's agent is running, another agent free, an open task",
+      "key": "ac46",
+      "requirement": "a-firing-is-refused-while-its-loop-s-agent-is-already-runnin",
+      "then": "it is not refused and the free agent is started for the task",
+      "when": "the job fires"
+    },
+    {
+      "given": "a loop whose agent is running, an empty queue, another agent free",
+      "key": "ac47",
+      "requirement": "a-firing-is-refused-while-its-loop-s-agent-is-already-runnin",
+      "then": "it is refused; no briefing is queued for the busy agent",
+      "when": "the job fires"
+    },
+    {
+      "given": "a loop whose agent is held and no one else is free, one pending task",
+      "key": "ac48",
+      "requirement": "a-firing-is-refused-while-its-loop-s-agent-is-already-runnin",
+      "then": "its stall reason is the hold, not a missing claimable task",
+      "when": "the loop's summary is read"
+    },
+    {
+      "given": "the agent's turn has ended or its hold has lifted",
+      "key": "ac49",
+      "requirement": "a-firing-is-refused-while-its-loop-s-agent-is-already-runnin",
+      "then": "the firing proceeds and claims a task",
+      "when": "the job fires with claimable work"
+    },
+    {
+      "given": "a queue holding only pending tasks",
+      "key": "ac50",
+      "requirement": "a-firing-claims-its-queue-s-current-item-before-the-turn-beg",
+      "then": "the oldest by creation is moved to assigned before the turn starts",
+      "when": "the loop fires"
+    },
+    {
+      "given": "a queue holding an assigned or in-progress task",
+      "key": "ac51",
+      "requirement": "a-firing-claims-its-queue-s-current-item-before-the-turn-beg",
+      "then": "that task is resumed rather than another claimed",
+      "when": "the loop fires"
+    },
+    {
+      "given": "a queue that has never held a task",
+      "key": "ac52",
+      "requirement": "a-firing-claims-its-queue-s-current-item-before-the-turn-beg",
+      "then": "nothing is claimed and the job's agent is briefed once to fill the queue",
+      "when": "the loop fires"
+    },
+    {
+      "given": "",
+      "key": "ac53",
+      "requirement": "a-firing-claims-its-queue-s-current-item-before-the-turn-beg",
+      "then": "no task changes status or assignee and no input is queued",
+      "when": "a firing is refused before the claim"
+    },
+    {
+      "given": "an older task with an unapproved prerequisite and a newer task with none",
+      "key": "ac54",
+      "requirement": "a-firing-does-not-claim-a-task-whose-dependencies-are-unmet",
+      "then": "the newer task is claimed and the older keeps its status and has no assignee",
+      "when": "the loop fires"
+    },
+    {
+      "given": "every open task has an unmet dependency",
+      "key": "ac55",
+      "requirement": "a-firing-does-not-claim-a-task-whose-dependencies-are-unmet",
+      "then": "nothing is claimed",
+      "when": "the loop fires"
+    },
+    {
+      "given": "a task whose only prerequisite has just been approved",
+      "key": "ac56",
+      "requirement": "a-firing-does-not-claim-a-task-whose-dependencies-are-unmet",
+      "then": "it is claimed and its move to in_progress is not refused by the gate",
+      "when": "the loop fires"
+    },
+    {
+      "given": "open tasks, none claimable, no gate involved",
+      "key": "ac57",
+      "requirement": "a-firing-is-refused-while-its-queue-is-stalled",
+      "then": "it is skipped with a reason naming the count and statuses of the open tasks",
+      "when": "the loop fires"
+    },
+    {
+      "given": "every candidate refused by the dependency gate",
+      "key": "ac58",
+      "requirement": "a-firing-is-refused-while-its-queue-is-stalled",
+      "then": "the reason names the gating, not the status breakdown",
+      "when": "the loop fires"
+    },
+    {
+      "given": "the walk recorded a staffing outcome naming a task",
+      "key": "ac59",
+      "requirement": "a-firing-is-refused-while-its-queue-is-stalled",
+      "then": "the reason is that outcome",
+      "when": "the loop fires with nothing claimable"
+    },
+    {
+      "given": "a stalled loop",
+      "key": "ac60",
+      "requirement": "a-firing-is-refused-while-its-queue-is-stalled",
+      "then": "the task is claimed; the job was never disabled",
+      "when": "its queue gains a claimable task and it fires"
+    },
+    {
+      "given": "every open task has an unapproved prerequisite",
+      "key": "ac61",
+      "requirement": "a-queue-gated-on-unapproved-work-is-stalled-never-stopped",
+      "then": "the job stays enabled and no stop reason is recorded",
+      "when": "the loop fires"
+    },
+    {
+      "given": "a task gated on a rejected prerequisite",
+      "key": "ac62",
+      "requirement": "a-queue-gated-on-unapproved-work-is-stalled-never-stopped",
+      "then": "the reason says it is gated on a rejected prerequisite that will not clear on its own",
+      "when": "the loop fires"
+    },
+    {
+      "given": "that prerequisite is moved back to pending and later approved",
+      "key": "ac63",
+      "requirement": "a-queue-gated-on-unapproved-work-is-stalled-never-stopped",
+      "then": "the gated task is claimed",
+      "when": "the loop fires"
+    },
+    {
+      "given": "a documentless loop whose agent is running, another agent free, a pending task",
+      "key": "ac64",
+      "requirement": "a-firing-staffs-a-loop-that-declares-no-document-only-with-t",
+      "then": "no task is started, the free agent is not selected, and the task keeps its status",
+      "when": "the job fires"
+    },
+    {
+      "given": "a documentless loop with two independent ready tasks",
+      "key": "ac65",
+      "requirement": "a-firing-staffs-a-loop-that-declares-no-document-only-with-t",
+      "then": "exactly one task is started, for the job's agent",
+      "when": "the job fires with its agent free"
+    },
+    {
+      "given": "a documentless loop task assigned to another agent",
+      "key": "ac66",
+      "requirement": "a-firing-staffs-a-loop-that-declares-no-document-only-with-t",
+      "then": "that task is resumed for its existing assignee",
+      "when": "the job fires"
+    },
+    {
+      "given": "a flow with two independent ready tasks and two free agents",
+      "key": "ac67",
+      "requirement": "a-firing-staffs-a-loop-that-declares-no-document-only-with-t",
+      "then": "both tasks are started",
+      "when": "the job fires"
+    },
+    {
+      "given": "a loop with a completed task",
+      "key": "ac68",
+      "requirement": "a-loop-does-not-staff-a-review-of-its-own-agent-s-work",
+      "then": "no reviewer is fired and the task's status is unchanged",
+      "when": "it fires"
+    },
+    {
+      "given": "a loop holding only completed work",
+      "key": "ac69",
+      "requirement": "a-loop-does-not-staff-a-review-of-its-own-agent-s-work",
+      "then": "the reason names that work as waiting for the operator to land it",
+      "when": "it fires"
+    },
+    {
+      "given": "a flow with a completed task",
+      "key": "ac70",
+      "requirement": "a-loop-does-not-staff-a-review-of-its-own-agent-s-work",
+      "then": "a reviewer other than the author is resolved and fired",
+      "when": "it fires"
+    },
+    {
+      "given": "a loop with a firing in progress",
+      "key": "ac79",
+      "requirement": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "then": "the edit is accepted as pending and the running firing is unaffected",
+      "when": "its purpose or stop condition is edited"
+    },
+    {
+      "given": "a staged edit",
+      "key": "ac80",
+      "requirement": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "then": "the firing is briefed with the edited definition and the edit is no longer pending",
+      "when": "the loop next fires"
+    },
+    {
+      "given": "a staged change of agent from held agent A to B, no firing running",
+      "key": "ac81",
+      "requirement": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "then": "B is applied before the busy guard asks, and the firing is not refused on A's hold",
+      "when": "the job fires"
+    },
+    {
+      "given": "a staged agent B archived before the next firing, with a purpose change",
+      "key": "ac82",
+      "requirement": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "then": "the purpose applies, the job still names A, and the application records B dropped as archived",
+      "when": "the job fires"
+    },
+    {
+      "given": "tasks assigned to A and input queued for A",
+      "key": "ac83",
+      "requirement": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "then": "the tasks keep their assignee and the input stays queued for A",
+      "when": "a change to B is applied"
+    },
+    {
+      "given": "a running loop",
+      "key": "ac84",
+      "requirement": "an-operator-s-stop-is-recorded-in-the-loop-s-history-as-a-fi",
+      "then": "it records `stopped`, its stop time and reason, one `loop_stopped` event, and no further firing starts",
+      "when": "the operator stops it with a reason"
+    },
+    {
+      "given": "a running loop",
+      "key": "ac85",
+      "requirement": "an-operator-s-stop-is-recorded-in-the-loop-s-history-as-a-fi",
+      "then": "it records stopped, not completed",
+      "when": "the operator stops it giving the reason `loop queue is empty`"
+    },
+    {
+      "given": "a loop that has ended",
+      "key": "ac86",
+      "requirement": "an-operator-s-stop-is-recorded-in-the-loop-s-history-as-a-fi",
+      "then": "it is refused with 409 code `loop_already_ended` and its ending, reason and time are unchanged",
+      "when": "a stop is requested with a new reason"
+    },
+    {
+      "given": "a running loop",
+      "key": "ac87",
+      "requirement": "an-operator-s-stop-is-recorded-in-the-loop-s-history-as-a-fi",
+      "then": "the loop records a stop event naming `archived with its job` and a `loop_archived` event",
+      "when": "the operator archives its job"
+    },
+    {
+      "given": "",
+      "key": "ac88",
+      "requirement": "a-loop-and-a-job-are-archivable-never-deletable",
+      "then": "the request is refused with 400 naming archiving; the job, its loop and its runs remain",
+      "when": "any caller asks to delete a job"
+    },
+    {
+      "given": "an archived loop",
+      "key": "ac89",
+      "requirement": "a-loop-and-a-job-are-archivable-never-deletable",
+      "then": "its purpose, queue counts, stop state, events and recent firings are returned",
+      "when": "it is fetched by id"
+    },
+    {
+      "given": "",
+      "key": "ac90",
+      "requirement": "a-loop-and-a-job-are-archivable-never-deletable",
+      "then": "it is refused",
+      "when": "an agent run asks to archive a loop or a job that has a loop"
+    },
+    {
+      "given": "a loop that has not ended",
+      "key": "ac91",
+      "requirement": "a-loop-that-is-still-running-cannot-be-archived",
+      "then": "it is refused with 400 saying it must stop or complete first",
+      "when": "the operator archives the loop"
+    },
+    {
+      "given": "a loop that has ended",
+      "key": "ac92",
+      "requirement": "a-loop-that-is-still-running-cannot-be-archived",
+      "then": "it is archived and leaves the default loop listing",
+      "when": "the operator archives it"
+    },
+    {
+      "given": "a running loop",
+      "key": "ac93",
+      "requirement": "a-loop-that-is-still-running-cannot-be-archived",
+      "then": "the loop is ended and archived in the same operation, its history intact",
+      "when": "the operator archives its job"
+    },
+    {
+      "given": "",
+      "key": "ac94",
+      "requirement": "how-a-loop-ended-is-a-distinct-value-not-only-a-written-reas",
+      "then": "its ending state is `completed`",
+      "when": "a loop ends because every task naming it is terminal"
+    },
+    {
+      "given": "one loop that drained and one stopped by the operator",
+      "key": "ac95",
+      "requirement": "how-a-loop-ended-is-a-distinct-value-not-only-a-written-reas",
+      "then": "they carry `completed` and `stopped` respectively",
+      "when": "they are listed"
+    },
+    {
+      "given": "a running flow naming A, firing every 5 minutes",
+      "key": "ac96",
+      "requirement": "the-operator-edits-a-loop-s-settings-from-the-loop-s-own-vie",
+      "then": "the cadence is in force at once and B is shown pending from the next firing",
+      "when": "the operator sets every 15 minutes and agent B and saves"
+    },
+    {
+      "given": "a project with agents on its roster",
+      "key": "ac97",
+      "requirement": "the-operator-edits-a-loop-s-settings-from-the-loop-s-own-vie",
+      "then": "the save is refused with a reason naming the agent and nothing changes",
+      "when": "the operator saves a default agent that does not exist or is archived"
+    },
+    {
+      "given": "a flow with no stop time that stops when its queue empties",
+      "key": "ac98",
+      "requirement": "the-operator-edits-a-loop-s-settings-from-the-loop-s-own-vie",
+      "then": "nothing is sent and the view says a flow needs a stop condition",
+      "when": "the operator unchecks stop-when-empty"
+    },
+    {
+      "given": "a loop that has ended",
+      "key": "ac99",
+      "requirement": "the-operator-edits-a-loop-s-settings-from-the-loop-s-own-vie",
+      "then": "its settings are read-only",
+      "when": "the operator opens its view"
+    },
+    {
+      "given": "a loop with a firing in progress",
+      "key": "ac100",
+      "requirement": "a-loop-s-own-view-offers-the-operator-s-actions-on-that-loop",
+      "then": "it says the running firing finishes and none starts after it",
+      "when": "the operator opens Stop's confirmation"
+    },
+    {
+      "given": "a loop that has ended and is not archived",
+      "key": "ac101",
+      "requirement": "a-loop-s-own-view-offers-the-operator-s-actions-on-that-loop",
+      "then": "Archive is offered and Stop is not",
+      "when": "the operator opens its view"
+    },
+    {
+      "given": "a view still offering Stop for a loop that has meanwhile ended",
+      "key": "ac102",
+      "requirement": "a-loop-s-own-view-offers-the-operator-s-actions-on-that-loop",
+      "then": "the refusal's text is shown and the view then shows how the loop ended",
+      "when": "the operator stops it and the Hub refuses"
+    },
+    {
+      "given": "a plain resume-mode job holding A's session",
+      "key": "ac103",
+      "requirement": "a-change-of-a-job-s-agent-does-not-resume-the-old-agent-s-se",
+      "then": "its next run is B's and does not resume A's session",
+      "when": "its agent is changed to B"
+    },
+    {
+      "given": "a loop with a change to B staged",
+      "key": "ac104",
+      "requirement": "a-change-of-a-job-s-agent-does-not-resume-the-old-agent-s-se",
+      "then": "the job holds no session",
+      "when": "the change is applied"
+    },
+    {
+      "given": "a project allowing agent job management, a loop naming A",
+      "key": "ac105",
+      "requirement": "only-the-operator-changes-which-agent-a-job-names",
+      "then": "it is refused with 403; the job still names A and nothing is staged",
+      "when": "a run of B asks to change the job's agent to B"
+    },
+    {
+      "given": "a project with a roster",
+      "key": "ac106",
+      "requirement": "a-job-shall-name-an-agent-that-exists",
+      "then": "it is refused with 400 naming the roster",
+      "when": "a job is created naming an agent not on it"
+    },
+    {
+      "given": "",
+      "key": "ac107",
+      "requirement": "a-job-shall-name-an-agent-that-exists",
+      "then": "it is refused saying the agent is archived",
+      "when": "a job is created naming an archived agent"
+    },
+    {
+      "given": "a project with no known agents",
+      "key": "ac108",
+      "requirement": "a-job-shall-name-an-agent-that-exists",
+      "then": "it is created",
+      "when": "a job is created naming any agent"
+    },
+    {
+      "given": "",
+      "key": "ac109",
+      "requirement": "a-job-shall-name-an-agent-that-exists",
+      "then": "the firing's record says the agent has no runner bound",
+      "when": "a job fires for an agent with no runner bound"
+    },
+    {
+      "given": "",
+      "key": "ac110",
+      "requirement": "a-loop-surfaces-its-current-state-without-a-caller-assemblin",
+      "then": "every field above is present",
+      "when": "a loop is read through any of these routes"
+    },
+    {
+      "given": "a loop whose firing's blocking question went unanswered until its wait ended",
+      "key": "ac111",
+      "requirement": "a-loop-surfaces-its-current-state-without-a-caller-assemblin",
+      "then": "that question is not in its open-question count",
+      "when": "its state is read"
+    },
+    {
+      "given": "",
+      "key": "ac112",
+      "requirement": "a-loop-surfaces-its-current-state-without-a-caller-assemblin",
+      "then": "it carries no loop block",
+      "when": "a plain job is read"
+    },
+    {
+      "given": "a firing that claimed a task and has not started its turn",
+      "key": "ac113",
+      "requirement": "a-claimed-task-is-still-the-loop-s-current-item",
+      "then": "the task is among the current items",
+      "when": "the summary is read"
+    },
+    {
+      "given": "a firing that selected two tasks",
+      "key": "ac114",
+      "requirement": "a-claimed-task-is-still-the-loop-s-current-item",
+      "then": "both are listed, each with its agent",
+      "when": "the summary is read"
+    },
+    {
+      "given": "a loop whose task is blocked on a question",
+      "key": "ac115",
+      "requirement": "a-claimed-task-is-still-the-loop-s-current-item",
+      "then": "the blocked task is a current item",
+      "when": "the summary is read"
+    },
+    {
+      "given": "a project with archived and unarchived loops",
+      "key": "ac116",
+      "requirement": "a-project-s-loops-are-listable-and-individually-inspectable",
+      "then": "only unarchived loops are returned",
+      "when": "the loops are listed without include_archived"
+    },
+    {
+      "given": "",
+      "key": "ac117",
+      "requirement": "a-project-s-loops-are-listable-and-individually-inspectable",
+      "then": "every loop is returned",
+      "when": "the loops are listed with include_archived"
+    },
+    {
+      "given": "",
+      "key": "ac118",
+      "requirement": "a-project-s-loops-are-listable-and-individually-inspectable",
+      "then": "its queue, current items, recent firings, recent events and active-firing flag are returned",
+      "when": "one loop is fetched by id"
+    },
+    {
+      "given": "two loops each with events",
+      "key": "ac119",
+      "requirement": "a-loop-s-history-is-answerable-for-that-loop-alone",
+      "then": "only that loop's events are returned, newest first, each with actor and time",
+      "when": "one loop is fetched"
+    },
+    {
+      "given": "",
+      "key": "ac120",
+      "requirement": "a-loop-s-history-is-answerable-for-that-loop-alone",
+      "then": "a `loop_control_changed` event is recorded against it",
+      "when": "a loop's control is delegated"
+    },
+    {
+      "given": "a loop that has fired",
+      "key": "ac136",
+      "requirement": "a-conversation-a-loop-firing-created-names-the-loop-that-cre",
+      "then": "the firing's conversation names the loop's label",
+      "when": "the agent's conversations are listed"
+    },
+    {
+      "given": "a plain job that has fired",
+      "key": "ac137",
+      "requirement": "a-conversation-a-loop-firing-created-names-the-loop-that-cre",
+      "then": "its conversation names no loop",
+      "when": "conversations are listed"
+    },
+    {
+      "given": "a conversation naming a loop",
+      "key": "ac138",
+      "requirement": "a-conversation-a-loop-firing-created-names-the-loop-that-cre",
+      "then": "the loop's own view opens",
+      "when": "the operator follows the name"
+    },
+    {
+      "given": "several consecutive firings of one loop by one agent",
+      "key": "ac139",
+      "requirement": "consecutive-firings-of-one-loop-occupy-one-row",
+      "then": "they occupy one row stating the count, expandable to each firing",
+      "when": "they are listed"
+    },
+    {
+      "given": "a flow's firings by A, A, then B",
+      "key": "ac140",
+      "requirement": "consecutive-firings-of-one-loop-occupy-one-row",
+      "then": "B's firing is not in the row holding A's",
+      "when": "they are listed"
+    },
+    {
+      "given": "a loop's firings, an operator conversation, more firings",
+      "key": "ac141",
+      "requirement": "consecutive-firings-of-one-loop-occupy-one-row",
+      "then": "the operator's conversation stays between two separate rows",
+      "when": "they are listed"
+    },
+    {
+      "given": "a collapsed row containing a firing waiting for the operator",
+      "key": "ac142",
+      "requirement": "consecutive-firings-of-one-loop-occupy-one-row",
+      "then": "the row says a firing is waiting",
+      "when": "the list is shown"
+    },
+    {
+      "given": "a loop that ended",
+      "key": "ac156",
+      "requirement": "n1",
+      "then": "it is refused with 409 code `loop_ended`",
+      "when": "the operator sets its job enabled"
+    },
+    {
+      "given": "a loop whose job was paused without ending",
+      "key": "ac157",
+      "requirement": "n1",
+      "then": "it is enabled",
+      "when": "the operator re-enables it"
+    },
+    {
+      "given": "an archived job",
+      "key": "ac158",
+      "requirement": "n2",
+      "then": "it is refused with 409 code `job_archived`",
+      "when": "the operator enables it or presses Run"
+    },
+    {
+      "given": "a disabled, unarchived job",
+      "key": "ac159",
+      "requirement": "n2",
+      "then": "it is refused with 400 `Job is disabled`",
+      "when": "Run is pressed"
+    },
+    {
+      "given": "",
+      "key": "ac160",
+      "requirement": "n3",
+      "then": "it is refused with a reason naming the day ambiguity",
+      "when": "a job is created with `0 0 15 * 5`"
+    },
+    {
+      "given": "",
+      "key": "ac161",
+      "requirement": "n3",
+      "then": "it is refused and the job is unchanged",
+      "when": "a job is updated with an invalid cron"
+    },
+    {
+      "given": "",
+      "key": "ac162",
+      "requirement": "n4",
+      "then": "the request is refused naming that entry and nothing is created",
+      "when": "a loop is created with two initial tasks, the second naming an unknown requirement"
+    },
+    {
+      "given": "",
+      "key": "ac163",
+      "requirement": "n4",
+      "then": "it is refused with 403 before any row exists",
+      "when": "an agent creates a loop for another agent with initial tasks"
+    },
+    {
+      "given": "",
+      "key": "ac164",
+      "requirement": "n4",
+      "then": "the response's queue counts include them",
+      "when": "a loop is created with valid initial tasks"
+    },
+    {
+      "given": "a project with checkpointing off",
+      "key": "ac165",
+      "requirement": "n5",
+      "then": "the response carries a continuity warning",
+      "when": "a loop is created"
+    },
+    {
+      "given": "a project with checkpointing on and a runner set",
+      "key": "ac166",
+      "requirement": "n5",
+      "then": "no warning is returned",
+      "when": "a loop is created"
+    },
+    {
+      "given": "a project that does not allow agent jobs",
+      "key": "ac167",
+      "requirement": "n6",
+      "then": "it is refused with 403 and the operator is asked",
+      "when": "an agent run creates a job"
+    },
+    {
+      "given": "a project allowing agent jobs",
+      "key": "ac168",
+      "requirement": "n6",
+      "then": "the operator's direction is requested before the archive happens",
+      "when": "an agent run archives a plain job"
+    },
+    {
+      "given": "",
+      "key": "af-ac49",
+      "requirement": "a-firing-s-briefing-states-which-tier-the-agent-is-working-i",
+      "then": "the briefing states that the flow routes the work onward",
+      "when": "a flow fires an agent"
+    },
+    {
+      "given": "",
+      "key": "af-ac50",
+      "requirement": "a-firing-s-briefing-states-which-tier-the-agent-is-working-i",
+      "then": "the briefing does not state that anything will route its work onward",
+      "when": "a loop with no document fires its agent"
+    },
+    {
+      "given": "",
+      "key": "af-ac75",
+      "requirement": "a-firing-s-briefing-names-how-its-claimed-task-is-finished",
+      "then": "the briefing names that reviewer and quotes its notes it names the conflicting paths and the remedy of merging the main branch into the task's branch and recording evidence again on the resolved commit",
+      "when": "a firing claims for work a task a reviewer moved to `revision_needed` with notes, and the task's branch no longer merges into the main branch"
+    },
+    {
+      "given": "",
+      "key": "af-ac76",
+      "requirement": "a-firing-s-briefing-names-how-its-claimed-task-is-finished",
+      "then": "the briefing names the call that moves that task names the status that means the work is finished names the status the task is in now",
+      "when": "a firing claims a task and briefs an agent for it"
+    },
+    {
+      "given": "",
+      "key": "af-ac77",
+      "requirement": "a-firing-s-briefing-names-how-its-claimed-task-is-finished",
+      "then": "the briefing states that finished work is offered for review by another agent the briefing still names how the task is finished does not state that anything routes its work onward",
+      "when": "a flow fires an agent for a task a loop that declares no document fires an agent for a task"
+    },
+    {
+      "given": "",
+      "key": "af-ac78",
+      "requirement": "a-firing-s-briefing-names-how-its-claimed-task-is-finished",
+      "then": "it also names the transition that causes those notes to be delivered",
+      "when": "a briefing asks an agent to record notes for whoever reviews the work"
+    },
+    {
+      "given": "",
+      "key": "af-ac79",
+      "requirement": "a-firing-s-briefing-names-how-its-claimed-task-is-finished",
+      "then": "the briefing states what happens if the turn ends with the task unmoved",
+      "when": "a firing claims a task and briefs an agent for it"
+    },
+    {
+      "given": "",
+      "key": "af-ac80",
+      "requirement": "a-firing-s-briefing-names-how-its-claimed-task-is-finished",
+      "then": "the briefing names those requirements by identifier names how evidence is recorded against them the briefing says nothing about recording evidence",
+      "when": "a firing claims a task that serves requirements of record a firing claims a task that serves no requirement of record"
+    },
+    {
+      "given": "",
+      "key": "af-ac81",
+      "requirement": "a-firing-s-briefing-names-how-its-claimed-task-is-finished",
+      "then": "the briefing names the transition that is legal from that status does not name the finished status as reachable in one step",
+      "when": "a firing claims a task that was returned for revision"
+    },
+    {
+      "given": "",
+      "key": "af-ac82",
+      "requirement": "a-firing-s-briefing-names-how-its-claimed-task-is-finished",
+      "then": "the briefing names no task, no transition and no requirement",
+      "when": "a firing proceeds with no task claimed"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-26": "ffdd471ae6f4b47f89918cd35483c337142fe91de0d9c0514df5000a27c21489",
+      "FR-27": "1b0ad7862948eb0979f19e0aefaeab7894c4e73d4598f3eb79459c71ec7c5b5e",
+      "FR-28": "0894dce1cb7605149563cc01db3779a75376f621a658156b49ec80195c7e7e4f",
+      "FR-29": "f81fc606cb7f452bd687b07204db037085b263192dad43a4a735bfd31d27b2d4",
+      "FR-30": "ebd99488b3e6a20d30e8063def432eaee18da9f566d74df108347a88b750e25c",
+      "FR-31": "1b1ca1c56eac27333dd1d8712edcfee14dad77f5a4be3d79605262a90ae04286",
+      "FR-32": "6da077fbe571c6faf85e2d426725f3f53a853877c5d08689a68233420e23391c",
+      "FR-33": "f5440b203963352e0b1a0febf065a3d504af8e61169c4875a315d53c5bc4edce",
+      "FR-34": "8a292e68399266852ef3a34a4a8bbe94461be197c4632d1668cacab7b5b8bba1",
+      "FR-35": "8bab35cc5acf58106234c8f7f71d21ae9f7853ab1d40e01a19df19e399b09132",
+      "FR-36": "17a2089b7d35b43aefa3e41711cd3dcc369bc9194c740a36006cf9d4e854b79b",
+      "FR-37": "4d48eed08f641f8c2344ee99cef3e1e15d2fb9a641a1fb9c2fa167c8c40f3c32",
+      "FR-38": "acf721e1dc7297fad2a8222781a960e95816b0a7ebd30db83e90dedf1689af9a",
+      "FR-39": "0f1d0899e6cc11ba3650a7d36115b148c799aed5f2d0eac400effe35916802e9",
+      "FR-40": "2315b2e4b1de06d734130a188366daa8c622f197cc40fcd0848a8318bedf77a7",
+      "FR-41": "55678d85b8b177d8cbdb06d5a67c6cc63a2bc47de528e66ae9dba73239ca63e7",
+      "FR-42": "116197a4de854174107393ce4c1b1a99bc4a1bb8a87af4c3515a3261cb9f8177",
+      "FR-43": "7792e8fbc95ee319e8090de79aa2d9c076577f726a1ca8ab3968ffeac449b97a",
+      "FR-44": "b1728a0dadbc1fd4fd38aab652e993a1098ad67c8ab9e45a5fa2d30c17c7b09d",
+      "FR-45": "34d3f853d9ff7a954be9bbf6500fd39b76fa01b7d18ef4808a14adb9209077c9",
+      "FR-46": "a939eb1303b2d529ce889bd72a6bc18d0f5d7b5840cdb0dc9f83a1fcece77105",
+      "FR-47": "8cd4388caaa4b1696ce125c0d8931fa516578eaa0e61187b1cff76817972adf6",
+      "FR-48": "6f2837e738879d69dd6a3839a7c28d075267cd710d182431a07a924b64059147",
+      "FR-49": "51b2d2e8c2f7d2a46c2af7f3a4cd003d75e3510a0b44b0a8d97553f875f1853d",
+      "FR-50": "4ee7636aacd3d48dfd90213c6e816445e5d2eb8c6fcc7b644bfdb9a68f572ea3",
+      "FR-51": "e20a406af4839595f97e16cae40fc55e5f114da35985dd6f97f50294a21b2190",
+      "FR-52": "98a5ea249aeb078365e7c169d747d45b31f6049afb98d29b00f3de5ef3a71bc4",
+      "FR-53": "7ce57b777ea3f4c5248bbb817359393b7b074c5286e36ca3b75850f4c625fc65",
+      "FR-54": "4dea5de2a65449bc6aeeac8ba830fab593d4f212c4e6a1f640e24e1248b802ca",
+      "FR-55": "b9450b2b460342e3cdc9bc5eb48922571cbeef6845aad38535b5c2cba7b7c888",
+      "FR-56": "ade02a41f2fcb69692c1a98a6194734faf9c189e04dfed22ac1ce3b49d9d44de",
+      "FR-57": "9d92d35843527d2d75bb51d6ea968fb7ed64e2941621059431cfd5dfea483fc4",
+      "FR-58": "66839d13bf1d4a261f3da4f61f2e7e584b8016d5657e23bd48e1359ab5726573",
+      "FR-59": "1e355447bd724c4444cdf6d37ad56bfbd7eb7db4d7377e053fae08d89354eaeb",
+      "FR-60": "779a0dcccd6e7014110f6e4d766e0f1a4b3db702e6e1af9582e25a0c529f6ed0",
+      "FR-61": "be090cc3efd61b229055ca1c2183737ccb83bf6284f0f6541a84858fcddff85d",
+      "FR-62": "a34c481d1d335c38bd3dde04426e490bb845116c06ae17345159b4b6ad5707c6",
+      "FR-63": "beb39063f385020da54c1cd3f05b4aa9aa95c25063a455913757361181c30fdb",
+      "FR-64": "d55aefe34cd8d019f3a9c47f43d761d14359fff343cbed2b737bd519e31ecdd3",
+      "FR-65": "52eb867f04ee3d2982a84b8b8c08713b386c975bcb78775d0bae74347a4b946c",
+      "FR-66": "0528637ac1b0a95f83d617a3e23a0b8f1ec1ffcfedd26f434169d348bbb132c1",
+      "FR-67": "4e33ac50a9292d9ba6d5ecc432101e4e6ab23905697a559200352070a8a5f66f",
+      "FR-68": "288f2a2fc7d86aeb4f5950633e685c0a8e66a24327d6a15a9614366fb53d335a",
+      "FR-69": "fd5d87ddd9e78a34e22727df763ce3ac2c3e81b8d2d0b3e408a9b07f07484b41",
+      "FR-70": "c1d3770f83789a0a2b9c1092776664c2b450ea53675c03b35fffa76b5e0c99c7",
+      "FR-71": "11ea7ebb03bfeb50d49a08b68e465aae31945cd68a9617f3c17ae80fa8d9bfdb",
+      "FR-72": "be5601429a713f38f3b630bd8018a42064bab5bc0d37591ebbea115e42675792",
+      "FR-73": "da41581665e71ae3823c1d1bb92922318a76426628ef31e09e97448aaec3251b",
+      "FR-74": "02099e6136e5d9f8ff46d86f4b4f610db81b63047f4651d5c13baeaa62e014de",
+      "FR-75": "6502042804cc76702b35e325c5669cb6d135098bdf216920295e4ac7dc7b6350",
+      "FR-76": "515a6a75e2fbef17f24c153c96992eef3bdbf5fd3a05049e195f5ff8d63860e2",
+      "FR-77": "362bfbf972a505b08c64ce6d63d0e0a657f0f4c40297ab78c06b8ba3712e4729",
+      "FR-78": "b3fec54a98f191340f317c627520f61d9c785f83923e2bbd080e2a38283aa73c",
+      "FR-79": "df7e123f4b2aa3edb6c667b5c69b8020710984bd1fe14af0ad305b3b0d7c363a",
+      "FR-80": "617182df4cdbf0a2af56bb54c9e0737171c1e9ab2e4988c1a392fc1dc5c52ef6",
+      "FR-81": "6fac79772a7be05744f3c3ba849eeb737bba3dad42dad5b89560b46388a4aeb2",
+      "FR-82": "7fc6e1231600b52870532e13ee0bb837ec6d3194f33a4d939c5a1fd5305c1137"
+    },
+    "high_water": 82,
+    "requirements": {
+      "a-change-of-a-job-s-agent-does-not-resume-the-old-agent-s-se": "FR-73",
+      "a-claimed-task-is-still-the-loop-s-current-item": "FR-46",
+      "a-conversation-a-loop-firing-created-names-the-loop-that-cre": "FR-48",
+      "a-firing-claims-its-queue-s-current-item-before-the-turn-beg": "FR-33",
+      "a-firing-does-not-claim-a-task-whose-dependencies-are-unmet": "FR-51",
+      "a-firing-is-refused-while-its-loop-s-agent-is-already-runnin": "FR-53",
+      "a-firing-is-refused-while-its-queue-is-stalled": "FR-54",
+      "a-firing-s-briefing-is-bounded": "FR-35",
+      "a-firing-s-briefing-names-how-its-claimed-task-is-finished": "FR-82",
+      "a-firing-s-briefing-states-which-tier-the-agent-is-working-i": "FR-81",
+      "a-firing-staffs-a-loop-that-declares-no-document-only-with-t": "FR-69",
+      "a-job-shall-name-an-agent-that-exists": "FR-57",
+      "a-loop-and-a-job-are-archivable-never-deletable": "FR-43",
+      "a-loop-declares-at-creation-whether-its-work-needs-evidence": "FR-61",
+      "a-loop-does-not-staff-a-review-of-its-own-agent-s-work": "FR-62",
+      "a-loop-has-a-controller-defaulting-to-the-operator-which-may": "FR-38",
+      "a-loop-may-declare-one-specification-document-as-its-queue-s": "FR-31",
+      "a-loop-s-continuity-across-firings-is-by-checkpoint-not-by-r": "FR-34",
+      "a-loop-s-history-is-answerable-for-that-loop-alone": "FR-41",
+      "a-loop-s-own-view-offers-the-operator-s-actions-on-that-loop": "FR-70",
+      "a-loop-s-queue-is-the-tasks-that-name-it-and-each-write-name": "FR-27",
+      "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-": "FR-30",
+      "a-loop-surfaces-its-current-state-without-a-caller-assemblin": "FR-29",
+      "a-loop-that-is-still-running-cannot-be-archived": "FR-44",
+      "a-project-s-loops-are-listable-and-individually-inspectable": "FR-47",
+      "a-queue-gated-on-unapproved-work-is-stalled-never-stopped": "FR-52",
+      "a-recurring-job-may-be-named-as-a-loop-with-a-purpose-and-a-": "FR-26",
+      "a-task-offered-to-a-stopped-loop-is-refused-and-offered-to-a": "FR-40",
+      "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-": "FR-39",
+      "an-empty-queue-with-a-request-still-in-flight-terminates-and": "FR-36",
+      "an-operator-s-stop-is-recorded-in-the-loop-s-history-as-a-fi": "FR-71",
+      "consecutive-firings-of-one-loop-occupy-one-row": "FR-50",
+      "how-a-loop-ended-is-a-distinct-value-not-only-a-written-reas": "FR-45",
+      "n1": "FR-75",
+      "n2": "FR-76",
+      "n3": "FR-77",
+      "n4": "FR-78",
+      "n5": "FR-79",
+      "n6": "FR-80",
+      "only-a-loop-s-creator-or-the-operator-may-add-to-its-queue-d": "FR-32",
+      "only-the-operator-changes-which-agent-a-job-names": "FR-74",
+      "the-operator-edits-a-loop-s-settings-from-the-loop-s-own-vie": "FR-72"
+    },
+    "retired": {
+      "a-firing-in-progress-is-distinguishable-from-one-that-has-fi": "FR-42",
+      "a-firing-s-recorded-reason-never-makes-the-loop-s-history-un": "FR-65",
+      "a-firing-that-does-not-fire-records-only-what-is-new": "FR-55",
+      "a-flow-adopts-the-tasks-already-materialised-from-the-docume": "FR-56",
+      "a-job-firing-into-a-held-queue-is-coalesced": "FR-67",
+      "a-loop-s-approved-work-is-landed-in-one-operator-action": "FR-63",
+      "a-loop-s-firing-is-traceable-to-what-it-produced": "FR-28",
+      "a-row-s-status-word-shall-be-its-own-status": "FR-58",
+      "a-self-created-loop-s-queue-accepts-additions-from-its-creat": "FR-37",
+      "a-surfaced-step-is-recorded-once-not-once-per-tick": "FR-66",
+      "a-task-reported-as-in-flight-is-one-an-agent-is-actually-wor": "FR-64",
+      "a-time-shown-for-a-loop-is-the-instant-it-happened": "FR-49",
+      "an-agent-attributed-to-a-task-shall-be-attributed-in-a-state": "FR-60",
+      "pressing-run-on-a-loop-that-declines-names-why-it-declined": "FR-68",
+      "two-counts-of-the-same-thing-shall-agree-or-be-distinguished": "FR-59"
+    }
+  },
+  "design": "D1 A loop is a job with a Loop row. A job opts in by a purpose or a stop condition; the loop keeps the job's cron, message and agent. A loop that declares a specification document is a flow (agent-flows); a documentless loop staffs only its job's agent.\n\nD2 One decision per firing. `decide_firing` (scheduler.py) is the single walk that chooses tasks and agents, decides stall or in-flight, and feeds both the firing and the loop summary, so the board and the firing cannot disagree.\n\nD3 Order inside a firing: apply a staged edit if no firing of the loop is running; busy guard (records nothing); stop condition (ends the loop); decision (in flight records nothing; stall records one row, then ticks); claim and queue; the conversation is created only once the firing proceeds.\n\nD4 Endings are written once (`loop_ending.end_loop`): reason, time, `completed`/`stopped`, and the job disabled, in one transaction with the `loop_stopped` event. Ended loops refuse re-enabling and new tasks; nothing deletes a job or loop.\n\nD5 Queue authorship: the job's agent stands for the loop's creator. Before the first firing it may add freely; after, only with delegated control; the operator always may; an ended loop refuses everyone. `loop_id` is write-once at creation.\n\nD6 Edits to purpose, stop condition and default agent are staged and applied at the next firing; name, message and schedule apply at once. The evidence declaration is fixed at creation because it is read at approval, not by a firing.\n\nD7 Briefings state the contract. Agents follow what the briefing names over the tool inventory, so every firing's briefing leads with its tier and names the `update_task` calls that finish the claimed task.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_jobs.py, hub/tests/test_jobs_crud.py - opt-in, document claim, agent and cron refusals, re-enable refusal, declaration",
+      "hub/tests/test_scheduler.py - stop conditions, claim order, stall, briefing bound, staged edits, queue-exhausted request",
+      "hub/tests/test_loop_busy_guard.py, test_a_loop_staffs_the_agent_it_names.py, test_pressing_run_names_the_reason.py - busy guard and Run answers",
+      "hub/tests/test_loop_stall_ticks_in_place.py, test_loop_claim_dependency_gate.py, test_a_review_nobody_is_doing.py, test_task_attribution.py",
+      "hub/tests/test_loop_archival.py, test_an_operator_stop_is_in_the_loops_history.py, test_a_gone_loop_lets_go.py, test_an_archived_job_stays_retired.py",
+      "hub/tests/test_a_held_agent_is_busy.py, test_one_action_lands_the_work.py, test_loop_lands_its_work.py, test_a_refused_initial_task_leaves_no_loop.py",
+      "hub/ui/src/__tests__/loopTab*.test.tsx, loopSettings.test.tsx, loopGrouping.test.ts, conversationLoopMarker.test.tsx, jobCard.test.tsx, hubTime.test.ts"
+    ],
+    "limits": [
+      "Audited by reading code and test names at e25e059; no test suite was run for this overhaul."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Unattended recurring work needs to know what it is for, what to work on next and when to stop, and the operator needs to see and steer it without stale work piling up while the agent is busy or the queue is stuck.",
+  "requirements": [
+    {
+      "key": "a-recurring-job-may-be-named-as-a-loop-with-a-purpose-and-a-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Opting in changes nothing about the job's cron, message, agent or history; a job never opted in behaves as a plain scheduled job. A loop field silently dropped would leave the caller believing the job does something it does not.",
+      "statement": "The Hub SHALL make a scheduled job a loop when a purpose, a stop time, or the stop-when-the-queue-empties condition is supplied for it, at creation or by a later update, and SHALL refuse any other loop field (a specification document, the evidence declaration, a stop reason) on a job that is not a loop and is not becoming one, naming what would make it one."
+    },
+    {
+      "key": "a-loop-may-declare-one-specification-document-as-its-queue-s",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One live loop per document keeps ownership of the document's tasks unambiguous. A loop that has ended but is not archived still holds its document: archiving is the operator's statement that it is finished with it.",
+      "statement": "A loop MAY declare one specification document as the source of its queue, given by the document's id or by its `spec/` path; the Hub SHALL store the document's id, SHALL refuse a path that names no document, and SHALL refuse a declaration of a document that another unarchived loop already declares, naming that loop."
+    },
+    {
+      "key": "a-loop-s-queue-is-the-tasks-that-name-it-and-each-write-name",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A loop's stop-when-empty condition and its history both read the queue, so its membership must not change behind them.",
+      "statement": "A loop's queue SHALL be exactly the tasks whose `loop_id` names it. `loop_id` SHALL be set only when a task is created (by the approval of a document the loop declares, or by a caller permitted to add to the loop's queue) or when a loop adopts a document's tasks; an update supplying `loop_id` SHALL be refused, and the task list scoped to a loop SHALL return every task naming it, whatever its status."
+    },
+    {
+      "key": "only-a-loop-s-creator-or-the-operator-may-add-to-its-queue-d",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The agent a loop's job names is treated as the loop's creator. An agent whose roster entry is archived loses the privilege. Tasks a document's approval creates are not subject to this rule.",
+      "statement": "The Hub SHALL accept a task created with a `loop_id` only from the operator or from a run of the agent the loop's job names, and SHALL refuse any other caller with 403, naming `send_message` to that agent as the way to ask for the addition."
+    },
+    {
+      "key": "a-loop-has-a-controller-defaulting-to-the-operator-which-may",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Before the first firing the agent is still defining its queue and is let through. Delegation and taking back are operator-only and are recorded against the loop with actor and time. A delegation is to one agent: when a change of the job's agent is applied, control returns to the operator and that return is recorded.",
+      "statement": "Each loop SHALL have a controller that decides whether the agent its job names may add tasks after the loop's first firing: the operator by default, or that agent once the operator delegates control. While the operator controls, that agent's direct additions after the first firing SHALL be refused, naming `ask_user` as the way to ask the operator."
+    },
+    {
+      "key": "a-task-offered-to-a-stopped-loop-is-refused-and-offered-to-a",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An ended loop's queue is closed; reviving it would contradict its recorded ending.",
+      "statement": "The Hub SHALL refuse every caller, the operator included, a task added to a loop that has ended, stating how and when it ended and echoing the submitted task so that it can be resubmitted as initial work of a new loop. The refusal SHALL NOT restart the loop."
+    },
+    {
+      "key": "a-loop-s-continuity-across-firings-is-by-checkpoint-not-by-r",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Every firing starts a new conversation, so the checkpoint is what carries one firing's outcome into the next.",
+      "statement": "Each firing of a loop SHALL be briefed with the most recent checkpoint of a prior firing of that loop (for a review turn, the checkpoint of the task's author where one exists), and a loop's job SHALL refuse `session_mode` `resume`, at creation or by update, naming checkpoint continuity."
+    },
+    {
+      "key": "a-firing-s-briefing-is-bounded",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A long-running loop's accumulated history must not grow what one firing is asked to read.",
+      "statement": "A loop firing's briefing SHALL carry the loop's purpose, the task claimed for it, and the prior checkpoint, the checkpoint truncated to a fixed bound (4,000 characters) when longer."
+    },
+    {
+      "key": "a-loop-declares-at-creation-whether-its-work-needs-evidence",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The declaration decides what approving a task writes into the operator's repository, so it cannot change part-way through a queue. Storing a copy of today's default would keep asserting it after the default moved. A declaration actually made wins over the default in both directions.",
+      "statement": "A loop MAY declare at creation whether its work needs evidence before it is integrated; the declaration SHALL be stored as made or not made, SHALL be refused on any later update, and where none was made the Hub SHALL resolve it when asked: evidence governs a loop that declares a document and any task linked to a requirement, and does not govern a task of a documentless loop that has no requirement link."
+    },
+    {
+      "key": "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The stop condition never creates a firing or decides what an agent does. A queue that was never filled is not drained, so a loop created before its work exists keeps running.",
+      "statement": "The Hub SHALL evaluate a loop's stop condition only within a firing its cron or a manual trigger already caused, and when it is met SHALL skip that firing, record the reason, end the loop and disable and unschedule its job. Stop-when-empty SHALL be met only when the queue has held tasks and none is still open."
+    },
+    {
+      "key": "an-empty-queue-with-a-request-still-in-flight-terminates-and",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An outstanding request does not create a waiting state, but whoever reviews the stop should see it. Outstanding is read from the message's delivery, not from a read flag nothing sets.",
+      "statement": "When a loop ends because its queue drained, the Hub SHALL record a `loop_queue_exhausted` event naming any outstanding request at that moment: an unanswered question in the loop's most recent earlier firing conversation, or else a message from the loop's agent to the agent whose run created the loop that is still queued or was delivered into a turn still running. The loop SHALL stop either way."
+    },
+    {
+      "key": "a-firing-is-refused-while-its-loop-s-agent-is-already-runnin",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A briefing queued for a busy or held agent is stale before it is read, and one per tick accumulates. A documentless loop staffs only its own agent, so another free agent cannot lift the refusal; a flow can staff a free agent for open work. Where this refusal would refuse the next firing, the loop's summary reports its reason rather than a stall.",
+      "statement": "The Hub SHALL refuse a loop's firing, before it records, claims or queues anything, when the agent its job names is running a turn or is held by a provider usage-allowance refusal, and in addition the loop's queue has no open task, or the loop declares no document, or no other agent in the project is free. The job SHALL stay enabled and scheduled."
+    },
+    {
+      "key": "a-firing-claims-its-queue-s-current-item-before-the-turn-beg",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The choice of task is never left to the agent. Under a flow the same decision also chooses the agent for each task.",
+      "statement": "A loop firing that is not refused SHALL select its work deterministically, resuming tasks already active before claiming the oldest startable entry-status task, and SHALL record each selected task as claimed (`pending` to `assigned`, assignee set) before the agent's turn begins. A refused firing SHALL change no task."
+    },
+    {
+      "key": "a-firing-does-not-claim-a-task-whose-dependencies-are-unmet",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "If claimability and startability disagree, the loop claims work it cannot begin.",
+      "statement": "A firing SHALL claim only a task the dependency gate would let start, using the gate's own determination, and SHALL skip unstartable tasks in queue order to claim the oldest startable one."
+    },
+    {
+      "key": "a-firing-is-refused-while-its-queue-is-stalled",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A stalled queue is not a finished one, and the operator resolving the stall is enough for a later firing to proceed. The named task is what the operator can act on; a status histogram is the reason of last resort.",
+      "statement": "The Hub SHALL skip a firing whose queue holds open tasks of which none is claimable, before queueing any input, recording the most specific reason it established: a named task the walk could not staff, else the dependency gating, else the count of open tasks by status. The job SHALL stay enabled and scheduled."
+    },
+    {
+      "key": "a-queue-gated-on-unapproved-work-is-stalled-never-stopped",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A rejection is reversible by the operator; stopping would disable and unschedule the job so that reversing the rejection could not revive it. The two causes have different remedies.",
+      "statement": "A loop whose queue is gated only by unmet dependencies SHALL be treated as stalled, never stopped, and its stall reason SHALL distinguish tasks awaiting a prerequisite's approval from tasks gated on a rejected prerequisite."
+    },
+    {
+      "key": "a-firing-staffs-a-loop-that-declares-no-document-only-with-t",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A documentless loop is one agent's loop. The one exception is reviewer recovery: replacing an author wrongly holding a review is not narrowed to the job's agent, since that agent is the author. The restriction filters agents already judged available and adds no availability condition of its own.",
+      "statement": "In a loop that declares no specification document the Hub SHALL staff a task nobody holds only with the agent the loop's job names, never substituting another agent, and SHALL NOT replace an existing assignee. A loop that declares a document MAY staff any available agent."
+    },
+    {
+      "key": "a-loop-does-not-staff-a-review-of-its-own-agent-s-work",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A loop has one agent, and every review it could staff would name the author, which author and reviewer separation refuses. The operator may still dispatch a review by hand, and a review already held by its author is still recovered by reassignment without moving status.",
+      "statement": "A loop that declares no document SHALL NOT select one of its completed tasks for review and SHALL NOT report such a task as a step it could not staff; where it has nothing to claim and holds completed tasks, its stall reason SHALL say that finished work is waiting for the operator to land it."
+    },
+    {
+      "key": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Where none of the loop's firings is running, the staged edit is applied before the busy guard, so the guard and the summary ask about the agent that will run. A staged agent archived meanwhile is dropped and the application records why; the rest of the edit applies. Tasks and input already assigned or queued for the old agent stay with it.",
+      "statement": "The Hub SHALL accept an edit to a loop's purpose, stop condition or default agent at any time, stage it, report it separately from the definition in force, and apply it at the start of the loop's next firing, recording both the staging and the application against the loop with actor and time. A firing already running keeps the definition it was briefed with."
+    },
+    {
+      "key": "an-operator-s-stop-is-recorded-in-the-loop-s-history-as-a-fi",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An ending is written once. Control changes and archiving are likewise recorded in the same transaction as the change, so neither exists without the other.",
+      "statement": "An operator's stop of a loop, stated as a stop reason or made by archiving its job, SHALL end the loop as `stopped` (never `completed`, whatever the reason text), disable and unschedule its job, and record a `loop_stopped` event in the same transaction, broadcast to listening clients. A stop of a loop that has already ended SHALL be refused with 409, leaving its recorded ending unchanged."
+    },
+    {
+      "key": "a-loop-and-a-job-are-archivable-never-deletable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Unattended work must stay accountable after it ends. A job's run history is bounded: the Hub keeps the most recent 100 run records per job.",
+      "statement": "The Hub MUST refuse to delete a job or a loop, naming archiving instead, and SHALL offer archiving, which hides them from default listings and keeps their purpose, queue, stop state, event history and run records. Archiving a loop SHALL be operator-only, and an agent SHALL NOT archive a job that has a loop."
+    },
+    {
+      "key": "a-loop-that-is-still-running-cannot-be-archived",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Archiving must never hide work that is still firing; archiving the job is the operator's way to retire a running loop in one step, since an archived job never fires.",
+      "statement": "The Hub SHALL refuse to archive a loop that has not ended, and SHALL end and archive a loop together with its job when the operator archives the job."
+    },
+    {
+      "key": "how-a-loop-ended-is-a-distinct-value-not-only-a-written-reas",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Completion must be countable without interpreting prose.",
+      "statement": "A loop that ends SHALL record how it ended as a value, `completed` when its queue drained and `stopped` otherwise, separately from its written reason."
+    },
+    {
+      "key": "the-operator-edits-a-loop-s-settings-from-the-loop-s-own-vie",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The declared document and the evidence declaration are shown but not editable; an ended or archived loop is read-only; a stop time can be replaced but not cleared; a flow cannot be saved without a stop condition; the view says a new default agent takes only work nobody holds.",
+      "statement": "The app SHALL let the operator edit a loop's name, default agent, message, schedule, purpose and stop condition from the loop's own view, sending only the changed fields; name, message and schedule apply at once, purpose, stop condition and default agent at the next firing."
+    },
+    {
+      "key": "a-loop-s-own-view-offers-the-operator-s-actions-on-that-loop",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Offering an action only where the Hub would accept it keeps the view honest; a stop does not interrupt a running firing, and the confirmation says so.",
+      "statement": "A loop's own view SHALL offer the operator Stop while it has not ended, Archive once it has ended and is not archived, and delegate or take back queue control while it has not ended, SHALL say who currently decides additions, and SHALL show any refusal in the Hub's own text."
+    },
+    {
+      "key": "a-change-of-a-job-s-agent-does-not-resume-the-old-agent-s-se",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A session belongs to the agent that held it.",
+      "statement": "When the agent a job names changes, the Hub SHALL clear the provider session the job would resume; for a plain job at once, for a loop when the change is applied at its next firing."
+    },
+    {
+      "key": "only-the-operator-changes-which-agent-a-job-names",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A job's agent decides who works it and, under delegated control, who may add to a loop's queue.",
+      "statement": "The Hub SHALL refuse with 403 a change to the agent a job names when it comes from an agent's run, saying only the operator can make it, before anything is applied or staged."
+    },
+    {
+      "key": "a-job-shall-name-an-agent-that-exists",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A typo otherwise produces a job that fails every tick. A project with no known agents is left alone, because creating a job before any agent is known is an ordinary order. An agent that exists but has no runner bound is reported at firing time as having no runner.",
+      "statement": "Creating or updating a job SHALL be refused with 400 when it names an archived agent (saying it is archived) or, where the project's roster is known, an agent not on it (saying it is not one of the project's agents and listing the roster)."
+    },
+    {
+      "key": "a-loop-surfaces-its-current-state-without-a-caller-assemblin",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A question whose wait ended unanswered is not waiting on anyone and is not counted.",
+      "statement": "For a loop, the job listing, a job's detail and the loop routes SHALL report its label, agent, declared document, purpose, stop condition, evidence declaration, ending state, stop reason and time, queue counts by status, current items, stall reason, controller, pending edit, whether a firing is active, and the count of questions from its firings that are unanswered, not declined and still being waited on. A plain job SHALL carry none of this."
+    },
+    {
+      "key": "a-claimed-task-is-still-the-loop-s-current-item",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Current items are a set because a flow may select several tasks; a blocked task cannot be claimed but is still the loop's work and is what the operator must see.",
+      "statement": "A loop's current items SHALL be every task the next firing would select plus any blocked task, each naming its agent and that agent's capacity; a task MUST NOT be omitted because the claim moved it to `assigned`."
+    },
+    {
+      "key": "a-project-s-loops-are-listable-and-individually-inspectable",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Each firing occupies its own conversation, so no conversation is the loop.",
+      "statement": "The Hub SHALL list a project's loops without any conversation id, excluding archived loops unless asked to include them, and SHALL return any single loop by id, archived or not, with its recent firings and its recent events."
+    },
+    {
+      "key": "a-loop-s-history-is-answerable-for-that-loop-alone",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A loop's story should be answerable without filtering a project-wide log by hand.",
+      "statement": "The Hub SHALL record against a loop, each with its actor and time, every staged and applied edit, change of control, stop, archiving, task adoption and stalled firing, and SHALL return those events scoped to that loop alone; the loop's firings SHALL be retrievable from its job's run history."
+    },
+    {
+      "key": "a-conversation-a-loop-firing-created-names-the-loop-that-cre",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Firings start conversations the operator never began; naming them lets the operator tell them apart without a second copy of the loop's history.",
+      "statement": "Where conversations are listed, a conversation created by a loop firing SHALL name that loop by its label and lead to the loop's own view; a conversation created by a plain job or by the operator SHALL name no loop."
+    },
+    {
+      "key": "consecutive-firings-of-one-loop-occupy-one-row",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A change of agent breaks the run, because under a flow the hand-over is the informative event.",
+      "statement": "Where conversations are listed, consecutive conversations created by the same loop for the same agent SHALL collapse into one expandable row naming the loop and the count, without reordering the list; the row SHALL say when a firing in it is waiting for the operator, and SHALL open when it holds the conversation being read."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An ended loop's queue is closed, so a re-enabled job would end again at its next firing.",
+      "statement": "The Hub SHALL refuse with 409 (code `loop_ended`) re-enabling the job of a loop that has ended, naming how and when it ended and that a new loop is the remedy; re-enabling a job merely paused SHALL still be accepted."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "There is no unarchive; the remedy is a new job.",
+      "statement": "An archived job SHALL never fire again: enabling it or running it by hand SHALL be refused with 409 (code `job_archived`), and the scheduler SHALL NOT register it at start; running a disabled job by hand SHALL be refused with 400."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An expression restricting both day fields fires on a different date than the one the Hub stores and shows.",
+      "statement": "Creating or updating a job SHALL refuse with 400 a cron expression that is malformed or that restricts both day-of-month and day-of-week."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A loop half-created behind a refused task would be enabled with a queue nobody intended.",
+      "statement": "A loop MAY be created with initial tasks; every entry SHALL be checked before anything is created, so that one refused entry creates no job, loop or task, and an agent SHALL be refused seeding a loop whose job names a different agent."
+    },
+    {
+      "key": "n5",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "A loop with no memory is legitimate but should not be a surprise; creation is when it can still be acted on. The warning never refuses.",
+      "statement": "Creating a loop SHOULD return a continuity warning when the project has checkpointing off or no checkpoint runner, saying each firing will start with no memory of the last."
+    },
+    {
+      "key": "n6",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Recurring work is a standing commitment of the operator's resources; the allowance is a project setting, and archiving is a decision the operator makes per job.",
+      "statement": "An agent run SHALL be able to create, update, run or archive jobs only when the project allows agent jobs and the run is live and correctly attributed; archiving a plain job from an agent SHALL additionally require the operator's direction for that archive."
+    },
+    {
+      "key": "a-firing-s-briefing-states-which-tier-the-agent-is-working-i",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent in a flow did not choose to be there; routing is the flow's job. Telling a loop's agent that someone reviews its work would be false. The statement precedes the prior checkpoint so truncation of a long checkpoint cannot remove it.",
+      "statement": "Every firing's briefing SHALL lead with whether the agent works inside a flow or a loop and SHALL tell it to finish the given task and stop; only a flow's briefing SHALL state that finished work is offered for review by another agent."
+    },
+    {
+      "key": "a-firing-s-briefing-names-how-its-claimed-task-is-finished",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Measured: agents call the tool the briefing names, not one listed only in the tool inventory. An instruction to record evidence against a requirement that does not exist is refused when followed. A rework brief that carried only the description sent an author back over a merge conflict to complete the same commit again.",
+      "statement": "Every firing that claims a task for work SHALL name in its briefing the `update_task` calls that finish it, legal from the task's current status, and what a turn that ends with the task unmoved costs. Where the task serves requirements of record the briefing SHALL name them and `record_evidence`; where it serves none it SHALL say nothing about evidence. A flow's briefing SHALL say that notes for the reviewer are delivered only when the task reaches `completed`. For a task returned for revision it SHALL say who sent it back and quote their notes, and, measured when composed, whether the task's branch still merges into the main branch, naming conflicting paths and the remedy; a failed measurement SHALL NOT withhold the briefing."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Opting a job into a loop; loop fields, the declared document and the evidence declaration",
+      "The loop's queue: membership, authorship and control",
+      "What a firing does: busy guard, stop condition, claim, dependency gating, stall, and staffing a loop that declares no document",
+      "The firing briefing: tier, how the claimed task is finished, the bounded prior checkpoint",
+      "Staged edits, stopping, archiving, re-enabling, and job validation (agent, cron, agent-run permissions)",
+      "Loop and job routes, the loop's history, and its surfaces in the app"
+    ],
+    "non_goals": [
+      "Flow staffing, in-flight judgement, agent capacity, adopting a document's tasks and reviewer resolution: agent-flows",
+      "What each firing records, held-queue coalescing and run-history counts: loop-firing-accountability",
+      "Task transitions and landing approved work: task-lifecycle-governance",
+      "How times are expressed in route answers: hub-api-request-contract",
+      "Binding runs to tasks: run-task-binding"
+    ]
+  },
+  "summary": "A loop is a scheduled job given a purpose and a stop condition. Each firing claims work from the loop's queue of tasks and briefs the loop's agent with the tier it works in, how its claimed task is finished and a bounded handover from the previous firing; the loop ends when its stop condition is met or the operator stops it, and is archived rather than deleted. Its job routes, history and views in the app belong here too.",
+  "tasks": [],
+  "title": "Agent loops"
+}

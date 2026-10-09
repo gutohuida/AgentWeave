@@ -49,10 +49,10 @@ plus `current`, reached only through `create_document` (a `capability`-kind docu
 there). The operator made `spec/` the source of truth on 2026-10-07, after re-importing all 45
 capabilities (requirement counts verified equal to openspec's).
 
-- **Current behaviour** lives in `spec/capabilities/<capability>/spec.html`, owned by the Hub:
-  change one through the app or the Hub's document routes (trial Hub `:8010`,
-  `proj-d85a82bf4216`), **never by editing the HTML**. `spec/index.json` and `spec/agentweave.html`
-  are the map. `openspec/specs/` is frozen (see its `README.md`); do not edit or re-sync it.
+- **Current behaviour** lives in `spec/capabilities/<capability>/spec.json` (the payload plus a
+  `hub` block; the HTML is rendered on read, converted 2026-10-09), owned by the Hub: change one
+  through the app or the Hub's document routes (trial Hub `:8010`, `proj-d85a82bf4216`), **never
+  by editing the file**. `spec/index.json` and `spec/agentweave.json` are the map. `openspec/specs/` is frozen (see its `README.md`); do not edit or re-sync it.
 - **New changes** are authored in the app as `spec/changes/<name>/` documents, one at a time — prefer
   a self-contained slice with no Hub-restart hazard.
 - **The changes still in `openspec/changes/` are moved across, not finished there** (operator,

@@ -1,0 +1,377 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "an open conversation with an automatically managed agent",
+      "key": "ac4",
+      "requirement": "agent-output-distinguishes-continuation-fresh-start-and-hand",
+      "then": "a labelled Checkpoint control is visible at rest and no Compact or Reset action appears",
+      "when": "the header renders"
+    },
+    {
+      "given": "an agent whose runner is manual",
+      "key": "ac8",
+      "requirement": "agent-output-distinguishes-continuation-fresh-start-and-hand",
+      "then": "Checkpoint is disabled and states that it requires an automatically managed runner",
+      "when": "the header renders"
+    },
+    {
+      "given": "the agent is running",
+      "key": "ac8a",
+      "requirement": "agent-output-distinguishes-continuation-fresh-start-and-hand",
+      "then": "Checkpoint is disabled and states that it is unavailable while the agent is busy",
+      "when": "the header renders"
+    },
+    {
+      "given": "an open conversation and a configured checkpoint runner",
+      "key": "ac5",
+      "requirement": "handoff-checkpoints-the-selected-conversation",
+      "then": "the UI requests the cutover for that checkpoint and moves to the successor",
+      "when": "the operator activates Checkpoint and the Hub returns a `ready` checkpoint"
+    },
+    {
+      "given": "an open conversation",
+      "key": "ac3",
+      "requirement": "handoff-checkpoints-the-selected-conversation",
+      "then": "no cutover is requested and the notice states why",
+      "when": "the generated checkpoint comes back `unwritten` or `failed`"
+    },
+    {
+      "given": "a project with no checkpoint runner configured",
+      "key": "n1-ac1",
+      "requirement": "n1-checkpoint-generation-refuses-rather-than-guesses",
+      "then": "the Hub answers 409 saying to choose one in project settings",
+      "when": "a checkpoint is requested"
+    },
+    {
+      "given": "a checkpoint already being written for a conversation",
+      "key": "n1-ac2",
+      "requirement": "n1-checkpoint-generation-refuses-rather-than-guesses",
+      "then": "the Hub answers 409",
+      "when": "a second one is requested for it"
+    },
+    {
+      "given": "a ready checkpoint of an idle conversation titled `Fix login`",
+      "key": "ac9",
+      "requirement": "the-next-conversation-resumes-the-durable-handoff",
+      "then": "one successor titled `Continued: Fix login` exists with origin `handoff`, it holds one queued entry carrying the rendered checkpoint, and the predecessor is archived",
+      "when": "it is cut over"
+    },
+    {
+      "given": "a predecessor titled `Continued: Fix login`",
+      "key": "ac9a",
+      "requirement": "the-next-conversation-resumes-the-durable-handoff",
+      "then": "the successor is titled `Continued: Fix login`, not `Continued: Continued: Fix login`",
+      "when": "it is cut over"
+    },
+    {
+      "given": "a successor created by cutover",
+      "key": "ac10",
+      "requirement": "the-next-conversation-resumes-the-durable-handoff",
+      "then": "it begins with a preamble saying the Hub generated it from the predecessor's record, and contains no instruction to read a checkpoint from a filesystem path",
+      "when": "its queued checkpoint is read"
+    },
+    {
+      "given": "a predecessor with runtime overrides",
+      "key": "ac10a",
+      "requirement": "the-next-conversation-resumes-the-durable-handoff",
+      "then": "the successor carries the same overrides",
+      "when": "it is cut over"
+    },
+    {
+      "given": "a conversation with a run that has not ended",
+      "key": "n2-ac1",
+      "requirement": "n2-cutover-refused-while-predecessor-has-outstanding-work",
+      "then": "it is refused with 409 and no successor or queued entry exists",
+      "when": "a cutover is requested"
+    },
+    {
+      "given": "a conversation with undelivered queued input",
+      "key": "n2-ac2",
+      "requirement": "n2-cutover-refused-while-predecessor-has-outstanding-work",
+      "then": "it is refused with 409",
+      "when": "a cutover is requested"
+    },
+    {
+      "given": "an `unwritten` checkpoint",
+      "key": "n2-ac3",
+      "requirement": "n2-cutover-refused-while-predecessor-has-outstanding-work",
+      "then": "it is refused",
+      "when": "a cutover is requested for it"
+    },
+    {
+      "given": "the operator activated Checkpoint",
+      "key": "ac11",
+      "requirement": "conversation-transition-state-is-visible-and-scoped-to-the-a",
+      "then": "the control reads `Checkpointing…` and the notice reads `Writing checkpoint…`",
+      "when": "the checkpoint is being written"
+    },
+    {
+      "given": "a cutover succeeded",
+      "key": "ac11a",
+      "requirement": "conversation-transition-state-is-visible-and-scoped-to-the-a",
+      "then": "the successor is the open conversation and the notice says the work continues in a new conversation",
+      "when": "the view updates"
+    },
+    {
+      "given": "a checkpoint notice is showing",
+      "key": "ac13",
+      "requirement": "conversation-transition-state-is-visible-and-scoped-to-the-a",
+      "then": "the notice and handoff state are cleared and the continuity line describes the newly open conversation",
+      "when": "the operator selects a different agent or conversation"
+    },
+    {
+      "given": "a successor holding its queued checkpoint and no running turn",
+      "key": "n3-ac1",
+      "requirement": "n3-a-successor-starts-from-its-checkpoint-without-a-message",
+      "then": "a turn starts from the queued checkpoint with no message typed",
+      "when": "the operator presses Continue"
+    },
+    {
+      "given": "a successor",
+      "key": "n3-ac2",
+      "requirement": "n3-a-successor-starts-from-its-checkpoint-without-a-message",
+      "then": "the message is sent exactly as typed, with no resume prefix",
+      "when": "the operator sends a message in it"
+    },
+    {
+      "given": "the Hub generated a ready checkpoint for the open conversation on context pressure",
+      "key": "n4-ac1",
+      "requirement": "n4-a-checkpoint-the-hub-made-is-offered-for-cutover",
+      "then": "an offer banner is shown, and its action cuts over from that checkpoint and moves to the successor",
+      "when": "the conversation renders"
+    },
+    {
+      "given": "the only Hub-made checkpoints are `unwritten` or `failed`",
+      "key": "n4-ac2",
+      "requirement": "n4-a-checkpoint-the-hub-made-is-offered-for-cutover",
+      "then": "no offer is shown",
+      "when": "the conversation renders"
+    },
+    {
+      "given": "a conversation",
+      "key": "ac15",
+      "requirement": "a-cutover-carries-the-line-of-work-to-the-successor-in-both-",
+      "then": "the successor's `lineage_id` equals the predecessor's, which is unchanged",
+      "when": "it is cut over"
+    },
+    {
+      "given": "a conversation bound to a recipient thread is cut over",
+      "key": "ac16",
+      "requirement": "a-cutover-carries-the-line-of-work-to-the-successor-in-both-",
+      "then": "it reaches the already-bound recipient conversation and no conversation is created",
+      "when": "the agent sends a peer message to that recipient from the successor"
+    },
+    {
+      "given": "a line of work whose conversation was cut over",
+      "key": "ac17",
+      "requirement": "a-cutover-carries-the-line-of-work-to-the-successor-in-both-",
+      "then": "the reply reaches the newest open conversation of that line and the archived predecessor receives nothing",
+      "when": "a correspondent replies into it"
+    },
+    {
+      "given": "a successor whose checkpoint rows are gone",
+      "key": "ac18",
+      "requirement": "a-cutover-carries-the-line-of-work-to-the-successor-in-both-",
+      "then": "it resolves from the conversation itself",
+      "when": "its line of work is resolved"
+    },
+    {
+      "given": "no cutover",
+      "key": "ac19",
+      "requirement": "a-cutover-carries-the-line-of-work-to-the-successor-in-both-",
+      "then": "its `lineage_id` is its own id",
+      "when": "a conversation is created by any other means"
+    },
+    {
+      "given": "a checkpoint cut over to a successor",
+      "key": "ac20",
+      "requirement": "a-conversation-is-handed-over-at-most-once-and-its-checkpoin",
+      "then": "that checkpoint reports `cut_over_to_conversation_id` as the successor's id",
+      "when": "the conversation's checkpoints are listed"
+    },
+    {
+      "given": "a conversation cut over and then reopened",
+      "key": "ac21",
+      "requirement": "a-conversation-is-handed-over-at-most-once-and-its-checkpoin",
+      "then": "the request is refused naming the existing successor, and exactly one successor and one queued checkpoint entry exist",
+      "when": "the same checkpoint is cut over again"
+    },
+    {
+      "given": "one ready checkpoint",
+      "key": "ac22",
+      "requirement": "a-conversation-is-handed-over-at-most-once-and-its-checkpoin",
+      "then": "exactly one succeeds and the other is refused naming that successor",
+      "when": "two cutover requests for it are processed concurrently"
+    },
+    {
+      "given": "a conversation cut over with one checkpoint and then reopened",
+      "key": "ac23",
+      "requirement": "a-conversation-is-handed-over-at-most-once-and-its-checkpoin",
+      "then": "the request is refused naming the existing successor",
+      "when": "a cutover is requested with a different checkpoint of it"
+    },
+    {
+      "given": "a conversation archived by hand and never handed over",
+      "key": "ac27",
+      "requirement": "a-conversation-is-handed-over-at-most-once-and-its-checkpoin",
+      "then": "it is refused with advice to unarchive it, and after it is unarchived the cutover succeeds",
+      "when": "a cutover is requested"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Operator checkpoint and cutover",
+      "steps": [
+        "UI: if a write for this conversation is already in flight, return that same promise.",
+        "POST .../conversations/{id}/checkpoint; the Hub generates the checkpoint on the configured checkpoint runner (409 if none, or if one is already being written) and clears any due/final/dismissed warning.",
+        "If the returned status is not `ready`, stop and show the generation error or the status.",
+        "POST .../checkpoints/{checkpoint_id}/cutover.",
+        "Hub: refuse if the checkpoint is not ready, if the conversation was already handed over (naming the successor), if it is archived, or if it has an unfinished run or undelivered input.",
+        "Hub: add the successor and its queued checkpoint entry, archive the predecessor, then claim the checkpoint with a conditional UPDATE; on no row or an integrity error, roll back and refuse naming whoever won.",
+        "Hub: commit, optionally schedule the agent when auto-continue is on, broadcast `conversation_cut_over`, return the successor id.",
+        "UI: move to the successor."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-10": "a8f659d5833c39967a1ec56493c065adb03af60ba4dfd394fead01d1af97713b",
+      "FR-11": "382ead35850eb409d3262b6894d708f23f12e999d40ba9e5d32a64f0a3d13f68",
+      "FR-12": "071973a0e43f612614d666a0c6254a303bc7759865d72cb18f3fa4cb73ad8dc6",
+      "FR-13": "d4e62eff2e30e0ab6dfec0b14a68ec858f8bb2e0f48969191991735d29aa1706",
+      "FR-14": "4209e095efca859714e61178721b9d5ad2b4f520529e3f3212efb81682716a2b",
+      "FR-5": "58c919859d2908e5cb6a6996ebe6a0e8a92124db7e6bb0a6ced73be9c22fbfb3",
+      "FR-6": "221b066aaa777db64a116efe7158e3ae49ca5fd6c710a24f7c453334d1440893",
+      "FR-7": "84d2bc5365e9c14a5358dd304ed2d078ca78c3befded77b1548f6a8f68ef574a",
+      "FR-8": "be237773e925428e95916b511243b23d989072a1b919fdadc3eecc8710a65ecc",
+      "FR-9": "a1c31fc1ade15e946438ef62f0929301d3ed653f82161a2cc594e96000cf462f"
+    },
+    "high_water": 14,
+    "requirements": {
+      "a-conversation-is-handed-over-at-most-once-and-its-checkpoin": "FR-10",
+      "a-cutover-carries-the-line-of-work-to-the-successor-in-both-": "FR-9",
+      "agent-output-distinguishes-continuation-fresh-start-and-hand": "FR-5",
+      "conversation-transition-state-is-visible-and-scoped-to-the-a": "FR-8",
+      "handoff-checkpoints-the-selected-conversation": "FR-6",
+      "n1-checkpoint-generation-refuses-rather-than-guesses": "FR-11",
+      "n2-cutover-refused-while-predecessor-has-outstanding-work": "FR-12",
+      "n3-a-successor-starts-from-its-checkpoint-without-a-message": "FR-13",
+      "n4-a-checkpoint-the-hub-made-is-offered-for-cutover": "FR-14",
+      "the-next-conversation-resumes-the-durable-handoff": "FR-7"
+    },
+    "retired": {}
+  },
+  "design": "D1. The Hub writes the checkpoint; the agent is not asked to. Agent-written handoff files were unreachable or never written while the run reported success.\n\nD2. The checkpoint reaches the successor as a conversation-scoped queued entry. Agent-scoped context is one file per agent and cannot carry one conversation's checkpoint.\n\nD3. Successor first, archive second, claim last, in one transaction: a failure part-way leaves the predecessor usable.\n\nD4. At-most-once is a fact on the checkpoint (`cut_over_to_conversation_id`), claimed by a conditional UPDATE and backed by a partial unique index per conversation, never inferred from the predecessor's lifecycle, because unarchiving is always allowed.\n\nD5. Lineage is a column on the conversation (`lineage_id`, self by default), so delivery has no special case for the first conversation and does not need checkpoint rows.\n\nD6. A successor title is derived from the predecessor's and marked operator-set, so the chain reads as one line in navigation and the titler does not rename it after its first acknowledgement.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_checkpoint_cutover.py (successor naming, delivery, archive, refusals, lineage, binding, auto-continue attribution)",
+      "hub/tests/test_checkpoint_handover.py (at-most-once, concurrent presses, listing reports the successor)",
+      "hub/tests/test_conversation_reply.py::test_continuation_survives_the_replying_sides_cutover",
+      "hub/ui/src/__tests__/agentHandoff.test.tsx, handoffPlacement.test.tsx, conversationControls.test.tsx"
+    ],
+    "limits": [
+      "The offer banner's cutover replaces any 409 sentence from the Hub with a generic 'finish or stop the run' message, so a refusal naming the successor is not shown on that path (AgentOutputPanel.tsx:626-630); the Checkpoint button path shows the Hub's sentence (checkpointOperationStore.ts:77-81).",
+      "The offer banner does not read `cut_over_to_conversation_id`, so a spent checkpoint is still offered on the archived predecessor (AgentOutputPanel.tsx:613-615)."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "A long conversation fills its context window. Continuing it means either letting the provider compact it with a summary nobody checked, or starting fresh and losing the thread. Asking the agent to write its own handoff file proved unreliable: files landed in the wrong place or were never written while the run reported success.",
+  "requirements": [
+    {
+      "key": "agent-output-distinguishes-continuation-fresh-start-and-hand",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operators forget a handoff exists if it is hidden; a disabled control that says why keeps the header from shifting between agents.",
+      "statement": "The open conversation's header SHALL show a labelled Checkpoint control at rest, not behind a menu. When it cannot be used it SHALL stay visible, disabled, stating why: the agent's runner is manual, no conversation is open, a checkpoint is already being written, or the agent is busy. The header MUST NOT offer legacy Compact or Reset actions, and conversations SHALL be identified by AgentWeave `conversation_id`, never by provider session id."
+    },
+    {
+      "key": "handoff-checkpoints-the-selected-conversation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Readiness is a property of a verified checkpoint record, not of a run having ended; the earlier design reported success for runs that produced nothing.",
+      "statement": "Activating Checkpoint SHALL ask the Hub to generate a checkpoint of the open conversation on the project's configured checkpoint runner (no agent turn is involved), and only when that checkpoint's status is `ready` SHALL it then request the cutover. If the checkpoint is `unwritten` or `failed`, nothing SHALL be cut over and the operator SHALL be told why."
+    },
+    {
+      "key": "n1-checkpoint-generation-refuses-rather-than-guesses",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The Hub will not spend another agent's runner on the operator's behalf, and two concurrent generations for one conversation would bill twice for one handoff.",
+      "statement": "`POST /api/v1/projects/{project_id}/conversations/{conversation_id}/checkpoint` SHALL answer 409 when the project has no checkpoint runner configured, and 409 when a checkpoint is already being written for that conversation; the UI SHALL coalesce repeated presses for one conversation into one request."
+    },
+    {
+      "key": "the-next-conversation-resumes-the-durable-handoff",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The successor and its queued checkpoint are created before the predecessor is archived, so a failure part-way leaves a usable predecessor; agent-scoped context is one file per agent and cannot carry one conversation's checkpoint.",
+      "statement": "`POST /api/v1/projects/{project_id}/checkpoints/{checkpoint_id}/cutover` SHALL, for a `ready` checkpoint, create exactly one successor conversation (origin `handoff`, title `Continued: <predecessor title>` without stacking the prefix, recorded as operator-set, inheriting the predecessor's runtime overrides and peer binding), queue the rendered checkpoint into the successor as conversation-scoped input with a preamble saying where it came from, archive the predecessor, broadcast `conversation_cut_over`, and return the successor's id. The checkpoint MUST NOT be delivered through agent-scoped context, and no message SHALL instruct the agent to find a checkpoint on disk."
+    },
+    {
+      "key": "n2-cutover-refused-while-predecessor-has-outstanding-work",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Cutting over anyway would leave a successor holding a summary while the predecessor holds the actual work.",
+      "statement": "A cutover SHALL be refused with 409 and a stated reason, leaving no successor and no queued entry, when the checkpoint is not `ready`, when the predecessor has a run that has not ended, or when it has undelivered queued input."
+    },
+    {
+      "key": "conversation-transition-state-is-visible-and-scoped-to-the-a",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator should always know which conversation the next message goes to; state left over from another conversation would describe the wrong one.",
+      "statement": "The conversation surface SHALL state which transition applies: continuing the open conversation (named by its title), writing a checkpoint, continuing in the successor after a cutover, or starting a fresh conversation when none is open. On a successful cutover the view SHALL move to the successor immediately. Handoff and notice state SHALL be cleared when the operator moves to another agent or conversation."
+    },
+    {
+      "key": "n3-a-successor-starts-from-its-checkpoint-without-a-message",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The successor already has everything it needs; requiring the operator to invent a sentence to get it moving made the handover a dead end.",
+      "statement": "A conversation holding queued input and no running turn SHALL offer a Continue control that starts its queued work without a new message, via `POST /api/v1/projects/{project_id}/conversations/{conversation_id}/continue`; when the project's `checkpoint_auto_continue` setting is on, a cutover SHALL itself try to start the successor. The operator's next message in a successor SHALL be sent as typed, with no resume prefix."
+    },
+    {
+      "key": "n4-a-checkpoint-the-hub-made-is-offered-for-cutover",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A checkpoint written and stored but never surfaced looked to the operator as if checkpointing did not work.",
+      "statement": "When the Hub has generated a `ready` checkpoint for the open conversation because of context pressure, the conversation SHALL show it as an offer in its banner stack, with an action that cuts over to a successor from that checkpoint; an `unwritten` or `failed` checkpoint SHALL NOT be offered."
+    },
+    {
+      "key": "a-cutover-carries-the-line-of-work-to-the-successor-in-both-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Peer delivery resolves against the line of work, so correspondents keep reaching the same thread in both directions across a handover, even after checkpoints are pruned.",
+      "statement": "A successor opened by cutover SHALL carry its predecessor's `lineage_id`, recorded on the conversation itself; every other conversation SHALL be created with a `lineage_id` equal to its own id. Lineage SHALL be resolvable without reading checkpoint records."
+    },
+    {
+      "key": "a-conversation-is-handed-over-at-most-once-and-its-checkpoin",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A second successor would redo finished work and fork a linear line of work. The check reads the handover record, not the lifecycle, because reopening an archived conversation is always allowed; a conditional claim and a partial unique index make two simultaneous presses produce exactly one successor.",
+      "statement": "The Hub SHALL record on the checkpoint the successor it was cut over to, in the same transaction that creates the successor, and SHALL refuse any cutover that would give a conversation a second successor, whether by the same checkpoint or another one of that conversation, whatever the timing; the refusal SHALL name the successor that holds the work. A conversation archived by hand and never handed over SHALL be refused with advice to unarchive it first."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The conversation header's Checkpoint (handoff) control and the transition notices around it",
+      "The cutover route: successor creation, checkpoint delivery, predecessor archive, refusals",
+      "Line-of-work continuity across a cutover",
+      "At-most-once handover, enforced by the database",
+      "Starting a successor from its queued checkpoint"
+    ],
+    "non_goals": [
+      "How a checkpoint is generated, verified, cited and when it is due (conversation-checkpoint)",
+      "Peer delivery routing by line of work (agent-conversation-workspace)",
+      "Archive and unarchive in general (conversation-lifecycle)"
+    ]
+  },
+  "summary": "The operator hands a conversation over to a successor: the Hub writes a checkpoint of the conversation, then a cutover opens one successor conversation in the same line of work, queues the checkpoint into it, and archives the predecessor. A conversation is handed over at most once, and the successor can start from its checkpoint without the operator typing anything.",
+  "tasks": [],
+  "title": "Agent conversation handoff"
+}

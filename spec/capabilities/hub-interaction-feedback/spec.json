@@ -1,0 +1,326 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the rail",
+      "key": "ac1",
+      "requirement": "every-activatable-element-responds-to-the-pointer-and-to-foc",
+      "then": "that row takes a hover treatment distinguishing it from its neighbours",
+      "when": "the operator hovers a project, an agent, a project view tab or a configuration section"
+    },
+    {
+      "given": "an activatable element",
+      "key": "ac2",
+      "requirement": "every-activatable-element-responds-to-the-pointer-and-to-foc",
+      "then": "its appearance differs from its hover appearance, and returns to hover on release with the pointer still over it",
+      "when": "the operator presses it"
+    },
+    {
+      "given": "an activatable element",
+      "key": "ac3",
+      "requirement": "every-activatable-element-responds-to-the-pointer-and-to-foc",
+      "then": "a focus ring visible against the surface behind it is drawn",
+      "when": "the operator focuses it with the keyboard"
+    },
+    {
+      "given": "one configuration section is selected",
+      "key": "ac4",
+      "requirement": "where-the-operator-is-differs-from-where-the-pointer-is",
+      "then": "both are distinguishable from unselected rows and from each other",
+      "when": "the operator hovers another"
+    },
+    {
+      "given": "a current destination",
+      "key": "ac5",
+      "requirement": "where-the-operator-is-differs-from-where-the-pointer-is",
+      "then": "the current destination remains marked",
+      "when": "the pointer leaves the rail"
+    },
+    {
+      "given": "a list of rows",
+      "key": "ac6",
+      "requirement": "gaining-emphasis-never-moves-anything",
+      "then": "no row and no text within a row moves",
+      "when": "the pointer moves across it"
+    },
+    {
+      "given": "a row with secondary actions",
+      "key": "ac7",
+      "requirement": "a-row-may-reveal-its-secondary-actions-on-hover",
+      "then": "the actions become visible and the row's other content does not move",
+      "when": "the operator hovers it"
+    },
+    {
+      "given": "a row whose actions are hidden",
+      "key": "ac8",
+      "requirement": "a-row-may-reveal-its-secondary-actions-on-hover",
+      "then": "the actions are shown and can be activated",
+      "when": "the operator tabs into it"
+    },
+    {
+      "given": "an element",
+      "key": "ac9",
+      "requirement": "state-changes-are-eased-and-easing-is-never-the-only-signal",
+      "then": "the change eases over the fast duration token",
+      "when": "it enters or leaves hover"
+    },
+    {
+      "given": "the operator prefers reduced motion",
+      "key": "ac10",
+      "requirement": "state-changes-are-eased-and-easing-is-never-the-only-signal",
+      "then": "they change without visible animation and remain distinguishable from rest and from each other",
+      "when": "states change"
+    },
+    {
+      "given": "a navigation row, a configuration section row and a list row",
+      "key": "ac11",
+      "requirement": "interaction-states-resolve-from-shared-semantic-tokens",
+      "then": "their hover, pressed and selected treatments use the same tokens",
+      "when": "they are compared in either mode"
+    },
+    {
+      "given": "the stylesheet",
+      "key": "ac12",
+      "requirement": "interaction-states-resolve-from-shared-semantic-tokens",
+      "then": "every interaction-state token has a value in both modes",
+      "when": "it is checked"
+    },
+    {
+      "given": "a menu open inside a panel that dismisses on Escape",
+      "key": "ac13",
+      "requirement": "one-dismissal-keystroke-dismisses-one-thing",
+      "then": "the menu closes and the panel stays open",
+      "when": "the operator presses Escape"
+    },
+    {
+      "given": "a panel that dismisses on Escape showing an inline field that cancels on Escape",
+      "key": "ac14",
+      "requirement": "one-dismissal-keystroke-dismisses-one-thing",
+      "then": "the field is cancelled and the panel stays open as it was",
+      "when": "the operator presses Escape in the field"
+    },
+    {
+      "given": "a dialog opened from another dialog",
+      "key": "ac15",
+      "requirement": "one-dismissal-keystroke-dismisses-one-thing",
+      "then": "only the newer dialog closes",
+      "when": "the operator presses Escape"
+    },
+    {
+      "given": "a dialog with nothing inside it claiming Escape",
+      "key": "ac16",
+      "requirement": "one-dismissal-keystroke-dismisses-one-thing",
+      "then": "the dialog closes",
+      "when": "the operator presses Escape"
+    },
+    {
+      "given": "a task's status menu",
+      "key": "ac17",
+      "requirement": "an-action-that-asks-for-something-leaves-the-keyboard-in-wha",
+      "then": "focus is in the reason field once the menu has closed and typing appears there",
+      "when": "the operator chooses Blocked, which asks for a reason"
+    },
+    {
+      "given": "a row menu",
+      "key": "ac18",
+      "requirement": "an-action-that-asks-for-something-leaves-the-keyboard-in-wha",
+      "then": "focus returns to the menu's trigger",
+      "when": "the operator chooses an action that presents no input"
+    },
+    {
+      "given": "the reason field presented by a menu action",
+      "key": "ac19",
+      "requirement": "an-action-that-asks-for-something-leaves-the-keyboard-in-wha",
+      "then": "the menu does not re-open",
+      "when": "the operator types an answer containing spaces"
+    },
+    {
+      "given": "a delete confirmation",
+      "key": "ac20",
+      "requirement": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
+      "then": "focus is on Cancel, and pressing Enter closes it without deleting",
+      "when": "it opens"
+    },
+    {
+      "given": "a dialog that asks for a name",
+      "key": "ac21",
+      "requirement": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
+      "then": "focus is in the name field",
+      "when": "it opens"
+    },
+    {
+      "given": "a dialog whose every control is disabled",
+      "key": "ac22",
+      "requirement": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
+      "then": "focus is on the dialog panel",
+      "when": "it opens"
+    },
+    {
+      "given": "a dialog opened from a control",
+      "key": "ac23",
+      "requirement": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
+      "then": "focus is on that control",
+      "when": "the operator closes it, including by Escape"
+    },
+    {
+      "given": "a confirmation dialog",
+      "key": "ac25",
+      "requirement": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
+      "then": "focus is on the dialog panel",
+      "when": "the operator confirms and the dialog disables its controls while the action runs"
+    },
+    {
+      "given": "a dialog just opened while focus is still on its opener",
+      "key": "n1-ac1",
+      "requirement": "n1-tab-stays-inside-an-open-dialog",
+      "then": "focus moves to the dialog's first control, not behind the scrim",
+      "when": "the operator presses Tab"
+    },
+    {
+      "given": "focus on a dialog's last control",
+      "key": "n1-ac2",
+      "requirement": "n1-tab-stays-inside-an-open-dialog",
+      "then": "focus moves to its first control",
+      "when": "the operator presses Tab"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-10": "7116456d77812153ee9686912f44d26521f4295f165cf9cd01b85a0cf7a2dbc5",
+      "FR-11": "ff9da65c1c3faaad1f271319e6ce40246fc042690cbbeb1ac0925a24b9fb92e1",
+      "FR-12": "9e5e8d806a20a3dcbe64f8240f93abb77b0680f8fdb9df3ef00dc6ab905bdc1b",
+      "FR-13": "b40a166dcec667836425ab63119d138f9dda5eb4fb97e8fe5b60fd49edb15ee4",
+      "FR-14": "b35512f16c52081a3cf1beeafbab8920bdb04d7a06bba7b6158e177a5ac29144",
+      "FR-15": "bf434a3fc7995c7b828ac8596595031667759452fe07df0943f2dd7b2fb889e7",
+      "FR-16": "4550e6a90e169c64592912f3caebaf199a7342d41a61230584decf7e08841728",
+      "FR-7": "aa69a377a9fa0cecf966fdfa29f8d30ce23f2090035148c5bf5f9ef59487d004",
+      "FR-8": "b1f7093009c462f72b53373e2a48b4b58129b021c90195c6852e409838424a0c",
+      "FR-9": "54e8e549aae2839aa90acf9048b01332368f57df5c9070856a80042416ac26d1"
+    },
+    "high_water": 16,
+    "requirements": {
+      "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-": "FR-15",
+      "a-row-may-reveal-its-secondary-actions-on-hover": "FR-10",
+      "an-action-that-asks-for-something-leaves-the-keyboard-in-wha": "FR-14",
+      "every-activatable-element-responds-to-the-pointer-and-to-foc": "FR-7",
+      "gaining-emphasis-never-moves-anything": "FR-9",
+      "interaction-states-resolve-from-shared-semantic-tokens": "FR-12",
+      "n1-tab-stays-inside-an-open-dialog": "FR-16",
+      "one-dismissal-keystroke-dismisses-one-thing": "FR-13",
+      "state-changes-are-eased-and-easing-is-never-the-only-signal": "FR-11",
+      "where-the-operator-is-differs-from-where-the-pointer-is": "FR-8"
+    },
+    "retired": {}
+  },
+  "design": "D1. States come from primitives, not per-screen styles: the Button primitive carries a permanent transparent border and a focus-visible ring; every list row uses the shared `.row-item` treatment and the `--row-hover` / `--row-active` / `--row-selected` ladder.\n\nD2. Escape ownership is signalled on the event itself (`defaultPrevented`); `useDialogFocus` listens on `document` in the bubble phase so it is always the last to see the key, and keeps a stack so only the newest dialog answers.\n\nD3. Menu items declare `takesFocus` when they present an input; such an item runs as the menu closes and the menu does not restore focus to its trigger.\n\nD4. Dialog initial focus is marked explicitly (`data-dialog-initial-focus`) rather than inferred from DOM order.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/hooks/useDialogFocus.ts and its users (DeleteConfirmDialog, JobForm, ArchiveConfirmDialog hold focus on the panel while pending)",
+      "hub/ui/src/__tests__/agentCreateDialogFocusRestore.test.tsx, jobFormFocus.test.tsx, chartersUi.test.tsx, runnersUi.test.tsx, setupModalAccessibility.test.tsx (initial focus and focus return)",
+      "hub/ui/src/__tests__/rowMenus.test.tsx, taskBlockedTreatment.test.tsx, taskDetailDrawer.test.tsx (menus, nested Escape)",
+      "hub/ui/src/__tests__/hubVisualLanguage.test.ts (motion and reduced-motion support)"
+    ],
+    "limits": [
+      "Hover/pressed distinctness and no-shift are enforced by the shared primitives and CSS (buttonVariants.ts, index.css row treatment), not by a test that measures layout."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Elements that did not respond to the pointer looked broken, emphasis that shifted layout made lists jitter, and keyboard focus left behind a dialog or on a menu trigger made the operator's keystrokes act on something they could not see.",
+  "requirements": [
+    {
+      "key": "every-activatable-element-responds-to-the-pointer-and-to-foc",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An element that does not answer the pointer reads as broken or decorative.",
+      "statement": "Every activatable element (controls, navigation and list rows, tabs, cards, disclosures) SHALL present distinct resting, hover and pressed states and a visible keyboard focus indicator; the shared Button primitive and row treatment SHALL supply these so no element that changes state when clicked is inert under the pointer."
+    },
+    {
+      "key": "where-the-operator-is-differs-from-where-the-pointer-is",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Where the operator is and where the pointer is are different facts.",
+      "statement": "A selected or current element SHALL look different from a merely hovered one and SHALL remain identifiable while the pointer is elsewhere; the hover, pressed and selected treatments MUST NOT resolve to the same appearance."
+    },
+    {
+      "key": "gaining-emphasis-never-moves-anything",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A one-pixel shift on hover makes a list jitter under the pointer.",
+      "statement": "Changing between resting, hover, pressed and selected states MUST NOT change an element's size or position or displace any neighbour; controls SHALL reserve their border space at rest."
+    },
+    {
+      "key": "a-row-may-reveal-its-secondary-actions-on-hover",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Revealing an action must not move the row, and an action that only the mouse can find does not exist for the keyboard.",
+      "statement": "A row's secondary actions that appear only on hover or focus SHALL occupy their layout space at rest (revealed by opacity), SHALL appear when the row has keyboard focus, SHALL stay visible while their menu is open or for the active item, and MUST remain reachable by keyboard."
+    },
+    {
+      "key": "state-changes-are-eased-and-easing-is-never-the-only-signal",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Easing makes state changes legible; motion must never be the only signal.",
+      "statement": "Transitions between interaction states SHALL use the shared duration and easing tokens; when the operator prefers reduced motion, transitions and animations SHALL be reduced to effectively instant while every state stays distinguishable by appearance alone."
+    },
+    {
+      "key": "interaction-states-resolve-from-shared-semantic-tokens",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One ladder of tokens keeps the three states from collapsing onto each other on some surfaces.",
+      "statement": "Hover, pressed and selected treatments SHALL resolve from semantic tokens defined in both modes (`--row-hover`, `--row-active`, `--row-selected` for rows), and the same kind of element SHALL use the same tokens wherever it appears; a component MUST NOT hard-code a colour for an interaction state."
+    },
+    {
+      "key": "one-dismissal-keystroke-dismisses-one-thing",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A panel that closes along with the menu or field inside it takes the operator's context with it, and the nested control can never be seen to work. The containing listener sits on `document` in the bubble phase so every nearer handler has already run.",
+      "statement": "An Escape keystroke SHALL be answered by exactly one surface, the innermost one that owns it: a nested control that handles Escape SHALL mark the event handled (`preventDefault`), and a containing surface SHALL NOT dismiss on an Escape already handled. Of several stacked dialogs, only the newest SHALL answer."
+    },
+    {
+      "key": "an-action-that-asks-for-something-leaves-the-keyboard-in-wha",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Returning focus to the trigger after an action that asks a question sends the operator's typing to a button; nothing errors and nothing appears.",
+      "statement": "A menu action that presents a control expecting input SHALL be declared as taking focus and SHALL leave keyboard focus in that control once the menu closes, running after the menu has gone; every other menu action SHALL return focus to the menu's trigger."
+    },
+    {
+      "key": "a-dialog-takes-the-keyboard-when-it-opens-and-gives-it-back-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Focus left behind a dialog answers the next key with the control that opened it, repeating the action being asked about; marking the initial control explicitly keeps a restyle from moving the keyboard onto a destructive choice.",
+      "statement": "Every modal dialog SHALL record where focus was, move focus into itself on open (to the control marked as initial focus, else its first enabled control, else the panel itself), and return focus to the recorded element on close. A confirmation of an action that cannot be undone SHALL mark its non-destructive choice as initial focus. While a dialog waits on an action that disabled the focused control, the dialog panel SHALL hold focus."
+    },
+    {
+      "key": "n1-tab-stays-inside-an-open-dialog",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A first Tab that fell through to the page landed behind the scrim, where the operator cannot see what they are operating.",
+      "statement": "While a modal dialog is open, Tab and Shift+Tab SHALL cycle through its enabled controls and MUST NOT move focus behind it, including on the first Tab when focus is still outside the panel; only the newest of stacked dialogs SHALL handle Tab."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Resting, hover, pressed, selected and focus treatments of activatable elements",
+      "Hover-revealed row actions",
+      "Motion and reduced motion for state changes",
+      "Escape ownership between nested surfaces",
+      "Focus placement for menus and modal dialogs"
+    ],
+    "non_goals": [
+      "Shell layout, palette and the contrast ramp (hub-workspace-shell)",
+      "Composer-specific control treatment (agent-composer)"
+    ]
+  },
+  "summary": "How the Hub answers the pointer and the keyboard: every activatable element shows resting, hover, pressed and focus states from shared tokens without moving anything; hover-revealed row actions keep their space; one Escape dismisses one thing; and menus and dialogs put the keyboard where the operator's next input belongs.",
+  "tasks": [],
+  "title": "Hub interaction feedback"
+}

@@ -1,0 +1,70 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Measured 2026-10-06 in three end-to-end drives of the slice spec flow (scripts/drive/FINDINGS.md F504, F506; .claude/handoffs/DEAD-ENDS.md 2026-10-06): parallel tasks of one slice routinely edit the same files, so after the first merges every sibling conflicts with main. The approval gate refuses, the reviewer sends the task back, the author merges main and resubmits. Review rounds per task were 1/4/2 in one slice, the extra rounds being merge conflicts rather than defects; each costs a full review turn plus a rework turn. The ordering machinery already exists (task depends_on, gated at start by dependency_gate and the flow's claim), but the planner is never told it exists: the submit_spec_document tool docs describe a task without depends_on, and nothing notices two unordered tasks that touch the same files.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Telling the planner that tasks expected to edit the same file must be ordered with depends_on",
+      "Letting a task declare the files it expects to edit, and noticing at submission when two unordered tasks overlap",
+      "Measuring afterwards whether conflict-caused review rounds went down"
+    ],
+    "non_goals": [
+      "Resolving merge conflicts automatically",
+      "Changing how the dependency gate or a flow's claim works",
+      "Inferring a task's files in the Hub without the planner declaring them",
+      "Any change that requires restarting the Hub while a slice is being built, or a database migration"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "A slice whose tasks share a file is drafted with those tasks chained, or the submission names the overlap, and the acceptance test for it passes.",
+      "intent": "A planner drafting a slice is told to chain tasks that edit the same files, can declare each task's files, and sees a warning when two unordered tasks overlap.",
+      "key": "declare-and-warn",
+      "title": "Planner orders same-file tasks and is warned when it does not"
+    },
+    {
+      "builds_after": [
+        "declare-and-warn"
+      ],
+      "done": "For a slice, the count of sends-back caused by a merge conflict is retrievable and agrees with the task history.",
+      "intent": "The operator can see, for a finished slice, how many revision_needed rounds were merge conflicts, so whether slice 1 worked is a number and not an impression.",
+      "key": "measure-conflict-rounds",
+      "title": "Conflict-caused review rounds are counted per slice"
+    },
+    {
+      "builds_after": [
+        "measure-conflict-rounds"
+      ],
+      "done": "A task whose real changes overlap an unordered sibling is flagged before its approval is refused for a conflict.",
+      "intent": "When a task's actual changed files overlap an unordered sibling's, the operator and reviewer are told before approval hits a conflict.",
+      "key": "flag-missed-overlap",
+      "title": "Overlaps the planner missed are flagged from real work"
+    }
+  ],
+  "summary": "Tasks of one slice that edit the same files stop conflicting with each other, by being built one after another instead of in parallel.",
+  "tasks": [],
+  "title": "Same-file tasks of a slice run in order"
+}

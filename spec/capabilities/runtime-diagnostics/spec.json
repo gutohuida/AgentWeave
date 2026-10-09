@@ -1,0 +1,465 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "Any machine with AgentWeave installed",
+      "key": "ac1",
+      "requirement": "runtime-readiness-checks",
+      "then": "It reports Python, Hub runtime, runner CLIs, the Hub instance, port, database, state permissions and symlink privilege.",
+      "when": "The operator runs `agentweave doctor`"
+    },
+    {
+      "given": "No native Hub state directory yet",
+      "key": "ac2",
+      "requirement": "runtime-readiness-checks",
+      "then": "It inspects the nearest existing parent and creates no Hub state, project or database.",
+      "when": "`doctor` runs"
+    },
+    {
+      "given": "A check whose data includes an API key or token",
+      "key": "ac3",
+      "requirement": "readiness-check-result-model",
+      "then": "The value is redacted.",
+      "when": "`doctor --json` prints it"
+    },
+    {
+      "given": "A check that fails",
+      "key": "ac4",
+      "requirement": "readiness-check-result-model",
+      "then": "The result carries its ID, target, `fail`, severity `error`, message and hint, and the command exits 1.",
+      "when": "`doctor --json` runs"
+    },
+    {
+      "given": "A provider runner naming `$MY_KEY`, unset in the Hub's environment",
+      "key": "ac6",
+      "requirement": "proxy-credential-diagnostics",
+      "then": "The agent is not runnable and the reason names `$MY_KEY` without any value.",
+      "when": "Launchability is read"
+    },
+    {
+      "given": "The same agent",
+      "key": "ac7",
+      "requirement": "proxy-credential-diagnostics",
+      "then": "It is refused with 409 before any spawn, naming the variable.",
+      "when": "A run is triggered"
+    },
+    {
+      "given": "An agent whose runner CLI is not on PATH",
+      "key": "ac9",
+      "requirement": "watchdog-launch-preflight",
+      "then": "No process is spawned and a 409 names the missing CLI.",
+      "when": "A run is triggered"
+    },
+    {
+      "given": "A trigger naming an agent that does not exist in the project",
+      "key": "ac76",
+      "requirement": "watchdog-launch-preflight",
+      "then": "It is refused with 409 saying the agent is not in this project.",
+      "when": "It is received"
+    },
+    {
+      "given": "A queued message for an agent that cannot launch",
+      "key": "ac10",
+      "requirement": "watchdog-launch-preflight",
+      "then": "The entry stays queued and is delivered once the agent can run.",
+      "when": "The launch is refused"
+    },
+    {
+      "given": "A run whose process exits non-zero",
+      "key": "ac13",
+      "requirement": "structured-diagnostic-events",
+      "then": "A persisted `run_failed` event with severity `warn` carries the agent, run ID, exit code and stderr tail.",
+      "when": "The run ends"
+    },
+    {
+      "given": "Log entries from an agent since deleted",
+      "key": "ac15",
+      "requirement": "hub-logs-usability",
+      "then": "The agent filter lists roster agents and log-only agents as separate groups, both selectable.",
+      "when": "The Logs view is opened"
+    },
+    {
+      "given": "Diagnostic events in the log",
+      "key": "ac16",
+      "requirement": "hub-logs-usability",
+      "then": "Only matching entries are shown.",
+      "when": "The operator picks a category or types a search"
+    },
+    {
+      "given": "A manually fired job whose trigger fails",
+      "key": "ac18",
+      "requirement": "job-failure-diagnostics",
+      "then": "The job run is stored as failed with an error summary and a `job_run_failed` event is recorded.",
+      "when": "It runs"
+    },
+    {
+      "given": "A job whose latest run failed",
+      "key": "ac19",
+      "requirement": "job-failure-diagnostics",
+      "then": "The failed run and its summary are visible, distinct from a disabled or idle job.",
+      "when": "The job view is shown"
+    },
+    {
+      "given": "A project's agents",
+      "key": "ac20",
+      "requirement": "agent-readiness-summary",
+      "then": "Each agent has runner, cli, present, authorized, runnable and reason, and no run starts.",
+      "when": "`GET /agents/launchability` is called"
+    },
+    {
+      "given": "An agent with no runner bound",
+      "key": "ac77",
+      "requirement": "agent-readiness-summary",
+      "then": "The reason says no runner is bound, not that a CLI named after the agent is missing.",
+      "when": "Launchability is read"
+    },
+    {
+      "given": "A non-full-access Codex agent whose runner opted out of the app-server transport",
+      "key": "ac22",
+      "requirement": "collaboration-readiness-is-checkable-before-it-is-needed",
+      "then": "It is runnable, not collaboration-ready, and the reason names the runner flag and the Full access setting.",
+      "when": "Launchability is read"
+    },
+    {
+      "given": "A Hub that has no `HUB_URL` and has observed no bound address",
+      "key": "ac23",
+      "requirement": "collaboration-readiness-is-checkable-before-it-is-needed",
+      "then": "Runnable agents are not collaboration-ready and the reason says the callback address is unknown.",
+      "when": "Launchability is read"
+    },
+    {
+      "given": "An agent that is not runnable, or has no bound runner",
+      "key": "ac24",
+      "requirement": "collaboration-readiness-is-checkable-before-it-is-needed",
+      "then": "It carries no collaboration verdict.",
+      "when": "Launchability is read"
+    },
+    {
+      "given": "A run whose app-server process dies mid-request",
+      "key": "ac25",
+      "requirement": "a-runtime-that-dies-reports-what-it-was-doing",
+      "then": "It carries the exit status, the method in flight and the stderr tail as separate fields.",
+      "when": "The failure is reported"
+    },
+    {
+      "given": "A turn that reports its own failure after its runtime exited",
+      "key": "ac29",
+      "requirement": "a-runtime-that-dies-reports-what-it-was-doing",
+      "then": "It carries the runtime's exit status and stderr tail.",
+      "when": "`run_failed` is recorded"
+    },
+    {
+      "given": "A runtime that writes more to stderr than a pipe holds",
+      "key": "ac27",
+      "requirement": "n1-a-runtime-error-stream-is-always-drained",
+      "then": "It is not blocked, and only a bounded tail is retained.",
+      "when": "It keeps running"
+    },
+    {
+      "given": "A run on a transport with no per-turn process exit",
+      "key": "ac30",
+      "requirement": "n2-exit-statuses-are-distinct-and-readable",
+      "then": "The turn's status and the runtime's status are reported in different fields.",
+      "when": "It fails"
+    },
+    {
+      "given": "A runtime killed and reported by the platform as 4294967295",
+      "key": "ac31",
+      "requirement": "n2-exit-statuses-are-distinct-and-readable",
+      "then": "It reads as a termination, and `Run.exit_code` keeps the raw value.",
+      "when": "The failure is displayed"
+    },
+    {
+      "given": "A build stamp whose fingerprint matches the UI source",
+      "key": "ac33",
+      "requirement": "the-built-interface-artefact-can-be-asserted-current",
+      "then": "No staleness is reported.",
+      "when": "`/health` is read"
+    },
+    {
+      "given": "A build stamp naming a different source state",
+      "key": "ac35",
+      "requirement": "the-built-interface-artefact-can-be-asserted-current",
+      "then": "`ui_stale` is true and the detail names `python scripts/refresh_ui_bundle.py`.",
+      "when": "`/health` is read"
+    },
+    {
+      "given": "No build stamp",
+      "key": "ac36",
+      "requirement": "the-built-interface-artefact-can-be-asserted-current",
+      "then": "It compares the last commit dates of source and bundle.",
+      "when": "Staleness is computed"
+    },
+    {
+      "given": "A Hub reporting the bundle stale",
+      "key": "ac37",
+      "requirement": "n3-a-recorded-build-stamp-takes-effect-without-restart",
+      "then": "The warning clears within the cache period, without a restart.",
+      "when": "A matching stamp is recorded"
+    },
+    {
+      "given": "A Hub started by hand with uvicorn, no PID file",
+      "key": "ac42",
+      "requirement": "a-running-instance-is-described-as-what-it-actually-is",
+      "then": "It reports `running (native)`, not docker.",
+      "when": "`status` runs"
+    },
+    {
+      "given": "A named profile and port",
+      "key": "ac43",
+      "requirement": "a-running-instance-is-described-as-what-it-actually-is",
+      "then": "It probes that port and that profile's database.",
+      "when": "`doctor` runs with them"
+    },
+    {
+      "given": "Nothing answering on the named port",
+      "key": "ac44",
+      "requirement": "a-running-instance-is-described-as-what-it-actually-is",
+      "then": "It reports a `hub_not_running` warning rather than omitting the instance.",
+      "when": "`doctor` runs"
+    },
+    {
+      "given": "A machine that cannot create directory symlinks",
+      "key": "ac45",
+      "requirement": "a-silently-degraded-environment-shall-be-reported-once-where",
+      "then": "It warns that agent checkouts will lack linked dependency directories and names the remedy, without failing.",
+      "when": "`doctor` runs"
+    },
+    {
+      "given": "A machine that can create them",
+      "key": "ac46",
+      "requirement": "a-silently-degraded-environment-shall-be-reported-once-where",
+      "then": "The check passes and nothing is left where it probed.",
+      "when": "`doctor` runs"
+    },
+    {
+      "given": "",
+      "key": "cr21",
+      "requirement": "operator-facing-severity-values-are-the-ones-the-operator-s-",
+      "then": "the row is written with `warn`",
+      "when": "an event is persisted with severity `warning`"
+    },
+    {
+      "given": "",
+      "key": "cr22",
+      "requirement": "operator-facing-severity-values-are-the-ones-the-operator-s-",
+      "then": "the broadcast carries the normalised severity",
+      "when": "a pushed log line with an unknown severity is broadcast"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-13": "2ad09688c6b485399cb6c67190b10ca6408af886b2d96bd5ec1151e300bc0054",
+      "FR-14": "3e90b3ac36ddd6d20102ac137facaa7aa9713b2005c5092afe382699b17c1f5c",
+      "FR-15": "38a70e62eb577980ada160a4507d74e88e079adadadba8f6f28893ac5e0e7b88",
+      "FR-16": "e1929b468054fa3d211ec8385ad4d2111e9977b68b22ced372c62c58493f4c3d",
+      "FR-17": "14e7e6a2ac4c49ecd7b4106ced9cba9fae4b7265bbb92207185eb31d5241b015",
+      "FR-18": "b1e3e25c77ec11fcbc3b57468537bd12c03b44859650aec529206077b35f3225",
+      "FR-19": "f853aaa0112e6b36167dcc21be3e79176c10495f33f4f67bd9c1f0a70da6b30f",
+      "FR-20": "5020fb26a1bb19e2e87bc161c1be65ad3c33e602204ae3c995619639719c9771",
+      "FR-21": "872fbfb5adf856eec496361b69bdb1fd7d0972301fb12abc489d242c60c43a77",
+      "FR-22": "cbaffd0952419e3e2b5393d5da0c3021e9772e81f0001a03d06f6b24c7befc8f",
+      "FR-23": "2843846cb57518c405a25a4d3eab9245967ee9ac1c589897269b5b151fc7ef96",
+      "FR-24": "84affdea149ed8962bac647574bcf5dd02f5d430fbb5d6efcaffa8ed3ac8e16e",
+      "FR-25": "191f9439ee86acd840eb8c74fa3c2ed873486aaba5a312a9c5f215634ba12cff",
+      "FR-26": "60ee492e66f0e26b126bc366445761fde2cee4d35f2e671e442d0207d1e5bee7",
+      "FR-27": "ba15c0ab04a5ec823a789c5ad1fcdbf3ffede2babc3ea7fd642f092941395d1a",
+      "FR-28": "d00ed752e58f16c4ebc329a215bdc2558490213e5d3b58a05ff8243d27fddff4",
+      "FR-29": "d71be73d3d67bb2e2a5ac402dffdece56909a2fc57f3b063eb049841ed84b082",
+      "FR-30": "9c2e67552702e1aad3cffbe791f1962a08bb1aececc3bb926738cfbf3e81d880",
+      "FR-31": "ec53c15b762f1863071e29adf019ecf790a29bc9f21e2124c9808691ac524f7a",
+      "FR-32": "0bd566eb166d7f30492864e7f1ef01ec7185df2ecc2909af36b11c62cce549eb",
+      "FR-33": "a279e4dd2ade0011906f0669998eb348876a6f595529058412ca8b3a6b63f9fc"
+    },
+    "high_water": 33,
+    "requirements": {
+      "a-running-instance-is-described-as-what-it-actually-is": "FR-26",
+      "a-runtime-that-dies-reports-what-it-was-doing": "FR-23",
+      "a-silently-degraded-environment-shall-be-reported-once-where": "FR-27",
+      "agent-readiness-summary": "FR-21",
+      "collaboration-readiness-is-checkable-before-it-is-needed": "FR-22",
+      "hub-logs-usability": "FR-19",
+      "job-failure-diagnostics": "FR-20",
+      "n1-a-runtime-error-stream-is-always-drained": "FR-30",
+      "n2-exit-statuses-are-distinct-and-readable": "FR-31",
+      "n3-a-recorded-build-stamp-takes-effect-without-restart": "FR-32",
+      "operator-facing-severity-values-are-the-ones-the-operator-s-": "FR-33",
+      "proxy-credential-diagnostics": "FR-15",
+      "readiness-check-result-model": "FR-14",
+      "runtime-readiness-checks": "FR-13",
+      "structured-diagnostic-events": "FR-17",
+      "the-built-interface-artefact-can-be-asserted-current": "FR-24",
+      "watchdog-launch-preflight": "FR-16"
+    },
+    "retired": {
+      "a-run-states-how-it-reached-the-hub": "FR-29",
+      "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w": "FR-28",
+      "hub-trigger-confidence-reporting": "FR-18",
+      "the-documented-command-form-is-the-one-that-works": "FR-25"
+    }
+  },
+  "design": "D1 Two halves, no shared code. The CLI's `agentweave/diagnostics.py` checks the machine and the instance; the Hub's `launchability.py` and runner adapters judge agents. The Hub does not import the CLI package, so the two are kept separate on purpose.\n\nD2 The instance describes itself. `/health` returns `runtime` (`native`, `docker`, or `AW_RUNTIME`) and the UI staleness verdict; `status` and `doctor` read that rather than inferring from a PID file.\n\nD3 Collaboration readiness comes from the same adapter member the trigger path uses to pick a transport, so what the operator is told and what actually runs cannot drift.\n\nD4 Exit codes: recorded raw (`Run.exit_code`), rendered readably wherever a payload is composed for display (`readable_exit_code`, applied in `_broadcast_run_lifecycle`).\n\nD5 UI staleness is an assertion (`hub/hub/static/ui/ui-build-stamp.json` with a source fingerprint), not a proof; with no stamp the old commit-date comparison applies, so no installation is declared current by default.",
+  "evidence": {
+    "checked": [
+      "tests/test_diagnostics.py, tests/test_cli_port_and_runtime.py, tests/test_cli_symlink_privilege.py",
+      "hub/tests/test_launchability.py, hub/tests/test_runtime_diagnostics.py",
+      "hub/tests/test_ui_staleness.py, hub/tests/test_ui_build_stamp.py",
+      "hub/ui/src/__tests__/runnerPickerCannotCollaborate.test.tsx"
+    ],
+    "limits": [
+      "Several CLI checks in src/agentweave/diagnostics.py (session, agentweave.yml, transport, per-agent readiness, jobs) are marked DEAD and are not run by `doctor`; they are not described here."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Most runtime failures look alike from the outside (\"the run failed\", \"the Hub is down\"). Without checks that inspect the real instance and failures that carry their own facts, the operator diagnoses by guessing which other agents still work.",
+  "requirements": [
+    {
+      "key": "runtime-readiness-checks",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A readiness check that changes what it inspects, or needs the thing it is diagnosing to be up, cannot be run before first launch.",
+      "statement": "`agentweave doctor` SHALL check Python support, the installed Hub runtime, runner CLIs on PATH, the Hub instance on the chosen port, port availability, database accessibility, Hub-state permissions and directory-symlink privilege, without starting the Hub, creating state, or calling any model provider."
+    },
+    {
+      "key": "readiness-check-result-model",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A stable structured result is what `--json`, logs and scripts read; secrets never belong in a diagnostic.",
+      "statement": "Each readiness check SHALL produce a result with a stable check ID, a target, a status (`pass`, `warn`, `fail`), a severity, a message and an optional hint, SHALL redact secret values from its data, and `doctor` SHALL exit non-zero only when a check fails."
+    },
+    {
+      "key": "proxy-credential-diagnostics",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A missing key otherwise surfaces as an opaque provider failure mid-run.",
+      "statement": "For a runner configured to send its runs to a model provider, the Hub SHALL report the agent not runnable when the environment variable the runner names for the key is unset, naming the variable and never its value."
+    },
+    {
+      "key": "watchdog-launch-preflight",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A launch known to be impossible should fail immediately and say why, and must not lose the input that asked for it.",
+      "statement": "Before spawning a run the Hub SHALL refuse, with a typed 409 naming the reason, an agent that does not exist, is archived, has no runner or a deleted runner, is not runnable, or already has a run in progress, and SHALL refuse with 501 a runner it has no adapter for; a refused delivery SHALL stay queued for retry."
+    },
+    {
+      "key": "structured-diagnostic-events",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A failure that exists only in a log line or a broadcast is gone by the time someone looks.",
+      "statement": "A run that fails SHALL be recorded as a persisted `run_failed` event with severity `warn` carrying the agent, run ID, error, and where known the exit code and the runtime's error-stream tail, scrubbed of the run's registered secrets."
+    },
+    {
+      "key": "hub-logs-usability",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A deleted agent's history must stay filterable, and a fixed agent list hides custom agents.",
+      "statement": "The Logs view SHALL offer an agent filter drawn from the project's roster and from agents named in returned log entries, shown as separate groups, and SHALL offer search and category filters (runner, proxy, setup, jobs, stderr)."
+    },
+    {
+      "key": "job-failure-diagnostics",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A job that fails every five minutes in silence is indistinguishable from one that never fires.",
+      "statement": "A scheduled or manually fired job run that fails to start, fails to trigger its agent, or meets an internal error SHALL be recorded as a failed job run with an error summary and a `job_run_failed` event, and the job view SHALL show a failed or skipped run with its summary, distinct from disabled or idle jobs."
+    },
+    {
+      "key": "agent-readiness-summary",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator should know an agent cannot run before they send it work.",
+      "statement": "The Hub SHALL report for each of a project's agents its runner, CLI, whether the CLI is present and authorized, whether it is runnable, and the reason when it is not, without starting a run."
+    },
+    {
+      "key": "collaboration-readiness-is-checkable-before-it-is-needed",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent that runs but cannot reach the Hub fails quietly; installed and authorized is not enough.",
+      "statement": "For a runnable agent bound to a runner, the Hub SHALL also report whether it can collaborate (its provider will let it call the Hub's tools, and the Hub knows the callback address it gives runs), naming each unmet condition in terms the operator can act on, without starting a run."
+    },
+    {
+      "key": "a-runtime-that-dies-reports-what-it-was-doing",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "'The process ended' is true of a crash, a missing binary, a rejected credential and an unresumable session alike; separate fields reach every reader, not only one sentence.",
+      "statement": "A run that fails because its runtime process ended SHALL report, as separate fields, the process's exit status, the operation in flight, and a bounded tail of what it wrote to its error stream, whether the failure was raised at start or reported by the turn."
+    },
+    {
+      "key": "n1-a-runtime-error-stream-is-always-drained",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A captured stream nobody reads fills and blocks the very process being diagnosed.",
+      "statement": "The Hub SHALL read the error stream of every runtime it starts, retaining only a bounded tail."
+    },
+    {
+      "key": "n2-exit-statuses-are-distinct-and-readable",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One death described by two or three different numbers cannot be diagnosed.",
+      "statement": "A turn's exit status SHALL be reported separately from the runtime process's exit status, and every displayed exit status SHALL be rendered readably (a forced termination reported as a large unsigned value is shown as the termination), while the recorded value stays as the platform reported it."
+    },
+    {
+      "key": "the-built-interface-artefact-can-be-asserted-current",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A date comparison cannot be cleared by a rebuild that produces identical output, and a warning that survives its remedy gets ignored.",
+      "statement": "The Hub SHALL treat the bundled UI as current when its build stamp's source fingerprint matches the UI source as it stands, including uncommitted changes, SHALL otherwise report it stale through `/health`, `status` and `doctor` naming `python scripts/refresh_ui_bundle.py` as the remedy, and SHALL fall back to comparing commit dates when no stamp exists."
+    },
+    {
+      "key": "n3-a-recorded-build-stamp-takes-effect-without-restart",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The staleness answer is cached briefly, not for the process lifetime.",
+      "statement": "A newly recorded build stamp SHALL clear the staleness warning without restarting the Hub."
+    },
+    {
+      "key": "a-running-instance-is-described-as-what-it-actually-is",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Only the running process knows whether it is in a container; a clean report on the wrong instance is worse than none.",
+      "statement": "`status` and `doctor` SHALL describe a running Hub by the runtime it reports about itself on `/health` (`native`, `docker`, or `AW_RUNTIME`), SHALL examine the port and profile database the operator named rather than the defaults, and SHALL report an unreachable instance rather than omit it."
+    },
+    {
+      "key": "a-silently-degraded-environment-shall-be-reported-once-where",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Degrading can be right; nobody being told is not. An agent finding missing dependencies by failing the suite is the cost.",
+      "statement": "Where the Hub deliberately degrades instead of failing, `doctor` SHALL report the condition as a warning (not a failure) naming its consequence and remedy; in particular it SHALL test whether a directory symlink can be created, leave nothing behind, and warn that agent checkouts will lack linked dependency directories when it cannot."
+    },
+    {
+      "key": "operator-facing-severity-values-are-the-ones-the-operator-s-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A severity no view recognises renders unmarked and is hidden by the filter meant to reveal it.",
+      "statement": "Events persisted for the operator SHALL carry a severity from the set the operator's views style and filter by (`info`, `warn`, `error`, `debug`); the persistence layer SHALL normalise any other value to `warn` before writing, and a live broadcast of the same event SHALL carry the normalised value."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "`agentweave doctor` and `agentweave status`, the result model they share, and how they describe a running instance",
+      "`GET /agents/launchability`: runnable and collaboration-ready verdicts per agent, including a provider runner's missing key",
+      "Pre-spawn refusals for agents that cannot run",
+      "Failure facts on `run_failed` and `job_run_failed`: exit statuses, the operation in flight, the error-stream tail",
+      "The severity values operator-facing events carry",
+      "The Logs view and the UI-bundle staleness signal"
+    ],
+    "non_goals": [
+      "Context-window and token reporting (agent-context-usage, usage-accounting)",
+      "How runs are rendered in a conversation (agent-stream-events, turn-outcome-visibility)",
+      "What a run states about how it reached the Hub (agent-tool-surface)",
+      "The runner controls offered for an agent that will run but cannot collaborate (agent-configuration)",
+      "Which command form starts and manages the instance (app-lifecycle)"
+    ]
+  },
+  "summary": "How AgentWeave tells the operator whether it can run and why something did not: `agentweave doctor` and `agentweave status` for the instance, the Hub's per-agent launchability and collaboration-readiness report, typed refusals before a spawn, durable failure facts for runs and jobs, and the severity vocabulary those events carry.",
+  "tasks": [],
+  "title": "Runtime diagnostics"
+}

@@ -1,0 +1,384 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a roadmap with non-goals and two slices, each with an outcome sentence as its done criterion",
+      "key": "ac1",
+      "requirement": "n1",
+      "then": "the move succeeds, and no finding names missing requirements",
+      "when": "the operator moves it to proposed"
+    },
+    {
+      "given": "a roadmap",
+      "key": "ac2",
+      "requirement": "n1",
+      "then": "a `slice_done_empty` finding names that slice's done criterion and the roadmap cannot be proposed; a slice whose done criterion is an outcome sentence draws no such finding",
+      "when": "it is submitted with a slice whose done criterion is `\"false\"` or `\"no\"`"
+    },
+    {
+      "given": "a roadmap",
+      "key": "ac3",
+      "requirement": "n1",
+      "then": "the submission is refused, saying the field is the outcome that shows the slice is finished, not whether it is finished yet",
+      "when": "it is submitted with a slice whose done criterion is a boolean"
+    },
+    {
+      "given": "a roadmap with no slices",
+      "key": "ac4",
+      "requirement": "n1",
+      "then": "it is refused with a `roadmap_without_slices` finding",
+      "when": "it is moved to proposed"
+    },
+    {
+      "given": "a roadmap payload",
+      "key": "ac5",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "then": "it is refused, and the refusal says those belong in the slice's change document",
+      "when": "it carries a requirement, an acceptance criterion or a task"
+    },
+    {
+      "given": "a change-spec payload",
+      "key": "ac6",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "then": "it is refused, naming `roadmap` as the field a change document uses instead",
+      "when": "it carries slices"
+    },
+    {
+      "given": "a roadmap payload",
+      "key": "ac7",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "then": "the submission is refused, naming the key",
+      "when": "a slice names in builds-after a key that is not another slice of the same roadmap, or itself"
+    },
+    {
+      "given": "a roadmap payload",
+      "key": "ac28",
+      "requirement": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "then": "the submission is refused",
+      "when": "two slices share a key, or a key is not lowercase letters, digits and hyphens"
+    },
+    {
+      "given": "a proposed roadmap",
+      "key": "ac8",
+      "requirement": "n1",
+      "then": "no task is created",
+      "when": "the operator approves it"
+    },
+    {
+      "given": "a roadmap with slices",
+      "key": "ac9",
+      "requirement": "n6",
+      "then": "each slice's key, title, intent, done criterion and builds-after appear, in roadmap order",
+      "when": "it is rendered, or read by an agent through the document read tool"
+    },
+    {
+      "given": "an approved roadmap holding slice `s1`",
+      "key": "ac10",
+      "requirement": "a-change-document-may-name-the-roadmap-slice-it-specifies",
+      "then": "no roadmap finding blocks it",
+      "when": "a change document naming that roadmap and `s1` is moved to proposed"
+    },
+    {
+      "given": "a roadmap that is still exploring, or a path that is no roadmap of the project",
+      "key": "ac11",
+      "requirement": "a-change-document-may-name-the-roadmap-slice-it-specifies",
+      "then": "the move is refused with `roadmap_not_approved`, naming the roadmap and its phase",
+      "when": "a change document naming it is moved to proposed"
+    },
+    {
+      "given": "an approved roadmap",
+      "key": "ac12",
+      "requirement": "a-change-document-may-name-the-roadmap-slice-it-specifies",
+      "then": "the move is refused with `roadmap_slice_unknown`, naming the key and the roadmap's slices",
+      "when": "a change document names a slice key that the roadmap does not hold and is moved to proposed"
+    },
+    {
+      "given": "a proposed slice document whose roadmap the operator has since reopened",
+      "key": "ac29",
+      "requirement": "a-change-document-may-name-the-roadmap-slice-it-specifies",
+      "then": "it is refused with 409 and a `roadmap_not_approved` blocking finding",
+      "when": "the operator approves the slice document"
+    },
+    {
+      "given": "a change document naming a roadmap slice",
+      "key": "ac13",
+      "requirement": "n6",
+      "then": "it shows the slice's key and title and the roadmap's title and path",
+      "when": "it is rendered"
+    },
+    {
+      "given": "slice `s1` of a roadmap whose slices are `s1`, `s2`, created by agent `planner` in a conversation, with two open tasks",
+      "key": "ac14",
+      "requirement": "n2",
+      "then": "no turn is queued and `next_slice` is `{state: waiting, slice: s2, agent: planner, open_tasks: 2}`",
+      "when": "the operator approves it with `draft_next_slice`"
+    },
+    {
+      "given": "that approval, waiting on two tasks",
+      "key": "ac15",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "then": "no turn is queued after the first; after the second, one operator-origin turn is queued to `planner` in the conversation that created the document, and `planner` is scheduled once that transition commits",
+      "when": "the first task is approved and then the second is approved or rejected, through any surface"
+    },
+    {
+      "given": "a built slice one of whose tasks never merged and had evidence the operator rejected",
+      "key": "ac16",
+      "requirement": "n3",
+      "then": "that task's line states that no merge into the main branch is recorded and names the rejected evidence's requirement with the operator's reason",
+      "when": "the drafting turn is queued"
+    },
+    {
+      "given": "a slice whose drafting turn was already queued",
+      "key": "ac17",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "then": "no second turn is queued",
+      "when": "one of its tasks is reopened and approved again"
+    },
+    {
+      "given": "a reopened slice document all of whose tasks are closed",
+      "key": "ac18",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "then": "the turn is queued in the approval request, and `next_slice.state` is `queued`",
+      "when": "the operator re-approves it with `draft_next_slice`"
+    },
+    {
+      "given": "a queued drafting turn",
+      "key": "ac19",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "then": "it has the roadmap open as its specification document (so it has no file-write tool) and its duties say the roadmap's slices are specified as change documents, not implemented",
+      "when": "it starts"
+    },
+    {
+      "given": "a document specifying the roadmap's last slice",
+      "key": "ac20",
+      "requirement": "n2",
+      "then": "nothing is recorded or queued, and `next_slice.state` is `last_slice`",
+      "when": "the operator approves it with `draft_next_slice`"
+    },
+    {
+      "given": "a slice document the operator created",
+      "key": "ac21",
+      "requirement": "n2",
+      "then": "nothing is recorded or queued, and `next_slice.state` is `no_author`",
+      "when": "the operator approves it with `draft_next_slice`"
+    },
+    {
+      "given": "a slice document with open tasks",
+      "key": "ac22",
+      "requirement": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "then": "no turn is queued",
+      "when": "the operator approves it without `draft_next_slice` and its tasks later close"
+    },
+    {
+      "given": "a change document that names no roadmap",
+      "key": "ac23",
+      "requirement": "n2",
+      "then": "nothing is recorded or queued, `next_slice.state` is `not_a_slice`, and the approval is otherwise unchanged",
+      "when": "the operator approves it with `draft_next_slice`"
+    },
+    {
+      "given": "a slice whose drafting was requested",
+      "key": "ac24",
+      "requirement": "n2",
+      "then": "the task or document is still approved, the failure is logged, and the approval response reports `not_queued` (or `queued` when only scheduling failed)",
+      "when": "queuing the drafting turn raises while the last task is being approved, or raises or fails to schedule during the approval request"
+    },
+    {
+      "given": "a document",
+      "key": "ac30",
+      "requirement": "n4",
+      "then": "the request is refused with 400 and nothing moves",
+      "when": "the operator sends `draft_next_slice` with a target phase other than approved"
+    },
+    {
+      "given": "a proposed document naming a roadmap slice open in the app",
+      "key": "ac31",
+      "requirement": "n5",
+      "then": "a \"Draft the next slice\" checkbox is shown ticked; approving sends `draft_next_slice: true`, or false when unticked, and the outcome is shown in words",
+      "when": "the operator looks at the approval controls"
+    },
+    {
+      "given": "a proposed document naming no roadmap slice",
+      "key": "ac32",
+      "requirement": "n5",
+      "then": "no checkbox is shown and `draft_next_slice` is not sent",
+      "when": "the operator approves it in the app"
+    },
+    {
+      "given": "the `create_spec_document` and `submit_spec_document` tools",
+      "key": "ac25",
+      "requirement": "authoring-guidance-prefers-a-roadmap-and-a-small-slice",
+      "then": "both name the roadmap-plus-first-slice shape and a slice size of about a dozen requirements",
+      "when": "their descriptions are read"
+    },
+    {
+      "given": "a specification turn on an exploring document",
+      "key": "ac26",
+      "requirement": "authoring-guidance-prefers-a-roadmap-and-a-small-slice",
+      "then": "they name the roadmap-plus-slice shape and the size of a slice",
+      "when": "its duties are composed"
+    },
+    {
+      "given": "an approved roadmap open in an agent's turn",
+      "key": "ac27",
+      "requirement": "authoring-guidance-prefers-a-roadmap-and-a-small-slice",
+      "then": "they carry the roadmap duty (slices specified one at a time, do not implement) instead of the approved-document duty",
+      "when": "its duties are composed"
+    },
+    {
+      "given": "a change document naming a roadmap slice",
+      "key": "ac33",
+      "requirement": "n6",
+      "then": "the response names the roadmap slice for the app",
+      "when": "the operator's document read is requested"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Recording and firing the next-slice request",
+      "steps": [
+        "At approval with `draft_next_slice`, after the approval commits: if the document is not a change-spec naming a roadmap, report `not_a_slice`; if the approved slice is the roadmap's last (or absent), report `last_slice`.",
+        "Find the document's `created` event; if its actor is not an agent, report `no_author`; if its run has no conversation, report `no_conversation`.",
+        "Record a `next_slice_requested` event carrying the roadmap, the approved and next slice, the agent and the conversation.",
+        "If no linked task is open, stage the drafting entry now (report `queued`); otherwise report `waiting` with the open-task count.",
+        "Whenever a linked task reaches a terminal status (approved or rejected), inside that transition's savepoint: take the latest request; if a `next_slice_queued` event already answers it, or any linked task is still open, do nothing; otherwise add the operator-origin inbound entry for the roadmap and record `next_slice_queued`, and schedule the agent after the transaction commits."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "7e342f09532b3fa4ac768ba634b509db4d78fb4bcd17bcc25ea785a793a6d40e",
+      "FR-10": "a720214874f84cdbad5bfc7d423da9ec15343001d49ed78a43846e2b8ebabb6a",
+      "FR-2": "1b0ab14431a14ce5ed2ae7d3a9277f7c1a4d5bec75c3b8ce44329e44c8201479",
+      "FR-3": "eda11f47a5a82d253c708a076938760db3b76d5a11f85d053c69342e1c2d83f6",
+      "FR-4": "80b5efd6d72fe8a30263e3f5df49a6af7525bf4465164d5af101e52ba615fd1b",
+      "FR-5": "dc006dbebbd70f96be71f0d071c8832a4535edd1135c3b6aa9f839c1caf6ba3e",
+      "FR-6": "3c337577a8623f900e36821f5fd9a5394bea08b9b143d8687360973f6375648f",
+      "FR-7": "7a29d36773c158fa319adab9705e69678050dd8d40e77b4257a76cf46259ff29",
+      "FR-8": "4e84810bfb8fde5a2acd6fbeb9292281042c3cbc64a5968f38b7bc5af17bb375",
+      "FR-9": "785c4093bccb411caaff07dcc4180cf18568ac10d128ebcb1dff553616bc0b0c"
+    },
+    "high_water": 10,
+    "requirements": {
+      "a-change-document-may-name-the-roadmap-slice-it-specifies": "FR-2",
+      "a-roadmap-carries-ordered-slices-and-no-requirements-or-task": "FR-1",
+      "authoring-guidance-prefers-a-roadmap-and-a-small-slice": "FR-4",
+      "n1": "FR-5",
+      "n2": "FR-6",
+      "n3": "FR-7",
+      "n4": "FR-8",
+      "n5": "FR-9",
+      "n6": "FR-10",
+      "the-next-slice-is-drafted-once-the-approved-slice-is-built": "FR-3"
+    },
+    "retired": {}
+  },
+  "design": "D1 — A roadmap is a document kind, not a section. Slices sit on a `roadmap` payload; requirements, criteria and tasks are refused there, and slices are refused on every other kind. Shape errors are validation refusals; a missing slice or an empty done criterion is a completeness finding, because those are about readiness, not shape.\n\nD2 — The link lives in the slice. `roadmap: {document, slice}` is part of the change document's payload, checked at proposed and at approved against the roadmap's recorded phase and stored slices. Approval freezes a roadmap's path, so the link stays resolvable.\n\nD3 — Drafting waits for the work, not the approval. The request is an event on the slice document; the turn fires from the task transition that closes the last linked task, at most once per request, and is addressed as the operator to the document's creating agent in its creating conversation, with the roadmap as the open document.\n\nD4 — Follow-up never undoes a judgement. The approval and the task transition commit regardless of what the drafting step does; failures are logged and reported as `not_queued`, and an entry whose scheduling failed is delivered by the next drain.\n\nD5 — Guidance, not enforcement. Slice size is stated in the tool descriptions and turn duties and measured on real runs; nothing refuses a large slice.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_spec_roadmaps.py — payload shape, completeness, link findings, agent creation, drafting (waiting, queued, once, last slice, no author, failures), guidance and rendering",
+      "hub/ui/src/__tests__/specDraftNextSlice.test.tsx — the approval checkbox and outcome messages"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "One large change document is slow to write, slow to review and built long after its assumptions were made. Splitting a request into slices lets the operator approve one demonstrable outcome at a time and lets the next slice be written with what building the previous one taught. That only works if the roadmap is a plan rather than a second specification, if a slice cannot be proposed against a plan the operator has not approved, and if the next slice is drafted only once the previous one's work is actually finished.",
+  "requirements": [
+    {
+      "key": "a-roadmap-carries-ordered-slices-and-no-requirements-or-task",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A roadmap is the plan for a request too large for one change document: it says what the slices are and in what order they are built. Each slice's requirements live in the change document that specifies it, written when that slice is next. The shape is wrong whatever the phase, so it is refused rather than reported as incomplete.",
+      "statement": "A roadmap document SHALL carry an ordered list of slices, each with a unique key (lowercase letters, digits and hyphens), a title, an intent, a done criterion and the keys of other slices of the same roadmap it builds after; a roadmap payload carrying requirements, acceptance criteria, tasks or a roadmap link, or any other kind carrying slices, SHALL be refused at validation."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Completeness for a plan means it plans something and says how each step's end is recognised. Agents read `done` as a status and wrote `false` or `no`, which then appeared verbatim in the drafting turn; refusing a boolean and finding a too-short value keeps the field an outcome. A roadmap is not built, so its approval creates no work.",
+      "statement": "A roadmap SHALL be proposable only when it has at least one slice and every slice's done criterion states an outcome; a boolean done criterion SHALL be refused at validation, and a done criterion of fewer than three words SHALL be a `slice_done_empty` completeness finding naming the slice. A roadmap is not asked for requirements, and approving one SHALL create no task."
+    },
+    {
+      "key": "a-change-document-may-name-the-roadmap-slice-it-specifies",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A slice is specified against a plan the operator has accepted. The link lives in the slice's own payload rather than the corpus index, which only the operator sets and a rename does not update. An approved roadmap cannot be renamed, so a path that resolves at proposal still resolves later; and a reopened roadmap blocks its slices again until it is re-approved.",
+      "statement": "A change document SHALL be able to name the roadmap and slice key it specifies (`roadmap: {document, slice}`), only a change document may carry that link, and moving it to proposed or approved SHALL be refused while the named roadmap is not an approved roadmap of the project (`roadmap_not_approved`) or does not hold that slice key (`roadmap_slice_unknown`)."
+    },
+    {
+      "key": "the-next-slice-is-drafted-once-the-approved-slice-is-built",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator approves each slice; the agent drafts the next one with what building the last one taught it, so the turn waits for the slice's tasks to close. A rejected task is closed too. The turn is the operator's because the operator asked for it at approval, so no new queue origin is introduced. The next slice is the one after the approved slice in list order; builds-after constrains that order but does not choose it. A task reopened and closed again does not queue a second turn for the same request.",
+      "statement": "When the operator approves a change document that names a roadmap slice with `draft_next_slice` set, the Hub SHALL record the request and, once no task linked to that document is still open (every one approved or rejected), SHALL queue exactly one operator-origin turn per request to the agent that created the document, in the conversation where it created it, with the roadmap as the turn's specification document, asking it to draft the slice that follows in the roadmap's order."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator needs to know whether anyone will be asked to draft the next slice and, if not, why. Approving a document or a task is a judgement about that work; a failure in the follow-up turn is not grounds to undo it, so it is logged and reported instead.",
+      "statement": "The approval response SHALL report in `next_slice` what the request did — `waiting` (with the number of open tasks), `queued`, `last_slice`, `no_author`, `no_conversation`, `not_a_slice` or `not_queued` — and the approval and any task transition SHALL stand even when recording, queuing or scheduling the drafting turn fails."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A status alone hides both facts: a real drafting run read only the statuses, saw `approved` three times, and called work solid whose evidence had been rejected twice and which never reached the main branch.",
+      "statement": "The drafting turn SHALL list each of the built slice's tasks with its final status, whether its work merged into the main branch (or that no merge is recorded), and each of its evidence the operator rejected with the rejection's reason, and SHALL say that work which did not reach the main branch is not done whatever its status says."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A request field is honoured or named, never silently ignored; asking for the next slice on a propose or reopen would otherwise look accepted and do nothing.",
+      "statement": "`draft_next_slice` SHALL be accepted only on a transition to approved; sent with any other target phase it SHALL be refused with 400 before anything moves."
+    },
+    {
+      "key": "n5",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Drafting the next slice is the normal continuation of a roadmap, so it is the default; the outcome line is how the operator learns that the turn is waiting, was queued, or could not be queued.",
+      "statement": "The app SHALL offer a \"Draft the next slice\" option, on by default, when the operator approves a proposed document that names a roadmap slice, SHALL not offer or send it for any other document, and SHALL show the operator what the approval's `next_slice` outcome was."
+    },
+    {
+      "key": "authoring-guidance-prefers-a-roadmap-and-a-small-slice",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The guidance sits in the creation and submission tool descriptions and in the specification-turn duties, so every authoring agent receives it whether or not a charter is bound. The ordinary approved-document duty says to implement, which is wrong for a roadmap. The size is not enforced; it is measured on real runs instead.",
+      "statement": "The guidance an agent receives for creating and submitting a specification SHALL tell it to write a request larger than one demonstrable outcome as a roadmap plus the first slice's change document, to keep a slice to about a dozen requirements or fewer as a few tasks, and to record later slices in the roadmap instead of specifying them; a turn with an approved roadmap open SHALL be told that slices are specified one at a time as change documents and that the roadmap is not implemented."
+    },
+    {
+      "key": "n6",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Readers of either document need to see where a slice sits in its plan without opening the roadmap's payload.",
+      "statement": "A roadmap's slices SHALL render, and be returned by the agent document read, with each slice's key, title, intent, done criterion and builds-after in roadmap order; a change document naming a roadmap slice SHALL render a line naming the slice's key and title and the roadmap's title and path, and the operator's document read SHALL return that link for the app."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The `roadmap` document kind: its slices and what it may not carry",
+      "The `roadmap: {document, slice}` link on a change document and the findings that gate it",
+      "The `draft_next_slice` option on approval, the drafting turn it queues, and the outcome the approval reports",
+      "Slice-sizing guidance in tool descriptions and specification-turn duties",
+      "Rendering and reading a roadmap's slices and a slice document's link"
+    ],
+    "non_goals": [
+      "Which kinds an agent may create (agent-document-creation)",
+      "Phase transitions, completeness in general and operator-only approval (spec-document-authority)",
+      "Task status transitions and what closes a task (task-lifecycle-governance)",
+      "Enforcing a slice size: the size is guidance only"
+    ]
+  },
+  "summary": "A request too large for one change document is written as a roadmap of ordered slices plus one small change document per slice. This capability defines the roadmap and its slices, the link from a slice's change document to its roadmap, the turn that asks the slice's author to draft the next slice once the approved slice is built, and the authoring guidance that prefers a roadmap and a small slice over one large document.",
+  "tasks": [],
+  "title": "Spec roadmaps"
+}

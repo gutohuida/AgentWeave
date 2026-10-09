@@ -1,0 +1,914 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "",
+      "key": "ac1",
+      "requirement": "a-checkpoint-is-a-durable-hub-record-not-a-file-an-agent-is-",
+      "then": "the Hub produces it without invoking any project-installed skill, and the record is attached to that conversation",
+      "when": "a checkpoint is requested for a conversation"
+    },
+    {
+      "given": "an agent whose sandbox forbids writes outside its worktree",
+      "key": "ac2",
+      "requirement": "a-checkpoint-is-a-durable-hub-record-not-a-file-an-agent-is-",
+      "then": "no path outside the Hub's own storage is needed for it to succeed",
+      "when": "a checkpoint is produced for its conversation"
+    },
+    {
+      "given": "a project whose checkpoint runner and model are set",
+      "key": "ac3",
+      "requirement": "checkpoint-generation-runs-on-a-worker-with-an-operator-chos",
+      "then": "generation uses that runner and model rather than the agent's own runner",
+      "when": "a checkpoint is generated for one of its conversations"
+    },
+    {
+      "given": "",
+      "key": "ac4",
+      "requirement": "checkpoint-generation-runs-on-a-worker-with-an-operator-chos",
+      "then": "the outcome is recorded on a worker invocation record and no exception reaches the caller",
+      "when": "a worker invocation exits non-zero, times out, cannot be spawned, or returns unparseable or schema-invalid output"
+    },
+    {
+      "given": "",
+      "key": "ac5",
+      "requirement": "checkpoint-generation-runs-on-a-worker-with-an-operator-chos",
+      "then": "its kind, prompt version, runner, model, duration, outcome, token usage and cost are recorded, and no Run row is created",
+      "when": "a worker invocation completes"
+    },
+    {
+      "given": "a checkpoint model the runner's catalog does not declare",
+      "key": "ac6",
+      "requirement": "checkpoint-generation-runs-on-a-worker-with-an-operator-chos",
+      "then": "the invocation is recorded as unknown_model without spawning anything",
+      "when": "generation is attempted"
+    },
+    {
+      "given": "",
+      "key": "ac7",
+      "requirement": "fields-the-hub-can-determine-are-computed-never-requested-fr",
+      "then": "the generation prompt does not ask the model for changed files, tasks, questions, timestamps or the model used",
+      "when": "a checkpoint is generated"
+    },
+    {
+      "given": "a conversation whose turns committed work",
+      "key": "ac8",
+      "requirement": "fields-the-hub-can-determine-are-computed-never-requested-fr",
+      "then": "the changed-file list names the files those turns committed, without any caller supplying the repository",
+      "when": "a checkpoint is generated for it"
+    },
+    {
+      "given": "a turn that committed in a task checkout which has since been removed",
+      "key": "ac9",
+      "requirement": "fields-the-hub-can-determine-are-computed-never-requested-fr",
+      "then": "the changed-file list still names the files that turn changed",
+      "when": "a checkpoint covering that turn is generated"
+    },
+    {
+      "given": "a conversation whose project workspace cannot be resolved",
+      "key": "ac10",
+      "requirement": "fields-the-hub-can-determine-are-computed-never-requested-fr",
+      "then": "a checkpoint is still produced, carrying no changed-file list",
+      "when": "a checkpoint is generated"
+    },
+    {
+      "given": "",
+      "key": "ac11",
+      "requirement": "fields-the-hub-can-determine-are-computed-never-requested-fr",
+      "then": "the computed fields are still populated and the record is stored as unwritten",
+      "when": "the worker returns no usable output"
+    },
+    {
+      "given": "a conversation that is not a loop firing",
+      "key": "ac12",
+      "requirement": "fields-the-hub-can-determine-are-computed-never-requested-fr",
+      "then": "its task list holds the agent's live tasks across the project and carries a note saying the list is not specific to this conversation",
+      "when": "a checkpoint is generated"
+    },
+    {
+      "given": "a conversation that already has a written checkpoint",
+      "key": "ac13",
+      "requirement": "a-checkpoint-is-anchored-on-its-predecessor-rather-than-rege",
+      "then": "generation reads the preceding checkpoint and only the turns since it, and the new checkpoint records its predecessor",
+      "when": "another checkpoint is produced"
+    },
+    {
+      "given": "",
+      "key": "ac14",
+      "requirement": "a-checkpoint-is-anchored-on-its-predecessor-rather-than-rege",
+      "then": "it records no predecessor, founds its own lineage, and generation reads the conversation from its start",
+      "when": "a conversation produces its first checkpoint"
+    },
+    {
+      "given": "a conversation whose latest checkpoint is unwritten",
+      "key": "ac15",
+      "requirement": "a-checkpoint-is-anchored-on-its-predecessor-rather-than-rege",
+      "then": "it anchors on the latest written checkpoint before that one, and covers the unwritten one's turns",
+      "when": "another checkpoint is produced"
+    },
+    {
+      "given": "a checkpoint taken over a span with no new turns",
+      "key": "ac16",
+      "requirement": "a-checkpoint-is-anchored-on-its-predecessor-rather-than-rege",
+      "then": "it covers only turns after the last covered run, not the conversation from turn one",
+      "when": "the next checkpoint is produced"
+    },
+    {
+      "given": "",
+      "key": "ac17",
+      "requirement": "the-agent-contributes-notes-that-the-hub-treats-as-input-rat",
+      "then": "the checkpoint is still produced and its body states that no agent notes were incorporated",
+      "when": "the agent does not answer, refuses, or returns unusable notes"
+    },
+    {
+      "given": "checkpointing is offered or automatic",
+      "key": "ac18",
+      "requirement": "the-agent-contributes-notes-that-the-hub-treats-as-input-rat",
+      "then": "one notes request is queued to the conversation, naming submit_checkpoint_notes, and no checkpoint is generated",
+      "when": "a reading crosses the notes point but not the threshold"
+    },
+    {
+      "given": "a notes request is already queued or unconsumed notes exist",
+      "key": "ac19",
+      "requirement": "the-agent-contributes-notes-that-the-hub-treats-as-input-rat",
+      "then": "no second request is queued",
+      "when": "another reading crosses the notes point"
+    },
+    {
+      "given": "",
+      "key": "ac20",
+      "requirement": "a-checkpoint-that-contradicts-the-hub-s-own-records-is-repor",
+      "then": "the checkpoint is marked failed and the disagreement is recorded per dimension as missing and invented values",
+      "when": "the probe's files, tasks or unanswered questions disagree with the Hub's records"
+    },
+    {
+      "given": "",
+      "key": "ac21",
+      "requirement": "a-checkpoint-that-contradicts-the-hub-s-own-records-is-repor",
+      "then": "no checkpoint is reported ready",
+      "when": "a run stops without a checkpoint record having been produced"
+    },
+    {
+      "given": "",
+      "key": "ac22",
+      "requirement": "a-checkpoint-that-contradicts-the-hub-s-own-records-is-repor",
+      "then": "the checkpoint stays ready with no probe verdict",
+      "when": "the probe invocation cannot run or returns nothing usable"
+    },
+    {
+      "given": "a checkpoint that failed its probe",
+      "key": "ac23",
+      "requirement": "a-checkpoint-that-contradicts-the-hub-s-own-records-is-repor",
+      "then": "the computed sections are shown, followed by a statement that the written summary failed its probe",
+      "when": "it is rendered"
+    },
+    {
+      "given": "",
+      "key": "ac24",
+      "requirement": "a-checkpoint-cites-observations-that-remain-exactly-recovera",
+      "then": "the recorded content is returned unmodified",
+      "when": "a permitted reader recalls a cited observation"
+    },
+    {
+      "given": "",
+      "key": "ac25",
+      "requirement": "a-checkpoint-cites-observations-that-remain-exactly-recovera",
+      "then": "the request is answered not-found",
+      "when": "a reader recalls an observation no checkpoint it may read cites"
+    },
+    {
+      "given": "",
+      "key": "ac26",
+      "requirement": "a-checkpoint-cites-observations-that-remain-exactly-recovera",
+      "then": "its citations carry each covered output's id, run id and a preview of at most 200 characters",
+      "when": "a checkpoint is generated, even with no written body"
+    },
+    {
+      "given": "an agent granted read but not recall",
+      "key": "ac27",
+      "requirement": "reading-a-checkpoint-and-recalling-raw-observations-are-sepa",
+      "then": "the recall is refused while the checkpoint stays readable",
+      "when": "it recalls an observation cited by another agent's checkpoint"
+    },
+    {
+      "given": "an agent with no grant",
+      "key": "ac28",
+      "requirement": "reading-a-checkpoint-and-recalling-raw-observations-are-sepa",
+      "then": "the request is refused",
+      "when": "it requests another agent's checkpoint"
+    },
+    {
+      "given": "a charter describing the agent as permitted to read other agents' work",
+      "key": "ac29",
+      "requirement": "reading-a-checkpoint-and-recalling-raw-observations-are-sepa",
+      "then": "access is refused",
+      "when": "the agent requests another agent's checkpoint without the grant"
+    },
+    {
+      "given": "an agent granted permission to read checkpoints",
+      "key": "ac30",
+      "requirement": "reading-a-checkpoint-and-recalling-raw-observations-are-sepa",
+      "then": "the granted agent can read it, and the operator's control says the grant reaches every conversation in the project",
+      "when": "another agent's checkpoint exists from a conversation the granted agent never joined"
+    },
+    {
+      "given": "an agent with no grants",
+      "key": "ac31",
+      "requirement": "reading-a-checkpoint-and-recalling-raw-observations-are-sepa",
+      "then": "both succeed",
+      "when": "it lists and reads its own checkpoints"
+    },
+    {
+      "given": "",
+      "key": "ac32",
+      "requirement": "lineage-is-recorded-and-participation-is-derived",
+      "then": "it carries the earlier checkpoint's id as predecessor and the same lineage identifier",
+      "when": "a checkpoint is produced on top of an earlier one"
+    },
+    {
+      "given": "",
+      "key": "ac33",
+      "requirement": "lineage-is-recorded-and-participation-is-derived",
+      "then": "each carries its lineage identifier and predecessor, newest first",
+      "when": "the checkpoints of a conversation are listed"
+    },
+    {
+      "given": "",
+      "key": "ac34",
+      "requirement": "lineage-is-recorded-and-participation-is-derived",
+      "then": "no participation record is written beside it",
+      "when": "a checkpoint is recorded"
+    },
+    {
+      "given": "an agent whose context window is unknown, with a token threshold",
+      "key": "ac35",
+      "requirement": "automatic-checkpointing-is-configured-as-a-threshold-in-prop",
+      "then": "the threshold is evaluated against that count",
+      "when": "a reading reports its token count"
+    },
+    {
+      "given": "an agent whose context window is unknown, with a percent threshold",
+      "key": "ac36",
+      "requirement": "automatic-checkpointing-is-configured-as-a-threshold-in-prop",
+      "then": "no checkpoint is triggered",
+      "when": "a reading carries no percentage"
+    },
+    {
+      "given": "a project with a percent threshold",
+      "key": "ac37",
+      "requirement": "automatic-checkpointing-is-configured-as-a-threshold-in-prop",
+      "then": "the agent's mode and value both apply",
+      "when": "one of its agents sets a token threshold"
+    },
+    {
+      "given": "",
+      "key": "ac38",
+      "requirement": "automatic-checkpointing-is-configured-as-a-threshold-in-prop",
+      "then": "the configuration is refused",
+      "when": "half a threshold (mode without value, or value without mode) is submitted for a project or an agent"
+    },
+    {
+      "given": "a project whose checkpoint model has a known context window",
+      "key": "ac39",
+      "requirement": "automatic-checkpointing-is-configured-as-a-threshold-in-prop",
+      "then": "the configuration is refused",
+      "when": "the operator sets a project token threshold at or above that window"
+    },
+    {
+      "given": "",
+      "key": "ac40",
+      "requirement": "automatic-checkpointing-is-configured-as-a-threshold-in-prop",
+      "then": "the configuration is refused",
+      "when": "a percent threshold of 100 or more, or a notes point not below the threshold, is submitted"
+    },
+    {
+      "given": "",
+      "key": "ac41",
+      "requirement": "automatic-checkpointing-is-configured-as-a-threshold-in-prop",
+      "then": "it is entered in thousands and stored as a token count, and where the checkpoint model's window is known the equivalent percentage is shown alongside it",
+      "when": "an operator enters a token threshold in project settings"
+    },
+    {
+      "given": "an agent with checkpoint mode null",
+      "key": "ac42",
+      "requirement": "automatic-checkpointing-is-configured-as-a-threshold-in-prop",
+      "then": "it inherits the project's mode rather than being off",
+      "when": "its policy is resolved"
+    },
+    {
+      "given": "",
+      "key": "ac43",
+      "requirement": "a-produced-checkpoint-is-visible-to-the-operator",
+      "then": "each is returned newest first with status, probe status and findings, citations, body and the worker's generation error",
+      "when": "the checkpoints of a conversation are requested"
+    },
+    {
+      "given": "",
+      "key": "ac44",
+      "requirement": "a-produced-checkpoint-is-visible-to-the-operator",
+      "then": "the artifact is returned exactly as a successor receives it",
+      "when": "the rendered form of a checkpoint is requested"
+    },
+    {
+      "given": "the operator presses Checkpoint",
+      "key": "ac45",
+      "requirement": "a-produced-checkpoint-is-visible-to-the-operator",
+      "then": "the conversation reports the failure with its reason and nothing is cut over",
+      "when": "the checkpoint comes back unwritten or failed"
+    },
+    {
+      "given": "a context-pressure checkpoint that is ready and not yet handed over",
+      "key": "ac46",
+      "requirement": "a-produced-checkpoint-is-visible-to-the-operator",
+      "then": "a banner offers to cut over to it",
+      "when": "the operator views its conversation"
+    },
+    {
+      "given": "checkpointing is offered",
+      "key": "ac47",
+      "requirement": "crossing-the-threshold-warns-before-it-spends",
+      "then": "the conversation is marked due and a checkpoint_due event is broadcast, and no checkpoint is generated",
+      "when": "a conversation crosses its threshold"
+    },
+    {
+      "given": "checkpointing is automatic and a checkpoint runner is configured",
+      "key": "ac48",
+      "requirement": "crossing-the-threshold-warns-before-it-spends",
+      "then": "a checkpoint is generated with trigger context_pressure and, if ready, the conversation is handed over to a successor",
+      "when": "a conversation crosses its threshold"
+    },
+    {
+      "given": "checkpointing is automatic and no checkpoint runner is configured",
+      "key": "ac49",
+      "requirement": "crossing-the-threshold-warns-before-it-spends",
+      "then": "nothing is generated and no other runner is used",
+      "when": "a conversation crosses its threshold"
+    },
+    {
+      "given": "checkpointing is off for the agent and project",
+      "key": "ac50",
+      "requirement": "crossing-the-threshold-warns-before-it-spends",
+      "then": "nothing is requested, warned or generated",
+      "when": "a conversation crosses any threshold"
+    },
+    {
+      "given": "a conversation whose newest checkpoint already covers its newest run",
+      "key": "ac51",
+      "requirement": "crossing-the-threshold-warns-before-it-spends",
+      "then": "no further checkpoint is generated or warned",
+      "when": "a reading crosses the threshold again"
+    },
+    {
+      "given": "a run asked a blocking question and its wait ended without an answer",
+      "key": "ac56",
+      "requirement": "a-question-whose-wait-ended-without-an-answer-is-listed-as-s",
+      "then": "the question is in the checkpoint's open questions marked as wait ended",
+      "when": "a checkpoint is generated for that conversation"
+    },
+    {
+      "given": "",
+      "key": "ac57",
+      "requirement": "a-question-whose-wait-ended-without-an-answer-is-listed-as-s",
+      "then": "that question is listed and not marked as wait ended",
+      "when": "a checkpoint is generated while a run is still waiting on a question it asked"
+    },
+    {
+      "given": "a checkpoint listing a question whose wait ended",
+      "key": "ac58",
+      "requirement": "a-question-whose-wait-ended-without-an-answer-is-listed-as-s",
+      "then": "the rendered line says the wait ended without an answer",
+      "when": "the checkpoint is rendered for a successor"
+    },
+    {
+      "given": "",
+      "key": "ac59",
+      "requirement": "a-copilot-worker-invocation-is-offered-no-tool",
+      "then": "the command excludes builtin, mcp and custom tools and carries no empty tool allow-list",
+      "when": "a checkpoint is generated with a copilot runner"
+    },
+    {
+      "given": "",
+      "key": "ac60",
+      "requirement": "a-copilot-worker-invocation-is-offered-no-tool",
+      "then": "the invocation is recorded as spawn_failed naming the path looked for, and no exception reaches the caller",
+      "when": "a worker invocation is requested on a copilot runner and no Copilot executable can be resolved"
+    },
+    {
+      "given": "",
+      "key": "ac61",
+      "requirement": "a-copilot-worker-invocation-is-offered-no-tool",
+      "then": "the title is taken from the answer inside Copilot's JSON output, not from the last line of that output",
+      "when": "a conversation on a copilot runner is titled"
+    },
+    {
+      "given": "",
+      "key": "ac62",
+      "requirement": "a-copilot-worker-invocation-is-offered-no-tool",
+      "then": "its environment names the Hub's worker Copilot home and carries no inherited GitHub token",
+      "when": "a copilot worker is spawned"
+    },
+    {
+      "given": "an agent bound to a runner that compacts at about 95% with no threshold of its own",
+      "key": "ac63",
+      "requirement": "the-threshold-the-notes-point-and-the-final-warning-are-plac",
+      "then": "its threshold is 80%, its notes point 70% and its final warning 92%",
+      "when": "its policy is resolved"
+    },
+    {
+      "given": "an agent bound to a runner that compacts at about 80%, no threshold of its own, checkpointing offered",
+      "key": "ac64",
+      "requirement": "the-threshold-the-notes-point-and-the-final-warning-are-plac",
+      "then": "the conversation is reported as due for a checkpoint",
+      "when": "its conversation's context reaches 66%"
+    },
+    {
+      "given": "a project threshold of 80% and one agent bound to a runner that compacts at about 80%",
+      "key": "ac65",
+      "requirement": "the-threshold-the-notes-point-and-the-final-warning-are-plac",
+      "then": "that agent's effective threshold is 77%, reported as lowered for its runner, the other agents keep 80%, and the project's settings say the threshold is lowered for that agent",
+      "when": "the settings are viewed"
+    },
+    {
+      "given": "an agent bound to a runner that compacts at about 95% with a configured threshold of 95% or 96%",
+      "key": "ac66",
+      "requirement": "the-threshold-the-notes-point-and-the-final-warning-are-plac",
+      "then": "its effective threshold is 92% and its settings say it is lowered to 92%",
+      "when": "its policy is resolved"
+    },
+    {
+      "given": "a dismissed conversation of an agent bound to a runner that compacts at about 80%",
+      "key": "ac67",
+      "requirement": "the-threshold-the-notes-point-and-the-final-warning-are-plac",
+      "then": "it is warned again and that warning cannot be dismissed",
+      "when": "its context reaches 77%"
+    },
+    {
+      "given": "an agent bound to a runner that compacts at about 80% with a token threshold and token notes point",
+      "key": "ac68",
+      "requirement": "the-threshold-the-notes-point-and-the-final-warning-are-plac",
+      "then": "the agent is asked for its notes",
+      "when": "the reading's proportion reaches 67% before the token counts are reached"
+    },
+    {
+      "given": "an agent bound to a runner that compacts at about 80% with a token threshold",
+      "key": "ac69",
+      "requirement": "the-threshold-the-notes-point-and-the-final-warning-are-plac",
+      "then": "the threshold is treated as crossed",
+      "when": "the reading's proportion reaches 77%"
+    },
+    {
+      "given": "an agent bound to a runner that compacts at about 95% with a token threshold",
+      "key": "ac70",
+      "requirement": "the-threshold-the-notes-point-and-the-final-warning-are-plac",
+      "then": "the threshold is not treated as crossed and its settings do not say it is lowered",
+      "when": "the reading's proportion is 92% or more but the token count is below the threshold"
+    },
+    {
+      "given": "checkpointing is automatic",
+      "key": "ac71",
+      "requirement": "a-compaction-the-runner-performed-counts-as-reaching-the-thr",
+      "then": "a checkpoint is generated with trigger context_pressure and the conversation is handed over",
+      "when": "the runner compacts the conversation below its threshold"
+    },
+    {
+      "given": "checkpointing is offered",
+      "key": "ac72",
+      "requirement": "a-compaction-the-runner-performed-counts-as-reaching-the-thr",
+      "then": "the conversation is reported as due and nothing is generated",
+      "when": "the runner compacts the conversation"
+    },
+    {
+      "given": "checkpointing is off, or the conversation's warning was dismissed, or it was already handed over",
+      "key": "ac73",
+      "requirement": "a-compaction-the-runner-performed-counts-as-reaching-the-thr",
+      "then": "no notes are requested, no warning is raised and no checkpoint is generated",
+      "when": "the runner compacts it"
+    },
+    {
+      "given": "",
+      "key": "ac74",
+      "requirement": "a-compaction-the-runner-performed-counts-as-reaching-the-thr",
+      "then": "no request for checkpoint notes is queued",
+      "when": "a conversation is compacted by its runner"
+    },
+    {
+      "given": "",
+      "key": "ac75",
+      "requirement": "a-compaction-the-runner-performed-counts-as-reaching-the-thr",
+      "then": "the conversation is treated as though no compaction happened",
+      "when": "a runner reports a failed compaction, or a compaction of one of its subagents"
+    },
+    {
+      "given": "",
+      "key": "ac76",
+      "requirement": "a-compaction-the-runner-performed-counts-as-reaching-the-thr",
+      "then": "the output is stored once and reported as stored",
+      "when": "a runner's output is recorded, whether or not it reports a compaction and whether or not acting on it fails"
+    },
+    {
+      "given": "a context reading for the conversation is still being considered",
+      "key": "ac77",
+      "requirement": "a-compaction-the-runner-performed-counts-as-reaching-the-thr",
+      "then": "the compaction is considered once that consideration ends, never at the same time",
+      "when": "the runner reports a compaction"
+    },
+    {
+      "given": "a project with no checkpoint runner",
+      "key": "ac78",
+      "requirement": "n1",
+      "then": "the request is refused with 409 naming the missing setting",
+      "when": "the operator asks for a checkpoint"
+    },
+    {
+      "given": "a checkpoint of the conversation is being written",
+      "key": "ac79",
+      "requirement": "n1",
+      "then": "the second request is refused with 409",
+      "when": "the operator asks again"
+    },
+    {
+      "given": "a conversation whose warning is due, final or dismissed",
+      "key": "ac80",
+      "requirement": "n1",
+      "then": "the warning is cleared and a checkpoint_ready event is broadcast with the outcome",
+      "when": "the operator takes a checkpoint"
+    },
+    {
+      "given": "a due warning",
+      "key": "ac81",
+      "requirement": "n2",
+      "then": "the conversation is marked dismissed and does not warn again while there is room",
+      "when": "the operator dismisses it"
+    },
+    {
+      "given": "a conversation that was never warned",
+      "key": "ac82",
+      "requirement": "n2",
+      "then": "the request is refused with 409",
+      "when": "the operator tries to dismiss its warning"
+    },
+    {
+      "given": "a conversation already dismissed",
+      "key": "ac83",
+      "requirement": "n2",
+      "then": "the answer is success and nothing changes",
+      "when": "the operator dismisses it again"
+    },
+    {
+      "given": "a dismissed conversation",
+      "key": "ac84",
+      "requirement": "n2",
+      "then": "it is warned once more, the warning is marked final, and nothing is generated",
+      "when": "its context reaches the final-warning point"
+    },
+    {
+      "given": "a final warning is showing",
+      "key": "ac85",
+      "requirement": "n2",
+      "then": "the request is refused with 409",
+      "when": "the operator tries to dismiss it"
+    },
+    {
+      "given": "a dismissed conversation with no resolvable context window",
+      "key": "ac86",
+      "requirement": "n2",
+      "then": "no final warning is raised",
+      "when": "readings arrive"
+    },
+    {
+      "given": "a dismissed conversation",
+      "key": "ac87",
+      "requirement": "n2",
+      "then": "the successor starts with no warning state and warns on its own threshold",
+      "when": "it is succeeded"
+    },
+    {
+      "given": "a handed-over conversation that was reopened",
+      "key": "ac88",
+      "requirement": "n3",
+      "then": "no notes are requested, no checkpoint is reported due, and none is generated",
+      "when": "work in it crosses its threshold or notes point"
+    },
+    {
+      "given": "a reopened, handed-over conversation whose warning was dismissed",
+      "key": "ac89",
+      "requirement": "n3",
+      "then": "it is warned again and that warning cannot be dismissed",
+      "when": "its context reaches the final-warning point"
+    },
+    {
+      "given": "a run with no conversation",
+      "key": "ac90",
+      "requirement": "n4",
+      "then": "the submission is refused with 409",
+      "when": "it submits notes"
+    },
+    {
+      "given": "",
+      "key": "ac91",
+      "requirement": "n4",
+      "then": "the submission is refused naming that entry and how far over it is",
+      "when": "an agent submits a suspicion longer than 400 characters"
+    },
+    {
+      "given": "a conversation with two unconsumed notes",
+      "key": "ac92",
+      "requirement": "n4",
+      "then": "only the newer notes feed it and both are marked consumed by it, even if generation produced no body",
+      "when": "a checkpoint is generated"
+    },
+    {
+      "given": "a granted peer",
+      "key": "ac93",
+      "requirement": "n5",
+      "then": "it sees ready checkpoints of every agent in the project, and unwritten or failed ones are omitted",
+      "when": "it lists checkpoints"
+    },
+    {
+      "given": "an ungranted agent",
+      "key": "ac94",
+      "requirement": "n5",
+      "then": "the filter narrows its own list and never widens it",
+      "when": "it lists checkpoints, filtering by another agent's name"
+    },
+    {
+      "given": "an ungranted agent",
+      "key": "ac95",
+      "requirement": "n5",
+      "then": "it is answered 404, the same as an unknown id",
+      "when": "it opens another agent's checkpoint id"
+    },
+    {
+      "given": "",
+      "key": "ac96",
+      "requirement": "n6",
+      "then": "it carries --tools with an empty value and --strict-mcp-config",
+      "when": "a Claude worker command is built"
+    },
+    {
+      "given": "",
+      "key": "ac97",
+      "requirement": "n6",
+      "then": "it runs exec with a read-only sandbox outside the project directory",
+      "when": "a Codex worker command is built"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-13": "40feb84b64c142469e626be838e5e69737f1937f47831c982ac537b2a85a9755",
+      "FR-14": "c3d8ec85fe224d23a82dc836b08439672ca868c36d7a9bbc37ba8804b2570e15",
+      "FR-15": "717dd7d2fa20eea3ca67fd7941d79a6ef5089e2b8a75ff8cc103b1ab3e11d4cc",
+      "FR-16": "4fe35659887c88f5e4b0ae0326a4520734679c7d0a888943f7ea635e176ae223",
+      "FR-17": "0cfe61ac8c03b7d03f9f7ef7fc9fe25394d9e39fab5549b61a1566911109ab3f",
+      "FR-18": "7c97e58fddda4eb9b9e4460b88197c7e8a4e6212a301ab2f1042bf6dfbd2437e",
+      "FR-19": "805b126a378f97903f399ab18addf345aeeb4749fb8482eb1335cdd64232c6d6",
+      "FR-20": "82a5364a4cb7a28a1bfff3c565229faa6f7d740a729851acb0e97ee20f11d8bb",
+      "FR-21": "dffbaefd03806fac0868331af2dcf07f74a490adf469bf83fb8a4d0a3d953ab4",
+      "FR-22": "f94066314ac6606ef575914de14941cf9bac1919a1803a872c66dd68fbe92ba4",
+      "FR-23": "b2548b527ad9469f7b861354cb57a64f00c004e9a7999e50c66df4cf2a8aac93",
+      "FR-24": "e25b99c7567c8c49844e2e2798c7a5c7f62310b28a38ea85a501bf45ffdbc298",
+      "FR-25": "3e2d0718fb26a33a609c377a640cb89f40a352379912785c211319d934490aa1",
+      "FR-26": "ff9003092e6379ede51967f91b178228406dcc2af8167b96b68552098f1a0fe9",
+      "FR-27": "98b5b524d8f659211644a583ada2db452d8d0e3a8bda40fcab5eb9d942005360",
+      "FR-28": "e6a10de1cc7747f57cd48dedfb8a24db3c2ea4616d24bac6176c5683fb118688",
+      "FR-29": "dc71ec360bfeb34b2b210c0a8950a5ac6d7a6c76cdb085be1421de669fdb095d",
+      "FR-30": "019bea55ef1485426acdbc83b6d7b616dc75e4526ed114d00447b570eae20021",
+      "FR-31": "90666748e7cbf6c50ea1b170ed751315663ebe999128386f82bbeaccb08e1a64",
+      "FR-32": "13f17d552530ad7c9bdda52e8c879a2cb65f21ff0e8db50190920310531c904d",
+      "FR-33": "4301933aeb898257782df5dd4247c8d6b10e04c06e31b0a72e8b7c4b2d279873",
+      "FR-34": "aaf187123a2eca27ac53bc4806831272d35248ccc2a27b0079bfed644077bc68",
+      "FR-35": "1eccd6170bd3bae70eb1eada60a8790f262d37ea8e000659025f892656da09b2",
+      "FR-36": "d1a07c35c666563a295143673dde06a4a35947607a299fff992a9693102f3223"
+    },
+    "high_water": 36,
+    "requirements": {
+      "a-checkpoint-cites-observations-that-remain-exactly-recovera": "FR-19",
+      "a-checkpoint-is-a-durable-hub-record-not-a-file-an-agent-is-": "FR-13",
+      "a-checkpoint-is-anchored-on-its-predecessor-rather-than-rege": "FR-16",
+      "a-checkpoint-that-contradicts-the-hub-s-own-records-is-repor": "FR-18",
+      "a-compaction-the-runner-performed-counts-as-reaching-the-thr": "FR-29",
+      "a-copilot-worker-invocation-is-offered-no-tool": "FR-27",
+      "a-produced-checkpoint-is-visible-to-the-operator": "FR-23",
+      "a-question-whose-wait-ended-without-an-answer-is-listed-as-s": "FR-26",
+      "automatic-checkpointing-is-configured-as-a-threshold-in-prop": "FR-22",
+      "checkpoint-generation-runs-on-a-worker-with-an-operator-chos": "FR-14",
+      "crossing-the-threshold-warns-before-it-spends": "FR-24",
+      "fields-the-hub-can-determine-are-computed-never-requested-fr": "FR-15",
+      "lineage-is-recorded-and-participation-is-derived": "FR-21",
+      "n1": "FR-30",
+      "n2": "FR-31",
+      "n3": "FR-32",
+      "n4": "FR-33",
+      "n5": "FR-34",
+      "n6": "FR-35",
+      "reading-a-checkpoint-and-recalling-raw-observations-are-sepa": "FR-20",
+      "the-agent-contributes-notes-that-the-hub-treats-as-input-rat": "FR-17",
+      "the-threshold-the-notes-point-and-the-final-warning-are-plac": "FR-28"
+    },
+    "retired": {
+      "a-flow-s-checkpoint-lineage-is-shared-across-the-agents-it-f": "FR-25",
+      "n7": "FR-36"
+    }
+  },
+  "design": "D1 Envelope computed, body generated. Everything the Hub can verify is read from the database and git; the model writes only judgement (objective, state, decisions, dead ends, next actions, risks). A body-less checkpoint is stored as unwritten, never ready (database constraint).\n\nD2 Changed files from the project repository. The Hub resolves the project's repository itself and reads each covered run's snapshot commit there, because linked task checkouts share its object store and may already be removed.\n\nD3 Anchoring. Generation reads the latest written checkpoint plus the turns since its covered boundary; a span with no new turns keeps the previous boundary.\n\nD4 Verification by blind probe. A second worker call reads the rendered checkpoint and names files, tasks and unanswered questions; a deterministic grader compares them with the envelope. Disagreement marks the checkpoint failed; an unrunnable probe leaves it ready.\n\nD5 Workers are not turns. One-shot CLI spawns in a temporary directory, no tools, no Run row, stdin closed, outcome and usage recorded in worker_invocations, at most two concurrently, never raising.\n\nD6 Policy. Mode off/offered/automatic; threshold is one mode plus one value; agent overrides the project's threshold whole. Built-in points derive from the bound runner's compaction point C (threshold C-15, notes C-25, final warning C-3); percent thresholds above C-3 are lowered, token thresholds also fire on proportion only for runners with C below 95.\n\nD7 Warn before spending. Offered mode marks the conversation due (checkpoint_warning column: null, due, dismissed, final) and generates only when the operator asks; automatic generates and hands over. Generation is dispatched off the output-recording path, one consideration per conversation at a time, with a compaction that arrives mid-consideration queued behind it.\n\nD8 Access. Two grants on the agent row (can_read_checkpoints, can_recall), off by default; an agent always reads and recalls its own. Out-of-reach ids answer 404 like unknown ones.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_checkpoint_record.py - envelope, files from released checkouts, anchoring, unwritten state",
+      "hub/tests/test_checkpoint_generation.py - prompt contents, probe grading, failed/unwritten rendering",
+      "hub/tests/test_checkpoint_policy.py - threshold resolution and runner-derived points",
+      "hub/tests/test_checkpoint_cutover.py - trigger, warning, dismissal and final-warning behaviour",
+      "hub/tests/test_checkpoint_from_compaction.py - compaction as a trigger",
+      "hub/tests/test_checkpoint_access.py, test_checkpoint_notes.py, test_checkpoint_configuration.py, test_worker.py, test_flow_checkpoint_lineage.py"
+    ],
+    "limits": [
+      "Overhauled by reading code and tests at e25e059; nothing was run against a live Hub.",
+      "The rendered checkpoint does not yet mark a wait-ended question (see a-question-whose-wait-ended-...); reported as a possible finding."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "An agent asked to write its own checkpoint file produced it in unreachable places or not at all, and was reported ready because readiness meant the run had ended. Conversations then continued on a runner's own compaction that nobody authored or could inspect.",
+  "requirements": [
+    {
+      "key": "a-checkpoint-is-a-durable-hub-record-not-a-file-an-agent-is-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent asked to write a checkpoint file produced it in unreachable places or not at all, and was still reported ready. A record the Hub writes itself cannot be refused by a sandbox or lost in a nested workspace.",
+      "statement": "The Hub SHALL persist each checkpoint as a durable record attached to the conversation it describes, and SHALL NOT depend on an agent writing a file, invoking a skill, or having any template or directory installed in the project."
+    },
+    {
+      "key": "checkpoint-generation-runs-on-a-worker-with-an-operator-chos",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Generation must not need the agent's cooperation or occupy its turn, and a cheap model can summarise work done on an expensive one. A worker is not a Run, so it never makes the agent look busy to the scheduler. Failures are recorded by outcome because a timeout, a missing CLI and a prose answer need different fixes.",
+      "statement": "Checkpoint generation SHALL run as an out-of-band worker invocation on the runner and model the operator chose for the project, using a prompt the Hub owns and versions; a worker invocation SHALL NOT be an agent turn, SHALL record its outcome, and SHALL NOT raise into its caller."
+    },
+    {
+      "key": "fields-the-hub-can-determine-are-computed-never-requested-fr",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "What the Hub can check it must not delegate: a model asked for a timestamp invented one, and one asked for pending work reported none from an always-clean worktree. Changed files are read from the project repository the Hub resolves itself, because task checkouts are removed when tasks finish while their commits stay readable from the repository, and a repository supplied by a caller was omitted by every caller.",
+      "statement": "A checkpoint's identity, lineage, covered turns, changed files, tasks, open questions, permission decisions and runtime overrides SHALL be computed by the Hub, and the generating model SHALL be asked only for judgement: objective, current state, decisions with rejected alternatives, dead ends with symptoms, ordered next actions, and risks."
+    },
+    {
+      "key": "a-checkpoint-is-anchored-on-its-predecessor-rather-than-rege",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Regenerating from scratch loses information gradually and pays full price each time. An unwritten checkpoint has no body to carry forward, so it is skipped as an anchor and the next checkpoint covers its span too.",
+      "statement": "Generation SHALL read the conversation's latest written checkpoint and only the turns since it, and SHALL NOT re-read the whole conversation from its start."
+    },
+    {
+      "key": "the-agent-contributes-notes-that-the-hub-treats-as-input-rat",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The record cannot hold what the agent was about to do, suspects, or would warn a successor about. Asking through a tool makes the request, the answer and its absence observable. Asking earlier than the threshold keeps the notes from being written from an exhausted context.",
+      "statement": "The Hub SHALL ask the agent for brief notes through a tool call at a configured notes point below the checkpoint threshold, SHALL treat those notes as one input to generation, and SHALL produce the checkpoint whether or not notes arrive."
+    },
+    {
+      "key": "a-checkpoint-that-contradicts-the-hub-s-own-records-is-repor",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Readiness used to mean a run had ended, so a run that produced nothing was reported ready. The dimensions summaries lose most are exactly the ones the Hub can settle without a judge. A probe that cannot run is the Hub's failure, not the checkpoint's, so it leaves the checkpoint ready.",
+      "statement": "The Hub SHALL verify a written checkpoint by having a reader given only the rendered checkpoint name its changed files, tasks and unanswered questions, SHALL compare those answers with its own records, and SHALL mark a checkpoint whose answers disagree as failed; ready SHALL mean a written checkpoint exists and did not fail verification."
+    },
+    {
+      "key": "a-checkpoint-cites-observations-that-remain-exactly-recovera",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A summary is lossy. Citing outputs that are already retained verbatim gives an exact escape hatch without re-running tools or similarity search. Citation is also what scopes recall to the conversation a checkpoint describes.",
+      "statement": "A checkpoint SHALL cite the recorded outputs of the turns it covers by stable id with a short preview, and the Hub SHALL return a cited output verbatim to a permitted reader."
+    },
+    {
+      "key": "reading-a-checkpoint-and-recalling-raw-observations-are-sepa",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A checkpoint is a bounded distillation; a recorded observation is raw tool output that may contain another workspace's files or secrets. Grants are structured configuration, never charter prose, so editing a paragraph cannot widen access. The read grant reaches every checkpoint in the project because no checkpoint can restrict itself.",
+      "statement": "The Hub SHALL hold permission to read other agents' checkpoints and permission to recall their cited observations as two independent grants on the agent record, both off by default, resolved from the identity bound to the running turn; an agent SHALL always be able to read and recall its own checkpoints."
+    },
+    {
+      "key": "lineage-is-recorded-and-participation-is-derived",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Lineage is a linear chain within one conversation; participation is cross-agent and already answerable from the runs recorded on task mutations. Storing participation would be a second graph to keep correct, and sharing one identifier for both would make it mean two things.",
+      "statement": "The Hub SHALL record on each checkpoint its predecessor and a lineage identifier shared along its conversation's chain, and SHALL NOT store cross-agent participation separately from existing run attribution."
+    },
+    {
+      "key": "automatic-checkpointing-is-configured-as-a-threshold-in-prop",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Context windows differ by an order of magnitude, so an absolute count is often the meaningful unit, and it still works for a model whose window is unknown. Combining an inherited mode with an overriding value would produce a threshold nobody configured, such as 150%.",
+      "statement": "The Hub SHALL let the operator set a checkpoint mode (off, offered or automatic) and a threshold given as one mode (percent or tokens) with one value, resolved agent then project then built-in default, where an agent's threshold replaces the project's mode and value together."
+    },
+    {
+      "key": "a-produced-checkpoint-is-visible-to-the-operator",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A checkpoint nobody can inspect reproduces the defect this capability removes: a signal reported as successful that nothing examines.",
+      "statement": "The Hub SHALL make every checkpoint of a conversation readable through the API with its status, probe verdict and generation error, and SHALL tell the operator in that conversation the outcome of a checkpoint they took or were offered, naming a failed or unwritten one rather than omitting it."
+    },
+    {
+      "key": "crossing-the-threshold-warns-before-it-spends",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Generation is a billed model call, and an operator who would rather keep working should not pay for a summary they discard. Automatic means acting alone. The warning hands over the decision while the context it would be written from still exists, so taking it generates immediately rather than later.",
+      "statement": "When a conversation crosses its threshold under offered mode, the Hub SHALL mark it due and broadcast a warning without generating anything; under automatic mode it SHALL generate a checkpoint and hand the conversation over without asking."
+    },
+    {
+      "key": "a-question-whose-wait-ended-without-an-answer-is-listed-as-s",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The successor needs to know a decision was taken without the operator, and that no answer is coming; dropping the question loses that, and listing it unmarked makes the successor wait for or defer to an answer that will not arrive.",
+      "statement": "Where a checkpoint lists a conversation's open questions, a question whose bounded wait ended without an answer SHALL still be listed, and SHALL be marked as one whose wait ended rather than as one still awaiting a reply, both in the record and in the rendered checkpoint a successor receives."
+    },
+    {
+      "key": "a-copilot-worker-invocation-is-offered-no-tool",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A worker's prompt is transcript text the Hub did not write, so an injection in it must find nothing to act with. Copilot's non-interactive mode pre-approves every available tool, and it reads an empty allow-list as no filter at all.",
+      "statement": "A worker or conversation-title invocation on a copilot runner SHALL exclude every built-in, MCP and custom tool and SHALL NOT pass an empty tool allow-list; it SHALL spawn the Copilot CLI's native executable under a Copilot home the Hub owns, with no GitHub token variable the Hub merely inherited."
+    },
+    {
+      "key": "the-threshold-the-notes-point-and-the-final-warning-are-plac",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Each threshold exists to act before the runner compacts on its own, so it must move with the runner: Claude and Codex compact near 95% (80/70/92), Copilot near 80% (65/55/77). Lowering rather than refusing is required because one project threshold serves agents on runners that compact at different points.",
+      "statement": "The Hub SHALL derive the built-in threshold, notes point and final warning from the compaction point C of the runner the agent is bound to, as C-15, C-25 and C-3 percent (C defaults to 95), and SHALL lower any configured percent threshold above C-3 to C-3 for that agent, stating the lowering in the agent's and project's settings."
+    },
+    {
+      "key": "a-compaction-the-runner-performed-counts-as-reaching-the-thr",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The threshold exists so the Hub acts before the runner compacts; once it has, there is no reason to wait. Notes written after compaction come from the runner's summary, which the checkpoint exists to replace. A dismissed conversation's final warning exists to precede the loss, so after the loss the stream's compaction card is the notice.",
+      "statement": "Where a runner reports that it compacted a conversation's root context successfully, the Hub SHALL act on that conversation as though it had crossed its threshold, under every other gate it already has, without requesting notes."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Falling back to another agent's runner would be a bill nobody agreed to, and two concurrent generations for one conversation waste a call. Once a checkpoint exists the warning has been answered, so the next crossing must be offered afresh.",
+      "statement": "The operator SHALL be able to take a checkpoint of a conversation on demand; the Hub SHALL refuse with 409 when the project has no checkpoint runner configured or a checkpoint of that conversation is already being written, and taking one SHALL clear any due, final or dismissed warning on the conversation."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Dismissal means 'not yet', not 'never': without the final warning, the runner's own compaction would replace the conversation with a summary nobody authored. The final warning needs a known proportion, because inventing a denominator would report a proportion the conversation does not have.",
+      "statement": "The operator SHALL be able to dismiss a due checkpoint warning; a dismissed conversation SHALL NOT be warned again until its proportion of context in use reaches the final-warning point, when it SHALL be warned once more with a warning that cannot be dismissed."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A conversation is handed over at most once, so any notes request, warning or generation toward a second handover spends a turn or a model call on something that cannot happen. The final warning is free.",
+      "statement": "A conversation that has already been handed over and was reopened SHALL NOT be asked for notes, warned that a checkpoint is due, or have a checkpoint generated by the threshold, under either mode; it SHALL still receive the final warning if its warning was dismissed."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Notes are one input to a record the Hub is authoritative for; an uncapped essay would be writing the checkpoint by the back door. Notes describe a moment, so once a checkpoint covers that moment they must not resurface in a later one, even when generation failed.",
+      "statement": "The Hub SHALL accept agent notes only from a run attached to a conversation and only within fixed caps (intent at most 1500 characters; suspicions and warnings each at most 8 entries of at most 400 characters), naming the entry and its overshoot when refusing, and a checkpoint SHALL take only the newest unconsumed notes and retire the older ones with it."
+    },
+    {
+      "key": "n5",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A grant nobody can spend is no grant, so readable checkpoints must be discoverable. A refusal that differs from absence would itself disclose that the record exists.",
+      "statement": "Agents SHALL be able to list the written checkpoints they may read, newest first, and open one by id; a checkpoint or observation outside a reader's grants SHALL be answered not-found, indistinguishably from one that does not exist."
+    },
+    {
+      "key": "n6",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The worker reads transcript text the Hub did not write; anything it can act with is a tool a prompt injection could use.",
+      "statement": "A worker invocation SHALL run in a temporary directory outside the project, with no project tool server, and offered no tools its runner can withhold: Claude with an empty tool set and strict MCP config, Codex in a read-only sandbox."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The checkpoint record, its computed envelope (files, tasks, open questions, decisions, overrides, covered turns, lineage) and its generated body",
+      "Worker invocations used for generation and verification, including the Copilot worker's tool exclusion",
+      "Agent notes as input to generation, and their caps",
+      "Verification by blind probe and checkpoint status",
+      "Read and recall grants, citations, listing and recall",
+      "Checkpoint mode and threshold policy, warnings, dismissal, the final warning, on-demand checkpoints, and runner compaction as a trigger"
+    ],
+    "non_goals": [
+      "Cutting over to a successor conversation and delivering the checkpoint into it: agent-conversation-handoff",
+      "A flow's checkpoint lineage shared across the agents it fires, and which checkpoint briefs a firing or reviewer: agent-flows",
+      "How a settings save applies a partial body: project-environment-settings",
+      "Measuring context usage itself: agent-context-usage"
+    ]
+  },
+  "summary": "A checkpoint is the Hub's durable record of where a conversation got to: an envelope the Hub computes from its own records plus a written body only a model can supply, generated out of band by a worker on the operator's chosen runner, verified by a blind probe, and readable by other agents only under explicit grants. Checkpoints are taken on the operator's request, at a context threshold, or when the runner compacts.",
+  "tasks": [],
+  "title": "Conversation checkpoint"
+}

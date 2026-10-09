@@ -1,0 +1,595 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a project is at its agent budget",
+      "key": "cr3",
+      "requirement": "creating-agents-and-scheduling-recurring-work-are-governed-n",
+      "then": "it is refused naming the budget",
+      "when": "an agent calls `request_agent`"
+    },
+    {
+      "given": "`allow_agent_jobs` is off",
+      "key": "cr4",
+      "requirement": "creating-agents-and-scheduling-recurring-work-are-governed-n",
+      "then": "it is refused 403",
+      "when": "an agent calls `create_job`, `create_loop`, `create_flow`, `toggle_job` or `run_job`"
+    },
+    {
+      "given": "`AW_RUN_TOKEN` is unset",
+      "key": "cr5",
+      "requirement": "an-agent-s-identity-is-bound-by-the-hub-never-asserted-by-th",
+      "then": "it fails as unbound and nothing is sent",
+      "when": "any tool that causes an effect is called"
+    },
+    {
+      "given": "a run was issued by another Hub instance",
+      "key": "cr6",
+      "requirement": "an-agent-s-identity-is-bound-by-the-hub-never-asserted-by-th",
+      "then": "the call is refused 401",
+      "when": "its credential reaches this Hub"
+    },
+    {
+      "given": "",
+      "key": "cr7",
+      "requirement": "one-tool-surface-configured-automatically",
+      "then": "its command line names the pinned tool server and no other MCP server",
+      "when": "a run with an MCP tool surface is spawned"
+    },
+    {
+      "given": "a tool is defined after the `__main__` guard",
+      "key": "cr8",
+      "requirement": "one-tool-surface-configured-automatically",
+      "then": "it fails",
+      "when": "the stdio surface test runs"
+    },
+    {
+      "given": "no `HUB_URL` is set and the Hub has served a request on port 8010",
+      "key": "cr9",
+      "requirement": "an-agent-is-told-the-address-of-the-hub-that-started-it",
+      "then": "its `HUB_URL` is `http://127.0.0.1:8010`",
+      "when": "a run starts"
+    },
+    {
+      "given": "no `HUB_URL` is set and no request has been served yet",
+      "key": "cr10",
+      "requirement": "an-agent-is-told-the-address-of-the-hub-that-started-it",
+      "then": "it is refused 409 as transient with the reason",
+      "when": "a run is triggered"
+    },
+    {
+      "given": "",
+      "key": "cr11",
+      "requirement": "a-failed-tool-call-is-reported-not-silently-absorbed",
+      "then": "the agent receives `Hub rejected <METHOD> <path> (403): <reason>`",
+      "when": "the Hub rejects a tool call 403"
+    },
+    {
+      "given": "",
+      "key": "cr12",
+      "requirement": "a-failed-tool-call-is-reported-not-silently-absorbed",
+      "then": "the agent receives a `Cannot reach the Hub at <url>` failure, distinct from a rejection",
+      "when": "no Hub answers at `HUB_URL`"
+    },
+    {
+      "given": "",
+      "key": "cr13",
+      "requirement": "a-failed-tool-call-is-reported-not-silently-absorbed",
+      "then": "the run's timeline records the tool event as failed",
+      "when": "a run's tool call returns an error"
+    },
+    {
+      "given": "",
+      "key": "cr16",
+      "requirement": "a-constrained-tool-parameter-declares-its-valid-values",
+      "then": "`status` is an enum of the eight statuses an agent may request",
+      "when": "the `update_task` schema is read"
+    },
+    {
+      "given": "",
+      "key": "cr17",
+      "requirement": "a-constrained-tool-parameter-declares-its-valid-values",
+      "then": "the agent reads `<field>: <message>`, not a list of error dicts",
+      "when": "the Hub rejects a field with a validation error"
+    },
+    {
+      "given": "",
+      "key": "cr18",
+      "requirement": "an-endpoint-the-harness-calls-is-not-advertised-as-a-capabil",
+      "then": "each served tool is described or listed with a reason, and the test fails otherwise",
+      "when": "the described surface and the served tools are compared"
+    },
+    {
+      "given": "",
+      "key": "cr19",
+      "requirement": "an-endpoint-the-harness-calls-is-not-advertised-as-a-capabil",
+      "then": "it is refused as not a callable tool",
+      "when": "`aw-tool approve_tool_call` is run"
+    },
+    {
+      "given": "an exploring document has a placeholder path",
+      "key": "cr20",
+      "requirement": "the-agent-can-name-the-document-it-is-exploring",
+      "then": "the response carries the new path and the previous path, and the old path no longer resolves",
+      "when": "the agent renames it with a subject"
+    },
+    {
+      "given": "",
+      "key": "cr21",
+      "requirement": "the-outbound-message-tool-describes-how-delivery-is-actually",
+      "then": "it states the binding rule, `start_new_thread`, the archived-conversation failure and that checkpoint cutover also starts a new thread, and does not mention recency selection",
+      "when": "the `send_message` description is read"
+    },
+    {
+      "given": "",
+      "key": "cr22",
+      "requirement": "a-structured-tool-parameter-advertises-its-shape-in-the-tool",
+      "then": "`scope`, `requirements`, `acceptance_criteria`, `tasks`, `algorithms`, `evidence`, `open_questions`, `delivery`, `slices` and `roadmap` are typed object or array",
+      "when": "the `submit_spec_document` schema is read"
+    },
+    {
+      "given": "",
+      "key": "cr23",
+      "requirement": "a-structured-tool-parameter-advertises-its-shape-in-the-tool",
+      "then": "`questions` is typed array",
+      "when": "the `ask_user` schema is read"
+    },
+    {
+      "given": "the checkout's `mcp_server.py` is edited after the Hub started",
+      "key": "cr28",
+      "requirement": "the-tool-server-a-run-is-given-is-the-one-its-hub-loaded",
+      "then": "it gets the pinned copy the Hub read at start",
+      "when": "a run spawns"
+    },
+    {
+      "given": "the pin cannot be written",
+      "key": "cr29",
+      "requirement": "the-tool-server-a-run-is-given-is-the-one-its-hub-loaded",
+      "then": "it is refused 409 naming the failure",
+      "when": "a run is triggered"
+    },
+    {
+      "given": "a chain is at its hop budget",
+      "key": "cr30",
+      "requirement": "a-message-the-hop-budget-holds-is-reported-to-its-sender-as-",
+      "then": "the result carries `success`, the message id, `held_by_hop_budget: true` and the delivery note",
+      "when": "an agent sends another message"
+    },
+    {
+      "given": "",
+      "key": "cr31",
+      "requirement": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
+      "then": "the new agent has the template's runner and charter and no grants",
+      "when": "an agent requests a new agent modelled on an open agent"
+    },
+    {
+      "given": "",
+      "key": "cr32",
+      "requirement": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
+      "then": "the refusal lists the project's open agents",
+      "when": "the template names no agent"
+    },
+    {
+      "given": "the template is archived",
+      "key": "cr33",
+      "requirement": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
+      "then": "it is refused saying it is archived",
+      "when": "a request names it"
+    },
+    {
+      "given": "",
+      "key": "cr34",
+      "requirement": "a-copilot-run-s-mcp-tool-calls-outlast-the-hub-s-longest-wai",
+      "then": "the Hub server's timeout is 660000 ms",
+      "when": "a Copilot run's MCP configuration is written"
+    },
+    {
+      "given": "",
+      "key": "cr35",
+      "requirement": "a-copilot-run-s-mcp-tool-calls-outlast-the-hub-s-longest-wai",
+      "then": "tools are named `agentweave-<tool>`",
+      "when": "a Copilot run's tool list is rendered"
+    },
+    {
+      "given": "",
+      "key": "cr36",
+      "requirement": "the-call-command-is-on-the-run-s-path-and-is-the-program-its",
+      "then": "its `PATH` begins with the launcher directory holding `aw-tool` and `aw-tool.cmd`",
+      "when": "a run is spawned"
+    },
+    {
+      "given": "",
+      "key": "cr37",
+      "requirement": "the-call-command-is-on-the-run-s-path-and-is-the-program-its",
+      "then": "it completes without importing fastmcp",
+      "when": "`aw-tool --list` runs"
+    },
+    {
+      "given": "a run is told the call command with a 300 s question wait",
+      "key": "cr38",
+      "requirement": "a-run-without-the-tool-protocol-surface-is-told-each-tool-s-",
+      "then": "each operation appears as `aw-tool <tool>` and the preamble says `ask_user` waits up to 300 seconds",
+      "when": "its context is rendered"
+    },
+    {
+      "given": "",
+      "key": "cr39",
+      "requirement": "aw-tool-help-prints-a-tools-whole-description",
+      "then": "the result holds the full description",
+      "when": "`aw-tool --help update_task` runs"
+    },
+    {
+      "given": "",
+      "key": "cr40",
+      "requirement": "aw-tool-help-prints-a-tools-whole-description",
+      "then": "it fails as a usage error naming `nope`",
+      "when": "`aw-tool --help nope` runs"
+    },
+    {
+      "given": "",
+      "key": "cr41",
+      "requirement": "n1",
+      "then": "it prints a `usage` envelope naming the accepted arguments and exits 64",
+      "when": "`aw-tool create_task` is given an arguments file with an unknown key"
+    },
+    {
+      "given": "",
+      "key": "cr42",
+      "requirement": "n1",
+      "then": "it prints a `rejected` envelope with the status and exits 1",
+      "when": "the Hub rejects the call"
+    },
+    {
+      "given": "`HUB_URL` is unset",
+      "key": "cr43",
+      "requirement": "n2",
+      "then": "it exits naming the missing address and serves nothing",
+      "when": "the MCP server is started"
+    },
+    {
+      "given": "`HUB_URL` is unset",
+      "key": "cr44",
+      "requirement": "n2",
+      "then": "it prints an `unbound` envelope and sends nothing",
+      "when": "`aw-tool list_tasks` runs"
+    },
+    {
+      "given": "a run is told the call command",
+      "key": "acp-cr15",
+      "requirement": "a-run-whose-harness-cannot-use-mcp-is-told-how-to-reach-the-",
+      "then": "the notice names `aw-tool <tool> .agentweave/calls/<file>.json`, `aw-tool --list` and `aw-tool --help <tool>`, and contains no credential or credential reference",
+      "when": "its turn prompt is composed"
+    },
+    {
+      "given": "the runner's sandbox may block the shell from reaching the Hub",
+      "key": "acp-cr16",
+      "requirement": "a-run-whose-harness-cannot-use-mcp-is-told-how-to-reach-the-",
+      "then": "it tells the run to report an `unreachable` result rather than retry",
+      "when": "the notice is composed"
+    },
+    {
+      "given": "",
+      "key": "cr69",
+      "requirement": "the-call-command-carries-the-run-s-authority-without-showing",
+      "then": "it fails as a usage error and nothing is sent",
+      "when": "`aw-tool` is called with an option other than `--list` or `--help`"
+    },
+    {
+      "given": "",
+      "key": "cr70",
+      "requirement": "the-call-command-carries-the-run-s-authority-without-showing",
+      "then": "it fails as a usage error and nothing is sent",
+      "when": "`aw-tool` is given an arguments file outside `.agentweave/calls/` or through a link"
+    },
+    {
+      "given": "A finished run",
+      "key": "ac54",
+      "requirement": "a-run-states-how-it-reached-the-hub",
+      "then": "They state the surface it was told and the recorded tool-server status.",
+      "when": "Its run facts are read"
+    },
+    {
+      "given": "A run given the tool server and told the call command, whose harness did not start the server",
+      "key": "ac55",
+      "requirement": "a-run-states-how-it-reached-the-hub",
+      "then": "It holds exactly one statement saying so, naming the call command.",
+      "when": "Its activity is read"
+    },
+    {
+      "given": "A run told the tool-protocol surface from its agent's history whose harness then did not start the server",
+      "key": "ac56",
+      "requirement": "a-run-states-how-it-reached-the-hub",
+      "then": "One statement says the server did not start and does not claim the run was told the call command.",
+      "when": "Its activity is read"
+    },
+    {
+      "given": "A harness that gives its own reason for not starting the server",
+      "key": "ac58",
+      "requirement": "a-run-states-how-it-reached-the-hub",
+      "then": "It quotes that reason, and what the run is told does not depend on the wording.",
+      "when": "The statement is written"
+    },
+    {
+      "given": "the tools the agent can call",
+      "key": "ac15",
+      "requirement": "an-agent-is-told-what-its-tools-accept",
+      "then": "every callable tool is described, with the accepted values of each constrained parameter",
+      "when": "they are compared with the tools its context describes"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-12": "5e21fd5f4040c26f86a6785fcad2bb32f3b2ff57c586b6aed4ff0e65842a0d31",
+      "FR-13": "e2210d70d24a4e6653b9dd96fe44670dfc37dd5fec3403b2fe987622969238a7",
+      "FR-14": "08d3c47381c2a52c2f68f2aceb88002ce0cc6e5b488cf1cb247bdf219209298e",
+      "FR-15": "d6c05b463df6f9ba5c772b6d061a3250500354dc28b5f0e770ce874c1fd60937",
+      "FR-16": "9ae231a2a1a030636fa13cc91979ae6d0e4be28064fa55cb102eb04d0734846b",
+      "FR-17": "df5defed7bcc38cdbb078459c5011395fac8944b28fc740c76977f69c9cb2469",
+      "FR-18": "88227c9442562f624f4470471605f2da1c04bbc50e21b66f6094bf37bc5bfda4",
+      "FR-19": "a08ae24a6b39f4df582420d7e9baad7ae9e7be869172fb032a0a4587ace328ec",
+      "FR-20": "2a2047012b4198165bbb02adf67fe09578a921169eaf6d4794927438082ea568",
+      "FR-21": "2d9c85e0d66abeca3a77de7a2f16934b9b99d8f5e31fbedfde962635d90c0a7c",
+      "FR-22": "18cc305c2b9e7aae8640897e13f361e2ad6dcf18afec49e5792964ba9a647151",
+      "FR-23": "54102ab277844efac6d48cf2c8e117a8b534dc91e428c6c737b96bed349aa077",
+      "FR-24": "c52e7959a0af955377e0fca8aa9c7aaa459626804754f2045e742a049e6e691c",
+      "FR-25": "aacfe9e477867573ce49ab5e763268cd047726b925fb19dbab9d250a174ba59e",
+      "FR-26": "854d12abe9462c8d6d24b42cbdcdd49e706ab0438651ed7185543b2ae835ad25",
+      "FR-27": "51ae3feb2d43a7a587e4bbfb61d3894b315b4d7921102055799dfce65c8e8484",
+      "FR-28": "7f71f047974cd101ae1e4289123251bbc84b0420c48e791f2e9b537209ab92a9",
+      "FR-29": "053786b71a70119239604ca13750339f2cd14dc8fe954600314d624b26efa63e",
+      "FR-30": "60608ff37f2edd85ea6ca696aaa372d628e65faad43599c044b8383a2eba46ca",
+      "FR-31": "c4b7eb6a775afe7acb5e340a3767ed7c1ed81705e113f4579d671af828106d16",
+      "FR-32": "731c09243a25799be5b9a7717c64b4117c511ada146d6cf0a1ba8bedaa97d41f",
+      "FR-33": "9a15e7c8985a08e7f3ec400d6a3e8c062d0d2c267d73510830f5ad2520e6d5b4",
+      "FR-34": "11065e5e0492d98de1665605a9156203a816349d3237497a7418adcf49178b93",
+      "FR-35": "ee97f282ef0b6a5c186b5f60c03cf5c571184af7df97e2f37418d0535a9fda04",
+      "FR-36": "77fc56dd6cce24e0d1afe06691be717423c12fb74dc3fa0e7454b27d76e6b245",
+      "FR-37": "f34ef4682a0379a1b75ee47d973b45775d872dca98cf8ab9fc2315e1fe7bbe27",
+      "FR-38": "d71be73d3d67bb2e2a5ac402dffdece56909a2fc57f3b063eb049841ed84b082",
+      "FR-39": "ba48b6d88fd82d5063682a1fc02a208d59bb16634fde0629fed70f278937200a"
+    },
+    "high_water": 39,
+    "requirements": {
+      "a-constrained-tool-parameter-declares-its-valid-values": "FR-20",
+      "a-copilot-run-s-mcp-tool-calls-outlast-the-hub-s-longest-wai": "FR-30",
+      "a-failed-tool-call-is-reported-not-silently-absorbed": "FR-18",
+      "a-message-the-hop-budget-holds-is-reported-to-its-sender-as-": "FR-28",
+      "a-run-states-how-it-reached-the-hub": "FR-38",
+      "a-run-whose-harness-cannot-use-mcp-is-told-how-to-reach-the-": "FR-36",
+      "a-run-without-the-tool-protocol-surface-is-told-each-tool-s-": "FR-32",
+      "a-structured-tool-parameter-advertises-its-shape-in-the-tool": "FR-24",
+      "an-agent-is-told-the-address-of-the-hub-that-started-it": "FR-17",
+      "an-agent-is-told-what-its-tools-accept": "FR-39",
+      "an-agent-request-is-modelled-on-an-agent-the-operator-made": "FR-29",
+      "an-agent-s-identity-is-bound-by-the-hub-never-asserted-by-th": "FR-15",
+      "an-endpoint-the-harness-calls-is-not-advertised-as-a-capabil": "FR-21",
+      "aw-tool-help-prints-a-tools-whole-description": "FR-33",
+      "creating-agents-and-scheduling-recurring-work-are-governed-n": "FR-14",
+      "n1": "FR-34",
+      "n2": "FR-35",
+      "one-tool-surface-configured-automatically": "FR-16",
+      "the-agent-can-name-the-document-it-is-exploring": "FR-22",
+      "the-call-command-carries-the-run-s-authority-without-showing": "FR-37",
+      "the-call-command-is-on-the-run-s-path-and-is-the-program-its": "FR-31",
+      "the-outbound-message-tool-describes-how-delivery-is-actually": "FR-23",
+      "the-tool-server-a-run-is-given-is-the-one-its-hub-loaded": "FR-27"
+    },
+    "retired": {
+      "an-invocable-tool-surface-is-the-default-not-an-opt-in": "FR-19",
+      "creating-a-flow-is-a-distinct-tool-from-creating-a-loop": "FR-26",
+      "outbound-intent-remains-available": "FR-13",
+      "the-hub-supplies-state-the-tool-surface-carries-intent": "FR-12",
+      "the-tools-an-agent-may-call-are-named-to-it": "FR-25"
+    }
+  },
+  "design": "D1 One program, two modes. `hub/hub/mcp_server.py` is the MCP server and, with `--call`, the `aw-tool` command. Call mode is decided before the fastmcp import and every tool registered with `_tool()` is callable through it (`_CALLABLE_TOOLS`). The file imports only stdlib and fastmcp; constrained values are restated as `Literal`s and tests (test_mcp_tool_schemas.py) hold them equal to the Hub's validators.\n\nD2 The Hub pins the program at start (hub/hub/tool_server.py): a digest-named copy under the user's home, 0700, with `aw-tool`/`aw-tool.cmd` launchers keyed by interpreter, prepended to every run's PATH. An edit reaches agents on the Hub's next restart, never mid-run.\n\nD3 One description of the operations (`_operations` in hub/hub/api/v1/agents.py) is rendered as MCP names, as `aw-tool` calls, or (tests only) as HTTP. `UNDESCRIBED_TOOLS` records each deliberate omission; test_tool_surface_matches_server.py fails on any other difference.\n\nD4 Waiting tools poll contract routes with Hub-stamped deadlines; per-agent waits arrive as environment variables, bounded 10-600 s, else defaults (120 s decisions, 240 s questions). Copilot's MCP timeout (660 s) exceeds the longest wait.\n\nD5 The adapter never guesses: no `HUB_URL` means no server and no call; no credential means no effect.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_mcp_server_stdio_surface.py - the spawned surface equals the imported one",
+      "hub/tests/test_tool_surface_matches_server.py, test_mcp_tool_schemas.py - described vs served, enums vs validators",
+      "hub/tests/test_mcp_call_mode.py, test_aw_tool_help.py - call command envelope and help",
+      "hub/tests/test_tool_server_pin.py - pinning and launchers",
+      "hub/tests/test_the_mcp_server_never_guesses_a_hub.py, test_instance_identity.py",
+      "hub/tests/test_hop_budget_bound.py, test_request_agent_models_an_existing_agent.py, test_agent_trigger.py (bound address)"
+    ],
+    "limits": [
+      "`send_message`'s description (hub/hub/mcp_server.py:288-295) does not yet say that checkpoint cutover starts a new thread; the requirement is kept and this is reported as a finding.",
+      "The loop/flow refusals are enforced in the adapter only (hub/hub/mcp_server.py:822-940); the HTTP route accepts a loop with no stop condition (see agent-capability-plane).",
+      "Many criteria still carry an empty GIVEN from the openspec import."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "An agent knows only what its tools' names, schemas and descriptions tell it. A tool that is mis-described, untyped, unreachable from the agent's harness, or served from a different program than the Hub loaded fails in ways the agent cannot diagnose.",
+  "requirements": [
+    {
+      "key": "creating-agents-and-scheduling-recurring-work-are-governed-n",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Each new agent or recurring job commits spend the operator did not authorise per occurrence.",
+      "statement": "A tool that brings a new agent into existence SHALL be bounded by the project's agent budget, counted over the project's own agents. A tool that creates, enables, triggers or archives scheduled work SHALL be refused while the operator has not turned on the project's `allow_agent_jobs` setting, and archiving SHALL additionally need the operator's direction for that job."
+    },
+    {
+      "key": "an-agent-s-identity-is-bound-by-the-hub-never-asserted-by-th",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent must not be able to cause an effect attributed to another agent, and an environment variable naming an agent proves nothing without a live credential.",
+      "statement": "The tool server and call command MUST take identity only from the run credential the Hub placed in their environment, MUST refuse every effect when it is absent rather than fall back to a placeholder identity, and a credential SHALL be honoured only by the Hub instance that issued it."
+    },
+    {
+      "key": "one-tool-surface-configured-automatically",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Importing the module runs the whole file while spawning it stops at the entry-point guard, so a tool defined below the guard is visible to every test and to no agent.",
+      "statement": "The Hub SHALL give each run whose tool surface is MCP exactly one tool server, its own, configured on the run's command line with no operator wiring, and the build SHALL verify the surface by spawning the server as the Hub does, from a directory other than the package root, and comparing the tools it advertises over stdio with the imported module's; any difference SHALL fail."
+    },
+    {
+      "key": "an-agent-is-told-the-address-of-the-hub-that-started-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A guessed address can be a different Hub, typically the operator's real one, where the run's credential is unknown.",
+      "statement": "The Hub SHALL give each run, as `HUB_URL`, the operator's explicit `HUB_URL` if set, else the loopback address on the port the Hub has observed itself serving, and SHALL refuse to start the run (409, retried later) when it has neither, never a configured default or assumed port."
+    },
+    {
+      "key": "a-failed-tool-call-is-reported-not-silently-absorbed",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A call delivered to the wrong Hub is diagnosable only if the report names where it went.",
+      "statement": "A failed tool call SHALL be reported to the agent distinguishing a Hub rejection (with status, the method and path called, and the Hub's sentence) from an unreachable Hub (with the address tried), and SHALL be recorded on the agent's timeline where the Hub observes it."
+    },
+    {
+      "key": "a-constrained-tool-parameter-declares-its-valid-values",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent must not discover a constraint by being rejected, and a raw validation dump is not something a model can act on.",
+      "statement": "Where a tool parameter accepts only certain values, its published schema SHALL declare them as an enum restated from the Hub's own validator, with a test holding the two equal; a rejection SHALL reach the agent as a sentence naming the field and what is accepted, never the validator's raw error structure."
+    },
+    {
+      "key": "an-endpoint-the-harness-calls-is-not-advertised-as-a-capabil",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The described surface tells an agent what it can deliberately use; a silently incomplete one is believed.",
+      "statement": "A tool that serves the runtime (`approve_tool_call`) SHALL NOT be described to the agent or callable through the call command, though it is served on the same MCP server; every other served tool SHALL be described in the standing surface unless recorded as a deliberate omission with its reason (today only `submit_checkpoint_notes`, described in the checkpoint prompt)."
+    },
+    {
+      "key": "the-agent-can-name-the-document-it-is-exploring",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The agent learns a document's subject first; taking a path would let the least trusted caller choose where a write lands.",
+      "statement": "The tool surface SHALL include `rename_spec_document(path, subject)`, which derives the new path from the subject, takes no destination path, returns the new and previous paths, and appears in the described surface."
+    },
+    {
+      "key": "the-outbound-message-tool-describes-how-delivery-is-actually",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The tool schema is the agent's only documentation of the surface, and a stale rule is acted on.",
+      "statement": "The `send_message` description SHALL describe the delivery rule the Hub enforces: omitting `conversation_id` continues the thread bound between sender and recipient or starts one if none is bound; a new thread is started only by `start_new_thread` or by checkpoint cutover; and a send to an archived conversation fails returning the content. It MUST NOT describe a rule the Hub no longer applies."
+    },
+    {
+      "key": "a-structured-tool-parameter-advertises-its-shape-in-the-tool",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A client can only shape a call it can see; the operator chose the advertised schema over a hand-written refusal that needed untyped parameters to fire (2026-08-25).",
+      "statement": "Every object or array parameter of a tool SHALL declare that type in the schema clients receive."
+    },
+    {
+      "key": "the-tool-server-a-run-is-given-is-the-one-its-hub-loaded",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Routes are fixed at Hub start; a server read later can call routes the Hub lacks, and a half-written edit reaches running agents as a server that fails to start.",
+      "statement": "The Hub SHALL give every run a copy of the tool server it read at start, held under `~/.agentweave/hub/tool-server/<digest>/` in a directory only the Hub's user can write, rewriting the copy if it is missing or altered, and SHALL refuse the run naming the failure if it cannot, never falling back to the source file. A copy no Hub has touched for 7 days MAY be pruned, never the current one."
+    },
+    {
+      "key": "a-message-the-hop-budget-holds-is-reported-to-its-sender-as-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The sender reads only the answer to its send; answered like an ordinary send, a held message silently stops a chain of work.",
+      "statement": "When a sent message is queued past the project's hop budget, the send SHALL still succeed with the message id, and SHALL add `held_by_hop_budget` and a note naming the depth and budget, that the recipient receives it only if the operator continues the chain or raises the budget, that resending queues it at the same depth, and that it must not be reported delivered. A send within budget SHALL be answered as usual."
+    },
+    {
+      "key": "an-agent-request-is-modelled-on-an-agent-the-operator-made",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator approves a kind of agent by creating one; an agent must not create a second holder of a grant the operator gave to one.",
+      "statement": "`request_agent` SHALL name as template an open agent of the same project with a bound runner, and create the new agent with that agent's runner, charter and runner configuration, but without its grants, default posture, `hub_client` declaration, description, per-agent overrides or wait override; a template that does not exist SHALL be refused naming the open agents, and one archived or with no runner SHALL be refused saying so."
+    },
+    {
+      "key": "a-copilot-run-s-mcp-tool-calls-outlast-the-hub-s-longest-wai",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Copilot ends an MCP call after 30 s unless told otherwise, which would cut off every answer the operator took longer to write.",
+      "statement": "The Hub SHALL configure its MCP server for a Copilot run with a tool-call timeout (660 s) longer than the longest wait any tool can make, and SHALL name the tools to a Copilot run as `agentweave-<tool>`."
+    },
+    {
+      "key": "the-call-command-is-on-the-run-s-path-and-is-the-program-its",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The command must be the pinned program for the same reason the server is; it is not named `aw` because that is the application's own CLI; `-I -S` stops environment variables or site packages changing what an auto-approved command runs.",
+      "statement": "The Hub SHALL put an `aw-tool` command first on the `PATH` of every run, as both `aw-tool.cmd` and a POSIX `aw-tool`, each running the pinned tool server with `-I -S --call` and nothing in between; call mode SHALL NOT import the MCP library."
+    },
+    {
+      "key": "a-run-without-the-tool-protocol-surface-is-told-each-tool-s-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Operations are named by short name throughout a turn; one stated rule maps them all, and a run must give a waiting command a longer timeout than its shell's default.",
+      "statement": "When a run is told the call command, its canonical context SHALL render every operation in the `aw-tool` form from the same operation descriptions the MCP rendering uses, SHALL state once that an operation named elsewhere by its short name is called through `aw-tool`, and SHALL state how long `ask_user` waits and that `archive_job` waits for direction."
+    },
+    {
+      "key": "aw-tool-help-prints-a-tools-whole-description",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "`--list` cut descriptions to one line, hiding the fields an agent needed.",
+      "statement": "`aw-tool --help <tool>` MUST print that tool's complete description with its parameters, and a name that is not a callable tool is refused as a usage error naming it; `aw-tool --list` prints each tool's parameters and only the first line of its description. The call-command notice SHALL say which of the two shows the whole description."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The envelope is the whole contract a shell caller has; a traceback or mixed output cannot be parsed reliably across shells.",
+      "statement": "Every `aw-tool` invocation SHALL print exactly one JSON object as its last line, `{\"ok\": true, \"result\": ...}` or `{\"ok\": false, \"error\": {\"kind\", \"detail\"}}` with kind `rejected`, `unreachable`, `unbound`, `usage` or `internal` and a matching exit code, SHALL refuse an unknown argument naming the accepted ones, and SHALL never print a traceback; an internal failure SHALL say the outcome is unknown and how to check before retrying."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The one address a guess lands on is the operator's own Hub.",
+      "statement": "The tool server SHALL refuse to start, and the call command SHALL refuse every call, when `HUB_URL` is unset, and neither SHALL fall back to a default address."
+    },
+    {
+      "key": "a-run-whose-harness-cannot-use-mcp-is-told-how-to-reach-the-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Capability that exists but is never described is not capability; and a command that carries the credential puts it into text the harness records.",
+      "statement": "A turn that is not told the MCP tools SHALL be told, in a notice prepended to the turn prompt, that the capability plane is reached through the `aw-tool` command, how an operation is called with it (arguments in a `.json` file under `.agentweave/calls/`), and how to list and describe the operations, and SHALL NOT be told to place the run credential in any command it writes."
+    },
+    {
+      "key": "the-call-command-carries-the-run-s-authority-without-showing",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A command that carries its credential puts it into text the harness records; a command naming only an operation and a file holds no secret.",
+      "statement": "The call command SHALL read the run's credential and the Hub's address only from its own process environment, SHALL NOT accept either as an argument or from a file, and SHALL take an operation's arguments only from a `.json` file inside the workspace's `.agentweave/calls/` directory."
+    },
+    {
+      "key": "a-run-states-how-it-reached-the-hub",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A machine that blocks tool-protocol servers otherwise shows only as runs that behave differently; the statement must describe what that run was told, not what the next one will be.",
+      "statement": "The Hub SHALL record for each run which surface it was told to reach the Hub through and whether its harness started the Hub's tool server, and when a run given the server did not start it, SHALL say so once in that run's activity, naming the surface that run was told and quoting the harness's own account where it gives one."
+    },
+    {
+      "key": "an-agent-is-told-what-its-tools-accept",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A tool never mentioned cannot be used deliberately, and a description kept separately from the definitions drifts.",
+      "statement": "The context SHALL describe every tool the agent can call, with each parameter and the accepted values of a constrained one, derived from the same source as the tool definitions and written in the idiom of the run's access path."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The MCP server and `aw-tool`: how they are pinned, spawned, put on PATH and told the Hub's address, and Copilot's tool naming and timeout.",
+      "The `aw-tool` notice for a run whose harness cannot use MCP, and how the command takes the run's credential and arguments.",
+      "Tool schemas and descriptions, including each tool's description rendered into the context, and which tools are described.",
+      "How tool failures are reported.",
+      "Recording which surface a run was told and whether its harness started the tool server.",
+      "Tool-level rules for messages held by the hop budget, scheduled work, agent requests and document renaming."
+    ],
+    "non_goals": [
+      "The HTTP contract, authentication and attribution: agent-capability-plane.",
+      "The state a turn is given and the tool names its context states: agent-context-onboarding.",
+      "Which tool surface a runner gets by default: runner-registry.",
+      "`create_flow` versus `create_loop`: agent-flows.",
+      "Permission postures and approving a run's own tool calls: agent-run-sandboxing."
+    ]
+  },
+  "summary": "The adapters through which an agent reaches the capability plane: the Hub's own MCP tool server and the `aw-tool` call command, which are one pinned program. This capability covers how that program is given to a run and told the Hub's address, how a run without MCP is told to use `aw-tool` and how the command carries the run's authority, how tools are typed and described, how failures reach the agent, the record of how each run reached the Hub, and the shape of individual tools (messages, scheduled work, agent requests, document renaming). The contract the tools call is agent-capability-plane.",
+  "tasks": [],
+  "title": "Agent tool surface"
+}

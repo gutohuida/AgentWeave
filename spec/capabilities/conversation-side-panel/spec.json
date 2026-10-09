@@ -1,0 +1,464 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the operator has opened two tabs",
+      "key": "ac1",
+      "requirement": "a-conversation-hosts-one-panel-shell-showing-one-tab-at-a-ti",
+      "then": "it shows exactly those two tabs and no tab for a kind that is not open",
+      "when": "the strip renders"
+    },
+    {
+      "given": "two open tabs",
+      "key": "ac2",
+      "requirement": "a-conversation-hosts-one-panel-shell-showing-one-tab-at-a-ti",
+      "then": "the shell body shows only that tab's content",
+      "when": "the operator selects the other one"
+    },
+    {
+      "given": "one open tab",
+      "key": "ac3",
+      "requirement": "a-conversation-hosts-one-panel-shell-showing-one-tab-at-a-ti",
+      "then": "the shell closes and the conversation takes the full width",
+      "when": "the operator closes it"
+    },
+    {
+      "given": "the shell is open with no tab",
+      "key": "ac3a",
+      "requirement": "a-conversation-hosts-one-panel-shell-showing-one-tab-at-a-ti",
+      "then": "it shows a launcher card for Specs, Files and Loops, the same set as the plus menu, and the Loops card carries a badge when loops are running",
+      "when": "it renders"
+    },
+    {
+      "given": "the Specs tab is open",
+      "key": "ac4",
+      "requirement": "the-plus-affordance-opens-a-tab-that-is-not-already-open",
+      "then": "it offers Files and Loops but not Specs",
+      "when": "the operator opens the plus menu"
+    },
+    {
+      "given": "Specs, Files and Loops are all open",
+      "key": "ac5",
+      "requirement": "the-plus-affordance-opens-a-tab-that-is-not-already-open",
+      "then": "no plus affordance is shown",
+      "when": "the strip renders"
+    },
+    {
+      "given": "the Loops index is open",
+      "key": "ac6",
+      "requirement": "an-index-tab-opens-a-keyed-detail-tab-for-the-item-selected-",
+      "then": "a detail tab for that loop opens and becomes visible",
+      "when": "the operator selects a loop"
+    },
+    {
+      "given": "a detail tab is already open for an item",
+      "key": "ac7",
+      "requirement": "an-index-tab-opens-a-keyed-detail-tab-for-the-item-selected-",
+      "then": "the existing tab becomes visible, its content is re-revealed, and no second tab exists",
+      "when": "the operator selects that item from the index again"
+    },
+    {
+      "given": "an open detail tab for a specification document",
+      "key": "ac8",
+      "requirement": "a-detail-tab-is-keyed-by-its-item-s-durable-identifier-where",
+      "then": "the tab still shows the same document",
+      "when": "that document is renamed"
+    },
+    {
+      "given": "a document tab opened by path before the inventory loaded, and the operator has since made another tab visible",
+      "key": "ac8a",
+      "requirement": "a-detail-tab-is-keyed-by-its-item-s-durable-identifier-where",
+      "then": "the tab is re-keyed to the document id in place and the other tab stays visible",
+      "when": "the inventory loads"
+    },
+    {
+      "given": "the Files tab is open",
+      "key": "ac9",
+      "requirement": "opening-a-file-replaces-the-file-tree-tab",
+      "then": "the file's tab is open and visible and the Files tab is no longer in the strip",
+      "when": "the operator opens a file from it"
+    },
+    {
+      "given": "the Loops tab is open",
+      "key": "ac9a",
+      "requirement": "opening-a-file-replaces-the-file-tree-tab",
+      "then": "the Loops tab stays open",
+      "when": "the operator opens a loop from it"
+    },
+    {
+      "given": "tabs open in a project",
+      "key": "ac10",
+      "requirement": "tab-configuration-is-remembered-per-project-width-is-one-glo",
+      "then": "the same tabs are open with the same one visible",
+      "when": "the operator leaves and later returns to that project, or reloads"
+    },
+    {
+      "given": "two projects with different tabs open",
+      "key": "ac11",
+      "requirement": "tab-configuration-is-remembered-per-project-width-is-one-glo",
+      "then": "each shows its own tab configuration",
+      "when": "the operator switches between them"
+    },
+    {
+      "given": "the operator resized the boundary in one project",
+      "key": "ac12",
+      "requirement": "tab-configuration-is-remembered-per-project-width-is-one-glo",
+      "then": "the same width is used",
+      "when": "they open the shell in another project"
+    },
+    {
+      "given": "persisted state naming a file tab whose path is no longer in the workspace listing",
+      "key": "ac13",
+      "requirement": "persisted-tab-state-is-versioned-reconciled-and-never-restor",
+      "then": "that tab is dropped and the remaining tabs are kept",
+      "when": "the listing has loaded"
+    },
+    {
+      "given": "persisted state written by a newer version, or an older one with no migration step",
+      "key": "ac13a",
+      "requirement": "persisted-tab-state-is-versioned-reconciled-and-never-restor",
+      "then": "the state is discarded and the shell starts empty and closed",
+      "when": "the shell loads"
+    },
+    {
+      "given": "persisted state in which every tab is dropped",
+      "key": "ac14",
+      "requirement": "persisted-tab-state-is-versioned-reconciled-and-never-restor",
+      "then": "it is restored closed, not open and empty",
+      "when": "the shell loads"
+    },
+    {
+      "given": "persisted state whose visible tab is dropped while others survive",
+      "key": "ac15",
+      "requirement": "persisted-tab-state-is-versioned-reconciled-and-never-restor",
+      "then": "a surviving tab is visible",
+      "when": "the shell loads"
+    },
+    {
+      "given": "a window wide enough for two columns",
+      "key": "ac16",
+      "requirement": "the-panel-shell-resizes-and-overlays-using-the-same-rule-for",
+      "then": "either side can be made the larger, down to its own minimum",
+      "when": "the operator drags the boundary"
+    },
+    {
+      "given": "the shell is open",
+      "key": "ac17",
+      "requirement": "the-panel-shell-resizes-and-overlays-using-the-same-rule-for",
+      "then": "the shell is shown as an overlay drawer rather than a column",
+      "when": "the available width falls below the conversation minimum plus the visible tab's minimum plus the divider"
+    },
+    {
+      "given": "the shell is shown as an overlay",
+      "key": "ac18",
+      "requirement": "the-panel-shell-resizes-and-overlays-using-the-same-rule-for",
+      "then": "a control above the conversation reopens it with the same tabs open and the same one visible",
+      "when": "the operator dismisses it"
+    },
+    {
+      "given": "a project with files",
+      "key": "ac19",
+      "requirement": "the-file-tree-lists-the-project-s-workspace-and-opens-a-file",
+      "then": "every listed path is shown as a navigable tree",
+      "when": "the operator opens the Files tab"
+    },
+    {
+      "given": "the Files tab is open",
+      "key": "ac19a",
+      "requirement": "the-file-tree-lists-the-project-s-workspace-and-opens-a-file",
+      "then": "it states that nothing matched; Escape returns to the tree",
+      "when": "the operator types a query matching nothing"
+    },
+    {
+      "given": "the Files tab is open",
+      "key": "ac20",
+      "requirement": "the-file-tree-lists-the-project-s-workspace-and-opens-a-file",
+      "then": "its content is shown in that file's detail tab",
+      "when": "the operator selects a text file"
+    },
+    {
+      "given": "a path the workspace listing returns",
+      "key": "ac21",
+      "requirement": "the-file-content-endpoint-s-allowlist-matches-the-workspace-",
+      "then": "the Hub returns the content",
+      "when": "its content is requested"
+    },
+    {
+      "given": "a traversal path, a gitignored path, or a listed symlink pointing outside the workspace",
+      "key": "ac22",
+      "requirement": "the-file-content-endpoint-s-allowlist-matches-the-workspace-",
+      "then": "the Hub answers 404",
+      "when": "its content is requested"
+    },
+    {
+      "given": "a file at or under the bound",
+      "key": "ac23",
+      "requirement": "the-file-content-endpoint-bounds-size-and-refuses-rather-tha",
+      "then": "its complete content is returned",
+      "when": "it is requested"
+    },
+    {
+      "given": "a file larger than the bound",
+      "key": "ac24",
+      "requirement": "the-file-content-endpoint-bounds-size-and-refuses-rather-tha",
+      "then": "the Hub answers 413 naming the file's size and the bound, with no partial content, and the tab shows that sentence",
+      "when": "it is requested"
+    },
+    {
+      "given": "an extensionless text file",
+      "key": "ac25",
+      "requirement": "the-file-content-endpoint-distinguishes-binary-content-befor",
+      "then": "it is returned as text and rendered in its tab",
+      "when": "it is requested"
+    },
+    {
+      "given": "a file with a NUL byte in its first 8,000 bytes",
+      "key": "ac26",
+      "requirement": "the-file-content-endpoint-distinguishes-binary-content-befor",
+      "then": "the response marks it binary with no content and the tab states it is binary with its size",
+      "when": "it is requested"
+    },
+    {
+      "given": "a file tab for `docs/release notes.md` and composer text `see`",
+      "key": "ac27",
+      "requirement": "a-file-can-be-inserted-into-the-composer-in-the-format-the-c",
+      "then": "the composer text becomes `see @\"docs/release notes.md\" `",
+      "when": "the operator presses Insert into composer"
+    },
+    {
+      "given": "a file tab for a path with a mid-name `@`",
+      "key": "ac27a",
+      "requirement": "a-file-can-be-inserted-into-the-composer-in-the-format-the-c",
+      "then": "no Insert into composer control is shown",
+      "when": "the tab renders"
+    },
+    {
+      "given": "three open tabs with the first visible",
+      "key": "ac28",
+      "requirement": "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl",
+      "then": "only the visible tab receives focus, and Enter or Space on a focused tab makes it visible as a click would",
+      "when": "the operator tabs into the strip"
+    },
+    {
+      "given": "focus on the first of three tabs",
+      "key": "ac29",
+      "requirement": "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl",
+      "then": "focus and activation move to the last tab",
+      "when": "the operator presses ArrowLeft"
+    },
+    {
+      "given": "focus on a tab",
+      "key": "ac30",
+      "requirement": "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl",
+      "then": "that tab's close control is focused and activating it closes the tab",
+      "when": "the operator presses Tab and then Enter"
+    },
+    {
+      "given": "the strip",
+      "key": "ac31",
+      "requirement": "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl",
+      "then": "its menu opens and each entry is keyboard reachable and activatable",
+      "when": "the operator reaches the plus affordance by keyboard and activates it"
+    },
+    {
+      "given": "a conversation with an attached document whose tab is open",
+      "key": "n1-ac1",
+      "requirement": "n1-closing-a-document-tab-does-not-detach-the-document",
+      "then": "the reading pane closes but the conversation's attached document is unchanged",
+      "when": "the operator closes that tab"
+    },
+    {
+      "given": "the Specs index is open",
+      "key": "n1-ac2",
+      "requirement": "n1-closing-a-document-tab-does-not-detach-the-document",
+      "then": "the document is shown in a tab without being attached to the conversation",
+      "when": "the operator opens a document from it"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "42041e1078682ecbcba93c6209426da0c916b5cb39e9438bfb89b1924f5150e7",
+      "FR-10": "f5c952298f533337ac26f1aa43d4ea0a53b78f99da1a055ec1afce3a1d6b5279",
+      "FR-11": "6cc1043965450a0715f6b5119f004e6418b8edfb6a2128721cca091461fa5eb2",
+      "FR-12": "c56d21e1e852f3acd01ba8462eb5f3da6a2ea26c06c866e81e78d3c9f22f52e1",
+      "FR-13": "26bdaf4af3453ce1554e8417bb932b7a17488ad5e5fbe4f9c88df0189475c4ae",
+      "FR-14": "70e1f514f7ac9773983e78304d26af91a73ab6f6962310850260ef08da459788",
+      "FR-15": "eb1eeed8a3927a88ae6f3a64e227b91431f8f2186108248735f018dd71884690",
+      "FR-2": "8233fc40dd04dfe77f62e532fb0a3dce331a1d983a8e9fac18e44ee7abc73557",
+      "FR-3": "4a6ece7d0030933ca535040f5015fc71b7c7e13065905e95528c9c29750e474b",
+      "FR-4": "5bbb33f576ce9da363064ae6f858298fe9f3c81d606c17748cb305894b2b5582",
+      "FR-5": "e88d1203e4769d9bd7cd15f59dad440d986e28771db101383d144609daeaaed4",
+      "FR-6": "82b4f80e38cdaf8ac79359a8bf8646a573d583594a7bead068244334232003b5",
+      "FR-7": "51c0090278a4dff40ed5eb70f88e7cdf4680cc19da9333fae471bd16f839b859",
+      "FR-8": "f6ae099217d46545a092647181961657773cf229edd810c035d13b18b59cc58d",
+      "FR-9": "181adb1723a26e765835fbd4a3eb825feb863b49d1ea8e4916c74a0c7ce8b807"
+    },
+    "high_water": 15,
+    "requirements": {
+      "a-conversation-hosts-one-panel-shell-showing-one-tab-at-a-ti": "FR-1",
+      "a-detail-tab-is-keyed-by-its-item-s-durable-identifier-where": "FR-4",
+      "a-file-can-be-inserted-into-the-composer-in-the-format-the-c": "FR-13",
+      "an-index-tab-opens-a-keyed-detail-tab-for-the-item-selected-": "FR-3",
+      "n1-closing-a-document-tab-does-not-detach-the-document": "FR-15",
+      "opening-a-file-replaces-the-file-tree-tab": "FR-5",
+      "persisted-tab-state-is-versioned-reconciled-and-never-restor": "FR-7",
+      "tab-configuration-is-remembered-per-project-width-is-one-glo": "FR-6",
+      "the-file-content-endpoint-bounds-size-and-refuses-rather-tha": "FR-11",
+      "the-file-content-endpoint-distinguishes-binary-content-befor": "FR-12",
+      "the-file-content-endpoint-s-allowlist-matches-the-workspace-": "FR-10",
+      "the-file-tree-lists-the-project-s-workspace-and-opens-a-file": "FR-9",
+      "the-panel-shell-resizes-and-overlays-using-the-same-rule-for": "FR-8",
+      "the-plus-affordance-opens-a-tab-that-is-not-already-open": "FR-2",
+      "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl": "FR-14"
+    },
+    "retired": {}
+  },
+  "design": "D1. Tab kinds are a closed literal union in the UI (`specs`, `files`, `loops`, `spec:<id>`, `file:<path>`, `loop:<id>`); the kind is derived from the id, never stored beside it or built from external input.\n\nD2. Index tabs launch keyed detail tabs; reopening an open tab bumps a reveal counter instead of duplicating it.\n\nD3. The store persists `{version, projects}` in localStorage under one key, per project, with a migration chain; an unknown version is discarded rather than guessed at. Width is not in it: the conversation width preference is global.\n\nD4. Reconciliation drops only `file:` and `spec:` tabs, and only for a kind whose listing has loaded. Index and loop tabs never dangle.\n\nD5. The overlay threshold and the column's minimum both read `minWidthForTabKind`, so they cannot disagree.\n\nD6. File content is allowlisted by membership of the path listing, plus `ProjectWorkspace.resolve_relative` to refuse symlink escapes; no second traversal check.\n\nD7. Attaching a document and reading a document are separate: the attach drives the tab open, never the reverse.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/__tests__/panelTabsStore.test.ts (keys, open/close rules, persistence, migration, reconcile, restore rules)",
+      "hub/ui/src/__tests__/panelShell.test.tsx (one tab at a time, plus menu, launcher, keyboard tablist)",
+      "hub/ui/src/__tests__/fileTab.test.tsx, filesIndexTab.test.tsx (binary, oversized, insert, tree/search)",
+      "hub/tests/test_workspace_file_endpoint.py (allowlist, symlink escape, 413, binary)",
+      "hub/tests/browser/test_panel_shell.py, test_files_tab.py (overlay, document attach vs read, file-replaces-tree, insert)"
+    ],
+    "limits": [
+      "`panelTabsStore.reconcile` is unit-tested but has no production caller (grep of hub/ui/src outside __tests__), so dangling file and document tabs are not dropped on load today; a missing file's tab shows the 404 sentence instead. The requirement is kept; see report."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Specification documents, workspace files and loops each need to be read beside the conversation without leaving it. Separate side surfaces with their own rules for opening, closing, width and narrow windows made the right-hand side unpredictable.",
+  "requirements": [
+    {
+      "key": "a-conversation-hosts-one-panel-shell-showing-one-tab-at-a-ti",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One surface with one set of rules; an empty shell that reads as a launcher, not a broken grey box.",
+      "statement": "The conversation surface SHALL host at most one panel shell beside it, whose strip shows only the tabs currently open and whose body renders the content of exactly one of them. Every open tab SHALL be closable, closing the last one SHALL close the shell, and an open shell with no tab SHALL show a launcher card for every index tab it can open, each with a one-line description and, where the caller supplies one, a count of live items."
+    },
+    {
+      "key": "the-plus-affordance-opens-a-tab-that-is-not-already-open",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Offering an already-open tab would read as \"open another\" when it cannot.",
+      "statement": "The shell SHALL offer a plus menu listing only the index tabs (Specs, Files, Loops) that are not already open, and SHALL hide it once all are open. Opening a tab that is already open, from any entry point, SHALL make that tab visible rather than open a second one."
+    },
+    {
+      "key": "an-index-tab-opens-a-keyed-detail-tab-for-the-item-selected-",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Opening the same thing again means \"show it to me again\", not \"give me a copy\".",
+      "statement": "Selecting an item from an index tab SHALL open a detail tab for that item and make it visible. Selecting an item whose detail tab is already open SHALL make that tab visible and re-reveal the item within it, and MUST NOT open a second tab for the same item."
+    },
+    {
+      "key": "a-detail-tab-is-keyed-by-its-item-s-durable-identifier-where",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Documents can be renamed by agents; a path-keyed tab would dangle for a document that still exists.",
+      "statement": "A detail tab SHALL be keyed by an identifier that survives renaming wherever the item has one: a specification document by its Hub document id (falling back to its path only until the document inventory has loaded, then re-keyed in place without changing which tab is visible), a loop by its loop id, and a file by its workspace-relative path."
+    },
+    {
+      "key": "opening-a-file-replaces-the-file-tree-tab",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The file tree is a launcher, and in a narrow column a tab spent on it once used is wasted; the loops and specs indexes are worth keeping in view.",
+      "statement": "Opening a file detail tab SHALL close the Files index tab in the same step. Opening a loop or a specification document from its index MUST NOT close that index."
+    },
+    {
+      "key": "tab-configuration-is-remembered-per-project-width-is-one-glo",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Each project has its own working set of documents and files; nothing suggests the operator wants a different width per project.",
+      "statement": "Which tabs are open, their order, which is visible and whether the shell is open SHALL be stored in this browser per project and restored when the operator returns to that project, and MUST NOT be shared between projects. The width of the conversation beside the shell SHALL be one value shared across every project and conversation."
+    },
+    {
+      "key": "persisted-tab-state-is-versioned-reconciled-and-never-restor",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Persisted tabs point at things that can stop existing; a misread configuration is worse than a lost one, and a listing that has not loaded must not be read as \"nothing exists\".",
+      "statement": "Persisted tab state SHALL carry a version and SHALL be migrated step by step on load when older, and discarded when newer or when no migration step exists. Unreadable or malformed state SHALL be ignored, and duplicate tab ids dropped. A file or document detail tab whose item no longer exists SHALL be dropped, but only once the listing of that kind has loaded. If restoring leaves no tab, the shell SHALL be restored closed; if the visible tab is gone while others survive, a survivor SHALL be made visible."
+    },
+    {
+      "key": "the-panel-shell-resizes-and-overlays-using-the-same-rule-for",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The threshold is derived from the same per-kind minimum the column uses, so the layout and the switch to overlay cannot disagree; the chosen width is clamped, not overwritten, when the window narrows.",
+      "statement": "The boundary between the conversation and the shell SHALL be draggable, bounded only by the conversation's minimum width and the visible tab kind's own minimum width. When the available width is below the conversation minimum plus the visible tab's minimum plus the divider, the shell SHALL open as an overlay drawer instead of a column; dismissing the overlay MUST NOT close the open tabs, and a control above the conversation SHALL reopen it."
+    },
+    {
+      "key": "the-file-tree-lists-the-project-s-workspace-and-opens-a-file",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The tree is for finding your way around; search is for when you know the name.",
+      "statement": "The Files index tab SHALL present the project's workspace path listing as a navigable tree marking the file currently open, SHALL switch to a ranked flat list of matches while a search is typed (Escape clears it), SHALL state an empty workspace or an empty search rather than show an empty box, and selecting a path SHALL open that file's detail tab."
+    },
+    {
+      "key": "the-file-content-endpoint-s-allowlist-matches-the-workspace-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Membership of the listing is the allowlist; the containment check exists only because git lists a symlink by its own path, not its target.",
+      "statement": "`GET /api/v1/projects/{project_id}/workspace/file?path=` SHALL serve content only for a path that is byte-for-byte a member of the workspace path listing for that project and whose resolved location lies inside the project's workspace root; any other path, including traversal, ignored files and symlinks pointing outside the workspace, SHALL be answered 404."
+    },
+    {
+      "key": "the-file-content-endpoint-bounds-size-and-refuses-rather-tha",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A silently truncated file is worse than a clear refusal.",
+      "statement": "A file up to the Hub's maximum body size SHALL be served in full; a larger file SHALL be refused with 413 and a message stating its size and the bound, checked before any content is read, and MUST NOT be served truncated."
+    },
+    {
+      "key": "the-file-content-endpoint-distinguishes-binary-content-befor",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Garbled bytes are never useful; an extensionless text file is still text.",
+      "statement": "The Hub SHALL classify a file as binary when a NUL byte appears in its first 8,000 bytes and SHALL then return no content; the file tab SHALL state that the file is binary and its size instead of rendering it. Text SHALL be decoded as UTF-8 with replacement and rendered with syntax highlighting, or as Markdown for Markdown files."
+    },
+    {
+      "key": "a-file-can-be-inserted-into-the-composer-in-the-format-the-c",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A mention inserted from either surface is indistinguishable, and an unsafe path would type a second live mention.",
+      "statement": "A file detail tab SHALL offer \"Insert into composer\", which appends to the conversation's composer text exactly the mention the composer's own `@` trigger produces for that path, separated by a space from text already typed. The control SHALL NOT be offered for a path containing an `@` that is neither its first character nor directly after `/`."
+    },
+    {
+      "key": "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "The tab strip SHALL follow the tablist pattern with automatic activation: only the visible tab is in the sequential focus order, Left/Right arrows move focus and activation between tabs with wrap-around, Home/End jump to the first and last tab, Enter or Space activates a focused tab, and each tab's close control and the plus menu are reachable and operable by keyboard. A newly visible tab SHALL be scrolled into view in the strip."
+    },
+    {
+      "key": "n1-closing-a-document-tab-does-not-detach-the-document",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Tidying the reading pane is not an edit to what the agent is working on.",
+      "statement": "Closing a specification document's tab, or opening a document from the Specs index, MUST NOT change which document the conversation has attached; attaching a document SHALL open or reveal its tab, and only the composer's stop-exploring control SHALL detach it (also closing the shell)."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The panel shell, its tab strip, plus menu and empty-state launcher",
+      "Per-project tab persistence and its restore rules",
+      "The conversation/panel boundary, and the overlay below the combined minimum width",
+      "The files index tab, the file detail tab, and the workspace file content endpoint",
+      "Inserting a file mention into the composer from a file tab"
+    ],
+    "non_goals": [
+      "What a specification document tab renders (spec-document-authority, spec-chat-session)",
+      "What the loops index and loop tabs show (agent-loops)",
+      "The workspace path listing endpoint itself (agent-composer)"
+    ]
+  },
+  "summary": "One panel shell beside a conversation, showing one tab at a time: the specs, files and loops index tabs and the keyed detail tabs they open (a specification document, a workspace file, a loop). The operator controls the tab strip; tab configuration is remembered per project, the width is one global preference, and one resize/overlay rule applies whatever is shown.",
+  "tasks": [],
+  "title": "Conversation side panel"
+}

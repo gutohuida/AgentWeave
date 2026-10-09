@@ -1,0 +1,544 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "an agent with no conversation selected",
+      "key": "ac1",
+      "requirement": "agent-configuration-is-a-destination-rather-than-a-surface-i",
+      "then": "the same agent's configuration and section are shown",
+      "when": "the operator opens its configuration from the rail and reloads"
+    },
+    {
+      "given": "an agent's configuration opened from a conversation or from the rail",
+      "key": "ac2",
+      "requirement": "configuration-navigation-replaces-the-surrounding-navigation",
+      "then": "the agent's most recent conversation is shown in both cases, with any document that was open beside it still open",
+      "when": "the operator uses the back control"
+    },
+    {
+      "given": "an agent's configuration",
+      "key": "ac3",
+      "requirement": "configuration-is-separated-from-observation",
+      "then": "no status, latest status message or last-seen time is presented; the conversation still shows them",
+      "when": "any section is shown"
+    },
+    {
+      "given": "an agent",
+      "key": "ac4",
+      "requirement": "configuration-sections-are-named-for-operator-intent",
+      "then": "the sections are Identity, Execution, Charter, Interaction, Context, Access and Workspace, and checkpointing is in Context",
+      "when": "its configuration is opened"
+    },
+    {
+      "given": "an agent",
+      "key": "ac5",
+      "requirement": "an-agent-carries-a-description-written-for-the-operator",
+      "then": "the first is stored trimmed and returned with the summary; the second leaves no description; neither changes the agent's turn context",
+      "when": "the operator saves a description and later saves it as whitespace"
+    },
+    {
+      "given": "an agent with a run in progress",
+      "key": "ac6",
+      "requirement": "an-agent-is-archived-rather-than-deleted",
+      "then": "409 with the reason, and it stays open",
+      "when": "it is archived"
+    },
+    {
+      "given": "an agent's configuration",
+      "key": "ac7",
+      "requirement": "an-agent-is-archived-rather-than-deleted",
+      "then": "none permanently deletes the agent",
+      "when": "its actions are listed"
+    },
+    {
+      "given": "an archived agent",
+      "key": "ac8",
+      "requirement": "n1",
+      "then": "it is not offered and the trigger returns 409 saying to unarchive it; its configuration still opens and offers Unarchive",
+      "when": "the new-conversation, recipient and assignee choices are listed, or it is triggered"
+    },
+    {
+      "given": "an agent bound to a charter and a runner",
+      "key": "ac9",
+      "requirement": "n2",
+      "then": "it holds no charter, still holds the runner, and the response names the released charter; the charter can then be deleted",
+      "when": "it is archived"
+    },
+    {
+      "given": "a database holding an agent archived with a charter still bound",
+      "key": "ac10",
+      "requirement": "n2",
+      "then": "that agent holds no charter",
+      "when": "the Hub's migrations run"
+    },
+    {
+      "given": "an archived agent that never had a charter",
+      "key": "ac11",
+      "requirement": "n2",
+      "then": "the response states no charter is bound, that unarchiving does not restore one and that it still runs, and asserts nothing about its own charter",
+      "when": "it is unarchived"
+    },
+    {
+      "given": "an archived agent",
+      "key": "ac12",
+      "requirement": "n3",
+      "then": "the first returns 409 naming unarchiving; the second succeeds",
+      "when": "a charter is bound to it, and then its charter is set to null"
+    },
+    {
+      "given": "an open agent and a second client with the project open",
+      "key": "ac13",
+      "requirement": "n4",
+      "then": "one `agent_archived` event is recorded and broadcast; the second call answers 200 saying nothing changed",
+      "when": "it is archived, then archived again"
+    },
+    {
+      "given": "an unbound agent with queued input",
+      "key": "ac15",
+      "requirement": "an-agent-that-cannot-be-archived-shall-be-told-what-to-clear",
+      "then": "409 says to bind a runner so the input can be delivered, or discard it, and carries the blocking entry ids",
+      "when": "it is archived"
+    },
+    {
+      "given": "the same agent after its queue is cleared",
+      "key": "ac16",
+      "requirement": "an-agent-that-cannot-be-archived-shall-be-told-what-to-clear",
+      "then": "it is archived",
+      "when": "it is archived"
+    },
+    {
+      "given": "an isolated agent that has never run",
+      "key": "ac17",
+      "requirement": "an-agent-s-workspace-states-where-it-works-and-whether-that-",
+      "then": "the directory it will work in is stated and no checkout is created",
+      "when": "Workspace is opened"
+    },
+    {
+      "given": "an agent with two tasks in task checkouts and one that began in its own checkout",
+      "key": "ac18",
+      "requirement": "an-agent-s-workspace-states-where-it-works-and-whether-that-",
+      "then": "each task checkout is listed with branch and task, and the third task is shown as worked in the agent's own checkout",
+      "when": "Workspace is opened"
+    },
+    {
+      "given": "a project directory that cannot provide an isolated checkout",
+      "key": "ac19",
+      "requirement": "an-agent-s-workspace-states-where-it-works-and-whether-that-",
+      "then": "the reason is stated",
+      "when": "Workspace is opened"
+    },
+    {
+      "given": "an agent whose default posture is Ask me",
+      "key": "ac20",
+      "requirement": "an-agent-has-a-default-permission-posture",
+      "then": "the first run uses Ask me; the second conversation uses Edit files; the agent default is unchanged",
+      "when": "a peer message triggers it in a conversation that chose none, and the operator then picks Edit files in another conversation"
+    },
+    {
+      "given": "an agent",
+      "key": "ac21",
+      "requirement": "n6",
+      "then": "`config.yolo` is true, then false",
+      "when": "its default posture is set to Full access and then cleared"
+    },
+    {
+      "given": "an agent with no default posture",
+      "key": "ac22",
+      "requirement": "n6",
+      "then": "both show the posture its next run would use, and nothing is stored for the conversation",
+      "when": "the new-conversation composer and its settings are shown"
+    },
+    {
+      "given": "an agent whose config sets `yolo`",
+      "key": "ac23",
+      "requirement": "a-setting-with-no-backing-state-is-not-presented",
+      "then": "no role field and no yolo badge appear, and no persona or role is offered",
+      "when": "its summary is returned and its configuration shown"
+    },
+    {
+      "given": "an agent bound to a reviewer charter",
+      "key": "ac24",
+      "requirement": "the-operator-can-grant-an-agent-the-authority-to-accept-evid",
+      "then": "the grant reads back as held, then the agent is refused when it next decides evidence; before the grant it held none",
+      "when": "the operator grants then withdraws `can_accept_evidence`"
+    },
+    {
+      "given": "a new agent",
+      "key": "ac25",
+      "requirement": "n7",
+      "then": "`can_read_checkpoints` and `can_recall` are both off",
+      "when": "its Access section is read"
+    },
+    {
+      "given": "an agent",
+      "key": "ac26",
+      "requirement": "n8",
+      "then": "the first returns 400 naming the 10-600 range; the second is stored",
+      "when": "`permission_timeout_seconds` is set to 5, then 300"
+    },
+    {
+      "given": "an agent",
+      "key": "ac27",
+      "requirement": "n9",
+      "then": "400 names the valid fields and nothing is stored",
+      "when": "PATCH carries `permission_timeout_secondz`"
+    },
+    {
+      "given": "an agent whose config has `{\"a\": {\"b\": 1}}`",
+      "key": "ac28",
+      "requirement": "n9",
+      "then": "the key `b` is removed",
+      "when": "PATCH sends `config: {\"a\": {\"b\": null}}`"
+    },
+    {
+      "given": "an unbound agent with queued input",
+      "key": "ac29",
+      "requirement": "n10",
+      "then": "the queued input is scheduled for delivery",
+      "when": "a runner is bound to it"
+    },
+    {
+      "given": "an agent with a non-terminal task assigned",
+      "key": "ac30",
+      "requirement": "n11",
+      "then": "409 and nothing in the body is stored",
+      "when": "a config change would make it stop working in its own checkout"
+    },
+    {
+      "given": "a Copilot agent whose stored setting is absent or anything but `true`",
+      "key": "ac33",
+      "requirement": "copilot-s-built-in-github-server-is-off-unless-the-operator-",
+      "then": "Copilot's built-in servers are disabled; after the operator enables it and reopens the settings it shows enabled and runs start without disabling them",
+      "when": "a run starts"
+    },
+    {
+      "given": "an agent bound to a `claude` runner",
+      "key": "ac34",
+      "requirement": "copilot-s-built-in-github-server-is-off-unless-the-operator-",
+      "then": "no GitHub server setting is presented",
+      "when": "its Execution section is shown"
+    },
+    {
+      "given": "an agent's question timeout is set to 400",
+      "key": "cr29",
+      "requirement": "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett",
+      "then": "the run waits up to 400 s and the Hub stamps a deadline 400 s out",
+      "when": "its run asks a blocking question"
+    },
+    {
+      "given": "an agent has no timeout set",
+      "key": "cr30",
+      "requirement": "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett",
+      "then": "neither variable is set and the defaults apply",
+      "when": "its run starts"
+    },
+    {
+      "given": "",
+      "key": "cr31",
+      "requirement": "n8",
+      "then": "it is on the agent's settings destination and not in the composer",
+      "when": "the operator looks for an agent's question timeout"
+    },
+    {
+      "given": "An agent the Hub reports runnable and not collaboration-ready",
+      "key": "ac49",
+      "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
+      "then": "The runner control says it will run but cannot collaborate, with the Hub's reason.",
+      "when": "The operator opens its execution settings"
+    },
+    {
+      "given": "An agent reported collaboration-ready",
+      "key": "ac50",
+      "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
+      "then": "No collaboration warning is shown.",
+      "when": "Its execution settings are opened"
+    },
+    {
+      "given": "An agent reported not runnable",
+      "key": "ac51",
+      "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
+      "then": "Only the cannot-run statement is shown.",
+      "when": "Its execution settings are opened"
+    },
+    {
+      "given": "An agent showing the cannot-collaborate statement",
+      "key": "ac52",
+      "requirement": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
+      "then": "The statement disappears without a reload.",
+      "when": "The operator changes its runner or permissions so it becomes ready"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-11": "10481191296d883cd890bb0be3886f500d369751ef44ebdc2160c5d596deb944",
+      "FR-12": "78c847d3537e694b8329e223cab628fa1e0d2ef1fe9f8263c469abf2f11d914b",
+      "FR-13": "e362b92349b1d3b246e8f959c804a97580477f80b1773a5a67c678a3bb78784a",
+      "FR-14": "7d50db5ef6aeaa4fd1b59ad258c22f3db3ea74dce82356c3b0700f1aaf060120",
+      "FR-15": "6a3c8d220fdc95d9ada3c15ee423ced08bd057c4b422e101ff2e245c543e0201",
+      "FR-16": "8278c53444b1afde0d80457bd8d5f97bbd47462f4e73120dd9df0467428f8edf",
+      "FR-17": "1893f6ee9d659de39e532f07868df75f89c39625628137305907819f0ab718c6",
+      "FR-18": "046fb23d871662a32ba004569dff2202580f00d3b7fcf3b3ff377373e3cc24c4",
+      "FR-19": "f121c9e4dfdee131920928b547969f122094af8c9fa7240f4e99c1d3e12a9f7e",
+      "FR-20": "e71b2d6c077ecccbe96fc0f882ca91c8184ab111e8ae5c133714be931c1a11ae",
+      "FR-21": "5d166072cb34f1ab95550611246ba727e57b1974085ddf92e166d74b158d61a0",
+      "FR-22": "9ea8b0597c1e832cda613c58da952e62f9f0f28632035ac456f21b43d7ce39a1",
+      "FR-23": "80472f2bb9a64dbccab0b41ad657358db070b108c4f4de1efc0658da47b1cebf",
+      "FR-24": "d6c96fa62156c18378ef807862bb83812f43b14a594fa0d012c81e4c66b0ed2a",
+      "FR-25": "da8e3265d29b7cb60502697099bee0ec6aba5d9a01742e7b9495b29279536a4e",
+      "FR-26": "c09cbd0c83ccb281804a6e8b88f9ce3363480937dc0eed377ab7c52de1a8d2c4",
+      "FR-27": "9acd25fab59e8e4364871c9ffa21ceb4451abc108ba52e51485af5113718d6f6",
+      "FR-28": "daf4c6069a97964d47444d881411a3e278cd4fdb2af05a0e20d3036fb61dc769",
+      "FR-29": "01d5d1f1d31325318cf117b33f5589e383d2e15146c7be228cdd07ddcbb634ed",
+      "FR-30": "c68022117d5d56d0209dd5c66150051de5964e86c822899099f57c329c703f31",
+      "FR-31": "da119286bff6da5ab5a41909a563cc05f30fa54646ec417a085a1b92780a4f39",
+      "FR-32": "d78817ec16968b4f8d1674d4ba46c4744fe190850313540138a95ee72809cf90",
+      "FR-33": "303c2e83dd33912f50194c7ef8844366d86685efd590110a63fdd304e8c76f30",
+      "FR-34": "bb79b93beb11f58317274021e11c1a3917437ac28b4663d9a93b4a006ed789f3",
+      "FR-35": "46c8e11d1d0b78a0ee7880d6ccb2007dcd85596bec4c6dbd7c174be58d4a9786",
+      "FR-36": "78be143139d22879453e156f01e5366b5e0fc253c254dd22a6a862f8116064ac",
+      "FR-37": "d00ed752e58f16c4ebc329a215bdc2558490213e5d3b58a05ff8243d27fddff4"
+    },
+    "high_water": 37,
+    "requirements": {
+      "a-setting-with-no-backing-state-is-not-presented": "FR-19",
+      "agent-configuration-is-a-destination-rather-than-a-surface-i": "FR-11",
+      "an-agent-carries-a-description-written-for-the-operator": "FR-15",
+      "an-agent-has-a-default-permission-posture": "FR-18",
+      "an-agent-is-archived-rather-than-deleted": "FR-16",
+      "an-agent-s-workspace-states-where-it-works-and-whether-that-": "FR-17",
+      "an-agent-that-cannot-be-archived-shall-be-told-what-to-clear": "FR-22",
+      "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w": "FR-37",
+      "configuration-is-separated-from-observation": "FR-13",
+      "configuration-navigation-replaces-the-surrounding-navigation": "FR-12",
+      "configuration-sections-are-named-for-operator-intent": "FR-14",
+      "copilot-s-built-in-github-server-is-off-unless-the-operator-": "FR-23",
+      "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett": "FR-36",
+      "n1": "FR-24",
+      "n10": "FR-33",
+      "n11": "FR-34",
+      "n2": "FR-25",
+      "n3": "FR-26",
+      "n4": "FR-27",
+      "n6": "FR-29",
+      "n7": "FR-30",
+      "n8": "FR-31",
+      "n9": "FR-32",
+      "the-operator-can-grant-an-agent-the-authority-to-accept-evid": "FR-20"
+    },
+    "retired": {
+      "an-agent-with-no-way-to-be-launched-shall-say-so-and-shall-n": "FR-21",
+      "n12": "FR-35",
+      "n5": "FR-28"
+    }
+  },
+  "design": "**Destination, not dialog.** Settings are a URL-addressed destination whose section rail replaces the workspace rail; back always goes to the agent's most recent conversation.\n\n**Archive, never delete.** `agent_lifecycle.archive` sets `lifecycle=archived`, stamps `archived_at` and clears `charter_id`; `runner_id` is kept so the archived agent's configuration still shows what it ran on, and runner deletion clears archived holders instead (runner-registry). Migration 0105 cleared charters from agents archived before this rule.\n\n**One PATCH route.** `PATCH /agents/{name}` takes an untyped body, so it carries the whole vocabulary check (unknown fields refused) and per-field validation (description, posture, waiting times, grants, Copilot review agents); `config` is an RFC 7396 merge patch.\n\n**Posture and yolo are one setting.** `default_permission_mode` is authoritative and `config.yolo` is rewritten from it, because command construction still reads `yolo`.\n\n**Waits travel as environment.** An agent's waiting limits reach its runs as `AW_DECISION_TIMEOUT` and `AW_QUESTION_TIMEOUT`; unset means the tool's built-in default.\n\n**Readiness from the trigger's own judgement.** The collaboration reason the runner control shows comes from the same adapter member the trigger uses to pick a transport, so the control cannot disagree with what runs.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_agent_archival.py — archive/unarchive, refusals, charter release, events.",
+      "hub/tests/test_archived_send_refusal.py — send to an archived agent.",
+      "hub/tests/test_agent_default_permission_mode.py, test_agent_evidence_grant.py.",
+      "hub/tests/test_copilot_github_mcp_toggle.py — GitHub server setting and decisions.",
+      "hub/ui/src/__tests__/agentWorkspaceSection.test.tsx, agentPermissionDefault.test.tsx, copilotAgentSettings.test.tsx, archivedAgentNotice.test.tsx, urlNavigation.test.ts."
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Settings reached through a conversation depend on which conversation is selected, settings mixed with live status change under the reader, and a deletable agent would orphan or destroy the record of work it did.",
+  "requirements": [
+    {
+      "key": "agent-configuration-is-a-destination-rather-than-a-surface-i",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent may have many transient conversations but has one durable configuration; it should not depend on which conversation happens to be selected.",
+      "statement": "The Hub SHALL present an agent's configuration as its own destination, addressed by URL (`?project=<id>&agent=<name>&settings=<section>`), reachable without opening a conversation and restored on reload."
+    },
+    {
+      "key": "configuration-navigation-replaces-the-surrounding-navigation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A settings surface is stepped into and out of; a fixed, named return target can be read before it is used, unlike a remembered origin. Dropping the attached document would silently change what the next turn is written against.",
+      "statement": "An agent's configuration SHALL show its section list in place of the surrounding navigation, with a back control that always returns to the agent's most recent conversation and keeps any document that was open beside it."
+    },
+    {
+      "key": "configuration-is-separated-from-observation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Observations change without anyone configuring anything. Provider sessions are listed under Workspace because their value is the directory each ran in, and they are never used to address a conversation.",
+      "statement": "An agent's configuration SHALL NOT present live observations (status, latest status message, last-seen time), which stay with the agent's conversation, and no setting SHALL be editable from more than one surface; provider sessions MAY appear only as diagnostic detail in the Workspace section."
+    },
+    {
+      "key": "configuration-sections-are-named-for-operator-intent",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Sections named for intent let later settings be added without restructuring; checkpointing lives in Context and read grants in Access.",
+      "statement": "An agent's configuration SHALL be divided into the sections Identity, Execution, Charter, Interaction, Context, Access and Workspace, and no section SHALL be named for a concept the product no longer has."
+    },
+    {
+      "key": "an-agent-carries-a-description-written-for-the-operator",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The charter is where behaviour is stated; a second behaviour-shaping field would leave two places to look when an agent acts wrongly. \"Cleared\" and \"never written\" are one state.",
+      "statement": "An agent SHALL carry an optional description of at most 256 characters, edited in Identity and returned with the agent's summary, stored trimmed with a blank value stored as none, and never injected into any turn's context."
+    },
+    {
+      "key": "an-agent-is-archived-rather-than-deleted",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Every run is attributed to its agent; deletion would cascade through or orphan that history. Stopping a live run from a settings page destroys work, and archiving over queued input strands it because nothing delivers to an archived agent.",
+      "statement": "The Hub SHALL let an operator archive and unarchive an agent, SHALL offer no means of deleting one, and SHALL refuse with 409 and the reason to archive an agent with a run in progress or with undelivered queued input."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent that could be archived but never found again would be deleted in all but name.",
+      "statement": "An archived agent SHALL NOT be offered where a working agent is chosen (new conversation, message recipient, task assignee, launchability report by default) and SHALL NOT be triggered, but SHALL remain reachable when asked for explicitly, including its configuration where it is unarchived; its conversations stay readable and its runs and messages keep their attribution."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A charter bound to an agent nothing runs governs nothing and only blocks the charter's deletion behind a name the roster hides. The runner stays so the archived agent's configuration still shows what it ran on.",
+      "statement": "Archiving SHALL release the agent's charter binding and keep its runner binding, the archive response SHALL name the charter released, and the unarchive response SHALL state that no charter is bound, that archiving releases one and unarchiving does not restore it, and that an agent with no charter still runs."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Re-binding would undo the release archival made; clearing is not re-binding.",
+      "statement": "Binding a charter to an archived agent SHALL be refused with 409 naming unarchiving as the repair, while clearing an archived agent's charter binding SHALL be permitted."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A response body reaches one client; the event is the durable record and tells a second client its roster changed. A repeated event would read in the log like a real transition.",
+      "statement": "Each real archive or unarchive SHALL be recorded as an `agent_archived` / `agent_unarchived` event (the archive event naming the released charter or none) and broadcast to open clients, and archiving an archived agent or unarchiving an open one SHALL answer 200 saying nothing changed, without a new event."
+    },
+    {
+      "key": "an-agent-that-cannot-be-archived-shall-be-told-what-to-clear",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An unlaunchable agent accumulates undeliverable input that then blocks archiving it; the refusal must name the remedy, non-destructive first.",
+      "statement": "When archiving is refused because input is queued for the agent, the refusal SHALL state how the input is cleared (bind a runner so it can be delivered when none is bound, otherwise let it be delivered, or discard it) and carry the count and ids of the blocking entries."
+    },
+    {
+      "key": "an-agent-s-workspace-states-where-it-works-and-whether-that-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An operator shown one directory for an agent working three tasks is shown a place most of its work is not; a blank section is indistinguishable from one that failed to load.",
+      "statement": "The Workspace section SHALL state the directory an agent's turns run in and whether it is the agent's own checkout or the shared project checkout, SHALL list each task checkout of the agent's tasks with its branch and task, marking a task worked in the agent's own checkout because it began before per-task checkouts, SHALL state why isolation is unavailable when it is, and SHALL NOT provision anything by being read."
+    },
+    {
+      "key": "an-agent-has-a-default-permission-posture",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Runs no operator starts still need a posture the operator chose.",
+      "statement": "An agent SHALL carry an optional default permission posture, chosen in Execution from the postures the catalog's providers declare with the same labels, applied to any run whose conversation has not chosen one (including peer- and schedule-started runs), and overridden by a conversation's own choice."
+    },
+    {
+      "key": "n6",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "`yolo` is the older spelling of the same setting and is still read by command construction; letting the two disagree runs an agent under one posture while showing another.",
+      "statement": "Setting the default posture SHALL set the agent's legacy `config.yolo` flag to whether the posture is Full access, clearing it SHALL clear the flag, and every surface that shows a posture at rest SHALL show the one the next run would use, derived the same way, without recording it as a conversation's choice."
+    },
+    {
+      "key": "a-setting-with-no-backing-state-is-not-presented",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A control with no state claims something is configurable when it is not; state with no control reports a value the operator cannot act on.",
+      "statement": "The Hub SHALL NOT present or return an agent setting that has no stored state behind it, SHALL NOT show a setting as a read-only badge when it has an editable home in the configuration, and SHALL NOT ask the operator to choose a persona or organizational role."
+    },
+    {
+      "key": "the-operator-can-grant-an-agent-the-authority-to-accept-evid",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Authority over what merges is the operator's to give, and is not a kind of reading; an enforced capability settable nowhere is a refusal of everyone.",
+      "statement": "The operator SHALL be able to grant and withdraw an agent's authority to accept or reject requirement evidence (`can_accept_evidence`), shown in Access apart from the read grants, stating that a granted agent still cannot accept its own work; with no agent granted, the operator SHALL still be able to decide evidence."
+    },
+    {
+      "key": "n7",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Reading a summary of a peer's work and reading the raw output behind it are different permissions.",
+      "statement": "The operator SHALL be able to grant and withdraw an agent's read grants `can_read_checkpoints` and `can_recall` in Access, both closed by default."
+    },
+    {
+      "key": "n8",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "How long an agent holds its turn open for the operator is a per-agent choice; validating at the route keeps a nonsense value out of the column a run reads.",
+      "statement": "The Interaction section SHALL let the operator set how long a run waits for a permission decision and for an answer to a question, each a whole number of seconds from 10 to 600 or cleared to the built-in default (the page states 120 s and 240 s), refused with 400 otherwise."
+    },
+    {
+      "key": "n9",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A misspelt safety setting answered 200 and changed nothing; a half-applied body leaves the operator believing all of it was saved.",
+      "statement": "`PATCH /agents/{name}` SHALL refuse the whole body with 400 naming the valid fields when it carries an unknown field, and SHALL apply `config` as a JSON merge patch in which null removes the key it names and `\"config\": null` clears the configuration."
+    },
+    {
+      "key": "n10",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Binding a runner is the repair the unbound refusal names; input queued meanwhile must be delivered once the repair is made.",
+      "statement": "Binding a runner to an agent that had none, or a different one, SHALL schedule delivery of the agent's queued input."
+    },
+    {
+      "key": "n11",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Flipping isolation under held work runs the next task turn in a different checkout from the earlier ones, and nothing commits the difference.",
+      "statement": "A configuration change that would switch whether an agent works in its own checkout SHALL be refused with 409 while the agent has a running turn or a non-terminal task assigned, storing no part of the request."
+    },
+    {
+      "key": "copilot-s-built-in-github-server-is-off-unless-the-operator-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "That server acts on GitHub as the signed-in operator, outside the agent's workspace, so it is off until the operator turns it on.",
+      "statement": "For an agent bound to a `copilot` runner, the Execution section SHALL offer a GitHub server setting, stored per agent and enabled only when the stored value is `true`, described as giving the agent read-only GitHub tools Copilot runs without asking in every posture and as not governing `gh` in a shell; with it off, the agent's runs SHALL start with Copilot's built-in MCP servers disabled."
+    },
+    {
+      "key": "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reasonable wait depends on the agent and on whether the operator is watching; one compiled-in number serves neither case.",
+      "statement": "Each agent SHALL carry its own optional limits for how long a run waits on a permission decision and on a question, passed to its runs as `AW_DECISION_TIMEOUT` and `AW_QUESTION_TIMEOUT`; an agent with no limit set, or a value outside 10-600 seconds, SHALL use the system default (120 s for decisions, 240 s for questions)."
+    },
+    {
+      "key": "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The condition should be named where it can be fixed, and must not linger after it is fixed.",
+      "statement": "An agent's runner control SHALL show the Hub's own collaboration reason when the Hub reports the agent runnable but not collaboration-ready, SHALL show nothing for a ready agent or one the verdict does not apply to, and SHALL refresh the verdict without a reload after the runner or permissions change."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The agent settings page (`hub/ui/src/components/agents/AgentSettingsPage.tsx`) and its seven sections.",
+      "`PATCH /agents/{name}`, `POST /agents/{name}/archive`, `POST /agents/{name}/unarchive`.",
+      "Agent-level settings: description, runner and charter binding, default permission posture, waiting limits passed to runs, grants, the Copilot GitHub server setting.",
+      "The runner control's statement that an agent will run but cannot collaborate."
+    ],
+    "non_goals": [
+      "Creating an agent: operator-agent-creation.",
+      "Runner and charter records themselves, and whether an agent can be launched at all: runner-registry, agent-charter.",
+      "What a posture permits at run time, and how calls to an enabled Copilot GitHub server are decided: agent-run-sandboxing.",
+      "Refusing a message to an archived agent: agent-capability-plane.",
+      "Checkpoint policy semantics (conversation-checkpoint); the Context section only hosts them."
+    ]
+  },
+  "summary": "An agent's configuration is a destination of its own, addressed by URL, divided into sections named for what an operator is trying to do: identity, execution, charter, interaction, context, access and workspace. It holds settings, not live observations, including the per-agent limits on how long a run waits for the operator. Settings are written through `PATCH /agents/{name}`, which refuses unknown fields. An agent is archived, never deleted, because every run is attributed to one; archival releases the agent's charter but keeps its runner. The runner control says when an agent will run but cannot collaborate.",
+  "tasks": [],
+  "title": "Agent configuration"
+}

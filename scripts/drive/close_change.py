@@ -10,7 +10,7 @@ already on the main branch lands as `already integrated`; nothing is merged.
 
 Then fold the change into the capability it changes, which archives it, through the Hub's fold
 route (`a-finished-change-is-folded-into-its-capability`; the app's "Fold into capability" does the
-same):  close_change.py --fold fold spec/capabilities/spec-document-authority/spec.html
+same):  close_change.py --fold fold spec/capabilities/spec-document-authority/spec.json
 The Hub refuses the fold while a task is open and on a key collision; nothing is written then.
 """
 
@@ -48,11 +48,11 @@ BAR_TESTS = "hub/ui/src/__tests__/specPhaseBar.test.tsx"
 # Folded by owner (operator, 2026-10-08): what the Hub holds on a document goes to
 # spec-document-authority, what a turn is told goes to spec-chat-session.
 JOURNEY_FOLD = {
-    "spec/capabilities/spec-document-authority/spec.html": [
+    "spec/capabilities/spec-document-authority/spec.json": [
         "step-recorded", "default-journey", "advance-tool", "criterion-check-fields",
         "operator-moves-journey", "propose-without-close", "existing-documents",
     ],
-    "spec/capabilities/spec-chat-session/spec.html": [
+    "spec/capabilities/spec-chat-session/spec.json": [
         "one-step-briefing", "step-asks-to-advance", "resume-anywhere", "intake-sizes",
         "acceptance-step", "context-preview",
     ],
@@ -60,7 +60,7 @@ JOURNEY_FOLD = {
 
 CHANGES = {
     "fjourney": {
-        "document": "spec/changes/a-spec-is-written-one-step-at-a-time/spec.html",
+        "document": "spec/changes/a-spec-is-written-one-step-at-a-time/spec.json",
         "commit": "90e8273",
         "tasks": ["task-c92b4f2b2e36", "task-d1486fcad84e", "task-92e550885015", "task-c04af8b96474"],
         "evidence": [
@@ -108,7 +108,7 @@ CHANGES = {
         ],
     },
     "f379": {
-        "document": "spec/changes/the-settings-that-gate-collaboration-are-on-the-project-page/spec.html",
+        "document": "spec/changes/the-settings-that-gate-collaboration-are-on-the-project-page/spec.json",
         "commit": "e38f017",
         "tasks": ["task-cb35c27ccb6e", "task-c8730b35bd7a"],
         "evidence": [
@@ -147,7 +147,7 @@ CHANGES = {
         ],
     },
     "f536": {
-        "document": "spec/changes/a-capability-can-be-retired/spec.html",
+        "document": "spec/changes/a-capability-can-be-retired/spec.json",
         "commit": "14695f6",
         "tasks": ["task-9695e6dc92b4", "task-5a7592c5b666", "task-40cef1d4fea7"],
         "evidence": [
@@ -172,7 +172,7 @@ CHANGES = {
         ],
     },
     "f440": {
-        "document": "spec/changes/a-decided-task-withdraws-its-waiting-reviews/spec.html",
+        "document": "spec/changes/a-decided-task-withdraws-its-waiting-reviews/spec.json",
         "tasks": ["task-3c0c22f24a44", "task-93f9df045c6a", "task-2035432af11f"],
         "evidence": [
             ("FR-1", "task-93f9df045c6a", "test_result", TESTS,
@@ -191,7 +191,7 @@ CHANGES = {
         ],
     },
     "f450": {
-        "document": "spec/changes/a-run-claims-only-its-agents-or-nobodys-work/spec.html",
+        "document": "spec/changes/a-run-claims-only-its-agents-or-nobodys-work/spec.json",
         "tasks": ["task-151291e8d5a9", "task-e13de03d6ec0", "task-c89c9d9b17d6"],
         "evidence": [
             ("FR-1", "task-e13de03d6ec0", "test_result", CLAIM_TESTS,
@@ -210,7 +210,7 @@ CHANGES = {
         ],
     },
     "f425": {
-        "document": "spec/changes/a-read-only-agent-holds-no-task-work/spec.html",
+        "document": "spec/changes/a-read-only-agent-holds-no-task-work/spec.json",
         "tasks": ["task-e12f21e11f3b", "task-e1bf77c9375a", "task-707ba7cd531f"],
         "evidence": [
             ("FR-1", "task-e1bf77c9375a", "test_result", READ_ONLY_TESTS,
@@ -229,7 +229,7 @@ CHANGES = {
         ],
     },
     "f462": {
-        "document": "spec/changes/a-codex-app-server-spec-turn-keeps-no-write-tools/spec.html",
+        "document": "spec/changes/a-codex-app-server-spec-turn-keeps-no-write-tools/spec.json",
         "tasks": ["task-a329084987ed", "task-c5e910f735b3", "task-b263ff986238"],
         "evidence": [
             ("FR-1", "task-c5e910f735b3", "test_result", CODEX_SPEC_TESTS,
@@ -249,7 +249,7 @@ CHANGES = {
         ],
     },
     "f531": {
-        "document": "spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server/spec.html",
+        "document": "spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server/spec.json",
         "tasks": ["task-c657e94471f5", "task-91d8626ddfe7"],
         "evidence": [
             ("FR-1", "task-91d8626ddfe7", "test_result", STRICT_MCP_TESTS,
@@ -268,7 +268,7 @@ CHANGES = {
         ],
     },
     "f508": {
-        "document": "spec/changes/a-document-names-its-default-reviewer/spec.html",
+        "document": "spec/changes/a-document-names-its-default-reviewer/spec.json",
         "tasks": [
             "task-ca5e972926f9",
             "task-3a09c1140b1b",
@@ -298,7 +298,7 @@ CHANGES = {
         ],
     },
     "fold": {
-        "document": "spec/changes/a-finished-change-is-folded-into-its-capability/spec.html",
+        "document": "spec/changes/a-finished-change-is-folded-into-its-capability/spec.json",
         "tasks": ["task-e7c8a583c45c", "task-8a9f0b76ae27", "task-880b8e79d65a"],
         "evidence": [
             ("FR-1", "task-8a9f0b76ae27", "test_result", FOLD_TESTS,
@@ -327,7 +327,7 @@ CHANGES = {
         ],
     },
     "f533": {
-        "document": "spec/changes/a-fold-can-retire-what-the-change-supersedes/spec.html",
+        "document": "spec/changes/a-fold-can-retire-what-the-change-supersedes/spec.json",
         "tasks": ["task-85b425296f6f", "task-036912f44f18", "task-e103703a8f9a"],
         "evidence": [
             ("FR-1", "task-036912f44f18", "test_result",
@@ -350,7 +350,7 @@ CHANGES = {
         ],
     },
     "f535": {
-        "document": "spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks/spec.html",
+        "document": "spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks/spec.json",
         "tasks": ["task-d89b47b08bed", "task-eb792ba57e58", "task-c0ebc563e02d"],
         "evidence": [
             ("FR-1", "task-eb792ba57e58", "test_result", REFRESH_TESTS,
@@ -376,7 +376,7 @@ CHANGES = {
         ],
     },
     "f532": {
-        "document": "spec/changes/the-operator-can-delete-a-document-a-task-or-an-archived-agent/spec.html",
+        "document": "spec/changes/the-operator-can-delete-a-document-a-task-or-an-archived-agent/spec.json",
         "tasks": ["task-590f10b700ce", "task-2b6be2d03939", "task-f383ec86c0dc"],
         "evidence": [
             ("FR-1", "task-2b6be2d03939", "test_result", DELETE_TESTS,

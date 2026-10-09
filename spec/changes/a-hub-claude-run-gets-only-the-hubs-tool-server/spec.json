@@ -1,0 +1,133 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the trial Hub on :8010, a fresh project, one Haiku agent, the operator's account carrying claude.ai connectors",
+      "key": "drive",
+      "requirement": "strict",
+      "then": "the spawned claude argv carries --strict-mcp-config and the turn names no mcp__claude_ai tool (1/3 on today's code, 3/3 after)",
+      "when": "one turn runs (scripts/drive/d1008_f531_no_connectors_drive.py)"
+    },
+    {
+      "given": "_build_claude_command with the Hub's server injected, with none, under yolo, and resuming a session",
+      "key": "argv",
+      "requirement": "strict",
+      "then": "it contains --strict-mcp-config exactly once, and the Hub's --mcp-config is unchanged",
+      "when": "the argv is built"
+    },
+    {
+      "given": "a runner whose flags carry --mcp-config naming a second stdio server",
+      "key": "runner-flag",
+      "requirement": "runner-servers",
+      "then": "system/init lists both the agentweave server and the runner's server, and no claude.ai server",
+      "when": "a Hub-shaped claude -p starts with that argv"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "3e70bf26a90de3d811bc706e28131cc3c66fece49d84785a0db2a0a36c823111",
+      "FR-2": "94735afc9320650196835915f631925909716be527d65b0ae56968b01d2d7758"
+    },
+    "high_water": 2,
+    "requirements": {
+      "runner-servers": "FR-2",
+      "strict": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2: a cross-cutting change to every Claude agent run's argv, and a containment question. No migration and no UI. HAZARD: it reaches :8000's agents at :8000's next restart, and from then on a project's own .mcp.json servers and the operator's user-scope MCP servers no longer load in any Hub agent run. Nothing in spec/capabilities promises them (grep: the only match is agent-run-sandboxing's allowlist of the Hub's own server), and the Hub describes none of them to the agent, but an operator could have come to rely on one; the remedy is a runner flag --mcp-config naming it, which strict mode honours (criterion runner-flag). ROLLBACK: revert the one commit; no stored state changes. WHERE: _build_claude_command, not _claude_mcp_args, because the latter returns [] when no server is injected and that run must not inherit either. CLAUDE.md and project settings still load: the flag affects MCP servers only (measured for the titler, conversation_titles.py:81-83).",
+  "evidence": {
+    "checked": [
+      "_build_claude_command (runner_commands.py:172) is the only builder of a Claude agent turn's argv (build_command -> ClaudeAdapter -> _build_claude_command); inject_mcp returns _claude_mcp_args, the same fragment",
+      "ClaudeAdapter.one_shot already passes --strict-mcp-config for worker and title (claude.py:168-170)",
+      "F21 probe 2026-10-08: --strict-mcp-config leaves the Hub's 27 tools in system/init and removes the account connectors (alwaysLoad read-out); context unchanged at 26.5k without connectors loaded",
+      "Acceptance drive on today's :8010: 1/3; the argv lacks the flag and the agent named mcp__claude_ai_Claude_Docs__batch, create, delete, export, guide, query, read, update"
+    ],
+    "limits": [
+      "The drive's second check relies on the model reporting tool names it can see; the argv check is the deterministic half",
+      "Windows only: the drive reads the process command line through Win32_Process"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "_build_claude_command (runner_commands.py:172) passes --mcp-config without --strict-mcp-config, so Claude Code merges in every server the operator's own configuration and account carry. Driven on :8010 on 2026-10-08 (scripts/drive/d1008_f531_no_connectors_drive.py, 1/3): a fresh Haiku agent's turn listed eight mcp__claude_ai_Claude_Docs__* tools; a Hub-shaped claude -p with alwaysLoad also showed Drive, Calendar and Gmail (needs-auth). Those tools were granted by no Hub surface, are described nowhere in the run's context, and under bypassPermissions or yolo are callable with no prompt. The Hub's one-shots (titles, workers) already pass the flag for this reason (claude.py:168-170; conversation_titles.py:81-83).",
+  "requirements": [
+    {
+      "key": "strict",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A run's tool surface is the Hub's to grant and describe; servers inherited from the operator's account or user configuration are neither granted nor recorded, and a no-server run must not inherit them either.",
+      "statement": "Every Claude agent run the Hub spawns MUST load only the MCP servers named on its own command line, by passing --strict-mcp-config, whether or not the Hub's own server is injected."
+    },
+    {
+      "key": "runner-servers",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The escape hatch for an operator whose agents need another server (a project's .mcp.json server, say): strict mode honours every --mcp-config on the command line.",
+      "statement": "An MCP server a runner's flags name with --mcp-config MUST still load in that runner's runs."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The argv of every Claude agent turn (_build_claude_command), with or without the Hub's MCP server injected",
+      "The agent-run-sandboxing capability: a requirement stating which MCP servers a Claude run loads"
+    ],
+    "non_goals": [
+      "Codex and Copilot runs: Copilot already runs in a Hub-made COPILOT_HOME; Codex reads ~/.codex/config.toml servers and is undrivable here (backlog, not this change)",
+      "A UI for choosing extra MCP servers per runner: runner flags already carry --mcp-config, which strict mode honours",
+      "The Hub's one-shot spawns: already strict"
+    ]
+  },
+  "summary": "Every Claude agent run the Hub spawns carries --strict-mcp-config, so it loads only the MCP servers the Hub's own --mcp-config names (the Hub's server, plus any a runner's flags add). The operator's claude.ai account connectors (Gmail, Drive, Calendar, Docs) and their user- and project-scope servers stop reaching agent runs (F531).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1008_f531_no_connectors_drive.py against :8010: the 'drive' criterion. Run before the build: 1/3, the agent listed eight Claude Docs connector tools.",
+      "files": [
+        "scripts/drive/d1008_f531_no_connectors_drive.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "strict"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "Failing tests first (hub/tests/test_a_hub_run_gets_only_the_hubs_tool_server.py: argv criterion, and a test that existing exact-argv tests are updated rather than loosened). Add the flag in _build_claude_command beside --mcp-config, outside _claude_mcp_args so a no-server run gets it too. Then the runner-flag criterion by a direct claude -p read-out, and the drive 3/3 on a restarted :8010.",
+      "files": [
+        "hub/hub/runner_commands.py",
+        "hub/tests/test_a_hub_run_gets_only_the_hubs_tool_server.py"
+      ],
+      "from": null,
+      "key": "flag",
+      "requirements": [
+        "strict",
+        "runner-servers"
+      ],
+      "reviewer": null,
+      "title": "--strict-mcp-config on every Claude agent turn"
+    }
+  ],
+  "title": "A Hub Claude run gets the Hub's tool server and no other"
+}

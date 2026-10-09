@@ -1,0 +1,158 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "A project with quiet hours 22:00-08:00 and the clock at 02:00",
+      "key": "ac1",
+      "requirement": "r1",
+      "then": "No notification is delivered and the notice is recorded as deferred.",
+      "when": "An agent raises a non-blocking notification"
+    },
+    {
+      "given": "The same project at 02:00",
+      "key": "ac2",
+      "requirement": "r2",
+      "then": "The notification is delivered immediately.",
+      "when": "An agent raises a blocking question"
+    },
+    {
+      "given": "Three notices deferred overnight",
+      "key": "ac3",
+      "requirement": "r3",
+      "then": "A digest is delivered containing all three.",
+      "when": "The window closes at 08:00"
+    },
+    {
+      "given": "Six notices deferred from two agents",
+      "key": "ac4",
+      "requirement": "r4",
+      "then": "It contains two groups, one per agent, not six entries in arrival order.",
+      "when": "The digest is built"
+    },
+    {
+      "given": "A new project with no quiet window configured",
+      "key": "ac5",
+      "requirement": "r5",
+      "then": "The window reads 22:00-08:00 in the project's declared timezone.",
+      "when": "Its notification settings are read"
+    },
+    {
+      "given": "A project with quiet hours disabled",
+      "key": "ac6",
+      "requirement": "r6",
+      "then": "It is delivered immediately, and nothing is deferred.",
+      "when": "An agent raises a non-blocking notification at 02:00"
+    },
+    {
+      "given": "A digest configured to deliver in-conversation",
+      "key": "ac7",
+      "requirement": "r7",
+      "then": "The digest appears as one conversation entry and no separate surface opens.",
+      "when": "The window closes"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "922f9ffa8577deffca13e68c39d4a6d8274d4da47d03653fcf76bda548b2c4aa",
+      "FR-2": "5631d5a9fa628c977c507118c67adc4213094e00f6fcce9537eb51b026cd87c9",
+      "FR-3": "092c5ab816e0013052ca91e1d3c9a6736c729864a23d5fff636dab79d8897e6e",
+      "FR-4": "2649d163d539d17d8176e45413884226ee8b94a030e645212a8f834898bcf982",
+      "FR-5": "bbac902085a812a0139cae5df2dc73302ab1efee990b103d6a10af0aa263ffc5",
+      "FR-6": "a7db52f08e2b76a7d000d5660eab0146c44ccec18056307ad5f9192e21ba028e",
+      "FR-7": "2cfd99973c679825a3993e91f7e9cdf491ea9728ba92d4ea299b87286076d9ec"
+    },
+    "high_water": 7,
+    "requirements": {
+      "r1": "FR-1",
+      "r2": "FR-2",
+      "r3": "FR-3",
+      "r4": "FR-4",
+      "r5": "FR-5",
+      "r6": "FR-6",
+      "r7": "FR-7"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Merged from quiet-hours-for-agent-notifications on first adoption of the capability corpus.",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "r1",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Losing a question silently is the failure this feature exists to prevent.",
+      "statement": "A notification raised inside the quiet window is deferred, not dropped."
+    },
+    {
+      "key": "r2",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A run that cannot continue without an answer is already costing time.",
+      "statement": "A blocking question overrides the quiet window and notifies immediately."
+    },
+    {
+      "key": "r3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Every deferred notification appears in the next digest after the window closes."
+    },
+    {
+      "key": "r4",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "Six notices from one agent read as one situation, not six.",
+      "statement": "The digest groups deferred notifications by agent rather than by arrival time."
+    },
+    {
+      "key": "r5",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The quiet window defaults to 22:00-08:00 in the project's declared timezone."
+    },
+    {
+      "key": "r6",
+      "modal": "MAY",
+      "party": null,
+      "rationale": null,
+      "statement": "A project may disable quiet hours entirely."
+    },
+    {
+      "key": "r7",
+      "modal": "MAY",
+      "party": null,
+      "rationale": null,
+      "statement": "The digest may be delivered as a conversation entry rather than a separate surface."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A per-project quiet window",
+      "Graded urgency per notification",
+      "A morning digest of everything deferred"
+    ],
+    "non_goals": [
+      "Per-agent overrides",
+      "Timezone inference from the host clock",
+      "Any change to how questions are routed"
+    ]
+  },
+  "summary": "Agents defer non-urgent notifications during a configured quiet window and deliver them afterwards as a grouped digest. Blocking questions are exempt and always notify immediately.",
+  "tasks": [],
+  "title": "Quiet hours"
+}

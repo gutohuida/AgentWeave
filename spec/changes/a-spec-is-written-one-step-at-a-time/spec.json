@@ -1,0 +1,372 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a scratch Hub on its own port and fresh database with a Haiku agent and a new change document (scripts/drive/d1009_step_journey.py)",
+      "key": "drive",
+      "requirement": "one-step-briefing",
+      "then": "intake's briefing holds intake's instructions and not acceptance's; the agent asked one question per ask_user; the document records size small and step requirements-and-acceptance after the move; the fresh conversation's briefing is that step's and its turn writes requirements with criteria. Fails on today's Hub at the first check (no step).",
+      "when": "the drive reads /agent-context for the document, asks the agent for a /ping route, answers each ask_user, says the work is small, then chooses continue in a fresh conversation"
+    },
+    {
+      "given": "a new change document",
+      "key": "new-doc-intake",
+      "requirement": "step-recorded",
+      "then": "its step is intake and its size is none",
+      "when": "it is created"
+    },
+    {
+      "given": "a document of each size",
+      "key": "journeys",
+      "requirement": "default-journey",
+      "then": "it is exactly the steps listed for that size, in order",
+      "when": "its journey is read"
+    },
+    {
+      "given": "a document at each step",
+      "key": "only-current",
+      "requirement": "one-step-briefing",
+      "then": "it contains that step's duty marker and no other step's",
+      "when": "the briefing is rendered"
+    },
+    {
+      "given": "every step's duty",
+      "key": "asks",
+      "requirement": "step-asks-to-advance",
+      "then": "it names what the step writes and the three choices through ask_user",
+      "when": "it is read"
+    },
+    {
+      "given": "a document at requirements with no requirements written",
+      "key": "move-recorded",
+      "requirement": "advance-tool",
+      "then": "the move succeeds, is recorded with the run, and the answer names the missing requirements",
+      "when": "the agent's run moves it to the next step"
+    },
+    {
+      "given": "a document moved to tasks in one conversation",
+      "key": "fresh",
+      "requirement": "resume-anywhere",
+      "then": "its briefing is the tasks step's",
+      "when": "a turn starts in a new conversation, with another agent"
+    },
+    {
+      "given": "the intake duty",
+      "key": "size-told",
+      "requirement": "intake-sizes",
+      "then": "it asks one question per ask_user and requires the size and reason before advancing",
+      "when": "it is read"
+    },
+    {
+      "given": "the acceptance and tasks duties",
+      "key": "acceptance-duty",
+      "requirement": "acceptance-step",
+      "then": "acceptance asks for how-to-check, who checks and the drive per MUST; tasks makes task 1 the drive, recorded failing",
+      "when": "they are read"
+    },
+    {
+      "given": "a payload whose criteria have how_to_check and checked_by, and one without",
+      "key": "fields-optional",
+      "requirement": "criterion-check-fields",
+      "then": "both are valid and the fields survive a round trip; checked_by other than agent or operator is refused naming the field",
+      "when": "each is submitted and rendered"
+    },
+    {
+      "given": "a document at acceptance, size small, open in Chromium",
+      "key": "bar",
+      "requirement": "operator-moves-journey",
+      "then": "the bar shows the large journey with intake current, and the next briefing is intake's",
+      "when": "the operator moves it back to intake and changes the size to large"
+    },
+    {
+      "given": "a complete exploring change document never marked complete",
+      "key": "no-close",
+      "requirement": "propose-without-close",
+      "then": "it moves to proposed; the bar offers no Exploration is complete control",
+      "when": "the operator proposes it"
+    },
+    {
+      "given": "a copy of the trial database with exploring documents with and without requirements, an approved change and a roadmap",
+      "key": "migrated",
+      "requirement": "existing-documents",
+      "then": "the empty document is at intake, the other at requirements, the approved change and roadmap have no step; the downgrade leaves the schema as before",
+      "when": "the migration runs, then its downgrade"
+    },
+    {
+      "given": "a document at acceptance",
+      "key": "preview",
+      "requirement": "context-preview",
+      "then": "the answer equals the briefing a turn on that document receives",
+      "when": "GET /agent-context?agent=a&spec_document=<path>"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "07fda0c9db071e21f3b11a73d865d81cc247477ce12ba82c93eb5acae13809ee",
+      "FR-10": "43f68d8794db50294a215b9a1b2f3046241fa3ea2726a082cc004229850a0c72",
+      "FR-11": "dafad943fff3c83339176fceab4d70c7f91cfcb1e5d58396a2f67492f5b6164f",
+      "FR-12": "b537f2993aba1069864f097afd95f01c1b68c3beb91d1dd61a6bc04331fce0f4",
+      "FR-13": "1ca8d3a245a31f95b4eaf938642989889399c328d9349cc6a7da45f4fd2a4b95",
+      "FR-2": "c88100155cd81c1322ea684690c0b08fb0fff3b02942e5d895082ab9cad6a692",
+      "FR-3": "dd756c373055d79fd1459e8ebff331831041457f1fc2f9775be5ca859048f7fc",
+      "FR-4": "543cd5269c55c654fd1828847d4edbaa09cb6ee6732e5107dad6512327f96034",
+      "FR-5": "1716b4ace0ff3fa3cbcb20a2445a3d2c717fc04985033944257b11422b120d52",
+      "FR-6": "5c8a8d7ebce83f1932f83cb176d348997c0ae3a7b2dd86286848f8e3ac4ba368",
+      "FR-7": "a61e594b40d809f137f681625c33ebffb8bd59fa87376ddbb96733b63801ac1c",
+      "FR-8": "a0bec4a6d5eb568c08f4620a764da10f4bf2602dc2928c9272aa468d54b1973c",
+      "FR-9": "a217a886a090a7f543b3077771d77bdaba93b1afc22babcc86966acfd6afbbba"
+    },
+    "high_water": 13,
+    "requirements": {
+      "acceptance-step": "FR-8",
+      "advance-tool": "FR-5",
+      "context-preview": "FR-13",
+      "criterion-check-fields": "FR-9",
+      "default-journey": "FR-2",
+      "existing-documents": "FR-12",
+      "intake-sizes": "FR-7",
+      "one-step-briefing": "FR-3",
+      "operator-moves-journey": "FR-10",
+      "propose-without-close": "FR-11",
+      "resume-anywhere": "FR-6",
+      "step-asks-to-advance": "FR-4",
+      "step-recorded": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2: a migration on spec_documents, and the operator's :8000 runs this checkout, so its next restart runs this migration on live data. Rollback: the downgrade drops the two columns; explore_closed_at is kept and simply no longer read, so a downgraded Hub gates proposing as before. The drive runs on its own scratch Hub, never on :8000; :8010 is restarted only after the build.\n\nD1 The step is a column, not conversation state: a fresh conversation, another day or another agent reads it. Rejected: a step held in a checkpoint (dies with the lineage).\nD2 The journey is derived from the size in code (one table), so slice project-steps can replace that table with the project's setting without a second migration.\nD3 The advance tool never refuses; it reports what the step left empty. Skipped outputs become slice approval-warnings' input.\nD4 Duties are short and each names a marker phrase, so a test can prove a briefing holds one step and not another.\nD5 Proposing keeps its other refusals (a requirement with no criterion, delivery incomplete); turning those into warnings is slice approval-warnings.",
+  "evidence": {
+    "checked": [
+      "agents.py:1720-1761 SPEC_PHASE_DUTIES, 2165-2284 open-document block, rebuilt per turn by agent_trigger.py:1344-1394",
+      "spec_lifecycle.py:485-501 close_exploration (operator only); spec_service.py:1283 explore_not_closed",
+      "SpecPhaseBar.tsx:392-401 the Exploration is complete control",
+      "spec_payload.py:93-102 AcceptanceCriterion: key, requirement, given, when, then",
+      "agents.py:3066 GET /agent-context renders without a spec document"
+    ],
+    "limits": [
+      "Whether Haiku follows one-question-at-a-time and the advance protocol is known only by the drive",
+      "Per-step instructions are supported by general degradation studies, not by a controlled study of this design"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "Every exploring turn carries the whole exploring duty and open-document block, about 7-8k characters (hub/hub/api/v1/agents.py:1720-1761, 2165-2284), so a long exploration drops steps; the Hub cannot say where an exploration is, and a fresh conversation has to rediscover it. Nothing sizes the work, so a one-line fix is explored like a hazard. Acceptance is asked for only as given/when/then per requirement (spec_payload.py:93-102), with no how-to-check and no word on who can check it, so the drive-first habit never reaches the product.",
+  "requirements": [
+    {
+      "key": "step-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The document, not the conversation, carries where the work is.",
+      "statement": "A change document MUST record its current journey step and its size (fix, small, large, or none yet); a new change document MUST start at intake with no size."
+    },
+    {
+      "key": "default-journey",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Ceremony scales with the work; acceptance is never dropped except for a fix, whose one task carries its failing check.",
+      "statement": "The journey MUST follow the size: none or large gives intake, requirements, acceptance, approach, tasks, delivery; small gives intake, requirements-and-acceptance (one step), tasks, delivery; fix gives intake, tasks, delivery."
+    },
+    {
+      "key": "one-step-briefing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Instruction adherence falls as instructions grow; each step gets only what it needs.",
+      "statement": "A turn on an exploring change document MUST be briefed with the current step's instructions and one line naming the journey's steps and the current one, and MUST NOT carry another step's instructions."
+    },
+    {
+      "key": "step-asks-to-advance",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The agent proposes advancing; the operator decides (2026-10-08).",
+      "statement": "Every step's instructions MUST say what the step writes into the document and MUST tell the agent, once that is written, to ask the operator through ask_user whether to continue here, continue in a fresh conversation, or stop, and to advance only on either continue."
+    },
+    {
+      "key": "advance-tool",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Warn, never gate; what was skipped is on record for the approval warnings.",
+      "statement": "The agent MUST be able to move its document to the next step, or to a named step, through a tool that records the move with its run and answers with the outputs the left step still lacks; it MUST NOT refuse a move for a missing output."
+    },
+    {
+      "key": "resume-anywhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Drop it today, continue another day.",
+      "statement": "A turn in any conversation on the document, including a new one or another agent's, MUST be briefed from the document's recorded step and size."
+    },
+    {
+      "key": "intake-sizes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Sizing is announced so it can be overridden.",
+      "statement": "The intake step's instructions MUST have the agent ask one question at a time through ask_user, offering choices where it can, and record the size with its reason before asking to advance; the size MUST be told to the operator."
+    },
+    {
+      "key": "acceptance-step",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Acceptance is the high-attention step; the drive-first habit becomes the product's.",
+      "statement": "The acceptance step's instructions MUST have the agent agree with the operator, for each MUST requirement, at least one criterion with how to check it and whether an agent or only the operator can, and name the acceptance drive; the tasks step's instructions MUST make the first task write that drive and record it failing."
+    },
+    {
+      "key": "criterion-check-fields",
+      "modal": "MAY",
+      "party": null,
+      "rationale": "Additive, so every existing document reads unchanged.",
+      "statement": "An acceptance criterion MAY carry how_to_check (text) and checked_by (agent or operator); a document without them MUST stay valid."
+    },
+    {
+      "key": "operator-moves-journey",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Steps are revisitable and the size is the operator's to override.",
+      "statement": "The document's phase bar MUST show the journey's steps, the current one and the size, and MUST let the operator move to any step, back or forward, and change the size, each change taking effect from the next turn."
+    },
+    {
+      "key": "propose-without-close",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The step pointer replaces the boolean; one fewer operator click.",
+      "statement": "Proposing a change document MUST NOT require the operator to have marked exploration complete; the Exploration is complete control and the explore_not_closed refusal MUST be removed."
+    },
+    {
+      "key": "existing-documents",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "No document loses its place, and the operator's live data on :8000 migrates safely.",
+      "statement": "The migration MUST place every exploring change document at intake when it has no requirements and at requirements otherwise, and leave other phases and roadmaps with no step; a document with no size MUST be briefed as large."
+    },
+    {
+      "key": "context-preview",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "What an agent is told becomes observable, by the drive and by the operator.",
+      "statement": "GET /agent-context MUST accept a spec_document and return the briefing a turn on that document receives."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/a-spec-is-written-one-step-at-a-time-roadmap/spec.json",
+    "slice": "step-journey"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "spec_documents: journey step and size, by migration",
+      "Per-step duties replacing the exploring duty for change documents, and a step line naming the journey",
+      "An agent tool that records a step move and answers with what the step left empty",
+      "Size fix, small or large, recorded at intake with a reason, overridable by the operator",
+      "Acceptance criteria gain optional how_to_check and checked_by (agent or operator)",
+      "The phase bar shows the journey, moves it, and changes the size; the Exploration is complete control and its gate are removed",
+      "GET /agent-context accepts spec_document and returns the briefing a turn on that document receives"
+    ],
+    "non_goals": [
+      "Project-defined steps or appended instructions (slice project-steps)",
+      "Approval warnings, including for skipped steps (slice approval-warnings); proposing keeps its other refusals",
+      "Roadmap documents: they keep today's duty",
+      "Dropping the explore_closed_at column (kept, unread, for rollback)"
+    ]
+  },
+  "summary": "A change document records its journey step and size. The spec agent is briefed with only the current step's instructions, writes the step's result into the document, and asks the operator to continue here, continue in a fresh conversation, or stop; any conversation on the document resumes at the recorded step. Intake sizes the work (fix, small, large) and the size shapes the journey. The operator sees the journey on the phase bar and can move it or change the size. The operator's 'exploration is complete' step before proposing is retired.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1009_step_journey.py: scratch Hub on its own port and fresh DB, a real Haiku agent, Chromium for the bar. The 'drive' criterion. Run before any build task; it must fail at the first check.",
+      "files": [
+        "scripts/drive/d1009_step_journey.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "one-step-briefing"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "Migration adding the step and size to spec_documents with backfill and downgrade (migration checklist in .claude/rules); journey definition by size; create at intake; propose no longer gated on explore_closed_at (spec_service.py:1283); payload criterion fields. Failing Hub tests first.",
+      "files": [
+        "hub/hub/db/models.py",
+        "hub/hub/migrations",
+        "hub/hub/spec_lifecycle.py",
+        "hub/hub/spec_service.py",
+        "hub/hub/spec_payload.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "model",
+      "requirements": [
+        "step-recorded",
+        "default-journey",
+        "criterion-check-fields",
+        "propose-without-close",
+        "existing-documents"
+      ],
+      "reviewer": null,
+      "title": "Journey step and size on the document; the journey by size; propose without closing"
+    },
+    {
+      "depends_on": [
+        "model"
+      ],
+      "description": "Replace SPEC_PHASE_DUTIES['exploring'] for change documents with one duty per step (agents.py:1720-1761) and render only the current one in the open-document block (2165-2284); an MCP tool and agent-actions route that move the step and report what is missing; GET /agent-context spec_document. Read .claude/rules for mcp_server.py first. Failing Hub tests first.",
+      "files": [
+        "hub/hub/api/v1/agents.py",
+        "hub/hub/mcp_server.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "briefing",
+      "requirements": [
+        "one-step-briefing",
+        "step-asks-to-advance",
+        "advance-tool",
+        "resume-anywhere",
+        "intake-sizes",
+        "acceptance-step",
+        "context-preview"
+      ],
+      "reviewer": null,
+      "title": "Per-step duties, the step line, the advance tool and the context preview"
+    },
+    {
+      "depends_on": [
+        "briefing"
+      ],
+      "description": "SpecPhaseBar: steps, current one, size; move to any step; change size; Exploration is complete control removed (SpecPhaseBar.tsx:392-401). Operator routes for the step and size. Failing vitest first; rebuild and commit the bundle with the source.",
+      "files": [
+        "hub/ui/src/components/spec/SpecPhaseBar.tsx",
+        "hub/ui/src/api",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "bar",
+      "requirements": [
+        "operator-moves-journey",
+        "propose-without-close"
+      ],
+      "reviewer": null,
+      "title": "The phase bar shows and moves the journey"
+    }
+  ],
+  "title": "A spec is written one step at a time"
+}

@@ -1,0 +1,305 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "The Environment area",
+      "key": "ac1",
+      "requirement": "a-configuration-section-states-what-it-governs",
+      "then": "It shows its scope, title and a statement of what it governs.",
+      "when": "The operator opens a section with only a few settings"
+    },
+    {
+      "given": "A configuration section",
+      "key": "ac2",
+      "requirement": "settings-are-presented-as-labelled-rows-not-as-boxed-cards",
+      "then": "Its label and explanation are beside its control.",
+      "when": "The operator reads a setting"
+    },
+    {
+      "given": "A configuration section",
+      "key": "ac3",
+      "requirement": "settings-are-presented-as-labelled-rows-not-as-boxed-cards",
+      "then": "Rows are separated by hairlines and no row is in its own card.",
+      "when": "It is displayed"
+    },
+    {
+      "given": "A wide viewport",
+      "key": "ac4",
+      "requirement": "a-configuration-section-occupies-the-content-region",
+      "then": "It occupies the content region without a large unused area beside it.",
+      "when": "A configuration section is displayed"
+    },
+    {
+      "given": "A numeric setting",
+      "key": "ac5",
+      "requirement": "numeric-fields-are-typed-not-stepped",
+      "then": "No stepper buttons are shown.",
+      "when": "The operator focuses or hovers it"
+    },
+    {
+      "given": "A numeric setting",
+      "key": "ac6",
+      "requirement": "numeric-fields-are-typed-not-stepped",
+      "then": "The value is refused and the permitted range is stated.",
+      "when": "The operator types a value outside its range and saves"
+    },
+    {
+      "given": "The Settings section",
+      "key": "ac7",
+      "requirement": "saving-reports-its-outcome",
+      "then": "The section shows \"Settings saved.\"",
+      "when": "The operator saves a valid change"
+    },
+    {
+      "given": "The Settings section",
+      "key": "ac8",
+      "requirement": "saving-reports-its-outcome",
+      "then": "The reason is shown in the section and the entered values remain.",
+      "when": "A save is refused"
+    },
+    {
+      "given": "A git project with no main branch chosen and a detected branch",
+      "key": "ac9",
+      "requirement": "the-operator-can-choose-the-branch-approval-merges-into",
+      "then": "The main-branch control shows the suggestion and a button to use it.",
+      "when": "The operator opens Settings"
+    },
+    {
+      "given": "A project that is not a git repository",
+      "key": "ac10",
+      "requirement": "the-operator-can-choose-the-branch-approval-merges-into",
+      "then": "The main-branch control is disabled and says there is nothing to merge into.",
+      "when": "Settings is opened"
+    },
+    {
+      "given": "A project with checkpoint settings",
+      "key": "ac12",
+      "requirement": "settings-may-be-changed-one-at-a-time",
+      "then": "The main branch changes and every other setting keeps its value.",
+      "when": "A save names only the main branch"
+    },
+    {
+      "given": "A stored checkpoint threshold",
+      "key": "ac13",
+      "requirement": "settings-may-be-changed-one-at-a-time",
+      "then": "The save is accepted.",
+      "when": "A save names only a notes value below it"
+    },
+    {
+      "given": "A project with a token budget",
+      "key": "ac14",
+      "requirement": "settings-may-be-changed-one-at-a-time",
+      "then": "The budget is cleared.",
+      "when": "A save sends `token_budget: null`"
+    },
+    {
+      "given": "A project",
+      "key": "ac15",
+      "requirement": "n1-a-saved-settings-change-is-recorded-in-history",
+      "then": "A `project_settings_updated` event records `hop_budget` was 5 and is 8.",
+      "when": "The hop budget is changed from 5 to 8"
+    },
+    {
+      "given": "A project",
+      "key": "ac16",
+      "requirement": "n1-a-saved-settings-change-is-recorded-in-history",
+      "then": "No `project_settings_updated` event is persisted.",
+      "when": "Settings are saved with no value changed"
+    },
+    {
+      "given": "A runner belonging to another project",
+      "key": "ac17",
+      "requirement": "n2-a-runner-named-in-settings-must-belong-to-the-project",
+      "then": "It is refused with 400 naming the runner ID.",
+      "when": "A save names it as the checkpoint runner"
+    },
+    {
+      "given": "a project with checkpointing configured",
+      "key": "ac98",
+      "requirement": "settings-may-be-changed-one-at-a-time",
+      "then": "the checkpoint configuration is unchanged",
+      "when": "the operator saves an unrelated project setting"
+    },
+    {
+      "given": "",
+      "key": "ac99",
+      "requirement": "settings-may-be-changed-one-at-a-time",
+      "then": "that field is cleared",
+      "when": "a checkpoint field is sent as null"
+    },
+    {
+      "given": "Environment > Settings",
+      "key": "the-settings-that-gate-collaboration-are-on-the-pro-groups-order",
+      "requirement": "settings-rows-are-grouped-collaboration-first",
+      "then": "group headings read Collaboration, Integration, Checkpointing, Conversations, Project in that order, and Delete project is the last control",
+      "when": "it renders"
+    },
+    {
+      "given": "Environment > Settings with a project token_budget of 5000",
+      "key": "the-settings-that-gate-collaboration-are-on-no-token-in-settings",
+      "requirement": "settings-leaves-the-token-budget-to-budgets",
+      "then": "no token budget input is rendered, the PUT body has no token_budget key, and a link to Budgets is shown",
+      "when": "the operator saves the hop budget"
+    },
+    {
+      "given": "Settings and Overview",
+      "key": "the-settings-that-gate-collaboration-are-on-the-pro-budget-label",
+      "requirement": "agent-budget-is-described-as-what-it-caps",
+      "then": "the agent budget text mentions agents staffing agents and does not contain 'at the same time'",
+      "when": "they render"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "8885a4f88f9c19092e2c1fbc626f65974221178de88bbb68649f0187ff00d096",
+      "FR-10": "bac1d28331c5ade740d470a108ce08b108f84b9219da0077d12fccd105ead1e6",
+      "FR-11": "cb3d09c3cb2f85f48b6423bcc7cf2ffc3daa0feac2dd25c8f68bcf754db3c85b",
+      "FR-12": "6ced368e9aa03ce8304bb2f777aeb74698517ab70e9cfd8df6c594325baa5ac2",
+      "FR-2": "21c521d1941ebd10d4988a731e78d7c8a92dcb95409e783193bab6c8995ba9b2",
+      "FR-3": "3d17e80456d3f69222d7169a7c4ec9ce2d4a46f47cbc111314070a9aa06d74d3",
+      "FR-4": "c3fa0ada765d0b1b4df73f7a0b5713adf89b1ebe9295037ced4ec359b0def217",
+      "FR-5": "e96d369a56a85af82bd1c1cded65f19882ef14ac46b961ad196d133b16e4861b",
+      "FR-6": "349c879716437957c01306e3b473e6a1d5600b9a8f1cf94694c38f99135888d1",
+      "FR-7": "89e3b012ab8f4397be39437a1f5f4d89ee44361fcb494532b0977cc7ef78e8ae",
+      "FR-8": "fbe280747c17fa189e29bd08b42d6ae2417f40c215e181fe700d92ee3e734dc4",
+      "FR-9": "5b0433746ab29fd83c04af62dfa6376c1faea677d279d9d7fa87a1dc7e9dcf57"
+    },
+    "high_water": 12,
+    "requirements": {
+      "a-configuration-section-occupies-the-content-region": "FR-3",
+      "a-configuration-section-states-what-it-governs": "FR-1",
+      "agent-budget-is-described-as-what-it-caps": "FR-12",
+      "n1-a-saved-settings-change-is-recorded-in-history": "FR-8",
+      "n2-a-runner-named-in-settings-must-belong-to-the-project": "FR-9",
+      "numeric-fields-are-typed-not-stepped": "FR-4",
+      "saving-reports-its-outcome": "FR-5",
+      "settings-are-presented-as-labelled-rows-not-as-boxed-cards": "FR-2",
+      "settings-leaves-the-token-budget-to-budgets": "FR-11",
+      "settings-may-be-changed-one-at-a-time": "FR-7",
+      "settings-rows-are-grouped-collaboration-first": "FR-10",
+      "the-operator-can-choose-the-branch-approval-merges-into": "FR-6"
+    },
+    "retired": {}
+  },
+  "design": "D1 One shared `SettingsSection` / `SettingsRow` pair (`hub/ui/src/components/environment/SettingsSection.tsx`) serves project and per-agent settings; its `scope` eyebrow says which.\n\nD2 The update body is derived from `ProjectSettings` with every field optional (`ProjectSettingsUpdate` in `hub/hub/api/v1/projects.py`), so a field cannot be accepted and then silently not written; the handler merges onto stored values with `exclude_unset` and validates the merged object.\n\nD3 Steppers are removed in CSS (`hub/ui/src/index.css`), not by changing input types, so browser validation still applies.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/__tests__/projectSettingsPanel.test.tsx, hub/ui/src/__tests__/environmentPresentation.test.tsx",
+      "hub/tests/test_operator_projects_api.py (settings routes)"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Per-project configuration moved out of the navigation rail into Environment sections. Those sections must read as complete, show what each setting does, never silently revert settings the surface did not know about, and say whether a save worked.",
+  "requirements": [
+    {
+      "key": "a-configuration-section-states-what-it-governs",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A section with few settings should still read as complete, and the operator should know whether it is project or agent configuration.",
+      "statement": "Every configuration section SHALL open with its scope, its title and a short statement of what it governs."
+    },
+    {
+      "key": "settings-are-presented-as-labelled-rows-not-as-boxed-cards",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Rows scan quickly and keep the explanation next to the control it explains.",
+      "statement": "A configuration section SHALL present its settings as rows, each pairing a label and an explanation of the setting's effect with its control, separated by hairlines rather than each enclosed in a card."
+    },
+    {
+      "key": "a-configuration-section-occupies-the-content-region",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A narrow column in a wide pane reads as unfinished.",
+      "statement": "A configuration section SHALL fill the content region it is given, bounding text and controls to a readable measure without leaving a large unused region beside a narrow column."
+    },
+    {
+      "key": "numeric-fields-are-typed-not-stepped",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Steppers invite accidental changes on hover and scroll; removing them must not remove validation.",
+      "statement": "Numeric settings SHALL be typed, with no increment or decrement steppers in any browser engine, and SHALL keep their numeric constraints, an invalid value being refused with an explanation."
+    },
+    {
+      "key": "saving-reports-its-outcome",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A save whose outcome is only in a log is a save the operator has to guess about.",
+      "statement": "Saving a configuration section SHALL report success in the section, and a refused save SHALL state the reason in the section and keep the values the operator entered."
+    },
+    {
+      "key": "the-operator-can-choose-the-branch-approval-merges-into",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The note on an unmerged task sends the operator to settings to choose a branch; the control it names has to be there.",
+      "statement": "The Settings section SHALL offer a main-branch control showing the project's chosen branch, offering the repository's detected branch as a one-click suggestion when none is chosen, and disabled with an explanation when the project is not a git repository."
+    },
+    {
+      "key": "settings-may-be-changed-one-at-a-time",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A surface that must resend every setting can silently revert one it does not know about, which is how a save once cleared a project's checkpoint configuration.",
+      "statement": "`PUT /projects/{id}/settings` SHALL accept a body naming only the fields being changed, treating an omitted field as unchanged and an explicit null as a clear, and SHALL apply cross-field validation to the merged result."
+    },
+    {
+      "key": "n1-a-saved-settings-change-is-recorded-in-history",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Budget changes made in Accounting were already in the project's history; the same change made in Settings must be too (F238).",
+      "statement": "A settings save that changes at least one value SHALL persist a `project_settings_updated` event listing each changed field's previous and new value, and a save that changes nothing SHALL record nothing."
+    },
+    {
+      "key": "n2-a-runner-named-in-settings-must-belong-to-the-project",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "These references are not foreign keys, so the route is the only place a cross-project or deleted runner can be caught.",
+      "statement": "A settings save naming a conversation-title runner or checkpoint runner that does not exist in this project SHALL be refused with 400 naming the runner ID."
+    },
+    {
+      "key": "settings-rows-are-grouped-collaboration-first",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The flat list of 18 is why the five gating rows are hard to find; nothing moves out of Settings.",
+      "statement": "Environment > Settings MUST render its rows under headed groups in this order: Collaboration (agents may start flows, hop budget, per-turn delivery cap, agent budget), Integration (main branch, checks), Checkpointing (the checkpoint rows), Conversations (title mode, title runner), Project (name, directory, then delete set apart last)."
+    },
+    {
+      "key": "settings-leaves-the-token-budget-to-budgets",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Two editors for one field is the F237 shape; a Settings form holding a stale token_budget would overwrite a limit just set in Budgets.",
+      "statement": "Environment > Settings MUST NOT render a token budget input and MUST NOT send token_budget in its save; its Collaboration group MUST link to Budgets, which stays the one editor."
+    },
+    {
+      "key": "agent-budget-is-described-as-what-it-caps",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The Hub checks it only in request_agent (api/v1/agents.py:2556); the current label promises a limit that does not exist (F557).",
+      "statement": "Wherever agent budget is labelled (Settings and Overview), the text MUST say it caps how many agents the project may hold when an agent staffs a new one, and MUST NOT say it limits agents running at the same time."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Presentation of Environment configuration sections (project and per-agent settings share it)",
+      "Typed numeric fields and save feedback",
+      "The main-branch control in Settings",
+      "`PUT /projects/{id}/settings` partial-update semantics, runner references, and its history record"
+    ],
+    "non_goals": [
+      "What each individual setting means: owned by its capability (budgets, checkpointing, checks, conversation titles)",
+      "The settings resource as a whole, the main-branch setting's rules and detection, project identity, relocation and deletion: local-project-workspace",
+      "Re-attempting integrations when a main branch is named: approval-integration"
+    ]
+  },
+  "summary": "The project's configuration surface under Environment and the settings write behind it: how each section introduces itself, how settings are laid out as labelled rows, how saving reports its outcome, the main-branch control, that a change may name only the fields it changes, that a runner named in settings must belong to the project, and that a saved change is recorded in the project's history.",
+  "tasks": [],
+  "title": "Project environment settings"
+}

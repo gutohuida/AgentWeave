@@ -1,0 +1,214 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the trial Hub on :8010, a fresh project with a capability document and an approved change whose one task is approved",
+      "key": "drive",
+      "requirement": "app",
+      "then": "the capability's file carries the change's requirement under <slug>-<key>, one merge row names the change, and the change is archived; on today's Hub the action does not exist",
+      "when": "the operator, in Chromium on the served bundle, opens the change, presses Fold into capability, picks the capability and confirms (scripts/drive/d1008_fold_change_drive.py)"
+    },
+    {
+      "given": "an approved change with two requirements and three criteria, and a capability already holding one of the draft keys",
+      "key": "draft-shape",
+      "requirement": "draft",
+      "then": "the payload appends both requirements and all three criteria under prefixed keys at most 64 characters long, and the existing key is listed as a collision with the capability's text untouched",
+      "when": "the draft is requested"
+    },
+    {
+      "given": "an approved change whose tasks are all approved",
+      "key": "fold-writes",
+      "requirement": "fold",
+      "then": "the capability holds the edited statement and the replaced requirement's new text under its old key, one merge row and one merged event exist, and the change is archived",
+      "when": "it is folded with one requirement's statement edited and another replacing an existing capability key"
+    },
+    {
+      "given": "a proposed change; an approved change with a task in_progress; an unknown requirement key; an unhandled collision; a replaces naming no capability key; a change-spec as target",
+      "key": "fold-refusals",
+      "requirement": "fold",
+      "then": "each is refused with its own code and nothing is written: no merge row, the capability's content digest unchanged, the change still approved",
+      "when": "each is folded"
+    },
+    {
+      "given": "an approved change with an open task; one with all tasks approved and no merge; the same with no_capability_change and a reason; a folded one",
+      "key": "guard",
+      "requirement": "archive-guard",
+      "then": "the first two are refused naming the open task and the missing fold; the last two are archived",
+      "when": "each is archived through the phase route"
+    },
+    {
+      "given": "a capability document",
+      "key": "lock",
+      "requirement": "write-via-merge",
+      "then": "the PUT is refused naming the merge route; the merge writes it and records an edit",
+      "when": "the operator PUTs its content, and then merges the same payload naming no change"
+    },
+    {
+      "given": "approved changes with an open task, with every task approved, and folded",
+      "key": "state",
+      "requirement": "app",
+      "then": "fold_state is tasks_open, ready, and folded naming the capability path",
+      "when": "each document is read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1a16d37cb7fd8dfaa9e31f524b8e43a28ed1871737287a1110e0059ec7b786d6",
+      "FR-2": "6e4e1e0be625a20c6084beeffe826d2925165e144303c6183122fd8db68c66b3",
+      "FR-3": "8711893631542d409cc7236d939a9ca777a63f8c778b717b73f12a5470fef6dd",
+      "FR-4": "8ddeb3faca5e6395c869df7c251c60c22d6c8ce0d29accae5b663ded1fd9dd45",
+      "FR-5": "0d8b7138aa1115d1730eb391db2f91f41b74c9ff9175121c4be1c1fe0c420b5f"
+    },
+    "high_water": 5,
+    "requirements": {
+      "app": "FR-5",
+      "archive-guard": "FR-3",
+      "draft": "FR-1",
+      "fold": "FR-2",
+      "write-via-merge": "FR-4"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1, no migration (spec_document_merges exists since 0074). The fold is spec_service.merge_document with a payload the Hub builds, so validation, identity minting, rendering and the audit row are the merge's own. Key rule: <change-slug>-<key>, the slug trimmed from the right so the whole key is at most 64 characters (KEY_RE, spec_payload.py:42); the dialog lets the operator rename. The archive guard lives in spec_lifecycle.transition beside the operator check, so every archive path meets it; no_capability_change rides PhaseRequest. HAZARDS: the UI bundle reaches :8000's app at its next reload, and from :8000's next restart a direct capability content write is refused there too (the operator's app never makes one; only scripts did). Rollback: revert the commits; no data changes shape.",
+  "evidence": {
+    "checked": [
+      "spec.py:2260 merge_document route: operator-only, full payload, from_changes min_length 1 (spec.py:387)",
+      "spec_service.py:741 merge_document writes through save_document and records SpecDocumentMerge plus a merged event",
+      "spec_lifecycle.py:319-345: archive checks only the operator and the exploring/proposed orphan rule",
+      "spec.py:606 PUT .../content: the operator's direct write; spec-document-authority ac136 requires it to succeed for a capability",
+      "spec_document_merges on :8010: 0 rows; seven reconcile scripts used PUT .../content",
+      "D7 of the-corpus-keeps-what-shipped: no merge UI was built"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "Closing a change has needed a hand-written script per change. The merge route (spec.py:2260) exists but takes the capability's whole new payload and has no app screen (the-corpus-keeps-what-shipped design D7), so every reconcile so far went through PUT .../content instead (scripts/drive/reconcile_f4xx.py, reconcile_f509.py, reconcile_f531.py): spec_document_merges holds 0 rows on :8010. Archive checks only that the actor is the operator (spec_lifecycle.py:319), so nothing stopped a shipped change being archived unfolded, and nothing noticed F509's three slices sat in no capability for two days (DEAD-ENDS 2026-10-08).",
+  "requirements": [
+    {
+      "key": "draft",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator reviews text instead of writing it; most reconciles so far copied the change's statements unchanged.",
+      "statement": "For an approved change-spec and a named capability document, the Hub MUST return a fold draft: the capability's current payload with each of the change's requirements appended verbatim under the key <change-slug>-<key> (the change's folder name, trimmed so the key is at most 64 characters), each acceptance criterion of those requirements appended with its requirement re-pointed at the new key, and every draft key that already exists in the capability reported as a collision rather than overwritten."
+    },
+    {
+      "key": "fold",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Replaces the per-change reconcile scripts with one audited operator action; a change touching two capabilities is folded twice, archiving on the second.",
+      "statement": "The operator MUST be able to fold an approved change-spec into a capability document in one request, choosing which of the change's requirements to fold (default all), each optionally with an edited key, statement or modal, or naming an existing capability requirement it replaces; the fold MUST write through the merge (one spec_document_merges row naming the change and one merged event) and, unless told not to, move the change to archived in the same transaction. It MUST be refused before anything is written when the change is not approved, a task of it is still open, a named requirement is not the change's, a key collides without naming what it replaces, a replaced key is not the capability's, or the target is not a capability document."
+    },
+    {
+      "key": "archive-guard",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "archived has no way back; a shipped change whose requirements live nowhere else must not become history (F509).",
+      "statement": "Archiving an approved change-spec MUST be refused, naming what is missing, unless every task the document declared is approved or rejected and either a merge names the change or the operator states no_capability_change with a non-empty reason. Other kinds and the existing exploring/proposed archive rule are unchanged."
+    },
+    {
+      "key": "write-via-merge",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Every capability change then has an audit row saying which change it came from, or that it was an edit; the original design said capability documents are written only by merge.",
+      "statement": "A capability document's content MUST change only through a merge: a direct content write to a capability document is refused with a code naming the merge route, and a merge naming no change is accepted as an operator edit and recorded as one. Creating a capability document is unchanged."
+    },
+    {
+      "key": "app",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The close-out becomes something the operator does in the app, and an unfolded shipped change is visible where the operator already looks.",
+      "statement": "The document view of an approved change-spec MUST carry fold_state (tasks_open, ready, or folded with the capability paths it was folded into), and the app's phase bar MUST show a ready change as shipped but not yet in a capability, with a Fold into capability action (capability picker, the draft's requirements with editable key and statement, an archive option on by default, confirm) and an Archive without a capability change action that asks for a reason."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A fold draft and a fold route for an approved change-spec, built on spec_service.merge_document",
+      "The archive transition's guard for change-spec documents",
+      "Capability content writes outside a merge (PUT .../content) refused; a merge naming no change allowed as an audited edit",
+      "fold_state on the document view, and the phase bar's fold dialog in the app",
+      "spec-document-authority: ac136 now reads that the operator's capability write succeeds through a merge"
+    ],
+    "non_goals": [
+      "Removing a capability requirement through a fold (a change that retires one is folded by an edited merge): backlog",
+      "Agents folding changes: merge stays operator-only",
+      "Back-filling merge rows for the ten changes archived before this change",
+      "Closing a change's tasks and evidence for operator-built work (close_change.py's first half)"
+    ]
+  },
+  "summary": "The operator closes a finished change from the app: the Hub drafts the capability's new content by copying the change's requirements and criteria in, the operator may edit the draft, and one confirm merges it (audited) and archives the change. Archiving a change is refused until its tasks are done and it was folded somewhere, or the operator says it changes no capability. A capability's content changes only through a merge.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1008_fold_change_drive.py against :8010 in a fresh testbed project: the 'drive' criterion. Run before the build; it must fail because the fold action does not exist.",
+      "files": [
+        "scripts/drive/d1008_fold_change_drive.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "app"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "Failing tests first in hub/tests/test_a_finished_change_is_folded_into_its_capability.py (draft-shape, fold-writes, fold-refusals, guard, lock, state). spec_service gains fold_draft and fold on top of merge_document; spec_lifecycle.transition gains the change-spec archive guard; save_document refuses a capability write that is not a merge; MergeRequest.from_changes may be empty; the document view gains fold_state. Existing tests that PUT a capability are moved to merge.",
+      "files": [
+        "hub/hub/spec_service.py",
+        "hub/hub/spec_lifecycle.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests/test_a_finished_change_is_folded_into_its_capability.py"
+      ],
+      "from": null,
+      "key": "backend",
+      "requirements": [
+        "draft",
+        "fold",
+        "archive-guard",
+        "write-via-merge",
+        "app"
+      ],
+      "reviewer": null,
+      "title": "Fold draft, fold, archive guard and capability write lock"
+    },
+    {
+      "depends_on": [
+        "backend"
+      ],
+      "description": "SpecPhaseBar shows a ready change as shipped but not in a capability, with Fold into capability (dialog: capability picker, draft requirements with editable key and statement, archive on by default) and Archive without a capability change (reason). Vitest first; bundle refreshed with scripts/refresh_ui_bundle.py and committed with hub/ui/src. Then the drive passes on a restarted :8010.",
+      "files": [
+        "hub/ui/src/components/spec/SpecPhaseBar.tsx",
+        "hub/ui/src/api/spec.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "app"
+      ],
+      "reviewer": null,
+      "title": "Fold dialog on the phase bar"
+    }
+  ],
+  "title": "A finished change is folded into its capability, then archived"
+}

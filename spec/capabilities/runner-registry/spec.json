@@ -1,0 +1,694 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a project",
+      "key": "ac1",
+      "requirement": "runners-are-project-scoped-hub-records",
+      "then": "it is stored as a row of that project with a `runner-` id and the database accepts it",
+      "when": "the operator creates a runner naming `copilot`"
+    },
+    {
+      "given": "a project",
+      "key": "ac2",
+      "requirement": "runners-are-project-scoped-hub-records",
+      "then": "it is refused and nothing is stored",
+      "when": "a runner naming `opencode`, or with a blank name, is submitted"
+    },
+    {
+      "given": "no project yet",
+      "key": "ac3",
+      "requirement": "built-in-runners-are-seeded-on-first-use",
+      "then": "it has one default `claude`, `codex` and `copilot` runner, each with no model",
+      "when": "a project is registered"
+    },
+    {
+      "given": "a project with at least one runner",
+      "key": "ac4",
+      "requirement": "built-in-runners-are-seeded-on-first-use",
+      "then": "no runner is added to it",
+      "when": "the Hub starts"
+    },
+    {
+      "given": "an agent bound to a runner",
+      "key": "ac5",
+      "requirement": "an-agent-is-bound-to-at-most-one-runner",
+      "then": "the spawned command uses that runner's CLI, flags and model",
+      "when": "it is triggered"
+    },
+    {
+      "given": "an open agent with no runner bound",
+      "key": "ac6",
+      "requirement": "an-agent-is-bound-to-at-most-one-runner",
+      "then": "the trigger returns 409 saying no runner is bound and to bind one in the Hub UI, and nothing is spawned",
+      "when": "it is triggered"
+    },
+    {
+      "given": "the Runners page",
+      "key": "ac7",
+      "requirement": "runner-management-is-available-through-the-hub-ui",
+      "then": "both runners are listed and the agent's next run uses the newly bound runner",
+      "when": "the operator creates a second `claude` runner with a different model and binds an agent to it"
+    },
+    {
+      "given": "the runner dialog with provider `claude`",
+      "key": "ac8",
+      "requirement": "a-runner-s-model-is-drawn-from-the-catalog",
+      "then": "it offers Provider default, the declared models and the declared aliases, and no free-text field",
+      "when": "the model control is opened"
+    },
+    {
+      "given": "a runner that does not record it",
+      "key": "ac9",
+      "requirement": "a-runner-s-model-is-drawn-from-the-catalog",
+      "then": "the request returns 400 naming the declared models and aliases",
+      "when": "it is created or edited with a model its CLI does not declare"
+    },
+    {
+      "given": "a runner recording a model",
+      "key": "ac10",
+      "requirement": "n1",
+      "then": "the runner records no model and the response shows none; a patch with no `model` key leaves it unchanged",
+      "when": "it is patched with `model: null`"
+    },
+    {
+      "given": "a runner recording a model the catalog no longer declares",
+      "key": "ac11",
+      "requirement": "n1",
+      "then": "the save succeeds; moving it to a different undeclared model is refused",
+      "when": "it is renamed with that same model in the request"
+    },
+    {
+      "given": "a runner recording an undeclared model",
+      "key": "ac12",
+      "requirement": "n2",
+      "then": "it carries `model_unrecognised: true`, the list marks it, and the editor shows that model selected and marked unrecognised; a runner recording a declared alias is not marked",
+      "when": "runners are listed and the runner is opened for editing"
+    },
+    {
+      "given": "provider `claude` declares alias `opus`",
+      "key": "ac13",
+      "requirement": "runner-management-offers-each-declared-alias-as-a-choice-of-",
+      "then": "`opus` is offered as its own choice reading \"opus — latest (now Opus 5.5)\"",
+      "when": "the operator opens a model picker"
+    },
+    {
+      "given": "the new-runner dialog",
+      "key": "ac14",
+      "requirement": "runner-management-presents-the-refusal-it-received",
+      "then": "the refusal's sentence is shown and the dialog stays open with the entered values",
+      "when": "the Hub refuses the submission"
+    },
+    {
+      "given": "a runner bound to an open agent",
+      "key": "ac15",
+      "requirement": "runner-management-presents-the-refusal-it-received",
+      "then": "the page shows the Hub's sentence naming the agents to unbind",
+      "when": "the operator deletes it"
+    },
+    {
+      "given": "a `codex` runner with no flags",
+      "key": "ac16",
+      "requirement": "a-runner-s-flags-may-select-a-transport-and-unset-means-the-",
+      "then": "it uses the app-server transport",
+      "when": "a run starts"
+    },
+    {
+      "given": "a `codex` runner whose flags hold the app-server opt-out sentinel",
+      "key": "ac17",
+      "requirement": "a-runner-s-flags-may-select-a-transport-and-unset-means-the-",
+      "then": "it uses the exec transport and the sentinel does not appear in the command line",
+      "when": "a run starts"
+    },
+    {
+      "given": "an agent bound to a runner",
+      "key": "ac18",
+      "requirement": "launchability-reports-the-runner-that-would-actually-be-spaw",
+      "then": "the verdict describes that runner and the trigger launches the same runner",
+      "when": "its launchability is probed and it is then triggered"
+    },
+    {
+      "given": "a project with an archived agent whose name is also in the session configuration",
+      "key": "ac19",
+      "requirement": "launchability-reports-the-runner-that-would-actually-be-spaw",
+      "then": "the archived agent is absent; with `lifecycle=archived` it appears with its runner's verdict",
+      "when": "`GET /agents/launchability` is called without `lifecycle`"
+    },
+    {
+      "given": "a project with runners",
+      "key": "ac20",
+      "requirement": "n3",
+      "then": "the first has a verdict per runner id, the second a verdict for each of `claude`, `codex`, `copilot`",
+      "when": "`GET /runners/launchability` and `GET /runners/launchability-by-provider` are called"
+    },
+    {
+      "given": "a runner held by one archived agent, and another held by an open agent",
+      "key": "ac21",
+      "requirement": "a-refusal-that-names-a-runner-s-holders-names-where-to-reach",
+      "then": "the first is deleted and the archived agent remains with no runner and its runs intact; the second returns 409 naming the open agent",
+      "when": "each is deleted"
+    },
+    {
+      "given": "two `claude` runners with the same name and different models",
+      "key": "ac22",
+      "requirement": "a-runner-offered-for-choosing-names-its-model",
+      "then": "the two choices differ by the model each names",
+      "when": "any runner select is opened"
+    },
+    {
+      "given": "a runner named \"Claude Code — Sonnet 5\" on `claude-sonnet-5`",
+      "key": "ac23",
+      "requirement": "a-runner-offered-for-choosing-names-its-model",
+      "then": "it reads \"Claude Code — Sonnet 5 (claude)\", naming the model once",
+      "when": "it is offered"
+    },
+    {
+      "given": "the project sets a checkpoint model",
+      "key": "ac24",
+      "requirement": "a-runner-offered-for-choosing-names-its-model",
+      "then": "each choice names the checkpoint model, not the runner's own",
+      "when": "the checkpoint-runner select is opened"
+    },
+    {
+      "given": "the Hub's code",
+      "key": "ac25",
+      "requirement": "each-supported-runner-cli-is-served-by-exactly-one-runner-ad",
+      "then": "`ADAPTERS`, `RUNNER_CLIS` and the catalog's providers are each exactly `claude`, `codex`, `copilot`",
+      "when": "its tests run"
+    },
+    {
+      "given": "an agent whose legacy configuration names a runner string with no adapter",
+      "key": "ac26",
+      "requirement": "each-supported-runner-cli-is-served-by-exactly-one-runner-ad",
+      "then": "it is decided without an adapter and no run of it is started through another CLI's adapter",
+      "when": "its launchability is probed"
+    },
+    {
+      "given": "`copilot` on PATH is the npm `copilot.cmd` shim",
+      "key": "ac27",
+      "requirement": "a-copilot-runner-is-spawned-as-its-own-executable",
+      "then": "the spawned command's first argument is the platform `copilot.exe` inside the shim's package",
+      "when": "a Copilot run starts"
+    },
+    {
+      "given": "a shim on PATH whose package has no binary for this platform",
+      "key": "ac28",
+      "requirement": "a-copilot-runner-is-spawned-as-its-own-executable",
+      "then": "the runner is reported not present and the reason names the path looked for",
+      "when": "launchability is probed"
+    },
+    {
+      "given": "a Copilot CLI reporting version 1.0.75, or no version",
+      "key": "ac29",
+      "requirement": "a-copilot-runner-below-the-supported-version-is-refused",
+      "then": "the run fails with a reason naming the version, 1.0.81 and how to update, and no session is created",
+      "when": "a turn starts"
+    },
+    {
+      "given": "a Copilot turn that wrote a file in its worktree",
+      "key": "ac30",
+      "requirement": "a-copilot-turn-that-fails-after-its-prompt-ends-as-a-failed-",
+      "then": "the run ends failed with that message and the worktree is snapshotted as for any finished turn",
+      "when": "its prompt is answered with an error, or Copilot reports a session error and then a normal end"
+    },
+    {
+      "given": "a Copilot turn that started a subagent",
+      "key": "ac31",
+      "requirement": "a-copilot-turn-that-fails-after-its-prompt-ends-as-a-failed-",
+      "then": "the run does not fail and the error appears in its timeline",
+      "when": "the subagent reports an error and the turn ends normally"
+    },
+    {
+      "given": "Copilot is not signed in",
+      "key": "ac32",
+      "requirement": "n4",
+      "then": "the runner is reported not authorized with the `copilot login` sentence and the operator's input stays queued without a delivery attempt counted",
+      "when": "a turn fails to start for that reason"
+    },
+    {
+      "given": "no `GH_TOKEN`, `GITHUB_TOKEN` or `COPILOT_GITHUB_TOKEN` in the Hub's environment and a signed-in Copilot CLI",
+      "key": "ac33",
+      "requirement": "copilot-launchability-is-read-from-copilot-itself",
+      "then": "the Copilot runner is launchable",
+      "when": "launchability is probed"
+    },
+    {
+      "given": "a held not-signed-in verdict",
+      "key": "ac34",
+      "requirement": "copilot-launchability-is-read-from-copilot-itself",
+      "then": "the first read starts a new check and a read after it completes reports launchable",
+      "when": "the operator runs `copilot login` and the verdict is read twice"
+    },
+    {
+      "given": "the Hub has not finished its first Copilot probe",
+      "key": "ac35",
+      "requirement": "copilot-launchability-is-read-from-copilot-itself",
+      "then": "creation is not refused on that account",
+      "when": "the operator creates a Copilot agent"
+    },
+    {
+      "given": "the operator signed in with `copilot login` after the Hub's Copilot homes were created",
+      "key": "ac36",
+      "requirement": "n5",
+      "then": "the probe reports launchable and the turn starts a session",
+      "when": "the Hub next probes and runs"
+    },
+    {
+      "given": "a `copilot` runner naming provider `anthropic`, a set key variable and a declared model",
+      "key": "ac37",
+      "requirement": "a-copilot-runner-may-reach-its-model-with-the-operator-s-own",
+      "then": "its environment names that provider, address and model and carries the key read from the variable",
+      "when": "a run, checkpoint or title process starts on it"
+    },
+    {
+      "given": "a `claude` or `codex` runner, or a provider type other than `anthropic`",
+      "key": "ac38",
+      "requirement": "a-copilot-runner-may-reach-its-model-with-the-operator-s-own",
+      "then": "it is refused with 400",
+      "when": "a provider is submitted"
+    },
+    {
+      "given": "a provider whose key-variable field holds a pasted key, or names `GH_TOKEN`",
+      "key": "ac39",
+      "requirement": "n6",
+      "then": "it is refused with a sentence saying to set the key in the Hub's environment and name the variable; nothing is stored and the response does not contain the submitted value",
+      "when": "it is submitted"
+    },
+    {
+      "given": "a provider with an `http://` address to a non-local host, or flags carrying `--model`",
+      "key": "ac40",
+      "requirement": "n6",
+      "then": "it is refused with a stated reason",
+      "when": "it is submitted"
+    },
+    {
+      "given": "a provider runner",
+      "key": "ac41",
+      "requirement": "n7",
+      "then": "each is refused with a stated reason",
+      "when": "it is submitted with the alias `haiku`, or a run asks for a different model"
+    },
+    {
+      "given": "a `copilot` runner recording `auto`",
+      "key": "ac42",
+      "requirement": "n7",
+      "then": "the request is refused and the runner is unchanged",
+      "when": "a provider is added without changing the model"
+    },
+    {
+      "given": "Copilot provider variables in the Hub's environment or the agent's env settings",
+      "key": "ac43",
+      "requirement": "n8",
+      "then": "its environment carries none of them; on a provider runner it carries only the runner's provider, address, key and model",
+      "when": "a run starts on a `copilot` runner with no provider"
+    },
+    {
+      "given": "a provider runner whose key variable is not set",
+      "key": "ac44",
+      "requirement": "n9",
+      "then": "it is not launchable, the reason names the variable, and no GitHub sign-in is asked for",
+      "when": "launchability is reported for it or an agent bound to it"
+    },
+    {
+      "given": "a provider runner whose key variable is set and Copilot not signed in to GitHub",
+      "key": "ac45",
+      "requirement": "n9",
+      "then": "the agent is created",
+      "when": "the operator creates an agent bound to it"
+    },
+    {
+      "given": "an agent is declared `hub_client: cli`",
+      "key": "cr64",
+      "requirement": "a-run-s-tool-surface-approval-channel-and-plane-access-are-d",
+      "then": "the tool surface is none and the plane access is the call command, and an approval channel carried by its transport's own protocol is kept",
+      "when": "its axes are resolved"
+    },
+    {
+      "given": "a Claude run has no approval channel",
+      "key": "cr65",
+      "requirement": "a-run-s-tool-surface-approval-channel-and-plane-access-are-d",
+      "then": "it is `acceptEdits`, not a Hub-answered posture",
+      "when": "its default posture is decided"
+    },
+    {
+      "given": "a Codex runner has no transport flag",
+      "key": "cr14",
+      "requirement": "an-invocable-tool-surface-is-the-default-not-an-opt-in",
+      "then": "it uses app-server, and `--no-app-server` is the opt-out",
+      "when": "a run starts"
+    },
+    {
+      "given": "a Claude run has the Hub's tool server",
+      "key": "cr15",
+      "requirement": "an-invocable-tool-surface-is-the-default-not-an-opt-in",
+      "then": "the Hub's approval tool answers its permission requests",
+      "when": "its default posture is decided"
+    },
+    {
+      "given": "an agent with no bound runner and none in its session configuration, with input queued",
+      "key": "ac-ac31",
+      "requirement": "an-agent-with-no-way-to-be-launched-shall-say-so-and-shall-n",
+      "then": "both say no runner is bound and neither names an executable after the agent",
+      "when": "launchability and the queue status are read"
+    },
+    {
+      "given": "an agent whose bound runner and session configuration name different runners",
+      "key": "ac-ac32",
+      "requirement": "an-agent-with-no-way-to-be-launched-shall-say-so-and-shall-n",
+      "then": "it reports the bound runner",
+      "when": "its launchability is read"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Resolving the Copilot executable",
+      "steps": [
+        "If the runner pins an executable, use it.",
+        "Else, if `copilot` on PATH is a native executable (not a `.cmd`/`.ps1`/`.js` script), use it.",
+        "Else, if it is an npm shim, use the platform binary inside the `@github/copilot` package the shim belongs to.",
+        "Else report not present, naming the path looked for."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-10": "b3c1a125d10fb097a59d8d4d4d28cea4d53b2b29d07090831ddc022934634916",
+      "FR-11": "7690dbfb5011dde7665b30655fb0b2ad8b8f2de788478443cbe9c0a469250813",
+      "FR-12": "17af6decc5ea3d30148f017f76c01267612eb3fe4405986cc3b87c246f267566",
+      "FR-13": "546f4f63b4c03760a20b3711c44bc2d6885492087671c0bc13a07bee93b99849",
+      "FR-14": "a93c34edcf0490a00731310d568e1ed19658099b94c4d5fbb9b3a85196294870",
+      "FR-15": "1d9f2d26ea19b04a3a88440ab90d34f62f40e26bfdf12d6b4081d5f1301dde8a",
+      "FR-16": "2cfbf43f3af76255de4bcbe9d44e3043a8937711c7da0a8f900063b9b5fc1eef",
+      "FR-17": "84a429ab8e700562a65f8967325c36fcb8eee5a1cdeb769117662ae09bb822ff",
+      "FR-18": "030daf6c94246f25081840a5cd9285a24febf51fae391d01f381515aecbf2ca6",
+      "FR-19": "c05fc07c85ed46d8321c68c981cec9d5df16f1c1539144ea6c6894f9ad4fd4e1",
+      "FR-20": "ed000e8af86b7b356000a9658e7ac15acfa7212ceae9874c9a5b3f1071b10de8",
+      "FR-21": "9676444269d64b0de9a8816b0c01f32ff64a6f856375fc9174388b1c19ecb3a4",
+      "FR-22": "2a60cecf81d2044a2c587111a9fa5687e7c03188bf9ef95ab1430866c41c2bb6",
+      "FR-23": "29939b811766ac51265b4eae99b07828d39ea251b3b195b21aa6e1b3d3016883",
+      "FR-24": "831c1807688ab49fcf8778d160ff41ec79a425f23f69faaa2acfc585bfa28c20",
+      "FR-25": "62531d4c964fb6dcd7c505d5f345a8e4ff7d86da573f1e841f6c73ff50413ba4",
+      "FR-26": "acbb01939e9de08045c5c89070a9036143031704781310aa4923975fb34b8c82",
+      "FR-27": "673cc0490156ce2dedfb83f912fd807b7a0597cc570dcefbf3f517ba7717321e",
+      "FR-28": "97730bd78f9b4923fbb964a9bd01a9d87f08b5bff06c6acd05afa4afd071ce9c",
+      "FR-29": "092e571e112400011f10d79b12c4fefc15cc900f897f0b698278c18f5772879c",
+      "FR-30": "b9335d1db7fa7c56dc4e8ee637c5fca15d49d771ea49b0e127ad7407ec3b0fb3",
+      "FR-31": "6b1d308e248173c7191353773064ee257afa97c3baa6ccfd74296769a200b912",
+      "FR-32": "c8dc4a4a14803dd2f73464031c84f244c8c9dcddbcdc058147b4c418e880426d",
+      "FR-33": "90e25ec458f5a899838661dd2fec118e094be3889369ef1e7376822b2fd78b99",
+      "FR-34": "791ee5d61ae7bbcf9371cc57046636aebb6ff92f34752cd1aa68c80d4e47fa32",
+      "FR-35": "a08ae24a6b39f4df582420d7e9baad7ae9e7be869172fb032a0a4587ace328ec",
+      "FR-36": "5d166072cb34f1ab95550611246ba727e57b1974085ddf92e166d74b158d61a0",
+      "FR-7": "2e8b14c310c7c5600be0755370b28047fd90f05a3d95ef224d745a796c98ece6",
+      "FR-8": "050474f8cb6f0870b28f1a305c7eaee3183803b4ad8f6c382833a4399a2d7f83",
+      "FR-9": "836acf1a1ceedd13682c78c7fb471b11cfa291b4f3a9ed699d037ce98b319f3e"
+    },
+    "high_water": 36,
+    "requirements": {
+      "a-copilot-runner-below-the-supported-version-is-refused": "FR-19",
+      "a-copilot-runner-is-spawned-as-its-own-executable": "FR-18",
+      "a-copilot-runner-may-reach-its-model-with-the-operator-s-own": "FR-23",
+      "a-copilot-turn-that-fails-after-its-prompt-ends-as-a-failed-": "FR-20",
+      "a-refusal-that-names-a-runner-s-holders-names-where-to-reach": "FR-16",
+      "a-run-s-tool-surface-approval-channel-and-plane-access-are-d": "FR-34",
+      "a-runner-offered-for-choosing-names-its-model": "FR-17",
+      "a-runner-s-flags-may-select-a-transport-and-unset-means-the-": "FR-14",
+      "a-runner-s-model-is-drawn-from-the-catalog": "FR-11",
+      "an-agent-is-bound-to-at-most-one-runner": "FR-9",
+      "an-agent-with-no-way-to-be-launched-shall-say-so-and-shall-n": "FR-36",
+      "an-invocable-tool-surface-is-the-default-not-an-opt-in": "FR-35",
+      "built-in-runners-are-seeded-on-first-use": "FR-8",
+      "copilot-launchability-is-read-from-copilot-itself": "FR-21",
+      "each-supported-runner-cli-is-served-by-exactly-one-runner-ad": "FR-22",
+      "launchability-reports-the-runner-that-would-actually-be-spaw": "FR-15",
+      "n1": "FR-24",
+      "n2": "FR-25",
+      "n3": "FR-26",
+      "n4": "FR-27",
+      "n5": "FR-28",
+      "n6": "FR-29",
+      "n7": "FR-30",
+      "n8": "FR-31",
+      "n9": "FR-32",
+      "runner-management-is-available-through-the-hub-ui": "FR-10",
+      "runner-management-offers-each-declared-alias-as-a-choice-of-": "FR-12",
+      "runner-management-presents-the-refusal-it-received": "FR-13",
+      "runners-are-project-scoped-hub-records": "FR-7"
+    },
+    "retired": {
+      "n10": "FR-33"
+    }
+  },
+  "design": "**Three separate records.** Runner (which CLI and model), Agent (identity) and Charter (behaviour) are distinct project-scoped rows; an agent holds at most one `runner_id`.\n\n**The bound runner is the one truth.** `launchability.get_agent_config` overwrites any session-configured runner with the bound `Runner` row, so the probe describes what `agent_trigger` launches; an agent with nothing bound gets `RUNNER_UNBOUND`, never a binary named after it.\n\n**One adapter per CLI.** `runner_adapters.ADAPTERS` = `RUNNER_CLIS` = catalog providers; the database check constraint is generated from `RUNNER_CLIS`. Legacy strings in `launchability.LEGACY_RUNNER_CLI` (kimi, opencode, codex_mcp, claude_proxy) are dead residue reachable only from hand-made legacy payloads. Codex remains a fully supported adapter even though it is no longer driven.\n\n**Model provider on the runner only.** A Copilot runner's `provider_config` is `{type, base_url, api_key_var}`; the key lives in the Hub's environment and only its variable name is stored. Provider settings from anywhere else are stripped.\n\n**Given and told are separate.** What a run is given (tool surface, approval channel, plane access) is resolved by `resolve_access_axes` from the runner's transport; what it is told about its access is decided elsewhere, so neither can move the other. Where a CLI offers several transports, the approvable one is the default and a weaker one is an explicit opt-out.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_runners_api.py, test_runner_charter_models.py — records, CLI set, delete rules.",
+      "hub/tests/test_launchability.py — bound runner, unbound reason, lifecycle filter.",
+      "hub/tests/test_runner_adapters_conformance.py, test_no_runner_literals.py — one adapter per CLI.",
+      "hub/tests/test_copilot_probe.py, test_copilot_acp_run_turn.py, test_copilot_home.py — Copilot executable, version, failures, sign-in.",
+      "hub/tests/test_runner_provider_config.py, test_copilot_byok_env.py — model provider.",
+      "hub/ui/src/__tests__/runnersUi.test.tsx, runnerOptionLabel.test.ts, runnerProviderConfig.test.tsx."
+    ],
+    "limits": [
+      "Copilot-name branches remain outside the adapters (F476 open), and `test_no_runner_literals.py` scans only `claude`/`codex`.",
+      "A provider runner has never completed a turn with a valid key (F494 open).",
+      "The app neither shows nor edits a runner's flags (F469 open).",
+      "Runner list order is `created_at` only; ties are unordered (F177 open)."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "When execution capability lived inside agent identity, the probe and the spawn could disagree about the same agent, a missing binding fell back to a binary named after the agent, and every CLI difference was a name comparison scattered through the Hub.",
+  "requirements": [
+    {
+      "key": "runners-are-project-scoped-hub-records",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A CLI the schema admits but the database refuses surfaces as a false 409 \"already exists\"; deriving both from one tuple keeps them from drifting.",
+      "statement": "The Hub SHALL persist each runner as a project-scoped database row naming a supported CLI (`claude`, `codex` or `copilot`), a non-blank name, optional flags, an optional model and an optional model provider, and SHALL enforce the supported CLI set identically in the request schema and in the database constraint."
+    },
+    {
+      "key": "built-in-runners-are-seeded-on-first-use",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A new project can bind an agent immediately, and an operator who deleted defaults in favour of their own runners does not get them back.",
+      "statement": "The Hub SHALL create one default runner per supported CLI, named \"<Cli> (default)\" with no model, when a project is registered and, at startup, for any project that has no runner, and SHALL create none for a project that already has one."
+    },
+    {
+      "key": "an-agent-is-bound-to-at-most-one-runner",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A silent default would launch something the operator never chose; the refusal says what to fix.",
+      "statement": "Each agent SHALL reference at most one runner, a triggered run SHALL launch the CLI, flags and model of the bound runner, and triggering an agent with no runner bound SHALL be refused with 409 and the sentence \"No runner is bound to this agent. Bind one in the Hub UI before it can run.\" rather than fall back to any default."
+    },
+    {
+      "key": "runner-management-is-available-through-the-hub-ui",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Runners are operator-managed records; the app is the way to manage them.",
+      "statement": "The Hub UI SHALL provide a Runners page to list, create, edit and delete runners (name, CLI, model, model provider), and SHALL let the operator bind an agent to a runner from the agent's configuration."
+    },
+    {
+      "key": "a-runner-s-model-is-drawn-from-the-catalog",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A free-typed model is refused at spawn or silently replaced by the provider; a selection makes the valid choices the only ones.",
+      "statement": "A runner's model SHALL be one the catalog declares for its CLI (an identifier or an alias, stored as written) or unset (the provider's default), offered as a selection rather than free text, and the Hub SHALL refuse with 400 a request that newly sets a model the catalog does not declare."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A picker sends the stored model back on every save; refusing it would make a legacy runner uneditable in every other respect.",
+      "statement": "A runner edit SHALL distinguish an explicit null model (clear it to the provider's default) from an absent model field (leave it unchanged), and SHALL accept a request carrying the model the runner already records even when the catalog no longer declares it."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Opening a runner for editing must not silently re-point it at a different model, and runners needing attention should be visible without opening each one.",
+      "statement": "A runner whose recorded model the catalog does not declare SHALL be reported with `model_unrecognised: true`, marked as unrecognised in the runner list, and offered that model still selected when edited, so that saving it unchanged keeps it."
+    },
+    {
+      "key": "runner-management-offers-each-declared-alias-as-a-choice-of-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Choosing an alias and choosing the identifier it stands for behave the same today and differently after the provider moves the alias; the label makes that difference readable.",
+      "statement": "Wherever the operator chooses a model for a provider, the interface SHALL offer each declared alias as its own choice labelled \"<alias> — latest (now <label of the model it stands for>)\"."
+    },
+    {
+      "key": "runner-management-presents-the-refusal-it-received",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A refusal that reaches no surface is indistinguishable from a button that does nothing.",
+      "statement": "When the Hub refuses a runner create, edit or delete, runner management SHALL show the refusal's own sentence, and a refused create or edit SHALL leave the dialog open with the operator's input intact."
+    },
+    {
+      "key": "a-runner-s-flags-may-select-a-transport-and-unset-means-the-",
+      "modal": "MAY",
+      "party": null,
+      "rationale": "Codex runs over its app-server by default; its exec transport is degraded and must be opted into explicitly. Sentinels are the union of every adapter's declared set.",
+      "statement": "A runner's flags MAY carry a transport sentinel declared by its CLI's adapter, which SHALL select how the Hub starts the run and SHALL NOT be passed to the CLI; a runner with no sentinel SHALL get its CLI's default transport, the one whose tool surface the agent can call."
+    },
+    {
+      "key": "launchability-reports-the-runner-that-would-actually-be-spaw",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Reporting an archived agent as runnable, or an unbound one as needing a binary named after itself, is the probe contradicting the trigger one call later.",
+      "statement": "An agent's launchability SHALL be derived from its bound runner whenever one is bound, so that the probe and the spawn cannot disagree, and `GET /agents/launchability` SHALL report the same agents the roster lists for the same `lifecycle` selector (default `open`)."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Runner management and agent creation must show whether a choice can run before the operator commits to it.",
+      "statement": "The Hub SHALL report launchability per runner (`GET /runners/launchability`) and per supported CLI before any runner exists (`GET /runners/launchability-by-provider`)."
+    },
+    {
+      "key": "a-refusal-that-names-a-runner-s-holders-names-where-to-reach",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An archived agent runs nothing, so its binding should not keep a runner undeletable; the agent and its history stay.",
+      "statement": "Deleting a runner that no open agent holds SHALL succeed and clear the runner from every archived agent that held it, and deleting a runner an open agent holds SHALL be refused with 409 naming those agents."
+    },
+    {
+      "key": "a-runner-offered-for-choosing-names-its-model",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Runners of one provider may share a name and differ only in model, and the model is what the choice decides.",
+      "statement": "Wherever the operator chooses a runner from a list, each choice SHALL read \"<name> — <model> (<cli>)\", where the model is the catalog label, \"Provider default\" when unset, \"<alias> (latest)\" for an alias, or \"<id> (unrecognised)\" when undeclared; the model part SHALL be omitted when the name already ends with it, and a setting that overrides the model for that use (the checkpoint model) SHALL be named instead of the runner's own."
+    },
+    {
+      "key": "each-supported-runner-cli-is-served-by-exactly-one-runner-ad",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Adding a CLI should be adding one adapter; code outside the adapters that branches on a supported CLI's name is where CLIs drift apart. A legacy runner string with no adapter is never spawned through another CLI's adapter.",
+      "statement": "The Hub SHALL decide everything that differs between runner CLIs (launch and transport, event parsing, usage and context reading, tool-server and context injection, posture, launchability, one-shot invocation, catalog provider) through one adapter per supported CLI, and the adapters, the CLIs a runner may name, the database's accepted set and the catalog's providers SHALL be the same set."
+    },
+    {
+      "key": "a-copilot-runner-is-spawned-as-its-own-executable",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An npm shim runs a second process in front of the CLI, and stopping the shim can leave the CLI running.",
+      "statement": "The Hub SHALL spawn Copilot by its native executable, resolved from the runner's pinned executable, then a native `copilot` on PATH, then the platform binary inside the npm package a `copilot` shim on PATH belongs to, and SHALL name the path it looked for when it finds none."
+    },
+    {
+      "key": "a-copilot-runner-below-the-supported-version-is-refused",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Older versions lack the session events the Hub depends on; an auto-update could swap in a different version after the check.",
+      "statement": "The Hub SHALL fail a Copilot turn, before any session is created, when the version the CLI reports in its handshake is missing or below 1.0.81, and SHALL spawn Copilot with `--no-auto-update` so the version checked is the version that runs."
+    },
+    {
+      "key": "a-copilot-turn-that-fails-after-its-prompt-ends-as-a-failed-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Copilot can report an error and still say the turn ended normally; a subagent's failure is not the turn's.",
+      "statement": "Once a Copilot turn's prompt is sent, the Hub SHALL record an error answer, process exit, timeout, or a session error for the turn's own agent as the run's failure, keeping what the turn wrote, even when Copilot then reports a normal end (unless the turn was stopped), and SHALL record a subagent's error in the run's timeline without failing the turn."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An authentication or version failure cannot succeed on retry; retrying it spent the input's delivery attempts for nothing.",
+      "statement": "When a Copilot turn fails to start because the CLI is not signed in or is too old, the Hub SHALL record that verdict for the runner before the input is retried, so the queued input is held rather than retried into the same failure."
+    },
+    {
+      "key": "copilot-launchability-is-read-from-copilot-itself",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Copilot keeps its sign-in in the OS credential store; a token variable overrides it rather than proving it exists. Signing in or updating must be seen without waiting for a cached verdict to age.",
+      "statement": "The Hub SHALL decide whether a Copilot runner is authorized by a model-free handshake with the Copilot CLI, not from GitHub token variables in its own environment, SHALL report not-signed-in and too-old as not authorized with a reason saying what to do, SHALL re-check such a verdict on its next read, and SHALL NOT refuse agent creation while no verdict has been computed yet."
+    },
+    {
+      "key": "n5",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "`copilot login` records the signed-in account only in the operator's own home, and the CLI reads the credential store through that record.",
+      "statement": "Before its probe and before every Copilot run, the Hub SHALL copy the operator's account record (never a token) from the operator's Copilot home (`$COPILOT_HOME`, else `~/.copilot`) into each Copilot home it owns, and the not-signed-in reason SHALL name the file it read."
+    },
+    {
+      "key": "a-copilot-runner-may-reach-its-model-with-the-operator-s-own",
+      "modal": "MAY",
+      "party": null,
+      "rationale": "The key stays where the operator already keeps credentials, the Hub's environment; the runner holds only a name.",
+      "statement": "A `copilot` runner MAY name the model provider `anthropic` with a base URL and the name of a Hub environment variable holding the API key; the Hub SHALL store only the variable's name, SHALL refuse a provider on a `claude` or `codex` runner or of any other type, and SHALL start every process it runs on that runner (agent runs, checkpoints, handovers, titles) against that provider with that key."
+    },
+    {
+      "key": "n6",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The likeliest mistake is a pasted key; echoing it would put it in a response body, a log and the browser's history. A Hub credential named as the key would be shipped off the machine.",
+      "statement": "A submitted provider SHALL be refused with 400, storing nothing and never repeating a submitted value, when its key-variable field is not a variable name or names one of the Hub's own credentials, when its address is unencrypted to a host other than the local machine, when an unknown field is present, or when the runner's flags choose a model."
+    },
+    {
+      "key": "n7",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The provider receives the model as is and cannot choose one, and a CLI alias is not an API model.",
+      "statement": "A provider runner's model SHALL be set and SHALL be one of the Claude API model identifiers the catalog declares for `claude` (no alias); a single run SHALL NOT override it; a conversation or checkpoint model recorded before the provider was added SHALL NOT be used; and adding or removing a provider SHALL be refused when the model left behind is not valid for the resulting runner."
+    },
+    {
+      "key": "n8",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Neither the operator's shell nor an agent's settings may silently move a run onto another account or provider.",
+      "statement": "A Copilot run SHALL take provider settings from its runner alone: every Copilot provider variable inherited from the Hub's environment or set in the agent's own environment SHALL be removed, a provider runner SHALL then get only the provider, address, key and model it names, and a runner whose stored provider is damaged SHALL NOT be spawned."
+    },
+    {
+      "key": "n9",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A provider runner does not use the GitHub subscription, so the sign-in question is the wrong one; a Claude Max plan is not a key.",
+      "statement": "A provider runner SHALL be reported launchable only when its key variable is set in the Hub's environment, the report naming the variable and not asking for a GitHub sign-in, on every surface that reports launchability; runner management SHALL state that an API key is required and that a subscription sign-in cannot be used."
+    },
+    {
+      "key": "a-run-s-tool-surface-approval-channel-and-plane-access-are-d",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "For some runners the three move together and for others not; one value standing for all three removed approvals from runs whose approvals never depended on MCP.",
+      "statement": "For every run the Hub SHALL resolve three separate values: its tool surface (whether the Hub's MCP server is given), its approval channel (taken from the runner's transport, and withdrawn by removing the tool surface only where that channel is carried by the tool server), and its plane access (MCP exactly when the tool surface is given). A posture naming the Hub as answerer SHALL be the default only where the run has an approval channel, and resolving these values SHALL NOT widen any run's containment."
+    },
+    {
+      "key": "an-invocable-tool-surface-is-the-default-not-an-opt-in",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An operator must not need to know a flag or sentinel for a newly created agent's tools to be callable.",
+      "statement": "Where a runner offers more than one way to start a run and only some let the Hub answer approvals per request, the Hub SHALL select an approvable transport by default; a less capable transport SHALL be reachable only by an explicit opt-out flag, and an agent's reported readiness SHALL reflect the transport its next run will use."
+    },
+    {
+      "key": "an-agent-with-no-way-to-be-launched-shall-say-so-and-shall-n",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Naming a binary after the agent sends the operator looking for something that was never supposed to exist.",
+      "statement": "Where an agent has no bound runner and its synchronised session configuration names none, its launchability and its queued input's waiting reason SHALL state that no runner is bound, and SHALL NOT name a missing executable derived from the agent's own name; an agent whose session configuration names a runner SHALL keep that configuration's verdict, and a bound runner SHALL outrank it."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The `runners` table, its routes (`/api/v1/runners`, `/runners/launchability`, `/runners/launchability-by-provider`) and the Runners settings page",
+      "Binding an agent to a runner, and what that binding decides at trigger and probe time, including an agent with no runner",
+      "The runner adapters (`hub/hub/runner_adapters/`) as the single place CLI differences live",
+      "Transport selection, and the tool surface, approval channel and plane access resolved for each run",
+      "Copilot runner specifics: executable resolution, minimum version, failure recording, launchability, and the operator model provider"
+    ],
+    "non_goals": [
+      "Which models and controls each provider offers (model-catalog)",
+      "What a permission posture permits a run to do, and scrubbing a provider key from a run's output (agent-run-sandboxing)",
+      "Whether a launchable runner can also collaborate through the Hub's tools, and pre-spawn refusals (runtime-diagnostics)",
+      "What a run is told about how it reaches the Hub (agent-tool-surface)",
+      "Holding an agent's queue when its provider allowance or Copilot quota is spent (provider-allowance-holds)",
+      "OpenCode, Kimi and other legacy runner strings: no runner record can name them"
+    ]
+  },
+  "summary": "Runners are project-scoped Hub records naming which CLI (`claude`, `codex` or `copilot`) and which model an agent launches with. An agent is bound to at most one runner, and that runner is the single source for what a run launches, which transport and tool surface it gets, and what launchability reports; an agent with none says so. Each supported CLI is served by one runner adapter, and a Copilot runner may send its model to an operator-chosen provider with a key held in the Hub's own environment.",
+  "tasks": [],
+  "title": "Runner registry"
+}

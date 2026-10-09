@@ -1,0 +1,188 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the trial Hub on :8010, a fresh project with an approved change and its task, a standalone task, and an archived agent bound to its own runner",
+      "key": "drive",
+      "requirement": "app",
+      "then": "the task and the change (with its file and its tasks) are gone, the runner deletes and the archived agent remains with no runner; on today's Hub neither Delete control exists and the runner is refused",
+      "when": "the operator deletes the task and the change in Chromium (scripts/drive/d1008_delete_drive.py), then the runner through the API"
+    },
+    {
+      "given": "an approved change with requirements, evidence, an approved task and a stopped flow",
+      "key": "document-cascade",
+      "requirement": "document",
+      "then": "no row of the project names it or its requirements or tasks, the file is gone and spec/index.json no longer lists it",
+      "when": "it is deleted"
+    },
+    {
+      "given": "a capability, an archived change, a folded change, a change with a running flow, a change with a run active on its task",
+      "key": "document-refusals",
+      "requirement": "document",
+      "then": "each is refused with its own code and nothing changes",
+      "when": "each is deleted"
+    },
+    {
+      "given": "a task with a dependency, a transition, evidence, a queued entry, a finished run and a conversation bound to it",
+      "key": "task-cascade",
+      "requirement": "task",
+      "then": "the dependency, transition, evidence and queued entry are gone; the run and the conversation remain with task_id cleared; a task with an active run is refused",
+      "when": "it is deleted"
+    },
+    {
+      "given": "a runner held by one archived agent, and another held by an open agent",
+      "key": "runner-unbind",
+      "requirement": "runner",
+      "then": "the first is deleted and the archived agent remains with runner_id cleared and its runs intact; the second is refused naming the open agent",
+      "when": "each is deleted"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "28c3aa7dad8f39eb1693ab5f4aea8efdc69caa6c9fbb3e56c4e925e48f8e2126",
+      "FR-2": "b51a0c0dee7c56d33dd3425eaf55e2edc512372044ed93cfffa2989df9ae4baa",
+      "FR-3": "d878bf11f5e3947962d3f254aaff95c0d5a858351dd48eb56bc2bd5d742e7849",
+      "FR-4": "043da9b70ccc2fedc3ca06db49b985ac8ecbe683f6a7528496556e3de14c2d1f",
+      "FR-5": "0a63d94a1bec94a53c0a098cc706d3ba5c2f8d7f4ebcf3bf0e75eebb84497630"
+    },
+    "high_water": 5,
+    "requirements": {
+      "app": "FR-4",
+      "document": "FR-1",
+      "runner": "FR-5",
+      "task": "FR-2"
+    },
+    "retired": {
+      "agent": "FR-3"
+    }
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2: it deletes data. No migration and no schema change. HAZARD: from :8000's next restart the operator's real instance gains these deletes, and the UI bundle reaches its app at its next reload; a delete there is final. Mitigations: every delete is operator-only, refuses what the corpus (capabilities, archived and folded changes) or a live run depends on, and sits behind a confirm naming what goes with it; agents are never deleted; a runner only archived agents hold is unbound from them and deleted. History that only mentions a deleted thing keeps its row with the pointer cleared rather than being deleted. Rollback: revert the commits; deleted rows are not recoverable except from a database backup, which the drive takes on :8010's profile before it runs. The cascades live in one module with a test that fails when a new table references tasks, agents or runs without being covered.",
+  "evidence": {
+    "checked": [
+      "@router.delete exists only in projects.py, runners.py, jobs.py, charters.py, agent_actions.py (jobs), inbound_queue.py, tasks.py (dependencies)",
+      "runners.py:238 refuses a runner bound to an archived agent",
+      "The 2026-10-08 cleanup script's cascade over 30 tables (session scratchpad clean_aw_project.py)"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F532: the operator API deletes projects, runners, jobs and charters and nothing else. Clearing drive residue out of this repo's trial project (26 documents with no file, 28 tasks, 20 archived agents, 168 runs) took a hand-written cascade over 30 tables with the Hub stopped. An archived agent also blocks deleting its runner (runners.py:238), so archiving is no way out. The operator chose (2026-10-08) to keep 'an agent is archived, never deleted' and free the runner instead.",
+  "requirements": [
+    {
+      "key": "document",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Drive residue and abandoned drafts otherwise stay on the board and in the coverage forever.",
+      "statement": "The operator MUST be able to delete a specification document that is not a capability, not archived and named by no merge, removing its file, its index entry, its requirements with their revisions, evidence and links, its events, its tasks as a task delete does, and its stopped flows; it MUST be refused, writing nothing, for a capability, an archived or folded document, a document with a run active on one of its tasks, or one whose flow is still running."
+    },
+    {
+      "key": "task",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A task nobody should work is otherwise only ever rejected, and stays counted.",
+      "statement": "The operator MUST be able to delete a task, removing its dependencies, links, transitions, integrations, checks, evidence and queued entries; rows that only mention it (runs, conversations, messages, questions) MUST keep their row with the pointer cleared; it MUST be refused while a run bound to it is active."
+    },
+    {
+      "key": "runner",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An archived agent runs nothing, so its binding only blocked the runner's deletion forever (runners.py:238); the agent and its history stay.",
+      "statement": "Deleting a runner that no open agent holds MUST succeed, clearing the runner of every archived agent that held it; a runner an open agent holds MUST still be refused, naming the agent."
+    },
+    {
+      "key": "app",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The cleanup should never again need a database script.",
+      "statement": "The app MUST offer Delete for a deletable document on its phase bar and for a task in its detail, each behind a confirm naming what goes with it, and show the Hub's refusal when there is one."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "DELETE /project/documents/{path} and DELETE /tasks/{id} on the operator API",
+      "Removing a deleted document's file and rebuilding spec/index.json without it",
+      "Deleting a runner held only by archived agents, unbinding them",
+      "Delete controls in the app: the spec phase bar and the task detail"
+    ],
+    "non_goals": [
+      "Deleting an agent: an agent is archived, never deleted; its name attributes its runs and conversations (operator, 2026-10-08)",
+      "Deleting a capability, an archived change or a folded change: they are the corpus and its history",
+      "Agents deleting anything: these are operator routes only",
+      "Undo: a delete is final, and the confirm says so"
+    ]
+  },
+  "summary": "Operator deletes for a specification document (not a capability, not archived, not folded) with its requirements, evidence and tasks, and for a task with its links and evidence; history that only mentions a deleted thing keeps its row and loses the pointer. An agent stays archived, never deleted (agent_lifecycle.py's decision, kept by the operator 2026-10-08): instead a runner held only by archived agents can be deleted, unbinding them. The app offers the document and task deletes behind a confirm.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1008_delete_drive.py against :8010: the 'drive' criterion, run before the build.",
+      "files": [
+        "scripts/drive/d1008_delete_drive.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "app"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "Failing tests first in hub/tests/test_the_operator_can_delete_a_document_a_task_or_an_archived_agent.py, including a guard that every table with a task, requirement or evidence reference is covered by the cascade. hub/hub/deletion.py holds the cascades; runners.py unbinds archived holders.",
+      "files": [
+        "hub/hub/deletion.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/api/v1/runners.py",
+        "hub/tests/test_the_operator_can_delete_a_document_a_task_or_an_archived_agent.py"
+      ],
+      "from": null,
+      "key": "backend",
+      "requirements": [
+        "document",
+        "task",
+        "runner"
+      ],
+      "reviewer": null,
+      "title": "Delete routes for documents and tasks; a runner held only by archived agents deletes"
+    },
+    {
+      "depends_on": [
+        "backend"
+      ],
+      "description": "Vitest first; Delete on the phase bar, the task detail and an archived agent, each behind a confirm; bundle refreshed; the drive passes on a restarted :8010.",
+      "files": [
+        "hub/ui/src",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "app"
+      ],
+      "reviewer": null,
+      "title": "Delete controls in the app"
+    }
+  ],
+  "title": "The operator can delete a document or a task, and a runner only archived agents hold"
+}

@@ -1,0 +1,34 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "system-map",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "The app itself, running on one machine for one operator: its lifecycle from start to stop, the project workspace it opens, the environment settings and instructions scoped to a project, its own configuration file, the diagnostics that report on its runtime health, the usage it accounts for, and the quiet hours that hold it back from running unattended when told to.",
+  "tasks": [],
+  "title": "The local instance"
+}

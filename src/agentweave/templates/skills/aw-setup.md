@@ -17,10 +17,12 @@ Run these and read the results before asking anything:
 1. `agentweave status` — is there a session? transport type? watchdog?
 2. `agentweave doctor` — runtime readiness issues
 3. Check which of these exist: `agentweave.yml`, `.agentweave/session.json`, `.agentweave/transport.json`, `.env`
-4. Check for a project spec: `find spec -name "*.html"` (and `spec/index.json` if present) —
-   does the project already have an HTML spec anywhere under `spec/`? Don't assume the baseline
-   is named `spec/spec.html` — an existing project may use a named baseline
-   (`spec/agentweave-spec.html`, etc.) declared as `home` in `spec/index.json`.
+4. Check for a project spec: `find spec -name "*.json" ! -name index.json` (and `spec/index.json`
+   if present) — does the project already have a spec document anywhere under `spec/`? Don't
+   assume the baseline is named `spec/spec.json` — an existing project may use a named baseline
+   (`spec/agentweave.json`, etc.) declared as `home` in `spec/index.json`. A `.html` document
+   under `spec/` is the legacy form: the Hub lists it as `legacy_html_document` until the project
+   is converted (`POST /project/spec/convert?to=json`).
 
 If `agentweave.yml` doesn't exist yet, run:
 
@@ -42,7 +44,7 @@ If **no spec exists anywhere under `spec/`** **AND `scaffold: true`**, propose t
 the user before launching into the full interview:
 
 1. Create a **single agent** (the user picks the runner and the model) with the **`spec`** role.
-2. That agent interviews the user and produces the project's living spec (`spec/spec.html` or a
+2. That agent interviews the user and produces the project's living spec (`spec/spec.json` or a
    named baseline of its choosing) and a `spec/index.json` entry declaring it `home`.
 3. Defer the full **roster** interview (the wider team of agents and their roles, steps 2c–2d) until the spec exists — it is much easier to choose agents and roles once the project is specified.
 

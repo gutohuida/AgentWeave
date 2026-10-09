@@ -1,0 +1,313 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a document's tasks",
+      "key": "ac1",
+      "requirement": "the-board-lays-work-out-by-dependency-depth-downward",
+      "then": "tasks with no prerequisites appear in the topmost layer",
+      "when": "the board is laid out"
+    },
+    {
+      "given": "a task depending on tasks in different layers",
+      "key": "ac2",
+      "requirement": "the-board-lays-work-out-by-dependency-depth-downward",
+      "then": "it appears below the deepest of them",
+      "when": "the board is laid out"
+    },
+    {
+      "given": "two tasks that are prerequisites of one task",
+      "key": "ac3",
+      "requirement": "the-board-lays-work-out-by-dependency-depth-downward",
+      "then": "a line is drawn for each relationship",
+      "when": "the board is drawn"
+    },
+    {
+      "given": "a task on the dependency board",
+      "key": "ac4",
+      "requirement": "the-card-carries-the-status-the-layout-no-longer-can",
+      "then": "its status badge is shown on the card",
+      "when": "it is drawn"
+    },
+    {
+      "given": "the dependency board",
+      "key": "ac5",
+      "requirement": "the-board-draws-structure-and-never-authors-it",
+      "then": "no such control exists on the board",
+      "when": "the operator looks for a way to add or remove a dependency"
+    },
+    {
+      "given": "a document's board is selected",
+      "key": "ac6",
+      "requirement": "the-board-draws-structure-and-never-authors-it",
+      "then": "a hint says dependencies are set in the document's depends_on field",
+      "when": "the board is shown"
+    },
+    {
+      "given": "a layer whose gated tasks' unmet prerequisites are all completed or under_review",
+      "key": "ac7",
+      "requirement": "the-board-distinguishes-why-work-is-not-moving",
+      "then": "the layer summary says it is waiting on N reviews",
+      "when": "the board is shown"
+    },
+    {
+      "given": "a task whose prerequisite was rejected",
+      "key": "ac8",
+      "requirement": "the-board-distinguishes-why-work-is-not-moving",
+      "then": "the card is marked gated on a rejected prerequisite, the edge is red, and the card's tooltip names the prerequisite",
+      "when": "the board is shown"
+    },
+    {
+      "given": "an in_progress task whose prerequisite has left approved",
+      "key": "ac9",
+      "requirement": "the-board-distinguishes-why-work-is-not-moving",
+      "then": "the card carries the running-on-regressed mark",
+      "when": "the board is shown"
+    },
+    {
+      "given": "a layer with one gated and one gated-on-rejected task",
+      "key": "ac10",
+      "requirement": "the-board-distinguishes-why-work-is-not-moving",
+      "then": "the summary names both counts separately",
+      "when": "the board is shown"
+    },
+    {
+      "given": "the operator selects a document's board",
+      "key": "ac11",
+      "requirement": "one-board-covers-one-document-and-tasks-without-one-have-the",
+      "then": "only tasks belonging to that document are laid out",
+      "when": "the board loads"
+    },
+    {
+      "given": "the operator selects \"No document\"",
+      "key": "ac12",
+      "requirement": "one-board-covers-one-document-and-tasks-without-one-have-the",
+      "then": "tasks with no owning document are shown",
+      "when": "the board loads"
+    },
+    {
+      "given": "the picker is shown",
+      "key": "ac13",
+      "requirement": "one-board-covers-one-document-and-tasks-without-one-have-the",
+      "then": "each board shows outstanding/total, documents first and \"No document\" last",
+      "when": "the operator reads it"
+    },
+    {
+      "given": "every task in a layer is approved or rejected",
+      "key": "ac14",
+      "requirement": "finished-layers-collapse-but-remain-reachable",
+      "then": "the layer shows as a single collapsed toggle",
+      "when": "the board is shown"
+    },
+    {
+      "given": "a collapsed layer",
+      "key": "ac15",
+      "requirement": "finished-layers-collapse-but-remain-reachable",
+      "then": "its tasks are shown",
+      "when": "the operator expands it"
+    },
+    {
+      "given": "a layer containing finished and unfinished tasks",
+      "key": "ac16",
+      "requirement": "finished-layers-collapse-but-remain-reachable",
+      "then": "the layer is not collapsed",
+      "when": "the board is shown"
+    },
+    {
+      "given": "a collapsed layer whose task is a prerequisite of a visible task",
+      "key": "ac17",
+      "requirement": "finished-layers-collapse-but-remain-reachable",
+      "then": "a ghost stub runs from the layer's toggle to the visible task",
+      "when": "the board is drawn"
+    },
+    {
+      "given": "a task depending on a task of another document",
+      "key": "ac18",
+      "requirement": "a-dependency-on-another-document-s-task-is-shown-as-leaving-",
+      "then": "a reference names the prerequisite and its document",
+      "when": "the board is shown"
+    },
+    {
+      "given": "such a reference",
+      "key": "ac19",
+      "requirement": "a-dependency-on-another-document-s-task-is-shown-as-leaving-",
+      "then": "the board switches to the owning document's board",
+      "when": "the operator selects it"
+    },
+    {
+      "given": "every prerequisite is on this board",
+      "key": "ac20",
+      "requirement": "a-dependency-on-another-document-s-task-is-shown-as-leaving-",
+      "then": "no off-board reference is drawn",
+      "when": "the board is shown"
+    },
+    {
+      "given": "the Tasks area",
+      "key": "ac21",
+      "requirement": "the-dependency-board-is-an-additional-view-not-a-replacement",
+      "then": "the status board is shown",
+      "when": "it opens"
+    },
+    {
+      "given": "the operator switches to Dependencies and back",
+      "key": "ac22",
+      "requirement": "the-dependency-board-is-an-additional-view-not-a-replacement",
+      "then": "both views are available",
+      "when": "each view is selected"
+    },
+    {
+      "given": "a chain a -> b -> c and an unrelated task d",
+      "key": "ac23",
+      "requirement": "n1",
+      "then": "a, b and c are highlighted and d is dimmed",
+      "when": "the operator hovers b"
+    },
+    {
+      "given": "a document with tasks and edges",
+      "key": "ac24",
+      "requirement": "n2",
+      "then": "its tasks and edges are returned; tasks of other documents are not",
+      "when": "GET /tasks/board?spec_document_id= is called"
+    },
+    {
+      "given": "hand-made and document tasks",
+      "key": "ac25",
+      "requirement": "n2",
+      "then": "each board has total and outstanding counts, with the no-document board last",
+      "when": "GET /tasks/boards is called"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "a0b627cf3e98c214f496c6fd40e46ba3394ab9e669a74849986f00b89e419db0",
+      "FR-10": "528e2ef3c29de534af8f56d7363bf69838e61cac4b853cc281c611ce0a1e61e4",
+      "FR-2": "fdef5e8afd2cbd1067e3fd72d36ae4479fedc43691dadae79b647a589234761a",
+      "FR-3": "50cffbc3307794ec811f0174b9dae0a65c2b602f92ff0fc4f89f4ee297f4a393",
+      "FR-4": "b925f3397776b907b4e3864c1f3c2b3735b43f672a808ed510f3c55ef770a38b",
+      "FR-5": "5700c462a8018ab92c24e6323f7844db51d19ec7c279b077a5c41d1a7174ad93",
+      "FR-6": "71d78cac778b392fa2973fa616e5f67565cc5e276573add980df55502996ced7",
+      "FR-7": "9c510df452262633bb8f0e9023130050be22a3c831a4f76ffc5a79c786a6fae6",
+      "FR-8": "22934cb7400f719830ce2d253a2fa59f997b6f54ca04e944d46f93ed73842e82",
+      "FR-9": "1ea2c57f8a2da440187e7ff4071142e82264fb5851b02e46c89974d6ddb217ac"
+    },
+    "high_water": 10,
+    "requirements": {
+      "a-dependency-on-another-document-s-task-is-shown-as-leaving-": "FR-7",
+      "finished-layers-collapse-but-remain-reachable": "FR-6",
+      "n1": "FR-9",
+      "n2": "FR-10",
+      "one-board-covers-one-document-and-tasks-without-one-have-the": "FR-5",
+      "the-board-distinguishes-why-work-is-not-moving": "FR-4",
+      "the-board-draws-structure-and-never-authors-it": "FR-3",
+      "the-board-lays-work-out-by-dependency-depth-downward": "FR-1",
+      "the-card-carries-the-status-the-layout-no-longer-can": "FR-2",
+      "the-dependency-board-is-an-additional-view-not-a-replacement": "FR-8"
+    },
+    "retired": {}
+  },
+  "design": "D1 Depth downward. Longest-path depth over on-board edges only; off-board prerequisites add no depth. A cycle (which the writer refuses) yields depth 0 rather than hanging.\nD2 One board per document, plus a standing no-document board. Outstanding counts exclude approved and rejected.\nD3 Stall states derive from the read model's dependency_state and each prerequisite's status; no second fetch.\nD4 Read-only. No authoring affordance on the board; structure is changed in the document or through the operator's dependency routes.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/__tests__/dependencyBoard.test.tsx — layout, stall summaries, collapse, off-board refs, edge markers, lineage",
+      "hub/ui/src/__tests__/dependencyBoardView.test.tsx — picker counts, default board, structure hint",
+      "hub/tests/test_task_dependency_reads.py — /tasks/board and /tasks/boards"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "The status board shows what is in flight but not what can start or what is waiting on what, so a stalled decomposition looks the same whether it waits on work, on review or on a rejection.",
+  "requirements": [
+    {
+      "key": "the-board-lays-work-out-by-dependency-depth-downward",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Depth goes on the vertical axis because chain length is unbounded while parallel width is bounded by the agent budget, and vertical scrolling is cheap. Longest path keeps a task with several prerequisites below all of them; the structure is a DAG, not a tree.",
+      "statement": "The dependency board SHALL place each task in a layer by its longest-path depth among this board's tasks — tasks with no on-board prerequisite at the top, each task below the deepest of its prerequisites — and SHALL draw a directed line for every edge whose two ends are on screen."
+    },
+    {
+      "key": "the-card-carries-the-status-the-layout-no-longer-can",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "On the status board a column states status; here position states depth, so status must live on the card or be lost.",
+      "statement": "Each task on the dependency board SHALL show its own status on its card."
+    },
+    {
+      "key": "the-board-draws-structure-and-never-authors-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The board is a read of the graph; a drag-to-link affordance would let structure change without the document or an explicit operator declaration recording it. Saying where structure comes from spares the operator discovering the absence by trying.",
+      "statement": "The dependency board SHALL offer no control that creates, removes or alters a dependency, and SHALL state, above the board, where the selected board's dependencies are changed."
+    },
+    {
+      "key": "the-board-distinguishes-why-work-is-not-moving",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "All three look like a card that will not start but have different remedies: wait, get it reviewed, or decide about abandoned work. Because a dependency is met only at approval, an unattended review backlog stalls every layer below it, and must not read as the dependency feature being broken.",
+      "statement": "Where a task cannot start, the board SHALL distinguish waiting on prerequisites still being worked (`gated`), waiting on prerequisites that are done but not yet approved (`waiting_on_review`: every unmet prerequisite is completed or under_review), and waiting on a rejected prerequisite (`gated_on_rejected`), both on the card and as a per-layer summary; a started task whose prerequisite left approved SHALL carry its own mark instead."
+    },
+    {
+      "key": "one-board-covers-one-document-and-tasks-without-one-have-the",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A project's finished work grows without bound; one document's decomposition does not. Hand-made tasks must be reachable on a board of their own. Showing what remains on the picker makes choosing a board and seeing its progress one act.",
+      "statement": "The dependency board SHALL show one board at a time, chosen from a picker listing every document that has tasks plus a standing \"No document\" board for tasks that belong to none, each entry showing outstanding (not approved or rejected) over total tasks; the picker SHALL default to the first document board."
+    },
+    {
+      "key": "finished-layers-collapse-but-remain-reachable",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Collapsing keeps a finished document's board short while the graph's shape stays legible; hiding the tasks or their edges entirely would leave the remaining graph looking rootless.",
+      "statement": "A layer whose tasks are all approved or rejected SHALL be collapsed by default to a toggle naming how many tasks are done and how many links it hides, which the operator can expand; edges with one end in a collapsed layer SHALL be drawn as stubs to that toggle."
+    },
+    {
+      "key": "a-dependency-on-another-document-s-task-is-shown-as-leaving-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The foreign task is not this document's work to act on, but hiding it would make a gated task look gated by nothing. Naming and linking the owning document makes the blocker reachable.",
+      "statement": "A prerequisite that belongs to another board SHALL be shown as a distinct reference naming its title and owning document, not laid out as a task of this board, and selecting it SHALL switch to that document's board."
+    },
+    {
+      "key": "the-dependency-board-is-an-additional-view-not-a-replacement",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A status board answers what is in flight; a dependency board answers what can start. Neither contains the other.",
+      "statement": "The Tasks area SHALL keep the status board as its default view and offer the dependency board as a second view the operator switches to."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "In a dense graph the eye cannot follow lines; tracing a chain on hover answers what a task waits on and what waits on it without opening anything.",
+      "statement": "Hovering a connected task SHALL highlight its full upstream and downstream lineage and dim unrelated work, and a card SHALL hint at the trace only when it has at least one edge."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The layout needs the edge set once, not reconstructed per card, and must not issue a query per card.",
+      "statement": "`GET /tasks/board` SHALL return one board's tasks (with dependency fields) and the edges from them in one call, and `GET /tasks/boards` SHALL return each board's document id, title, total and outstanding count."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "the Dependencies view, its document picker and layout",
+      "the board read routes"
+    ],
+    "non_goals": [
+      "declaring or removing dependencies (task-dependencies)",
+      "the status board itself"
+    ]
+  },
+  "summary": "A second view of the Tasks area that lays one document's tasks out by dependency depth, draws the edges between them, shows each card's status and why it cannot start, collapses finished layers, and names prerequisites that live in other documents.",
+  "tasks": [],
+  "title": "Task dependency board"
+}

@@ -1,0 +1,181 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a task assigned (grandfathered) to read_only agent 'reader'",
+      "key": "refused-turn",
+      "requirement": "turn-refused",
+      "then": "409 naming reader, the task and the remedy; no run, no workspace, nothing written to the project directory",
+      "when": "the operator triggers reader with that task"
+    },
+    {
+      "given": "a completed task with evidence naming a commit",
+      "key": "review-ok",
+      "requirement": "turn-refused",
+      "then": "the review starts in reader's review checkout as today",
+      "when": "the operator dispatches reader's review of it"
+    },
+    {
+      "given": "reader is read_only",
+      "key": "create-refused",
+      "requirement": "assignment-refused",
+      "then": "422 naming reader as read-only; nothing created or changed",
+      "when": "the operator creates a task with assignee reader, or PATCHes one to reader"
+    },
+    {
+      "given": "an unassigned task",
+      "key": "claim-refused",
+      "requirement": "assignment-refused",
+      "then": "403; the task is unchanged",
+      "when": "a run of reader moves it to in_progress"
+    },
+    {
+      "given": "a flow whose roster has reader and writer free and one pending task and one completed task",
+      "key": "flow",
+      "requirement": "flow-excludes",
+      "then": "the pending task goes to writer, never reader; reader may be selected as the completed task's reviewer",
+      "when": "it fires"
+    },
+    {
+      "given": "on the trial Hub, a read_only agent registered through the API and a task assigned to it before this change",
+      "key": "drive",
+      "requirement": "turn-refused",
+      "then": "refused with the remedy and the project directory's git status unchanged; on the pre-fix Hub the turn runs in the project directory",
+      "when": "the operator triggers it on the task"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "3c268eee128b8510fb3c785e5ccde4e48be7ab55b6231c013af866b475a3972e",
+      "FR-2": "b07ee27dec6f759bc5c57333ddc8e8364f8e2f998be52dc7aaba2c462b025c1c",
+      "FR-3": "10c32c812b8ca7291d93d4e6c79c18138c1de54173a1819e5458258e3698ec5b"
+    },
+    "high_water": 3,
+    "requirements": {
+      "assignment-refused": "FR-2",
+      "flow-excludes": "FR-3",
+      "turn-refused": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1. The finding's suggestion was to refuse at assignment in one service function; reading the code, six places write an assignee (task create, PATCH, bind_run_to_task, enter_selected_task, the divergence escalation, the revision return) and only one place turns an assignment into writing -- the dispatch's workspace resolution. So the turn refusal is the guarantee and the assignment refusals are the early, legible feedback at the doors the operator and agents use. Tasks already assigned to a read_only agent are not rewritten (no migration); their turns are refused with the remedy. The divergence escalation and revision return name agents that already wrote, so they are not doors for this.",
+  "evidence": {
+    "checked": [
+      "worktrees.takes_task_workspace: task_id is not None and is_writing_agent(config) and is_git_repo(repo_root)",
+      "agent_trigger resolves the workspace via resolve_turn_workspace after takes_task_workspace (~1233-1275)",
+      "read_only is a key in the agent's config (worktrees.is_writing_agent), set only through the API"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "worktrees.takes_task_workspace returns True only for a writing agent, so a read_only agent's task-bound turn resolves to the project directory -- the operator's checkout -- and, not being isolated, is never snapshotted. read_only drives no runner flag or sandbox, so the agent can still write. Nothing in the app sets read_only, but POST /agents/register and the agent config API do.",
+  "requirements": [
+    {
+      "key": "turn-refused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The harm is the turn itself; this is the one chokepoint every assigning door leads to.",
+      "statement": "The system MUST refuse, before resolving any workspace, a turn for an agent declared read_only whose delivered input binds it to a task's work, naming the agent, the task and the remedy (assign a writing agent, or clear read_only), and leaving nothing staged."
+    },
+    {
+      "key": "assignment-refused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Refused where the operator is looking, rather than later at a turn they did not start.",
+      "statement": "The operator's task create and update MUST refuse to name an agent declared read_only as a task's assignee, and an agent run of such an agent MUST NOT claim a task."
+    },
+    {
+      "key": "flow-excludes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Otherwise the flow stages work its own dispatch then refuses, and stalls.",
+      "statement": "A flow MUST NOT select an agent declared read_only for ordinary work, and MUST still consider it as a reviewer."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The dispatch of a turn bound to a task's work (task_id, not review_task_id) for a read_only agent",
+      "The operator's task create and PATCH naming a read_only agent as assignee",
+      "An agent run's claim (-> in_progress) by a read_only agent",
+      "A flow's selection of an agent for ordinary work"
+    ],
+    "non_goals": [
+      "Review turns: a read_only agent reviewing in its detached review checkout is the intended use",
+      "Unassigning tasks that already name a read_only agent: they stay as they are, visible; their turns are refused with the remedy",
+      "Making read_only a sandbox: it stays a workspace declaration"
+    ]
+  },
+  "summary": "An agent declared read_only is never given a task's work: its work turn bound to a task is refused before any workspace is resolved, the operator cannot assign it a task, a run of it cannot claim one, and a flow does not select it for ordinary work. It stays a reviewer. Today such a turn runs in the operator's own checkout and nothing snapshots it (F425).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "hub/tests/test_a_read_only_agent_holds_no_task_work.py: refused-turn, review-ok, create-refused, claim-refused, flow.",
+      "files": [
+        "hub/tests/test_a_read_only_agent_holds_no_task_work.py"
+      ],
+      "from": null,
+      "key": "tests",
+      "requirements": [
+        "turn-refused",
+        "assignment-refused",
+        "flow-excludes"
+      ],
+      "reviewer": null,
+      "title": "Failing tests for the read-only boundary"
+    },
+    {
+      "depends_on": [
+        "tests"
+      ],
+      "description": "worktrees.is_writing_agent is the predicate. agent_trigger: refuse a work-bound turn for a non-writing agent ahead of the workspace (beside takes_task_workspace's use). tasks.py create/PATCH: refuse a read_only assignee. task_transition_service._guard_run_holds_the_task: refuse a read_only claimant. scheduler: exclude non-writing agents from the ordinary-work pool, not from resolve_reviewer.",
+      "files": [
+        "hub/hub/api/v1/agent_trigger.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/scheduler.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "turn-refused",
+        "assignment-refused",
+        "flow-excludes"
+      ],
+      "reviewer": null,
+      "title": "One predicate, four doors"
+    },
+    {
+      "depends_on": [
+        "build"
+      ],
+      "description": "scripts/drive/d1007_read_only_drive.py, failing on the pre-fix Hub.",
+      "files": [
+        "scripts/drive/d1007_read_only_drive.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "turn-refused"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive on :8010"
+    }
+  ],
+  "title": "A read-only agent does not hold a task's work"
+}

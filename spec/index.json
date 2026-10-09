@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "home": "spec/agentweave.html",
+  "home": "spec/agentweave.json",
   "documents": [
     {
-      "path": "spec/agentweave.html",
+      "path": "spec/agentweave.json",
       "title": "AgentWeave",
       "kind": "system-map",
       "status": "exploring",
@@ -11,271 +11,271 @@
       "order": 10
     },
     {
-      "path": "spec/areas/agents-and-execution.html",
+      "path": "spec/areas/agents-and-execution.json",
       "title": "Agents and execution",
       "kind": "system-map",
       "status": "exploring",
-      "parent": "spec/agentweave.html",
+      "parent": "spec/agentweave.json",
       "order": 360
     },
     {
-      "path": "spec/areas/conversations.html",
+      "path": "spec/areas/conversations.json",
       "title": "Conversations",
       "kind": "system-map",
       "status": "exploring",
-      "parent": "spec/agentweave.html",
+      "parent": "spec/agentweave.json",
       "order": 370
     },
     {
-      "path": "spec/areas/interface.html",
+      "path": "spec/areas/interface.json",
       "title": "Interface",
       "kind": "system-map",
       "status": "exploring",
-      "parent": "spec/agentweave.html",
+      "parent": "spec/agentweave.json",
       "order": 380
     },
     {
-      "path": "spec/areas/specification.html",
+      "path": "spec/areas/specification.json",
       "title": "Specification",
       "kind": "system-map",
       "status": "exploring",
-      "parent": "spec/agentweave.html",
+      "parent": "spec/agentweave.json",
       "order": 390
     },
     {
-      "path": "spec/areas/the-local-instance.html",
+      "path": "spec/areas/the-local-instance.json",
       "title": "The local instance",
       "kind": "system-map",
       "status": "exploring",
-      "parent": "spec/agentweave.html",
+      "parent": "spec/agentweave.json",
       "order": 400
     },
     {
-      "path": "spec/areas/work-and-traceability.html",
+      "path": "spec/areas/work-and-traceability.json",
       "title": "Work and traceability",
       "kind": "system-map",
       "status": "exploring",
-      "parent": "spec/agentweave.html",
+      "parent": "spec/agentweave.json",
       "order": 410
     },
     {
-      "path": "spec/capabilities/agent-capability-plane/spec.html",
+      "path": "spec/capabilities/agent-capability-plane/spec.json",
       "title": "Agent capability plane",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/agents-and-execution.html",
+      "parent": "spec/areas/agents-and-execution.json",
       "order": 20
     },
     {
-      "path": "spec/capabilities/agent-charter/spec.html",
+      "path": "spec/capabilities/agent-charter/spec.json",
       "title": "Agent charter",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/agents-and-execution.html",
+      "parent": "spec/areas/agents-and-execution.json",
       "order": 30
     },
     {
-      "path": "spec/capabilities/agent-composer/spec.html",
+      "path": "spec/capabilities/agent-composer/spec.json",
       "title": "Agent composer",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/conversations.html",
+      "parent": "spec/areas/conversations.json",
       "order": 40
     },
     {
-      "path": "spec/capabilities/agent-configuration/spec.html",
+      "path": "spec/capabilities/agent-configuration/spec.json",
       "title": "Agent configuration",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/agents-and-execution.html",
+      "parent": "spec/areas/agents-and-execution.json",
       "order": 50
     },
     {
-      "path": "spec/capabilities/agent-context-onboarding/spec.html",
+      "path": "spec/capabilities/agent-context-onboarding/spec.json",
       "title": "Agent context onboarding",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/agents-and-execution.html",
+      "parent": "spec/areas/agents-and-execution.json",
       "order": 60
     },
     {
-      "path": "spec/capabilities/agent-context-usage/spec.html",
+      "path": "spec/capabilities/agent-context-usage/spec.json",
       "title": "Agent context usage",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/agents-and-execution.html",
+      "parent": "spec/areas/agents-and-execution.json",
       "order": 70
     },
     {
-      "path": "spec/capabilities/agent-conversation-handoff/spec.html",
+      "path": "spec/capabilities/agent-conversation-handoff/spec.json",
       "title": "Agent conversation handoff",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/conversations.html",
+      "parent": "spec/areas/conversations.json",
       "order": 80
     },
     {
-      "path": "spec/capabilities/agent-conversation-workspace/spec.html",
+      "path": "spec/capabilities/agent-conversation-workspace/spec.json",
       "title": "Agent conversation workspace",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/conversations.html",
+      "parent": "spec/areas/conversations.json",
       "order": 90
     },
     {
-      "path": "spec/capabilities/agent-document-creation/spec.html",
+      "path": "spec/capabilities/agent-document-creation/spec.json",
       "title": "Agent document creation",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/specification.html",
+      "parent": "spec/areas/specification.json",
       "order": 420
     },
     {
-      "path": "spec/capabilities/agent-flows/spec.html",
+      "path": "spec/capabilities/agent-flows/spec.json",
       "title": "Agent flows",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/work-and-traceability.html",
+      "parent": "spec/areas/work-and-traceability.json",
       "order": 430
     },
     {
-      "path": "spec/capabilities/agent-loops/spec.html",
+      "path": "spec/capabilities/agent-loops/spec.json",
       "title": "Agent loops",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/work-and-traceability.html",
+      "parent": "spec/areas/work-and-traceability.json",
       "order": 100
     },
     {
-      "path": "spec/capabilities/agent-run-sandboxing/spec.html",
+      "path": "spec/capabilities/agent-run-sandboxing/spec.json",
       "title": "Agent run sandboxing",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/agents-and-execution.html",
+      "parent": "spec/areas/agents-and-execution.json",
       "order": 110
     },
     {
-      "path": "spec/capabilities/agent-stream-events/spec.html",
+      "path": "spec/capabilities/agent-stream-events/spec.json",
       "title": "Agent stream events",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/conversations.html",
+      "parent": "spec/areas/conversations.json",
       "order": 120
     },
     {
-      "path": "spec/capabilities/agent-tool-surface/spec.html",
+      "path": "spec/capabilities/agent-tool-surface/spec.json",
       "title": "Agent tool surface",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/agents-and-execution.html",
+      "parent": "spec/areas/agents-and-execution.json",
       "order": 130
     },
     {
-      "path": "spec/capabilities/app-lifecycle/spec.html",
+      "path": "spec/capabilities/app-lifecycle/spec.json",
       "title": "App lifecycle",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/the-local-instance.html",
+      "parent": "spec/areas/the-local-instance.json",
       "order": 140
     },
     {
-      "path": "spec/capabilities/approval-integration/spec.html",
+      "path": "spec/capabilities/approval-integration/spec.json",
       "title": "Approval integration",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/work-and-traceability.html",
+      "parent": "spec/areas/work-and-traceability.json",
       "order": 700
     },
     {
-      "path": "spec/capabilities/conversation-checkpoint/spec.html",
+      "path": "spec/capabilities/conversation-checkpoint/spec.json",
       "title": "Conversation checkpoint",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/conversations.html",
+      "parent": "spec/areas/conversations.json",
       "order": 150
     },
     {
-      "path": "spec/capabilities/conversation-lifecycle/spec.html",
+      "path": "spec/capabilities/conversation-lifecycle/spec.json",
       "title": "Conversation lifecycle",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/conversations.html",
+      "parent": "spec/areas/conversations.json",
       "order": 160
     },
     {
-      "path": "spec/capabilities/conversation-navigation/spec.html",
+      "path": "spec/capabilities/conversation-navigation/spec.json",
       "title": "Conversation navigation",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/conversations.html",
+      "parent": "spec/areas/conversations.json",
       "order": 710
     },
     {
-      "path": "spec/capabilities/conversation-side-panel/spec.html",
+      "path": "spec/capabilities/conversation-side-panel/spec.json",
       "title": "Conversation side panel",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/conversations.html",
+      "parent": "spec/areas/conversations.json",
       "order": 170
     },
     {
-      "path": "spec/capabilities/hub-api-request-contract/spec.html",
+      "path": "spec/capabilities/hub-api-request-contract/spec.json",
       "title": "Hub API request contract",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/the-local-instance.html",
+      "parent": "spec/areas/the-local-instance.json",
       "order": 440
     },
     {
-      "path": "spec/capabilities/hub-interaction-feedback/spec.html",
+      "path": "spec/capabilities/hub-interaction-feedback/spec.json",
       "title": "Hub interaction feedback",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/interface.html",
+      "parent": "spec/areas/interface.json",
       "order": 180
     },
     {
-      "path": "spec/capabilities/hub-workspace-shell/spec.html",
+      "path": "spec/capabilities/hub-workspace-shell/spec.json",
       "title": "Hub workspace shell",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/interface.html",
+      "parent": "spec/areas/interface.json",
       "order": 190
     },
     {
-      "path": "spec/capabilities/inbound-queue-delivery/spec.html",
+      "path": "spec/capabilities/inbound-queue-delivery/spec.json",
       "title": "Inbound queue delivery",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/conversations.html",
+      "parent": "spec/areas/conversations.json",
       "order": 720
     },
     {
-      "path": "spec/capabilities/local-project-workspace/spec.html",
+      "path": "spec/capabilities/local-project-workspace/spec.json",
       "title": "Local project workspace",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/the-local-instance.html",
+      "parent": "spec/areas/the-local-instance.json",
       "order": 200
     },
     {
-      "path": "spec/capabilities/loop-firing-accountability/spec.html",
+      "path": "spec/capabilities/loop-firing-accountability/spec.json",
       "title": "Loop firing accountability",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/work-and-traceability.html",
+      "parent": "spec/areas/work-and-traceability.json",
       "order": 450
     },
     {
-      "path": "spec/capabilities/model-catalog/spec.html",
+      "path": "spec/capabilities/model-catalog/spec.json",
       "title": "Model catalog",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/agents-and-execution.html",
+      "parent": "spec/areas/agents-and-execution.json",
       "order": 210
     },
     {
-      "path": "spec/capabilities/opencode-config/spec.html",
+      "path": "spec/capabilities/opencode-config/spec.json",
       "title": "Opencode config",
       "kind": "capability",
       "status": "archived",
@@ -283,55 +283,55 @@
       "order": 220
     },
     {
-      "path": "spec/capabilities/operator-agent-creation/spec.html",
+      "path": "spec/capabilities/operator-agent-creation/spec.json",
       "title": "Operator agent creation",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/agents-and-execution.html",
+      "parent": "spec/areas/agents-and-execution.json",
       "order": 230
     },
     {
-      "path": "spec/capabilities/peer-message-routing/spec.html",
+      "path": "spec/capabilities/peer-message-routing/spec.json",
       "title": "Peer message routing",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/conversations.html",
+      "parent": "spec/areas/conversations.json",
       "order": 730
     },
     {
-      "path": "spec/capabilities/project-checks/spec.html",
+      "path": "spec/capabilities/project-checks/spec.json",
       "title": "Project checks",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/work-and-traceability.html",
+      "parent": "spec/areas/work-and-traceability.json",
       "order": 460
     },
     {
-      "path": "spec/capabilities/project-environment-settings/spec.html",
+      "path": "spec/capabilities/project-environment-settings/spec.json",
       "title": "Project environment settings",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/the-local-instance.html",
+      "parent": "spec/areas/the-local-instance.json",
       "order": 240
     },
     {
-      "path": "spec/capabilities/project-instructions/spec.html",
+      "path": "spec/capabilities/project-instructions/spec.json",
       "title": "Project instructions",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/the-local-instance.html",
+      "parent": "spec/areas/the-local-instance.json",
       "order": 340
     },
     {
-      "path": "spec/capabilities/provider-allowance-holds/spec.html",
+      "path": "spec/capabilities/provider-allowance-holds/spec.json",
       "title": "Provider allowance holds",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/agents-and-execution.html",
+      "parent": "spec/areas/agents-and-execution.json",
       "order": 740
     },
     {
-      "path": "spec/capabilities/quiet-hours/spec.html",
+      "path": "spec/capabilities/quiet-hours/spec.json",
       "title": "Quiet hours",
       "kind": "capability",
       "status": "archived",
@@ -339,103 +339,103 @@
       "order": 350
     },
     {
-      "path": "spec/capabilities/requirement-traceability/spec.html",
+      "path": "spec/capabilities/requirement-traceability/spec.json",
       "title": "Requirement traceability",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/specification.html",
+      "parent": "spec/areas/specification.json",
       "order": 250
     },
     {
-      "path": "spec/capabilities/run-task-binding/spec.html",
+      "path": "spec/capabilities/run-task-binding/spec.json",
       "title": "Run task binding",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/work-and-traceability.html",
+      "parent": "spec/areas/work-and-traceability.json",
       "order": 260
     },
     {
-      "path": "spec/capabilities/runner-registry/spec.html",
+      "path": "spec/capabilities/runner-registry/spec.json",
       "title": "Runner registry",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/agents-and-execution.html",
+      "parent": "spec/areas/agents-and-execution.json",
       "order": 270
     },
     {
-      "path": "spec/capabilities/runtime-diagnostics/spec.html",
+      "path": "spec/capabilities/runtime-diagnostics/spec.json",
       "title": "Runtime diagnostics",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/the-local-instance.html",
+      "parent": "spec/areas/the-local-instance.json",
       "order": 280
     },
     {
-      "path": "spec/capabilities/spec-chat-session/spec.html",
+      "path": "spec/capabilities/spec-chat-session/spec.json",
       "title": "Spec chat session",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/specification.html",
+      "parent": "spec/areas/specification.json",
       "order": 290
     },
     {
-      "path": "spec/capabilities/spec-corpus-map/spec.html",
+      "path": "spec/capabilities/spec-corpus-map/spec.json",
       "title": "Spec corpus map",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/specification.html",
+      "parent": "spec/areas/specification.json",
       "order": 470
     },
     {
-      "path": "spec/capabilities/spec-document-adoption/spec.html",
+      "path": "spec/capabilities/spec-document-adoption/spec.json",
       "title": "Spec document adoption",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/specification.html",
+      "parent": "spec/areas/specification.json",
       "order": 480
     },
     {
-      "path": "spec/capabilities/spec-document-authority/spec.html",
+      "path": "spec/capabilities/spec-document-authority/spec.json",
       "title": "Spec document authority",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/specification.html",
+      "parent": "spec/areas/specification.json",
       "order": 300
     },
     {
-      "path": "spec/capabilities/spec-roadmaps/spec.html",
+      "path": "spec/capabilities/spec-roadmaps/spec.json",
       "title": "Spec roadmaps",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/specification.html",
+      "parent": "spec/areas/specification.json",
       "order": 490
     },
     {
-      "path": "spec/capabilities/task-dependencies/spec.html",
+      "path": "spec/capabilities/task-dependencies/spec.json",
       "title": "Task dependencies",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/work-and-traceability.html",
+      "parent": "spec/areas/work-and-traceability.json",
       "order": 500
     },
     {
-      "path": "spec/capabilities/task-dependency-board/spec.html",
+      "path": "spec/capabilities/task-dependency-board/spec.json",
       "title": "Task dependency board",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/work-and-traceability.html",
+      "parent": "spec/areas/work-and-traceability.json",
       "order": 510
     },
     {
-      "path": "spec/capabilities/task-lifecycle-governance/spec.html",
+      "path": "spec/capabilities/task-lifecycle-governance/spec.json",
       "title": "Task lifecycle governance",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/work-and-traceability.html",
+      "parent": "spec/areas/work-and-traceability.json",
       "order": 310
     },
     {
-      "path": "spec/capabilities/trace-timeline/spec.html",
+      "path": "spec/capabilities/trace-timeline/spec.json",
       "title": "Trace timeline",
       "kind": "capability",
       "status": "archived",
@@ -443,31 +443,31 @@
       "order": 320
     },
     {
-      "path": "spec/capabilities/turn-outcome-visibility/spec.html",
+      "path": "spec/capabilities/turn-outcome-visibility/spec.json",
       "title": "Turn outcome visibility",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/conversations.html",
+      "parent": "spec/areas/conversations.json",
       "order": 520
     },
     {
-      "path": "spec/capabilities/usage-accounting/spec.html",
+      "path": "spec/capabilities/usage-accounting/spec.json",
       "title": "Usage accounting",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/the-local-instance.html",
+      "parent": "spec/areas/the-local-instance.json",
       "order": 330
     },
     {
-      "path": "spec/capabilities/workspace-isolation/spec.html",
+      "path": "spec/capabilities/workspace-isolation/spec.json",
       "title": "Workspace isolation",
       "kind": "capability",
       "status": "current",
-      "parent": "spec/areas/agents-and-execution.html",
+      "parent": "spec/areas/agents-and-execution.json",
       "order": 530
     },
     {
-      "path": "spec/changes/a-capability-can-be-retired/spec.html",
+      "path": "spec/changes/a-capability-can-be-retired/spec.json",
       "title": "A capability can be retired",
       "kind": "change-spec",
       "status": "archived",
@@ -475,7 +475,15 @@
       "order": 660
     },
     {
-      "path": "spec/changes/a-codex-app-server-spec-turn-keeps-no-write-tools/spec.html",
+      "path": "spec/changes/a-change-is-reconciled-with-its-code-before-it-is-folded/spec.json",
+      "title": "A change is reconciled with its code before it is folded, and each defect names the step that caught it",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 780
+    },
+    {
+      "path": "spec/changes/a-codex-app-server-spec-turn-keeps-no-write-tools/spec.json",
       "title": "A Codex app-server specification turn keeps no write tools",
       "kind": "change-spec",
       "status": "archived",
@@ -483,7 +491,7 @@
       "order": 590
     },
     {
-      "path": "spec/changes/a-decided-task-withdraws-its-waiting-reviews/spec.html",
+      "path": "spec/changes/a-decided-task-withdraws-its-waiting-reviews/spec.json",
       "title": "A decided task withdraws its waiting reviews",
       "kind": "change-spec",
       "status": "archived",
@@ -491,7 +499,7 @@
       "order": 600
     },
     {
-      "path": "spec/changes/a-document-names-its-default-reviewer/spec.html",
+      "path": "spec/changes/a-document-names-its-default-reviewer/spec.json",
       "title": "A document names its default reviewer, and approval says who reviews",
       "kind": "change-spec",
       "status": "archived",
@@ -499,7 +507,7 @@
       "order": 610
     },
     {
-      "path": "spec/changes/a-finished-change-is-folded-into-its-capability/spec.html",
+      "path": "spec/changes/a-finished-change-is-folded-into-its-capability/spec.json",
       "title": "A finished change is folded into its capability, then archived",
       "kind": "change-spec",
       "status": "archived",
@@ -507,7 +515,7 @@
       "order": 620
     },
     {
-      "path": "spec/changes/a-fold-can-retire-what-the-change-supersedes/spec.html",
+      "path": "spec/changes/a-fold-can-retire-what-the-change-supersedes/spec.json",
       "title": "A fold can retire what the change supersedes in the capability",
       "kind": "change-spec",
       "status": "archived",
@@ -515,7 +523,7 @@
       "order": 670
     },
     {
-      "path": "spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server/spec.html",
+      "path": "spec/changes/a-hub-claude-run-gets-only-the-hubs-tool-server/spec.json",
       "title": "A Hub Claude run gets the Hub's tool server and no other",
       "kind": "change-spec",
       "status": "archived",
@@ -523,7 +531,15 @@
       "order": 630
     },
     {
-      "path": "spec/changes/a-read-only-agent-holds-no-task-work/spec.html",
+      "path": "spec/changes/a-project-orders-its-own-spec-steps/spec.json",
+      "title": "A project orders its own spec steps, adds its own and appends instructions",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 790
+    },
+    {
+      "path": "spec/changes/a-read-only-agent-holds-no-task-work/spec.json",
       "title": "A read-only agent does not hold a task's work",
       "kind": "change-spec",
       "status": "archived",
@@ -531,7 +547,7 @@
       "order": 640
     },
     {
-      "path": "spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/spec.html",
+      "path": "spec/changes/a-review-turn-reviews-the-branch-tip-where-evidence-does-not-govern-the-merge/spec.json",
       "title": "A review turn reviews the branch tip where evidence does not govern the merge",
       "kind": "change-spec",
       "status": "archived",
@@ -539,7 +555,7 @@
       "order": 540
     },
     {
-      "path": "spec/changes/a-run-claims-only-its-agents-or-nobodys-work/spec.html",
+      "path": "spec/changes/a-run-claims-only-its-agents-or-nobodys-work/spec.json",
       "title": "A run claims only work that is its agent's or nobody's",
       "kind": "change-spec",
       "status": "archived",
@@ -547,7 +563,15 @@
       "order": 650
     },
     {
-      "path": "spec/changes/a-spec-is-written-one-step-at-a-time-roadmap/spec.html",
+      "path": "spec/changes/a-spec-document-is-stored-as-its-payload/spec.json",
+      "title": "A spec document is stored as its payload",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 800
+    },
+    {
+      "path": "spec/changes/a-spec-is-written-one-step-at-a-time-roadmap/spec.json",
       "title": "A spec is written one step at a time, and a tester keeps it true",
       "kind": "roadmap",
       "status": "approved",
@@ -555,7 +579,7 @@
       "order": 760
     },
     {
-      "path": "spec/changes/a-spec-is-written-one-step-at-a-time/spec.html",
+      "path": "spec/changes/a-spec-is-written-one-step-at-a-time/spec.json",
       "title": "A spec is written one step at a time",
       "kind": "change-spec",
       "status": "archived",
@@ -563,7 +587,23 @@
       "order": 770
     },
     {
-      "path": "spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks/spec.html",
+      "path": "spec/changes/a-tester-drives-the-built-product-and-keeps-the-spec-true/spec.json",
+      "title": "A tester drives the built product and keeps the spec true",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 810
+    },
+    {
+      "path": "spec/changes/approve-lists-what-is-missing-and-can-approve-anyway/spec.json",
+      "title": "Approve lists what is missing and lets the operator approve anyway",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 820
+    },
+    {
+      "path": "spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks/spec.json",
       "title": "Re-approving an amended document refreshes its open tasks",
       "kind": "change-spec",
       "status": "archived",
@@ -571,7 +611,7 @@
       "order": 680
     },
     {
-      "path": "spec/changes/same-file-tasks-build-in-order-the-shim-planner-is-told/spec.html",
+      "path": "spec/changes/same-file-tasks-build-in-order-the-shim-planner-is-told/spec.json",
       "title": "Slice 1b: a planner on the aw-tool path is told about files and same-file ordering",
       "kind": "change-spec",
       "status": "archived",
@@ -579,7 +619,7 @@
       "order": 550
     },
     {
-      "path": "spec/changes/same-file-tasks-build-in-order/spec.html",
+      "path": "spec/changes/same-file-tasks-build-in-order/spec.json",
       "title": "Tasks of one slice that edit the same files build in order",
       "kind": "change-spec",
       "status": "archived",
@@ -587,7 +627,7 @@
       "order": 560
     },
     {
-      "path": "spec/changes/same-file-tasks-run-in-order-roadmap/spec.html",
+      "path": "spec/changes/same-file-tasks-run-in-order-roadmap/spec.json",
       "title": "Same-file tasks of a slice run in order",
       "kind": "roadmap",
       "status": "approved",
@@ -595,7 +635,7 @@
       "order": 570
     },
     {
-      "path": "spec/changes/submission-warns-when-a-multi-task-planner-declares-no-files/spec.html",
+      "path": "spec/changes/submission-warns-when-a-multi-task-planner-declares-no-files/spec.json",
       "title": "Submission warns when a multi-task planner declares no files",
       "kind": "change-spec",
       "status": "archived",
@@ -603,7 +643,7 @@
       "order": 580
     },
     {
-      "path": "spec/changes/the-operator-can-delete-a-document-a-task-or-an-archived-agent/spec.html",
+      "path": "spec/changes/the-operator-can-delete-a-document-a-task-or-an-archived-agent/spec.json",
       "title": "The operator can delete a document or a task, and a runner only archived agents hold",
       "kind": "change-spec",
       "status": "archived",
@@ -611,7 +651,7 @@
       "order": 690
     },
     {
-      "path": "spec/changes/the-settings-that-gate-collaboration-are-on-the-project-page/spec.html",
+      "path": "spec/changes/the-settings-that-gate-collaboration-are-on-the-project-page/spec.json",
       "title": "The settings that gate collaboration are on the project page",
       "kind": "change-spec",
       "status": "archived",

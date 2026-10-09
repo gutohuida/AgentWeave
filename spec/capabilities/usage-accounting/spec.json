@@ -1,0 +1,408 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "A runner that reports usage",
+      "key": "ac1",
+      "requirement": "every-hub-owned-turn-has-a-durable-accounting-outcome",
+      "then": "Exactly one `measured` row is stored for that run.",
+      "when": "A turn completes"
+    },
+    {
+      "given": "A runner that reports no usable usage",
+      "key": "ac2",
+      "requirement": "every-hub-owned-turn-has-a-durable-accounting-outcome",
+      "then": "Exactly one `unavailable` row is stored and the UI does not show zero tokens for it.",
+      "when": "A turn completes"
+    },
+    {
+      "given": "A Claude stream with partial assistant usage then final result usage",
+      "key": "ac3",
+      "requirement": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
+      "then": "The final result usage is the outcome and partial samples add no turns.",
+      "when": "The turn is accounted"
+    },
+    {
+      "given": "Codex reporting input, output, cache and reasoning tokens",
+      "key": "ac4",
+      "requirement": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
+      "then": "The breakdowns are kept and are not added to the total twice.",
+      "when": "The turn is accounted"
+    },
+    {
+      "given": "A Copilot run with three model calls and a prompt result equal to their sum",
+      "key": "ac5",
+      "requirement": "n1-a-copilot-run-records-the-larger-lower-bound-of-its-tokens",
+      "then": "Its tokens equal the sum of the calls, not double it.",
+      "when": "It is accounted"
+    },
+    {
+      "given": "One Copilot process reporting two prompt results, the later including the earlier",
+      "key": "ac6",
+      "requirement": "n1-a-copilot-run-records-the-larger-lower-bound-of-its-tokens",
+      "then": "The later result is used.",
+      "when": "The run is accounted"
+    },
+    {
+      "given": "A Copilot call whose input includes cache reads",
+      "key": "ac8",
+      "requirement": "n1-a-copilot-run-records-the-larger-lower-bound-of-its-tokens",
+      "then": "The total is input plus output and cache reads are a breakdown only.",
+      "when": "It is accounted"
+    },
+    {
+      "given": "Measured turns for two agents and another project",
+      "key": "ac9",
+      "requirement": "usage-aggregates-by-agent-and-project",
+      "then": "Each agent's summary holds only its usage, the project total is their sum, and nothing leaks across projects.",
+      "when": "`GET /accounting` is called"
+    },
+    {
+      "given": "Measured and unavailable turns",
+      "key": "ac10",
+      "requirement": "usage-aggregates-by-agent-and-project",
+      "then": "Both counts are reported and the unavailable turn adds no token value.",
+      "when": "Accounting is read"
+    },
+    {
+      "given": "A conversation with more turns than the recent-turns cap",
+      "key": "ac36",
+      "requirement": "n2-a-conversation-has-its-own-usage-rollup",
+      "then": "Every one of its runs is summed.",
+      "when": "Its accounting is read"
+    },
+    {
+      "given": "An unknown conversation ID",
+      "key": "ac37",
+      "requirement": "n2-a-conversation-has-its-own-usage-rollup",
+      "then": "The route answers 404.",
+      "when": "Its accounting is read"
+    },
+    {
+      "given": "Recent turns with both allowance and cost data",
+      "key": "ac11",
+      "requirement": "allowance-and-currency-presentation-cannot-imply-billing",
+      "then": "The preferred display is the allowance, naming its runner.",
+      "when": "Accounting is read"
+    },
+    {
+      "given": "Cost data and no allowance",
+      "key": "ac12",
+      "requirement": "allowance-and-currency-presentation-cannot-imply-billing",
+      "then": "It is labelled \"API-equivalent estimate\" and never spend, bill or charged.",
+      "when": "It is displayed"
+    },
+    {
+      "given": "Some turns that reported a cost and some that did not",
+      "key": "ac13",
+      "requirement": "allowance-and-currency-presentation-cannot-imply-billing",
+      "then": "It sums the reported costs and states how many turns are excluded.",
+      "when": "The estimate is shown"
+    },
+    {
+      "given": "An exhausted budget and an agent-origin queue entry",
+      "key": "ac15",
+      "requirement": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
+      "then": "No run starts, the entry stays queued, and the waiting reason is \"token budget exhausted\".",
+      "when": "Scheduling runs"
+    },
+    {
+      "given": "An exhausted budget and operator input queued",
+      "key": "ac17",
+      "requirement": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
+      "then": "The turn starts and the run is recorded as operator-initiated.",
+      "when": "Scheduling runs"
+    },
+    {
+      "given": "A project",
+      "key": "ac38",
+      "requirement": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
+      "then": "It is refused with 422.",
+      "when": "`PATCH /accounting/budget` sends 0 or a negative value"
+    },
+    {
+      "given": "Autonomous work held by an exhausted budget",
+      "key": "ac39",
+      "requirement": "n3-changing-the-budget-reschedules-queued-work",
+      "then": "The held work starts.",
+      "when": "The budget is raised above usage"
+    },
+    {
+      "given": "Project usage at or above the budget",
+      "key": "ac18",
+      "requirement": "the-operator-can-see-accounting-and-exhaustion-state",
+      "then": "It states that autonomous turns are paused and operator messages can still run.",
+      "when": "The budget view is shown"
+    },
+    {
+      "given": "A Copilot run reporting usage and a session credit total",
+      "key": "ac19",
+      "requirement": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
+      "then": "The turn, its conversation, its agent and the project show its credits beside tokens.",
+      "when": "Accounting is read"
+    },
+    {
+      "given": "A project with only Claude and Codex runs",
+      "key": "ac25",
+      "requirement": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
+      "then": "No screen shows credits and the credit fields are null.",
+      "when": "Accounting is read"
+    },
+    {
+      "given": "A Copilot run resuming a session whose previous run ended at one total",
+      "key": "ac20",
+      "requirement": "n4-a-copilot-run-is-charged-credits-once",
+      "then": "It is charged the difference.",
+      "when": "It ends at a higher total"
+    },
+    {
+      "given": "A Copilot run ending below its baseline",
+      "key": "ac22",
+      "requirement": "n4-a-copilot-run-is-charged-credits-once",
+      "then": "It is charged its per-call sum, premium requests are unknown, and its total becomes the next baseline.",
+      "when": "It is accounted"
+    },
+    {
+      "given": "A run that created its session and reported only per-call costs",
+      "key": "ac24",
+      "requirement": "n4-a-copilot-run-is-charged-credits-once",
+      "then": "The next run is charged only that total minus the first run's sum.",
+      "when": "The next run of the session reports a session total"
+    },
+    {
+      "given": "A session's runs written in order while the clock stepped backwards",
+      "key": "ac26",
+      "requirement": "n4-a-copilot-run-is-charged-credits-once",
+      "then": "Each run's baseline is the run written just before it and no credit is charged twice.",
+      "when": "Each is accounted"
+    },
+    {
+      "given": "A completed Copilot run reporting a non-finite session total",
+      "key": "ac28",
+      "requirement": "n5-malformed-copilot-figures-are-unknown-not-fatal",
+      "then": "It is recorded as completed with its tokens, the credit figure unknown and premium requests recorded.",
+      "when": "It is accounted"
+    },
+    {
+      "given": "A project with a token budget and Copilot runs reporting credits",
+      "key": "ac21",
+      "requirement": "n6-credits-are-never-money-or-budget",
+      "then": "Used tokens include the runs' tokens and not their credits.",
+      "when": "Budget state is computed"
+    },
+    {
+      "given": "Credits that exceed the token budget while tokens do not",
+      "key": "ac27",
+      "requirement": "n6-credits-are-never-money-or-budget",
+      "then": "The budget is not exhausted and turns still start.",
+      "when": "Scheduling runs"
+    },
+    {
+      "given": "A one-shot call whose output carries two usage checkpoints",
+      "key": "ac29",
+      "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
+      "then": "It carries the second checkpoint's figures, not their sum.",
+      "when": "Its invocation record is written"
+    },
+    {
+      "given": "A one-shot call that reported a session error and a checkpoint",
+      "key": "ac31",
+      "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
+      "then": "It is recorded as failed and still carries the checkpoint's figures.",
+      "when": "It is recorded"
+    },
+    {
+      "given": "A one-shot call with no checkpoint",
+      "key": "ac32",
+      "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
+      "then": "Credits and premium requests are unknown.",
+      "when": "It is recorded"
+    },
+    {
+      "given": "A valid checkpoint followed by one with a negative credit figure",
+      "key": "ac34",
+      "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
+      "then": "Credits are unknown and premium requests come from the later checkpoint.",
+      "when": "It is recorded"
+    },
+    {
+      "given": "A one-shot call whose process failed, timed out or did not start",
+      "key": "ac35",
+      "requirement": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
+      "then": "Both figures are unknown and its output is not read.",
+      "when": "It is recorded"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-10": "d178f731ddc22799f5bf808abbddf2c7cb3931719575bc0bbfb5a6e85d5f4114",
+      "FR-11": "339edcb026643691707bda3c65c5f14cccdd09045eb841d601d71623f5cfc8ba",
+      "FR-12": "4cae253530c547aac080dc845520d11d455eb80073cc64215ebf91c9df46b8b9",
+      "FR-13": "22965708f51572620d3a9cf6b2872525521e3c666f8377766d1bb2580c528423",
+      "FR-14": "f23ef7dd680e98400c58de83aa726e013c8627dcc703968bd10fd5498daa67ae",
+      "FR-15": "6faf288bac9e3952dcf3cb240483a0c4da92f47d675fa2294ed9a6996825328c",
+      "FR-16": "14e13db8c0b9197765e59815eb5256a8fd1e1bef4b7de7317b0a87058a5f4dcc",
+      "FR-17": "d49c3180fdc914b74f745756b0aad9167769a34002d0e2fb4eef619594315825",
+      "FR-18": "bf00834e25b7fb2b680ef98d91d19fb19d7a4d9464417915b6b27ff96b6bcd4f",
+      "FR-19": "e16eb779c460f2ebf2473c3fb14cb63266b255e13afd56e005008d223817b5dd",
+      "FR-20": "a5e3a57a886560ddd02239bbdb130430ed317d50f2def4ecb182216f0e2c753c",
+      "FR-7": "0243dcae0b94bec3d8557b1d6fbe37b827f6ac81370c20aac02c926ddd800868",
+      "FR-8": "a47401808ab90b647f8f27c6cfb33aa0b068daa8f6f20a22c5e66cc07a4af6e1",
+      "FR-9": "f9b839718a1d5e35d1d0b3306acbf14f7d2ac72c331553511beb93cb06c0b0f4"
+    },
+    "high_water": 20,
+    "requirements": {
+      "a-copilot-one-shot-call-records-the-credits-its-session-repo": "FR-14",
+      "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde": "FR-13",
+      "a-project-token-budget-pauses-autonomy-but-not-the-operator": "FR-11",
+      "allowance-and-currency-presentation-cannot-imply-billing": "FR-10",
+      "every-hub-owned-turn-has-a-durable-accounting-outcome": "FR-7",
+      "n1-a-copilot-run-records-the-larger-lower-bound-of-its-tokens": "FR-15",
+      "n2-a-conversation-has-its-own-usage-rollup": "FR-16",
+      "n3-changing-the-budget-reschedules-queued-work": "FR-17",
+      "n4-a-copilot-run-is-charged-credits-once": "FR-18",
+      "n5-malformed-copilot-figures-are-unknown-not-fatal": "FR-19",
+      "n6-credits-are-never-money-or-budget": "FR-20",
+      "supported-runner-telemetry-normalizes-to-one-accounting-shap": "FR-8",
+      "the-operator-can-see-accounting-and-exhaustion-state": "FR-12",
+      "usage-aggregates-by-agent-and-project": "FR-9"
+    },
+    "retired": {}
+  },
+  "design": "D1 Rows are immutable facts; every total is derived from `TurnUsage` by aggregate query (`hub/hub/usage_accounting.py`), so a fix to presentation never rewrites history.\n\nD2 Unavailable is a status, not a zero: aggregates sum only `measured` rows and report the unavailable count beside them.\n\nD3 Presentation preference is allowance, then API-equivalent estimate (with unpriced-turn count), then tokens, then unavailable. No price catalogue is consulted.\n\nD4 Credits are stored as `ai_nano_aiu` (Copilot's unit) and `premium_requests`, nullable, separate from tokens, and never read by the budget gate (`project_budget_state` sums `total_tokens` only).\n\nD5 The budget gate lives in `turn_scheduler` and applies only to turns whose initiator is `autonomous`.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_accounting_api.py, hub/tests/test_accounting_budget.py, hub/tests/test_accounting_model.py",
+      "hub/tests/test_copilot_usage.py"
+    ],
+    "limits": [
+      "`hub/hub/runner_parsing.py` still carries an OpenCode telemetry parser, but no runner launches OpenCode, so it is not described as a supported source."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Runners report usage in different shapes and sometimes not at all. Without one honest record per run, missing data reads as zero, estimates read as charges, and a budget either stops nothing or stops the operator too.",
+  "requirements": [
+    {
+      "key": "every-hub-owned-turn-has-a-durable-accounting-outcome",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A missing figure shown as zero understates usage and cannot be told apart from a free turn.",
+      "statement": "The Hub SHALL persist exactly one accounting outcome per Hub-owned run after it ends: `measured`, with normalised input, output and total tokens and cache and reasoning breakdowns where reported, or `unavailable`, which MUST NOT be represented as zero."
+    },
+    {
+      "key": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One shape makes per-agent and per-project totals comparable across runners.",
+      "statement": "The Hub SHALL normalise Claude result usage, Codex completed-turn usage and Copilot usage into one accounting shape without double-counting cache or reasoning subsets, and malformed telemetry SHALL yield an `unavailable` outcome rather than failing the run."
+    },
+    {
+      "key": "n1-a-copilot-run-records-the-larger-lower-bound-of-its-tokens",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Each Copilot figure is a lower bound; Copilot's input already includes cache reads.",
+      "statement": "A Copilot run's tokens SHALL be the larger of the sum of its per-call usage (each call once, including subagent and compaction calls) and its process's latest cumulative prompt usage for this run, never their sum, and cache reads SHALL NOT be added to its input or total again."
+    },
+    {
+      "key": "usage-aggregates-by-agent-and-project",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator needs to see who used what, and how much of it is unknown.",
+      "statement": "`GET /accounting` SHALL report measured token totals per agent and per project, with measured and unavailable turn counts and the most recent turns, and SHALL NOT invent values for unmeasured turns."
+    },
+    {
+      "key": "n2-a-conversation-has-its-own-usage-rollup",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An aggregate over no rows is a valid zero, so an unknown conversation must not read as one that cost nothing (F239).",
+      "statement": "`GET /accounting/conversations/{id}` SHALL aggregate every run of that conversation, uncapped, and SHALL answer 404 for a conversation that does not exist or belongs to another project."
+    },
+    {
+      "key": "allowance-and-currency-presentation-cannot-imply-billing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Subscription users are not billed per token; an estimate that silently omits turns overstates its coverage.",
+      "statement": "Accounting SHALL prefer the latest runner-reported rate-limit allowance (naming its runner) over any monetary figure; otherwise a runner-reported monetary figure SHALL be labelled \"API-equivalent estimate\" and state how many turns reported no cost, and the Hub MUST NOT compute money from a price catalogue."
+    },
+    {
+      "key": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A budget exists to stop runaway autonomy, not to lock the operator out of their own project.",
+      "statement": "An operator SHALL be able to set a positive project token budget or clear it; while measured project usage is at or above it, autonomous turns SHALL stay queued with the waiting reason \"token budget exhausted\", and operator-initiated turns SHALL still start and be accounted."
+    },
+    {
+      "key": "n3-changing-the-budget-reschedules-queued-work",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Raising the budget should release what it was holding without another nudge.",
+      "statement": "A budget change SHALL be recorded as an `accounting_budget_updated` event and SHALL reconsider every agent with queued entries, so work held by an exhausted budget starts once the budget allows it."
+    },
+    {
+      "key": "the-operator-can-see-accounting-and-exhaustion-state",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A paused project that looks broken sends the operator looking for the wrong fault.",
+      "statement": "The interface SHALL show the project's measured token total and budget, SHALL show unavailable usage as unavailable rather than zero, and when the budget is exhausted SHALL state that autonomous turns are paused and operator messages can still run."
+    },
+    {
+      "key": "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Credits are what Copilot meters; a project with no Copilot runs must look as it did before credits existed.",
+      "statement": "The Hub SHALL record the AI credits and premium requests each Copilot run reports and show them beside tokens on the turn, conversation, agent and project, and accounting responses SHALL carry these fields for every project, null where none were reported."
+    },
+    {
+      "key": "n4-a-copilot-run-is-charged-credits-once",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Copilot reports a session-wide running total; no credit may be charged to two runs, and no run charged negative credits, even if the clock steps backwards.",
+      "statement": "A Copilot run's credits SHALL be the larger of its session total minus the total the previous run of that session recorded (zero for a new session) and the sum of its own per-call credit costs; when the difference cannot be taken, is negative, or is smaller than that sum, the run SHALL be charged the sum with premium requests unknown, and each run SHALL record the session total it reached, the previous run being the one written last."
+    },
+    {
+      "key": "n5-malformed-copilot-figures-are-unknown-not-fatal",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A bad figure from the provider should cost one field, not the run's record.",
+      "statement": "A negative, non-numeric, boolean, non-finite or larger-than-2^53-1 credit or premium-request figure SHALL be ignored and that figure recorded as unknown, without failing the run or losing its tokens."
+    },
+    {
+      "key": "n6-credits-are-never-money-or-budget",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Credits are the provider's report of consumption; the budget is denominated in tokens only.",
+      "statement": "AI credits SHALL be stored in Copilot's own unit and shown as AI credits, and SHALL NOT be converted to money, added to any token total, or counted toward a token budget or its exhaustion."
+    },
+    {
+      "key": "a-copilot-one-shot-call-records-the-credits-its-session-repo",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A one-shot call opens one session, so its last cumulative checkpoint is its whole charge; checkpoints must not be summed.",
+      "statement": "A Copilot one-shot call (checkpoint, probe, or other Hub-owned `copilot -p` call with an invocation record) that exits successfully SHALL record the credits and premium requests of the last session usage checkpoint in its output, applying the same malformed-figure rule per figure; with no checkpoint, or when the process failed, timed out or did not start, both SHALL be unknown, never zero."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "`TurnUsage` rows and their normalisation from Claude, Codex and Copilot telemetry",
+      "`GET /accounting`, `GET /accounting/conversations/{id}`, `PATCH /accounting/budget`",
+      "Copilot AI credits and premium requests, for runs and one-shot calls",
+      "The token budget gate for autonomous turns, and how accounting is shown"
+    ],
+    "non_goals": [
+      "The context-window meter (agent-context-usage)",
+      "Hop budget and delivery cap (turn scheduling)"
+    ]
+  },
+  "summary": "Every Hub-owned run gets one durable token-accounting outcome, measured or explicitly unavailable; usage is aggregated per agent, conversation and project; allowance and cost are presented without implying a bill; Copilot's AI credits are recorded beside tokens; and a project token budget pauses autonomous work while the operator keeps control.",
+  "tasks": [],
+  "title": "Usage accounting"
+}

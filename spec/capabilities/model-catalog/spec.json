@@ -1,0 +1,307 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the Hub's runner CLIs are `claude`, `codex`, `copilot`",
+      "key": "ac1",
+      "requirement": "the-hub-declares-a-model-catalog-for-every-supported-provide",
+      "then": "it has exactly one entry per runner CLI and none for any other provider",
+      "when": "the catalog is read"
+    },
+    {
+      "given": "a model whose context window the Hub does not know (every `copilot` model)",
+      "key": "ac2",
+      "requirement": "the-hub-declares-a-model-catalog-for-every-supported-provide",
+      "then": "that model's context window is null, not a default number",
+      "when": "the catalog is read"
+    },
+    {
+      "given": "Claude's effort control applies as `--effort {value}` and Codex's as config `model_reasoning_effort={value}`",
+      "key": "ac3",
+      "requirement": "runtime-controls-are-declared-not-coded",
+      "then": "Claude gets `--effort high` on argv; Codex gets `-c model_reasoning_effort=high` on argv, or the same key in the app-server `config` map",
+      "when": "each is rendered with value `high`"
+    },
+    {
+      "given": "Claude's Workspace only value carries its own application",
+      "key": "ac4",
+      "requirement": "runtime-controls-are-declared-not-coded",
+      "then": "it renders `--permission-mode manual`, not `--permission-mode workspace`",
+      "when": "permission_mode `workspace` is rendered for `claude`"
+    },
+    {
+      "given": "Claude permits effort `max` and Codex does not",
+      "key": "ac5",
+      "requirement": "control-values-are-per-provider",
+      "then": "it is refused naming Codex's permitted values",
+      "when": "a Codex override requests effort `max`"
+    },
+    {
+      "given": "an authenticated operator",
+      "key": "ac6",
+      "requirement": "the-catalog-is-served-to-the-operator-interface",
+      "then": "the same providers, models and controls are returned; without authentication the call is refused",
+      "when": "GET /api/v1/model-catalog is called with or without a project"
+    },
+    {
+      "given": "the operator opens a model or control picker",
+      "key": "ac7",
+      "requirement": "the-catalog-is-served-to-the-operator-interface",
+      "then": "they are the catalog's models and enum control values for the relevant provider",
+      "when": "the choices are listed"
+    },
+    {
+      "given": "an agent bound to a `claude` runner",
+      "key": "ac8",
+      "requirement": "the-hub-validates-overrides-before-spawning",
+      "then": "the request returns 400 with a reason naming the control and no turn is queued",
+      "when": "a turn is requested with an override for a control `claude` does not declare"
+    },
+    {
+      "given": "an agent bound to a `claude` runner",
+      "key": "ac9",
+      "requirement": "the-hub-validates-overrides-before-spawning",
+      "then": "the request returns 400 listing the permitted values and the value never reaches the provider",
+      "when": "a turn is requested with effort `ultra`"
+    },
+    {
+      "given": "`opus` is a declared alias of a `claude` model",
+      "key": "ac10",
+      "requirement": "a-declared-alias-is-accepted-wherever-a-model-is-and-kept-as",
+      "then": "the request is accepted, the record stores `opus`, and the runner is not flagged as having an unrecognised model",
+      "when": "a runner or agent is created, or a runner edited, with model `opus`"
+    },
+    {
+      "given": "a runner that records `opus`",
+      "key": "ac11",
+      "requirement": "a-declared-alias-is-accepted-wherever-a-model-is-and-kept-as",
+      "then": "the provider is invoked with `--model opus`",
+      "when": "a run's command is built"
+    },
+    {
+      "given": "a model that is neither a declared id nor alias",
+      "key": "ac12",
+      "requirement": "a-declared-alias-is-accepted-wherever-a-model-is-and-kept-as",
+      "then": "it is refused with 400 and the reason lists each declared id with its aliases",
+      "when": "it is submitted"
+    },
+    {
+      "given": "a readable Codex cache listing models with priorities, and one hidden entry",
+      "key": "ac13",
+      "requirement": "a-provider-that-publishes-its-own-catalog-is-described-from-",
+      "then": "only visibility-`list` models are offered, lowest priority first and default; a runner on a cache-listed model is accepted and one on a model only the built-in list declares is refused",
+      "when": "the catalog is read"
+    },
+    {
+      "given": "the Codex cache is absent, malformed, or lists no model",
+      "key": "ac14",
+      "requirement": "a-provider-that-publishes-its-own-catalog-is-described-from-",
+      "then": "both succeed against the built-in list",
+      "when": "the catalog is read and a runner is created"
+    },
+    {
+      "given": "a readable Codex cache",
+      "key": "ac15",
+      "requirement": "n1",
+      "then": "the `codex` entry reports source `cli_cache` with the cache's `fetched_at` and `client_version`; with no cache it reports `built_in` with the reason",
+      "when": "GET /api/v1/model-catalog is read"
+    },
+    {
+      "given": "the Hub has read the Codex cache",
+      "key": "ac16",
+      "requirement": "n1",
+      "then": "the new list is offered; a failed read is retried on the next call rather than remembered",
+      "when": "the cache file is rewritten and the catalog read again"
+    },
+    {
+      "given": "a readable cache that omits a model the built-in list declares",
+      "key": "ac17",
+      "requirement": "n2",
+      "then": "the built-in window is returned, while a runner newly set to that model is refused",
+      "when": "the context window of that model is looked up for a run's usage"
+    },
+    {
+      "given": "the catalog",
+      "key": "ac18",
+      "requirement": "the-copilot-catalog-offers-auto-and-validates-what-copilot-w",
+      "then": "`auto`, labelled \"Auto\", is the default model; Permissions offers Edit files, Workspace only, Ask me and Full access with Workspace only as default; Effort renders as `--reasoning-effort {value}`",
+      "when": "its `copilot` entry is read"
+    },
+    {
+      "given": "an agent bound to a `copilot` runner",
+      "key": "ac19",
+      "requirement": "the-copilot-catalog-offers-auto-and-validates-what-copilot-w",
+      "then": "the Hub refuses it naming the models `copilot` declares and no Copilot process starts",
+      "when": "a run is requested with model `bogus-model`"
+    },
+    {
+      "given": "a model offered with no declared window whose provider reports none",
+      "key": "acu-ac18",
+      "requirement": "every-model-the-catalog-offers-declares-a-context-window-or-",
+      "then": "it is unknown and no other model's window is used",
+      "when": "a reading is recorded"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Reading the Codex model list",
+      "steps": [
+        "Resolve the cache path: `$CODEX_HOME/models_cache.json`, else `~/.codex/models_cache.json`.",
+        "If the file is missing, return the built-in list with reason \"no Codex model cache at <path>\".",
+        "If (path, mtime, size) matches the last successful reading, reuse it.",
+        "Parse the bytes as JSON; on any error return the built-in list with reason \"unreadable\".",
+        "Keep entries with `visibility == \"list\"` and a non-empty `slug`; if none, return the built-in list with reason \"lists no models\".",
+        "Sort by `priority` (missing sorts last, ties keep file order); the first becomes the default.",
+        "Take each entry's `display_name` and `context_window`; keep the built-in controls unchanged."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-10": "305f0d16e6896ac4cc4babda4bbce17552ecf79a29bff3b196348adebf3e6402",
+      "FR-11": "1d24698098340d2e29fdac8f1b37aebe6bc16cc6597c1e2de78ac0efec0c2125",
+      "FR-12": "0066894fc1196259e525833d922b3a95ac271dc684577ce2534c3220ef425911",
+      "FR-13": "0fb37826f3c5de7e321d993a4bd3b7e3ff9efe0dbd30d0cb28af1c32cd9af382",
+      "FR-14": "324705bea90b597c67f7c550e5fa4bf912441d594963750c0afcabf9193894ad",
+      "FR-15": "36320d193347df26f127e030941be43895805469978a0b8147c616254553d24b",
+      "FR-16": "c4c2e676e5cb995ab4f00bc33a6bf3b85e9f8b76ad90bc6850a396ee890d5a10",
+      "FR-6": "6a2fdb944d895892d0dad07627f38fcd924a8fde75f34a17c27e707e53155711",
+      "FR-7": "9047e03610e2fdbd69ca2f2125cb9264902a3a998fab70aa487b042d92a72ce2",
+      "FR-8": "aad2676bf09290ddc5df9495ce5e2947f46357cfef71ca48fc13351e12a552da",
+      "FR-9": "91011339b5deb80a608a2056b348f2b2f32cf4deaac3b0c8d0a164ef56902722"
+    },
+    "high_water": 16,
+    "requirements": {
+      "a-declared-alias-is-accepted-wherever-a-model-is-and-kept-as": "FR-11",
+      "a-provider-that-publishes-its-own-catalog-is-described-from-": "FR-12",
+      "control-values-are-per-provider": "FR-8",
+      "every-model-the-catalog-offers-declares-a-context-window-or-": "FR-16",
+      "n1": "FR-14",
+      "n2": "FR-15",
+      "runtime-controls-are-declared-not-coded": "FR-7",
+      "the-catalog-is-served-to-the-operator-interface": "FR-9",
+      "the-copilot-catalog-offers-auto-and-validates-what-copilot-w": "FR-13",
+      "the-hub-declares-a-model-catalog-for-every-supported-provide": "FR-6",
+      "the-hub-validates-overrides-before-spawning": "FR-10"
+    },
+    "retired": {}
+  },
+  "design": "**Catalog as data.** `hub/hub/model_catalog.py` holds one `ProviderDescriptor` per runner CLI. Controls carry an `ApplySpec` (`flag`, `config`, or `none`); `render_control_args` and `render_control_config` render any control without knowing its meaning, so a new control needs no change outside the catalog.\n\n**Validation is the Hub's.** `validate_overrides` checks `model` against declared ids and aliases and every other key against declared controls before a turn is queued; `undeclared_model_reason` is the single refusal sentence for every site that refuses a model (runners, agents, worker, trigger).\n\n**Aliases are choices, not shorthand.** `ProviderDescriptor.model()` resolves an alias only to decide acceptance; what is stored and sent is the alias as written.\n\n**Codex reads its CLI's cache; Claude and Copilot are literals.** Claude's ids and windows were live-verified from Claude's own reported `contextWindow`; Copilot keeps no model file and listing models costs a spawn, so its list is the captured `copilot help config` output. `scripts/check_model_catalog.py` reports drift of the built-in lists.\n\n**One model, one window.** No per-model window variant is offered: the current Claude models have one window each, and `[1m]` on Haiku fails. A model with no declared window reads as unknown rather than borrowing another model's.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_model_catalog.py — provider coverage, per-provider values, rendering, Copilot entry.",
+      "hub/tests/test_model_catalog_api.py — served catalog, auth, not project-scoped.",
+      "hub/tests/test_a_model_alias_is_a_model_choice.py — alias accepted and stored as written on every path.",
+      "hub/tests/test_codex_models_from_the_cli_cache.py — cache reading, fallback, source reporting, window fallback.",
+      "hub/tests/test_a_refusal_says_what_would_work.py — refusal names what would be accepted."
+    ],
+    "limits": [
+      "Validation checks values only for `enum` controls; no `boolean` or `number` control is declared today, so a value for one would be accepted unchecked."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Providers accept model names and control values they cannot honour and silently fall back to a default, so a turn can run under settings the operator never chose. Hard-coding provider knowledge in the interface and in command construction also makes every new model or control a multi-place edit.",
+  "requirements": [
+    {
+      "key": "the-hub-declares-a-model-catalog-for-every-supported-provide",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A provider listed but not spawnable would offer a choice that can never run, and a substituted window would show a usage percentage that is not true.",
+      "statement": "The Hub SHALL declare a catalog entry for exactly the providers it can spawn (`claude`, `codex`, `copilot`), each listing its models with the identifier passed to the provider, a label, any aliases the provider accepts, and the model's context window, declared as unknown rather than substituted when the Hub does not know it."
+    },
+    {
+      "key": "runtime-controls-are-declared-not-coded",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Command construction renders any declared control without knowing what it means, so adding a control is a catalog edit rather than a change to command building, validation and the interface.",
+      "statement": "Each provider entry SHALL declare its runtime controls with an id, a label, a kind, its permitted values, a default, and how it is applied to the invocation (a command-line flag, a configuration override, or nothing on the command line), and a permitted value MAY carry its own application in place of its control's."
+    },
+    {
+      "key": "control-values-are-per-provider",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Providers support different effort levels; Codex's effort values are the intersection of what every listed Codex model supports, so the Hub never accepts a value a specific model would reject or silently discard.",
+      "statement": "A control's permitted values SHALL be declared on that provider's control, and a value permitted for one provider SHALL be refused for a provider that does not declare it."
+    },
+    {
+      "key": "the-catalog-is-served-to-the-operator-interface",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The catalog is not project data; serving it once keeps the interface free of hard-coded model ids, control ids and values, so a catalog edit reaches every picker without an interface change.",
+      "statement": "The Hub SHALL serve the catalog at GET /api/v1/model-catalog to any authenticated operator, identically for every project, and the operator interface SHALL present model and control choices from it rather than from provider knowledge of its own."
+    },
+    {
+      "key": "the-hub-validates-overrides-before-spawning",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Providers warn and continue at their default on an invalid value, so the Hub's own check is the only one that keeps a turn from running under settings nobody chose.",
+      "statement": "The Hub SHALL validate a turn's requested overrides against its runner's provider entry before the turn is queued, and SHALL refuse with HTTP 400 and a stated reason an override naming an undeclared control, an enum value the provider does not permit, or an undeclared model, so that no provider process starts."
+    },
+    {
+      "key": "a-declared-alias-is-accepted-wherever-a-model-is-and-kept-as",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An alias is the provider's way of following the latest model of a family; resolving it on the day it was chosen would freeze the choice the alias exists to keep current.",
+      "statement": "The Hub SHALL accept a model alias the catalog declares wherever it accepts that provider's model identifiers (runner create and edit, agent creation, turn overrides, one-shot workers), and SHALL store and pass on the alias as written; a value that is neither a declared identifier nor a declared alias SHALL be refused with a reason naming every identifier and alias that would be accepted."
+    },
+    {
+      "key": "a-provider-that-publishes-its-own-catalog-is-described-from-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The provider's server sends each client version its own list, so the list the installed client wrote is the one it will accept; a built-in list can only be a fallback.",
+      "statement": "For Codex, whose installed CLI keeps a model cache (`$CODEX_HOME/models_cache.json`, else `~/.codex/models_cache.json`), the Hub SHALL offer the cache's listed models in the cache's priority order with the first as default, and SHALL fall back to its built-in list only when the cache is absent, unreadable, malformed or lists no model, without failing any request."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An operator choosing a model needs to know whether the list reflects the installed CLI or a fallback.",
+      "statement": "For a cache-backed provider, the served catalog SHALL state whether its models came from the CLI cache (with the cache's fetch time and client version) or from the built-in list (with the reason the cache was not used), and a change to the cache SHALL be reflected on the next read without restarting the Hub."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A run on a model the cache has since dropped keeps an honest window, while new choices stay limited to what the installed CLI accepts.",
+      "statement": "Where a run reports usage on a model the provider's cache does not list but the built-in list declares, the Hub SHALL still take that model's context window from the built-in list, and this fallback SHALL NOT make the model acceptable where a model is newly set."
+    },
+    {
+      "key": "the-copilot-catalog-offers-auto-and-validates-what-copilot-w",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Copilot accepts any model name and silently replaces one the account's plan does not allow, so the Hub's validation is the only check a model name gets; Copilot reports the window it actually ran per turn, and it has no sandbox of its own, so an unset posture is judged as Workspace only.",
+      "statement": "The catalog SHALL describe `copilot` with `auto` (labelled \"Auto\") as its default model followed by the models `copilot help config` documents, held as a built-in list, each with its context window unknown, with an Effort control and with the same four permission postures and labels as the other providers, defaulting to Workspace only; a model outside that list SHALL be refused before a Copilot process starts."
+    },
+    {
+      "key": "every-model-the-catalog-offers-declares-a-context-window-or-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An absent window must degrade to unknown rather than to a borrowed value.",
+      "statement": "A model the catalog offers without a declared window SHALL produce readings reported as unknown unless its provider reports a window, and SHALL NOT take another model's window."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The catalog's content for `claude`, `codex` and `copilot` (hub/hub/model_catalog.py), including each model's context window or its absence",
+      "GET /api/v1/model-catalog and the source it reports for a cache-backed provider",
+      "Validation of a model, alias or runtime override against the catalog, and rendering of a validated control into the provider's invocation",
+      "The built-in window fallback for a model the cache does not list"
+    ],
+    "non_goals": [
+      "Which runner a model is bound to, and a runner that sends its model to an operator-supplied provider: runner-registry",
+      "How a run's context usage is computed and presented from a window: agent-context-usage",
+      "What each permission posture lets a run do: agent-run-sandboxing"
+    ]
+  },
+  "summary": "The Hub's declaration of what each provider it can spawn offers: its models (id, label, aliases, context window) and its runtime controls (effort, permissions), each with its own permitted values and how it reaches the provider. The catalog is served to the operator interface, which renders choices from it, and every model or control the Hub accepts is validated against it before any provider process starts.",
+  "tasks": [],
+  "title": "Model catalog"
+}

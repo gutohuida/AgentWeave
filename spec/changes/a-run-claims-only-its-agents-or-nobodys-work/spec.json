@@ -1,0 +1,177 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a task assigned to alpha, status assigned, and a run of beta bound to nothing",
+      "key": "refused",
+      "requirement": "others-refused",
+      "then": "403 naming alpha and that the operator can reassign it; the task stays assigned to alpha with no transition, and beta's run stays unbound",
+      "when": "beta's run moves it to in_progress"
+    },
+    {
+      "given": "the same task",
+      "key": "complete-refused",
+      "requirement": "others-refused",
+      "then": "refused as today (the run holds nothing)",
+      "when": "beta's run then moves it to completed"
+    },
+    {
+      "given": "an unassigned pending-or-assigned task",
+      "key": "claim-assigns",
+      "requirement": "unassigned-claimed",
+      "then": "200; the task is in_progress with assignee beta and beta's run is bound to it",
+      "when": "beta's run claims it"
+    },
+    {
+      "given": "a task assigned to beta",
+      "key": "own",
+      "requirement": "own-unchanged",
+      "then": "200, bound, as today",
+      "when": "beta's run claims it"
+    },
+    {
+      "given": "a task assigned to alpha",
+      "key": "operator",
+      "requirement": "own-unchanged",
+      "then": "200, as today",
+      "when": "the operator moves it to in_progress"
+    },
+    {
+      "given": "on the trial Hub, a task assigned to alpha and never started",
+      "key": "drive",
+      "requirement": "others-refused",
+      "then": "both refused, the task still assigned to alpha with no transitions by beta; on the pre-fix Hub both are 200 (F450's row)",
+      "when": "a real Haiku turn on idle beta is told to set it in_progress then completed"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "423d04c1432777439102e12b06b59f8b68348823ed3389a29292b20cee29848f",
+      "FR-2": "1d22939cb87b004347378a96b003d6ecba47c0fe4990718bb3b74dd52d4bc0e0",
+      "FR-3": "dec91cbba869e7a40b7f15b3f5dfb7f1724c55895d2846e5261ab7524e7e3def"
+    },
+    "high_water": 3,
+    "requirements": {
+      "others-refused": "FR-1",
+      "own-unchanged": "FR-3",
+      "unassigned-claimed": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2 (an authorization boundary). Hazard: a live flow whose task carries a stale assignee could now see its agent's claim refused instead of silently taking the work. Every path that legitimately starts work writes the assignee first (enter_selected_task, bind_run_to_task) or arrives bound, so the refusal fires only on an agent picking up someone else's card; the remedy is the operator reassigning, which the refusal names. Rollback: revert the guard; no data is migrated. Refused rather than taken-over-and-recorded: a silent takeover is what F450 is, and the operator, not an agent, decides who holds work.",
+  "evidence": {
+    "checked": [
+      "task_transition_service._guard_run_holds_the_task binds a run holding nothing to any task (run.task_id is None -> bind) and never reads task.assignee",
+      "scheduler.enter_selected_task and run_task_binding.bind_run_to_task write the assignee before or as the run binds, so flow, loop and delegated runs arrive bound",
+      "The operator returns first in the guard (actor.is_operator)"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "Found by the 2026-09-25 sweep (row 7): task-bdb51ddeea1c was assigned to alpha and never started; a real Haiku turn on idle beta called update_task in_progress then completed, both 200. The transitions record beta, tasks.assignee still says alpha, so the board and timeline name the wrong holder and alpha may later be briefed on work already done. `_guard_run_holds_the_task` (task_transition_service.py) binds a run holding nothing to any task it claims and never compares the run's agent with the assignee.",
+  "requirements": [
+    {
+      "key": "others-refused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The assignee is who the board, the briefings and the flow's resumption believe holds the work; a claim that leaves it naming someone else makes all three wrong.",
+      "statement": "The system MUST refuse an agent run's move of a task to in_progress where the task is assigned to a different agent and the run is not already bound to it, naming the assignee and the operator's remedy, and leaving the task, its assignee and the run's binding unchanged."
+    },
+    {
+      "key": "unassigned-claimed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Claiming waiting work stays a real behaviour (the charter's list_tasks), and the board then names who took it.",
+      "statement": "Where an agent run claims an unassigned task, the system MUST record the run's agent as the task's assignee in the same transaction as the claim."
+    },
+    {
+      "key": "own-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Flows, loops, delegations and the operator's bound runs all arrive this way.",
+      "statement": "A claim by a run whose agent is the task's assignee, or by a run already bound to the task, MUST behave as before."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "An agent run's claim (-> in_progress) through the task routes",
+      "The assignee written when a run claims an unassigned task"
+    ],
+    "non_goals": [
+      "The operator: an operator move is a person's statement and stays unguarded",
+      "The runtime binding (bind_run_to_task) and a flow's own staging, which write the assignee before the run exists",
+      "Review verdicts, already governed by the author/reviewer guards",
+      "Reassigning from an agent: no agent tool reassigns, and this adds none"
+    ]
+  },
+  "summary": "A run may claim a task (-> in_progress) only where the task is unassigned or assigned to the run's own agent; claiming an unassigned task makes the run's agent its assignee. Today any idle run takes any task, and the board keeps naming the agent it was assigned to (F450).",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "hub/tests/test_a_run_claims_only_its_agents_or_nobodys_work.py over the agent task route: refused, complete-refused, claim-assigns, own, operator.",
+      "files": [
+        "hub/tests/test_a_run_claims_only_its_agents_or_nobodys_work.py"
+      ],
+      "from": null,
+      "key": "tests",
+      "requirements": [
+        "others-refused",
+        "unassigned-claimed",
+        "own-unchanged"
+      ],
+      "reviewer": null,
+      "title": "Failing tests for the claim boundary"
+    },
+    {
+      "depends_on": [
+        "tests"
+      ],
+      "description": "task_transition_service._guard_run_holds_the_task: on -> in_progress by a run bound to nothing, refuse where task.assignee names another agent; else bind and, where unassigned, assign the run's agent.",
+      "files": [
+        "hub/hub/task_transition_service.py"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "others-refused",
+        "unassigned-claimed",
+        "own-unchanged"
+      ],
+      "reviewer": null,
+      "title": "Compare the claimant with the assignee"
+    },
+    {
+      "depends_on": [
+        "build"
+      ],
+      "description": "scripts/drive/d1007_claim_boundary_drive.py: F450's sweep row with a real Haiku turn, failing on the pre-fix Hub.",
+      "files": [
+        "scripts/drive/d1007_claim_boundary_drive.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "others-refused"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive on :8010"
+    }
+  ],
+  "title": "A run claims only work that is its agent's or nobody's"
+}

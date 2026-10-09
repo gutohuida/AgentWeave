@@ -1,0 +1,2013 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "",
+      "key": "ac1",
+      "requirement": "a-flow-is-a-loop-that-declares-a-specification-document",
+      "then": "its firings select an agent as well as a task",
+      "when": "a loop declares a specification document"
+    },
+    {
+      "given": "",
+      "key": "ac2",
+      "requirement": "a-flow-is-a-loop-that-declares-a-specification-document",
+      "then": "it staffs no review and draws no agent from the project's pool",
+      "when": "a loop declares no specification document"
+    },
+    {
+      "given": "",
+      "key": "ac4",
+      "requirement": "a-firing-determines-both-the-task-and-the-agent",
+      "then": "the Hub determines which agent is fired no agent is asked to nominate one",
+      "when": "a flow fires and a task needs an agent other than the one that produced it"
+    },
+    {
+      "given": "",
+      "key": "ac5",
+      "requirement": "a-firing-determines-both-the-task-and-the-agent",
+      "then": "that agent is not fired the firing reports that it could not staff the step",
+      "when": "the only otherwise-eligible agent has no runner bound"
+    },
+    {
+      "given": "",
+      "key": "ac6",
+      "requirement": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "then": "that agent may be fired for it",
+      "when": "a flow fires and a queued task is `completed`, and an eligible agent is not the one that completed it"
+    },
+    {
+      "given": "",
+      "key": "ac7",
+      "requirement": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "then": "it is not fired for that task the firing reports that it could not staff the review",
+      "when": "the only available agent is the one that completed the task"
+    },
+    {
+      "given": "",
+      "key": "ac8",
+      "requirement": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "then": "B is not fired for that task",
+      "when": "a flow fires and a queued task is `completed` by agent A, and agent B recorded evidence for it"
+    },
+    {
+      "given": "",
+      "key": "ac9",
+      "requirement": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "then": "that agent moving the task to a review outcome is not refused by author/reviewer separation",
+      "when": "an agent is fired for a task in `completed`"
+    },
+    {
+      "given": "",
+      "key": "ac10",
+      "requirement": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "then": "that agent may be fired for it",
+      "when": "a task's most recent completion was recorded by the operator, and an agent has no recorded transition on that task"
+    },
+    {
+      "given": "",
+      "key": "ac11",
+      "requirement": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "then": "that agent is not fired for it",
+      "when": "a task's most recent completion was recorded by the operator, and an agent is recorded on one of that task's earlier transitions"
+    },
+    {
+      "given": "",
+      "key": "ac12",
+      "requirement": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "then": "that agent is not fired for it",
+      "when": "a task's most recent completion was recorded by the operator, and the task is assigned to an agent that no transition on that task names"
+    },
+    {
+      "given": "",
+      "key": "ac13",
+      "requirement": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "then": "that agent is not fired for it",
+      "when": "a task's most recent completion was recorded by the operator, and an agent's run was bound to that task while another agent was recorded on its transitions and held its assignment"
+    },
+    {
+      "given": "",
+      "key": "ac14",
+      "requirement": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "then": "that agent is not fired for it",
+      "when": "a task's most recent completion was recorded by the operator, and an agent recorded evidence for that task from a run that was never bound to it, having taken no transition on it and never held its assignment"
+    },
+    {
+      "given": "",
+      "key": "ac15",
+      "requirement": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "then": "that agent is not fired for it",
+      "when": "the only record naming an agent on an operator-completed task is evidence whose review is still awaiting a decision, or whose review rejected it"
+    },
+    {
+      "given": "",
+      "key": "ac16",
+      "requirement": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "then": "an agent that no other record associates with that task may be fired for it",
+      "when": "an operator-completed task's only evidence was recorded by the operator"
+    },
+    {
+      "given": "",
+      "key": "ac17",
+      "requirement": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "then": "no agent is fired for it",
+      "when": "a task is `completed` and no transition into that status is recorded for it"
+    },
+    {
+      "given": "",
+      "key": "ac18",
+      "requirement": "a-review-turn-that-records-no-verdict-is-divergent",
+      "then": "no divergence is recorded",
+      "when": "a review turn moves its task to approved, rejected, or revision needed, and ends"
+    },
+    {
+      "given": "",
+      "key": "ac19",
+      "requirement": "a-review-turn-that-records-no-verdict-is-divergent",
+      "then": "a divergence is recorded naming the run, the reviewer, the task, and the exit status the task's status is unchanged",
+      "when": "a review turn ends having recorded no verdict on the task it was given"
+    },
+    {
+      "given": "",
+      "key": "ac20",
+      "requirement": "a-review-turn-that-records-no-verdict-is-divergent",
+      "then": "it is readable afterwards without consulting whether any run is currently alive",
+      "when": "a review turn's divergence has been recorded"
+    },
+    {
+      "given": "",
+      "key": "ac21",
+      "requirement": "a-response-to-a-failed-review-is-given-the-work-under-review",
+      "then": "that run's workspace is the checkout of the work under review",
+      "when": "a flow starts a run in response to a review that recorded no verdict"
+    },
+    {
+      "given": "",
+      "key": "ac22",
+      "requirement": "a-response-to-a-failed-review-is-given-the-work-under-review",
+      "then": "no review checkout is prepared for it",
+      "when": "a flow starts a run in response to a run that was not a review"
+    },
+    {
+      "given": "",
+      "key": "ac26",
+      "requirement": "a-flow-resolves-a-reviewer-by-declaration-then-by-availabili",
+      "then": "that agent is fired for the review",
+      "when": "a task declares a reviewer that resolves to an eligible agent"
+    },
+    {
+      "given": "",
+      "key": "ac27",
+      "requirement": "a-flow-resolves-a-reviewer-by-declaration-then-by-availabili",
+      "then": "no other agent is fired for that review the declared name and the reason it did not resolve are surfaced to the operator",
+      "when": "a task declares a reviewer that resolves to no agent in this project"
+    },
+    {
+      "given": "",
+      "key": "ac28",
+      "requirement": "a-flow-resolves-a-reviewer-by-declaration-then-by-availabili",
+      "then": "an agent that is not running, is not held, and holds no work is fired for the review",
+      "when": "a task declares no reviewer at all"
+    },
+    {
+      "given": "",
+      "key": "ac29",
+      "requirement": "a-flow-resolves-a-reviewer-by-declaration-then-by-availabili",
+      "then": "it is not selected while another eligible agent is available",
+      "when": "an otherwise eligible agent is running a turn, is held by a refusal of the provider's usage allowance, or holds work as *An active task makes its assignee unavailable only while something will move it* defines"
+    },
+    {
+      "given": "",
+      "key": "ac30",
+      "requirement": "a-flow-resolves-a-reviewer-by-declaration-then-by-availabili",
+      "then": "that agent is fired for the review the flow does not surface that it could not staff the step",
+      "when": "a task declares no reviewer, and the only agent other than its author is assigned a task in an active status that belongs to no loop, with no turn running or queued on it"
+    },
+    {
+      "given": "",
+      "key": "ac31",
+      "requirement": "a-flow-resolves-a-reviewer-by-declaration-then-by-availabili",
+      "then": "the operator is notified, naming the task the flow's job remains enabled and scheduled",
+      "when": "no agent can be resolved or found for a task"
+    },
+    {
+      "given": "",
+      "key": "ac32",
+      "requirement": "a-flow-resolves-a-reviewer-by-declaration-then-by-availabili",
+      "then": "the flow surfaces that it could not staff the review no special-case path is taken to reach that outcome",
+      "when": "a flow's project holds only the agent that completed the task, and no reviewer is declared"
+    },
+    {
+      "given": "",
+      "key": "ac38",
+      "requirement": "a-flow-resolves-a-reviewer-by-declaration-then-by-availabili",
+      "then": "the agent that moved that task to completed is not selected this holds whether the reviewer is being resolved for the first time or after a failure",
+      "when": "a reviewer is resolved for a task"
+    },
+    {
+      "given": "a task declares reviewer B, an open agent, and this firing has already selected B for other work",
+      "key": "ac169",
+      "requirement": "a-flow-resolves-a-reviewer-by-declaration-then-by-availabili",
+      "then": "no other agent is staffed and no unstaffed outcome is surfaced; the review is deferred to the next firing",
+      "when": "the flow resolves a reviewer for the task"
+    },
+    {
+      "given": "",
+      "key": "ac33",
+      "requirement": "n1",
+      "then": "no other agent is fired for that review the operator is told which declared reviewer gave no verdict, naming the task",
+      "when": "a review by a declared reviewer ends without recording a verdict"
+    },
+    {
+      "given": "",
+      "key": "ac34",
+      "requirement": "n1",
+      "then": "the reviewer is resolved again by the same rule the agent that gave no verdict is not selected",
+      "when": "a review by an agent selected on availability ends without recording a verdict"
+    },
+    {
+      "given": "",
+      "key": "ac35",
+      "requirement": "n1",
+      "then": "the flow surfaces that it could not staff the review, naming the task the flow's job remains enabled and scheduled",
+      "when": "an availability-picked review gives no verdict and no other eligible agent exists"
+    },
+    {
+      "given": "",
+      "key": "ac24",
+      "requirement": "n1",
+      "then": "neither A nor B is selected",
+      "when": "a flow resolves a reviewer for a task agent A completed, first or after a review that gave no verdict, and agent B recorded evidence for it"
+    },
+    {
+      "given": "",
+      "key": "ac23",
+      "requirement": "n1",
+      "then": "an agent that any record associates with that task is not selected the agent that gave no verdict is not selected",
+      "when": "a reviewer staffed for a task the operator moved to `completed` ends its turn without recording a verdict, and no agent is left for the Hub to resolve"
+    },
+    {
+      "given": "",
+      "key": "ac25",
+      "requirement": "n1",
+      "then": "the surfaced reason states that the excluded agents worked on the task it does not state that any of them completed it",
+      "when": "a reviewer staffed for a task the operator moved to `completed` ends its turn without recording a verdict, and no agent is left for the Hub to resolve"
+    },
+    {
+      "given": "",
+      "key": "ac39",
+      "requirement": "an-agent-fired-to-review-a-completed-task-is-given-a-review-",
+      "then": "the reviewing agent's workspace contains that commit's content",
+      "when": "a flow fires an agent for a task another agent completed that task's evidence cites a commit that exists only on the author's branch"
+    },
+    {
+      "given": "",
+      "key": "ac40",
+      "requirement": "an-agent-fired-to-review-a-completed-task-is-given-a-review-",
+      "then": "the turn context states that this is a review, of which task, at which commit",
+      "when": "a flow fires an agent for a task in `completed`"
+    },
+    {
+      "given": "",
+      "key": "ac41",
+      "requirement": "an-agent-fired-to-review-a-completed-task-is-given-a-review-",
+      "then": "the agent is not fired with an ordinary turn the reason is surfaced to the operator",
+      "when": "a flow would fire an agent for a review and the review turn cannot be prepared"
+    },
+    {
+      "given": "one firing that staged a review for an agent and another that staged ordinary work for the same agent",
+      "key": "ac42",
+      "requirement": "an-agent-fired-to-review-a-completed-task-is-given-a-review-",
+      "then": "the turn is refused the reviewing agent is not delivered an ordinary turn alongside its review",
+      "when": "both are still queued and a turn is started"
+    },
+    {
+      "given": "a loop whose work does not need evidence, and a completed task with no evidence but a commit on its task branch",
+      "key": "ac170",
+      "requirement": "an-agent-fired-to-review-a-completed-task-is-given-a-review-",
+      "then": "the review checkout is the tip of the task's branch",
+      "when": "a reviewer is staffed for it"
+    },
+    {
+      "given": "",
+      "key": "ac43",
+      "requirement": "a-flow-may-start-every-task-whose-dependencies-are-met",
+      "then": "both tasks are started",
+      "when": "a flow fires, two queued tasks have all their dependencies met, and two eligible agents are available"
+    },
+    {
+      "given": "",
+      "key": "ac44",
+      "requirement": "a-flow-may-start-every-task-whose-dependencies-are-met",
+      "then": "one task is started the others keep their status and gain no assignee",
+      "when": "three tasks are startable and one eligible agent is available"
+    },
+    {
+      "given": "",
+      "key": "ac45",
+      "requirement": "a-flow-may-start-every-task-whose-dependencies-are-met",
+      "then": "only the prerequisite is started",
+      "when": "one queued task depends on another and neither has been approved"
+    },
+    {
+      "given": "",
+      "key": "ac46",
+      "requirement": "a-flow-may-start-every-task-whose-dependencies-are-met",
+      "then": "that agent is started for one of them only",
+      "when": "two tasks would both resolve to the same agent"
+    },
+    {
+      "given": "",
+      "key": "ac47",
+      "requirement": "a-flow-s-checkpoint-lineage-belongs-to-the-flow",
+      "then": "the fired agent's briefing includes that checkpoint's content",
+      "when": "a flow fires an agent for a task another agent completed, and that agent recorded a checkpoint"
+    },
+    {
+      "given": "",
+      "key": "ac48",
+      "requirement": "a-flow-s-checkpoint-lineage-belongs-to-the-flow",
+      "then": "the agent that wrote it is identifiable",
+      "when": "a checkpoint is read from a flow whose firings involved more than one agent"
+    },
+    {
+      "given": "",
+      "key": "ac51",
+      "requirement": "a-dispatched-review-leaves-the-reviewable-pool",
+      "then": "the next firing does not staff a review for that task the task is not offered to any other agent either",
+      "when": "a flow staffs an agent to review a completed task that review turn ends without moving the task"
+    },
+    {
+      "given": "",
+      "key": "ac52",
+      "requirement": "a-dispatched-review-leaves-the-reviewable-pool",
+      "then": "the flow does not report itself stalled the task is shown as current, naming the agent holding it",
+      "when": "a flow has staffed a review and nothing else is ready"
+    },
+    {
+      "given": "",
+      "key": "ac53",
+      "requirement": "a-dispatched-review-leaves-the-reviewable-pool",
+      "then": "the task is still awaiting review, with its holder unchanged the next firing does not staff a review for that task the task is shown as the flow's current work, naming the agent the review turn waits for",
+      "when": "a flow staffs an agent to review a completed task, and that agent's review turn has not started"
+    },
+    {
+      "given": "",
+      "key": "ac54",
+      "requirement": "a-dispatched-review-leaves-the-reviewable-pool",
+      "then": "the task is still awaiting review, with its holder and its transitions as they were before the firing the next firing surfaces the task, naming the agent and containing the refusal's own sentence the next firing does not staff another review for it",
+      "when": "a flow staffs a review and the dispatch of that review turn is refused"
+    },
+    {
+      "given": "",
+      "key": "ac55",
+      "requirement": "a-dispatched-review-leaves-the-reviewable-pool",
+      "then": "that request is not refused on the ground that the task is already under review",
+      "when": "a flow's review dispatch has been refused the operator then requests a review of the same task naming a different reviewer"
+    },
+    {
+      "given": "",
+      "key": "ac56",
+      "requirement": "a-dispatched-review-leaves-the-reviewable-pool",
+      "then": "the next firing may staff a review for that task",
+      "when": "a flow's review turn for a task is given up on after repeated refusals, or withdrawn by the operator"
+    },
+    {
+      "given": "",
+      "key": "ac57",
+      "requirement": "a-dispatched-review-leaves-the-reviewable-pool",
+      "then": "no firing staffs that task as ordinary work no agent is fired at it in a workspace other than the review checkout",
+      "when": "a task is held by a reviewer"
+    },
+    {
+      "given": "",
+      "key": "ac58",
+      "requirement": "a-review-turn-is-told-how-to-record-its-verdict",
+      "then": "the context names how to record that the work is correct names how to record that it needs revision both are transitions the task can actually make",
+      "when": "an agent is given a review turn"
+    },
+    {
+      "given": "",
+      "key": "ac59",
+      "requirement": "a-review-turn-is-told-how-to-record-its-verdict",
+      "then": "its briefing names that requirement and says `approved` will be refused says `revision_needed` returns the task to its author",
+      "when": "a review turn is given for a task serving a requirement whose evidence is all rejected"
+    },
+    {
+      "given": "",
+      "key": "ac60",
+      "requirement": "a-flow-generates-the-author-s-handover-briefing",
+      "then": "a checkpoint is generated for that agent's conversation the checkpoint is attributed to the flow the agent's notes are consumed by it",
+      "when": "an agent in a flow completes its task having recorded notes for its reviewer"
+    },
+    {
+      "given": "",
+      "key": "ac61",
+      "requirement": "a-flow-generates-the-author-s-handover-briefing",
+      "then": "no checkpoint is generated no generation is spawned",
+      "when": "an agent in a flow completes its task having recorded no notes"
+    },
+    {
+      "given": "",
+      "key": "ac62",
+      "requirement": "a-flow-generates-the-author-s-handover-briefing",
+      "then": "no handover checkpoint is generated",
+      "when": "a run ends without having completed the task it held"
+    },
+    {
+      "given": "an agent with checkpointing turned off",
+      "key": "ac171",
+      "requirement": "a-flow-generates-the-author-s-handover-briefing",
+      "then": "no checkpoint is generated",
+      "when": "it completes a flow task having recorded notes for its reviewer"
+    },
+    {
+      "given": "",
+      "key": "ac63",
+      "requirement": "a-reviewer-is-briefed-by-the-author-of-the-work-it-is-review",
+      "then": "the briefing carries the author's checkpoint does not carry the more recent one",
+      "when": "a reviewer is given a task whose author is not the last agent to have finished"
+    },
+    {
+      "given": "",
+      "key": "ac64",
+      "requirement": "a-reviewer-is-briefed-by-the-author-of-the-work-it-is-review",
+      "then": "the briefing carries the flow's most recent checkpoint",
+      "when": "an agent is given a turn that is not a review"
+    },
+    {
+      "given": "",
+      "key": "ac65",
+      "requirement": "a-task-a-flow-declines-to-staff-for-review-is-named-to-the-o",
+      "then": "the operator is notified, naming the task the notification states that the task has no recorded completion the flow's job remains enabled and scheduled",
+      "when": "a flow fires on a queue holding a `completed` task for which no completion is recorded"
+    },
+    {
+      "given": "",
+      "key": "ac66",
+      "requirement": "a-task-a-flow-declines-to-staff-for-review-is-named-to-the-o",
+      "then": "the recorded reason is the one naming the task, not a count of open tasks by status",
+      "when": "that firing is refused because nothing in the queue could be claimed"
+    },
+    {
+      "given": "",
+      "key": "ac67",
+      "requirement": "a-task-a-flow-declines-to-staff-for-review-is-named-to-the-o",
+      "then": "that task is not recorded as being worked by any agent",
+      "when": "a flow declines to staff a review for a task"
+    },
+    {
+      "given": "",
+      "key": "ac68",
+      "requirement": "a-flow-staffs-a-review-for-work-the-operator-finished",
+      "then": "that agent is fired for the review",
+      "when": "a flow fires on a queue holding a task the operator moved to `completed`, and an eligible agent has no recorded transition on that task"
+    },
+    {
+      "given": "",
+      "key": "ac69",
+      "requirement": "a-flow-staffs-a-review-for-work-the-operator-finished",
+      "then": "an agent recorded on one of that task's earlier transitions is not selected",
+      "when": "a flow resolves a reviewer for a task the operator moved to `completed`"
+    },
+    {
+      "given": "",
+      "key": "ac70",
+      "requirement": "a-flow-staffs-a-review-for-work-the-operator-finished",
+      "then": "the agent that recorded the evidence is not selected the other agent is fired for the review",
+      "when": "a flow resolves a reviewer for a task the operator moved to `completed`, and one eligible agent recorded that task's evidence while another did not"
+    },
+    {
+      "given": "",
+      "key": "ac71",
+      "requirement": "a-flow-staffs-a-review-for-work-the-operator-finished",
+      "then": "no agent is fired for the review the flow surfaces that it could not staff the review, naming the task",
+      "when": "the only agent in the project is one recorded on that task's transitions"
+    },
+    {
+      "given": "",
+      "key": "ac72",
+      "requirement": "a-flow-staffs-a-review-for-work-the-operator-finished",
+      "then": "no agent is fired for the review the flow surfaces that it could not staff the review, naming the task the surfaced reason does not state that any agent completed it",
+      "when": "every agent free to review an operator-completed task recorded evidence for it"
+    },
+    {
+      "given": "",
+      "key": "ac73",
+      "requirement": "a-flow-staffs-a-review-for-work-the-operator-finished",
+      "then": "the surfaced reason states that the excluded agents worked on the task it does not state that any of them completed it",
+      "when": "a flow cannot staff a review for a task the operator moved to `completed`"
+    },
+    {
+      "given": "",
+      "key": "ac74",
+      "requirement": "a-flow-staffs-a-review-for-work-the-operator-finished",
+      "then": "the surfaced reason is that there is nothing to check out for review",
+      "when": "a task the operator moved to `completed` has no evidence naming a commit"
+    },
+    {
+      "given": "",
+      "key": "ac83",
+      "requirement": "a-review-firing-s-briefing-is-a-review-briefing",
+      "then": "the briefing states that the turn is a review does not instruct the agent to finish or complete the task presents the task's description as what the work is checked against",
+      "when": "a flow staffs an agent to review a completed task"
+    },
+    {
+      "given": "",
+      "key": "ac84",
+      "requirement": "a-review-firing-s-briefing-is-a-review-briefing",
+      "then": "the briefing names how to record that the work is correct names how to record that it needs revision both are transitions the task can make from the status it is in",
+      "when": "an agent is briefed for a review turn"
+    },
+    {
+      "given": "",
+      "key": "ac85",
+      "requirement": "a-review-firing-s-briefing-is-a-review-briefing",
+      "then": "the briefing and the turn context do not give contradictory instructions about whether the agent is doing the work or checking it",
+      "when": "an agent is briefed for a review turn"
+    },
+    {
+      "given": "",
+      "key": "ac86",
+      "requirement": "a-review-firing-s-briefing-is-a-review-briefing",
+      "then": "the briefing identifies the text following it as the loop's standing message does not instruct the agent to disregard it the loop's message itself is delivered with its words unchanged, its at-signs neutralised as every firing's text is",
+      "when": "an agent is briefed for a review turn and the loop's own message follows the briefing"
+    },
+    {
+      "given": "",
+      "key": "ac87",
+      "requirement": "a-review-firing-s-briefing-is-a-review-briefing",
+      "then": "the briefing instructs the agent to do the task's work names the transition that finishes it",
+      "when": "a firing is not staffed as a review"
+    },
+    {
+      "given": "",
+      "key": "ac88",
+      "requirement": "a-review-firing-s-briefing-is-a-review-briefing",
+      "then": "the message reaches the run with that mention neutralised and no file is attached for it the stored message keeps the mention as its author wrote it",
+      "when": "a review firing delivers a loop message that mentions a file in the harness's mention syntax"
+    },
+    {
+      "given": "",
+      "key": "ac89",
+      "requirement": "a-review-nobody-is-doing-is-named-whatever-its-history",
+      "then": "the flow surfaces that review, naming the task and that agent",
+      "when": "an operator moves a task to under review by hand, naming an agent, and no run is ever bound to that task"
+    },
+    {
+      "given": "",
+      "key": "ac90",
+      "requirement": "a-review-nobody-is-doing-is-named-whatever-its-history",
+      "then": "the task remains under review with the silent reviewer named the flow surfaces that review on each firing rather than reporting the queue as busy",
+      "when": "a review turn ends without recording a verdict and the resolution finds no agent left to substitute"
+    },
+    {
+      "given": "",
+      "key": "ac91",
+      "requirement": "a-review-nobody-is-doing-is-named-whatever-its-history",
+      "then": "the sentence the operator reads names the agent whose name is on the task",
+      "when": "a review nobody is doing is surfaced"
+    },
+    {
+      "given": "",
+      "key": "ac92",
+      "requirement": "a-review-nobody-is-doing-is-named-whatever-its-history",
+      "then": "the flow surfaces that review, naming the task and the named agent",
+      "when": "a task is under review with an agent named on it, no turn is running on it, and a message naming the task is queued for a different agent"
+    },
+    {
+      "given": "",
+      "key": "ac93",
+      "requirement": "a-review-nobody-is-doing-is-named-whatever-its-history",
+      "then": "the flow surfaces that review the sentence contains the refusal's own words",
+      "when": "a task is under review with an agent named on it, and the review input queued for that agent was refused on its last delivery"
+    },
+    {
+      "given": "",
+      "key": "ac94",
+      "requirement": "a-review-nobody-is-doing-is-named-whatever-its-history",
+      "then": "the flow reports the task as in flight and does not surface it as a review nobody is doing no sentence names the author as the task's reviewer",
+      "when": "a task is under review with the agent that produced its work named on it, and a message naming the task is queued for a different agent"
+    },
+    {
+      "given": "",
+      "key": "ac95",
+      "requirement": "a-review-nobody-is-doing-is-named-whatever-its-history",
+      "then": "no other agent is fired for that review by this path the assignee on the task is not changed by it",
+      "when": "the flow surfaces a review nobody is doing"
+    },
+    {
+      "given": "",
+      "key": "ac96",
+      "requirement": "a-flow-treats-an-agent-whose-queue-is-held-as-unable-to-take",
+      "then": "no further input is queued for the held agent its task is reported in flight",
+      "when": "an agent's queue is held, it is assigned a task, input naming that task is queued for it, and another agent in the project is free the flow fires three times"
+    },
+    {
+      "given": "",
+      "key": "ac97",
+      "requirement": "a-flow-treats-an-agent-whose-queue-is-held-as-unable-to-take",
+      "then": "no further input is queued for the held agent the flow surfaces the task with the refusal's own words",
+      "when": "an agent's queue is held, it is assigned a task, and the input its next turn would start with was refused on its last delivery the flow fires three times"
+    },
+    {
+      "given": "",
+      "key": "ac98",
+      "requirement": "a-flow-treats-an-agent-whose-queue-is-held-as-unable-to-take",
+      "then": "exactly one input naming that task is queued for the agent",
+      "when": "an agent's queue is held, it is assigned a task, and no input naming that task is queued the flow fires three times"
+    },
+    {
+      "given": "",
+      "key": "ac99",
+      "requirement": "a-flow-treats-an-agent-whose-queue-is-held-as-unable-to-take",
+      "then": "the firing staffs the free agent, not the held one",
+      "when": "a flow's job agent is held and another agent is free an unassigned task is startable"
+    },
+    {
+      "given": "",
+      "key": "ac100",
+      "requirement": "a-flow-treats-an-agent-whose-queue-is-held-as-unable-to-take",
+      "then": "it is not counted among the agents free for new work or for review",
+      "when": "an agent is held, running no turn and holding no task"
+    },
+    {
+      "given": "",
+      "key": "ac101",
+      "requirement": "a-flow-treats-an-agent-whose-queue-is-held-as-unable-to-take",
+      "then": "the flow surfaces that it could not staff the review the surfaced reason names the provider's usage limit among the grounds",
+      "when": "no reviewer is declared, and the only agent that could review a task is held, running no turn and holding no task"
+    },
+    {
+      "given": "",
+      "key": "ac102",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "the agent may be selected for the review",
+      "when": "an agent is assigned a task in an active status that belongs to no loop, and no turn is running or queued for it on that task a flow fires with a completed task to review, declaring no reviewer, whose author is another agent"
+    },
+    {
+      "given": "",
+      "key": "ac103",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "that other agent is staffed onto the startable task",
+      "when": "a flow fires with a startable unassigned task, its job's agent is already selected or busy, and the only other agent is assigned only tasks that belong to no loop"
+    },
+    {
+      "given": "",
+      "key": "ac104",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "it is not counted among the agents free for new work or for review",
+      "when": "an agent is assigned a task in an active status that belongs to a loop that has not ended"
+    },
+    {
+      "given": "",
+      "key": "ac105",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "it is not counted among the agents free for new work or for review",
+      "when": "an agent is assigned a task in an active status that belongs to a loop whose job the operator has paused"
+    },
+    {
+      "given": "",
+      "key": "ac106",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "that task does not stop the agent being counted free",
+      "when": "an agent is assigned a task in an active status that belongs only to a loop that has ended"
+    },
+    {
+      "given": "",
+      "key": "ac107",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "it is not counted among the agents free for new work or for review",
+      "when": "an agent is assigned a task that belongs to no loop, and input naming that task is queued for that agent"
+    },
+    {
+      "given": "",
+      "key": "ac108",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "that task does not stop the assignee being counted free",
+      "when": "an agent is assigned a task that belongs to no loop, and input naming that task is queued only for a different agent"
+    },
+    {
+      "given": "",
+      "key": "ac109",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "it is not counted among the agents free for new work or for review, whichever agent's input the Hub reads first",
+      "when": "an agent is assigned a task that belongs to no loop, input naming that task is queued for that agent, and input naming the same task is also queued for a different agent"
+    },
+    {
+      "given": "",
+      "key": "ac110",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "that task does not stop the agent being counted free",
+      "when": "an agent is assigned a task that belongs to no loop, and the only input naming that task queued for it is past the project's hop budget"
+    },
+    {
+      "given": "",
+      "key": "ac111",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "that task does not stop the agent being counted free",
+      "when": "an agent is assigned a task in an active status that belongs only to a loop the operator archived without ending it"
+    },
+    {
+      "given": "",
+      "key": "ac112",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "the firing is not refused as busy the other agent is staffed",
+      "when": "a flow's job agent is running a turn, and the only other agent is assigned only tasks that belong to no loop the flow has a startable task"
+    },
+    {
+      "given": "",
+      "key": "ac113",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "the firing is refused as busy no input is queued for the job's agent",
+      "when": "a loop's job agent is running a turn, the only other agent is assigned only tasks that belong to no loop, and the loop's queue holds no task in a non-terminal status the loop's job fires"
+    },
+    {
+      "given": "",
+      "key": "ac114",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "that agent is not counted among the agents free for new work or for review",
+      "when": "a flow has staffed an agent to review a completed task, and that agent's review turn has not started"
+    },
+    {
+      "given": "",
+      "key": "ac115",
+      "requirement": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "then": "the roster still counts that task among the agent's active tasks",
+      "when": "an agent is assigned a task in an active status that belongs to no loop"
+    },
+    {
+      "given": "",
+      "key": "ac116",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the surfaced reason names each of those agents it names each agent's held tasks by identifier and status, up to the bound, and counts the rest",
+      "when": "a flow cannot staff a review of a completed task, and the agents other than its author each hold tasks in active statuses"
+    },
+    {
+      "given": "",
+      "key": "ac117",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "that agent is not described as held by that task the task's identifier does not appear in the surfaced reason",
+      "when": "a flow cannot staff a review, and an agent other than the author is assigned a task in an active status that no live loop walks and no queued turn names"
+    },
+    {
+      "given": "",
+      "key": "ac118",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the surfaced reason names that agent's hold as its reason it does not name that task as the agent's reason",
+      "when": "a flow cannot staff a review and an agent whose queue is held by a refusal of its provider's usage allowance is also assigned a task that a live loop still walks"
+    },
+    {
+      "given": "",
+      "key": "ac119",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the surfaced reason still names the provider's usage limit among the grounds",
+      "when": "so many agents are unavailable that some are counted rather than named, and one of those counted is held by a refusal of its provider's usage allowance"
+    },
+    {
+      "given": "",
+      "key": "ac120",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the surfaced reason does not offer rejecting a task as a way forward",
+      "when": "a flow cannot staff a review and no agent is unavailable because of the tasks it holds"
+    },
+    {
+      "given": "",
+      "key": "ac121",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the surfaced reason names that agent's hold as its reason it does not state that the agent is running a turn",
+      "when": "a flow cannot staff a review and an agent was passed over because its queue is held by a refusal of its provider's usage allowance"
+    },
+    {
+      "given": "",
+      "key": "ac122",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the way forward it offers names rejecting an unwanted task it does not offer pausing as a way to free an agent it does not claim that ending or archiving a loop frees them",
+      "when": "a flow cannot staff a review because every other agent holds work"
+    },
+    {
+      "given": "",
+      "key": "ac123",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the reason states the author's exclusion for this task it does not list the author's other holdings in its place",
+      "when": "the author of the task also holds other tasks in active statuses"
+    },
+    {
+      "given": "",
+      "key": "ac124",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the reason states that the agent which gave no verdict reviewed the task without it does not state that this agent completed the task",
+      "when": "a review selected on availability ends without a verdict, and the second resolution finds nobody"
+    },
+    {
+      "given": "",
+      "key": "ac125",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the reason states that the agent which gave no verdict reviewed the task without it does not describe that agent only as having worked on the task",
+      "when": "the operator completed the task, a review selected on availability ends without a verdict, and the second resolution finds nobody"
+    },
+    {
+      "given": "",
+      "key": "ac126",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the reason names the landing action as the operator's own review it does not state that landing approves the task",
+      "when": "the unstaffed task is `completed`"
+    },
+    {
+      "given": "",
+      "key": "ac127",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the reason states that the roster has no agent it still names the action",
+      "when": "a flow cannot staff a review and the project has no non-archived agent"
+    },
+    {
+      "given": "",
+      "key": "ac128",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the reason names approving, rejecting, or returning it for revision it does not name the landing action",
+      "when": "the unstaffed task is `under_review`"
+    },
+    {
+      "given": "",
+      "key": "ac129",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the reason counts the agents it does not name it still names the action the job's run history is returned successfully",
+      "when": "so many agents are unavailable that naming each would exceed the length the loop's run history accepts"
+    },
+    {
+      "given": "",
+      "key": "ac130",
+      "requirement": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "then": "the reason names that agent, with as many of its held tasks as fit, and counts the rest it still names the action",
+      "when": "the first agent in name order holds several tasks whose identifiers are as long as a task identifier may be"
+    },
+    {
+      "given": "",
+      "key": "ac36",
+      "requirement": "a-review-no-reviewer-can-approve-is-handed-to-the-operator",
+      "then": "no other agent is fired for that review the task's holder is unchanged",
+      "when": "a review by an agent selected on availability ends without recording a verdict approving the task is refused because evidence naming a commit is waiting to be decided, and no other agent's approved work would merge the agent the resolution would select has not been granted the decision on evidence"
+    },
+    {
+      "given": "",
+      "key": "ac37",
+      "requirement": "a-review-no-reviewer-can-approve-is-handed-to-the-operator",
+      "then": "that agent is fired for the review",
+      "when": "a review by an agent selected on availability ends without recording a verdict, approving the task is refused because evidence is waiting to be decided, and the agent the resolution selects has been granted the decision on evidence"
+    },
+    {
+      "given": "",
+      "key": "ac131",
+      "requirement": "a-review-no-reviewer-can-approve-is-handed-to-the-operator",
+      "then": "the review is surfaced with the approval refusal's own sentence the surfaced reason does not state that no agent is free, and does not list which agents were excluded",
+      "when": "a review turn ends without a verdict, and approving the task is refused because evidence naming a commit is waiting to be decided"
+    },
+    {
+      "given": "",
+      "key": "ac132",
+      "requirement": "a-review-no-reviewer-can-approve-is-handed-to-the-operator",
+      "then": "no second reviewer is resolved the review is surfaced with the approval refusal's own sentence",
+      "when": "a review selected on availability ends without a verdict, and approving the task is refused because a requirement it serves has an unresolved drift candidate the agent the resolution would select has been granted the decision on evidence"
+    },
+    {
+      "given": "",
+      "key": "ac133",
+      "requirement": "a-review-no-reviewer-can-approve-is-handed-to-the-operator",
+      "then": "the sentence the flow records names that reason and the decision waiting for the operator it does not offer asking the same reviewer again",
+      "when": "a flow fires while that task is still under review with the silent reviewer named, and approving it is still refused for the same reason"
+    },
+    {
+      "given": "",
+      "key": "ac134",
+      "requirement": "a-review-no-reviewer-can-approve-is-handed-to-the-operator",
+      "then": "no second reviewer is resolved the review is surfaced with a sentence saying the Hub could not ask git, and its reason",
+      "when": "a review selected on availability ends without a verdict, and asking the project's repository whether the task's work would merge fails or does not answer in time"
+    },
+    {
+      "given": "",
+      "key": "ac135",
+      "requirement": "a-review-no-reviewer-can-approve-is-handed-to-the-operator",
+      "then": "the reviewer is resolved again as *A flow resolves a reviewer by declaration, then by availability* states the failure is logged as a warning",
+      "when": "a review selected on availability ends without a verdict, and evaluating approval fails for a reason other than the repository"
+    },
+    {
+      "given": "",
+      "key": "ac136",
+      "requirement": "a-review-no-reviewer-can-approve-is-handed-to-the-operator",
+      "then": "the reviewer is resolved again as *A flow resolves a reviewer by declaration, then by availability* states",
+      "when": "a review selected on availability ends without a verdict, and approving the task is refused only because the work cannot be merged cleanly"
+    },
+    {
+      "given": "an approved change document declared by an unarchived flow",
+      "key": "ac137",
+      "requirement": "an-approved-document-offers-the-operator-its-flow-or-a-way-t",
+      "then": "the flow is named on the document, and opening it shows the flow's own view",
+      "when": "the operator opens the document"
+    },
+    {
+      "given": "an approved change document that no unarchived flow declares",
+      "key": "ac138",
+      "requirement": "an-approved-document-offers-the-operator-its-flow-or-a-way-t",
+      "then": "a flow is created that declares the document, stops when its queue empties, and fires every 5 minutes it has not fired yet; its first firing is at the next scheduled time the document now names the flow instead of offering to start one",
+      "when": "the operator starts a flow from it, choosing an agent and keeping the other defaults"
+    },
+    {
+      "given": "an approved change document declared by a flow that has ended and is not archived",
+      "key": "ac139",
+      "requirement": "an-approved-document-offers-the-operator-its-flow-or-a-way-t",
+      "then": "the ended flow is named on the document, and no offer to start one is shown",
+      "when": "the operator opens the document"
+    },
+    {
+      "given": "",
+      "key": "ac140",
+      "requirement": "an-approved-document-offers-the-operator-its-flow-or-a-way-t",
+      "then": "nothing is sent, and the offer says a flow needs a stop condition",
+      "when": "the operator clears every stop condition in the offer and tries to start the flow"
+    },
+    {
+      "given": "a document another unarchived loop already declares",
+      "key": "ac141",
+      "requirement": "an-approved-document-offers-the-operator-its-flow-or-a-way-t",
+      "then": "the start is refused with a reason naming the loop that holds it",
+      "when": "a flow is started from it"
+    },
+    {
+      "given": "a proposed document whose delivery is a flow with agent dev, stopping when its queue empties, every 5 minutes",
+      "key": "ac142",
+      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
+      "then": "a flow declaring the document exists, naming dev, and holds the tasks the approval created it has not fired; its next run is the next 5-minute boundary",
+      "when": "the operator approves it"
+    },
+    {
+      "given": "a proposed document whose delivery names an agent that has since been archived",
+      "key": "ac143",
+      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
+      "then": "the document is approved and its board is created no flow is created, and the approval reports that the agent is archived",
+      "when": "the operator approves it without choosing another agent"
+    },
+    {
+      "given": "a proposed document whose delivery names an agent that is not one of the project's agents",
+      "key": "ac144",
+      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
+      "then": "the document is approved and no flow is created the approval reports that the agent is not on the project",
+      "when": "the operator approves it"
+    },
+    {
+      "given": "a proposed document whose delivery names an archived agent",
+      "key": "ac145",
+      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
+      "then": "the flow is created naming dev the document still names the archived agent, and the approval records the replacement",
+      "when": "the operator approves it choosing agent dev"
+    },
+    {
+      "given": "an approved document whose delivery created flow F, reopened and proposed again",
+      "key": "ac146",
+      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
+      "then": "no second flow is created, and the tasks the approval created belong to F the approval reports that F already builds the document",
+      "when": "the operator approves it"
+    },
+    {
+      "given": "an approved document whose flow F stopped when its queue emptied and is not archived",
+      "key": "ac147",
+      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
+      "then": "no second flow is created the approval reports that F has ended and that the new task waits for it",
+      "when": "the document is reopened, revised with a new task, proposed and approved"
+    },
+    {
+      "given": "an approved document whose flow F names agent dev, reopened and proposed again, whose delivery now names an archived agent",
+      "key": "ac148",
+      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
+      "then": "no flow is created and F still names dev the approval reports that qa was not applied because F already declares the document",
+      "when": "the operator approves it choosing agent qa"
+    },
+    {
+      "given": "a proposed document whose delivery is a flow, and whose board cannot be created",
+      "key": "ac149",
+      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
+      "then": "the document is approved and no flow is created the approval reports that no flow was started because the approval gave it no tasks",
+      "when": "the operator approves it"
+    },
+    {
+      "given": "a proposed document whose delivery says no flow",
+      "key": "ac150",
+      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
+      "then": "its board is created and no flow is created",
+      "when": "the operator approves it"
+    },
+    {
+      "given": "",
+      "key": "ac151",
+      "requirement": "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a",
+      "then": "its context names the code-review agent by the exact name Copilot dispatches it by, says how to recover when the agent's model is not available on the operator's plan says not to describe a review the agent did not give says that the verdict is the reviewer's own and is recorded only by updating the task",
+      "when": "a Copilot agent whose operator chose code review is given a review turn"
+    },
+    {
+      "given": "",
+      "key": "ac152",
+      "requirement": "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a",
+      "then": "its review context is the same as it is without this change",
+      "when": "a Copilot agent with no review agents chosen is given a review turn"
+    },
+    {
+      "given": "",
+      "key": "ac153",
+      "requirement": "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a",
+      "then": "no review agent is named",
+      "when": "a Copilot agent with review agents chosen is given a turn that is not a review"
+    },
+    {
+      "given": "",
+      "key": "ac154",
+      "requirement": "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a",
+      "then": "no Copilot review agent is named, whatever its configuration holds",
+      "when": "an agent bound to a runner other than `copilot` is given a review turn"
+    },
+    {
+      "given": "",
+      "key": "ac155",
+      "requirement": "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a",
+      "then": "the choice is refused",
+      "when": "an operator chooses a Copilot agent that is not among those offered"
+    },
+    {
+      "given": "",
+      "key": "ac156",
+      "requirement": "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a",
+      "then": "the review context names only the offered agents it holds, and none when it is not a list",
+      "when": "an agent's stored configuration names a review agent that is not offered, or is not a list, because it was written by a route that does not check it"
+    },
+    {
+      "given": "",
+      "key": "ac157",
+      "requirement": "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a",
+      "then": "the review turn takes place its context names the commit alone",
+      "when": "a Copilot reviewer with review agents chosen is given a review turn for a project with no branch that approval merges into"
+    },
+    {
+      "given": "",
+      "key": "ac158",
+      "requirement": "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a",
+      "then": "the review turn takes place with its context naming the commit alone nothing prepared for the review is left behind unreleased",
+      "when": "determining the divergence point fails for any reason, including the version-control command timing out"
+    },
+    {
+      "given": "",
+      "key": "ac159",
+      "requirement": "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a",
+      "then": "code review is shown as chosen",
+      "when": "the operator chooses code review for a Copilot agent and reopens its settings"
+    },
+    {
+      "given": "",
+      "key": "ac160",
+      "requirement": "a-copilot-review-turn-records-which-review-agents-actually-r",
+      "then": "the run's stream records that the code-review agent was asked for and that no subagent ran",
+      "when": "a Copilot review turn whose context named the code-review agent ends without Copilot reporting any subagent"
+    },
+    {
+      "given": "",
+      "key": "ac161",
+      "requirement": "a-copilot-review-turn-records-which-review-agents-actually-r",
+      "then": "the run's stream records that it ran, how it ended and the model it ran on",
+      "when": "a Copilot review turn whose context named the code-review agent ends after Copilot reported that agent completing"
+    },
+    {
+      "given": "",
+      "key": "ac162",
+      "requirement": "a-copilot-review-turn-records-which-review-agents-actually-r",
+      "then": "the run's stream still records which subagents ran",
+      "when": "a Copilot review turn whose context named review agents fails or is stopped after Copilot was given the turn"
+    },
+    {
+      "given": "",
+      "key": "ac163",
+      "requirement": "a-copilot-review-turn-records-which-review-agents-actually-r",
+      "then": "no report of review agents is recorded",
+      "when": "a Copilot turn ends whose context named no review agent, including every turn that is not a review"
+    },
+    {
+      "given": "",
+      "key": "ac164",
+      "requirement": "a-review-turn-is-told-the-task-s-check-result",
+      "then": "its briefing names the failing check and says `approved` will be refused and `revision_needed` returns it",
+      "when": "a review turn is given for a task whose latest check run failed"
+    },
+    {
+      "given": "",
+      "key": "ac165",
+      "requirement": "a-review-turn-is-told-the-task-s-check-result",
+      "then": "its briefing carries no check sentence",
+      "when": "a review turn is given in a project with no checks configured"
+    },
+    {
+      "given": "a project with checks whose latest run for the task is still running, or ran against an older main tip",
+      "key": "ac172",
+      "requirement": "a-review-turn-is-told-the-task-s-check-result",
+      "then": "both channels say the checks have not finished and `approved` will be refused until they pass",
+      "when": "a review turn is given for the task"
+    },
+    {
+      "given": "a flow-delivered document whose delivery names critic and whose tasks name none, and a free agent sorting before critic",
+      "key": "a-document-names-its-default-reviewer-staffs",
+      "requirement": "a-document-names-its-default-reviewer",
+      "then": "critic reviews it",
+      "when": "a completed task's review is staffed"
+    },
+    {
+      "given": "a default reviewer that is archived or not on the roster",
+      "key": "a-document-names-its-default-reviewer-unresolved",
+      "requirement": "a-document-names-its-default-reviewer",
+      "then": "nobody is staffed; the reason names the document's default reviewer",
+      "when": "a completed task's review is staffed"
+    },
+    {
+      "given": "a proposed flow-delivered document",
+      "key": "a-document-names-its-default-reviewer-bar",
+      "requirement": "a-document-names-its-default-reviewer",
+      "then": "the approval bar reads 'Reviewed by @X', 'Reviewed by any free agent', or an amber line for a default that is no open agent",
+      "when": "the operator opens it"
+    },
+    {
+      "given": "a flow with a startable unassigned task, whose only free agent is read-only",
+      "key": "ac173",
+      "requirement": "n2",
+      "then": "the read-only agent is not staffed with the task",
+      "when": "the flow fires"
+    },
+    {
+      "given": "a completed task to review, declaring no reviewer, whose only free non-author agent is read-only",
+      "key": "ac174",
+      "requirement": "n2",
+      "then": "the read-only agent is staffed for the review",
+      "when": "the flow fires"
+    },
+    {
+      "given": "a flow task in `assigned` whose assignee has been archived",
+      "key": "ac175",
+      "requirement": "n3",
+      "then": "the task is surfaced naming the archived agent and the remedy; no input is queued and the task and agent are unchanged",
+      "when": "the flow fires"
+    },
+    {
+      "given": "a flow with a review it cannot staff for an unchanged reason",
+      "key": "ac176",
+      "requirement": "n4",
+      "then": "exactly one `review_unstaffed` event is recorded for that task and the flow's job stays enabled and scheduled",
+      "when": "the flow fires several times"
+    },
+    {
+      "given": "a standing `review_unstaffed` event for a task",
+      "key": "ac177",
+      "requirement": "n4",
+      "then": "a new `review_unstaffed` event carries the new reason",
+      "when": "a later firing cannot staff it for a different reason"
+    },
+    {
+      "given": "a task whose governing evidence is awaiting a decision, reviewed by an agent without the evidence grant",
+      "key": "ac178",
+      "requirement": "n5",
+      "then": "both channels name the awaiting evidence id and tell the reviewer to ask the operator with `ask_user` before approving",
+      "when": "the review turn is composed"
+    },
+    {
+      "given": "the same task reviewed by an agent granted evidence decisions",
+      "key": "ac179",
+      "requirement": "n5",
+      "then": "both channels tell it to accept the evidence with `decide_evidence` first, not any it recorded itself",
+      "when": "the review turn is composed"
+    },
+    {
+      "given": "a task that depends on a prerequisite already merged",
+      "key": "ac180",
+      "requirement": "n6",
+      "then": "both channels name the prerequisite with its merge commit and say its work is not in this diff",
+      "when": "a review turn is composed for the task"
+    },
+    {
+      "given": "an `under_review` task held by the agent that completed it",
+      "key": "tlg-ac48",
+      "requirement": "a-review-a-flow-cannot-staff-is-not-reported-as-staffed",
+      "then": "the assignee becomes that reviewer, the task stays `under_review`, and a review turn is dispatched",
+      "when": "a flow fires and an eligible reviewer exists"
+    },
+    {
+      "given": "",
+      "key": "tlg-ac49",
+      "requirement": "a-review-a-flow-cannot-staff-is-not-reported-as-staffed",
+      "then": "neither the completer nor any evidence author is a candidate",
+      "when": "a reviewer is resolved for such a task"
+    },
+    {
+      "given": "a task the operator completed, `under_review`, assigned to a reviewer on none of its transitions",
+      "key": "tlg-ac52",
+      "requirement": "a-review-a-flow-cannot-staff-is-not-reported-as-staffed",
+      "then": "it is reported as held by that reviewer and no reviewer is resolved",
+      "when": "a flow fires"
+    },
+    {
+      "given": "a reviewer holding an `under_review` task, with a turn running on it, that has recorded evidence",
+      "key": "tlg-ac55",
+      "requirement": "a-review-a-flow-cannot-staff-is-not-reported-as-staffed",
+      "then": "the dispatch is refused and the first reviewer still holds the task",
+      "when": "another reviewer is dispatched"
+    },
+    {
+      "given": "a completed task",
+      "key": "ac190",
+      "requirement": "dispatching-a-review-staffs-the-task-whichever-path-dispatch",
+      "then": "the task is held by that reviewer and `under_review` before the turn begins",
+      "when": "the operator starts a review naming a reviewer that is not its author"
+    },
+    {
+      "given": "a task already in review held by the same reviewer",
+      "key": "ac192",
+      "requirement": "dispatching-a-review-staffs-the-task-whichever-path-dispatch",
+      "then": "status and holder are unchanged and no transition is recorded",
+      "when": "a review is dispatched again"
+    },
+    {
+      "given": "a task in `in_progress`",
+      "key": "ac194",
+      "requirement": "dispatching-a-review-staffs-the-task-whichever-path-dispatch",
+      "then": "the request is refused naming the status, with no turn started",
+      "when": "a review is requested"
+    },
+    {
+      "given": "a task under review held by a different reviewer",
+      "key": "ac195",
+      "requirement": "dispatching-a-review-staffs-the-task-whichever-path-dispatch",
+      "then": "the request is refused naming the current holder",
+      "when": "a review is requested"
+    },
+    {
+      "given": "a task the operator completed and agent B recorded evidence for",
+      "key": "ac199",
+      "requirement": "dispatching-a-review-staffs-the-task-whichever-path-dispatch",
+      "then": "the request is refused naming the evidence, with no turn or checkout created",
+      "when": "the operator dispatches B to review it"
+    },
+    {
+      "given": "a task under review held by the agent that produced the work, with no turn of it on the task",
+      "key": "ac197",
+      "requirement": "dispatching-a-review-staffs-the-task-whichever-path-dispatch",
+      "then": "the new reviewer becomes the holder",
+      "when": "a review naming a different agent is dispatched"
+    },
+    {
+      "given": "a task under review held by an agent that recorded evidence for it and whose turn is running on it",
+      "key": "ac201",
+      "requirement": "dispatching-a-review-staffs-the-task-whichever-path-dispatch",
+      "then": "the request is refused naming the current holder",
+      "when": "the operator dispatches a different reviewer"
+    },
+    {
+      "given": "a completed task whose evidence names a commit the repository no longer has",
+      "key": "ac257",
+      "requirement": "a-refused-review-dispatch-leaves-the-task-as-it-was-before-t",
+      "then": "the request is refused naming the commit; status and holder are unchanged and no transition is recorded",
+      "when": "the operator dispatches a review"
+    },
+    {
+      "given": "a review request waiting behind the named reviewer's own running turn, during which that reviewer records evidence for the task",
+      "key": "ac260",
+      "requirement": "a-refused-review-dispatch-leaves-the-task-as-it-was-before-t",
+      "then": "the dispatch is refused, the task is unchanged, and the refusal is recorded as what the input waits for",
+      "when": "the request is delivered"
+    },
+    {
+      "given": "",
+      "key": "ac261",
+      "requirement": "a-refused-review-dispatch-leaves-the-task-as-it-was-before-t",
+      "then": "after every attempt the task is unchanged with no transition recorded, and the operator is told the refusal",
+      "when": "a refused review dispatch is retried until the system gives up"
+    },
+    {
+      "given": "a flow's firing queued a review of a completed task",
+      "key": "ac264",
+      "requirement": "a-refused-review-dispatch-leaves-the-task-as-it-was-before-t",
+      "then": "the task is `completed` with its previous holder and no transition is recorded",
+      "when": "the dispatch is refused because the commit is not in the repository"
+    },
+    {
+      "given": "a review entry queued for a reviewer mid-turn",
+      "key": "a-decided-task-withdraws-its-waiting-reviews-land",
+      "requirement": "a-decided-task-withdraws-its-waiting-reviews",
+      "then": "the entry is withdrawn with the verdict as its reason, a queue_entry_withdrawn event names it, and after the reviewer's turn ends no delivery of it is attempted",
+      "when": "the operator lands the task"
+    },
+    {
+      "given": "a task under review with a second reviewer's review entry queued",
+      "key": "a-decided-task-withdraws-its-waiting-reviews-revise",
+      "requirement": "a-decided-task-withdraws-its-waiting-reviews",
+      "then": "the second entry is withdrawn",
+      "when": "the task is sent back with revision_needed"
+    },
+    {
+      "given": "a delivered review entry for the task, a queued review entry for another task, and a queued work entry for the task",
+      "key": "a-decided-task-withdraws-its-waiting-reviews-others",
+      "requirement": "a-decided-task-withdraws-its-waiting-reviews",
+      "then": "the first two are unchanged and the work entry stays queued with its task released",
+      "when": "the task is approved"
+    },
+    {
+      "given": "a payload whose task names a reviewer",
+      "key": "td-ac25",
+      "requirement": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
+      "then": "the recovered payload names the same reviewer",
+      "when": "it is rendered and read back"
+    },
+    {
+      "given": "a payload whose tasks name no reviewer",
+      "key": "td-ac26",
+      "requirement": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
+      "then": "it validates and materialises as one without the field",
+      "when": "it is submitted and approved"
+    },
+    {
+      "given": "an approved document whose task names a reviewer that is not on the roster or is archived",
+      "key": "td-ac27",
+      "requirement": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
+      "then": "no other agent is substituted; the review falls back to the operator with a reason naming the declared reviewer",
+      "when": "that task's review is staffed"
+    },
+    {
+      "given": "a document naming a reviewer",
+      "key": "td-ac28",
+      "requirement": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
+      "then": "no task is assigned to an agent as a result of the name alone",
+      "when": "it is materialised"
+    },
+    {
+      "given": "a loop that declares no document and fires only its own agent",
+      "key": "cc-ac54",
+      "requirement": "a-flow-s-checkpoint-lineage-belongs-to-the-flow",
+      "then": "its briefing carries its own newest checkpoint as before",
+      "when": "it fires again"
+    },
+    {
+      "given": "",
+      "key": "cc-ac55",
+      "requirement": "a-flow-s-checkpoint-lineage-belongs-to-the-flow",
+      "then": "its task list is the loop's whole queue in every status, with a note saying so",
+      "when": "a checkpoint is generated for a loop firing"
+    },
+    {
+      "given": "",
+      "key": "cr25",
+      "requirement": "creating-a-flow-is-a-distinct-tool-from-creating-a-loop",
+      "then": "it is refused naming `create_flow`",
+      "when": "`create_loop` is called with a `spec_document_id`"
+    },
+    {
+      "given": "",
+      "key": "cr26",
+      "requirement": "creating-a-flow-is-a-distinct-tool-from-creating-a-loop",
+      "then": "it is refused naming `create_loop`",
+      "when": "`create_flow` is called with no document"
+    },
+    {
+      "given": "",
+      "key": "cr27",
+      "requirement": "creating-a-flow-is-a-distinct-tool-from-creating-a-loop",
+      "then": "it is refused for lacking a stop condition",
+      "when": "either is called with neither `stop_at` nor `stop_when_queue_empties`"
+    },
+    {
+      "given": "a task under review with an assignee, no bound run running and no input queued",
+      "key": "al-ac71",
+      "requirement": "a-task-reported-as-in-flight-is-one-an-agent-is-actually-wor",
+      "then": "the task is not in flight and the stall reason names the task and the agent",
+      "when": "the loop fires"
+    },
+    {
+      "given": "a review whose input is queued for its reviewer and not yet started",
+      "key": "al-ac72",
+      "requirement": "a-task-reported-as-in-flight-is-one-an-agent-is-actually-wor",
+      "then": "it is reported in flight and no stall is recorded",
+      "when": "the loop fires"
+    },
+    {
+      "given": "an assigned task whose only input for its agent was refused on its last delivery",
+      "key": "al-ac73",
+      "requirement": "a-task-reported-as-in-flight-is-one-an-agent-is-actually-wor",
+      "then": "nothing more is queued for that agent and the reason contains the refusal's words",
+      "when": "the flow fires three times"
+    },
+    {
+      "given": "an assigned task whose agent is running a turn bound to no task",
+      "key": "al-ac74",
+      "requirement": "a-task-reported-as-in-flight-is-one-an-agent-is-actually-wor",
+      "then": "the task is in flight and the agent is not briefed again",
+      "when": "the loop fires"
+    },
+    {
+      "given": "every candidate held by a running turn",
+      "key": "ac75",
+      "requirement": "a-task-reported-as-in-flight-is-one-an-agent-is-actually-wor",
+      "then": "the firing records nothing and reports in flight, not stalled",
+      "when": "the loop fires"
+    },
+    {
+      "given": "",
+      "key": "ac76",
+      "requirement": "a-surfaced-step-is-recorded-once-not-once-per-tick",
+      "then": "exactly one record exists",
+      "when": "a loop fires repeatedly finding one step unstaffable for the same reason"
+    },
+    {
+      "given": "two steps each unstaffable for an unchanged reason",
+      "key": "ac77",
+      "requirement": "a-surfaced-step-is-recorded-once-not-once-per-tick",
+      "then": "exactly one record exists for each",
+      "when": "the loop fires repeatedly"
+    },
+    {
+      "given": "two surfaced steps",
+      "key": "ac78",
+      "requirement": "a-surfaced-step-is-recorded-once-not-once-per-tick",
+      "then": "a new record is written for that step only, carrying the new reason",
+      "when": "the reason changes for one between firings"
+    },
+    {
+      "given": "an agent with a run running on the task",
+      "key": "al-ac148",
+      "requirement": "an-agent-attributed-to-a-task-shall-be-attributed-in-a-state",
+      "then": "it is named as working",
+      "when": "the summary is read"
+    },
+    {
+      "given": "a review whose run ended with no run in progress",
+      "key": "al-ac149",
+      "requirement": "an-agent-attributed-to-a-task-shall-be-attributed-in-a-state",
+      "then": "the reviewer is named as held, not working",
+      "when": "the summary is read"
+    },
+    {
+      "given": "a completed task the next firing would give to a reviewer",
+      "key": "al-ac150",
+      "requirement": "an-agent-attributed-to-a-task-shall-be-attributed-in-a-state",
+      "then": "the reviewer is named as next",
+      "when": "the summary is read"
+    },
+    {
+      "given": "",
+      "key": "al-ac151",
+      "requirement": "an-agent-attributed-to-a-task-shall-be-attributed-in-a-state",
+      "then": "it does not read the firing decision's cannot-staff collection",
+      "when": "any module other than the attribution module is examined"
+    },
+    {
+      "given": "a document approved before any loop declares it",
+      "key": "al-ac12",
+      "requirement": "a-flow-adopts-the-tasks-already-materialised-from-the-docume",
+      "then": "the document's tasks name the new loop and its queue contains them",
+      "when": "a loop is then created declaring it"
+    },
+    {
+      "given": "an archived loop that owned the document's tasks, some approved and some open",
+      "key": "al-ac13",
+      "requirement": "a-flow-adopts-the-tasks-already-materialised-from-the-docume",
+      "then": "the open tasks move to the new loop, the approved and rejected ones still name the archived loop, and both loops' histories hold one `loop_tasks_adopted` event",
+      "when": "a new loop declares the document"
+    },
+    {
+      "given": "tasks of the document owned by an unarchived loop",
+      "key": "al-ac14",
+      "requirement": "a-flow-adopts-the-tasks-already-materialised-from-the-docume",
+      "then": "the declaration is refused and no task moves",
+      "when": "another loop tries to declare the document"
+    },
+    {
+      "given": "a successor adopted an in-progress task whose assignee is archived",
+      "key": "al-ac15",
+      "requirement": "a-flow-adopts-the-tasks-already-materialised-from-the-docume",
+      "then": "it does not brief the archived agent and its stall reason names the task and that assignee",
+      "when": "the successor fires"
+    },
+    {
+      "given": "a change document with requirements and tasks but no delivery section",
+      "key": "ac218",
+      "requirement": "a-change-document-declares-how-it-will-be-built-before-it-is",
+      "then": "the proposal is refused with a finding saying how the work will be built is unanswered",
+      "when": "it is proposed"
+    },
+    {
+      "given": "a change document whose delivery is a flow naming an agent and no stop condition",
+      "key": "ac219",
+      "requirement": "a-change-document-declares-how-it-will-be-built-before-it-is",
+      "then": "the proposal is refused with a finding naming the missing stop condition",
+      "when": "it is proposed"
+    },
+    {
+      "given": "a change document whose delivery says no flow",
+      "key": "ac220",
+      "requirement": "a-change-document-declares-how-it-will-be-built-before-it-is",
+      "then": "it is proposed",
+      "when": "it is proposed and nothing else blocks it"
+    },
+    {
+      "given": "a document proposed before delivery sections existed",
+      "key": "ac221",
+      "requirement": "a-change-document-declares-how-it-will-be-built-before-it-is",
+      "then": "it is approved, its board is created, and no flow is created",
+      "when": "the operator approves it"
+    },
+    {
+      "given": "a proposed document whose delivery names agent dev2",
+      "key": "ac224",
+      "requirement": "a-document-s-delivery-is-checked-against-the-roster-when-it-",
+      "then": "the delivery is reported stale because dev2 is archived the document's file is unchanged",
+      "when": "dev2 is archived and the document is read"
+    },
+    {
+      "given": "a document whose delivery is a flow and whose tasks name no reviewer",
+      "key": "n10-c1",
+      "requirement": "n10",
+      "then": "a reviewer_undeclared warning is returned, and ready_to_propose is unchanged",
+      "when": "it is submitted"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "a171e1e060d1d58da03a3ed57b6965f2ef71e587b89c39742aea568b1f8d364d",
+      "FR-10": "6fac79772a7be05744f3c3ba849eeb737bba3dad42dad5b89560b46388a4aeb2",
+      "FR-11": "356a4613421b6eded2a1ddc3457d2e5b88930d320e3e1e18d3de2443d1ecee64",
+      "FR-12": "8440c048cc3aded3f89873b23e02a2f76c22c0e56bdc77160630415ddd2d5465",
+      "FR-13": "e20029bb7719dd2f0f388051559c0a9b4e30a7eb6767e4d4c4d67c16ff844b5e",
+      "FR-14": "22c598ffe055865984e4f818433ddf70ed0b96d2358b6228f219abe2dfb97b7d",
+      "FR-15": "bcc3622d1627a52ba636ff0f5fead16da33055bfa484ec0bb1027f29e3e8f9fc",
+      "FR-16": "934f6456a1425ca46c4b48a9775f7c44a83efc579c23b8993513449e539ba3cd",
+      "FR-17": "7fc6e1231600b52870532e13ee0bb837ec6d3194f33a4d939c5a1fd5305c1137",
+      "FR-18": "eda9b11afe0a7c66e3b99542dd64c90880bbd4af364b79d5a56c902052202050",
+      "FR-19": "b1090ff952a52bb6a91f8071981dc0e656fd06afd88685c630aa430f395bc9ef",
+      "FR-2": "ba413a613af33eb5b06726ff7360e2fb5df277be27dfa60a43f53df42419375b",
+      "FR-20": "ecad27ddf9d96a0d584d6eb5ed603a438ce330fd8650c58afcdaac3a872c808f",
+      "FR-21": "eb37de8df2f421cde276ca651bf8ff3bc4c9adc86dd03fc4e20354c3250e4e82",
+      "FR-22": "a8a40ea7864f320acb856e7363e4298fad816daa8b9e9ce744b42da488763e95",
+      "FR-23": "88625db01d6bcb561cd14fa3d3905f50438affe0722013e226f6ca7782b564bb",
+      "FR-24": "b78f751ff5c0e1e1a0041b90d3a27d9913a19b91dd91204147d14c248419991f",
+      "FR-25": "96dec15db71cc8f058659a9f5c5e788aa49f06ac67bea0c0b3a843851c98f7d3",
+      "FR-26": "c095179f775d7050b536b484bb92054c2c502dec25d2afe4dcbf1b47ff15cf8f",
+      "FR-27": "67481ffce623fe885880dd91a0d888004612d7575c5c57ac2162f3c9c13dd3d4",
+      "FR-28": "83863d4073c27fd8c337f43245be1294784e3914716c020ea611946e231ee827",
+      "FR-29": "d83f099575484254c324436fe6a42345f7433bb2078f57c5a730413f38b0b7e4",
+      "FR-3": "60e9d97a6bc858268afa8d344f5f8b6ecfd71cd5392d3e795d2f74df54ee3020",
+      "FR-30": "4e1613184572123431d671dafdd62e7249f71e3eb9da5a623b57f08fac819756",
+      "FR-31": "635925a8ebb474f923a23882c8a6925c45bead0b67ff112a814ccc0a56c659a7",
+      "FR-32": "b63ef80a42d36c1a5282f75f30259f602dea388f193505d985c133d9a0e69f79",
+      "FR-33": "59ce811a2595f00333caed4084b3fd72280ab8dfc156568fed90baba3ee97b38",
+      "FR-34": "a3231fe243e9a67b1115d2e780e4e39b546b62728115afbd9e0dc941b574c075",
+      "FR-35": "d0be0452701150b0221dd09cb54cd246433211cb4308e9b2f811564bce402071",
+      "FR-36": "746a5262c7af8c984b0a036572567368aaac8e652762bd20d4c389f3657bee69",
+      "FR-37": "a68e5c680bd0d79ac76ab7aacd0eb80fb9b307a12e881b340b13b84b88baed28",
+      "FR-38": "b7af8a7e4cb5cfe683f3002b89f20a763de898b8fffdc08d2a23f85d3f5a299f",
+      "FR-39": "f1c3d97e43f3cd8bcb84abfed2a5ad602277d076b2bedeff25b4a660ad560d5b",
+      "FR-4": "d32f1a4e628f7a4acac22dead3805868de704a89f46e2ad265f9950552cdca86",
+      "FR-40": "8ddd27372a23cf5456d89b0d9a2ba995e7632b24ebbf946a6a075365aaa563ca",
+      "FR-41": "854d12abe9462c8d6d24b42cbdcdd49e706ab0438651ed7185543b2ae835ad25",
+      "FR-42": "d55aefe34cd8d019f3a9c47f43d761d14359fff343cbed2b737bd519e31ecdd3",
+      "FR-43": "0528637ac1b0a95f83d617a3e23a0b8f1ec1ffcfedd26f434169d348bbb132c1",
+      "FR-44": "779a0dcccd6e7014110f6e4d766e0f1a4b3db702e6e1af9582e25a0c529f6ed0",
+      "FR-45": "ade02a41f2fcb69692c1a98a6194734faf9c189e04dfed22ac1ce3b49d9d44de",
+      "FR-46": "e7bbabeed4bb05de59733e94a0b7512c30c5784ba4fa62152dce7263fb048d91",
+      "FR-47": "304def36088d99e7aabff893af9868ebcf9fac663f8aba832958b516e534cd30",
+      "FR-48": "13e67eac4f2173f883c4bd40be6f5c8a48c1758dcedb555a98ad7f394fa3f53b",
+      "FR-5": "2bf5a8b71078c495b84638bc27e232dfa4d54e1f12f07abd04d97b99e390cba4",
+      "FR-6": "cc139f28e5d55807598615bf73a5621f0b45542840fde940b9caf8e6500966eb",
+      "FR-7": "7686a10b0bf967730d0b843a55dc2a0997d4e4a44836d14294793091b795bce4",
+      "FR-8": "85b8ed980e83db0077ba703df3273ad47c908341da0a23b3bf1fec615a2716b8",
+      "FR-9": "d9f72cd8351cffecaa2b8b77dbcf64ffb44e7950651a9275dd844ebaae25c628"
+    },
+    "high_water": 48,
+    "requirements": {
+      "a-change-document-declares-how-it-will-be-built-before-it-is": "FR-46",
+      "a-completed-task-is-claimable-by-an-agent-that-did-not-compl": "FR-3",
+      "a-copilot-review-turn-records-which-review-agents-actually-r": "FR-27",
+      "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a": "FR-26",
+      "a-decided-task-withdraws-its-waiting-reviews": "FR-39",
+      "a-dispatched-review-leaves-the-reviewable-pool": "FR-11",
+      "a-document-names-its-default-reviewer": "FR-29",
+      "a-document-s-delivery-is-checked-against-the-roster-when-it-": "FR-47",
+      "a-firing-determines-both-the-task-and-the-agent": "FR-2",
+      "a-flow-adopts-the-tasks-already-materialised-from-the-docume": "FR-45",
+      "a-flow-generates-the-author-s-handover-briefing": "FR-13",
+      "a-flow-is-a-loop-that-declares-a-specification-document": "FR-1",
+      "a-flow-may-start-every-task-whose-dependencies-are-met": "FR-8",
+      "a-flow-resolves-a-reviewer-by-declaration-then-by-availabili": "FR-6",
+      "a-flow-s-checkpoint-lineage-belongs-to-the-flow": "FR-9",
+      "a-flow-staffs-a-review-for-work-the-operator-finished": "FR-16",
+      "a-flow-treats-an-agent-whose-queue-is-held-as-unable-to-take": "FR-20",
+      "a-refused-review-dispatch-leaves-the-task-as-it-was-before-t": "FR-38",
+      "a-response-to-a-failed-review-is-given-the-work-under-review": "FR-5",
+      "a-review-a-flow-cannot-staff-is-not-reported-as-staffed": "FR-36",
+      "a-review-firing-s-briefing-is-a-review-briefing": "FR-18",
+      "a-review-no-reviewer-can-approve-is-handed-to-the-operator": "FR-23",
+      "a-review-nobody-is-doing-is-named-whatever-its-history": "FR-19",
+      "a-review-nobody-is-free-to-take-names-who-holds-what": "FR-22",
+      "a-review-turn-is-told-how-to-record-its-verdict": "FR-12",
+      "a-review-turn-is-told-the-task-s-check-result": "FR-28",
+      "a-review-turn-that-records-no-verdict-is-divergent": "FR-4",
+      "a-reviewer-is-briefed-by-the-author-of-the-work-it-is-review": "FR-14",
+      "a-surfaced-step-is-recorded-once-not-once-per-tick": "FR-43",
+      "a-task-a-flow-declines-to-staff-for-review-is-named-to-the-o": "FR-15",
+      "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint": "FR-40",
+      "a-task-reported-as-in-flight-is-one-an-agent-is-actually-wor": "FR-42",
+      "an-active-task-makes-its-assignee-unavailable-only-while-som": "FR-21",
+      "an-agent-attributed-to-a-task-shall-be-attributed-in-a-state": "FR-44",
+      "an-agent-fired-to-review-a-completed-task-is-given-a-review-": "FR-7",
+      "an-approved-document-offers-the-operator-its-flow-or-a-way-t": "FR-24",
+      "approving-a-document-creates-the-flow-its-delivery-declares": "FR-25",
+      "creating-a-flow-is-a-distinct-tool-from-creating-a-loop": "FR-41",
+      "dispatching-a-review-staffs-the-task-whichever-path-dispatch": "FR-37",
+      "n1": "FR-30",
+      "n10": "FR-48",
+      "n2": "FR-31",
+      "n3": "FR-32",
+      "n4": "FR-33",
+      "n5": "FR-34",
+      "n6": "FR-35"
+    },
+    "retired": {
+      "a-firing-s-briefing-names-how-its-claimed-task-is-finished": "FR-17",
+      "a-firing-s-briefing-states-which-tier-the-agent-is-working-i": "FR-10"
+    }
+  },
+  "design": "D1 A flow is a loop with `spec_document_id` set. No separate table or job kind; the scheduler branches on that column (`scheduler.decide_firing`, `_agents_a_loop_may_staff`).\n\nD2 One walk decides a firing. `decide_firing` walks the queue once, in `_loop_queue_order`, and returns selections, in-flight rows, unstaffed and deferred outcomes. The firing and the board both read it, so they cannot disagree about what a flow is doing.\n\nD3 Refuse to offer, permit to act. Claimability withholds work whose author cannot be ruled out; the transition guards permit when attribution is unknown. Each is the safe direction for its job, and both call the same attribution functions (`task_transition_service.completion_attribution`, `agents_that_may_have_authored`, `agents_that_recorded_evidence_for`).\n\nD4 The reviewer ladder is one function (`scheduler.resolve_reviewer`) used for first staffing and for re-staffing after a silent review (`run_divergence._answer_failed_review`). Declared names are never substituted; `exclude` carries a per-agent reason so the surfaced sentence is true for every excluded agent; `unavailable` (taken by this firing) yields `deferred`, which is never surfaced.\n\nD5 Availability is one read (`_roster_availability`) from which both the pool and the unstaffed sentence are derived, so the sentence cannot name an agent the resolution counted free.\n\nD6 A flow's review is staged at the dispatch, not the firing. The firing queues a review entry; the dispatch moves `completed -> under_review` and sets the holder under its own rollback. A waiting review entry is what keeps the task out of the pool meanwhile.\n\nD7 Width has no setting: a firing starts every ready task an agent resolves for, one task per agent per firing.\n\nD8 Review briefings state the contract. Agents follow what the briefing names over the tool inventory, so a review briefing names the verdicts and the gates that can refuse them; the two review channels (loop briefing, turn context) share their gate sentences through `review_turn.verdict_evidence_sentence` so they cannot disagree.\n\nD9 One wedged-review predicate. `assignee_produced_the_work` is shared by the flow's recovery and the dispatch's holder check, so they cannot disagree about whether a review is held.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_reviewer_ladder.py, test_actor_aware_claimability.py, test_the_evidence_names_the_author.py — claimability and the ladder",
+      "hub/tests/test_flow_width.py, test_flow_fires_a_review_turn.py, test_flow_chain_end_to_end.py — staffing, width, review turns",
+      "hub/tests/test_review_divergence.py, test_a_review_no_reviewer_can_approve_goes_to_the_operator.py — silent reviews",
+      "hub/tests/test_a_flow_stages_its_review_in_the_dispatch.py, test_review_leaves_the_pool.py, test_a_review_nobody_is_doing.py",
+      "hub/tests/test_a_task_nothing_will_move_holds_nobody.py, test_a_held_agent_is_busy.py, test_a_flow_names_what_it_cannot_staff.py",
+      "hub/tests/test_briefing_names_its_contract.py, test_a_rework_brief_says_why.py, test_review_briefing_names_the_evidence_gate.py, test_review_briefing_names_dependencies.py, test_project_checks_gate.py",
+      "hub/tests/test_handover_briefs_the_reviewer.py, test_flow_checkpoint_lineage.py",
+      "hub/tests/test_a_document_says_how_it_will_be_built.py, test_a_document_names_its_default_reviewer.py, hub/ui/src/__tests__/startFlow.test.tsx",
+      "hub/tests/test_review_turn_copilot_agents.py, test_review_agents_report.py, test_a_read_only_agent_holds_no_task_work.py"
+    ],
+    "limits": [
+      "n3 (archived assignee surfaced): no test found exercising the sentence at scheduler.py decide_firing.",
+      "F423 open: a declined handover's note never reaches that task's reviewer (R14 fallback path).",
+      "F442 open: a flow review refused at a deferred dispatch does not finalize the firing's JobRun."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059 (requirements condensed, the silent-review answer split out, six behaviours added).",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "a-flow-is-a-loop-that-declares-a-specification-document",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "No separate record exists for a flow: the declared document is the whole distinction, so a loop and a flow share one scheduler, one queue and one board.",
+      "statement": "The Hub SHALL treat a loop that declares a specification document as a flow and apply this capability's requirements to it. A loop that declares no document SHALL NOT staff reviews, SHALL NOT draw agents from the project's pool, and is governed by `agent-loops` alone."
+    },
+    {
+      "key": "a-firing-determines-both-the-task-and-the-agent",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "No agent chooses its own next step, and a rerun on the same state pairs the same tasks with the same agents. Selecting an agent the Hub cannot start would turn a staffing question into a launch failure one step later.",
+      "statement": "Each firing of a flow SHALL determine deterministically, from the queue order and the agent roster in name order, which tasks are worked and which agent works each. An agent with no runner bound, or that is archived, SHALL be treated as unavailable rather than selected."
+    },
+    {
+      "key": "a-completed-task-is-claimable-by-an-agent-that-did-not-compl",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Claimability uses the same attribution the author/reviewer guard uses, so a flow never offers work to an agent that would then be refused for judging it. Where the completer is unknown the determination is over-inclusive on purpose: excluding an agent that did nothing costs a review the operator sees go unstaffed, while including the author costs an unseen self-approval. Evidence excludes its author whatever its review state; evidence the operator recorded excludes nobody.",
+      "statement": "A task in `completed` SHALL be claimable for review only by an agent that could record a verdict on it: where an agent is recorded as completing it, by any other agent that recorded no evidence for it; where the operator recorded the completion, by any agent that no record associates with the task (its transitions, its assignee, runs bound to it, or agent-recorded evidence for it); and where no completion is recorded at all, by nobody."
+    },
+    {
+      "key": "a-review-turn-that-records-no-verdict-is-divergent",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A review that produced no judgement is a positive fact to hold, not something to infer from the absence of a live run; the system does not supply a verdict on the reviewer's behalf.",
+      "statement": "Where a review turn ends with its task still `completed` or `under_review`, the Hub SHALL record a divergence naming the run, the reviewer, the task, the task's status and the run's exit status, and SHALL NOT move the task."
+    },
+    {
+      "key": "a-response-to-a-failed-review-is-given-the-work-under-review",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reviewer fired into its own workspace cannot see the author's unmerged work.",
+      "statement": "Where the Hub queues a run in response to a review that gave no verdict, that run SHALL be given the same checkout of the work under review that the original review turn was given."
+    },
+    {
+      "key": "a-flow-resolves-a-reviewer-by-declaration-then-by-availabili",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A declaration that named someone is a different fact from no declaration: quietly staffing another agent would tell the operator the named one checked the work. An agent may not judge work it completed or recorded evidence for, so the ladder excludes such agents up front rather than staffing a review that is refused on arrival. A reviewer that is merely taken by another selection of the same firing is deferred to the next firing, not surfaced.",
+      "statement": "The Hub SHALL resolve a reviewer for a task by: (1) the declared reviewer, via the same resolution every review path uses, when it names an open agent that may judge the task; (1b) where a declaration exists and does not resolve, or names an agent that may not judge the task, no substitute, surfacing the declaration and why; (2) with no declaration, the first agent in name order that has a runner, is not running a turn, is not held by a usage-allowance refusal, holds no work as `an-active-task-makes-its-assignee-unavailable-only-while-som` defines, and may judge the task; (3) otherwise, surface that the review could not be staffed, naming the task, leaving the flow's job enabled and scheduled."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One rule staffs and re-staffs a review, so the two cannot reach different answers. Excluding every reviewer already silent on the attempt terminates against a finite roster, and the surfaced reason names each excluded agent's own reason (completed it, reviewed without a verdict, recorded evidence, worked on it), so it never claims an agent completed work no agent completed.",
+      "statement": "Where a review turn ends without a verdict, the Hub SHALL answer it through the same ladder: if the reviewer was the task's declared reviewer, surface it and substitute nobody; if it was chosen by availability, resolve again excluding the work's authors (by the same determination the first resolution used), every agent with an unresolved verdict-less review of the task, and the agent that just failed, and queue the review to the agent found or surface the ladder's reason."
+    },
+    {
+      "key": "an-agent-fired-to-review-a-completed-task-is-given-a-review-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An ordinary turn places the agent in its own checkout, where unintegrated work does not exist. The guarantee holds over the delivered turn, not only the firing that staged it, because one turn can carry several firings' input.",
+      "statement": "Where a flow fires an agent for a task in `completed`, the turn SHALL be a review turn: the agent works in a detached checkout of the commit under review (the most recent evidence naming a commit where evidence governs the merge, otherwise the tip of the task's branch), and its context names the task and that commit. Where the review cannot be prepared the flow SHALL surface the stated reason and SHALL NOT fire an ordinary turn instead, and a turn that would batch a review entry with a work entry SHALL be refused."
+    },
+    {
+      "key": "a-flow-may-start-every-task-whose-dependencies-are-met",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Parallelism is decided at spec time by decomposing into independent work, not by a dial. A task left unstaffed because the free agents were already selected keeps its status and assignee and is reconsidered next firing; that deferral is recorded but not surfaced, since nothing needs doing.",
+      "statement": "A firing of a flow MAY start several tasks, and SHALL start only tasks whose dependencies are met and for which an agent resolved, with at most one task per agent per firing. The number started SHALL be bounded only by the graph and the agents available, never by a configured limit."
+    },
+    {
+      "key": "a-flow-s-checkpoint-lineage-belongs-to-the-flow",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A firing that is not a review is briefed with the flow's most recent checkpoint regardless of which agent wrote it.",
+      "statement": "The Hub SHALL keep one checkpoint lineage per flow, shared by every agent the flow fires, and each checkpoint SHALL record the agent whose conversation it summarises."
+    },
+    {
+      "key": "a-dispatched-review-leaves-the-reviewable-pool",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Staging the review at the dispatch, under its rollback, means a refused dispatch leaves the task exactly as it was instead of held by a reviewer that never ran. A task held by a reviewer stays visible as the flow's current work, naming that reviewer, for as long as it is held.",
+      "statement": "Where a flow staffs a review, the firing SHALL only queue the review turn; the move to `under_review` and the reviewer as holder SHALL be recorded by that turn's dispatch. A task with a review turn waiting for any agent, or already held by a reviewer, SHALL NOT be offered for review again. Where the waiting turn's last delivery was refused, the firing SHALL surface the task with the agent and the refusal's sentence and staff no other review; once the turn is given up on or withdrawn, the task returns to the pool on the next firing."
+    },
+    {
+      "key": "a-review-turn-is-told-how-to-record-its-verdict",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Measured: with no stated way to end a correct review, no flow-dispatched reviewer had ever recorded a verdict. The rejected-requirement remedy is the author's, so a reviewer not told this approves into a refusal it cannot clear.",
+      "statement": "A review turn's context and the flow's review briefing SHALL both name `approved` and `revision_needed` as the two verdicts, legal from `under_review`, recorded with `update_task`. Where a requirement the task serves has only rejected evidence, both SHALL say `approved` will be refused for it and that `revision_needed` returns the task to its author."
+    },
+    {
+      "key": "a-flow-generates-the-author-s-handover-briefing",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A firing's conversation reaches neither a usage threshold nor an operator action, so a briefing that depended on either would never be delivered. Generation runs in the background and never fails the finished turn.",
+      "statement": "At the end of a run, inside a loop or flow firing's conversation, that moved a task to `completed`, the Hub SHALL generate a checkpoint carrying the notes the agent recorded for its reviewer, attributed to the loop, without any context-usage threshold or operator action. It SHALL generate nothing where the agent recorded no notes, where checkpointing is off for that agent and project, or where the project has chosen no checkpoint runner, and SHALL NOT substitute another runner."
+    },
+    {
+      "key": "a-reviewer-is-briefed-by-the-author-of-the-work-it-is-review",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "With several agents firing concurrently the most recent checkpoint is usually another task's; the reviewer needs the author's account of this work.",
+      "statement": "A review turn's briefing SHALL carry the checkpoint of the conversation whose run completed the task under review, within the same flow, and SHALL fall back to the flow's most recent checkpoint only where that author left none."
+    },
+    {
+      "key": "a-task-a-flow-declines-to-staff-for-review-is-named-to-the-o",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A count of tasks by status describes the queue, not the task the operator can act on. A completed task with no recorded completion is named as such, with reviewing it directly as the way forward, since no firing can give it provenance.",
+      "statement": "A flow SHALL record a staffing outcome naming the task for every task it considers for review and does not staff, as one the operator must resolve rather than as work in flight or deferred. Where nothing was claimable and nothing is in flight, the firing's stall reason SHALL be the first such outcome rather than a count of open tasks by status."
+    },
+    {
+      "key": "a-flow-staffs-a-review-for-work-the-operator-finished",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator marking work finished is a judgement that it is done, not that it is right; withholding review from it removes the flow's second half exactly where the operator involved themselves, and `completed` offers them no exit back to an agent.",
+      "statement": "A flow SHALL resolve a reviewer through the ordinary ladder for a task whose most recent completion the operator recorded, excluding every agent that has worked the task as `a-completed-task-is-claimable-by-an-agent-that-did-not-compl` determines, and the reason it surfaces when nobody is left SHALL say the excluded agents worked on the task, never that any of them completed it."
+    },
+    {
+      "key": "a-review-firing-s-briefing-is-a-review-briefing",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reviewer handed the implementation briefing may re-implement the work and approve its own edit. The loop's message is never rewritten, because it is its author's durable record; it may itself address reviews. At-signs in it are neutralised on delivery as `agent-run-sandboxing` requires of every firing's text.",
+      "statement": "A firing staffed as a review SHALL state that the turn is a review, SHALL NOT instruct the agent to do the task's work, SHALL present the task's description and acceptance criteria as the standard the work is checked against, and SHALL identify the loop's message that follows as its standing message delivered on every firing, without telling the agent to disregard it."
+    },
+    {
+      "key": "a-review-nobody-is-doing-is-named-whatever-its-history",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An operator can move a task into review by hand, leaving no run boundary to diagnose it. Input queued for a third agent is not the named agent reviewing it. Where the named agent produced the work and some turn is on the task, recovery waits for that turn and the task is not described as a review that agent is neglecting.",
+      "statement": "Where a task is `under_review` with an agent named on it and that agent has no turn running or deliverable on it, the flow SHALL surface the review naming the task and the agent and the operator's own remedies, however the task got there and whether or not a run was ever bound to it. Where that agent's input on the task was refused, the sentence SHALL carry the refusal's words. The flow SHALL NOT substitute another agent through this surfacing."
+    },
+    {
+      "key": "a-flow-treats-an-agent-whose-queue-is-held-as-unable-to-take",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The scheduler starts no autonomous turn for a held agent, so repeated briefings would only stack identical input for when the hold ends. A declared reviewer is still resolved; its review waits for the hold.",
+      "statement": "A flow SHALL treat an agent whose queue is held by a refusal of its provider's usage allowance as unable to take a turn: it is not the firing's default agent, not recruited for new work or for review, and a task assigned to it is briefed at most once while held, then reported in flight while input naming the task is queued for it, or surfaced with the refusal's words where that input was refused."
+    },
+    {
+      "key": "an-active-task-makes-its-assignee-unavailable-only-while-som",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An assignee is a record of who holds a task, not evidence anything will move it; counting a task nothing will move withdrew its assignee from every flow forever. This changes only staffing, not a task's status, assignee or loop, nor the roster's count of active tasks.",
+      "statement": "A flow SHALL count an agent as holding work only for a task in a live status that belongs to a loop neither ended nor archived (paused counts as live), or on which that agent has a turn running or queued within the project's hop budget, or for which a review turn is queued for it. The firing's busy refusal, the pool of agents a flow may give new work to, and reviewer availability SHALL all use this one definition."
+    },
+    {
+      "key": "a-review-nobody-is-free-to-take-names-who-holds-what",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A sentence that names nobody leaves the operator unable to see that holdings outside the flow are what starves it. The facts come from the same read that decided availability, and the reason never names pausing, ending or archiving a loop as freeing an agent, since none of them reliably does.",
+      "statement": "Where no reviewer is free, the surfaced reason SHALL name each non-archived agent on the roster with the first applicable reason: excluded from this review (with that agent's own reason), no runner bound, waiting for its provider's usage limit to reset, booked for named tasks (identifier and status, up to three, the rest counted), or running a turn. It SHALL end with the operator's own remedy for the task's status (`completed`: land it to review it yourself, without promising approval; `under_review`: decide it yourself), and SHALL suggest rejecting unwanted tasks only when some agent was booked. It SHALL fit 500 characters, counting rather than omitting agents that do not fit, and name at least one agent where any exists."
+    },
+    {
+      "key": "a-review-no-reviewer-can-approve-is-handed-to-the-operator",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A second reviewer meets the identical refusal, and a reason about staffing sends the operator to the roster where nothing they change moves the task. Where the agent the ladder selects may itself decide the evidence, or the only refusal is the author's to repair, the review is re-staffed as usual.",
+      "statement": "Where a review turn ends without a verdict and approving the task is refused for a reason only the operator can remove (evidence awaiting a decision the selected agent may not take, a drift candidate, an unsatisfiable requirement, or the Hub being unable to ask the repository whether the work merges), the Hub SHALL surface the review with that refusal's own remedy and SHALL NOT resolve a second reviewer; later firings SHALL surface the same reason and SHALL NOT suggest asking the same reviewer again."
+    },
+    {
+      "key": "an-approved-document-offers-the-operator-its-flow-or-a-way-t",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The offer is never shown for a document that is not an approved change document. After a flow is started the document names it without being reopened.",
+      "statement": "Where the app shows an approved change document, it SHALL show the unarchived flow that declares it, ended or not, and let the operator open it; when none exists it SHALL offer Start a flow, asking for name, agent, message, schedule (default every 5 minutes) and stop condition (default when the queue empties), saying the first firing is at the next schedule tick, and SHALL refuse to send with no stop condition."
+    },
+    {
+      "key": "approving-a-document-creates-the-flow-its-delivery-declares",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator is the actor, so creation does not depend on the project letting agents create scheduled work. A flow whose queue was never filled fires every tick and never stops. An agent chosen at approval applies to the flow only and never edits the document.",
+      "statement": "When the operator approves a change document whose delivery is a flow, the Hub SHALL create a flow declaring that document, named after it, using the delivery's agent (or the agent the operator chose at approval), stop condition and schedule, owning the approval's tasks, first firing at the next tick, and SHALL report the outcome in the approval. It SHALL NOT create one where an unarchived flow already declares the document (reporting that flow and whether it is running, disabled or ended), where the agent is archived or not on the project, where no stop condition is set or the stop time has passed, or where the flow would own no open task; the document is approved and its board created regardless."
+    },
+    {
+      "key": "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A Copilot review agent is a tool the reviewer may use, not a reviewer. The setting is off by default (each consult is billed), offered only for `copilot` agents, refused on write for an unknown name, and filtered to the offered list on read. A missing merge base narrows the bullet but never prevents the review.",
+      "statement": "Where an agent bound to a `copilot` runner is given a review turn and its configuration lists Copilot review agents (`code-review`, `security-review`, `rubber-duck`), the review context SHALL name them with the exact `task` dispatch Copilot accepts, the changes from the merge base with the main branch to the commit under review (or the commit's own changes where no base is found), how to retry when the model is unavailable, and that the verdict remains the reviewer's to record with `update_task`."
+    },
+    {
+      "key": "a-copilot-review-turn-records-which-review-agents-actually-r",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reviewer can claim a consultation that never happened; the Hub states what ran beside the reviewer's prose without judging it. Building the report never fails the turn.",
+      "statement": "Where a Copilot review turn's context named review agents, the run's stream SHALL record at the end of the turn, as a status event visible with diagnostics hidden, which Copilot subagents ran (with outcome and model), and which named agents did not run, including that none ran."
+    },
+    {
+      "key": "a-review-turn-is-told-the-task-s-check-result",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The reviewer reads what is recorded and starts nothing; a briefing never fails over reading checks.",
+      "statement": "Where the project has checks that apply to the work approval would merge, both review channels SHALL state the task's check result: passed; failed, naming the failing checks with the last output, that `approved` will be refused and that `revision_needed` with that output returns the task; could not run; or not finished (running, stale or not yet run), with `approved` refused until they pass. Where no check applies they SHALL say nothing about checks."
+    },
+    {
+      "key": "a-document-names-its-default-reviewer",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A planner promised a reviewer in prose with no field naming it, and the flow gave the review to whichever free agent sorted first.",
+      "statement": "A change document's delivery MAY name a default reviewer, which SHALL count as the declaration for every task whose own entry names none: resolved by the declared-reviewer rule, surfaced and never substituted when it is not an open agent, and overridden by a task's own reviewer. For a flow delivery not yet approved, the app SHALL state who reviews (the default by name, or any free agent) and flag a default that is not an open agent."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The dispatch refuses a read-only agent's work turn, so staffing one stages a step that cannot start; reviewing is what a read-only agent is for.",
+      "statement": "A flow SHALL NOT staff a read-only agent with a task's work, whether as the firing's default agent or from the pool, and SHALL still allow it to be resolved as a reviewer."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An archived agent's turn is refused, so selecting the task for it only produces a refused turn and a loop that says nothing.",
+      "statement": "Where a flow's next work task is assigned to an archived agent, the firing SHALL surface it naming the task and the agent, with unarchiving or reassigning as the remedy, and SHALL change neither the task nor the agent."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Every remedy (adding or freeing an agent, fixing a name) is something the next firing should pick up by itself; repeating an unchanged sentence every tick buries the events that carry news.",
+      "statement": "A review a flow could not staff SHALL be persisted and broadcast as a `review_unstaffed` event naming the job, loop, task and reason, and SHALL be emitted again for the same task only when its reason changes. Emitting it SHALL NOT disable, unschedule or stop the flow."
+    },
+    {
+      "key": "n5",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Measured: approvals refused by the evidence gate were reported to peers as approved because neither channel mentioned the gate. Where evidence does not govern the merge, nothing is said.",
+      "statement": "Where evidence that governs the task's merge is awaiting a decision, both review channels SHALL name each awaiting evidence id, its requirement and commit, and say `approved` can be refused until it is accepted; they SHALL tell a reviewer granted evidence decisions to accept it with `decide_evidence` first (never its own), and any other reviewer to ask the operator with `ask_user` and not report the task approved until `update_task` succeeds."
+    },
+    {
+      "key": "n6",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reviewer judging the diff alone sent correct work back for missing tests that belonged to its already-merged prerequisite.",
+      "statement": "Where the task under review depends on other tasks, both review channels SHALL name each prerequisite and whether it has merged (with its merge commit) or not, and say that merged work is on the main branch and not in this task's diff."
+    },
+    {
+      "key": "a-review-a-flow-cannot-staff-is-not-reported-as-staffed",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Such a task is claimable by nobody and its assignee looks busy, so left unrecognised it is never reviewed (F70, F142, F167). The determination reads transitions and evidence only, never the assignee or bound runs, which would name every staffed reviewer an author.",
+      "statement": "A flow SHALL NOT treat an `under_review` task as held by a reviewer when its assignee produced the work (the recorded completer where one names an agent, otherwise an agent on the task's transitions, and in either case an agent that recorded evidence for it), and SHALL instead resolve a reviewer through the ordinary ladder and reassign the task without changing its status, replacing the holder only while it has no turn running or queued on the task."
+    },
+    {
+      "key": "dispatching-a-review-staffs-the-task-whichever-path-dispatch",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Refusing after a turn begins pays for a turn whose conclusion has nowhere to go. Staffing at dispatch rather than at request means an undelivered request leaves no phantom holder. Replacing a reviewer silently would leave the history unable to explain who holds the task.",
+      "statement": "Every path that dispatches a review turn SHALL, at dispatch and before the turn begins, record the reviewer as the task's holder and then move the task into `under_review`; this SHALL be idempotent for a reviewer already holding a task in review. A review SHALL be refused before any turn or checkout is created, as a refusal reported to the requester, when the task is neither `completed` nor `under_review` (naming its status), when the reviewer completed the task or recorded evidence for it (by the same rule that refuses its verdict), or when the task is under review by a different holder (naming it) unless that holder produced the work and has no turn running or queued on the task, or is a reviewer the resolution of its own failed review replaced."
+    },
+    {
+      "key": "a-refused-review-dispatch-leaves-the-task-as-it-was-before-t",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The provisional holder exists only so the entry into review can be judged; kept after a refusal it reports a review nobody is doing and refuses every other reviewer.",
+      "statement": "A refused or deferred review dispatch SHALL leave the task's status and holder as they were before the dispatch and record no transition, whichever refusal it was and whether it arose when the request was answered or when queued input was delivered; the refusal's sentence SHALL still be recorded as why the queued input waits and SHALL count toward giving up on it where it counts."
+    },
+    {
+      "key": "a-decided-task-withdraws-its-waiting-reviews",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A review of a decided task can only be refused; left queued it would be delivered, refused up to the delivery limit, and book its reviewer meanwhile.",
+      "statement": "When a task moves to approved, rejected or revision_needed, the system SHALL withdraw, in the same transaction as the move, every queued inbound entry that asks for a review of that task, recording the verdict as its reason and announcing each withdrawal; a delivered entry, an entry naming another task, and a work entry's queued state SHALL be left unchanged."
+    },
+    {
+      "key": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
+      "modal": "MAY",
+      "party": null,
+      "rationale": "A committed document must reproduce on a machine whose roster differs from its author's, so an unresolvable name is routine, not an error. Substituting a different reviewer would misreport who checked the work; the review falls back to the operator and says why.",
+      "statement": "A document's task entry MAY name a `reviewer`; the name SHALL be kept in the document and resolved against the project's roster only when the task's review is staffed, and a name that matches no open agent SHALL NOT make the document invalid or cause another agent to be substituted."
+    },
+    {
+      "key": "creating-a-flow-is-a-distinct-tool-from-creating-a-loop",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A flow and a loop differ in what they do with their queue; an optional parameter that silently switches between them hides that.",
+      "statement": "The tool surface SHALL offer `create_flow` separately from `create_loop`. `create_flow` SHALL require a specification document and refuse `work_needs_evidence`; `create_loop` SHALL refuse a document, naming `create_flow`; both SHALL require a stop condition; each refusal SHALL say why."
+    },
+    {
+      "key": "a-task-reported-as-in-flight-is-one-an-agent-is-actually-wor",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An assignee records who holds a task, not that a turn exists; reading it as activity reports a flow as healthy while every agent is idle. An assigned task with no input for its agent is briefed once, as any resumed task.",
+      "statement": "A firing SHALL treat a task as in flight only where a turn bound to it is running, or (for work, not review) its assignee is running any turn, or input naming it is queued for its assignee within the hop budget and is not behind a delivery refused on its last attempt; it SHALL NOT brief that agent on it again, and SHALL record any other held, non-terminal task as a step it could not staff, naming the task, the agent and, where a delivery was refused, the refusal's own words."
+    },
+    {
+      "key": "a-surfaced-step-is-recorded-once-not-once-per-tick",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A condition only the operator can clear outlives many firings; repeating it buries the records of firings that did work. Comparing against the loop's latest record of any task would re-record two stuck tasks on every firing.",
+      "statement": "The Hub SHALL record and broadcast a step a firing could not staff when it is new for that task or its reason changed, judged against that task's own most recent record, and SHALL NOT record it again while it is unchanged."
+    },
+    {
+      "key": "an-agent-attributed-to-a-task-shall-be-attributed-in-a-state",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Each capacity has its own source: runs for working, the firing's selection for next, the task for assigned. The firing's private cannot-staff collection is read only by that one module, because reading it as activity showed an agent working a task whose run had already failed.",
+      "statement": "Where a loop's summary names the agent on a task, it SHALL state one of four capacities, determined in one place: `working` (a run is running against the task), `held` (staffed, nothing running and no firing can staff it), `next` (who the next firing would select) and `assigned` (the task's own assignee, nobody being selected); a surface given a name with no capacity SHALL NOT infer one."
+    },
+    {
+      "key": "a-flow-adopts-the-tasks-already-materialised-from-the-docume",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The order of approving a document and creating its loop must not decide whether the loop has a queue. Finished work stays with the loop that ran it; an adopted task keeps its assignee.",
+      "statement": "When a loop declares a specification document, at creation or by an update, the Hub SHALL, in the same transaction, give that loop every task of the document that no loop owns and every task of the document that an archived loop owns and that is neither approved nor rejected, and SHALL record a `loop_tasks_adopted` event against both loops naming the tasks moved."
+    },
+    {
+      "key": "a-change-document-declares-how-it-will-be-built-before-it-is",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "How the work is built is decided before the document is agreed; documents written before the section existed keep working, and at approval an absent delivery means no flow.",
+      "statement": "A change document's payload SHALL be able to declare `delivery`: a flow naming a default agent, at least one stop condition and a schedule, or no flow; proposing SHALL be refused while it is absent or a flow names no agent or no stop condition, and saving, re-rendering, approving and merging SHALL NOT require it."
+    },
+    {
+      "key": "a-document-s-delivery-is-checked-against-the-roster-when-it-",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roster changes independently of the document; the test is the one approval applies before creating a flow.",
+      "statement": "For a change document in `exploring` or `proposed` whose delivery is a flow, every read SHALL report whether its default agent (and its reviewer, when named) is an open agent of the project, reporting it stale with the reason otherwise, never writing the report into the file; the app SHALL show a stale delivery beside the approval action."
+    },
+    {
+      "key": "n10",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "The Hub cannot read a reviewer promised in prose, so it says what the fields will do (F508).",
+      "statement": "When a flow-delivered document names no reviewer, neither as `delivery.reviewer` nor on any local task, the submission's answer SHOULD carry an advisory `reviewer_undeclared` warning saying any free agent will review."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A change document's declared delivery, its roster check, and the flow that approval creates or the operator starts",
+      "Adopting the declared document's tasks into the flow",
+      "Staffing a firing: which tasks, which agents, how wide, what counts as in flight, and the capacity an attributed agent is reported in",
+      "Who may review finished work, how a reviewer is declared (document default or task hint) and resolved, and what happens when a review gives no verdict",
+      "Review dispatch: staffing at dispatch, refused dispatches, and withdrawing waiting reviews when a task is decided",
+      "What review briefings and the author's handover tell the reviewer, including the gates that can refuse a verdict",
+      "Surfacing steps and reviews a flow cannot staff or nobody is doing, recorded once per reason",
+      "The flow's checkpoint lineage, and `create_flow` as a tool distinct from `create_loop`"
+    ],
+    "non_goals": [
+      "Loop scheduling, stop conditions, queue authorship and a firing's work briefing: agent-loops",
+      "What each firing records and the run history: loop-firing-accountability",
+      "Transition guards, approval gates and landing: task-lifecycle-governance",
+      "The dependency gate itself: task-dependencies",
+      "Document lifecycle phases: spec-document-authority",
+      "Divergence policies for non-review runs: run-task-binding"
+    ]
+  },
+  "summary": "A flow is a loop that declares a specification document. Where a loop fires one agent on a schedule, each firing of a flow decides both the tasks and the agents, so work crosses agents (implementer to reviewer) without any agent choosing its next step. This capability owns how a change document declares its delivery and becomes a flow, the flow's adoption of the document's tasks, firing-time staffing, width, in-flight judgement and agent capacity, reviewer declaration and resolution, review dispatch and withdrawal and the briefings around review, the surfacing of steps and reviews nobody can staff or is doing, the flow's checkpoint lineage, and the `create_flow` tool.",
+  "tasks": [],
+  "title": "Agent flows"
+}

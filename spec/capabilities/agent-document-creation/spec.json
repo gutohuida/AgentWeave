@@ -1,0 +1,264 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "an agent run with a valid run credential",
+      "key": "ac1",
+      "requirement": "an-agent-may-begin-a-specification-document",
+      "then": "the creation returns 201 and the submission is accepted",
+      "when": "the agent creates a specification document and then submits a payload against the returned path"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac2",
+      "requirement": "an-agent-may-begin-a-specification-document",
+      "then": "the response and the stored document both report phase `exploring`, and the document appears in the operator's document list",
+      "when": "the agent creates a specification document"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac3",
+      "requirement": "an-agent-may-begin-a-specification-document",
+      "then": "the creation event names the agent and its run",
+      "when": "the agent creates a specification document"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac4",
+      "requirement": "an-agent-may-begin-a-specification-document",
+      "then": "the request succeeds, the value is ignored, and identity is taken from the run credential",
+      "when": "a creation request carries an actor, agent name or run identifier in its body"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac5",
+      "requirement": "the-hub-chooses-where-an-agent-s-document-lands",
+      "then": "the request succeeds, the path is not honoured, and the document lands at a path the Hub minted",
+      "when": "the agent sends a `path` in its creation request"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac6",
+      "requirement": "the-hub-chooses-where-an-agent-s-document-lands",
+      "then": "each call returns a distinct placeholder path that no record and no file occupied before",
+      "when": "the agent creates documents twice"
+    },
+    {
+      "given": "a specification directory that already holds documents",
+      "key": "ac7",
+      "requirement": "the-hub-chooses-where-an-agent-s-document-lands",
+      "then": "no pre-existing document's file is modified",
+      "when": "an agent creates documents repeatedly"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac9",
+      "requirement": "an-agent-may-begin-only-a-change-specification",
+      "then": "it is refused with 422, the refusal names `change-spec` and `roadmap`, and no document is recorded",
+      "when": "the agent asks to create a `capability`, `baseline`, `system-map` or unknown kind"
+    },
+    {
+      "given": "a document an agent created as a change specification",
+      "key": "ac10",
+      "requirement": "an-agent-may-begin-only-a-change-specification",
+      "then": "the submission is refused with `kind_is_fixed`",
+      "when": "the agent submits a payload of another kind against it"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac11",
+      "requirement": "an-agent-may-begin-only-a-change-specification",
+      "then": "a roadmap is created in the `exploring` phase",
+      "when": "the agent creates a document asking for the roadmap kind"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac12",
+      "requirement": "an-agent-may-begin-only-a-change-specification",
+      "then": "a change specification is created",
+      "when": "the agent creates a document without naming a kind"
+    },
+    {
+      "given": "a document an agent created",
+      "key": "ac13",
+      "requirement": "creating-a-document-confers-no-authority-over-it",
+      "then": "it is refused with 401 and the document stays `exploring`",
+      "when": "that agent calls the operator's propose route with its run credential"
+    },
+    {
+      "given": "the agent action surface",
+      "key": "ac14",
+      "requirement": "creating-a-document-confers-no-authority-over-it",
+      "then": "none proposes, approves, transitions or archives a specification document",
+      "when": "its routes are listed"
+    },
+    {
+      "given": "no document at a path",
+      "key": "ac16",
+      "requirement": "submission-against-a-missing-document-names-the-remedy-an-ag",
+      "then": "it is refused with 404 and the message names `create_spec_document`",
+      "when": "an agent submits a payload for that path"
+    },
+    {
+      "given": "a project with `allow_agent_jobs` false, then true",
+      "key": "ac17",
+      "requirement": "n1",
+      "then": "both creations return 201",
+      "when": "an agent creates a document under each setting"
+    },
+    {
+      "given": "a placeholder namespace with no free name, or a project whose workspace cannot be resolved",
+      "key": "ac18",
+      "requirement": "n2",
+      "then": "the call returns 409 (`naming_exhausted` for the first) and no document is recorded",
+      "when": "an agent creates a document"
+    },
+    {
+      "given": "",
+      "key": "cr53",
+      "requirement": "an-agent-may-begin-a-specification-document",
+      "then": "the Hub mints its path, the document starts `exploring`, and its creation is attributed to the run",
+      "when": "an agent creates a document"
+    },
+    {
+      "given": "",
+      "key": "ac190",
+      "requirement": "an-agent-may-begin-only-a-change-specification",
+      "then": "it is created as before, with the kind the operator supplied",
+      "when": "the operator creates a document of any kind"
+    },
+    {
+      "given": "",
+      "key": "ac191",
+      "requirement": "an-agent-may-begin-only-a-change-specification",
+      "then": "it is refused in both cases",
+      "when": "an agent attempts to create or to write a capability document"
+    },
+    {
+      "given": "",
+      "key": "ac192",
+      "requirement": "creating-a-document-confers-no-authority-over-it",
+      "then": "approval is the operator's decision, as for any document",
+      "when": "an agent-created document is proposed"
+    },
+    {
+      "given": "",
+      "key": "ac193",
+      "requirement": "creating-a-document-confers-no-authority-over-it",
+      "then": "the transition rules are the same whether the document was created by an agent or by the operator",
+      "when": "a document's phase is transitioned"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "9d23f90c23b21b965d26fb532899224784a7ec30f7b578810d1ac787712a374d",
+      "FR-2": "37456ea2969f40f9345d9d338b490ec17f79997af8eab6e702abf20f43325bf5",
+      "FR-3": "a044c744018ff74957958003c17bea8b41f30a3334b21825723ce3397c92a83f",
+      "FR-4": "6f8bc0efe68f14505bba69d79a9320b0c1bcd0080ec3712893db207a4478cf1d",
+      "FR-5": "81726418160cc343875174a54a67aedf9ea2e91aaed3d528ad6259a356ed7557",
+      "FR-6": "726b8d2200a670991d82a3927894e801392e37fbaac6c30a5d813e6f04f9f16b",
+      "FR-7": "0ae856d857d162ac15dcd6643bc48e25c6f1d0da9f6278590150479536bea29b"
+    },
+    "high_water": 7,
+    "requirements": {
+      "an-agent-may-begin-a-specification-document": "FR-1",
+      "an-agent-may-begin-only-a-change-specification": "FR-3",
+      "creating-a-document-confers-no-authority-over-it": "FR-4",
+      "n1": "FR-6",
+      "n2": "FR-7",
+      "submission-against-a-missing-document-names-the-remedy-an-ag": "FR-5",
+      "the-hub-chooses-where-an-agent-s-document-lands": "FR-2"
+    },
+    "retired": {}
+  },
+  "design": "D1 — One minting rule. The agent route and the operator's `POST /project/documents` share `spec_service.mint_document_path`, so there is exactly one definition of a free path (free in the records and on disk).\n\nD2 — The path arrives second. Creation returns a meaningless placeholder (a colour and a mythic animal); the agent calls `rename_spec_document(path, subject)` once it knows the subject, and the Hub derives the real path. Renaming is specified in spec-document-authority.\n\nD3 — Lax body by design. `SpecDocumentCreate` deliberately does not inherit the strict `RequestModel` (it is the one entry in `LAX_BY_DESIGN`, hub/tests/test_request_strictness.py): stray `path`, `actor`, `agent` or `run_id` fields are ignored, which keeps placement and identity unexpressible without making a forward-compatible client fail.\n\nD4 — Creation writes through the normal save path. The route records the document, then saves a minimal payload (`schema_version`, `kind`, `title`) through `spec_service.save_document`, so the file exists and is rendered the same way as any later submission.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_agent_created_documents.py — creation, attribution, distinct placeholders, ignored identity/path fields, 409s, three-call flow, no self-propose, allow_agent_jobs independence",
+      "hub/tests/test_spec_roadmaps.py — test_an_agent_creates_a_roadmap, test_no_kind_is_a_change_spec, test_any_other_kind_is_refused_naming_both_kinds",
+      "hub/tests/test_spec_documents_api.py — test_submitting_to_a_document_that_does_not_exist_says_how_to_start_one",
+      "hub/tests/test_spec_capability_kind.py — kind_is_fixed on submission"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "An agent that reaches something worth writing up — a finding, a proposal, a design — should record it and keep working. If only the operator could create documents, every such moment became a stop. Letting an agent create documents must not, however, let the least trusted caller choose where a write lands, create a document it can never fill, or gate its own work.",
+  "requirements": [
+    {
+      "key": "an-agent-may-begin-a-specification-document",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent that needs a document should record its finding and keep working rather than stop for the operator. A document an agent created is an ordinary document: same phase, same lifecycle, listed for the operator like any other. Identity comes from the credential because a request body is caller-controlled.",
+      "statement": "The Hub SHALL let an agent create a specification document through `create_spec_document` (`POST /agent-actions/spec/documents/create`); the document SHALL start in the `exploring` phase, SHALL be attributed to the calling agent and run taken from the run credential, and SHALL be immediately writable by that agent through `submit_spec_document`."
+    },
+    {
+      "key": "the-hub-chooses-where-an-agent-s-document-lands",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Path validation is the single control keeping a document from being written anywhere beneath `spec/`. A minted path makes a wrong destination unexpressible rather than merely refused, and minting against the disk as well as the records guarantees creation never overwrites an existing file. Stray fields are ignored rather than refused so they cost the caller nothing and gain it nothing.",
+      "statement": "The creation operation SHALL NOT accept a path, filename or slug; the Hub SHALL mint a meaningless placeholder path that is free against both the project's recorded documents and the files in the specification directory, and SHALL ignore (not refuse) any path or identity field a caller sends anyway."
+    },
+    {
+      "key": "an-agent-may-begin-only-a-change-specification",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A capability document is created directly in `current` and agents may never write one, so allowing an agent to create it would produce a document that can never be filled in — success that yields an unusable artefact. Change specifications and roadmaps are the kinds whose lifecycle is authored by an agent and gated by the operator. A refusal that names what is allowed tells the agent what to do next.",
+      "statement": "The creation operation SHALL create a `change-spec` document by default or a `roadmap` when the agent asks for one, and SHALL refuse every other kind with a 422 (`kind_not_creatable`) whose message names the two kinds an agent may create."
+    },
+    {
+      "key": "creating-a-document-confers-no-authority-over-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Authorship is not authority. An agent that could approve what it wrote would be the only party in its own gate. The agent surface offers no transition route, and the operator's transition routes refuse a run credential.",
+      "statement": "An agent that created a document SHALL have no capability over it beyond what any agent has over any document; in particular it SHALL NOT be able to propose, approve, transition or archive it."
+    },
+    {
+      "key": "submission-against-a-missing-document-names-the-remedy-an-ag",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The refusal is where a confused agent looks next. Naming the remedy the agent actually has keeps it working; naming a rule that no longer exists would have the product contradict its own tool descriptions.",
+      "statement": "When an agent submits a payload for a path with no document, the Hub SHALL refuse it with a 404 whose message tells the agent to call `create_spec_document` (then `rename_spec_document`), and SHALL NOT say that only the operator may create documents."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "That allowance gates scheduled jobs an agent may create. Reusing it here would silently stop agents from recording findings in every project that has not opted into agent jobs.",
+      "statement": "Document creation by an agent SHALL NOT depend on the project's agent-jobs allowance (`allow_agent_jobs`)."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Minting is bounded so a full namespace yields a refusal rather than a hang, and a document whose file cannot be written must not be recorded.",
+      "statement": "When the Hub cannot mint a free placeholder name, or cannot resolve the project's workspace, the creation operation SHALL refuse with a 409 and create nothing."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The agent creation route `POST /agent-actions/spec/documents/create` and its MCP tool `create_spec_document`",
+      "Which kinds an agent may create, and where the created document lands",
+      "That creation needs no standing allowance and, when no placeholder or workspace can be had, refuses and creates nothing",
+      "That creating a document confers no authority over it",
+      "The refusal an agent sees when it submits against a path with no document"
+    ],
+    "non_goals": [
+      "Renaming a document and the path a subject yields: spec-document-authority",
+      "What a submission validates and stores, and the operator-only phase transitions: spec-document-authority",
+      "Roadmap and slice semantics: spec-roadmaps",
+      "When a spec-chat turn should write into the operator's open document instead of creating one: spec-chat-session"
+    ]
+  },
+  "summary": "An agent may start its own specification document (a change specification or a roadmap) through `create_spec_document`, without asking the operator first and whatever the project's agent-jobs setting. The Hub chooses where the document lands, the document starts in `exploring` like any operator-created one, and creating it gives the agent no say over its lifecycle.",
+  "tasks": [],
+  "title": "Agent document creation"
+}

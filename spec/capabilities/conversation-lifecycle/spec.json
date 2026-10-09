@@ -1,0 +1,338 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a conversation with no title",
+      "key": "ac1",
+      "requirement": "a-conversation-carries-a-human-readable-title",
+      "then": "its title is that message's text and the conversation listing returns it",
+      "when": "its first message is queued"
+    },
+    {
+      "given": "a first message longer than 120 characters",
+      "key": "ac2",
+      "requirement": "a-conversation-carries-a-human-readable-title",
+      "then": "the stored title ends at a word boundary within the limit and contains no partial word",
+      "when": "it is queued"
+    },
+    {
+      "given": "a titled conversation",
+      "key": "ac2a",
+      "requirement": "a-conversation-carries-a-human-readable-title",
+      "then": "the title is unchanged",
+      "when": "a later message is queued"
+    },
+    {
+      "given": "a conversation that predates titling with a recorded first message",
+      "key": "ac3",
+      "requirement": "a-conversation-carries-a-human-readable-title",
+      "then": "it is returned titled from that message, not labelled by its identifier",
+      "when": "it is listed"
+    },
+    {
+      "given": "no open conversation",
+      "key": "ac4",
+      "requirement": "a-conversation-records-where-it-came-from",
+      "then": "its origin is `operator`",
+      "when": "the operator starts one and sends its first message"
+    },
+    {
+      "given": "a peer recipient with no bound conversation",
+      "key": "ac5",
+      "requirement": "a-conversation-records-where-it-came-from",
+      "then": "the conversation created for the recipient has origin `peer`",
+      "when": "an agent sends it a message"
+    },
+    {
+      "given": "a scheduled job",
+      "key": "ac5a",
+      "requirement": "a-conversation-records-where-it-came-from",
+      "then": "that conversation's origin is `job`",
+      "when": "it fires and opens a conversation"
+    },
+    {
+      "given": "a conversation",
+      "key": "ac6",
+      "requirement": "a-conversation-records-where-it-came-from",
+      "then": "its origin is unchanged",
+      "when": "it is renamed, archived or unarchived"
+    },
+    {
+      "given": "a conversation",
+      "key": "ac7",
+      "requirement": "the-operator-can-rename-a-conversation",
+      "then": "the title is stored, recorded as operator-set, and every listing shows it",
+      "when": "the operator submits a new title"
+    },
+    {
+      "given": "an operator-set title and title generation on",
+      "key": "ac8",
+      "requirement": "the-operator-can-rename-a-conversation",
+      "then": "the operator's title is unchanged",
+      "when": "a turn completes"
+    },
+    {
+      "given": "a conversation",
+      "key": "ac9",
+      "requirement": "the-operator-can-rename-a-conversation",
+      "then": "the Hub answers 400 with the reason and the title is unchanged",
+      "when": "the operator submits an empty title or one over 120 characters"
+    },
+    {
+      "given": "a new project whose title setting was never changed",
+      "key": "ac10",
+      "requirement": "title-generation-is-a-project-setting-off-by-default",
+      "then": "titles stay truncated and no titling command is spawned",
+      "when": "a turn completes"
+    },
+    {
+      "given": "the project settings panel",
+      "key": "ac11",
+      "requirement": "title-generation-is-a-project-setting-off-by-default",
+      "then": "controls let them choose generation instead of truncation and choose the runner",
+      "when": "the operator opens it"
+    },
+    {
+      "given": "generation on and no operator title",
+      "key": "ac12",
+      "requirement": "title-generation-is-a-project-setting-off-by-default",
+      "then": "the conversation's title is replaced with the generated one and a `conversation_titled` event is recorded",
+      "when": "an agent's first turn completes"
+    },
+    {
+      "given": "a conversation already titled from its current excerpt",
+      "key": "ac12a",
+      "requirement": "title-generation-is-a-project-setting-off-by-default",
+      "then": "no titling command is spawned",
+      "when": "a later turn completes"
+    },
+    {
+      "given": "a title runner id from another project",
+      "key": "ac12b",
+      "requirement": "title-generation-is-a-project-setting-off-by-default",
+      "then": "the setting is rejected",
+      "when": "the operator saves it"
+    },
+    {
+      "given": "generation on",
+      "key": "ac13",
+      "requirement": "n1-title-generation-never-affects-the-conversation",
+      "then": "no run row is written and the conversation's timeline has no entry for it",
+      "when": "a titling run completes"
+    },
+    {
+      "given": "generation on",
+      "key": "ac14",
+      "requirement": "n1-title-generation-never-affects-the-conversation",
+      "then": "the conversation keeps its truncated title and the agent's run is unaffected",
+      "when": "the titling command fails or times out"
+    },
+    {
+      "given": "an idle conversation",
+      "key": "ac15",
+      "requirement": "a-conversation-can-be-archived-and-unarchived",
+      "then": "its lifecycle is `archived`, its archived time is recorded, and the default listing no longer includes it",
+      "when": "the operator archives it"
+    },
+    {
+      "given": "an archived conversation",
+      "key": "ac16",
+      "requirement": "a-conversation-can-be-archived-and-unarchived",
+      "then": "its full timeline is rendered unchanged",
+      "when": "the operator opens it from the archived listing"
+    },
+    {
+      "given": "an archived conversation",
+      "key": "ac17",
+      "requirement": "a-conversation-can-be-archived-and-unarchived",
+      "then": "its lifecycle is `open` and it appears in the default listing again",
+      "when": "the operator unarchives it"
+    },
+    {
+      "given": "a project with archived conversations under two agents",
+      "key": "ac17a",
+      "requirement": "a-conversation-can-be-archived-and-unarchived",
+      "then": "it reports the total archived count and the count per agent",
+      "when": "the project conversation listing is requested"
+    },
+    {
+      "given": "a conversation whose run is still running",
+      "key": "ac18",
+      "requirement": "archiving-is-refused-while-work-is-outstanding",
+      "then": "the Hub answers 409 naming the running run and the run continues",
+      "when": "the operator archives it"
+    },
+    {
+      "given": "a conversation holding an undelivered queued entry",
+      "key": "ac19",
+      "requirement": "archiving-is-refused-while-work-is-outstanding",
+      "then": "the Hub answers 409 naming the undelivered messages and the entry stays queued",
+      "when": "the operator archives it"
+    },
+    {
+      "given": "the run has ended and the queue has drained",
+      "key": "ac20",
+      "requirement": "archiving-is-refused-while-work-is-outstanding",
+      "then": "it is archived",
+      "when": "the operator archives the conversation again"
+    },
+    {
+      "given": "an archived conversation",
+      "key": "ac21",
+      "requirement": "an-agent-addressing-an-archived-conversation-is-told-how-to-",
+      "then": "the send is refused with 409, the response states that it is archived, says to omit `conversation_id`, and restates the content",
+      "when": "an agent sends a message naming it"
+    },
+    {
+      "given": "a send to an archived conversation was refused",
+      "key": "ac22",
+      "requirement": "an-agent-addressing-an-archived-conversation-is-told-how-to-",
+      "then": "it has no new message and no new queued entry, and no other conversation received the message",
+      "when": "the conversation is inspected"
+    },
+    {
+      "given": "an archived conversation of agent `A`",
+      "key": "n2-ac1",
+      "requirement": "n2-triggering-an-unavailable-conversation-says-why",
+      "then": "the Hub answers 409 saying it is archived, to unarchive it, or to omit `conversation_id`",
+      "when": "the operator triggers `A` naming it"
+    },
+    {
+      "given": "a conversation belonging to agent `B`",
+      "key": "n2-ac2",
+      "requirement": "n2-triggering-an-unavailable-conversation-says-why",
+      "then": "the Hub answers 409 naming `B` as its owner",
+      "when": "a trigger for `A` names it"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-10": "9025ccb1d531ae410f485b1b8ebf420e52c6d29fa024835649fccf2d3c438e16",
+      "FR-11": "be690315caa76b19db4694f4c65db7149630f25a8a98f1c1ee407fb349e78364",
+      "FR-12": "0ac9dcaee272094c24728fae9d500fba402e9dd17d90643a4d2294ed88550c8d",
+      "FR-13": "79b8b3a5cb040f150111321ef6f7d41bbc4b885fbc587e3733ae5a6ec6e19ae3",
+      "FR-14": "e0277e0fdf915afb86ba1674d055fac2c536676ed9a9b20d1cdb2454cabfba8a",
+      "FR-15": "0c969f6796dc802c21ca39287f145eb7b11bb1c2688a6a463a3ca43addf7f738",
+      "FR-16": "4f464747c99cbee84af013ebce8ba7be226a9447e8b20cd34bc70bfcadcd76b9",
+      "FR-8": "3ea6e7c849e3c5a0dd1e29eb0fb935bce253b9d484c68c3da8ead71151298a36",
+      "FR-9": "63eb5d56f42c0485fad0e0b71fea49a9ffccbe4019254748733d24b3b9969813"
+    },
+    "high_water": 16,
+    "requirements": {
+      "a-conversation-can-be-archived-and-unarchived": "FR-12",
+      "a-conversation-carries-a-human-readable-title": "FR-8",
+      "a-conversation-records-where-it-came-from": "FR-9",
+      "an-agent-addressing-an-archived-conversation-is-told-how-to-": "FR-14",
+      "archiving-is-refused-while-work-is-outstanding": "FR-13",
+      "n1-title-generation-never-affects-the-conversation": "FR-15",
+      "n2-triggering-an-unavailable-conversation-says-why": "FR-16",
+      "the-operator-can-rename-a-conversation": "FR-10",
+      "title-generation-is-a-project-setting-off-by-default": "FR-11"
+    },
+    "retired": {}
+  },
+  "design": "D1. Truncation is the floor and is applied when the first message is queued (`name_conversation`, a no-op once titled); pre-existing untitled rows are named lazily on listing rather than by a migration.\n\nD2. Generation is a best-effort upgrade that records an event, not a run: a run row under the agent's name would gate the scheduler and stall the agent's queue.\n\nD3. Operator-set titles are a flag (`title_set_by_operator`), checked before and after generation so a rename made while the model runs wins.\n\nD4. Archive refuses instead of resolving: it never stops a run or drops a queued entry. Unarchive is never refused.\n\nD5. Origin is a required argument of `new_conversation`, not a default.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_conversation_titles.py (truncation, first-message naming, rename, backfill)",
+      "hub/tests/test_title_generation.py (off by default, operator title wins, no run row, no timeline entry, project directory, excerpt dedupe)",
+      "hub/tests/test_conversation_archive.py, test_conversation_archive_refusal.py (round trip, listings, counts, refusals)",
+      "hub/tests/test_archived_send_refusal.py (three-part refusal, nothing written, MCP parity)"
+    ],
+    "limits": [
+      "The `spec` origin is declared in `CONVERSATION_ORIGINS` (hub/hub/db/models.py:403) but no code creates a conversation with it; the spec workspace reuses the agent's conversation."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Operators navigate many conversations per agent. Identifiers are unreadable as labels, a conversation's provenance matters when reasoning about posture and delivery, and tidying the list must never strand queued work or stop a run.",
+  "requirements": [
+    {
+      "key": "a-conversation-carries-a-human-readable-title",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Navigation must be readable without knowing ids; the first message is the best cheap description of a thread.",
+      "statement": "A conversation SHALL be titled from the text of the first message queued into it, whitespace collapsed and cut at a word boundary within 120 characters (a single longer word is cut at the limit); later messages MUST NOT retitle it. A conversation that predates titling SHALL be titled from its first message when it is next listed. No operator surface SHALL show a conversation's identifier as its label; a conversation with no title is shown as new."
+    },
+    {
+      "key": "a-conversation-records-where-it-came-from",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Provenance can only be known where a conversation is created; a default would record every peer and job conversation as the operator's, and posture inheritance depends on it.",
+      "statement": "Every conversation SHALL record an immutable `origin` at creation from the set `operator`, `peer`, `handoff`, `spec`, `job`, `divergence`: `operator` when the operator's trigger, an operator-sent message or an operator answer opens it, `peer` when a peer agent's message or agent request opens it for the recipient, `handoff` for a cutover successor, `job` for a scheduled firing, and `divergence` when a diverged run's work is escalated or restaffed to a different agent. Creating a conversation without an origin SHALL be an error."
+    },
+    {
+      "key": "the-operator-can-rename-a-conversation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An operator's own name for a thread is a decision, not a draft for the titler to improve.",
+      "statement": "`PATCH /api/v1/projects/{project_id}/agents/{agent}/conversations/{conversation_id}` SHALL set the title (whitespace collapsed) and record it as operator-set, after which no generated title SHALL replace it; an empty title or one over 120 characters SHALL be refused with 400 and a stated reason, and an unknown conversation with 404. The rail's row menu SHALL offer Rename inline, treating an empty or unchanged entry as a cancel."
+    },
+    {
+      "key": "title-generation-is-a-project-setting-off-by-default",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Truncation is the free floor; generation is opt-in. Recording a run under the agent's name would make the agent look busy and stall its queue, and the excerpt check stops every later turn paying for the same title.",
+      "statement": "A project SHALL carry `conversation_title_mode` (`truncate`, the default, or `generate`) and an optional `conversation_title_runner_id` from the same project, both editable in the project settings panel. Under `generate`, after each completed turn the Hub SHALL run a one-shot titling command, in the project's own directory, on the chosen runner or else the agent's own runner, from the opening message and first reply; it SHALL replace the title only when the operator has not set one (re-checked after generation), SHALL skip the call when the same excerpt already produced the current title, and SHALL record a `conversation_titled` event rather than a run."
+    },
+    {
+      "key": "n1-title-generation-never-affects-the-conversation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A title is never worth failing or delaying a completed turn.",
+      "statement": "A titling run MUST NOT be bound to any conversation, resume any provider session, appear in any timeline or change any context usage; when it fails, times out (45 s), has no usable runner, or the project directory cannot be resolved, the truncated title SHALL stay and the agent's run SHALL be unaffected."
+    },
+    {
+      "key": "a-conversation-can-be-archived-and-unarchived",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Archiving is reversible tidying, never deletion; the counts let navigation offer \"show archived\" without a second request.",
+      "statement": "The operator SHALL be able to archive a conversation (`POST .../conversations/{id}/archive`), setting its lifecycle to `archived` and recording the time, and to unarchive it (`POST .../unarchive`), returning it to `open` and clearing that time. Archiving an archived conversation SHALL succeed as a no-op, and unarchiving SHALL never be refused. Conversation listings SHALL exclude archived conversations by default, return exactly them with `lifecycle=archived`, and the project listing SHALL report archived counts in total and per agent. An archived conversation SHALL remain fully readable."
+    },
+    {
+      "key": "archiving-is-refused-while-work-is-outstanding",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Nothing delivers into an archived conversation, so archiving would strand queued work, and stopping a live run from a row menu destroys work with no undo.",
+      "statement": "Archiving SHALL be refused with 409 and a sentence naming the obstruction when the conversation has a running run or an undelivered queued entry, and the system MUST NOT stop a run or discard a queued entry to satisfy the request."
+    },
+    {
+      "key": "an-agent-addressing-an-archived-conversation-is-told-how-to-",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent whose send is refused should not have to reconstruct a message from context it has already moved past.",
+      "statement": "A message sent to an archived recipient conversation SHALL be refused with 409 stating that the conversation is archived, instructing the sender to omit `conversation_id` to reach a new conversation, and restating the submitted content; no message or queued entry SHALL be created against it, the message MUST NOT be re-homed, and an `agent_action_rejected` event SHALL be recorded. The MCP send tool SHALL carry the same three parts."
+    },
+    {
+      "key": "n2-triggering-an-unavailable-conversation-says-why",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One generic sentence for a typo, another agent's thread and an archived one named no repair.",
+      "statement": "A trigger naming a conversation that cannot be continued SHALL be refused with 409 and a sentence distinguishing the cause: unknown in this project, belonging to another agent (naming it), or archived (advising to unarchive it), each also saying that omitting `conversation_id` starts a new conversation."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Conversation titles: truncation, operator rename, optional model generation",
+      "Conversation origin",
+      "Archive and unarchive, and their refusals",
+      "Refusing sends and triggers addressed to an archived conversation"
+    ],
+    "non_goals": [
+      "Navigation of conversations in the rail (agent-conversation-workspace)",
+      "Archiving as part of a handoff cutover (agent-conversation-handoff)",
+      "Runtime override inheritance between conversations (agent-conversation-workspace)"
+    ]
+  },
+  "summary": "A conversation is a durable Hub record, independent of the provider session beneath it. It carries a readable title (truncated from its first message, optionally upgraded by a model, never overwriting a title the operator set) and an immutable origin. It can be renamed, archived and unarchived; archiving is reversible tidying, refused while work is outstanding, and a sender addressing an archived conversation is told what to do instead and handed back its message.",
+  "tasks": [],
+  "title": "Conversation lifecycle"
+}

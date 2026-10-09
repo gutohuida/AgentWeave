@@ -1,0 +1,221 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "A project with no instructions saved",
+      "key": "ac1",
+      "requirement": "hub-stores-project-instructions-per-project",
+      "then": "It returns `{\"content\": \"\"}`.",
+      "when": "`GET /api/v1/project/instructions` is called"
+    },
+    {
+      "given": "A project",
+      "key": "ac2",
+      "requirement": "hub-stores-project-instructions-per-project",
+      "then": "The content is stored and a later GET returns it.",
+      "when": "`PUT /api/v1/project/instructions` sends `{\"content\": \"...\"}`"
+    },
+    {
+      "given": "Non-empty project instructions",
+      "key": "ac3",
+      "requirement": "hub-prepends-instructions-to-charter-content",
+      "then": "The instructions appear before the charter content.",
+      "when": "An agent's charter context or full context is requested"
+    },
+    {
+      "given": "Empty or absent project instructions",
+      "key": "ac4",
+      "requirement": "hub-prepends-instructions-to-charter-content",
+      "then": "The charter content is returned unchanged.",
+      "when": "`GET /agents/context` is requested"
+    },
+    {
+      "given": "Stored instructions that read successfully",
+      "key": "ac7",
+      "requirement": "hub-ui-provides-instructions-editor",
+      "then": "The textarea is pre-filled with them and the session notice is shown.",
+      "when": "The operator opens the Instructions screen"
+    },
+    {
+      "given": "Instructions read successfully",
+      "key": "ac5",
+      "requirement": "hub-ui-provides-instructions-editor",
+      "then": "The content is written with PUT and the save is reported as successful.",
+      "when": "The operator edits them, without blanking non-empty content, and saves"
+    },
+    {
+      "given": "A read that fails, including with no response body",
+      "key": "ac8",
+      "requirement": "an-unread-instructions-editor-is-not-presented-as-the-projec",
+      "then": "No textarea is shown, the section says the instructions could not be loaded and that nothing stored changed, and a retry is offered.",
+      "when": "The screen renders"
+    },
+    {
+      "given": "A failed read",
+      "key": "ac10",
+      "requirement": "an-unread-instructions-editor-is-not-presented-as-the-projec",
+      "then": "The textarea appears pre-filled.",
+      "when": "The operator retries and it succeeds"
+    },
+    {
+      "given": "Instructions shown after a successful read",
+      "key": "ac12",
+      "requirement": "an-unread-instructions-editor-is-not-presented-as-the-projec",
+      "then": "The textarea and its content stay on screen.",
+      "when": "A background refetch fails"
+    },
+    {
+      "given": "The screen open on project A",
+      "key": "ac13",
+      "requirement": "an-unread-instructions-editor-is-not-presented-as-the-projec",
+      "then": "No textarea shows project A's content.",
+      "when": "Project B is selected and its read has not succeeded"
+    },
+    {
+      "given": "A read that failed or has not settled",
+      "key": "ac20",
+      "requirement": "save-cannot-write-instructions-that-were-never-read",
+      "then": "No write request is issued and the stored content is unchanged.",
+      "when": "The operator interacts with the screen"
+    },
+    {
+      "given": "A read that succeeded, first time or after retry",
+      "key": "ac23",
+      "requirement": "save-cannot-write-instructions-that-were-never-read",
+      "then": "The edit is written.",
+      "when": "The operator edits and saves"
+    },
+    {
+      "given": "Non-empty stored instructions read successfully",
+      "key": "ac14",
+      "requirement": "a-save-that-would-blank-stored-instructions-is-confirmed-fir",
+      "then": "No write is issued until the operator confirms in a dialog naming the project and what would be lost.",
+      "when": "The operator empties the editor, or leaves only whitespace, and saves"
+    },
+    {
+      "given": "The confirmation dialog",
+      "key": "ac16",
+      "requirement": "a-save-that-would-blank-stored-instructions-is-confirmed-fir",
+      "then": "Nothing is written and the editor keeps what they typed.",
+      "when": "The operator declines"
+    },
+    {
+      "given": "The confirmation dialog",
+      "key": "ac17",
+      "requirement": "a-save-that-would-blank-stored-instructions-is-confirmed-fir",
+      "then": "The content is written exactly as typed.",
+      "when": "The operator confirms"
+    },
+    {
+      "given": "A non-empty save, or an empty save over empty stored instructions",
+      "key": "ac18",
+      "requirement": "a-save-that-would-blank-stored-instructions-is-confirmed-fir",
+      "then": "It is written without confirmation.",
+      "when": "The operator saves"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "38eb7cb723184362d00ad2786fd9abb6eacca18918edf82dca8b963c0137f231",
+      "FR-2": "e8e3087e7b09ab2967c04f063817a38fbd52553f401f8db5b6117eb2f0086fa7",
+      "FR-3": "3f6b651850a9b244044209e4a3ef4647e47f606443faabd3c443335816b1988d",
+      "FR-4": "5aaded6000404704d98e77c92501050cab46fc6f0aff9086b38b27e83a9ff340",
+      "FR-5": "245689e96fb3024603000eab1a2719a61ea92dab9b11d70166ffc74ffbb3accd",
+      "FR-6": "da8f793a367296b25d79faf76a975323f603f31f7ee08e80f324c4e5914d15a2",
+      "FR-7": "1a39b2b80cf8839f0aa37cf64076631ae4e73d54bdb2e0dadf538463d496d5e1",
+      "FR-8": "f87995f5822158fe9d39cce1d1ce793e6e8466e644d25d101821ae9a1aac6cb1",
+      "FR-9": "7d985d52352dae344a90aacec567d0be6dc007fd528a34c26a1a29ff629c71d2"
+    },
+    "high_water": 9,
+    "requirements": {
+      "a-save-that-would-blank-stored-instructions-is-confirmed-fir": "FR-8",
+      "an-unread-instructions-editor-is-not-presented-as-the-projec": "FR-7",
+      "hub-prepends-instructions-to-charter-content": "FR-5",
+      "hub-stores-project-instructions-per-project": "FR-4",
+      "hub-ui-provides-instructions-editor": "FR-6",
+      "save-cannot-write-instructions-that-were-never-read": "FR-9"
+    },
+    "retired": {
+      "r1": "FR-1",
+      "r2": "FR-2",
+      "r3": "FR-3"
+    }
+  },
+  "design": "D1 One row per project, replaced in place; no history. That is why the client guards are strict.\n\nD2 The guards live in the client (`hub/ui/src/components/instructions/InstructionsPage.tsx`): the screen renders from `data` first, so a refetch error never removes a loaded editor, and the blanking check compares against the last successful read, with whitespace counted as empty on both sides.\n\nD3 The PUT body is a strict request model: an unknown field (for example `contents`) is refused by name instead of being read as an empty string and blanking the instructions.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_instructions.py",
+      "hub/ui/src/__tests__/instructionsUnreadEditor.test.tsx, hub/ui/src/__tests__/instructionsClearConfirmation.test.tsx"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Instructions are a single row with no history. An editor that saves over content it never loaded, or blanks it with the same click as a one-word edit, destroys the only copy.",
+  "requirements": [
+    {
+      "key": "hub-stores-project-instructions-per-project",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The database is the only source; there is no local-file mirror and no revision history.",
+      "statement": "The Hub SHALL store one instructions text per project in `project_instructions`, return an empty string when none is stored, and replace it in place on `PUT`, accepting the empty string as a deliberate clear."
+    },
+    {
+      "key": "hub-prepends-instructions-to-charter-content",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Project-wide rules frame every role, so they come first.",
+      "statement": "When a project's instructions are non-empty, the Hub SHALL place them before the charter content in `GET /agents/context` (separated by a rule) and as a `## Project Instructions` section before the `## Charter` section of an agent's full context; when they are empty, the charter SHALL be returned unchanged."
+    },
+    {
+      "key": "hub-ui-provides-instructions-editor",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator edits project-wide guidance in the app, where every other project setting lives.",
+      "statement": "Once the selected project's instructions have been read, the Instructions screen SHALL present them in a markdown textarea with a Save control and a notice that changes take effect when agents start a new session."
+    },
+    {
+      "key": "an-unread-instructions-editor-is-not-presented-as-the-projec",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Empty instructions and unreadable instructions are different situations; showing the second as the first invites the operator to overwrite content they cannot see.",
+      "statement": "The Instructions screen SHALL present an editable textarea only after the selected project's instructions have been read successfully; a failed read SHALL be stated in the section with a retry that needs no reload, a pending read SHALL show loading, and a later failed background read SHALL NOT remove content already shown."
+    },
+    {
+      "key": "save-cannot-write-instructions-that-were-never-read",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The route accepts an empty string on purpose, so only the client can tell an intended clear from state it never loaded.",
+      "statement": "The Instructions screen SHALL NOT issue a write for a project whose stored instructions have not been read successfully."
+    },
+    {
+      "key": "a-save-that-would-blank-stored-instructions-is-confirmed-fir",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A blanking save is unrecoverable; a confirmation on every save would be dismissed by habit.",
+      "statement": "The Instructions screen SHALL ask the operator to confirm, naming the project and how much would be lost, before saving empty or whitespace-only content over stored instructions that contain more than whitespace, compared against the content last read successfully; declining SHALL write nothing and keep the editor as it was, and every other save SHALL proceed without confirmation."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "`GET` and `PUT /api/v1/project/instructions`",
+      "Placing instructions ahead of charter content in agent context",
+      "The Environment > Instructions screen"
+    ],
+    "non_goals": [
+      "Charter authoring (agent-charter)",
+      "How agent context is assembled overall (agent-context-onboarding)"
+    ]
+  },
+  "summary": "Each project has one block of instructions, stored in the Hub database, served to every agent ahead of its charter, and edited on the project's Instructions screen, which never writes content it did not read and asks before blanking what is stored.",
+  "tasks": [],
+  "title": "Project instructions"
+}

@@ -1,0 +1,121 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "",
+      "key": "ac1",
+      "requirement": "agentweave-yml-accepts-runner-opencode",
+      "then": "`load_agentweave_yml()` SHALL return an `AgentConfig` with `runner=\"opencode\"` and `model=\"ollama/qwen2.5-coder:7b\"` without raising `ConfigValidationError`",
+      "when": "`agentweave.yml` contains an agent with `runner: opencode` and `model: ollama/qwen2.5-coder:7b`"
+    },
+    {
+      "given": "",
+      "key": "ac2",
+      "requirement": "agentweave-yml-accepts-runner-opencode",
+      "then": "`load_agentweave_yml()` SHALL return an `AgentConfig` with `runner=\"opencode\"` and `model=\"anthropic/claude-sonnet-4-5\"` without raising `ConfigValidationError`",
+      "when": "`agentweave.yml` contains an agent with `runner: opencode` and `model: anthropic/claude-sonnet-4-5`"
+    },
+    {
+      "given": "",
+      "key": "ac3",
+      "requirement": "agentweave-yml-accepts-runner-opencode",
+      "then": "`load_agentweave_yml()` SHALL return an `AgentConfig` with `runner=\"opencode\"` and `model=None` without raising `ConfigValidationError`",
+      "when": "`agentweave.yml` contains an agent with `runner: opencode` and no `model` field"
+    },
+    {
+      "given": "",
+      "key": "ac4",
+      "requirement": "agentweave-yml-opencode-agents-support-roles-env-yolo",
+      "then": "`load_agentweave_yml()` SHALL return an `AgentConfig` with `roles=[\"developer\"]` and `env=[\"SOME_VAR\"]`",
+      "when": "`agentweave.yml` contains an opencode agent with `roles: [developer]` and `env: [SOME_VAR]`"
+    },
+    {
+      "given": "",
+      "key": "ac5",
+      "requirement": "generate-agentweave-yml-serializes-opencode-agents-correctly",
+      "then": "the generated `agentweave.yml` SHALL contain `runner: opencode` and `model: ollama/qwen2.5-coder:7b` under that agent's key",
+      "when": "a session contains an opencode agent with `runner=\"opencode\"` and `model=\"ollama/qwen2.5-coder:7b\"`"
+    },
+    {
+      "given": "",
+      "key": "ac6",
+      "requirement": "agentweave-init-printed-instructions-include-opencode-exampl",
+      "then": "the printed instructions SHALL mention that `agentweave mcp-setup` configures `opencode.json`",
+      "when": "`agentweave init` completes with at least one opencode agent in the session"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "6f6230aa66d71d31293a4f6f960661450e16a321054913554db07ba6770351b6",
+      "FR-2": "fb98da364fe7fe3c505aef386869ae51f984030ba310000e7ad686a8a251c363",
+      "FR-3": "218e1bcab5926b3ae4c644202fa5b6470b084f1257f925b9175c990617e53865",
+      "FR-4": "ae15fb7bdccc8adfb875a1220ad7eef7bdfca090722ce5a26f43c9438ab68801"
+    },
+    "high_water": 4,
+    "requirements": {
+      "agentweave-init-printed-instructions-include-opencode-exampl": "FR-4",
+      "agentweave-yml-accepts-runner-opencode": "FR-1",
+      "agentweave-yml-opencode-agents-support-roles-env-yolo": "FR-2",
+      "generate-agentweave-yml-serializes-opencode-agents-correctly": "FR-3"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/opencode-config/spec.md (4 requirements, 6 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenarios-state-no-starting-state: 6 of 6 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "agentweave-yml-accepts-runner-opencode",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "The system SHALL accept `runner: opencode` as a valid value in an agent's configuration block in `agentweave.yml`, passing validation without error."
+    },
+    {
+      "key": "agentweave-yml-opencode-agents-support-roles-env-yolo",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "The system SHALL accept the same optional fields for opencode agents as for all other runner types."
+    },
+    {
+      "key": "generate-agentweave-yml-serializes-opencode-agents-correctly",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "The system SHALL serialize opencode agents back to `agentweave.yml` with the correct `runner: opencode` and `model` fields when `generate_agentweave_yml()` is called."
+    },
+    {
+      "key": "agentweave-init-printed-instructions-include-opencode-exampl",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "When a user runs `agentweave init` and the session includes an opencode agent, the system SHALL print a reminder that `agentweave mcp-setup` will write `opencode.json`."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Opencode config"
+}

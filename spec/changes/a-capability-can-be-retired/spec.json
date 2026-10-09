@@ -1,0 +1,199 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the trial Hub on :8010, a fresh testbed project with capabilities old (2 requirements) and new",
+      "key": "drive",
+      "requirement": "app",
+      "then": "old is archived with its 2 requirements retired, the phase event names the reason and new, a merge into old is refused, a reindex leaves them retired, and spec/index.json lists old as archived",
+      "when": "the operator opens old in Chromium, presses Retire, gives a reason and picks new as absorbing it (scripts/drive/d1008_retire_capability_drive.py)"
+    },
+    {
+      "given": "a current capability",
+      "key": "refusals",
+      "requirement": "retire",
+      "then": "each is refused with its own code and nothing changes",
+      "when": "retiring it is asked with no reason, with itself or a change document as the absorber, by an agent, or while an open task links one of its requirements"
+    },
+    {
+      "given": "an archived capability whose file still lists its requirements",
+      "key": "retired-stay",
+      "requirement": "requirements-retire",
+      "then": "every one of its requirements is still retired and coverage does not report it unserved",
+      "when": "the project is reindexed"
+    },
+    {
+      "given": "an archived capability",
+      "key": "merge-refused",
+      "requirement": "frozen",
+      "then": "the Hub answers 409 and the file is unchanged",
+      "when": "a merge or a fold names it"
+    },
+    {
+      "given": "a capability retired with a reason and an absorbing capability",
+      "key": "event",
+      "requirement": "recorded",
+      "then": "a phase event from current to archived carries both, the file shows archived, and the index lists it as archived",
+      "when": "its history and the index are read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "b996538298b2d50ad055cf321ae26dc476123ff378b21b9e1e8504e5fb3ea996",
+      "FR-2": "b8b6cd4aa6e96c8cfaa68e7bef2d2a0de786b3844e6147683e974ff3e93f6d51",
+      "FR-3": "47e41801be1e0485586cb93a728fe495fd27c8aadb3453615b14f5ee2c69cca3",
+      "FR-4": "ef1e050964b6b24292dc0848fe5f97d75c2a00ff2f212eb4d1fb190162b4ef21",
+      "FR-5": "9f81e25709139624aed074c1eb3400156b13ba992fabd3fdf65503410652aaa9"
+    },
+    "high_water": 5,
+    "requirements": {
+      "app": "FR-5",
+      "frozen": "FR-3",
+      "recorded": "FR-4",
+      "requirements-retire": "FR-2",
+      "retire": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2: a migration. HAZARD: 0121 recreates spec_documents to relax ck_spec_documents_kind_phase to (capability AND phase IN (current, archived)) OR (not capability AND phase != current); it reaches the operator's real :8000 database at their next restart, and the UI bundle reaches :8000's app at its next reload. Nothing existing changes value. Rollback: downgrade sets any archived capability back to current, then restores the narrow CHECK (retirements are lost; requirement rows stay retired until the next reindex). Decision (operator 2026-10-08: 'Build retire a capability'): reuse archived rather than a new phase, so the vocabulary and the index's statuses do not grow; the reason and absorbing capability live on the phase event, not a column. Requirements are retired by one rule in the index (archived capability => retired), not by editing the file, so the file stays the record. Folds into spec-document-authority.",
+  "evidence": {
+    "checked": [
+      "hub/hub/deletion.py:201 refuses a capability (delete_capability)",
+      "hub/hub/spec_lifecycle.py TRANSITIONS has no edge out of current",
+      "hub/hub/db/models.py ck_spec_documents_kind_phase ties capability to current",
+      "hub/hub/spec_index.py requirements_from_payload indexes every payload requirement as active"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "one-off",
+  "open_questions": [],
+  "problem": "F536: quiet-hours (a sample), trace-timeline (never built) and opencode-config (runner removed) describe nothing in the code, and two capabilities that overlap cannot be combined: DELETE refuses a capability (delete_capability), `current` has no transition, and a merge can only empty one, leaving an empty `current` capability in the map, the index and coverage.",
+  "requirements": [
+    {
+      "key": "retire",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A corpus that cannot lose a capability keeps describing features that do not exist. Open work against it must be decided first, or that work would serve requirements nobody holds any more.",
+      "statement": "The operator MUST be able to move a capability from current to archived, stating a reason and optionally naming the current capability that absorbed it; the move MUST be refused without a reason, when the named capability is not another current capability, when the actor is not the operator, and while a task that is neither approved nor rejected links one of its active requirements."
+    },
+    {
+      "key": "requirements-retire",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Coverage, linking and evidence all read the requirement index; a retired capability's requirements must leave all three at once, and a reindex from the unchanged file must not bring them back.",
+      "statement": "Every requirement of an archived capability MUST be retired when it is archived and MUST stay retired whenever the document is indexed again."
+    },
+    {
+      "key": "frozen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The file is the record of what the capability said when it was retired.",
+      "statement": "A merge or fold into an archived capability MUST be refused, writing nothing."
+    },
+    {
+      "key": "recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Why a capability left, and where its behaviour went, must be readable later from the document's own history.",
+      "statement": "Retiring MUST record a phase event carrying the reason and the absorbing capability, re-render the file with its archived status, and keep the document in spec/index.json with status archived."
+    },
+    {
+      "key": "app",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Retiring is an operator decision made where the operator reads the capability.",
+      "statement": "A current capability's view in the app MUST offer Retire, asking for the reason and optionally the absorbing capability, and MUST show the Hub's refusal when one is returned."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A current -> archived edge for capability documents, operator-only, with a required reason and an optional absorbing capability",
+      "Retiring every requirement of a retired capability, and keeping them retired on any later reindex",
+      "Refusing a merge or fold into a retired capability",
+      "A Retire action on a capability in the app"
+    ],
+    "non_goals": [
+      "Deleting a capability or its file: the file and its history stay",
+      "Un-retiring: there is no transition out of archived, as for changes",
+      "Moving the requirements to the absorbing capability: that is a separate, authored merge",
+      "Retiring change, roadmap or system-map documents: they have their own archive rules"
+    ]
+  },
+  "summary": "The operator can retire a capability that no longer describes the product: with a stated reason, and optionally naming the capability that absorbed it. A retired capability is archived: its requirements are retired, so they leave coverage and nothing can link to them; no merge or fold can write to it; and its file stays as the record of what it said.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1008_retire_capability_drive.py against :8010: the 'drive' criterion, run before the build.",
+      "files": [
+        "scripts/drive/d1008_retire_capability_drive.py"
+      ],
+      "from": null,
+      "key": "drive-first",
+      "requirements": [
+        "app"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing on today's Hub"
+    },
+    {
+      "depends_on": [
+        "drive-first"
+      ],
+      "description": "Failing tests first in hub/tests/test_a_capability_can_be_retired.py. Migration 0121 lets a capability be archived; spec_lifecycle adds the current -> archived edge with its guards; spec_index retires an archived capability's requirements; merge and fold refuse an archived capability; the phase route takes absorbed_by.",
+      "files": [
+        "hub/hub/migrations/versions/0121_a_capability_can_be_retired.py",
+        "hub/hub/db/models.py",
+        "hub/hub/spec_lifecycle.py",
+        "hub/hub/spec_index.py",
+        "hub/hub/spec_service.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests/test_a_capability_can_be_retired.py"
+      ],
+      "from": null,
+      "key": "backend",
+      "requirements": [
+        "retire",
+        "requirements-retire",
+        "frozen",
+        "recorded"
+      ],
+      "reviewer": null,
+      "title": "Retire a capability in the Hub"
+    },
+    {
+      "depends_on": [
+        "backend"
+      ],
+      "description": "Vitest first; the capability view offers Retire with a reason and an optional absorbing capability; bundle refreshed; the drive passes on a restarted :8010.",
+      "files": [
+        "hub/ui/src/components/spec/SpecPhaseBar.tsx",
+        "hub/ui/src/api/spec.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "app"
+      ],
+      "reviewer": null,
+      "title": "Retire action on a capability in the app"
+    }
+  ],
+  "title": "A capability can be retired"
+}

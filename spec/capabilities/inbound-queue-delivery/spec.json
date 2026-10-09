@@ -1,0 +1,988 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "",
+      "key": "ac68",
+      "requirement": "a-delivered-turn-reaches-the-model-intact",
+      "then": "the agent receives every line of that prompt",
+      "when": "the Hub starts a run whose turn prompt spans several lines"
+    },
+    {
+      "given": "",
+      "key": "ac69",
+      "requirement": "a-delivered-turn-reaches-the-model-intact",
+      "then": "that input's full content formed part of the prompt that run was started with, with its file mentions neutralised where the operator did not write it",
+      "when": "a queued input is marked delivered against a run"
+    },
+    {
+      "given": "",
+      "key": "ac70",
+      "requirement": "a-delivered-turn-reaches-the-model-intact",
+      "then": "every character of its content reaches the prompt, and the only difference is the neutralisation of each mention",
+      "when": "a queued input from another agent that contains a file mention is delivered"
+    },
+    {
+      "given": "an agent CLI installed on Windows as an npm `.cmd` shim that forwards all arguments to one executable",
+      "key": "acn13",
+      "requirement": "a-delivered-turn-reaches-the-model-intact",
+      "then": "the executable is spawned directly and receives every line",
+      "when": "the Hub starts a run whose prompt spans several lines"
+    },
+    {
+      "given": "",
+      "key": "ac137",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "then": "the input records that a delivery attempt failed",
+      "when": "a run fails and its input returns to the queue the provider did not refuse the run for a spent allowance"
+    },
+    {
+      "given": "",
+      "key": "ac138",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "then": "the input it was carrying returns to the queue the attempt is counted",
+      "when": "a run's runtime ends abnormally after the turn has begun"
+    },
+    {
+      "given": "",
+      "key": "ac139",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "then": "its input is not returned to the queue",
+      "when": "a run completes"
+    },
+    {
+      "given": "",
+      "key": "ac140",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "then": "its input is not returned to the queue",
+      "when": "the operator stops a run"
+    },
+    {
+      "given": "",
+      "key": "ac141",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "then": "its input is not returned to the queue the conversation's binding is unchanged",
+      "when": "a run fails because the runtime reported a different provider session than the one bound"
+    },
+    {
+      "given": "",
+      "key": "ac149",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "then": "a later input for the same agent is delivered",
+      "when": "an input the system has given up on was blocking the queue"
+    },
+    {
+      "given": "",
+      "key": "ac151",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "then": "the system attempts to deliver it again no operator action is required to make that happen",
+      "when": "a run fails and its input returns to the queue"
+    },
+    {
+      "given": "",
+      "key": "ac152",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "then": "the run is not reported as having left that task's work behind",
+      "when": "a run bound to a task fails and its input returns to the queue"
+    },
+    {
+      "given": "",
+      "key": "ac153",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "then": "the run is reported as having left that task's work behind",
+      "when": "a run bound to a task fails and none of its input returns to the queue"
+    },
+    {
+      "given": "",
+      "key": "acn14",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "then": "its input returns to the queue with its conversation and arrival position unchanged, and delivery is attempted again without operator action",
+      "when": "a run fails for any reason other than a stop or a binding conflict"
+    },
+    {
+      "given": "",
+      "key": "ac154",
+      "requirement": "a-re-delivered-turn-says-the-earlier-attempt-was-cut-off",
+      "then": "the delivered turn states that an earlier attempt did not finish it names which attempt this is",
+      "when": "input is delivered to an agent after one failed attempt"
+    },
+    {
+      "given": "",
+      "key": "ac155",
+      "requirement": "a-re-delivered-turn-says-the-earlier-attempt-was-cut-off",
+      "then": "the delivered turn states that an earlier attempt did not finish it names attempt 2",
+      "when": "input is delivered to an agent after one delivery the provider's allowance refused"
+    },
+    {
+      "given": "",
+      "key": "ac156",
+      "requirement": "a-re-delivered-turn-says-the-earlier-attempt-was-cut-off",
+      "then": "the delivered turn says nothing about earlier attempts",
+      "when": "input is delivered to an agent for the first time"
+    },
+    {
+      "given": "",
+      "key": "ac157",
+      "requirement": "a-re-delivered-turn-says-the-earlier-attempt-was-cut-off",
+      "then": "only the retried one states that an earlier attempt did not finish",
+      "when": "a turn carries both a retried input and one never tried before"
+    },
+    {
+      "given": "a project whose hop budget is exceeded by one queued agent-originated entry a second entry in the same conversation that is within budget",
+      "key": "ac181",
+      "requirement": "the-hop-budget-bounds-delivery-not-only-admission",
+      "then": "only the within-budget entry is delivered the over-budget entry remains queued",
+      "when": "the agent's turn starts"
+    },
+    {
+      "given": "an agent-originated entry held back because its hop depth exceeds the budget",
+      "key": "ac182",
+      "requirement": "the-hop-budget-bounds-delivery-not-only-admission",
+      "then": "the operator's message is delivered; the over-budget entry remains queued; the turn's depth is the operator message's depth",
+      "when": "the operator sends a message into the same conversation"
+    },
+    {
+      "given": "a turn admitted by an entry at a given hop depth",
+      "key": "ac183",
+      "requirement": "the-hop-budget-bounds-delivery-not-only-admission",
+      "then": "the resulting entry's hop depth is greater than the admitting entry's depth",
+      "when": "the agent sends a message during that turn"
+    },
+    {
+      "given": "an entry held back because its hop depth exceeds the budget",
+      "key": "ac184",
+      "requirement": "an-entry-held-back-by-the-hop-budget-is-visible-and-has-a-st",
+      "then": "the entry is delivered on the agent's next turn the decision to release it is recorded messages the agent sends during that turn are within budget again",
+      "when": "the operator chooses to continue that chain"
+    },
+    {
+      "given": "an entry held back because its hop depth exceeds the budget",
+      "key": "ac185",
+      "requirement": "an-entry-held-back-by-the-hop-budget-is-visible-and-has-a-st",
+      "then": "it is withdrawn and never delivered",
+      "when": "the operator discards it"
+    },
+    {
+      "given": "one or more entries held back because their hop depth exceeds the budget",
+      "key": "ac186",
+      "requirement": "an-entry-held-back-by-the-hop-budget-is-visible-and-has-a-st",
+      "then": "those entries become deliverable without any further operator action",
+      "when": "the operator raises the project's hop budget above those depths"
+    },
+    {
+      "given": "an agent's queue holds a review entry and a work entry in the same conversation",
+      "key": "ac199",
+      "requirement": "a-turn-admits-entries-of-one-kind-only",
+      "then": "the delivered turn carries only the review entry the work entry remains queued",
+      "when": "the review entry is the earliest admitted"
+    },
+    {
+      "given": "an agent's queue holds a review entry and a work entry in the same conversation",
+      "key": "ac200",
+      "requirement": "a-turn-admits-entries-of-one-kind-only",
+      "then": "the delivered turn carries only the work entry the review entry remains queued",
+      "when": "the work entry is the earliest admitted"
+    },
+    {
+      "given": "an entry left queued because a turn admitted only the other kind",
+      "key": "ac201",
+      "requirement": "a-turn-admits-entries-of-one-kind-only",
+      "then": "the deferred entry is delivered",
+      "when": "the agent's next turn is scheduled"
+    },
+    {
+      "given": "queued input containing an entry naming a task to review and an entry naming a different task to work on",
+      "key": "ac202",
+      "requirement": "a-delivered-turn-carries-a-review-or-ordinary-work-never-bot",
+      "then": "the turn is refused the reason names both tasks and states that a turn has one subject no agent process is started",
+      "when": "a turn is started from that input"
+    },
+    {
+      "given": "queued input containing an entry naming a task to review and an entry naming that same task to work on",
+      "key": "ac203",
+      "requirement": "a-delivered-turn-carries-a-review-or-ordinary-work-never-bot",
+      "then": "the turn is refused",
+      "when": "a turn is started from that input"
+    },
+    {
+      "given": "queued input containing more than one entry naming a task to work on and no review",
+      "key": "ac204",
+      "requirement": "a-delivered-turn-carries-a-review-or-ordinary-work-never-bot",
+      "then": "the turn is delivered the run is bound to one of those tasks by the existing ordering rule",
+      "when": "a turn is started from that input"
+    },
+    {
+      "given": "queued input containing one or more entries naming the same task to review and no work",
+      "key": "ac205",
+      "requirement": "a-delivered-turn-carries-a-review-or-ordinary-work-never-bot",
+      "then": "the turn is delivered with the review checkout the run is bound to the task under review",
+      "when": "a turn is started from that input"
+    },
+    {
+      "given": "a turn refused for batching a review and ordinary work",
+      "key": "ac206",
+      "requirement": "a-delivered-turn-carries-a-review-or-ordinary-work-never-bot",
+      "then": "the entries are still queued none is marked delivered",
+      "when": "the operator inspects the agent's queue"
+    },
+    {
+      "given": "",
+      "key": "ac207",
+      "requirement": "a-request-refused-for-what-it-asked-is-answered-as-refused",
+      "then": "the request is answered as a failure the answer carries the refused condition's own status the answer carries the refusal's own sentence",
+      "when": "an operator submits input to an agent the system determines the input cannot be delivered because of what the request asked for"
+    },
+    {
+      "given": "",
+      "key": "ac208",
+      "requirement": "a-request-refused-for-what-it-asked-is-answered-as-refused",
+      "then": "the request is answered as accepted the answer states the refusal's own sentence as what the input is waiting for the input remains queued, so that repairing the environment delivers it",
+      "when": "an operator submits input to an agent delivery is refused because the environment the agent would run in is not ready"
+    },
+    {
+      "given": "",
+      "key": "ac209",
+      "requirement": "a-request-refused-for-what-it-asked-is-answered-as-refused",
+      "then": "the request is answered as accepted the answer states what the input is waiting for",
+      "when": "an operator submits input to an agent delivery is deferred for a reason that can clear on its own"
+    },
+    {
+      "given": "",
+      "key": "ac210",
+      "requirement": "a-request-refused-for-what-it-asked-is-answered-as-refused",
+      "then": "the request is answered as accepted",
+      "when": "an operator submits input to an agent another delivery in progress takes that input before this request examines the queue"
+    },
+    {
+      "given": "",
+      "key": "ac211",
+      "requirement": "a-refusal-is-reported-only-to-the-input-it-is-about",
+      "then": "this request is answered as accepted the answer states that the input is waiting behind other input the answer does not carry the other conversation's refusal",
+      "when": "an operator submits input to an agent the system refuses a turn it was building from an older input belonging to another conversation"
+    },
+    {
+      "given": "",
+      "key": "ac212",
+      "requirement": "a-start-is-reported-only-to-the-input-it-is-about",
+      "then": "the request is answered as started the conversation identified as started is the one named",
+      "when": "a request names a conversation and the started turn carried that conversation's input"
+    },
+    {
+      "given": "",
+      "key": "ac213",
+      "requirement": "a-start-is-reported-only-to-the-input-it-is-about",
+      "then": "the request is not answered as started the answer states that the named conversation's input is waiting behind other input the answer identifies the conversation whose input the turn carried the named conversation's input remains queued",
+      "when": "a request names a conversation and the started turn carried a different conversation's input"
+    },
+    {
+      "given": "",
+      "key": "ac214",
+      "requirement": "a-start-is-reported-only-to-the-input-it-is-about",
+      "then": "the request is not answered as started the answer states that the named conversation had nothing queued the answer does not state that its input is waiting behind other input",
+      "when": "a request names a conversation that has no input queued the started turn carried another conversation's input"
+    },
+    {
+      "given": "",
+      "key": "ac215",
+      "requirement": "a-start-is-reported-only-to-the-input-it-is-about",
+      "then": "the request is not answered as started the answer states the reason no turn started no conversation is identified as started",
+      "when": "a request names a conversation and no turn started"
+    },
+    {
+      "given": "",
+      "key": "ac216",
+      "requirement": "a-start-is-reported-only-to-the-input-it-is-about",
+      "then": "the record names the conversation the reason belongs to rather than the conversation addressed",
+      "when": "the system records that a turn did not start, in answer to an act addressed to one conversation"
+    },
+    {
+      "given": "",
+      "key": "ac217",
+      "requirement": "the-operator-is-told-when-the-turn-that-began-is-not-the-one",
+      "then": "the interface confirms that this conversation is continuing",
+      "when": "the started conversation is the one displayed"
+    },
+    {
+      "given": "",
+      "key": "ac218",
+      "requirement": "the-operator-is-told-when-the-turn-that-began-is-not-the-one",
+      "then": "the interface states that the displayed conversation's work is waiting behind other input identifies the conversation that began",
+      "when": "a turn began in a conversation other than the one displayed"
+    },
+    {
+      "given": "",
+      "key": "ac219",
+      "requirement": "the-operator-is-told-when-the-turn-that-began-is-not-the-one",
+      "then": "the interface states that nothing started gives the stated reason",
+      "when": "no turn started"
+    },
+    {
+      "given": "",
+      "key": "ac220",
+      "requirement": "input-refused-for-what-it-asked-does-not-stay-queued-for-ret",
+      "then": "the input that request submitted is no longer queued for delivery the record of why it will not be delivered names the refusal",
+      "when": "a request is answered with a refusal about what that request asked for"
+    },
+    {
+      "given": "",
+      "key": "ac221",
+      "requirement": "input-refused-for-what-it-asked-does-not-stay-queued-for-ret",
+      "then": "the input that request submitted remains queued for delivery",
+      "when": "a request is answered as accepted because the environment the agent would run in is not ready"
+    },
+    {
+      "given": "",
+      "key": "ac222",
+      "requirement": "input-refused-for-what-it-asked-does-not-stay-queued-for-ret",
+      "then": "the system reports that the input has been withdrawn it does not report that it gave up on the input after failed delivery attempts",
+      "when": "a request is answered with a refusal about what that request asked for the system had already reported that request's input as queued"
+    },
+    {
+      "given": "",
+      "key": "ac223",
+      "requirement": "the-operator-reads-why-a-submission-was-refused",
+      "then": "the operator is shown the refusal's own sentence",
+      "when": "a submission to an agent is refused"
+    },
+    {
+      "given": "",
+      "key": "ac224",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "no delivery attempt is counted against the earlier input the earlier input remains queued",
+      "when": "an operator submits input to an agent whose environment is not ready the operator submits further input to the same agent"
+    },
+    {
+      "given": "",
+      "key": "ac225",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "every input they submitted is delivered none of it was discarded while they were making the agent able to run",
+      "when": "input has been waiting for an agent that cannot run at all the operator has submitted further input and asked the system to start the waiting work the operator then makes the agent able to run"
+    },
+    {
+      "given": "",
+      "key": "ac226",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "no delivery attempt is counted against that input the input remains queued",
+      "when": "input is waiting for an agent whose environment is not ready the operator asks the system to start the waiting work without submitting anything new"
+    },
+    {
+      "given": "",
+      "key": "ac227",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "no delivery attempt is counted against that input",
+      "when": "input is waiting for an agent whose environment is not ready another agent's turn ends, causing every queued agent to be re-evaluated"
+    },
+    {
+      "given": "",
+      "key": "ac228",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "a delivery attempt is counted against that input the existing limit still applies to it",
+      "when": "a run carrying queued input fails"
+    },
+    {
+      "given": "",
+      "key": "ac229",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "a delivery attempt is counted against that input the existing limit still applies to it",
+      "when": "a turn is refused because of what the queued input asked for"
+    },
+    {
+      "given": "",
+      "key": "ac230",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "a delivery attempt is counted against that input the existing limit still applies to it, so it cannot hold the queue indefinitely",
+      "when": "a turn is refused for a reason that would not prevent the agent's other queued input from being delivered"
+    },
+    {
+      "given": "",
+      "key": "ac231",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "no delivery attempt is counted against the input at the head of the queue it is still queued after repeated attempts to start the agent it is delivered once the operator clears the condition",
+      "when": "an agent's own workspace cannot be prepared every other input queued for that agent would have run in that same workspace"
+    },
+    {
+      "given": "",
+      "key": "ac232",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "a delivery attempt is counted against the input at the head of the queue the existing limit still applies to it, so it cannot hold the other input indefinitely",
+      "when": "an agent's own workspace cannot be prepared other input queued for that agent is about a task that has a checkout of its own, so it would run there"
+    },
+    {
+      "given": "",
+      "key": "ac233",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "no delivery attempt is counted against the input at the head of the queue it is still queued after repeated attempts to start the agent",
+      "when": "an agent's own workspace cannot be prepared the only other input queued for that agent is about a task whose work executes in the agent's own workspace rather than in a checkout of its own"
+    },
+    {
+      "given": "",
+      "key": "ac234",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "no delivery attempt is counted against the input at the head of the queue it is still queued after repeated attempts to start the agent",
+      "when": "an agent's own workspace cannot be prepared the only other input queued for that agent is input the system would not have started — because it is beyond the limits that decide what may start, or because the thread it arrived in is no longer open"
+    },
+    {
+      "given": "",
+      "key": "ac235",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "no delivery attempt is counted against the input at the head of the queue it is still queued after repeated attempts to start the agent",
+      "when": "an agent's own workspace cannot be prepared the only other input queued for that agent asks it to review work for which nothing has been recorded to review"
+    },
+    {
+      "given": "",
+      "key": "ac236",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "a delivery attempt is counted against the input at the head of the queue the existing limit still applies to it",
+      "when": "an agent's own workspace cannot be prepared other input queued for that agent asks it to review work the system can put in front of it"
+    },
+    {
+      "given": "",
+      "key": "ac237",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "a delivery attempt is counted against the input at the head of the queue the existing limit still applies to it",
+      "when": "an agent's own workspace cannot be prepared other input queued for that agent names work the operator has already decided about the thread that input arrived in is about work that does have a checkout of its own"
+    },
+    {
+      "given": "",
+      "key": "ac238",
+      "requirement": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "then": "a delivery attempt is counted against that input the existing limit still applies to it",
+      "when": "the checkout for the task a turn is about cannot be prepared"
+    },
+    {
+      "given": "",
+      "key": "ac239",
+      "requirement": "a-run-that-has-ended-releases-the-queue-behind-it",
+      "then": "the queued input is delivered to a successor run without any further operator action",
+      "when": "a run reaches a terminal status and the work that follows recording it raises input for that agent is queued behind the run"
+    },
+    {
+      "given": "",
+      "key": "ac240",
+      "requirement": "a-run-that-has-ended-releases-the-queue-behind-it",
+      "then": "it is delivered without the operator opening the project, saving settings, or relocating the workspace",
+      "when": "input arrived for an agent while it was busy, so it was queued rather than delivered and the run it was waiting behind reaches a terminal status and the work that follows raises"
+    },
+    {
+      "given": "",
+      "key": "ac241",
+      "requirement": "a-run-that-has-ended-releases-the-queue-behind-it",
+      "then": "the second agent is re-evaluated as a consequence of the first run ending",
+      "when": "a run holding a task's checkout ends and the work that follows recording its outcome raises a second agent has input queued that was refused while that checkout was held"
+    },
+    {
+      "given": "",
+      "key": "ac242",
+      "requirement": "a-run-that-has-ended-releases-the-queue-behind-it",
+      "then": "the run still reports the outcome it reached, rather than being relabelled as failed",
+      "when": "a run reaches a terminal status and later bookkeeping raises"
+    },
+    {
+      "given": "",
+      "key": "ac243",
+      "requirement": "a-run-that-has-ended-releases-the-queue-behind-it",
+      "then": "input queued behind that run is delivered to a successor run, exactly as it is for a run executed over a process transport",
+      "when": "a run executed over the app-server transport reaches a terminal status and the work that follows recording it raises"
+    },
+    {
+      "given": "",
+      "key": "ac244",
+      "requirement": "every-started-run-reaches-a-terminal-status-without-a-restar",
+      "then": "the run reaches a terminal status and carries the reason it ended",
+      "when": "a run's execution raises after its runtime has started and before it records an outcome"
+    },
+    {
+      "given": "",
+      "key": "ac245",
+      "requirement": "every-started-run-reaches-a-terminal-status-without-a-restar",
+      "then": "the agent accepts and executes a subsequent turn without the Hub being restarted",
+      "when": "a run's execution has failed in that way"
+    },
+    {
+      "given": "",
+      "key": "ac246",
+      "requirement": "every-started-run-reaches-a-terminal-status-without-a-restar",
+      "then": "it reaches a terminal status exactly as a run executed over a process transport does",
+      "when": "a run executed over the app-server transport raises after its runtime has started"
+    },
+    {
+      "given": "",
+      "key": "ac247",
+      "requirement": "giving-up-on-queued-input-goes-on-to-the-input-behind-it",
+      "then": "that input is delivered in a turn started by the same pass no other event was needed to start it",
+      "when": "the input at the head of an agent's queue is refused for the last time its limit allows, no other input rode in the turn the system gave up on the next input queued for the same agent is in another conversation, and nothing refuses the turn built from it"
+    },
+    {
+      "given": "",
+      "key": "ac248",
+      "requirement": "giving-up-on-queued-input-goes-on-to-the-input-behind-it",
+      "then": "one delivery attempt is counted against the input behind it that input remains queued the pass stops",
+      "when": "the system gives up on the head of an agent's queue the input behind it is refused too"
+    },
+    {
+      "given": "",
+      "key": "ac249",
+      "requirement": "giving-up-on-queued-input-goes-on-to-the-input-behind-it",
+      "then": "one delivery attempt in total is counted against the riding input in that pass the riding input remains queued",
+      "when": "input that no attempt has been counted against rides in a turn built from other input, the same pass carries the riding input again, in its next attempt, and that attempt is refused too"
+    },
+    {
+      "given": "",
+      "key": "ac250",
+      "requirement": "giving-up-on-queued-input-goes-on-to-the-input-behind-it",
+      "then": "no other input for that agent is attempted in that pass no delivery attempt is counted against the head",
+      "when": "the turn built from the head of an agent's queue is deferred for a reason that clears on its own"
+    },
+    {
+      "given": "",
+      "key": "ac251",
+      "requirement": "giving-up-on-queued-input-goes-on-to-the-input-behind-it",
+      "then": "the system gives up on each of them once the pass ends",
+      "when": "every input queued for an agent is at the last attempt its limit allows each is refused in turn"
+    },
+    {
+      "given": "",
+      "key": "ac252",
+      "requirement": "giving-up-on-queued-input-goes-on-to-the-input-behind-it",
+      "then": "the request is answered as started, in the conversation it submitted to",
+      "when": "the operator submits input to an agent whose queue holds older input in another the pass that request triggers gives up on the older input and then starts a turn carrying the operator's input"
+    },
+    {
+      "given": "",
+      "key": "ac253",
+      "requirement": "giving-up-on-queued-input-goes-on-to-the-input-behind-it",
+      "then": "what the pass reports is that input's refusal it does not report that the queue was empty",
+      "when": "the pass gives up on the only input queued for an agent"
+    },
+    {
+      "given": "",
+      "key": "ac267",
+      "requirement": "an-agent-s-queue-status-presents-a-remembered-refusal-as-a-r",
+      "then": "the queue status names that other agent and that task as why the input waits",
+      "when": "an agent's input names a task, and another agent is running a turn on that task"
+    },
+    {
+      "given": "",
+      "key": "ac268",
+      "requirement": "an-agent-s-queue-status-presents-a-remembered-refusal-as-a-r",
+      "then": "the queue status does not state that the other agent is running a turn on that task it presents the refusal as what the last attempt was refused with",
+      "when": "an agent's input was refused because another agent held the task's checkout, and that other agent's turn has since ended, and no attempt has been made since"
+    },
+    {
+      "given": "",
+      "key": "ac269",
+      "requirement": "an-agent-s-queue-status-presents-a-remembered-refusal-as-a-r",
+      "then": "the status presents that refusal's own words as the last attempt's refusal",
+      "when": "none of the conditions the queue status can check holds, and the last delivery attempt was refused"
+    },
+    {
+      "given": "",
+      "key": "ac270",
+      "requirement": "an-agent-s-queue-status-presents-a-remembered-refusal-as-a-r",
+      "then": "the queue status reports that reason exactly as before",
+      "when": "an agent's input waits because the agent is running a turn"
+    },
+    {
+      "given": "",
+      "key": "ac271",
+      "requirement": "an-agent-s-queue-status-presents-a-remembered-refusal-as-a-r",
+      "then": "the queue status still answers it presents the refusal as what the last attempt was refused with",
+      "when": "an agent's last delivery attempt was refused, and checking whether another agent holds the task's checkout fails"
+    },
+    {
+      "given": "an agent whose runtime fails to start",
+      "key": "ac272",
+      "requirement": "an-undelivered-message-shall-say-how-its-last-attempt-ended",
+      "then": "the message shows that it was not delivered, with the Hub's reason it shows that the last attempt failed, with the error that attempt recorded",
+      "when": "the operator's message is abandoned after its attempts fail"
+    },
+    {
+      "given": "",
+      "key": "ac273",
+      "requirement": "an-undelivered-message-shall-say-how-its-last-attempt-ended",
+      "then": "the message shows that it was not delivered, with the Hub's reason it names no attempt",
+      "when": "the Hub gives up on a message without starting any run for it"
+    },
+    {
+      "given": "the operator has the conversation open",
+      "key": "ac274",
+      "requirement": "an-undelivered-message-shall-say-how-its-last-attempt-ended",
+      "then": "the message is shown as not delivered without a reload",
+      "when": "the Hub gives up on a message in it without starting a run"
+    },
+    {
+      "given": "a chain whose next hop exceeds the project's hop budget",
+      "key": "acn20",
+      "requirement": "a-peer-message-held-by-the-hop-budget-tells-its-sender",
+      "then": "the entry is queued and not delivered, a `queue_chain_suspended` event is recorded, and the send's response says the message is held by the hop budget",
+      "when": "an agent sends the next peer message"
+    },
+    {
+      "given": "a queue entry the Hub gave up on",
+      "key": "acn21",
+      "requirement": "a-non-queued-entry-cannot-be-withdrawn-or-released-and-says-w",
+      "then": "the request is refused 409 with the Hub's reason for giving up",
+      "when": "the operator tries to withdraw it"
+    },
+    {
+      "given": "a queued entry within the hop budget",
+      "key": "acn22",
+      "requirement": "a-non-queued-entry-cannot-be-withdrawn-or-released-and-says-w",
+      "then": "the request is refused saying the hop budget is not what holds it",
+      "when": "the operator asks to release it"
+    },
+    {
+      "given": "a queued entry selected for a turn",
+      "key": "acn23",
+      "requirement": "delivery-and-withdrawal-cannot-both-claim-one-entry",
+      "then": "the delivery claims nothing, no run is created for it, and the withdrawal stands",
+      "when": "the operator withdraws it before the delivery's write"
+    },
+    {
+      "given": "",
+      "key": "acn24",
+      "requirement": "the-trigger-refuses-at-submission-what-can-never-run",
+      "then": "the request is answered 409 and no queue entry is created",
+      "when": "the operator triggers an archived agent"
+    },
+    {
+      "given": "",
+      "key": "acn25",
+      "requirement": "the-trigger-refuses-at-submission-what-can-never-run",
+      "then": "the request is answered 409 with the decided-task sentence and nothing is queued",
+      "when": "the operator triggers an agent naming a task already approved"
+    },
+    {
+      "given": "an agent with queued input whose bound CLI is not installed",
+      "key": "acn26",
+      "requirement": "the-queue-status-names-the-present-reason-input-waits",
+      "then": "the reason names the missing CLI rather than an attempt count",
+      "when": "its queue status is read"
+    },
+    {
+      "given": "queued input that failed delivery once and nothing else explains the wait",
+      "key": "acn27",
+      "requirement": "the-queue-status-names-the-present-reason-input-waits",
+      "then": "the reason states one failed delivery and two attempts left",
+      "when": "its queue status is read"
+    },
+    {
+      "given": "",
+      "key": "ac142",
+      "requirement": "repeated-failure-starts-a-fresh-provider-session",
+      "then": "the next delivery starts a new provider session rather than resuming the old one",
+      "when": "an input has failed to be delivered twice"
+    },
+    {
+      "given": "",
+      "key": "ac143",
+      "requirement": "input-is-given-up-after-three-failed-deliveries",
+      "then": "it is no longer delivered the reason it was given up on is recorded the operator is told",
+      "when": "an input has failed to be delivered three times"
+    },
+    {
+      "given": "",
+      "key": "ac150",
+      "requirement": "input-is-given-up-after-three-failed-deliveries",
+      "then": "the record still names the run it was last delivered to",
+      "when": "the system gives up on an input"
+    },
+    {
+      "given": "",
+      "key": "ac148",
+      "requirement": "a-failure-the-provider-names-unretryable-is-given-up-at-once",
+      "then": "the input is not returned to the queue the reason recorded names that failure and states that the Hub did not retry the conversation's provider session is still bound",
+      "when": "a Copilot run fails because its root `session.error` names `authentication` or `quota`, and the provider's reading does not refuse the turn with a reset ahead"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "36496af75658238d3751683975fab056da25358d1f860c5b6749d4f893f0d02e",
+      "FR-10": "034d1623944acc984afae6560648b31861d7db469d390d23b008d85566fffaa1",
+      "FR-11": "17896ecda479609b26415aecebec21aa6b84e531699d841e7fc6b8e78c22f959",
+      "FR-12": "9f78a1c01ed56c842d5ca92fa838c1891e736da72c728b40f180c303507631cb",
+      "FR-13": "9a1eb958b094864052741ffd4d47c5a097aaf9cd09ae532ea4308365a0f521fd",
+      "FR-14": "0749362a91c24bd3eed239b3bbfa495cb4a0aa2e40fe5e849ba8a8bf6e33fa65",
+      "FR-15": "113d28a5a3ea07a1a5e997c98637da09897d4055e48dd7ecc84e49cbef740c34",
+      "FR-16": "8c1cd49c37956d76ce4f642862f2ab220ba68ad2bff384a85449c5b5519cb460",
+      "FR-17": "1a477424952bd676dcb0d0d040813f4a60280f8ed51aefaed955f5b0f365fe67",
+      "FR-18": "fed95a2e2efbeeeaa39ef53d2af376a143bef55e5ed45bcf4e8d2ebf2600295e",
+      "FR-19": "956b4f9e493b1f3d8b8a384871b9abbcdf68e4c5414439b0ac9522e4a51ab440",
+      "FR-2": "c58dd1d03c038f36a4dc64254cd4ccc1d444be284eb5cb99a904e5a7ea665767",
+      "FR-20": "e0edf350e8572f02180887639a28411bf4c8cdf446b76ad0fbed4137d1c6f4f9",
+      "FR-21": "4240a6f54d4a01e92cca62dd3ff8fe50fbf8c21e8b56a4a78adec15e04d87e7e",
+      "FR-22": "ea240064f1e9be0a6c345ec564136480862309ac3a12b95398c49b22b4d29ac2",
+      "FR-23": "1268262c8b4609acd56384e42f636815cde5c929a9f709c6cb0f36bc4b7446c1",
+      "FR-24": "0293e26b119486b2236974e264e2da104958413753927e010797969a96c0d472",
+      "FR-25": "28e0abff9c9fbee8c1f7096277516a6b7eafb9174f63b6bf851cc3641cfeec72",
+      "FR-26": "d5516631e89f7a9e9520559546a21e50a56a0246eb42d697dec0f17a06318356",
+      "FR-27": "94982b3c3385b41f9c339dfc35120490817f55950c80f0d3f6cffcd0fa7361df",
+      "FR-3": "065a0efc441b5b85c0f7d79fdda3b952ef38f4c2c466d9f53817f420c3f28bf5",
+      "FR-4": "b9994b20205a42b667699a8e27f2ce2abfcffc5ebfa4bd5381f1d0b2a8b53a98",
+      "FR-5": "ae17c713ddcd6654c83fcd552e4d17a50923c78336c354540035e06dfecad9cc",
+      "FR-6": "40521e886fad38d15d2b3f92fcb9b436c52288a8e195c93cbd49e5c86f438c8b",
+      "FR-7": "25961fb36a1ebfa891fd77694f03d523639f23d6f440c46bef47d4c14b82bcb3",
+      "FR-8": "9c3ed42e412a52c5efc2b51089c1140f42e440610e47c80fab5d8e3c8fdaa06a",
+      "FR-9": "460a821a46a771460ed9dd352b395641d65d2d40c649bcf1558bb17cbef0030d"
+    },
+    "high_water": 27,
+    "requirements": {
+      "a-delivered-turn-carries-a-review-or-ordinary-work-never-bot": "FR-7",
+      "a-delivered-turn-reaches-the-model-intact": "FR-1",
+      "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte": "FR-14",
+      "a-failure-the-provider-names-unretryable-is-given-up-at-once": "FR-27",
+      "a-non-queued-entry-cannot-be-withdrawn-or-released-and-says-w": "FR-21",
+      "a-peer-message-held-by-the-hop-budget-tells-its-sender": "FR-20",
+      "a-re-delivered-turn-says-the-earlier-attempt-was-cut-off": "FR-3",
+      "a-refusal-is-reported-only-to-the-input-it-is-about": "FR-9",
+      "a-request-refused-for-what-it-asked-is-answered-as-refused": "FR-8",
+      "a-run-that-has-ended-releases-the-queue-behind-it": "FR-15",
+      "a-start-is-reported-only-to-the-input-it-is-about": "FR-10",
+      "a-turn-admits-entries-of-one-kind-only": "FR-6",
+      "an-agent-s-queue-status-presents-a-remembered-refusal-as-a-r": "FR-18",
+      "an-entry-held-back-by-the-hop-budget-is-visible-and-has-a-st": "FR-5",
+      "an-undelivered-message-shall-say-how-its-last-attempt-ended": "FR-19",
+      "delivery-and-withdrawal-cannot-both-claim-one-entry": "FR-22",
+      "every-started-run-reaches-a-terminal-status-without-a-restar": "FR-16",
+      "giving-up-on-queued-input-goes-on-to-the-input-behind-it": "FR-17",
+      "input-is-given-up-after-three-failed-deliveries": "FR-26",
+      "input-refused-for-what-it-asked-does-not-stay-queued-for-ret": "FR-12",
+      "repeated-delivery-failure-does-not-wedge-an-agent": "FR-2",
+      "repeated-failure-starts-a-fresh-provider-session": "FR-25",
+      "the-hop-budget-bounds-delivery-not-only-admission": "FR-4",
+      "the-operator-is-told-when-the-turn-that-began-is-not-the-one": "FR-11",
+      "the-operator-reads-why-a-submission-was-refused": "FR-13",
+      "the-queue-status-names-the-present-reason-input-waits": "FR-24",
+      "the-trigger-refuses-at-submission-what-can-never-run": "FR-23"
+    },
+    "retired": {}
+  },
+  "design": "D1. Delivery is specified apart from how a conversation looks: attempt counting, give-up, refusal attribution and withdrawal races are backend behaviour with their own tests. Allowance holds pause the queue for a reason outside the Hub and live in provider-allowance-holds.\n\nD2. One turn = one conversation, one kind, admitted by the oldest eligible entry within the hop budget (`inbound_queue.select_turn`, shared by the scheduler and the status route); its depth is the admitting entry's.\n\nD3. Delivery failure: count per entry; at 2 clear the provider session, at 3 withdraw with a reason (`RESUME_RETRY_LIMIT`, `DELIVERY_ATTEMPT_LIMIT`). Provider-named unretryable failures give up at once. Refusals that stop the agent running at all, or block only its own workspace with nothing else runnable, are not counted.\n\nD4. Refusal vs environment: a `TriggerAgentError` marked `request_level` and not transient is the request's failure (status + sentence, input withdrawn); everything else is a wait the input survives. Each answer is attributed to the request's own entries.\n\nD5. Release is unconditional on run end: every terminal path calls `redrain_queued_agents`, independent of whether the bookkeeping after it succeeds. There is no timer.\n\nD6. Every queue write (deliver, withdraw, count, give up) takes effect only if the entry is still queued, so racing writers cannot both succeed.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Split out of agent-conversation-workspace in the 2026-10-08 spec overhaul.",
+  "open_questions": [],
+  "problem": "Input that silently stalls, is retried forever, is reported delivered when it was not, or is answered with another request's refusal leaves the operator unable to tell what an agent is doing and an agent wedged behind input that can never run.",
+  "requirements": [
+    {
+      "key": "a-delivered-turn-reaches-the-model-intact",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On Windows an npm `.cmd` shim is executed by cmd.exe, which truncates an argument at its first newline; the Hub unwraps such a shim to the executable it forwards to.",
+      "statement": "Every queued input the Hub marks as delivered SHALL reach the agent's model in full, including content spanning several lines; the Hub MUST NOT report an input as delivered when the launch path cannot carry it, and the only change delivery makes is neutralising file mentions in text the operator did not write."
+    },
+    {
+      "key": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A runtime that dies mid-turn is the likeliest failure; a stopped turn and a binding-conflict turn already did what they were going to do, so re-delivering them would repeat work.",
+      "statement": "The system SHALL return a failed run's input to the queue however the run failed, keeping its place in arrival order and its conversation, except for a run the operator stopped and a run failed for reporting a provider session other than the conversation's binding; returning input SHALL trigger another delivery attempt without operator action."
+    },
+    {
+      "key": "a-re-delivered-turn-says-the-earlier-attempt-was-cut-off",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The agent cannot otherwise tell that half-finished work in its checkout is its own; what to do about it is left to the agent.",
+      "statement": "Input delivered after an earlier delivery failed or was refused by the provider's allowance SHALL state, per entry, which attempt this is and that an earlier attempt was cut off before it finished; first deliveries SHALL carry no such note."
+    },
+    {
+      "key": "the-hop-budget-bounds-delivery-not-only-admission",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Taking the minimum let a shallow entry carry a deep one and restart the chain's count.",
+      "statement": "An inbound queue entry whose hop depth exceeds the project's hop budget SHALL NOT be delivered in any turn, and a turn's depth SHALL be the depth of the entry that admitted it, never the lowest depth among the entries it carries."
+    },
+    {
+      "key": "an-entry-held-back-by-the-hop-budget-is-visible-and-has-a-st",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A bound with no exit is a wedge; re-basing to 0 records \"the operator restarted this chain here\".",
+      "statement": "The Hub SHALL report an entry queued because its hop depth exceeds the budget as held for that reason, and the operator SHALL be able to release it — re-basing its depth to 0, recording the release with the depth it was released from, and scheduling the agent — or discard it."
+    },
+    {
+      "key": "a-turn-admits-entries-of-one-kind-only",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A turn has one workspace, so a mixed batch delivered a turn that was neither.",
+      "statement": "Where an agent's queue holds both a review entry and a work entry in one conversation, a turn SHALL carry only the kind of the entry that admitted it (entries naming neither ride with either), and the other kind SHALL stay queued for a later turn."
+    },
+    {
+      "key": "a-delivered-turn-carries-a-review-or-ordinary-work-never-bot",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Defence in depth for a caller that hands `queue_entry_ids` to the trigger directly, bypassing the scheduler's narrowing.",
+      "statement": "The system SHALL refuse, before any workspace is prepared or process started, a turn whose input asks for both a review and work on a task, or for reviews of more than one task, naming the tasks and stating that a turn has one subject."
+    },
+    {
+      "key": "a-request-refused-for-what-it-asked-is-answered-as-refused",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Answering a refusal as \"queued\" tells the operator to wait for something that will never happen; answering an environment wait as a failure would discard input the repair is meant to deliver.",
+      "statement": "A request submitting input to an agent SHALL be answered as a failure, with the refused condition's own status code and sentence, where the input cannot be delivered because of what the request asked for; input that waits on the environment (no runner bound, CLI missing, workspace not preparable), a turn in flight, or a budget or hold that will clear SHALL be answered as accepted and queued."
+    },
+    {
+      "key": "a-refusal-is-reported-only-to-the-input-it-is-about",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The turn is built from the oldest eligible input, which may belong to a conversation the caller cannot see.",
+      "statement": "Where the system refuses a turn, it SHALL report that refusal only to a request whose own input the refused turn would have carried, and SHALL tell any other request that its input is queued behind other input."
+    },
+    {
+      "key": "a-start-is-reported-only-to-the-input-it-is-about",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A start reported to the wrong conversation is indistinguishable from success; input selection itself stays in arrival order.",
+      "statement": "Where a request naming one conversation (the trigger or `POST /conversations/{id}/continue`) causes a turn to start, it SHALL be answered as started only if the turn carried that conversation's input; otherwise it SHALL identify the conversation that did start and say whether the named conversation's input is waiting behind other input, was given up, or had nothing queued."
+    },
+    {
+      "key": "the-operator-is-told-when-the-turn-that-began-is-not-the-one",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Rendering one confirmation for both outcomes invites a second press that starts a turn nobody asked for.",
+      "statement": "The Continue control on a conversation with queued work and no run SHALL distinguish a turn that began in this conversation from one that began elsewhere, naming the other conversation by its title, and SHALL state the server's reason when nothing started."
+    },
+    {
+      "key": "input-refused-for-what-it-asked-does-not-stay-queued-for-ret",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator was told synchronously that the request failed; a queue still counting the input would say the opposite.",
+      "statement": "Input whose submitting request was answered with a refusal about what it asked for SHALL be withdrawn from the queue with the refusal as its reason and announced as withdrawn (not as given up after attempts); input waiting on the environment SHALL stay queued."
+    },
+    {
+      "key": "the-operator-reads-why-a-submission-was-refused",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A correct status that reaches no readable message has not told the operator anything.",
+      "statement": "Where a submission is refused, the interface SHALL present the refusal's own sentence to the operator."
+    },
+    {
+      "key": "a-delivery-attempt-is-counted-only-where-a-delivery-was-atte",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Counting the operator's own retries against an agent that cannot run destroys input nothing tried to deliver; where other input could run, the head of the queue really is in the way. When uncertain, the system holds rather than counts.",
+      "statement": "The system SHALL NOT count a delivery attempt against queued input where the turn was refused for a reason that prevents the agent from running at all, or where the agent's own workspace cannot be prepared and no other queued input would have run in a different workspace; every other refusal of a turn SHALL count an attempt."
+    },
+    {
+      "key": "a-run-that-has-ended-releases-the-queue-behind-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Nothing re-evaluates the queue on a timer, and restart reconciliation only examines runs still recorded as running, so a release gated on bookkeeping strands input indefinitely.",
+      "statement": "The system SHALL re-evaluate every agent holding queued input in a project whenever a run in that project reaches a terminal status, on every execution path, regardless of whether the bookkeeping after the terminal status succeeds, and a later bookkeeping failure MUST NOT relabel a run that had already ended."
+    },
+    {
+      "key": "every-started-run-reaches-a-terminal-status-without-a-restar",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent with a run stuck in `running` is refused every later turn; a run whose Hub was killed is left to startup reconciliation.",
+      "statement": "The system SHALL bring every run whose execution ends inside the process that started it to a terminal status on every execution path without a restart, recording and logging why when it ended abnormally, while still propagating deliberate cancellation."
+    },
+    {
+      "key": "giving-up-on-queued-input-goes-on-to-the-input-behind-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Giving up releases the queue only if something then tries it; counting a rider each time would spend its allowance in one pass.",
+      "statement": "Where an attempt to start an agent's turn ends by giving up on queued input, the system SHALL, in the same pass, attempt the input queued behind it, SHALL continue only after a give-up, SHALL count an attempt against any one input at most once per pass, and SHALL answer the request from the attempt that ended the pass (the give-up's refusal where the queue was then empty)."
+    },
+    {
+      "key": "an-agent-s-queue-status-presents-a-remembered-refusal-as-a-r",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A remembered refusal may have stopped being true; presenting it as current contradicts the live state beside it.",
+      "statement": "Where an agent's queue status can find no present reason for waiting input and falls back to the refusal of the last delivery attempt, it SHALL present it as \"the last delivery attempt was refused: …\", except that a refusal naming another agent's turn as holding a task checkout SHALL be checked now and named as the present reason only while that turn still runs; a failed check SHALL still yield an answer."
+    },
+    {
+      "key": "an-undelivered-message-shall-say-how-its-last-attempt-ended",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A run that failed before its process started writes no output, so without this the reason sits only on the run's row.",
+      "statement": "Where the Hub gave up delivering a message, the conversation SHALL show the message as not delivered with the Hub's reason and, where a run was the last attempt, how that run ended and the error it recorded; it SHALL learn of the give-up on every path, without a reload."
+    },
+    {
+      "key": "a-peer-message-held-by-the-hop-budget-tells-its-sender",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A sender told only that its message was sent waits for a reply that the budget will never let happen.",
+      "statement": "When a peer message is queued at a hop depth beyond the project's budget, the Hub SHALL record a `queue_chain_suspended` event and SHALL tell the sender, in the send's response, that the message is held by the hop budget."
+    },
+    {
+      "key": "a-non-queued-entry-cannot-be-withdrawn-or-released-and-says-w",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One sentence for every state told an operator whose entry had been given up that it was delivered.",
+      "statement": "Withdrawing or releasing a queue entry that is not queued SHALL be refused with a reason naming its actual state — unknown in this project (404), already delivered (naming the run), given up by the Hub (with its reason), or already withdrawn (409) — and releasing an entry within the hop budget SHALL be refused because the budget is not what holds it."
+    },
+    {
+      "key": "delivery-and-withdrawal-cannot-both-claim-one-entry",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A read-then-write let a delivery overwrite a withdrawal the operator had already been answered 200 for.",
+      "statement": "Delivering, withdrawing, counting and giving up on a queue entry SHALL each take effect only if the entry is still queued at the moment of the write, so a withdrawal and a delivery or give-up racing for one entry cannot both succeed."
+    },
+    {
+      "key": "the-trigger-refuses-at-submission-what-can-never-run",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator is looking at the response; a refusal at spawn would only surface later as a failed or silently unbound run.",
+      "statement": "`POST /agent/trigger` SHALL refuse before queueing anything a request it can already tell will never run: an invalid agent name (400), an archived agent (409), a conversation that is unknown, another agent's or archived (409), a `work_dir` overriding a writing agent's isolation (400), a task already decided (409), a review the task cannot receive (409/403), and runtime overrides with no runner bound (409) or that the catalog rejects (400)."
+    },
+    {
+      "key": "the-queue-status-names-the-present-reason-input-waits",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Each live check describes the agent now; the stored refusal and the attempt count are records of the past and only explain the wait when nothing current does.",
+      "statement": "`GET /queue/{agent}/status` SHALL explain waiting input with the first reason that applies, in this order: the agent is running; every entry is over the hop budget; a provider allowance hold; the token budget is spent for autonomous input; the agent is not launchable; the project workspace is unavailable; another agent's running turn holds the task checkout; the last attempt's recorded refusal; and finally the failed-attempt count with attempts left."
+    },
+    {
+      "key": "repeated-failure-starts-a-fresh-provider-session",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One failure is routinely a restart or a transient spawn error and must not discard provider-side context; repeated failure suggests the session itself cannot be resumed.",
+      "statement": "After an input's second failed delivery, the system SHALL clear its conversation's provider session so the next delivery starts a fresh provider session."
+    },
+    {
+      "key": "input-is-given-up-after-three-failed-deliveries",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One attempt on the old session, one that trips the reset, one on a fresh session; more would wedge an agent across further failing turns before anyone is told.",
+      "statement": "After an input's third failed delivery or counted refusal, the system SHALL stop attempting it, withdraw it with a recorded reason, keep the run that last carried it, and report the give-up to the operator as `queue_entry_abandoned`."
+    },
+    {
+      "key": "a-failure-the-provider-names-unretryable-is-given-up-at-once",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A refused credential or spent quota fails the same way on every retry, so each retry only spends a run and an error card.",
+      "statement": "Where a Copilot turn fails on a root `session.error` whose `errorType` is `authentication` or `quota` and no allowance refusal with a reset ahead applies, the system SHALL count the attempt, withdraw the input at once with a reason naming the failure and stating the Hub did not retry, and keep the conversation's provider session."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Delivering queued input intact and in order, and composing a turn of one kind",
+      "The hop budget at delivery, held entries, their release, and telling a peer sender its message is held",
+      "Counting attempts, re-delivery notes, a fresh provider session after two failures, giving up after three or at once for unretryable provider failures",
+      "Refusing at submission what can never run; refusal versus waiting on the environment",
+      "Reporting refusals and starts only to the input they concern, and the Continue control's report",
+      "Releasing the queue when a run ends; every run reaching a terminal status",
+      "Queue status reasons, and how an undelivered message reports its last attempt",
+      "Withdrawing and releasing entries, and the race between withdrawal and delivery"
+    ],
+    "non_goals": [
+      "Which recipient conversation a peer message is bound to: peer-message-routing",
+      "Holds caused by a provider's usage allowance: provider-allowance-holds",
+      "Which checkout a turn runs in: workspace-isolation",
+      "The composer and how the conversation is shown: agent-composer, agent-conversation-workspace"
+    ]
+  },
+  "summary": "How input queued for an agent becomes a turn. Queued input is delivered intact, in arrival order, one kind (a review or ordinary work) per turn and within the hop budget; failed deliveries are counted, retried on a fresh provider session and eventually given up; refusals and starts are reported only to the input they concern; and held entries can be released or withdrawn without racing delivery.",
+  "tasks": [],
+  "title": "Inbound queue delivery"
+}

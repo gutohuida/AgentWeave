@@ -1,0 +1,169 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a loop created with work_needs_evidence=false, a completed task on it with a committed task branch and no evidence rows, and an agent other than the task's author",
+      "key": "dispatch-evidence-free-loop-task",
+      "requirement": "review-target-is-the-merge-tip",
+      "then": "the response is not 409, the entry is queued, and the review turn is handed the commit equal to the task branch tip, the same sha task_integration.merge_targets returns for the task",
+      "when": "POST /agent/trigger is called with that agent and review_task_id set to the task"
+    },
+    {
+      "given": "the same evidence-free task",
+      "key": "checkout-at-branch-tip",
+      "requirement": "review-target-is-the-merge-tip",
+      "then": "the review context's commit_sha equals the branch tip and the provisioned checkout is at that commit",
+      "when": "prepare_review_turn runs for it"
+    },
+    {
+      "given": "a documentless loop with undeclared work_needs_evidence and a task with no requirement link, so evidence_governs is false by its last arm",
+      "key": "undeclared-loop-no-link",
+      "requirement": "review-target-is-the-merge-tip",
+      "then": "the branch tip is the target, identical to the declared-false case",
+      "when": "a review is requested"
+    },
+    {
+      "given": "a task with no loop and evidence naming commit C",
+      "key": "ordinary-task-with-evidence",
+      "requirement": "evidence-governed-review-unchanged",
+      "then": "the review target is C, and with no evidence the request is refused 409 with today's no-recorded-evidence sentence",
+      "when": "a review is requested"
+    },
+    {
+      "given": "a task on a flow whose document makes evidence govern, with no evidence",
+      "key": "flow-task-unchanged",
+      "requirement": "evidence-governed-review-unchanged",
+      "then": "it is refused exactly as today",
+      "when": "its review is requested"
+    },
+    {
+      "given": "a work_needs_evidence=false loop task with no task branch",
+      "key": "never-committed",
+      "requirement": "no-branch-is-an-honest-refusal",
+      "then": "409 whose detail says the task has no branch to review and does not contain 'no recorded evidence'",
+      "when": "a review is requested"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "eb7bc937f7f731b8b0e2446133c65b8697ba5c546729c51e36a0de286317cc5e",
+      "FR-2": "5061ab226c372cb9cb24229b3c1ec7fec6a418e566f227853dc84ac61840880c",
+      "FR-3": "726df6bbde71e5d8ca789653799261318e3cb667ee4966388d8a06b9c412349d"
+    },
+    "high_water": 3,
+    "requirements": {
+      "evidence-governed-review-unchanged": "FR-2",
+      "no-branch-is-an-honest-refusal": "FR-3",
+      "review-target-is-the-merge-tip": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Operator-decided direction: where evidence does not govern the merge, the review turn reviews the task's branch tip, the same commit approval would merge (task_integration.merge_targets, which already returns exactly one branch-tip Target in that case and an empty list when the task has no branch).\n\nDecision records:\n- D1 One source of truth. The review target for an evidence-ungoverned task is derived from task_integration.evidence_governs plus task_branch_tip, not from a second reimplementation, so the commit reviewed and the commit merged cannot diverge.\n- D2 Evidence-governed tasks are untouched: commit_for_task_review keeps today's rule (most recent evidence naming a commit wins, earlier commits reported).\n- D3 commit_for_task_review takes only a session today and branch-tip resolution needs a repository root (git rev-parse). The builder chooses how to supply the root; the three consumers (POST /agent/trigger precheck, prepare_review_turn, turn_scheduler's gate) and the flow review staffing at scheduler.py:2076 must all agree, so they share one resolution rather than each learning about branch tips separately.\n- D4 A branch-tip target carries no evidence row: ReviewContext.evidence_id is already tolerated as empty (review_turn.py:358).\n- D5 Loops stay unstaffed by the scheduler. test_a_loop_does_not_staff_its_own_review.py (F161) removed the review arm for documentless loops because a loop has one agent and no second party; that stays. This change makes the operator's by-hand dispatch (POST /agent/trigger with review_task_id) work for these tasks; it does not make the scheduler staff reviews for loops. Flows cannot set work_needs_evidence (create_flow refuses it), so flow review staffing keeps today's behaviour except where evidence_governs is false, in which case it uses the same shared resolution.\n- D6 The refusal for a branch-tip task with no branch stays a refusal and says so in its own words, mirroring NO_TASK_BRANCH, not the evidence sentence.\nReviewer for the build: aw-reviewer.\nAcceptance seam: a real git repo with a task branch, a loop with work_needs_evidence=false and a task with no evidence; POST /agent/trigger review_task_id must be accepted and the review checkout must be at the branch tip.",
+  "evidence": {
+    "checked": [],
+    "gaps": [
+      "No existing test covers a review turn for a work_needs_evidence=false task; hub/tests/test_review_target.py covers evidence-governed targets only."
+    ],
+    "limits": [],
+    "proposed_tests": [
+      "hub/tests/test_a_review_turn_reviews_the_branch_tip.py (proposed coverage derived from the acceptance criteria, not yet written or run)"
+    ]
+  },
+  "hub": {
+    "phase": "archived",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "change-spec",
+  "lifecycle": "Acceptance test written first and failing (409 today), then the build, then a drive. No migrations, no Hub-restart hazard.",
+  "open_questions": [],
+  "problem": "A loop created with work_needs_evidence=false merges its task's branch tip at approval (task_integration.evidence_governs is false), so its tasks need no evidence and usually have none: evidence is recorded against a requirement and such a task serves none. But requirement_evidence.commit_for_task_review (requirement_evidence.py:985) finds a commit only through evidence rows, so POST /agent/trigger with review_task_id answers 409 \"task ... has no recorded evidence, so there is no commit to review\" (agent_trigger.py:1835), for every task of that loop, forever. prepare_review_turn (review_turn.py:321) and the turn scheduler's head-of-queue gate (turn_scheduler.py:199) ask the same function and refuse the same way. Found by driving the acceptance drive of approval-runs-the-projects-checks on 2026-10-06; the drive worked around it with a turn bound to the task. The commit approval would merge and the commit a reviewer is shown are two different answers to one question, and for these tasks the second does not exist.",
+  "requirements": [
+    {
+      "key": "review-target-is-the-merge-tip",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Approval and review must be about the same commit; requiring evidence that such a task structurally never has makes review impossible while approval is allowed.",
+      "statement": "Where evidence does not govern a task's merge, a review turn for that task SHALL be handed the commit that approving the task would merge, the tip of the task's branch, and SHALL NOT require recorded evidence."
+    },
+    {
+      "key": "evidence-governed-review-unchanged",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The fix must not weaken the review gate for tasks on the evidence chain.",
+      "statement": "Where evidence governs a task's merge, a review turn SHALL still be handed the commit named by the task's most recent evidence, and a task with no evidence naming a commit SHALL still be refused with the existing sentence."
+    },
+    {
+      "key": "no-branch-is-an-honest-refusal",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator can act on a missing branch, not on a missing evidence row that was never going to exist.",
+      "statement": "Where evidence does not govern a task's merge and the task has no branch, a review turn request SHALL be refused with a message saying the task has no branch to review, and SHALL NOT report missing evidence."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "goals": [
+      "The review target for a task whose approval merges its branch tip",
+      "POST /agent/trigger review_task_id precheck, prepare_review_turn, turn_scheduler head-of-queue gate, and flow review staffing agreeing on one answer"
+    ],
+    "in_scope": [],
+    "non_goals": [
+      "Making the scheduler staff reviews for documentless loops (F161 stands: a one-agent loop has no second party)",
+      "Changing which tasks evidence governs (evidence_governs is unchanged)",
+      "Any change to the rule for evidence-governed tasks",
+      "Letting a loop's author review its own work (the author-exclusion guards stay)"
+    ]
+  },
+  "summary": "Fix for finding F510. A task whose approval merges its branch tip (evidence does not govern) can today never be given a review turn, because a review is only handed a commit through evidence. Make the review turn review that same branch tip.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Test that fails today with 409: a work_needs_evidence=false loop task with a branch tip and no evidence, POST /agent/trigger review_task_id is accepted and the review context carries the branch-tip sha; plus the evidence-governed and no-branch scenarios. Use a real git repo.",
+      "files": [
+        "hub/tests/test_a_review_turn_reviews_the_branch_tip.py"
+      ],
+      "from": null,
+      "key": "acceptance-test",
+      "requirements": [
+        "review-target-is-the-merge-tip",
+        "evidence-governed-review-unchanged",
+        "no-branch-is-an-honest-refusal"
+      ],
+      "reviewer": "aw-reviewer",
+      "title": "Write the failing acceptance test for F510"
+    },
+    {
+      "depends_on": [
+        "acceptance-test"
+      ],
+      "description": "Where task_integration.evidence_governs is false, resolve the review target from the task branch tip (the commit merge_targets returns) in the one shared resolution used by POST /agent/trigger's precheck, prepare_review_turn, the turn scheduler's gate and flow review staffing. Keep the evidence path unchanged and add the no-branch refusal.",
+      "files": [
+        "hub/hub/requirement_evidence.py",
+        "hub/hub/task_integration.py",
+        "hub/hub/api/v1/agent_trigger.py",
+        "hub/hub/review_turn.py",
+        "hub/hub/turn_scheduler.py",
+        "hub/hub/scheduler.py"
+      ],
+      "from": null,
+      "key": "branch-tip-review-target",
+      "requirements": [
+        "review-target-is-the-merge-tip",
+        "evidence-governed-review-unchanged",
+        "no-branch-is-an-honest-refusal"
+      ],
+      "reviewer": "aw-reviewer",
+      "title": "Resolve the review target from the merge source"
+    }
+  ],
+  "title": "A review turn reviews the branch tip where evidence does not govern the merge"
+}

@@ -1,0 +1,691 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "an index whose home is spec/home.html and which files spec/area.html under it",
+      "key": "ac1",
+      "requirement": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "then": "the file contains a link to the home and a link to its parent",
+      "when": "spec/area.html is rendered"
+    },
+    {
+      "given": "a valid index",
+      "key": "ac2",
+      "requirement": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "then": "the file contains no navigation link to itself",
+      "when": "the home document is rendered"
+    },
+    {
+      "given": "a filed document with no recorded parent",
+      "key": "ac3",
+      "requirement": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "then": "the file links to the home and shows no parent link",
+      "when": "it is rendered"
+    },
+    {
+      "given": "a rendered corpus on disk",
+      "key": "ac4",
+      "requirement": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "then": "its navigation links resolve to the other documents' files",
+      "when": "a document is opened from disk with no Hub running"
+    },
+    {
+      "given": "a document named as parent by several others",
+      "key": "ac5",
+      "requirement": "a-document-with-children-renders-a-generated-map-of-them",
+      "then": "its map lists each child with title, kind, phase and summary, under a heading saying it is generated",
+      "when": "it is rendered"
+    },
+    {
+      "given": "a document no other document names as parent",
+      "key": "ac6",
+      "requirement": "a-document-with-children-renders-a-generated-map-of-them",
+      "then": "the file contains no map section",
+      "when": "it is rendered"
+    },
+    {
+      "given": "a payload containing prose that resembles a list of children",
+      "key": "ac7",
+      "requirement": "a-document-with-children-renders-a-generated-map-of-them",
+      "then": "the map is built from the index and the prose is rendered unchanged as authored content",
+      "when": "the document is rendered"
+    },
+    {
+      "given": "children whose recorded order differs from their alphabetical order",
+      "key": "ac8",
+      "requirement": "a-document-with-children-renders-a-generated-map-of-them",
+      "then": "it lists them in recorded order",
+      "when": "the map is generated"
+    },
+    {
+      "given": "home > area > leaf in the index",
+      "key": "ac28",
+      "requirement": "n1",
+      "then": "the home's map lists area with leaf nested beneath it, and area's map lists leaf with no further nesting",
+      "when": "the home and area are rendered"
+    },
+    {
+      "given": "a child whose payload summary is empty or begins with the syncing-change placeholder",
+      "key": "ac9",
+      "requirement": "a-child-with-no-usable-summary-is-reported-as-such",
+      "then": "the map says \"no summary yet\" for that child",
+      "when": "the map is generated"
+    },
+    {
+      "given": "a child whose payload carries a summary",
+      "key": "ac10",
+      "requirement": "a-child-with-no-usable-summary-is-reported-as-such",
+      "then": "the map shows that summary",
+      "when": "the map is generated"
+    },
+    {
+      "given": "a valid index filing two documents",
+      "key": "ac11",
+      "requirement": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "then": "the index records that parent after the rebuild",
+      "when": "the operator arranges one under the other and the index is then rebuilt"
+    },
+    {
+      "given": "a valid index",
+      "key": "ac12",
+      "requirement": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "then": "it is refused with 422 and the index is unchanged",
+      "when": "a placement names a parent that is not in the index"
+    },
+    {
+      "given": "a valid index where B is under A",
+      "key": "ac13",
+      "requirement": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "then": "it is refused with 422 and the index is unchanged",
+      "when": "A is placed under B, or a document under itself"
+    },
+    {
+      "given": "a document with a recorded parent",
+      "key": "ac14",
+      "requirement": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "then": "the index records no parent and the document re-renders with a home link and no parent link",
+      "when": "the operator arranges it with parent null"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac15",
+      "requirement": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "then": "no MCP tool offers it and the route answers 401 to a run credential",
+      "when": "it tries to change the index"
+    },
+    {
+      "given": "a project with no usable index",
+      "key": "ac29",
+      "requirement": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "then": "the Hub answers 409 naming POST /spec/reindex and the home it may ask for",
+      "when": "the operator arranges a document"
+    },
+    {
+      "given": "an indexed corpus home, area, other",
+      "key": "ac16",
+      "requirement": "regeneration-is-bounded-to-the-documents-the-arrangement-cha",
+      "then": "area and home are re-rendered and other's file is not written",
+      "when": "area is placed under home and the index is rebuilt"
+    },
+    {
+      "given": "an indexed corpus",
+      "key": "ac17",
+      "requirement": "regeneration-is-bounded-to-the-documents-the-arrangement-cha",
+      "then": "it and the home (whose map is recursive) are re-rendered and no unrelated document is written",
+      "when": "a document is arranged"
+    },
+    {
+      "given": "an indexed corpus",
+      "key": "ac18",
+      "requirement": "regeneration-is-bounded-to-the-documents-the-arrangement-cha",
+      "then": "no document file is written",
+      "when": "the index is rebuilt with no change to any title, placement, order or summary"
+    },
+    {
+      "given": "an approved document whose map changes",
+      "key": "ac19",
+      "requirement": "a-re-render-is-driven-from-the-file-and-is-not-an-authored-c",
+      "then": "the document is re-rendered and not refused as a write to an approved document",
+      "when": "the index is rebuilt"
+    },
+    {
+      "given": "a tracked document",
+      "key": "ac20",
+      "requirement": "a-re-render-is-driven-from-the-file-and-is-not-an-authored-c",
+      "then": "its history records a `rerendered` event by the system actor",
+      "when": "a rebuild re-renders it"
+    },
+    {
+      "given": "a filed document whose file carries no readable payload",
+      "key": "ac21",
+      "requirement": "a-re-render-is-driven-from-the-file-and-is-not-an-authored-c",
+      "then": "it is not written and is reported under corpus.skipped with reason no_readable_payload",
+      "when": "a rebuild would re-render it"
+    },
+    {
+      "given": "a tracked document",
+      "key": "ac22",
+      "requirement": "regeneration-records-the-digest-it-produced",
+      "then": "it is not reported as drifted",
+      "when": "a rebuild re-renders it and drift is then detected"
+    },
+    {
+      "given": "a document a rebuild re-rendered",
+      "key": "ac23",
+      "requirement": "regeneration-records-the-digest-it-produced",
+      "then": "drift is reported for it",
+      "when": "its file is then edited outside the Hub and drift is detected"
+    },
+    {
+      "given": "an index file that cannot be written",
+      "key": "ac30",
+      "requirement": "n3",
+      "then": "the Hub answers 500 with code index_write_failed and a sentence, and no document is re-rendered",
+      "when": "the operator arranges a document"
+    },
+    {
+      "given": "a corpus where one document's file cannot be rewritten",
+      "key": "ac31",
+      "requirement": "n3",
+      "then": "that document is reported as a write_failed skip and the others are re-rendered",
+      "when": "a rebuild re-renders the corpus"
+    },
+    {
+      "given": "a project with no usable index",
+      "key": "ac24",
+      "requirement": "the-operator-shapes-the-corpus-from-the-app",
+      "then": "it says there is no usable index and offers Rebuild index as the primary action",
+      "when": "the operator opens the document browser"
+    },
+    {
+      "given": "several tracked documents and no recorded home",
+      "key": "ac25",
+      "requirement": "the-operator-shapes-the-corpus-from-the-app",
+      "then": "no index is written, the browser asks which tracked document is home, and the rebuild that follows records the chosen document",
+      "when": "the operator rebuilds"
+    },
+    {
+      "given": "a project with an open document browser",
+      "key": "ac32",
+      "requirement": "the-operator-shapes-the-corpus-from-the-app",
+      "then": "a spec_updated event is broadcast to the project",
+      "when": "a rebuild or an arrangement completes"
+    },
+    {
+      "given": "an open filed document",
+      "key": "ac26",
+      "requirement": "n2",
+      "then": "the index records that parent and the document's rendered navigation names it",
+      "when": "the operator chooses Place under, picks another filed document and confirms"
+    },
+    {
+      "given": "an open filed document",
+      "key": "ac27",
+      "requirement": "n2",
+      "then": "the view shows the Hub's message and diagnostics and the index is unchanged",
+      "when": "the operator chooses a parent that would create a cycle"
+    },
+    {
+      "given": "a project with no usable index",
+      "key": "ac33",
+      "requirement": "n2",
+      "then": "the view shows the message and offers the rebuild in place",
+      "when": "a placement is refused with 409"
+    },
+    {
+      "given": "",
+      "key": "ac41",
+      "requirement": "document-discovery-covers-every-safe-document",
+      "then": "all of them are listed",
+      "when": "the specification tree contains documents in nested directories"
+    },
+    {
+      "given": "",
+      "key": "ac42",
+      "requirement": "document-discovery-covers-every-safe-document",
+      "then": "it is not listed as a document the exclusion is reported rather than passed over silently",
+      "when": "a discovered path fails path validation"
+    },
+    {
+      "given": "",
+      "key": "ac43",
+      "requirement": "home-document-selection-is-explicit-and-resilient",
+      "then": "it remains the home document",
+      "when": "the index records a home document that still exists"
+    },
+    {
+      "given": "",
+      "key": "ac44",
+      "requirement": "home-document-selection-is-explicit-and-resilient",
+      "then": "no home is selected and a home_ambiguous diagnostic names the candidates",
+      "when": "no home is recorded and several candidates exist"
+    },
+    {
+      "given": "",
+      "key": "ac45",
+      "requirement": "an-unreadable-or-absent-index-degrades-visibly",
+      "then": "discovered documents are still listed the index's state is reported as invalid",
+      "when": "the index cannot be parsed"
+    },
+    {
+      "given": "",
+      "key": "ac46",
+      "requirement": "an-unreadable-or-absent-index-degrades-visibly",
+      "then": "the entry is retained and reported as unresolved it is not silently discarded",
+      "when": "the index names a document with no file on disk and no evidence of deliberate deletion"
+    },
+    {
+      "given": "",
+      "key": "ac158",
+      "requirement": "the-hub-can-write-the-document-index-it-reads",
+      "then": "reading that file yields a valid index its state is reported as valid rather than absent, unreadable or invalid",
+      "when": "the Hub writes the index for a project holding at least one document"
+    },
+    {
+      "given": "a project whose documents were rendered by the Hub and have no index",
+      "key": "ac159",
+      "requirement": "the-hub-can-write-the-document-index-it-reads",
+      "then": "every discovered document is reported as filed none is reported as unindexed",
+      "when": "the operator rebuilds the index"
+    },
+    {
+      "given": "",
+      "key": "ac160",
+      "requirement": "the-hub-can-write-the-document-index-it-reads",
+      "then": "the attempt is refused the index on disk is unchanged",
+      "when": "an agent attempts to rebuild or write the document index"
+    },
+    {
+      "given": "",
+      "key": "ac161",
+      "requirement": "the-index-describes-documents-in-the-same-vocabulary-the-hub",
+      "then": "the index is valid the document is reported as filed",
+      "when": "the index describes a document whose kind is `capability`"
+    },
+    {
+      "given": "a document at a given lifecycle phase",
+      "key": "ac162",
+      "requirement": "the-index-describes-documents-in-the-same-vocabulary-the-hub",
+      "then": "the entry's status is that phase comparing the entry against the rendered document reports no metadata conflict",
+      "when": "the Hub writes the index"
+    },
+    {
+      "given": "",
+      "key": "ac163",
+      "requirement": "the-index-describes-documents-in-the-same-vocabulary-the-hub",
+      "then": "the index is valid the document is reported as filed",
+      "when": "the index describes a change document that has been archived"
+    },
+    {
+      "given": "",
+      "key": "ac164",
+      "requirement": "the-index-describes-documents-in-the-same-vocabulary-the-hub",
+      "then": "the index is reported as invalid the discovered documents are still listed",
+      "when": "an index entry carries a status that is not a lifecycle phase"
+    },
+    {
+      "given": "",
+      "key": "ac165",
+      "requirement": "the-index-describes-documents-in-the-same-vocabulary-the-hub",
+      "then": "the index is reported as invalid",
+      "when": "an index entry pairs a kind with a phase that kind can never hold"
+    },
+    {
+      "given": "",
+      "key": "ac166",
+      "requirement": "the-index-describes-documents-in-the-same-vocabulary-the-hub",
+      "then": "the index is reported as invalid the diagnostic names both documents",
+      "when": "two entries in the index record the same order"
+    },
+    {
+      "given": "a valid index recording a home document that still exists",
+      "key": "ac167",
+      "requirement": "rebuilding-the-index-preserves-what-the-operator-arranged",
+      "then": "the same document is still home",
+      "when": "the operator rebuilds the index"
+    },
+    {
+      "given": "a valid index recording a parent and an order for a document",
+      "key": "ac168",
+      "requirement": "rebuilding-the-index-preserves-what-the-operator-arranged",
+      "then": "that document's parent and order are unchanged",
+      "when": "the operator rebuilds the index"
+    },
+    {
+      "given": "a project with several documents and no recorded arrangement",
+      "key": "ac169",
+      "requirement": "rebuilding-the-index-preserves-what-the-operator-arranged",
+      "then": "both rebuilds produce the same order no document is given a parent",
+      "when": "the operator rebuilds the index twice with no document changing in between"
+    },
+    {
+      "given": "a project with several documents and no recorded home",
+      "key": "ac170",
+      "requirement": "rebuilding-the-index-preserves-what-the-operator-arranged",
+      "then": "no document is recorded as home the operator is asked which is home no index is written",
+      "when": "the operator rebuilds the index"
+    },
+    {
+      "given": "a project with several documents and no recorded home",
+      "key": "ac171",
+      "requirement": "the-operator-can-name-the-home-the-hub-refuses-to-guess",
+      "then": "that document is recorded as home every discovered document is reported as filed",
+      "when": "the operator rebuilds the index naming one of them as home"
+    },
+    {
+      "given": "a valid index already recording a home",
+      "key": "ac172",
+      "requirement": "the-operator-can-name-the-home-the-hub-refuses-to-guess",
+      "then": "the newly named document is home",
+      "when": "the operator rebuilds the index naming a different document as home"
+    },
+    {
+      "given": "",
+      "key": "ac173",
+      "requirement": "the-operator-can-name-the-home-the-hub-refuses-to-guess",
+      "then": "no index is written no other document is substituted as home",
+      "when": "the operator rebuilds the index naming a home that is not in the corpus"
+    },
+    {
+      "given": "a project with several documents and no home",
+      "key": "ac174",
+      "requirement": "a-failure-to-write-the-index-does-not-abandon-the-requiremen",
+      "then": "the requirement index is rebuilt the response reports that no document index was written the response states why",
+      "when": "the operator rebuilds"
+    },
+    {
+      "given": "a valid index whose home names a document that has since been removed",
+      "key": "ac175",
+      "requirement": "a-failure-to-write-the-index-does-not-abandon-the-requiremen",
+      "then": "no other document is substituted as home the condition is reported",
+      "when": "the operator rebuilds the index"
+    },
+    {
+      "given": "a project whose index file cannot be written",
+      "key": "ac176",
+      "requirement": "a-failure-to-write-the-index-does-not-abandon-the-requiremen",
+      "then": "the requirement index is rebuilt and kept the response reports that no document index was written, naming the reason the previous index file is unchanged",
+      "when": "the operator rebuilds"
+    },
+    {
+      "given": "",
+      "key": "ac177",
+      "requirement": "a-failure-to-write-the-index-does-not-abandon-the-requiremen",
+      "then": "that document is reported as skipped, with the reason the other documents are still re-rendered and recorded",
+      "when": "one document's file cannot be written while the corpus is re-rendered"
+    },
+    {
+      "given": "",
+      "key": "ac178",
+      "requirement": "a-failure-to-write-the-index-does-not-abandon-the-requiremen",
+      "then": "the placement is refused with a message naming the reason the previous index file is unchanged",
+      "when": "the operator places a document and the index file cannot be written"
+    },
+    {
+      "given": "",
+      "key": "ac179",
+      "requirement": "both-index-implementations-agree-on-the-vocabulary",
+      "then": "the two sets are identical",
+      "when": "the set of kinds each implementation accepts is compared"
+    },
+    {
+      "given": "",
+      "key": "ac180",
+      "requirement": "both-index-implementations-agree-on-the-vocabulary",
+      "then": "the two sets are identical",
+      "when": "the set of phases each implementation accepts is compared"
+    },
+    {
+      "given": "",
+      "key": "ac194",
+      "requirement": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "then": "the rendered file carries navigation built from that context",
+      "when": "a document is rendered and corpus context is supplied"
+    },
+    {
+      "given": "",
+      "key": "ac195",
+      "requirement": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "then": "the rendered file is byte-identical to what the same payload produced before corpus context existed",
+      "when": "a document is rendered with no corpus context supplied"
+    },
+    {
+      "given": "",
+      "key": "ac196",
+      "requirement": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "then": "it carries no parent or placement field",
+      "when": "a document's payload is read back from its rendered file"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "a442ad740ba17f09aa238b253e651687c982de390793b7988b02a87ab9ffbff0",
+      "FR-10": "1ebaa3e1cfaa92900e4089dfa1eb7c3e0042bc50d045f890f88433180ed614b2",
+      "FR-11": "adff0a208fc8263f001aff6d2e6be4034e50dec8cc8a9ac1bae889c0a6391fae",
+      "FR-12": "4243507e12466cbe58f3d77dcadc707469e3f7ca2590c8d9663bec14f64547f6",
+      "FR-13": "1f44877ae63dae3fb3acac4a4e03b3ded82beff5960cac92848487a6bd1af81d",
+      "FR-14": "5f265eaa64f2156dd11710a1440a95e499675dfc60423e1960a92500924b99fe",
+      "FR-15": "9bfe24681628fbf22dee1b97d49329c41278d112f2d12bca7627e3bd59fca56b",
+      "FR-16": "7f5fdfc2dadbc6f932b13155703cf247f5110c77816dc817f8deb0d09139d137",
+      "FR-17": "23eadbc89251c5a146a6bd95038136c2bba0c83d1b1d0260bb90a1c3d3a1f69c",
+      "FR-18": "a97d581f5ae8003a28c402b92a13ffcfa1320e0957f3ff527929f2fe94fc9c36",
+      "FR-19": "ce955f46820ddc6d377a5c919a2f7bf55fb6eb2fcb746310e9cbe2b4042a2350",
+      "FR-2": "be820b15f1fe106beefe4397ecdef12098f88202d0b06e34c846dd135516c31a",
+      "FR-20": "91971fd538698f17c7a700785189ef4408151826091ec55c39b3b062e88867f0",
+      "FR-3": "e225931898f43d2bfeb9c14a36a940dde339f5f666b876852168970065e7099a",
+      "FR-4": "c2ff3098ff78186b4122f907f5c0579b302dbd9857418edc565a2c880bc2fafc",
+      "FR-5": "aa8e923ff00dfc7369cc2a347395cdf51bc4dbcffbe224fdb9078a50e51e6c59",
+      "FR-6": "62ec00462dfc65aa518c527b4ad1fac386140af0a270ef9075473d8ab439d048",
+      "FR-7": "f424873fc0e9f3685a5f28657adf68c63dc12554e124ccc6490a980c1514f446",
+      "FR-8": "0d2fd5668d5055574085355ee5e32d07bb073a11e0ffc67f25126fd6aec83a4b",
+      "FR-9": "95783265b823d41c9e550a93ea5540732b4f0660ae684dd7655686592c8a87e5"
+    },
+    "high_water": 20,
+    "requirements": {
+      "a-child-with-no-usable-summary-is-reported-as-such": "FR-3",
+      "a-document-s-place-in-the-corpus-is-operator-set-and-held-in": "FR-4",
+      "a-document-with-children-renders-a-generated-map-of-them": "FR-2",
+      "a-failure-to-write-the-index-does-not-abandon-the-requiremen": "FR-19",
+      "a-re-render-is-driven-from-the-file-and-is-not-an-authored-c": "FR-6",
+      "a-rendered-document-carries-navigation-to-its-home-and-its-p": "FR-1",
+      "an-unreadable-or-absent-index-degrades-visibly": "FR-14",
+      "both-index-implementations-agree-on-the-vocabulary": "FR-20",
+      "document-discovery-covers-every-safe-document": "FR-12",
+      "home-document-selection-is-explicit-and-resilient": "FR-13",
+      "n1": "FR-9",
+      "n2": "FR-11",
+      "n3": "FR-10",
+      "rebuilding-the-index-preserves-what-the-operator-arranged": "FR-17",
+      "regeneration-is-bounded-to-the-documents-the-arrangement-cha": "FR-5",
+      "regeneration-records-the-digest-it-produced": "FR-7",
+      "the-hub-can-write-the-document-index-it-reads": "FR-15",
+      "the-index-describes-documents-in-the-same-vocabulary-the-hub": "FR-16",
+      "the-operator-can-name-the-home-the-hub-refuses-to-guess": "FR-18",
+      "the-operator-shapes-the-corpus-from-the-app": "FR-8"
+    },
+    "retired": {}
+  },
+  "design": "D1 - Navigation and map are rendered into the HTML file, with relative links computed from corpus paths (posix relpath), so the corpus reads from disk or a code host with no Hub.\nD2 - Placement lives in spec/index.json, not the payload and not directory nesting: it is an operator's editorial judgement and must travel with the project. Arrange validates by round-tripping the candidate index through the same loader that reads it (unknown parent, self-parent, cycle), not a second implementation.\nD3 - Re-rendering compares rendered bytes, not index structure: every filed document is rendered, only differing files are written. This catches a child's summary changing, which touches no index field.\nD4 - The home's map is the whole corpus (recursive); every other map is one level, so a placement change rewrites the moved document, its old and new parent, and the home.\nD5 - Re-renders read each file's embedded payload and are recorded as `rerendered` by the system actor, bypassing the authored write path (no approved-document refusal, no attribution to the operator who rebuilt) and advancing the stored digest so drift stays quiet.\nD6 - The index is written atomically before any re-render; a failed index write re-renders nothing, a failed document write is a reported skip.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_spec_index_writer.py - TestReindexCorpusRerender, TestArrangeRoute, test_no_agent_facing_tool_can_write_the_index, test_reindex_refuses_a_credential_that_is_not_the_operators, write-failure tests (F434)",
+      "hub/tests/test_spec_corpus_context.py - context building, ordering, recursive home map, summaries",
+      "hub/tests/test_spec_render.py - navigation and map rendering",
+      "hub/ui/src/__tests__/specCorpusStrip.test.tsx - strip (1.3-1.5, 1.10, 1.15) and Place under (1.8, 1.9)"
+    ],
+    "limits": [
+      "Authored writes (save, fold, phase-change rewrite) render without corpus context, so they strip the navigation and map until the next rebuild or arrangement; six files in spec/ lack navigation today. Reported as a possible finding against the first requirement."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "The corpus is read outside the product as often as inside it - in a diff, on a code host, from disk with no Hub running. Documents that cannot be navigated between, or a hand-kept table of contents that drifts from the documents it lists, leave the reader with islands rather than a corpus.",
+  "requirements": [
+    {
+      "key": "a-rendered-document-carries-navigation-to-its-home-and-its-p",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A document that cannot be navigated away from is an island. The region depends only on the document's own placement and never lists siblings, so adding one document does not rewrite all of its siblings.",
+      "statement": "Every rendered specification document SHALL include a navigation region with a relative link to the corpus home (omitted on the home itself) and, where the index records one, to its parent, each resolvable from disk without a running Hub."
+    },
+    {
+      "key": "a-document-with-children-renders-a-generated-map-of-them",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A map maintained by hand drifts from the corpus as soon as a document is added. Built from the index on every render, it cannot; the label tells an operator editing the file that the next rebuild overwrites that section.",
+      "statement": "A document that other documents name as their parent SHALL render a map section, labelled as generated, listing each child in its recorded index order with its title, kind, phase and summary, each linked by relative path; a document with no children SHALL render no map section."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The home is where a reader starts, so it shows everything; elsewhere one level keeps a placement change from rewriting every ancestor.",
+      "statement": "The corpus home's map SHALL list the whole corpus as a nested tree, while every other document's map SHALL list only its direct children."
+    },
+    {
+      "key": "a-child-with-no-usable-summary-is-reported-as-such",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An empty cell reads as a rendering fault and hides a content gap; naming the gap makes it visible.",
+      "statement": "Where a child document's payload carries no summary, only whitespace, or the placeholder text a syncing change leaves behind, the map SHALL say \"no summary yet\" for it rather than rendering an empty cell."
+    },
+    {
+      "key": "a-document-s-place-in-the-corpus-is-operator-set-and-held-in",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Placement is an editorial judgement about what the project is. It lives in the index so it travels with the project, is never derived from directory nesting, and is not offered to agents: no MCP tool writes the index and the route accepts only an operator credential.",
+      "statement": "A document's parent SHALL be recorded only in spec/index.json and SHALL be set or cleared only by the operator, through the arrange route, which SHALL refuse an invalid path (400), a document the index does not file (404), a project with no usable index (409, naming the reindex that builds one) and a parent that is unknown, the document itself, or would create a cycle (422, with the index's diagnostics), leaving the index unchanged on every refusal."
+    },
+    {
+      "key": "regeneration-is-bounded-to-the-documents-the-arrangement-cha",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Rendering the corpus into files buys portability at the cost of writes. Comparing rendered bytes keeps the writes to the documents whose navigation or map actually changed, including a parent whose child's summary was filled in later, which a structural comparison of the index would miss.",
+      "statement": "After a rebuild that writes the index, or a successful arrangement, the Hub SHALL re-render every filed document and write only those whose rendered bytes differ from the file on disk; a rebuild that writes no index SHALL re-render nothing."
+    },
+    {
+      "key": "a-re-render-is-driven-from-the-file-and-is-not-an-authored-c",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Reading the file means a cloned document regenerates identically to one the Hub created, and keeps regeneration off the authored write path that refuses approved documents and attributes edits to whoever triggered the rebuild.",
+      "statement": "A corpus re-render SHALL take the document's structure from the payload embedded in its own file, SHALL be recorded as a `rerendered` event by the system actor rather than as an authored change, SHALL NOT be refused for an approved document, and SHALL skip and report (`file_missing`, `no_readable_payload`) a document it cannot read rather than render it from guessed structure."
+    },
+    {
+      "key": "regeneration-records-the-digest-it-produced",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Drift detection compares the stored digest with the file; without this, every rebuild would report the Hub's own writes as drift and the signal would stop being read.",
+      "statement": "When a corpus re-render writes a document the Hub tracks, the Hub SHALL update that document's stored content digest to the bytes it wrote."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A half-applied arrangement, or one unwritable file taking down the whole rebuild, leaves files and database disagreeing with no sentence saying why.",
+      "statement": "A file write that fails during placement or re-rendering SHALL be reported rather than abort as a bare error: an index that cannot be written refuses the arrangement with `index_write_failed` before anything is re-rendered or placed, and a document that cannot be rewritten is reported as a `write_failed` skip while the others proceed, its digest unchanged."
+    },
+    {
+      "key": "the-operator-shapes-the-corpus-from-the-app",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The index is the only travelling record of the corpus's home and hierarchy; a judgement that can only be made by direct HTTP call is not one the operator can make. A rebuild is broadcast to the project's open views so they refresh.",
+      "statement": "The document browser SHALL show whether the project's index is usable and, when it is, which document is home, SHALL always offer a rebuild, and, when the Hub answers that it will not choose a home, SHALL ask the operator which tracked document is home and rebuild with that answer, never choosing one itself."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Placement is made where the operator is looking at the document; a refusal that names no remedy leaves them stuck.",
+      "statement": "A document's view SHALL let the operator place it under any other filed document or under no parent, SHALL show the Hub's refusal and its diagnostics when a placement is refused, and SHALL offer the rebuild in place when the refusal is that there is no usable index or the document is not yet filed."
+    },
+    {
+      "key": "document-discovery-covers-every-safe-document",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Nested archives, roadmaps and system maps are documents, not only `spec/changes/*/spec.html`.",
+      "statement": "The Hub SHALL discover every `.html` document beneath `spec/` whose path is safe, at any depth and outside hidden directories, up to 1,000, and SHALL report each unsafe path and any truncation as a diagnostic rather than skipping it silently."
+    },
+    {
+      "key": "home-document-selection-is-explicit-and-resilient",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A home the Hub picked would be indistinguishable from one the operator set.",
+      "statement": "The tree's home SHALL be the one the index records while that document exists; with no index, a single document MAY be home, and with several the Hub SHALL report the ambiguity rather than choose."
+    },
+    {
+      "key": "an-unreadable-or-absent-index-degrades-visibly",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A degraded tree presented as healthy hides the problem; an entry the Hub cannot explain may be a deliberate deletion or a missed rename.",
+      "statement": "When the index is absent, unreadable or invalid, the Hub SHALL still list every discovered document and report the index's state, and SHALL keep and report an index entry whose file is missing."
+    },
+    {
+      "key": "the-hub-can-write-the-document-index-it-reads",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The index carries the corpus's home, titles, hierarchy and order when the project moves; how the corpus is presented is the operator's decision.",
+      "statement": "The operator SHALL be able to rebuild `spec/index.json` from the discovered documents and their rows, and an index the Hub writes SHALL read back as valid; no agent route SHALL write it."
+    },
+    {
+      "key": "the-index-describes-documents-in-the-same-vocabulary-the-hub",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A document the Hub produced must be describable by an index the Hub validates.",
+      "statement": "A document's kind and phase SHALL mean the same in the index as in the rendered document: every kind a payload may declare is expressible, and an entry's status is its lifecycle phase, with an impossible kind and phase pair or a duplicate order reported as invalid."
+    },
+    {
+      "key": "rebuilding-the-index-preserves-what-the-operator-arranged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A rebuild must not replace the operator's arrangement with a derived one.",
+      "statement": "Rebuilding the index SHALL keep the home, parents and order a valid index records; with none recorded it SHALL derive a stable order, leave parents unset and invent no home."
+    },
+    {
+      "key": "the-operator-can-name-the-home-the-hub-refuses-to-guess",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Refusing to guess a home would otherwise leave a multi-document corpus permanently unindexable.",
+      "statement": "A rebuild SHALL accept a home named by the operator, taking precedence over any recorded home, and SHALL write no index when the named home is not a document of the corpus."
+    },
+    {
+      "key": "a-failure-to-write-the-index-does-not-abandon-the-requiremen",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Only the file can be blocked on the operator's decision or the disk; a bare server error would discard the requirement index with it.",
+      "statement": "When the index file cannot be written (no home to record, or an operating-system failure), a rebuild SHALL still rebuild the requirement index, leave the previous index file intact and say why in its answer; a document that cannot be re-rendered SHALL be reported as skipped while the others continue; and a placement whose index cannot be written SHALL be refused with the reason."
+    },
+    {
+      "key": "both-index-implementations-agree-on-the-vocabulary",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The two modules deliberately share no import, so only a test holds them together.",
+      "statement": "The Hub's and the CLI's index validators SHALL accept exactly the same kinds and phases."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Discovering documents beneath `spec/`, and reporting unsafe paths and truncation",
+      "`spec/index.json`: choosing its home, its vocabulary shared with the CLI's validator, degrading visibly when it is absent or invalid, and rebuilding it while preserving the operator's arrangement",
+      "The navigation region (home and parent links) and the generated map rendered into each document file",
+      "Recording and changing a document's parent (POST /project/spec/documents/arrange)",
+      "Re-rendering documents after a rebuild (POST /project/spec/reindex) or an arrangement, and how those re-renders are recorded",
+      "The app surfaces that show index state, rebuild it, ask for the home, and place a document"
+    ],
+    "non_goals": [
+      "A document's content, phase and authored writes (spec-document-authority)",
+      "Adopting documents found on disk without a record (spec-document-adoption)",
+      "The requirement index rebuilt by the same reindex route (requirement-traceability)"
+    ]
+  },
+  "summary": "How a project's specification documents are found and form one navigable corpus. The Hub discovers every safe document beneath `spec/`, keeps `spec/index.json` (home, parents, order, kind and phase) and lets the operator rebuild it and name its home; each rendered file links to the corpus home and its parent, a parent renders a generated map of its children, and a rebuild or arrangement re-renders only the files whose navigation or map changed.",
+  "tasks": [],
+  "title": "Spec corpus map"
+}

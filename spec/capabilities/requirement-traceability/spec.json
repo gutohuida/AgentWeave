@@ -1,0 +1,1338 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a project",
+      "key": "ac1",
+      "requirement": "a-requirement-is-addressable-outside-its-document",
+      "then": "each requirement is indexed under its identifier with its document, state, digest, digest version and anchor",
+      "when": "a specification document with requirements is saved"
+    },
+    {
+      "given": "an indexed project",
+      "key": "ac2",
+      "requirement": "n1",
+      "then": "it describes the same requirements, identifiers and digests as before",
+      "when": "the operator discards and rebuilds the index from the project's documents"
+    },
+    {
+      "given": "an indexed document whose file has become unreadable",
+      "key": "ac81",
+      "requirement": "n1",
+      "then": "its requirements keep their previous state and none is retired",
+      "when": "the index is rebuilt"
+    },
+    {
+      "given": "two documents in a project that both declare `FR-1`",
+      "key": "ac7",
+      "requirement": "n2",
+      "then": "the resolution is refused as `identifier_ambiguous`; naming the document resolves it",
+      "when": "work names `FR-1` without naming a document"
+    },
+    {
+      "given": "an indexed requirement",
+      "key": "ac5",
+      "requirement": "n3",
+      "then": "its semantic digest changes",
+      "when": "its modal changes and its statement does not"
+    },
+    {
+      "given": "an indexed requirement",
+      "key": "ac6",
+      "requirement": "n3",
+      "then": "its semantic digest is unchanged",
+      "when": "only its rationale changes, or its criteria are reordered"
+    },
+    {
+      "given": "an indexed requirement with a linked task",
+      "key": "ac3",
+      "requirement": "n4",
+      "then": "it is marked retired and the task's link still resolves to it",
+      "when": "it is removed from its document"
+    },
+    {
+      "given": "a retired requirement",
+      "key": "ac82",
+      "requirement": "n4",
+      "then": "it is restored under its old identifier and the change is logged as `restored`",
+      "when": "the same requirement is put back in its document"
+    },
+    {
+      "given": "an indexed requirement",
+      "key": "ac4",
+      "requirement": "n5",
+      "then": "a `reworded` entry records the previous and current digest, the source and the actor",
+      "when": "its statement changes so its digest changes"
+    },
+    {
+      "given": "an indexed document declaring FR-1 and FR-2",
+      "key": "ac8",
+      "requirement": "work-is-linked-to-the-requirements-it-serves",
+      "then": "a link exists from the task to each requirement, recording its actor and run",
+      "when": "a task is created naming FR-1 and FR-2"
+    },
+    {
+      "given": "a linked task",
+      "key": "ac9",
+      "requirement": "work-is-linked-to-the-requirements-it-serves",
+      "then": "its links remain",
+      "when": "it reaches a terminal status"
+    },
+    {
+      "given": "an indexed document declaring FR-1",
+      "key": "ac83",
+      "requirement": "n6",
+      "then": "the request is refused with 422 `identifier_unknown` and no task is created",
+      "when": "a task is created naming FR-1 and FR-99"
+    },
+    {
+      "given": "a task whose legacy reference names an identifier its project declares",
+      "key": "ac10",
+      "requirement": "n7",
+      "then": "a link to that requirement is created",
+      "when": "migration or a reindex runs"
+    },
+    {
+      "given": "a task whose legacy reference resolves to no requirement",
+      "key": "ac11",
+      "requirement": "n7",
+      "then": "the reference is kept verbatim as unresolved and no requirement is created",
+      "when": "migration or a reindex runs"
+    },
+    {
+      "given": "a requirement with a linked task and evidence",
+      "key": "ac41",
+      "requirement": "a-requirement-and-its-work-are-navigable-in-both-directions",
+      "then": "its tasks, evidence and coverage are returned",
+      "when": "the requirement is read (`GET /spec/requirements/{identifier}`)"
+    },
+    {
+      "given": "a task linked to requirements",
+      "key": "ac42",
+      "requirement": "a-requirement-and-its-work-are-navigable-in-both-directions",
+      "then": "each linked requirement is returned with its current statement, or none when it is retired",
+      "when": "the task is read"
+    },
+    {
+      "given": "an indexed requirement",
+      "key": "ac12",
+      "requirement": "evidence-names-what-produced-it-and-what-it-was-produced-aga",
+      "then": "the record names its kind, locator, summary, task, producing actor and run, and the digest current at that moment",
+      "when": "evidence is recorded for it"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac43",
+      "requirement": "evidence-names-what-produced-it-and-what-it-was-produced-aga",
+      "then": "the recorded actor is the one its run credential establishes, whatever the body says",
+      "when": "the agent records evidence"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac13",
+      "requirement": "n8",
+      "then": "the evidence is awaiting review rather than accepted",
+      "when": "the agent records evidence"
+    },
+    {
+      "given": "the operator",
+      "key": "ac84",
+      "requirement": "n8",
+      "then": "it is accepted on arrival with a review row saying the operator recorded it",
+      "when": "the operator records evidence"
+    },
+    {
+      "given": "a piece of evidence",
+      "key": "ac14",
+      "requirement": "n9",
+      "then": "both decisions are kept, each with its actor, and neither is overwritten",
+      "when": "it is accepted and later rejected"
+    },
+    {
+      "given": "an agent the operator granted the capability",
+      "key": "ac15",
+      "requirement": "n10",
+      "then": "the acceptance is recorded with that agent as the actor",
+      "when": "it accepts evidence another agent recorded"
+    },
+    {
+      "given": "an agent without the capability",
+      "key": "ac18",
+      "requirement": "n10",
+      "then": "it is refused with 403",
+      "when": "it attempts to decide evidence"
+    },
+    {
+      "given": "a project where no agent holds the capability",
+      "key": "ac19",
+      "requirement": "n10",
+      "then": "the decision is recorded",
+      "when": "the operator decides evidence"
+    },
+    {
+      "given": "a granted agent",
+      "key": "ac16",
+      "requirement": "n11",
+      "then": "it is refused as `self_acceptance`",
+      "when": "it attempts to accept evidence it recorded, from any run"
+    },
+    {
+      "given": "a run delivered a task for review",
+      "key": "ac17",
+      "requirement": "n12",
+      "then": "it is refused with `reviewer_records_evidence`, naming the task and `revision_needed`; a run delivered the same task to work records evidence as before",
+      "when": "it records evidence for that task"
+    },
+    {
+      "given": "a retired requirement",
+      "key": "ac85",
+      "requirement": "n13",
+      "then": "it is refused with `requirement_retired`",
+      "when": "evidence is recorded for it"
+    },
+    {
+      "given": "an agent run bound to a task",
+      "key": "ac86",
+      "requirement": "n13",
+      "then": "the evidence is recorded against the run's task",
+      "when": "it records evidence without naming a task"
+    },
+    {
+      "given": "an agent's earlier piece for a requirement, task and commit",
+      "key": "ac49",
+      "requirement": "n14",
+      "then": "it is refused as `duplicate_evidence` and the refusal does not tell the agent to commit its work",
+      "when": "the agent records the same demonstration in a later run with nothing uncommitted"
+    },
+    {
+      "given": "an earlier run's piece at a commit, and a new run whose Hub-committed checkout holds uncommitted changes",
+      "key": "ac50",
+      "requirement": "n14",
+      "then": "the new piece is recorded and not refused",
+      "when": "the new run records evidence matching that piece"
+    },
+    {
+      "given": "a piece whose recording run is executing",
+      "key": "ac44",
+      "requirement": "evidence-is-decided-only-after-the-run-that-recorded-it-has-",
+      "then": "the decision is refused with 409 `recording_run_live` naming the run and saying that stopping it ends the hold; no review is recorded",
+      "when": "the operator or a granted agent decides it"
+    },
+    {
+      "given": "a piece whose recording run has ended and been re-pointed",
+      "key": "ac45",
+      "requirement": "evidence-is-decided-only-after-the-run-that-recorded-it-has-",
+      "then": "it is accepted and recorded against the re-pointed commit",
+      "when": "the same decision is made"
+    },
+    {
+      "given": "a run marked running that the Hub is not executing",
+      "key": "ac46",
+      "requirement": "evidence-is-decided-only-after-the-run-that-recorded-it-has-",
+      "then": "the decision is accepted",
+      "when": "a piece it recorded is decided"
+    },
+    {
+      "given": "a piece whose recording run is executing",
+      "key": "ac47",
+      "requirement": "evidence-is-decided-only-after-the-run-that-recorded-it-has-",
+      "then": "the view says the run is still recording",
+      "when": "the piece is read"
+    },
+    {
+      "given": "a run that recorded a piece for a requirement and task",
+      "key": "ac48",
+      "requirement": "n15",
+      "then": "the first piece is revised with the new summary and locator, its recorded time is the revision time, it is marked revised, and no second piece exists",
+      "when": "it records the same demonstration again before anything is committed"
+    },
+    {
+      "given": "a new run with uncommitted changes that recorded a piece matching its earlier run's",
+      "key": "ac51",
+      "requirement": "n15",
+      "then": "its own piece is revised and exactly two pieces exist, one per run",
+      "when": "it records the same demonstration again"
+    },
+    {
+      "given": "an agent whose decision was refused while the recording run executed",
+      "key": "ac52",
+      "requirement": "an-agent-held-from-a-decision-is-told-when-it-can-decide",
+      "then": "the agent has one queued Hub-origin input in the conversation it was refused in, naming the piece and its new commit, and deciding the piece in that turn is recorded",
+      "when": "that run ends"
+    },
+    {
+      "given": "an agent's refused decision on a piece",
+      "key": "ac53",
+      "requirement": "an-agent-held-from-a-decision-is-told-when-it-can-decide",
+      "then": "no note naming that piece is queued",
+      "when": "the operator decides the piece after the run ends and before the note is queued"
+    },
+    {
+      "given": "the operator's decision refused while the recording run executed",
+      "key": "ac54",
+      "requirement": "an-agent-held-from-a-decision-is-told-when-it-can-decide",
+      "then": "nothing is queued for any agent",
+      "when": "that run ends"
+    },
+    {
+      "given": "an approved task waiting for a piece of evidence, whose integration will fail",
+      "key": "ac55",
+      "requirement": "a-decision-is-answered-as-recorded-even-when-the-merge-it-tr",
+      "then": "the response reports it accepted and the stored piece reads accepted",
+      "when": "the operator or a granted agent accepts the piece"
+    },
+    {
+      "given": "a requirement shown on its document and counted in a project total",
+      "key": "ac24",
+      "requirement": "coverage-is-one-computation-with-one-precedence",
+      "then": "both derive from the same computation",
+      "when": "both are read"
+    },
+    {
+      "given": "a document with a requirement no task is linked to",
+      "key": "ac21",
+      "requirement": "n16",
+      "then": "its state is `unserved`",
+      "when": "coverage is read"
+    },
+    {
+      "given": "a requirement with accepted evidence",
+      "key": "ac23",
+      "requirement": "n16",
+      "then": "its state is `stale`",
+      "when": "its statement is reworded"
+    },
+    {
+      "given": "a requirement whose only current-digest evidence is rejected",
+      "key": "ac87",
+      "requirement": "n16",
+      "then": "its state is `rejected`",
+      "when": "coverage is read"
+    },
+    {
+      "given": "a requirement retired with no linked task",
+      "key": "ac22",
+      "requirement": "n17",
+      "then": "its state is `retired`, never `unserved`",
+      "when": "coverage including retired requirements is read"
+    },
+    {
+      "given": "a document with a requirement that has no identifier",
+      "key": "ac88",
+      "requirement": "n17",
+      "then": "it is reported as a diagnostic and has no coverage state",
+      "when": "coverage is read"
+    },
+    {
+      "given": "a requirement with accepted evidence whose footprint is not reachable from the main branch",
+      "key": "ac25",
+      "requirement": "n18",
+      "then": "it reports `verified` and `not_integrated`",
+      "when": "coverage is read"
+    },
+    {
+      "given": "any coverage response",
+      "key": "ac26",
+      "requirement": "n18",
+      "then": "every entry carries an integration answer",
+      "when": "it is read"
+    },
+    {
+      "given": "a project that is not a git repository",
+      "key": "ac29",
+      "requirement": "n19",
+      "then": "the footprint names that path and its content hash, and a later change to the file raises a drift candidate",
+      "when": "evidence naming a file is recorded"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac33",
+      "requirement": "n20",
+      "then": "the footprint is taken from the agent's own working checkout",
+      "when": "it records evidence whose locator names a commit"
+    },
+    {
+      "given": "an agent that recorded evidence with its work uncommitted",
+      "key": "ac74",
+      "requirement": "n20",
+      "then": "the footprint is re-stamped at the committed work and records where its watched files came from",
+      "when": "its run ends and is snapshotted"
+    },
+    {
+      "given": "the operator",
+      "key": "ac30",
+      "requirement": "n21",
+      "then": "the footprint names that commit and the files it watches there, not the operator's checkout",
+      "when": "evidence is recorded naming a commit the repository has"
+    },
+    {
+      "given": "the operator",
+      "key": "ac31",
+      "requirement": "n21",
+      "then": "it is refused with `locator_commit_unknown` and no evidence or footprint is recorded",
+      "when": "evidence is recorded naming a commit the repository does not have"
+    },
+    {
+      "given": "the operator",
+      "key": "ac32",
+      "requirement": "n21",
+      "then": "the footprint is taken from the operator's own checkout",
+      "when": "evidence is recorded whose locator is a path"
+    },
+    {
+      "given": "an agent run",
+      "key": "ac34",
+      "requirement": "n22",
+      "then": "the response reports the footprint marked provisional",
+      "when": "it records evidence"
+    },
+    {
+      "given": "evidence with a captured footprint",
+      "key": "ac75",
+      "requirement": "n22",
+      "then": "the response reports where the watched files came from and how many there are",
+      "when": "it is recorded"
+    },
+    {
+      "given": "a run that wrote outside its footprint directory",
+      "key": "ac38",
+      "requirement": "n23",
+      "then": "the footprint reports the outside writes, still describes its own directory, and the evidence is recorded",
+      "when": "it records evidence"
+    },
+    {
+      "given": "accepted evidence whose locator names one file",
+      "key": "ac67",
+      "requirement": "a-footprint-watches-the-files-its-evidence-is-about",
+      "then": "no drift candidate is raised for it",
+      "when": "a later commit changes only a different file"
+    },
+    {
+      "given": "accepted evidence whose locator names one file",
+      "key": "ac68",
+      "requirement": "a-footprint-watches-the-files-its-evidence-is-about",
+      "then": "a candidate is raised naming that file",
+      "when": "a later commit on its comparison line changes that file"
+    },
+    {
+      "given": "an agent's evidence naming no file, footprinted at a commit not yet on the main line",
+      "key": "ac69",
+      "requirement": "a-footprint-watches-the-files-its-evidence-is-about",
+      "then": "it watches the files changed since that line left the main line",
+      "when": "the footprint is taken"
+    },
+    {
+      "given": "an agent's evidence naming one of several files its task branch changed",
+      "key": "ac71",
+      "requirement": "a-footprint-watches-the-files-its-evidence-is-about",
+      "then": "it watches that file only",
+      "when": "the footprint is taken"
+    },
+    {
+      "given": "a locator `src/engine.js (Engine.currentRun); test/engine.test.js`",
+      "key": "ac72",
+      "requirement": "a-footprint-watches-the-files-its-evidence-is-about",
+      "then": "it watches `src/engine.js` and `test/engine.test.js` and nothing for the other words",
+      "when": "the footprint is taken"
+    },
+    {
+      "given": "accepted evidence naming no file and no commit whose work changed nothing off the main line",
+      "key": "ac70",
+      "requirement": "a-footprint-watches-the-files-its-evidence-is-about",
+      "then": "it watches nothing and appears with reason `names_no_file`",
+      "when": "unwatched evidence is listed"
+    },
+    {
+      "given": "accepted evidence recorded before footprints recorded what they watch",
+      "key": "ac73",
+      "requirement": "n24",
+      "then": "its footprint is rebuilt from its locator or else its merge; a merge-rebuilt footprint raises nothing for changes made before the rebuild; one that cannot be rebuilt is listed as `recorded_before_watching`",
+      "when": "the operator scans for drift"
+    },
+    {
+      "given": "accepted current-digest evidence watching a file",
+      "key": "ac27",
+      "requirement": "a-changed-implementation-raises-a-candidate-never-an-edit",
+      "then": "a drift candidate exists for that requirement",
+      "when": "the file changes on its comparison line and the operator scans"
+    },
+    {
+      "given": "accepted evidence whose footprint watches nothing",
+      "key": "ac28",
+      "requirement": "a-changed-implementation-raises-a-candidate-never-an-edit",
+      "then": "no candidate is raised for it and it is listed as unwatched with its reason",
+      "when": "the operator scans"
+    },
+    {
+      "given": "a raised drift candidate",
+      "key": "ac35",
+      "requirement": "a-changed-implementation-raises-a-candidate-never-an-edit",
+      "then": "the specification document is unchanged",
+      "when": "the document is read"
+    },
+    {
+      "given": "accepted evidence whose line of work has been deleted and never reached the main branch",
+      "key": "ac89",
+      "requirement": "a-changed-implementation-raises-a-candidate-never-an-edit",
+      "then": "no candidate is raised for it",
+      "when": "the operator scans"
+    },
+    {
+      "given": "a candidate",
+      "key": "ac36",
+      "requirement": "n25",
+      "then": "the same change does not raise it again",
+      "when": "the operator resolves it as no specification change required and scans again"
+    },
+    {
+      "given": "a candidate",
+      "key": "ac37",
+      "requirement": "n25",
+      "then": "a new candidate is raised",
+      "when": "the operator resolves it as implementation corrected and the change is still present at the next scan"
+    },
+    {
+      "given": "an open candidate",
+      "key": "ac90",
+      "requirement": "n25",
+      "then": "it is refused with `resolution_is_the_operators`",
+      "when": "an agent tries to resolve it"
+    },
+    {
+      "given": "a requirement with an open drift candidate",
+      "key": "ac91",
+      "requirement": "n26",
+      "then": "the candidate is `superseded`",
+      "when": "its statement is reworded"
+    },
+    {
+      "given": "a document's view",
+      "key": "ac76",
+      "requirement": "drift-is-raised-and-answered-where-the-operator-reads-the-re",
+      "then": "the scan runs across the project and the view reports how many candidates were raised and how many belong to this document",
+      "when": "the operator scans for drift"
+    },
+    {
+      "given": "a document with an open candidate",
+      "key": "ac77",
+      "requirement": "drift-is-raised-and-answered-where-the-operator-reads-the-re",
+      "then": "it shows the requirement's identifier, the files that moved and the verified evidence, and offers the three answers",
+      "when": "its view is shown"
+    },
+    {
+      "given": "the only open candidate for a requirement",
+      "key": "ac78",
+      "requirement": "drift-is-raised-and-answered-where-the-operator-reads-the-re",
+      "then": "the requirement no longer reports drifting in that view or any other open view",
+      "when": "the operator answers it"
+    },
+    {
+      "given": "an answered candidate",
+      "key": "ac79",
+      "requirement": "drift-is-raised-and-answered-where-the-operator-reads-the-re",
+      "then": "it is refused with 409 `drift_not_open` naming the recorded answer, which is unchanged",
+      "when": "another answer is submitted"
+    },
+    {
+      "given": "a gated requirement that is drifting",
+      "key": "ac80",
+      "requirement": "n27",
+      "then": "the refusal says the operator answers the candidate on the document and that an agent cannot",
+      "when": "approval is refused"
+    },
+    {
+      "given": "a requirement whose evidence awaits a decision",
+      "key": "ac56",
+      "requirement": "the-screen-that-says-evidence-awaits-a-decision-can-take-it",
+      "then": "each piece is listed with its summary, recorder, commit and branch; accepting one records the decision and the requirement's coverage updates",
+      "when": "the operator opens it in the coverage view"
+    },
+    {
+      "given": "a piece awaiting a decision",
+      "key": "ac57",
+      "requirement": "the-screen-that-says-evidence-awaits-a-decision-can-take-it",
+      "then": "the rejection is not sent",
+      "when": "the operator tries to reject it without a reason"
+    },
+    {
+      "given": "a piece awaiting a decision",
+      "key": "ac58",
+      "requirement": "the-screen-that-says-evidence-awaits-a-decision-can-take-it",
+      "then": "the Hub's sentence is shown beside that piece and its state is unchanged",
+      "when": "the Hub refuses the operator's decision"
+    },
+    {
+      "given": "a piece awaiting a decision that names a commit",
+      "key": "ac60",
+      "requirement": "the-screen-that-says-evidence-awaits-a-decision-can-take-it",
+      "then": "beside Accept it says accepting may merge that commit into the main branch for an approved task waiting on it",
+      "when": "the view is shown"
+    },
+    {
+      "given": "two open views of a project's coverage",
+      "key": "ac59",
+      "requirement": "n28",
+      "then": "both refresh",
+      "when": "a piece is decided by the operator or a granted agent"
+    },
+    {
+      "given": "a piece shown as still being recorded",
+      "key": "ac61",
+      "requirement": "n28",
+      "then": "the view refreshes without a reload and the piece can be decided",
+      "when": "the run that recorded it ends"
+    },
+    {
+      "given": "a task serving one verified, one awaiting-review and one rejected requirement",
+      "key": "ac62",
+      "requirement": "a-task-card-shows-where-each-requirement-it-serves-stands",
+      "then": "each chip carries its own requirement's tone",
+      "when": "it is shown on the board"
+    },
+    {
+      "given": "a task serving five requirements, three verified and two not evidenced",
+      "key": "ac63",
+      "requirement": "a-task-card-shows-where-each-requirement-it-serves-stands",
+      "then": "all five chips are shown and a count names three verified and two open",
+      "when": "it is shown on the board"
+    },
+    {
+      "given": "a task serving four requirements or fewer",
+      "key": "ac64",
+      "requirement": "a-task-card-shows-where-each-requirement-it-serves-stands",
+      "then": "its chips are shown and no count",
+      "when": "it is shown on the board"
+    },
+    {
+      "given": "a document that has retired a requirement",
+      "key": "ac65",
+      "requirement": "a-retired-requirement-stays-reachable-from-its-document",
+      "then": "it lists that requirement's identifier and key as retired",
+      "when": "its view is shown"
+    },
+    {
+      "given": "a retired requirement a task and a piece of evidence still point at",
+      "key": "ac66",
+      "requirement": "a-retired-requirement-stays-reachable-from-its-document",
+      "then": "the task, the evidence and its coverage are shown",
+      "when": "the operator opens it"
+    },
+    {
+      "given": "",
+      "key": "ac162",
+      "requirement": "navigating-from-a-task-s-requirement-link-reaches-that-requi",
+      "then": "the document opens with that requirement in view",
+      "when": "the operator follows a task's requirement link"
+    },
+    {
+      "given": "a task serves FR-2",
+      "key": "cr47",
+      "requirement": "a-task-states-what-its-requirements-say",
+      "then": "its requirement entry carries FR-2's statement as the document states it",
+      "when": "the task is read"
+    },
+    {
+      "given": "the project's directory is unavailable",
+      "key": "cr48",
+      "requirement": "a-task-states-what-its-requirements-say",
+      "then": "tasks are returned with identifiers and no wording, and the read does not fail",
+      "when": "the task board is read"
+    },
+    {
+      "given": "",
+      "key": "cr49",
+      "requirement": "an-agent-can-record-read-and-decide-requirement-evidence",
+      "then": "it is stored `awaiting`, attributed to the run, and the response carries its footprint",
+      "when": "an agent records evidence"
+    },
+    {
+      "given": "",
+      "key": "cr50",
+      "requirement": "an-agent-can-record-read-and-decide-requirement-evidence",
+      "then": "each row names its producer and requirement identifier",
+      "when": "an agent lists evidence"
+    },
+    {
+      "given": "an agent holds the grant",
+      "key": "cr51",
+      "requirement": "an-agent-can-record-read-and-decide-requirement-evidence",
+      "then": "the decision is refused",
+      "when": "it decides evidence it produced itself"
+    },
+    {
+      "given": "",
+      "key": "cr52",
+      "requirement": "an-agent-can-record-read-and-decide-requirement-evidence",
+      "then": "`decide_evidence.decision` is the enum `accepted`/`rejected` and `record_evidence.kind` is free text",
+      "when": "the MCP schemas are read"
+    },
+    {
+      "given": "",
+      "key": "sda-ac49",
+      "requirement": "evidence-is-footprinted-against-the-work-it-describes",
+      "then": "the footprint names the agent's branch and the commit in that checkout the footprint does not name the project checkout's commit",
+      "when": "an agent records evidence while its checkout holds work not present in the project's checkout"
+    },
+    {
+      "given": "",
+      "key": "sda-ac50",
+      "requirement": "evidence-is-footprinted-against-the-work-it-describes",
+      "then": "the footprint names the project checkout's branch and commit",
+      "when": "the operator records evidence"
+    },
+    {
+      "given": "",
+      "key": "sda-ac51",
+      "requirement": "evidence-is-footprinted-against-the-work-it-describes",
+      "then": "the footprint falls back to the project's own directory no error is raised",
+      "when": "an agent records evidence that belongs to no task whose branch exists, and a directory exists at its checkout's location that version control does not track"
+    },
+    {
+      "given": "",
+      "key": "sda-ac52",
+      "requirement": "evidence-is-footprinted-against-the-work-it-describes",
+      "then": "the footprint falls back to the project's own directory no checkout is created",
+      "when": "an agent with no provisioned checkout records evidence that belongs to no task whose branch exists"
+    },
+    {
+      "given": "",
+      "key": "sda-ac59",
+      "requirement": "evidence-is-footprinted-against-the-work-it-describes",
+      "then": "the footprint names the task's branch and its tip commit it does not name the project checkout's commit",
+      "when": "an agent records evidence for a task whose checkout has been released while its run continues"
+    },
+    {
+      "given": "",
+      "key": "sda-ac60",
+      "requirement": "whether-work-has-reached-the-main-line-is-re-answered",
+      "then": "coverage reports that requirement as integrated it did not report so before the integration",
+      "when": "a requirement's work is integrated into the project's main branch"
+    },
+    {
+      "given": "",
+      "key": "sda-ac61",
+      "requirement": "whether-work-has-reached-the-main-line-is-re-answered",
+      "then": "the earlier work's recorded answer is revised as well",
+      "when": "integrating one requirement's commit also brings an earlier commit on the same branch into the main line"
+    },
+    {
+      "given": "",
+      "key": "sda-ac62",
+      "requirement": "drift-is-assessed-against-the-line-of-work-a-footprint-names",
+      "then": "no drift candidate is raised for that work",
+      "when": "the main branch changes and an agent's demonstrated work, not yet reachable from the main line, is unchanged on its branch"
+    },
+    {
+      "given": "",
+      "key": "sda-ac63",
+      "requirement": "drift-is-assessed-against-the-line-of-work-a-footprint-names",
+      "then": "a drift candidate is raised",
+      "when": "the branch a footprint names changes a watched file after the evidence was accepted, and the work is not yet on the main line"
+    },
+    {
+      "given": "",
+      "key": "sda-ac64",
+      "requirement": "drift-is-assessed-against-the-line-of-work-a-footprint-names",
+      "then": "a drift candidate is raised for that evidence",
+      "when": "an agent's demonstrated work has reached the main line a later commit on the main line changes a file its footprint watches"
+    },
+    {
+      "given": "",
+      "key": "sda-ac65",
+      "requirement": "drift-is-assessed-against-the-line-of-work-a-footprint-names",
+      "then": "no new candidate is raised",
+      "when": "a candidate was resolved while the work was on its branch the work then reaches the main line with the same content for the watched files"
+    },
+    {
+      "given": "",
+      "key": "sda-ac66",
+      "requirement": "drift-is-assessed-against-the-line-of-work-a-footprint-names",
+      "then": "a drift candidate is raised for that evidence",
+      "when": "a footprint names no line of work, because it was taken on a detached checkout its commit is reachable from the main line a later commit on the main line changes a file it watches"
+    },
+    {
+      "given": "",
+      "key": "sda-ac67",
+      "requirement": "drift-is-assessed-against-the-line-of-work-a-footprint-names",
+      "then": "no drift candidate is raised no error is reported",
+      "when": "the branch a footprint names no longer exists and its work is not on the main line"
+    },
+    {
+      "given": "",
+      "key": "sda-ac53",
+      "requirement": "a-committed-turn-s-footprints-are-repointed-at-its-commit",
+      "then": "the evidence names the commit the system made it does not name the commit the turn started from",
+      "when": "an agent records evidence for work it has not yet committed the system commits that work when the turn ends"
+    },
+    {
+      "given": "",
+      "key": "sda-ac54",
+      "requirement": "a-committed-turn-s-footprints-are-repointed-at-its-commit",
+      "then": "the accepted evidence names the commit containing the work the decision recorded against it is unchanged",
+      "when": "a turn's evidence has been accepted before the turn's work was committed"
+    },
+    {
+      "given": "",
+      "key": "sda-ac55",
+      "requirement": "a-committed-turn-s-footprints-are-repointed-at-its-commit",
+      "then": "the evidence reports that the work has not reached the main line an earlier answer of reached is not carried over",
+      "when": "a turn's evidence is re-pointed at a commit that has not reached the main line"
+    },
+    {
+      "given": "",
+      "key": "sda-ac56",
+      "requirement": "a-footprint-s-branch-names-its-line-of-work",
+      "then": "the footprint names that task's branch it does not name the detached checkout",
+      "when": "evidence is footprinted in a checkout detached at the tip of a task's branch"
+    },
+    {
+      "given": "",
+      "key": "sda-ac57",
+      "requirement": "a-footprint-s-branch-names-its-line-of-work",
+      "then": "the footprint names that branch",
+      "when": "the operator records evidence naming a commit that one branch contains and that is no longer that branch's tip"
+    },
+    {
+      "given": "",
+      "key": "sda-ac58",
+      "requirement": "a-footprint-s-branch-names-its-line-of-work",
+      "then": "both carry the same empty branch",
+      "when": "two footprints are taken where no single branch can be named, one on a detached checkout and one on a named commit"
+    },
+    {
+      "given": "",
+      "key": "ac147",
+      "requirement": "n16",
+      "then": "its coverage state is reported as verified",
+      "when": "a requirement whose only prior evidence was rejected later receives accepted evidence against the same wording"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Coverage state of one requirement",
+      "steps": [
+        "If it has no identifier or no digest, report a diagnostic and no state.",
+        "If an open drift candidate exists: drifting.",
+        "Else if its evidence is only against an earlier digest: stale.",
+        "Else if current-digest evidence awaits review: evidence_awaiting_review.",
+        "Else if current-digest evidence is accepted: verified.",
+        "Else if current-digest evidence exists and all of it is rejected: rejected.",
+        "Else if linked work is started or completed: in_progress; if linked work exists: not_started.",
+        "Else: retired when the requirement is retired, otherwise unserved.",
+        "Independently, answer integration from the accepted current-digest evidence's footprints: integrated, not_integrated, unknown (no main branch) or not_applicable."
+      ]
+    },
+    {
+      "name": "Files a footprint watches",
+      "steps": [
+        "Read the locator as words; strip `::node` and `:line` suffixes; keep the words that are paths, or directories holding paths, in the footprinted tree.",
+        "If none, and an operator named a commit, take the files that commit changed (a merge against its first parent).",
+        "If none, take the files changed on the line of work since it left the main line.",
+        "If none, watch nothing with reason `names_no_file`."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-10": "1ebd88b1de2bc47ff3767457713c6e5d28821813a055f9f8cb5c28b5f00517d4",
+      "FR-11": "341fb490808bbeec648144245221843e49d801a3278f5fad2d33a8edcd5f41fc",
+      "FR-12": "86a7b07580af811588f841ed197ae804022112aa1944dba4332811b45045011b",
+      "FR-13": "d487c94739ae6db4c5a1e9645b725a669da09d5c36789e26194337658764ef24",
+      "FR-14": "7bd733c7bd9b6ac3bf9341c78b7d9068670211d63d8d54a96b06fb6c2a6b6027",
+      "FR-15": "2c8e7c0f359299ed4e43bf98d676fe1e2f512cd32856ed54846212509edfc6d7",
+      "FR-16": "cad85e8783a1d920260e566f14d03d2e3e0ec68fe8e3cbce81e0303e65ab1691",
+      "FR-17": "be15b2706813c1b5a62fe7664bdb275abbc42e66da10f34bba7260da83930cdd",
+      "FR-18": "4589f2c21cdd76c3a001dd0d247dd69c52ec867df17c9ae0423c7ad3fbdf670b",
+      "FR-19": "e7073047fab7104763d8f37a5677deacdc78bd92408e1505c6b8233fa33e05c2",
+      "FR-20": "529f518a1285a02f3ed04e699481946cb7fbe4cbc68da38aa379885c2741be4d",
+      "FR-21": "6f1353801b548ee96336f6ed42d17d5c7323abd060652fa1e081afb3946f199c",
+      "FR-22": "71d28a3009e427177785ebea0d34f531a1433ed0437a80bee7e584961fb770c5",
+      "FR-23": "a521695c7651e328c00ef3adf4fef213988b702cb45332b27694fd6f143e8766",
+      "FR-24": "0ce6c5e307319604ac30ff2891cc01fcf6d75519ff1c016cad099f0ec5acdec7",
+      "FR-25": "c19b1afbe45f4e73f49697a1005671d105602fae393ceeb98bb32368a51efa7a",
+      "FR-26": "e9a6b9b033ab2beb275dd26aad4a31287ba149ebefa5637195927ad33aa1dec2",
+      "FR-27": "e9c24dda844e8d41459831173b55c3f6a597bf6506b6e961c29a9b7003f7bd7c",
+      "FR-28": "25506c029cb6d965cc59d9b4b056d29b34a415a393bcf6e52b4bc5278b2b5c17",
+      "FR-29": "95e7e0c8e26c01388bfe9c6c18c828d6aea791860c2193b386c9d34b1355a6b2",
+      "FR-30": "6ca168c30ed773456021e573c86ee8ddf30ff6acdeefd5532c5356fb0c61a93a",
+      "FR-31": "b75084bd6f9507a396ad92c92f03a1f24b6d75119168251d20c4299a7b806aff",
+      "FR-32": "83125dbc911dc537e1be9b54eda45bc176c8578539d066df930910cfa6ac95bb",
+      "FR-33": "b8e53df1dbcd0e0a7de35d4fd3daca8c9d3ee1055bbabac70536da3718d563a2",
+      "FR-34": "60ee812e9bd81450c9ea8e1434e4efa38cc666418e9aa33ab2717e5fef0bc4fc",
+      "FR-35": "6dfd2992600a0506ccd9a6c2f7bbf2477c67d5aa804aed15877ec8b5af7e670b",
+      "FR-36": "8a7d191beb5e5c380196ac2565b196a9c714785a29260b7d7ede7b42695e1e16",
+      "FR-37": "d1a08abb4dec3f9692120ebfc28028de5798e7d5dd394e15d6ea484a187b25d7",
+      "FR-38": "950385c309fde264605580eb07ddde56f819bc4f5ed1e36608a1537ae8416d6f",
+      "FR-39": "5363ae4bbdadbbdabbb0ea989d247dc6b726b6de5eeafb58ebf6a42c02cc207f",
+      "FR-40": "9d25877ef8b55a79425f7b0e2b18c63a58f79de92e8f8fbb5cc660c9ebbc41f1",
+      "FR-41": "677ab219204ca25b695a7ca9d086a1329f890e8e72940689caacc7f7f0c9132a",
+      "FR-42": "f8afacb907d742c6b12bd269e88e151a5001d67b370f47123c5057e1ae8b3d05",
+      "FR-43": "c31bd54f825b76000ca9f49e3edfb8dba87b174f5c216a945df36749be835c5d",
+      "FR-44": "1b6d9bf68b50b63cd0fb448201c4256b5c768b3426c4441459e499181949755e",
+      "FR-45": "44e2f38df65b451e139c80bda3a58545c90d357da23e06c057c342a6bb723c7a",
+      "FR-46": "7662745f7d81c11992c775f6186b546eed18f33ebef84086321d79d6f9a75a33",
+      "FR-47": "720affb2c96085d3198bf7ed7bf8c978caf25c117e0cb6c1a277bd9eb5187123",
+      "FR-48": "48875fdeb795740cb9fd56fd13d24232c662a92a7c45e7a20b0147b46aa6c705",
+      "FR-49": "622693ecfd71eb41c716dd7569416feef3b534ca73a9ee0285036bca39b89892",
+      "FR-50": "4ca12dd15fb92bf64dcfddc992c99871e52bc1a40fe167146fed6358f8c3664f",
+      "FR-51": "0307ef49b75fa9dd4f0c2195227e33b9a27373b9a917f6d39858e58f95887200",
+      "FR-52": "b6eb46cbb2ea7be594f815f01a0332d83aa219324832374951095512791aa832",
+      "FR-53": "620b70084198ffe55294ecbfacb4d8c8ad86784f4d334d4b63ec0630182ce56b",
+      "FR-54": "9371c370bae967e20011547df6945755263e4fb92261dce4c899885cf2ca80ec",
+      "FR-55": "d3f730102892c55da148d56d393997c8d129dfcd9e55c344d88c1bdaeccb6cde",
+      "FR-56": "c5a1fac12b5a350dcbf7e7f2505e66bb487fc8ebcdc3664fae5542e2a7ffa13f",
+      "FR-7": "822fa2cbcc9ee98f412a7040d2bd7738941a2c762b8af112c3c1ff28d0a26c47",
+      "FR-8": "e320eebf6045fc12d206c38c7d6e54299432f7f6fe1c4948faddb267d400fea3",
+      "FR-9": "da908b42a1d65c2b719f110fe3b3f6d9af59a64cde27ad8f1118a0164cdc9ee3"
+    },
+    "high_water": 56,
+    "requirements": {
+      "a-changed-implementation-raises-a-candidate-never-an-edit": "FR-11",
+      "a-committed-turn-s-footprints-are-repointed-at-its-commit": "FR-55",
+      "a-decision-is-answered-as-recorded-even-when-the-merge-it-tr": "FR-15",
+      "a-footprint-s-branch-names-its-line-of-work": "FR-56",
+      "a-footprint-watches-the-files-its-evidence-is-about": "FR-19",
+      "a-requirement-and-its-work-are-navigable-in-both-directions": "FR-12",
+      "a-requirement-is-addressable-outside-its-document": "FR-7",
+      "a-retired-requirement-stays-reachable-from-its-document": "FR-18",
+      "a-task-card-shows-where-each-requirement-it-serves-stands": "FR-17",
+      "a-task-states-what-its-requirements-say": "FR-50",
+      "an-agent-can-record-read-and-decide-requirement-evidence": "FR-51",
+      "an-agent-held-from-a-decision-is-told-when-it-can-decide": "FR-14",
+      "coverage-is-one-computation-with-one-precedence": "FR-10",
+      "drift-is-assessed-against-the-line-of-work-a-footprint-names": "FR-54",
+      "drift-is-raised-and-answered-where-the-operator-reads-the-re": "FR-20",
+      "evidence-is-decided-only-after-the-run-that-recorded-it-has-": "FR-13",
+      "evidence-is-footprinted-against-the-work-it-describes": "FR-52",
+      "evidence-names-what-produced-it-and-what-it-was-produced-aga": "FR-9",
+      "n1": "FR-21",
+      "n10": "FR-30",
+      "n11": "FR-31",
+      "n12": "FR-32",
+      "n13": "FR-33",
+      "n14": "FR-34",
+      "n15": "FR-35",
+      "n16": "FR-36",
+      "n17": "FR-37",
+      "n18": "FR-38",
+      "n19": "FR-39",
+      "n2": "FR-22",
+      "n20": "FR-40",
+      "n21": "FR-41",
+      "n22": "FR-42",
+      "n23": "FR-43",
+      "n24": "FR-44",
+      "n25": "FR-45",
+      "n26": "FR-46",
+      "n27": "FR-47",
+      "n28": "FR-48",
+      "n3": "FR-23",
+      "n4": "FR-24",
+      "n5": "FR-25",
+      "n6": "FR-26",
+      "n7": "FR-27",
+      "n8": "FR-28",
+      "n9": "FR-29",
+      "navigating-from-a-task-s-requirement-link-reaches-that-requi": "FR-49",
+      "the-screen-that-says-evidence-awaits-a-decision-can-take-it": "FR-16",
+      "whether-work-has-reached-the-main-line-is-re-answered": "FR-53",
+      "work-is-linked-to-the-requirements-it-serves": "FR-8"
+    },
+    "retired": {}
+  },
+  "design": "D1 — Derived index, document-scoped identity. The index is rebuilt from the files and holds no wording; identifiers are per document, so records point at the indexed row, and a bare identifier shared by two documents is refused rather than guessed.\n\nD2 — Producing evidence is open; accepting it is the gate. Anyone working a task may record evidence; agents' evidence waits for review; decisions are append-only, per-agent granted by the operator, never self-decided, and never by the task's reviewer recording its own.\n\nD3 — Evidence is pinned twice: to the requirement digest (so rewording makes it stale) and to an implementation footprint (so a code change can raise drift and integration can be judged).\n\nD4 — Footprints describe the tree that was named or worked in, never a guessed one: an agent's own checkout re-stamped at run end, an operator's named commit or checkout. Writes outside the workspace are reported, not chased or refused.\n\nD5 — Watch narrowly. Watched files come from the first source that names any (locator, named commit, branch diff), never their union, so one shared-file commit does not flood candidates.\n\nD6 — Drift is a question for the operator, never an edit. Three answers; `implementation_corrected` keeps no fingerprint so a recurrence is raised again; rewording supersedes open candidates.\n\nD7 — One coverage computation, with integration reported beside it rather than ranked within it.\n\nD8 — Decisions wait for the recording run to end, because the Hub re-points that run's evidence at its commit then; the held agent is told when it can decide.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_spec_index.py, hub/tests/test_spec_index_writer.py — index, digest, retirement, restore, change log, rebuild",
+      "hub/tests/test_requirement_links.py, hub/tests/test_task_requirement_ids_readable.py — links, refusals, backfill, task view",
+      "hub/tests/test_requirement_evidence.py, hub/tests/test_duplicate_evidence.py, hub/tests/test_a_reviewer_does_not_record_evidence.py — recording and deciding",
+      "hub/tests/test_evidence_waits_for_its_run.py, hub/tests/test_evidence_restamp.py — live-run hold, revision, held-agent note, run-end restamp",
+      "hub/tests/test_requirement_coverage.py — precedence, diagnostics, retired, integration",
+      "hub/tests/test_requirement_drift.py, hub/tests/test_drift_watches_files.py, hub/tests/test_evidence_footprint_root.py, hub/tests/test_a_reworded_requirement_supersedes_its_drift.py — footprints and drift",
+      "hub/ui/src/__tests__/evidencePieces.test.tsx, specDriftPanel.test.tsx, taskRequirementLinks.test.tsx, specRetiredRequirements.test.tsx — the views"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059 (bundled requirements split, retention and artifact-removal clauses dropped as unbuilt).",
+  "open_questions": [],
+  "problem": "A requirement copied into a task as text cannot be joined, checked or noticed when it changes, and an agent's claim that it verified something is not a fact. Without an index, links, digest-pinned evidence and a single coverage definition, nobody can answer whether a requirement has work, whether that work was demonstrated against the current wording, whether the demonstration reached the product, or whether the implementation has since moved under it.",
+  "requirements": [
+    {
+      "key": "a-requirement-is-addressable-outside-its-document",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Other records point at a requirement without copying its wording. The index is derived from the documents and is not authoritative, so it must never hold text the documents do not.",
+      "statement": "The Hub SHALL index every requirement a project's specification documents declare under the identifier the Hub minted for it, unique within its document, recording the declaring document, whether it is active or retired, its semantic digest with that digest's canonicalization version, and its anchor in the rendered document, and SHALL hold no requirement wording in the index."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A derived index must be reconstructible. Treating an unreadable file as an empty document would retire every requirement in it, and every link and piece of evidence would then point at retired rows.",
+      "statement": "The operator SHALL be able to rebuild the requirement index from the project's document files alone, yielding the same requirements, identifiers and digests; a document file that cannot be read SHALL leave its indexed requirements unchanged rather than retire them."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Identifiers are minted per document, so `FR-3` names a different requirement in each. Choosing one would link work to a requirement nobody named, and the mistake would be invisible until someone read both documents.",
+      "statement": "Where a requirement is named by identifier alone and more than one document in the project declares that identifier, the Hub SHALL refuse the resolution as ambiguous (`identifier_ambiguous`) unless the document is also named."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The digest marks what a reader must satisfy; explanatory prose changing must not make evidence stale. Recording the canonicalization keeps a digest taken under an older rule distinguishable from a rewording.",
+      "statement": "A requirement's semantic digest SHALL be computed by one definition covering its modal, statement, party and acceptance criteria (independent of criteria order) and excluding its rationale, and SHALL be stored with the version of the canonicalization that produced it."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Work and evidence that pointed at a retired requirement must keep resolving: what it demanded, and what was built for it, outlive it.",
+      "statement": "A requirement removed from its document SHALL be retired with its last digest rather than deleted, its identifier SHALL never be issued to another requirement, and a requirement restored to its document SHALL return under its old identifier."
+    },
+    {
+      "key": "n5",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Staleness and drift are judged against wording history; an append-only log is the only record of when and how a requirement changed.",
+      "statement": "Every change to an indexed requirement — created, reworded, retired or restored — SHALL be appended to a log recording the previous and new digest, whether the change came through the Hub or from an external edit, and the actor."
+    },
+    {
+      "key": "work-is-linked-to-the-requirements-it-serves",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A copied string cannot be joined, checked, or notice a rewording; a link can. What work served a requirement is asked mostly about finished work, so links outlive the task's activity.",
+      "statement": "A task SHALL be linked to the requirements it serves by reference to the indexed requirement, each link recording the actor that created it and, where an agent did, the run; links SHALL be added, never removed, including when the task reaches a terminal status."
+    },
+    {
+      "key": "n6",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A task that silently drops one of the requirements it was created for looks complete when it is not. Free text predates links and may hold prose; refusing it would break existing callers, and discarding it would lose what the author wrote.",
+      "statement": "Requirement identifiers given when creating or updating a task SHALL be resolved all-or-nothing: a malformed, unknown or ambiguous identifier SHALL refuse the request with 422 (`identifier_malformed`, `identifier_unknown`, `identifier_ambiguous`) and create nothing, while the free-text `requirements` field SHALL never refuse and SHALL keep what does not resolve verbatim as an unresolved reference."
+    },
+    {
+      "key": "n7",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Old tasks should join the traceability record without inventing requirements nobody wrote.",
+      "statement": "Legacy free-text requirement references SHALL be converted into links where they resolve to a requirement in the same project — by migration and again whenever the operator reindexes — and those that do not resolve SHALL be preserved verbatim; no requirement SHALL be created to match one."
+    },
+    {
+      "key": "a-requirement-and-its-work-are-navigable-in-both-directions",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Traceability is only useful if both questions — what serves this requirement, and what does this task promise — can be answered without a manual join.",
+      "statement": "From a requirement it SHALL be possible to reach the tasks linked to it, the evidence recorded for it and its coverage; from a task it SHALL be possible to reach the requirements it serves with their current statements."
+    },
+    {
+      "key": "evidence-names-what-produced-it-and-what-it-was-produced-aga",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Evidence is whatever demonstrates the work, so kinds stay open. Pinning it to a digest is what makes staleness detectable. Identity comes from the credential because a body is caller-controlled. The database is not an artifact store.",
+      "statement": "Evidence for a requirement SHALL record its kind from an open set, a locator saying where its artifact is (not the artifact's content), a summary, its task, the actor and run taken from the caller's credential, and the requirement digest current when it was recorded."
+    },
+    {
+      "key": "n8",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent's report that it verified something is a claim, not a fact; accepting it is the controlled act. The operator recording evidence is already that act.",
+      "statement": "Evidence recorded by an agent SHALL start awaiting review; evidence recorded by the operator SHALL be accepted on arrival with a review row saying so."
+    },
+    {
+      "key": "n9",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Who judged what, and in what order, is the record; overwriting it would erase the history an approval rests on.",
+      "statement": "Accepting or rejecting evidence SHALL be recorded as an append-only review attributed to the actor that decided; no decision is updated or deleted."
+    },
+    {
+      "key": "n10",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A charter describes behaviour, and behaviour is not authority. Operator-only acceptance is a supported way to work, not a degraded one.",
+      "statement": "Evidence SHALL be decided only by the operator or by an agent the operator has granted the evidence-acceptance capability on that agent; a charter or anything an agent asserts SHALL NOT grant it, and where no agent holds it the operator decides."
+    },
+    {
+      "key": "n11",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Producing evidence is open; accepting it is the gate. The same distinctness rule governs task approval.",
+      "statement": "An agent SHALL NOT decide evidence it recorded, judged on agent identity rather than run identity (`self_acceptance`)."
+    },
+    {
+      "key": "n12",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reviewer that records evidence and then approves it is judging its own work; one such row lifted a block the operator's rejection had placed.",
+      "statement": "A run delivered a task for review SHALL be refused when it records evidence for that task (`reviewer_records_evidence`), the refusal naming the task and telling it to move the task to `revision_needed` saying what is missing; a run working the task records evidence as before."
+    },
+    {
+      "key": "n13",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A retired requirement asks for nothing new. Defaulting the task keeps an agent's evidence attached to the work it was doing.",
+      "statement": "Recording evidence for a retired requirement SHALL be refused (`requirement_retired`), and evidence recorded without a task SHALL take the task the recording run is bound to."
+    },
+    {
+      "key": "n14",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Duplicates inflate coverage. An agent is told the Hub commits its work, so a refusal telling it to commit is wrong advice; and uncommitted work will be re-pointed to a new commit at run end, so it is not a duplicate.",
+      "statement": "Evidence matching an existing non-rejected piece on requirement, task, commit and actor SHALL be refused as `duplicate_evidence`, without telling an agent to commit its work; where the recording run's checkout is one the Hub commits at run end and holds uncommitted changes, a match with an earlier run's piece SHALL be recorded instead."
+    },
+    {
+      "key": "evidence-is-decided-only-after-the-run-that-recorded-it-has-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent records evidence while its work is uncommitted, and the Hub re-points the evidence at the commit holding the work when the run ends; a decision before then judges a commit about to be replaced. It is a conflict that clears on its own, not a lack of permission.",
+      "statement": "The Hub SHALL refuse to accept or reject evidence while the run that recorded it is still executing, with a 409 (`recording_run_live`) that says it clears when that run ends and that stopping the run ends it, applying to the operator and granted agents alike and checked after the permanent refusals; a run marked running that the Hub is not executing SHALL NOT hold a decision, and the evidence view SHALL say whether its recording run is still executing."
+    },
+    {
+      "key": "n15",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "It is the most recent recording of that demonstration, and whatever picks the most recent piece must pick it. A piece recorded against an earlier wording is not revised onto the current one.",
+      "statement": "Where a run records evidence for the same requirement and task again while its earlier piece is still undecided and the requirement's wording is unchanged, the Hub SHALL revise that piece in place — keeping its identity, taking the revision time as its recorded time, and saying it was a revision — rather than refuse or add a second piece."
+    },
+    {
+      "key": "an-agent-held-from-a-decision-is-told-when-it-can-decide",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The refused agent's turn ended on the refusal; without the note a premature decision becomes a missing one. After a Hub restart the run is no longer executing and the decision is already open, so no note is owed.",
+      "statement": "When an agent's decision was refused because the recording run was executing, the Hub SHALL, once that run is no longer counted as executing, queue one Hub-origin note to that agent in the conversation where it was refused, naming each still-undecided piece and the commit it now names; no note SHALL be sent when every piece was decided meanwhile, when the conversation is closed or belongs to another agent, or for a refusal the operator received."
+    },
+    {
+      "key": "a-decision-is-answered-as-recorded-even-when-the-merge-it-tr",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Accepting evidence may merge an approved task's waiting work; a repository failure there is recorded as a skip. The decision stands, so a client told it failed would show a failure for a decision that was made.",
+      "statement": "The Hub SHALL answer an accept or reject with the decision it recorded even when integrating the task work that waited for that decision fails."
+    },
+    {
+      "key": "coverage-is-one-computation-with-one-precedence",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Two implementations of \"is this verified\" eventually disagree, invisibly, until someone compares two screens.",
+      "statement": "The Hub SHALL compute a requirement's coverage state with a single definition that every surface reporting coverage uses."
+    },
+    {
+      "key": "n16",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The order ranks how much the evidence can be trusted, worst news first, so a reworded or drifting requirement is never reported verified. `rejected` is distinct so a refused demonstration is not mistaken for work not yet evidenced.",
+      "statement": "Coverage SHALL take the first state that applies, in this order: `drifting` (an open drift candidate), `stale` (evidence only against an earlier digest), `evidence_awaiting_review`, `verified` (accepted current-digest evidence), `rejected` (all current-digest evidence rejected), `in_progress` (linked work started or completed without evidence), `not_started`, `unserved` (no linked work)."
+    },
+    {
+      "key": "n17",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A broken requirement is not unserved, it is broken. `unserved` means somebody should build it, which a retired requirement does not ask for.",
+      "statement": "A requirement with no identifier or no digest SHALL be reported as a diagnostic outside coverage; a retired requirement with no linked work SHALL be reported as `retired`, never `unserved`; and a document SHALL be able to list its active requirements that have no linked work."
+    },
+    {
+      "key": "n18",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Accepted evidence can describe code that never reached the product; reporting `verified` alone would be true of the branch and false of the product. Integration is independent of evidence quality, so ranking them together would force a choice between \"stale but merged\" and \"verified but unmerged\".",
+      "statement": "Every coverage entry the Hub returns SHALL carry an integration answer — `integrated`, `not_integrated`, `unknown` (no main branch) or `not_applicable` (no accepted current-digest evidence) — saying whether the accepted evidence's footprint is reachable from the main branch, and integration SHALL NOT be a coverage state."
+    },
+    {
+      "key": "n19",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A project without a repository is a supported first-class case and would otherwise be permanently unverifiable.",
+      "statement": "Recording evidence SHALL capture an implementation footprint: in a git repository, a commit and the blob identifiers of the files it watches; outside one, those paths and a content hash of each."
+    },
+    {
+      "key": "n20",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The agent's checkout is the work in progress; a later re-stamp corrects it once the Hub commits it. Honouring a commit an agent names would let it describe a tree other than the one it worked in.",
+      "statement": "An agent's footprint SHALL be taken from its own working checkout (or, once a task's checkout is released, the task branch tip) whatever commit its locator names, and SHALL be re-stamped at the commit holding its work when the run ends."
+    },
+    {
+      "key": "n21",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Review checks out the footprinted commit and integration merges on its reachability, so a footprint silently describing a tree other than the one named is worse than none. A locator is otherwise a path; reading paths as revisions would be a guess.",
+      "statement": "An operator's footprint SHALL be taken from the commit they name — the `commit` field, else a locator that is a bare git object name — and otherwise from their own checkout; a named commit the repository does not have SHALL be refused (`locator_commit_unknown`) with no evidence recorded."
+    },
+    {
+      "key": "n22",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The recorder sees which tree the evidence was attached to while it can still correct it; an agent's footprint will be re-stamped at run end.",
+      "statement": "The response to recording evidence SHALL report the captured footprint, including where its watched files came from and how many there are, and an agent's recording response SHALL mark it provisional."
+    },
+    {
+      "key": "n23",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A run's workspace is a working directory, not a wall, so a footprint can miss part of the work. Moving it to another tree would be a guess (one may be the operator's unrelated checkout); refusing would turn an observation into a gate.",
+      "statement": "A footprint SHALL report where the run that produced it wrote outside the directory it was taken from, SHALL still describe that directory, and the evidence SHALL NOT be refused for it."
+    },
+    {
+      "key": "a-footprint-watches-the-files-its-evidence-is-about",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Sources are tried in order, not combined: combined, every agent row watched its task's whole diff, and one commit to a shared file raised candidates for about half the accepted evidence. A locator is read as words, and only words that are paths in the tree count.",
+      "statement": "A footprint SHALL watch only the files its evidence is about, taken from the first of these sources that names any file: the paths its locator names that exist in the tree, the files changed by the commit an operator names, and the files changed on its line of work since it left the main line; a footprint naming none SHALL watch nothing and say why, and recording SHALL NOT be refused for it."
+    },
+    {
+      "key": "n24",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Old evidence should join drift detection without its first scan reporting every file anyone has touched since the merge.",
+      "statement": "A drift scan SHALL rebuild footprints recorded before footprints recorded what they watch — from the locator at the verified commit, keeping that commit as baseline, or else from the files their merge into the main line brought in, taking the main line at rebuild time as baseline — and one that cannot be rebuilt SHALL be listed as `recorded_before_watching`."
+    },
+    {
+      "key": "a-changed-implementation-raises-a-candidate-never-an-edit",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "That an implementation changed is observable; that a requirement should change is a judgement, and inferring it would rewrite an approved specification on a file diff. Overlap is a candidate signal, not proof, so an unknown comparison raises nothing rather than a guess.",
+      "statement": "A drift scan SHALL raise a candidate for accepted, current-digest evidence whose watched files changed on its comparison line — its own line of work until that reaches the main branch, the main branch after — SHALL raise nothing where that comparison cannot be made, SHALL NOT scan a footprint that watches nothing, and SHALL NOT edit any specification document."
+    },
+    {
+      "key": "n25",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "\"Implementation corrected\" claims the change was undone; silencing it would turn a mistaken answer into a permanent blind spot, so the same change still present is drift again.",
+      "statement": "Only the operator SHALL resolve a drift candidate, as specification updated, implementation corrected, or no specification change required, recording the digest current at that moment; the first and third answers SHALL also record the current fingerprint so the same change is not raised again, and `implementation_corrected` SHALL NOT."
+    },
+    {
+      "key": "n26",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A candidate asks whether the requirement or the implementation is wrong; once the requirement changed, that question is about a wording that no longer exists.",
+      "statement": "Rewording or retiring a requirement SHALL mark its open drift candidates `superseded`."
+    },
+    {
+      "key": "drift-is-raised-and-answered-where-the-operator-reads-the-re",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A state whose remedy cannot be performed where it is shown is a defect. Raising and answering ship together: a scan never raises the same question twice, so a scan without answers could leave a gated requirement permanently unapprovable.",
+      "statement": "The operator's view of a specification document SHALL offer a project-wide drift scan, show that document's open candidates with the requirement's identifier, the files that moved and the evidence that had been verified, and let the operator answer each there; a second answer to a candidate SHALL be refused (409 `drift_not_open`) naming the answer it has, and scanning and answering SHALL be announced to every open view of the project."
+    },
+    {
+      "key": "n27",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The refusal is where the operator and agents learn what unblocks approval.",
+      "statement": "The approval gate's refusal for a drifting requirement SHALL say that the operator answers the drift candidate on the document and that an agent cannot."
+    },
+    {
+      "key": "the-screen-that-says-evidence-awaits-a-decision-can-take-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A screen that says a judgement is the operator's must let them make it; accepted evidence is what approval merges, so a decision that can change the main branch must not look like a label.",
+      "statement": "Where the operator's coverage view reports that a requirement's evidence awaits a decision, it SHALL list each piece in the order the Hub returns them — with summary, recorder, locator, commit and branch, task, state and latest decision reason, the most recent marked without claiming it is the one a merge takes — and SHALL let the operator accept it, or reject it with a reason; where accepting can merge the piece's commit, the piece SHALL say so beside Accept, and a Hub refusal SHALL be shown beside the piece in the Hub's words."
+    },
+    {
+      "key": "n28",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Several screens show the same state; one refreshing while another shows the old state is how an operator acts on stale information.",
+      "statement": "A decision on evidence, and the end of a run that recorded evidence (after it stops counting as live), SHALL be announced to every open view of the project, so coverage and the task board update without a reload and a piece that was still being recorded becomes decidable."
+    },
+    {
+      "key": "a-task-card-shows-where-each-requirement-it-serves-stands",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A task may serve a whole slice; a card showing only identifiers reads as one unit and hides a rejected requirement inside it. Using the document's coverage means the card cannot disagree with the document view.",
+      "statement": "The task card SHALL show a chip for each requirement the task serves, toned by that requirement's coverage on its document (verified, awaiting review, rejected, otherwise neutral), opening the requirement in its document when one resolves, and SHALL add a count by state when it serves more than four requirements."
+    },
+    {
+      "key": "a-retired-requirement-stays-reachable-from-its-document",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Retired requirements are kept so their links and evidence survive; coverage excludes them, so without this list they leave every screen while work still points at them.",
+      "statement": "The operator's view of a document SHALL list the requirements it has retired by identifier and key, and from each SHALL reach the tasks and evidence still linked to it and its coverage."
+    },
+    {
+      "key": "navigating-from-a-task-s-requirement-link-reaches-that-requi",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Opening at the top leaves the operator to hunt for the requirement the link already named.",
+      "statement": "Following a task's link to a requirement SHALL open the document declaring it, scrolled to that requirement."
+    },
+    {
+      "key": "a-task-states-what-its-requirements-say",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An identifier is actionable only by a reader who can open the document; the wording is read from the document so it cannot disagree with it.",
+      "statement": "A task returned by the API SHALL carry, for each requirement it serves, the requirement's current wording read from the document alongside its identifier, reading each document once per page of tasks; where the wording cannot be read the task SHALL still be returned with its identifiers."
+    },
+    {
+      "key": "an-agent-can-record-read-and-decide-requirement-evidence",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Integration gates on accepted evidence, so an agent plane with no way to produce, find or judge evidence builds a pipeline only the operator can drive.",
+      "statement": "The agent API SHALL offer recording evidence against a requirement (entering `awaiting`), listing the project's evidence with who produced each row and its requirement identifier, and one decide operation covering acceptance and rejection, subject to the operator's grant and refused for evidence the agent produced. The record operation's description SHALL state that accepted evidence is what lets approved work merge. Constrained values SHALL be constrained identically on both surfaces, and open ones (evidence `kind`) SHALL stay open."
+    },
+    {
+      "key": "evidence-is-footprinted-against-the-work-it-describes",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Agents work on isolated branches, so a footprint taken from the project directory names the operator's checkout and never the agent's work.",
+      "statement": "An evidence footprint SHALL be taken from the checkout holding the work it describes, as version control (not a directory's presence) answers it: the agent's own checkout where one exists; else, where the run's checkout is gone and the evidence's task branch exists, that branch's tip; else the project's own checkout; operator evidence from the project's checkout or the commit it names; never creating a checkout to do so."
+    },
+    {
+      "key": "whether-work-has-reached-the-main-line-is-re-answered",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Work is demonstrated before it is integrated, so the first answer is always \"not yet\".",
+      "statement": "Whether a footprint's work has reached the main line SHALL be re-evaluated after work is integrated, against the project's configured main branch where one is set, bounded, revising only answers that changed."
+    },
+    {
+      "key": "drift-is-assessed-against-the-line-of-work-a-footprint-names",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Comparing unmerged agent work against the main line would make every demonstrated requirement a candidate; being unable to tell is not drift.",
+      "statement": "Drift SHALL be assessed by comparing a footprint's watched files against the line of work it names until its work reaches the main line, and against the main line from then on; a footprint not yet on the main line that names no line of work, or one that no longer exists, SHALL raise nothing."
+    },
+    {
+      "key": "a-committed-turn-s-footprints-are-repointed-at-its-commit",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Evidence is recorded before the work is committed, so the commit named then never contains the work.",
+      "statement": "Where the system commits a turn's work after the turn, every footprint that turn recorded, whatever its decision, SHALL be re-pointed at the resulting commit, re-answering whether it has reached the main line and creating a footprint for evidence that had none."
+    },
+    {
+      "key": "a-footprint-s-branch-names-its-line-of-work",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Two footprints that name no line of work must carry the same value, and drift and integration read this field.",
+      "statement": "A footprint's branch SHALL name the line of work its commit is on: the one branch whose tip is the commit, else the evidence's task branch where it contains the commit, else the one branch that contains it, else empty; never `HEAD` or other text git prints for a detached checkout."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The requirement index, semantic digests, retirement and the digest change log",
+      "Task-to-requirement links, their resolution, and the requirement wording a task carries",
+      "Evidence recording, revision, decisions and who may decide, including the agent operations for them",
+      "Implementation footprints: which checkout they are taken from, what they watch, their branch, re-pointing at a turn's commit, and whether their work has reached the main line",
+      "Coverage states and integration answers",
+      "Drift detection, assessment against a line of work, and resolution",
+      "The coverage, evidence, drift and retired-requirement views; task-card requirement chips and navigation from a task to its requirements"
+    ],
+    "non_goals": [
+      "Task status transitions, who may approve a task, and the rigor approval gate (task-lifecycle-governance)",
+      "Merging an approved task's work into the main branch (approval-integration); only that a decision survives its failure is stated here",
+      "Document phases, completeness findings and requirement identifier minting in the document (spec-document-authority)",
+      "Storing evidence artifacts: the Hub records where an artifact is, not the artifact"
+    ]
+  },
+  "summary": "The Hub indexes every requirement its specification documents declare, links tasks to the requirements they serve, records evidence pinned both to the wording it demonstrates and to the implementation it describes, decides that evidence through an append-only review, and computes one coverage state per requirement. It watches the files each piece of evidence is about, so a later change raises a drift candidate for the operator to answer, and it carries requirement wording and coverage onto tasks and into the agent API.",
+  "tasks": [],
+  "title": "Requirement traceability"
+}

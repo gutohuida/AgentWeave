@@ -1,0 +1,315 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a project with no runner for `claude` / Sonnet 5",
+      "key": "ac1",
+      "requirement": "an-operator-can-create-an-agent-from-the-project-workspace",
+      "then": "the agent is created, bound to a runner for that model, with no charter",
+      "when": "the operator adds an agent with a valid name, provider `claude`, model Sonnet 5 and no charter"
+    },
+    {
+      "given": "the Add agent dialog",
+      "key": "ac2",
+      "requirement": "an-operator-can-create-an-agent-from-the-project-workspace",
+      "then": "the models offered are that provider's catalog models, and no persona or role is asked for",
+      "when": "a provider is chosen"
+    },
+    {
+      "given": "a project with an agent named `dev`",
+      "key": "ac3",
+      "requirement": "n1",
+      "then": "the first returns 409 and the dialog keeps the other selections; the others return 400 with a sentence",
+      "when": "an agent named `dev`, `operator`, or `bad name` is submitted"
+    },
+    {
+      "given": "a project",
+      "key": "ac4",
+      "requirement": "n1",
+      "then": "the request is refused",
+      "when": "`POST /agents` carries both `runner_id` and `provider`+`model`, or neither"
+    },
+    {
+      "given": "a provider whose CLI is missing or not signed in",
+      "key": "ac5",
+      "requirement": "agent-creation-exposes-real-runner-launchability",
+      "then": "that provider is shown disabled with its reason",
+      "when": "the dialog is opened"
+    },
+    {
+      "given": "a provider launchable when the dialog loaded",
+      "key": "ac6",
+      "requirement": "agent-creation-exposes-real-runner-launchability",
+      "then": "the Hub returns 409 with the current reason and creates nothing",
+      "when": "it becomes unlaunchable before submit and the operator submits"
+    },
+    {
+      "given": "an existing project runner on `claude` / `claude-sonnet-5`",
+      "key": "ac7",
+      "requirement": "agent-creation-provisions-its-runner-atomically",
+      "then": "it is bound to the existing runner and no runner is added",
+      "when": "a second agent is created on that provider and model"
+    },
+    {
+      "given": "no matching runner",
+      "key": "ac8",
+      "requirement": "agent-creation-provisions-its-runner-atomically",
+      "then": "no runner remains; a runner created by a successful creation appears in runner management like any other",
+      "when": "creation fails after the runner was added to the transaction"
+    },
+    {
+      "given": "no matching runner",
+      "key": "ac9",
+      "requirement": "agent-creation-provisions-its-runner-atomically",
+      "then": "the new runner is named \"Claude Code — opus (latest)\" and records `opus`",
+      "when": "an agent is created on alias `opus`"
+    },
+    {
+      "given": "a second client with the project open",
+      "key": "ac10",
+      "requirement": "n2",
+      "then": "an `agent_created` event is recorded and broadcast, and the agent appears in both rails without a reload",
+      "when": "an agent is created"
+    },
+    {
+      "given": "the provider choice",
+      "key": "ac11",
+      "requirement": "provider-choice-is-presented-by-provider-identity",
+      "then": "each provider shows its name and, where one exists, its own inline SVG mark; a launchable provider with no mark is still selectable",
+      "when": "it is opened"
+    },
+    {
+      "given": "the Add agent dialog",
+      "key": "ac12",
+      "requirement": "what-creation-collects-is-decided-by-whether-it-changes-the-",
+      "then": "they are name, provider, model and an optional charter; posture, waiting times and grants are left to the agent's configuration",
+      "when": "its fields are listed"
+    },
+    {
+      "given": "a Git project",
+      "key": "ac13",
+      "requirement": "operator-created-agents-preserve-runtime-isolation",
+      "then": "no checkout exists for it",
+      "when": "an agent is created and sent no work"
+    },
+    {
+      "given": "a writing agent in a Git project",
+      "key": "ac14",
+      "requirement": "operator-created-agents-preserve-runtime-isolation",
+      "then": "each task turn runs on its own task branch carrying no other task's commits, and the unbound turn runs in the agent's own checkout",
+      "when": "it takes turns on two tasks and one turn bound to no task"
+    },
+    {
+      "given": "a Git project where the checkout cannot be provisioned",
+      "key": "ac15",
+      "requirement": "operator-created-agents-preserve-runtime-isolation",
+      "then": "it is refused naming the failure and does not run in the primary checkout",
+      "when": "a writing turn starts"
+    },
+    {
+      "given": "a `copilot` runner",
+      "key": "ac23",
+      "requirement": "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-",
+      "then": "its Hub-owned home holds a custom agent named after it with the edited charter and the precedence statement, the repository has no new file, and no file holds the run's token",
+      "when": "an agent bound to it is created, its charter edited, and it is triggered"
+    },
+    {
+      "given": "a project whose identifier contains a path separator or is `..`",
+      "key": "ac24",
+      "requirement": "n4",
+      "then": "no file is written and the turn is refused with a reason",
+      "when": "a Copilot turn is triggered"
+    },
+    {
+      "given": "a hook file the Hub did not write in a Copilot agent's home",
+      "key": "ac25",
+      "requirement": "n5",
+      "then": "the file is gone before Copilot starts and permission requests reach the Hub",
+      "when": "the agent is triggered"
+    },
+    {
+      "given": "Copilot's own config file with no trust or permission setting, and an empty plugin directory",
+      "key": "ac26",
+      "requirement": "n5",
+      "then": "both remain and the timeline reports no repair",
+      "when": "the agent is triggered"
+    },
+    {
+      "given": "Copilot does not select the Hub's custom agent, or selects another",
+      "key": "ac27",
+      "requirement": "n5",
+      "then": "no custom agent is selected, the stable context is sent with the prompt, and the timeline says why",
+      "when": "a turn starts"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Which checkout a writing turn gets",
+      "steps": [
+        "If the turn is a review, use a detached checkout of the commit under review.",
+        "If the agent is read-only, or the project is not a Git repository, use the project directory.",
+        "If the turn is bound to a task whose `workspace_scheme` is `task`, use (and provision on first use) that task's checkout, refusing if another agent's turn holds it.",
+        "Otherwise (no task, or a grandfathered `agent`-scheme task), use the agent's own checkout.",
+        "If the chosen checkout cannot be provisioned, refuse the turn with the reason."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-10": "159f260ab983226f3ff9e2e39f1d4a6af2659e18aacd0314bdc484c40cfde7fa",
+      "FR-11": "26cf6bce3b012492976e2d5cb465d7dfda46fe6585b7a0d440578d4a5dd1c4e5",
+      "FR-12": "9945dc8420bde0eafde470de5d0d13ecb9d13169be039de863b452582b8c1f21",
+      "FR-13": "e496b9740ca31eba23dfcce4f7cc1e881cfbdfead8e81b5c5ac909ec5878c0a7",
+      "FR-14": "caaae67923a41efa3e398f0351d47a90626eccf91a096f72e4aba956196022a8",
+      "FR-15": "9a3d4a11c8658acdd816d24da0c48d8498a0fa78dd22306718606e78872a56ef",
+      "FR-16": "9f9a8d9d8fcc0e8609aa148c0d0d7c02de1e1535f98ce5f5d44ffe700e6eb3ac",
+      "FR-17": "2f6240cae0afce2bc5d95a6b7659e015593652fef37947a847d0957f33105b77",
+      "FR-18": "63e2a1382f4cde9f825427ed82a68139312b16ba1e998f66c5a4ee3e1f254cc5",
+      "FR-19": "82267cf09f53e5ad5ec9829c533ed411eafee51ed0c1f8e911ee40883a5036ce",
+      "FR-20": "33a38a88ced040c65a4284f040c8269c7a9bfb747316ee6a92a46fb56c51c178",
+      "FR-21": "c2411a4a38df7ba5e42f900b3e0881b5830196d5c5f9f71a4c8d717ec7e6eb80",
+      "FR-22": "13c04a023f0daf74c68e386305d0edfa12c67c959532bbae0791a976801cf038",
+      "FR-8": "f0c7d1bdb3710f2d52883b023635e1cd03cd15e114bcec81c1f58aaee170e956",
+      "FR-9": "3c1aaa536d9fdf4419ddeb5f56e3deb41e1794f6cba078f9daaa46ea5edcb7e7"
+    },
+    "high_water": 22,
+    "requirements": {
+      "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-": "FR-17",
+      "agent-creation-exposes-real-runner-launchability": "FR-9",
+      "agent-creation-provisions-its-runner-atomically": "FR-11",
+      "an-operator-can-create-an-agent-from-the-project-workspace": "FR-8",
+      "n1": "FR-18",
+      "n2": "FR-19",
+      "n4": "FR-21",
+      "n5": "FR-22",
+      "operator-created-agents-preserve-runtime-isolation": "FR-10",
+      "provider-choice-is-presented-by-provider-identity": "FR-12",
+      "what-creation-collects-is-decided-by-whether-it-changes-the-": "FR-13"
+    },
+    "retired": {
+      "a-project-that-is-not-a-git-repository-still-runs-its-agents": "FR-14",
+      "a-task-s-checkout-is-worked-by-one-turn-at-a-time": "FR-16",
+      "n3": "FR-20",
+      "work-already-under-way-keeps-the-checkout-it-started-in": "FR-15"
+    }
+  },
+  "design": "**Find-or-create in one commit.** `POST /agents` adds a new runner to the same session as the agent and commits once, so neither record survives a failure; an existing runner with the same CLI and model is reused.\n\n**Launchability twice.** The dialog reads per-provider launchability before a runner exists; the route probes the actual runner on submit.\n\n**Creation touches no checkout.** Isolation is decided per turn, by workspace-isolation, so creating an agent never provisions or changes a Git checkout.\n\n**Copilot home owned whole.** The Hub writes the custom agent and MCP config and sweeps everything else that could approve a permission, so the Hub stays the only approver.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_operator_agent_creation.py (`POST /agents`); hub/ui/src/__tests__/agentCreationUi.test.tsx, providerMark.test.tsx.",
+      "hub/tests/test_task_workspace_scheme.py — the grandfathered set is never written.",
+      "hub/tests/test_copilot_home.py, test_copilot_home_has_no_deciding_hook.py, test_copilot_home_routes.py.",
+      "hub/tests/test_operator_is_a_reserved_agent_name.py."
+    ],
+    "limits": [
+      "Names that shadow a Hub route (`conflicts`, `settings`, `sessions`, `board`, `boards`) are still accepted at creation (F248 open)."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "Agents that can only be created by editing configuration, or that look ready in the app but cannot run, put the first moment an operator uses the product behind a barrier or a lie.",
+  "requirements": [
+    {
+      "key": "an-operator-can-create-an-agent-from-the-project-workspace",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Choosing a provider and a model is enough to describe a working agent; anything more at creation is friction at first use.",
+      "statement": "Each project workspace SHALL offer an Add agent action that creates an agent from a project-unique name, a launchable provider and a model that provider's catalog declares, with an optional charter, and SHALL NOT require a runner to exist beforehand nor ask for a persona or organizational role."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent's name becomes a path component, a branch suffix and an attribution; reserved names already mean someone who is not an agent, and every route that runs an agent refuses them.",
+      "statement": "`POST /agents` SHALL refuse with 400 a name that does not match `^[a-zA-Z0-9_-]{1,32}$` or is a reserved name (`user`, `operator`), and with 409 a name already held by an agent or a session-configured agent in the project, and SHALL accept either `runner_id` or both `provider` and `model`, never both and never neither."
+    },
+    {
+      "key": "agent-creation-exposes-real-runner-launchability",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Launchability can change between loading the dialog and submitting it; an agent that looks ready but cannot run is the failure this prevents.",
+      "statement": "The creation dialog SHALL show every provider with its current launchability from `GET /runners/launchability-by-provider`, keep an unlaunchable provider visible but not selectable with its reason, and the Hub SHALL re-check the chosen runner's launchability on submit and refuse with 409 and the current reason when it cannot run."
+    },
+    {
+      "key": "agent-creation-provisions-its-runner-atomically",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Duplicate runners for one choice clutter runner management, and a runner left behind by a failed creation is a record nobody asked for. An alias-created runner is named for the alias, since its target moves.",
+      "statement": "When created from a provider and model, the Hub SHALL reuse a project runner with the same CLI and model, or else create one named \"<provider label> — <model label>\" (\"<alias> (latest)\" for an alias) in the same commit as the agent, so that a failure leaves neither record behind."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator should be able to talk to the agent immediately, and other open clients should see it too.",
+      "statement": "A created agent SHALL receive a stable project color, be bound to its runner and optional charter, and be recorded as an `agent_created` event broadcast to open clients, so it appears in the rail without a reload."
+    },
+    {
+      "key": "provider-choice-is-presented-by-provider-identity",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A mark helps recognition but must never be the only distinction; launchability alone decides what can be chosen.",
+      "statement": "Where the operator chooses a provider, each SHALL be shown by its name with its own inline mark where one exists, never another provider's mark, and marks SHALL use no second icon system, webfont or network request and SHALL NOT affect which providers are offered or selectable."
+    },
+    {
+      "key": "what-creation-collects-is-decided-by-whether-it-changes-the-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A stated placement rule stops creation growing by accretion. A charter is offered because it shapes the first turn, and stays optional.",
+      "statement": "Agent creation SHALL offer a setting only when the agent's first turn would be materially different without it, and SHALL leave every setting with a workable default that can be changed before it takes effect to the agent's configuration."
+    },
+    {
+      "key": "operator-created-agents-preserve-runtime-isolation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A per-agent branch carries every task its agent ever worked on, so merging it integrates unapproved work; a branch per task is what lets one approval land one task's work. Silently losing isolation is worse than refusing.",
+      "statement": "Creating an agent SHALL NOT provision or change any Git checkout; in a Git project, a writing turn bound to a task SHALL run in that task's own checkout on a branch carrying only that task's work, a writing turn bound to no task SHALL run in the agent's own checkout, and a turn whose checkout cannot be provisioned SHALL be refused with the reason rather than run in the primary checkout."
+    },
+    {
+      "key": "a-copilot-agent-s-native-files-are-written-into-a-hub-owned-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Copilot reads custom agents and MCP configuration from its home; writing them into the repository would change the operator's project. Per-turn material reaches each turn with its prompt instead.",
+      "statement": "When a Copilot agent is created or its runner or charter binding changes, and before every Copilot turn, the Hub SHALL write a custom agent named after the agent (its identity, the project's instructions and its charter, with a statement that this takes precedence over the repository's instruction files) and the `agentweave` MCP configuration into a Copilot home it owns under `~/.agentweave/hub/copilot-home/projects/<project>/<agent>/`, never into the repository and never with a credential."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A project's identifier can come from a marker file inside the project's own folder.",
+      "statement": "The Copilot home's path SHALL be built only from identifiers checked to be single, safe path components, and a turn whose home cannot be written SHALL be refused with a reason, while a write failure at creation SHALL NOT undo the agent's creation."
+    },
+    {
+      "key": "n5",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Nothing left in the home may answer a permission request in the Hub's place.",
+      "statement": "Before every Copilot turn the Hub SHALL remove from the agent's home any hook, plugin, MCP configuration or custom agent it did not write and any setting that trusts a folder or grants a permission, leaving Copilot's own harmless files in place, and SHALL NOT send a prompt while a custom agent it did not write is selected."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The Add agent dialog (`hub/ui/src/components/agents/AgentCreateDialog.tsx`) and `POST /agents`: name rules, provider and model choice, launchability, what creation collects",
+      "Finding or creating the agent's runner atomically, the agent's colour and the `agent_created` announcement",
+      "How providers are presented in the dialog",
+      "That creation provisions no checkout, and the task / agent checkout guarantee it preserves",
+      "A Copilot agent's Hub-owned Copilot home: what is written, path safety, and the sweep before each turn"
+    ],
+    "non_goals": [
+      "Which checkout a turn gets in detail (non-Git projects, work already under way, one turn per task checkout) and how checkouts are provisioned: workspace-isolation",
+      "Editing an agent after creation: agent-configuration",
+      "Agents requested by other agents (`POST /agents/request`)",
+      "The models and controls a provider offers: model-catalog"
+    ]
+  },
+  "summary": "An operator creates an agent from the project workspace by naming it and choosing a launchable provider and a model (or an existing runner), with an optional charter. The Hub finds or creates the matching runner in the same transaction, checks launchability again on submit, and announces the new agent. Creation provisions no checkout, and a Copilot agent's native files are written into a Copilot home the Hub owns and keeps clean.",
+  "tasks": [],
+  "title": "Operator agent creation"
+}

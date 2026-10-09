@@ -1,0 +1,2230 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "",
+      "key": "ac1",
+      "requirement": "a-specification-document-is-a-file-in-the-project-working-di",
+      "then": "its content is read from the project's working directory at request time no cached copy is consulted",
+      "when": "the operator opens a specification document in a registered project"
+    },
+    {
+      "given": "",
+      "key": "ac2",
+      "requirement": "a-specification-document-is-a-file-in-the-project-working-di",
+      "then": "the request is refused no file outside the workspace is read or written",
+      "when": "any caller supplies a document path that is absolute, contains a traversal segment or a control character, or escapes through a symlink"
+    },
+    {
+      "given": "",
+      "key": "ac3",
+      "requirement": "a-specification-document-is-a-file-in-the-project-working-di",
+      "then": "documents resolve normally within that root a path outside the root is refused rather than guessed at",
+      "when": "the Hub runs with a configured workspace root and a project's directory lies beneath it"
+    },
+    {
+      "given": "",
+      "key": "ac4",
+      "requirement": "the-agent-submits-a-structured-payload-and-the-hub-renders-t",
+      "then": "the Hub renders the document and writes it to the project working directory the rendered markup is produced by the Hub, not supplied by the agent",
+      "when": "an agent submits a payload that satisfies the schema"
+    },
+    {
+      "given": "",
+      "key": "ac5",
+      "requirement": "the-agent-submits-a-structured-payload-and-the-hub-renders-t",
+      "then": "the submission is refused with an error identifying the field the document on disk is unchanged",
+      "when": "an agent submits a payload that omits a required field or violates a declared constraint"
+    },
+    {
+      "given": "",
+      "key": "ac6",
+      "requirement": "the-agent-submits-a-structured-payload-and-the-hub-renders-t",
+      "then": "the Hub does not treat that content as an authored document the document's authority remains the last validated payload",
+      "when": "an agent writes specification markup to the working directory by any other means"
+    },
+    {
+      "given": "",
+      "key": "ac7",
+      "requirement": "the-payload-contract-is-versioned-and-forward-compatible",
+      "then": "those fields are present and unchanged in the result, and no validation error is raised on their account",
+      "when": "a document containing fields the current schema version does not define is read and written again"
+    },
+    {
+      "given": "",
+      "key": "ac8",
+      "requirement": "the-payload-contract-is-versioned-and-forward-compatible",
+      "then": "the submission is refused the error names the missing version rather than a downstream field",
+      "when": "a payload omits its schema version"
+    },
+    {
+      "given": "an agent has read a document whose requirements carry acceptance criteria",
+      "key": "n1-c1",
+      "requirement": "n1",
+      "then": "every criterion is kept and no requirement is retired",
+      "when": "it resubmits the read unchanged"
+    },
+    {
+      "given": "a read that cut a requirement short",
+      "key": "n1-c2",
+      "requirement": "n1",
+      "then": "the submission is refused naming the requirement, and nothing is written",
+      "when": "that requirement is resubmitted"
+    },
+    {
+      "given": "",
+      "key": "ac9",
+      "requirement": "the-hub-mints-requirement-identifiers-and-they-are-stable",
+      "then": "that requirement keeps the identifier it already had",
+      "when": "an agent resubmits a document in which one requirement's text has changed and its key has not"
+    },
+    {
+      "given": "",
+      "key": "ac10",
+      "requirement": "the-hub-mints-requirement-identifiers-and-they-are-stable",
+      "then": "every previously known key keeps the identifier it already had only the new key receives a newly minted one",
+      "when": "an agent resubmits a document with the same keys in a different order, or inserts a new key among them"
+    },
+    {
+      "given": "",
+      "key": "ac11",
+      "requirement": "the-hub-mints-requirement-identifiers-and-they-are-stable",
+      "then": "the Hub assigns its own identifier the submitted value does not appear as that requirement's identity",
+      "when": "a submitted payload contains an identifier for a requirement"
+    },
+    {
+      "given": "",
+      "key": "ac12",
+      "requirement": "the-hub-mints-requirement-identifiers-and-they-are-stable",
+      "then": "the new requirement receives an identifier that has never been used in this document",
+      "when": "a requirement is removed and a new requirement is added in a later submission"
+    },
+    {
+      "given": "",
+      "key": "ac33",
+      "requirement": "a-document-s-digest-is-stored-on-write-and-divergence-is-rep",
+      "then": "the divergence is reported, and the file is left as it is found",
+      "when": "a document's content on disk no longer matches its stored digest and nobody writes it"
+    },
+    {
+      "given": "",
+      "key": "ac34",
+      "requirement": "a-document-s-digest-is-stored-on-write-and-divergence-is-rep",
+      "then": "the digest recorded for that requirement changes the digest for an unmodified requirement does not",
+      "when": "a requirement's text is changed"
+    },
+    {
+      "given": "",
+      "key": "ac206",
+      "requirement": "divergence-is-reported-when-a-document-is-read-not-only-when",
+      "then": "the response carries the content and marks it as diverged from what the Hub recorded",
+      "when": "a document's file no longer matches its recorded digest and any reader requests it"
+    },
+    {
+      "given": "",
+      "key": "ac207",
+      "requirement": "divergence-is-reported-when-a-document-is-read-not-only-when",
+      "then": "the divergence is stated to the agent",
+      "when": "an agent reads such a document through the tool surface"
+    },
+    {
+      "given": "",
+      "key": "ac208",
+      "requirement": "divergence-is-reported-when-a-document-is-read-not-only-when",
+      "then": "no divergence is reported",
+      "when": "a document matches its recorded digest"
+    },
+    {
+      "given": "",
+      "key": "ac209",
+      "requirement": "divergence-is-reported-when-a-document-is-read-not-only-when",
+      "then": "a diverged document is identifiable from the listing",
+      "when": "documents are listed"
+    },
+    {
+      "given": "",
+      "key": "ac30",
+      "requirement": "every-change-to-a-document-is-recorded-as-an-attributed-even",
+      "then": "an event records the agent as actor, the submission as origin, and that run's identifier",
+      "when": "an agent submits a document payload during a run"
+    },
+    {
+      "given": "",
+      "key": "ac31",
+      "requirement": "every-change-to-a-document-is-recorded-as-an-attributed-even",
+      "then": "an event records the operator as actor and the control as origin",
+      "when": "the operator changes a document through a Hub control"
+    },
+    {
+      "given": "",
+      "key": "ac32",
+      "requirement": "every-change-to-a-document-is-recorded-as-an-attributed-even",
+      "then": "the attempt is refused the existing history is unchanged",
+      "when": "any caller attempts to modify or delete a recorded event"
+    },
+    {
+      "given": "",
+      "key": "ac155",
+      "requirement": "authorship-is-attributed-to-whoever-performed-it",
+      "then": "the recorded event names the operator as the actor it is not attributed to any agent or run",
+      "when": "the operator writes a document's content"
+    },
+    {
+      "given": "",
+      "key": "ac156",
+      "requirement": "authorship-is-attributed-to-whoever-performed-it",
+      "then": "the recorded event names the agent and the run it acted under",
+      "when": "an agent writes a document's content"
+    },
+    {
+      "given": "",
+      "key": "ac157",
+      "requirement": "authorship-is-attributed-to-whoever-performed-it",
+      "then": "the recorded actor is the one established from the credential the body's claim is disregarded",
+      "when": "a request carries an actor or run named in its body"
+    },
+    {
+      "given": "",
+      "key": "ac13",
+      "requirement": "a-document-has-a-phase-and-the-hub-owns-its-transitions",
+      "then": "it is refused",
+      "when": "a transition names a phase this capability does not define"
+    },
+    {
+      "given": "",
+      "key": "ac14",
+      "requirement": "a-document-has-a-phase-and-the-hub-owns-its-transitions",
+      "then": "it is refused as an illegal transition, naming both phases",
+      "when": "a transition is attempted that the phase map does not list, such as exploring to approved"
+    },
+    {
+      "given": "",
+      "key": "ac15",
+      "requirement": "a-document-has-a-phase-and-the-hub-owns-its-transitions",
+      "then": "it is refused",
+      "when": "any caller attempts to move a document to or from `current` through the transition operation"
+    },
+    {
+      "given": "",
+      "key": "ac16",
+      "requirement": "approval-is-the-operator-s-decision-and-no-agent-can-express",
+      "then": "it is refused, and the refusal says approval is the operator's",
+      "when": "an agent attempts to move a document to `approved`"
+    },
+    {
+      "given": "",
+      "key": "ac17",
+      "requirement": "approval-is-the-operator-s-decision-and-no-agent-can-express",
+      "then": "it is refused, and the refusal says archiving is the operator's",
+      "when": "an agent attempts to move a document to `archived`"
+    },
+    {
+      "given": "",
+      "key": "ac18",
+      "requirement": "approval-is-the-operator-s-decision-and-no-agent-can-express",
+      "then": "the same refusal applies, because the check is made there and not duplicated per caller",
+      "when": "either transition is attempted through any code path that ultimately calls the Hub's phase transition operation"
+    },
+    {
+      "given": "a document in exploring",
+      "key": "n2-c1",
+      "requirement": "n2",
+      "then": "the document's phase is unchanged",
+      "when": "an agent submits a payload carrying a phase or status field"
+    },
+    {
+      "given": "a document in exploring",
+      "key": "n2-c2",
+      "requirement": "n2",
+      "then": "it is refused with explore_close_is_the_operators",
+      "when": "a non-operator actor reaches the close-exploration operation"
+    },
+    {
+      "given": "an incomplete document in exploring",
+      "key": "n3-c1",
+      "requirement": "n3",
+      "then": "the answer carries proposed false and lists every blocker, and the document stays in exploring",
+      "when": "the operator proposes it"
+    },
+    {
+      "given": "a complete document whose exploration is closed",
+      "key": "n3-c2",
+      "requirement": "n3",
+      "then": "the answer carries proposed true and the document is proposed",
+      "when": "the operator proposes it"
+    },
+    {
+      "given": "",
+      "key": "ac24",
+      "requirement": "document-validity-is-checked-by-the-hub-not-asserted-by-its-",
+      "then": "the move is refused with every finding named the document stays in `exploring`",
+      "when": "the operator moves an incomplete document to `proposed` through the phase operation rather than the propose operation"
+    },
+    {
+      "given": "",
+      "key": "ac25",
+      "requirement": "document-validity-is-checked-by-the-hub-not-asserted-by-its-",
+      "then": "approval is refused with the finding named no task is created from the document",
+      "when": "a proposed document is edited so that a requirement has no task, and the operator approves it"
+    },
+    {
+      "given": "",
+      "key": "ac26",
+      "requirement": "document-validity-is-checked-by-the-hub-not-asserted-by-its-",
+      "then": "the move is refused with every finding named, because the checks are made there and not duplicated per caller",
+      "when": "any code path calls the Hub's phase transition operation to move an incomplete document to `proposed` or `approved`"
+    },
+    {
+      "given": "",
+      "key": "ac27",
+      "requirement": "document-validity-is-checked-by-the-hub-not-asserted-by-its-",
+      "then": "the answer names the open exploration and every completeness finding together the document stays in `exploring`",
+      "when": "the operator proposes an incomplete document whose exploration has not been closed"
+    },
+    {
+      "given": "",
+      "key": "ac28",
+      "requirement": "document-validity-is-checked-by-the-hub-not-asserted-by-its-",
+      "then": "it is refused as an illegal transition",
+      "when": "a transition the phase map does not allow is attempted on an incomplete document"
+    },
+    {
+      "given": "",
+      "key": "ac21",
+      "requirement": "n4",
+      "then": "the transition to `proposed` is refused the offending requirement is named",
+      "when": "a document contains a requirement that no acceptance criterion references"
+    },
+    {
+      "given": "",
+      "key": "ac22",
+      "requirement": "n4",
+      "then": "the transition to `proposed` is refused the offending task is named",
+      "when": "a document contains a task that references no requirement"
+    },
+    {
+      "given": "",
+      "key": "ac23",
+      "requirement": "n4",
+      "then": "the transition to `proposed` is refused",
+      "when": "a document still carries a clarification marker that has not been resolved"
+    },
+    {
+      "given": "a capability document with requirements and criteria but no tasks and no non-goals",
+      "key": "n4-c1",
+      "requirement": "n4",
+      "then": "neither requirement_without_task nor non_goals_empty is reported",
+      "when": "its completeness is checked"
+    },
+    {
+      "given": "",
+      "key": "ac29",
+      "requirement": "n5",
+      "then": "approval succeeds the import is preserved and reported as naming a document that is not approved",
+      "when": "a complete document is proposed while the document it imports from is approved, that document is then reopened, and the operator approves the first"
+    },
+    {
+      "given": "",
+      "key": "ac19",
+      "requirement": "n6",
+      "then": "an `unknown_field` finding names that field on that requirement it says acceptance criteria go in the top-level list, each naming the requirement's key",
+      "when": "a document is submitted whose requirement carries its own `acceptance_criteria`"
+    },
+    {
+      "given": "",
+      "key": "ac20",
+      "requirement": "n7",
+      "then": "the answer reports it as not ready to propose",
+      "when": "an agent submits a document that is saved with blocking findings"
+    },
+    {
+      "given": "an approved document",
+      "key": "ac153",
+      "requirement": "n8",
+      "then": "it is refused the approved content is unchanged",
+      "when": "the operator submits content for it without reopening it"
+    },
+    {
+      "given": "an approved document",
+      "key": "n8-c1",
+      "requirement": "n8",
+      "then": "it is refused with document_approved and the file is unchanged",
+      "when": "an agent submits content for it"
+    },
+    {
+      "given": "",
+      "key": "ac131",
+      "requirement": "a-finished-change-is-archived-by-the-operator",
+      "then": "the document's phase becomes `archived` its requirements, digests, events and declared tasks are unchanged",
+      "when": "the operator moves an approved document to `archived`"
+    },
+    {
+      "given": "",
+      "key": "ac134",
+      "requirement": "a-finished-change-is-archived-by-the-operator",
+      "then": "it is refused",
+      "when": "any phase transition is attempted on an archived document"
+    },
+    {
+      "given": "",
+      "key": "ac210",
+      "requirement": "a-document-that-produced-nothing-can-be-archived",
+      "then": "the transition is permitted, and the manifest drift warning the document caused clears",
+      "when": "a document in an early phase with no requirements and no materialised tasks is archived"
+    },
+    {
+      "given": "",
+      "key": "ac211",
+      "requirement": "a-document-that-produced-nothing-can-be-archived",
+      "then": "it is refused (archive_would_orphan_work), naming what exists",
+      "when": "archiving is attempted on a document from which tasks have been materialised"
+    },
+    {
+      "given": "",
+      "key": "ac212",
+      "requirement": "a-document-that-produced-nothing-can-be-archived",
+      "then": "the close-out rules for an approved change apply unchanged",
+      "when": "an approved document is archived"
+    },
+    {
+      "given": "an approved change with an open task; one with all tasks approved and no merge; the same with no_capability_change and a reason; a folded one",
+      "key": "a-finished-change-is-folded-into-its-capability-guard",
+      "requirement": "a-finished-change-is-folded-into-its-capability-archive-guard",
+      "then": "the first two are refused naming the open task and the missing fold; the last two are archived",
+      "when": "each is archived through the phase route"
+    },
+    {
+      "given": "",
+      "key": "ac200",
+      "requirement": "a-document-s-path-is-fixed-once-it-has-ever-been-approved",
+      "then": "the rename is refused",
+      "when": "a rename is attempted on a document that was approved and has since been archived"
+    },
+    {
+      "given": "",
+      "key": "ac201",
+      "requirement": "a-document-s-path-is-fixed-once-it-has-ever-been-approved",
+      "then": "the rename is refused",
+      "when": "a rename is attempted on a document that was approved and has since been reopened for revision"
+    },
+    {
+      "given": "",
+      "key": "ac202",
+      "requirement": "a-document-s-path-is-fixed-once-it-has-ever-been-approved",
+      "then": "the rename succeeds",
+      "when": "a rename is attempted on a document that has never been approved"
+    },
+    {
+      "given": "",
+      "key": "ac203",
+      "requirement": "a-document-s-path-is-fixed-once-it-has-ever-been-approved",
+      "then": "the record that it was approved remains",
+      "when": "a document is approved and subsequently leaves the approved phase"
+    },
+    {
+      "given": "",
+      "key": "ac135",
+      "requirement": "a-capability-document-sits-outside-the-phase-machine",
+      "then": "its phase is `current` no phase transition, including one naming `current`, succeeds against it",
+      "when": "a document is created with `kind` `capability`"
+    },
+    {
+      "given": "",
+      "key": "ac136",
+      "requirement": "a-capability-document-sits-outside-the-phase-machine",
+      "then": "it is refused; the same submission from the operator succeeds through a merge, and the operator's direct content write is refused naming the merge route",
+      "when": "an agent submits content against a capability document"
+    },
+    {
+      "given": "",
+      "key": "ac137",
+      "requirement": "a-capability-document-sits-outside-the-phase-machine",
+      "then": "it is refused, and the document's recorded `kind` is unchanged",
+      "when": "a submission's `kind` differs from the document's recorded `kind`"
+    },
+    {
+      "given": "",
+      "key": "ac94",
+      "requirement": "a-new-document-is-given-a-name-that-means-nothing",
+      "then": "the Hub mints a path of the form `spec/changes/<colour>-<animal>/spec.html` returns that path to the caller",
+      "when": "a document is created without a path"
+    },
+    {
+      "given": "",
+      "key": "ac95",
+      "requirement": "a-new-document-is-given-a-name-that-means-nothing",
+      "then": "neither minted path contains any word from its title or its opening message",
+      "when": "two documents are created without a path, with different titles and different opening messages"
+    },
+    {
+      "given": "",
+      "key": "ac96",
+      "requirement": "a-new-document-is-given-a-name-that-means-nothing",
+      "then": "the Hub mints a different one and the created document occupies it",
+      "when": "a document is created without a path and the first candidate name is already in use in the project or on disk"
+    },
+    {
+      "given": "",
+      "key": "ac97",
+      "requirement": "a-new-document-is-given-a-name-that-means-nothing",
+      "then": "that path is used and nothing is minted",
+      "when": "a document is created with a path"
+    },
+    {
+      "given": "",
+      "key": "ac98",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "then": "the document's path becomes `spec/changes/personal-houseplant-watering-tracker/spec.html` the file exists at the new path and no longer exists at the old one",
+      "when": "a document at a minted placeholder path is renamed with the subject \"personal houseplant watering tracker\""
+    },
+    {
+      "given": "",
+      "key": "ac99",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "then": "its identifier, its rendered content, its requirement identifiers and its recorded events are unchanged",
+      "when": "a document with minted requirement identifiers is renamed"
+    },
+    {
+      "given": "",
+      "key": "ac100",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "then": "that entry names the new path",
+      "when": "an inbound queue entry naming the old path has not been delivered and the document is renamed"
+    },
+    {
+      "given": "",
+      "key": "ac101",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "then": "that entry still names the old path",
+      "when": "an inbound queue entry naming the old path has already been delivered and the document is renamed"
+    },
+    {
+      "given": "",
+      "key": "ac102",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "then": "it is refused, and the refusal says the document is approved",
+      "when": "a rename is attempted on a document that is or was approved"
+    },
+    {
+      "given": "",
+      "key": "ac103",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "then": "it is refused, and no placeholder is minted in its place",
+      "when": "a rename is attempted with a subject that yields an empty slug"
+    },
+    {
+      "given": "",
+      "key": "ac104",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "then": "it is refused and neither document is changed",
+      "when": "a rename would move a document onto a path another document already occupies"
+    },
+    {
+      "given": "",
+      "key": "ac68",
+      "requirement": "a-renamed-document-carries-its-new-subject",
+      "then": "its title is that subject its path reflects that subject",
+      "when": "a document is renamed to a new subject"
+    },
+    {
+      "given": "",
+      "key": "ac236",
+      "requirement": "an-agent-can-read-a-specification-document-in-results-that-f",
+      "then": "the result SHALL be within the bound it SHALL carry the leading requirements in identifier order, mark itself truncated, and list the identifiers it did not return",
+      "when": "an agent reads a document whose requirements and criteria serialise to more than the bound"
+    },
+    {
+      "given": "",
+      "key": "ac237",
+      "requirement": "an-agent-can-read-a-specification-document-in-results-that-f",
+      "then": "the result SHALL carry those requirements, within the bound it SHALL NOT carry the document's summary, problem, scope or open questions",
+      "when": "an agent reads the same document again naming the identifiers the first result listed as remaining"
+    },
+    {
+      "given": "",
+      "key": "ac238",
+      "requirement": "an-agent-can-read-a-specification-document-in-results-that-f",
+      "then": "the result SHALL carry it, cut to the bound and marked as cut if it alone exceeds it",
+      "when": "a read names the document's problem statement as not returned because it did not fit the agent asks for that field alone"
+    },
+    {
+      "given": "",
+      "key": "ac239",
+      "requirement": "an-agent-can-read-a-specification-document-in-results-that-f",
+      "then": "the result SHALL carry all of it and SHALL NOT be marked truncated",
+      "when": "an agent reads a document whose requested content is within the bound"
+    },
+    {
+      "given": "",
+      "key": "ac240",
+      "requirement": "an-agent-can-read-a-specification-document-in-results-that-f",
+      "then": "each requirement SHALL be returned with its identifier, key, modal, statement and state, and without its rationale or acceptance criteria a requirement the index has not given an identifier SHALL still carry its key",
+      "when": "an agent asks for the outline of a document"
+    },
+    {
+      "given": "",
+      "key": "ac241",
+      "requirement": "an-agent-can-read-a-specification-document-in-results-that-f",
+      "then": "the other named requirements SHALL be returned `FR-99` SHALL be reported as unknown",
+      "when": "an agent names `FR-99` among the identifiers to read and the document has no `FR-99`"
+    },
+    {
+      "given": "",
+      "key": "ac242",
+      "requirement": "an-agent-can-read-a-specification-document-in-results-that-f",
+      "then": "the design section SHALL be named as omitted reading that section alone SHALL return it",
+      "when": "an agent asks for the full document and its design section does not fit within the bound"
+    },
+    {
+      "given": "",
+      "key": "ac243",
+      "requirement": "a-read-too-large-for-one-result-is-written-into-the-agent-s-",
+      "then": "the answer SHALL be within the bound and SHALL name a file under `.agentweave/reads/` in that workspace that file SHALL hold every requirement with its acceptance criteria",
+      "when": "an agent whose run has a workspace reads a document whose content exceeds the bound"
+    },
+    {
+      "given": "",
+      "key": "ac244",
+      "requirement": "a-read-too-large-for-one-result-is-written-into-the-agent-s-",
+      "then": "it SHALL be returned in the answer and no file SHALL be written",
+      "when": "the content of a read is within the bound"
+    },
+    {
+      "given": "",
+      "key": "ac245",
+      "requirement": "a-read-too-large-for-one-result-is-written-into-the-agent-s-",
+      "then": "the bounded read SHALL be returned instead",
+      "when": "the place the file would go is not a plain directory"
+    },
+    {
+      "given": "",
+      "key": "ac246",
+      "requirement": "a-specification-document-is-readable-by-the-id-tasks-carry",
+      "then": "the result SHALL be the same as reading it by its path SHALL carry both the id and the path",
+      "when": "an agent reads a document by the `spdoc-` id its task carries"
+    },
+    {
+      "given": "",
+      "key": "ac247",
+      "requirement": "a-specification-document-is-readable-by-the-id-tasks-carry",
+      "then": "the read SHALL be refused as no such document, with the same answer as an id that does not exist",
+      "when": "an agent reads by an id that belongs to a document in a different project"
+    },
+    {
+      "given": "",
+      "key": "ac105",
+      "requirement": "a-rendered-document-is-ordered-and-complete-for-a-reader",
+      "then": "the rendered table lists every criterion for a requirement before any criterion for a later requirement",
+      "when": "a document is rendered whose acceptance criteria were submitted out of requirement order"
+    },
+    {
+      "given": "",
+      "key": "ac106",
+      "requirement": "a-rendered-document-is-ordered-and-complete-for-a-reader",
+      "then": "they appear in the order they were submitted",
+      "when": "a requirement has several acceptance criteria"
+    },
+    {
+      "given": "",
+      "key": "ac107",
+      "requirement": "a-rendered-document-is-ordered-and-complete-for-a-reader",
+      "then": "the rendered document states that none are outstanding",
+      "when": "a written document has an empty open-questions list"
+    },
+    {
+      "given": "",
+      "key": "ac143",
+      "requirement": "the-rendered-document-shares-the-hub-s-theme-not-a-colour-sc",
+      "then": "the document's background is the Hub's light background, and switching the Hub to dark mode changes it to match",
+      "when": "the Hub is in light mode and a specification document is opened"
+    },
+    {
+      "given": "",
+      "key": "ac144",
+      "requirement": "the-rendered-document-shares-the-hub-s-theme-not-a-colour-sc",
+      "then": "that distinction is visible identically in both the Hub's light and dark modes",
+      "when": "the document renders a mandatory requirement with distinct colour from an optional one"
+    },
+    {
+      "given": "",
+      "key": "ac145",
+      "requirement": "the-rendered-document-visually-distinguishes-requirement-str",
+      "then": "each is rendered with a treatment distinct to its obligation the treatment is consistent for every requirement sharing that obligation",
+      "when": "a document contains requirements with different modal obligations"
+    },
+    {
+      "given": "",
+      "key": "ac108",
+      "requirement": "a-document-declares-how-strictly-it-is-enforced",
+      "then": "its rigor is `sketch` it blocks no work",
+      "when": "a document is created"
+    },
+    {
+      "given": "",
+      "key": "ac109",
+      "requirement": "a-document-declares-how-strictly-it-is-enforced",
+      "then": "the rendered document states it, from the row and never from a submission",
+      "when": "a document's rigor is set"
+    },
+    {
+      "given": "",
+      "key": "ac110",
+      "requirement": "a-document-declares-how-strictly-it-is-enforced",
+      "then": "the previous level, the new level, the actor and the reason are recorded, and the record is never edited",
+      "when": "rigor moves from one level to another"
+    },
+    {
+      "given": "",
+      "key": "ac111",
+      "requirement": "a-document-declares-how-strictly-it-is-enforced",
+      "then": "it is refused rather than applied",
+      "when": "a rigor change is submitted against a digest that is no longer current"
+    },
+    {
+      "given": "",
+      "key": "ac112",
+      "requirement": "only-the-operator-changes-rigor",
+      "then": "it is refused",
+      "when": "an agent attempts to promote a document's rigor"
+    },
+    {
+      "given": "",
+      "key": "ac113",
+      "requirement": "only-the-operator-changes-rigor",
+      "then": "it is refused the document's rigor is unchanged",
+      "when": "an agent blocked by a gate attempts to demote the document"
+    },
+    {
+      "given": "",
+      "key": "ac114",
+      "requirement": "only-the-operator-changes-rigor",
+      "then": "the demotion is applied and recorded with their attribution",
+      "when": "the operator demotes a document"
+    },
+    {
+      "given": "",
+      "key": "ac115",
+      "requirement": "rigor-is-only-raised-on-a-document-that-can-be-enforced",
+      "then": "it is refused, naming what is unresolved",
+      "when": "promotion is attempted on a document with an unresolved identifier"
+    },
+    {
+      "given": "",
+      "key": "ac116",
+      "requirement": "rigor-is-only-raised-on-a-document-that-can-be-enforced",
+      "then": "its requirement links, evidence and reviews are unchanged",
+      "when": "a `gate` document is demoted to `sketch`"
+    },
+    {
+      "given": "",
+      "key": "ac117",
+      "requirement": "rigor-is-only-raised-on-a-document-that-can-be-enforced",
+      "then": "the demotion succeeds",
+      "when": "the operator demotes a document that does not currently parse"
+    },
+    {
+      "given": "",
+      "key": "ac225",
+      "requirement": "a-document-s-rigor-history-is-on-its-screen-and-the-app-reco",
+      "then": "its view lists both changes, newest first, each with its levels, actor, reason and time",
+      "when": "a document's rigor has been changed twice"
+    },
+    {
+      "given": "",
+      "key": "ac226",
+      "requirement": "a-document-s-rigor-history-is-on-its-screen-and-the-app-reco",
+      "then": "the interface asks why the change is not submitted until a reason is given the recorded change carries that reason",
+      "when": "the operator lowers a document's rigor in the app"
+    },
+    {
+      "given": "",
+      "key": "ac227",
+      "requirement": "a-document-s-rigor-history-is-on-its-screen-and-the-app-reco",
+      "then": "the interface offers a reason field the change can be submitted with it left empty",
+      "when": "the operator raises a document's rigor in the app"
+    },
+    {
+      "given": "",
+      "key": "ac118",
+      "requirement": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
+      "then": "neither requirement's live content changes exactly two pending proposals are recorded, each naming the requirement it targets",
+      "when": "an agent submits an edit against a document whose rigor is gate, changing two requirements"
+    },
+    {
+      "given": "",
+      "key": "ac119",
+      "requirement": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
+      "then": "the live document is updated immediately, with no proposal recorded",
+      "when": "an agent submits the same shape of edit against a document whose rigor is `sketch`"
+    },
+    {
+      "given": "",
+      "key": "ac120",
+      "requirement": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
+      "then": "no proposal is created the submission is not reported as a failure",
+      "when": "an agent submits a contract- or gate-rigor document's content unchanged from what is stored"
+    },
+    {
+      "given": "",
+      "key": "ac122",
+      "requirement": "a-pending-proposal-is-discoverable-in-position-and-is-indivi",
+      "then": "an operator can accept the FR-3 proposal without the metadata proposal changing state the metadata proposal remains pending and unapplied",
+      "when": "a document has one pending proposal against requirement FR-3 and another against its non-requirement content"
+    },
+    {
+      "given": "",
+      "key": "ac123",
+      "requirement": "a-pending-proposal-is-discoverable-in-position-and-is-indivi",
+      "then": "the live document's content is unchanged, and the section the proposal targeted shows no trace of it",
+      "when": "an operator rejects a pending proposal"
+    },
+    {
+      "given": "",
+      "key": "ac124",
+      "requirement": "an-accepted-proposal-is-attributed-to-both-its-proposer-and-",
+      "then": "a later read reports run-123 as the proposer and alex as the accepter, in separate fields",
+      "when": "a proposal created by agent run `run-123` is accepted by operator `alex`"
+    },
+    {
+      "given": "",
+      "key": "ac125",
+      "requirement": "accepting-or-rejecting-a-proposal-is-reserved-to-the-operato",
+      "then": "the attempt is refused the proposal's status is unchanged",
+      "when": "an actor of kind `agent` attempts to accept a pending proposal, including one it created itself"
+    },
+    {
+      "given": "",
+      "key": "ac126",
+      "requirement": "a-proposal-that-no-longer-matches-the-document-s-current-con",
+      "then": "the attempt is refused with a stated reason, and the proposal is marked stale, not accepted",
+      "when": "an operator accepts a proposal whose recorded digest no longer matches the document's"
+    },
+    {
+      "given": "",
+      "key": "ac228",
+      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
+      "then": "the second submission records no new proposal its response names the pending proposal that already holds each unit",
+      "when": "a proposer submits the same edit twice against a gate-rigor document whose content has not changed"
+    },
+    {
+      "given": "",
+      "key": "ac229",
+      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
+      "then": "the new proposal is pending the earlier one is marked superseded, naming the new one",
+      "when": "a proposer submits a different edit to a requirement it already has a pending proposal for"
+    },
+    {
+      "given": "",
+      "key": "ac230",
+      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
+      "then": "the proposal to remove it is marked superseded it is no longer offered for acceptance",
+      "when": "a proposer's earlier submission left a pending proposal to remove a requirement the proposer's next submission keeps that requirement exactly as it is stored"
+    },
+    {
+      "given": "",
+      "key": "ac231",
+      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
+      "then": "the proposal stays accepted the other request is refused, or makes no change",
+      "when": "a proposal is accepted while another request that read it as pending tries to reject or withdraw it"
+    },
+    {
+      "given": "",
+      "key": "ac232",
+      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
+      "then": "both proposals are pending",
+      "when": "a second proposer submits an edit to a requirement the first proposer has a pending proposal for"
+    },
+    {
+      "given": "",
+      "key": "ac233",
+      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
+      "then": "it is marked withdrawn and no longer listed as pending no rejection is recorded for it the live document is unchanged",
+      "when": "the operator withdraws a pending proposal"
+    },
+    {
+      "given": "",
+      "key": "ac234",
+      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
+      "then": "the attempt is refused the proposal's status is unchanged",
+      "when": "an agent-authenticated actor attempts to withdraw a pending proposal"
+    },
+    {
+      "given": "",
+      "key": "ac235",
+      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
+      "then": "the proposal is no longer offered for a decision in any open view of that document",
+      "when": "the operator rejects a pending proposal in one view"
+    },
+    {
+      "given": "",
+      "key": "ac47",
+      "requirement": "document-state-changes-refresh-subscribers",
+      "then": "subscribers to that project receive an event identifying the document",
+      "when": "an agent's submission is accepted"
+    },
+    {
+      "given": "",
+      "key": "ac48",
+      "requirement": "document-state-changes-refresh-subscribers",
+      "then": "subscribers receive an event carrying the document and its new phase",
+      "when": "a document's phase changes"
+    },
+    {
+      "given": "",
+      "key": "ac69",
+      "requirement": "a-declared-task-can-state-the-name-the-board-shows",
+      "then": "the created task carries that title",
+      "when": "a document declares a task with a title the document is approved"
+    },
+    {
+      "given": "",
+      "key": "ac70",
+      "requirement": "a-declared-task-can-state-the-name-the-board-shows",
+      "then": "the created task carries a title derived from it that title is short enough to read as a name",
+      "when": "a declared task states only its description"
+    },
+    {
+      "given": "",
+      "key": "ac71",
+      "requirement": "a-declared-task-can-state-the-name-the-board-shows",
+      "then": "the derived title ends on a word boundary",
+      "when": "a description is too long to serve as a title"
+    },
+    {
+      "given": "",
+      "key": "ac72",
+      "requirement": "a-declared-task-can-state-the-name-the-board-shows",
+      "then": "the created task's title is that description",
+      "when": "a declared task's description is already short enough to be a name"
+    },
+    {
+      "given": "",
+      "key": "ac73",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "the created task carries that criterion",
+      "when": "a document declares a task naming a requirement that document declares an acceptance criterion against the same requirement the document is approved and a task is created for that entry"
+    },
+    {
+      "given": "",
+      "key": "ac74",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "the task's criteria are grouped by requirement, in the order the document declares its requirements within one requirement they keep the order the document wrote them in",
+      "when": "a document declares criteria for two requirements, interleaved in its own declaration of them a task naming both requirements is created"
+    },
+    {
+      "given": "",
+      "key": "ac75",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "the criterion is still attached to that task it is ordered after the criteria of the requirements the document does list",
+      "when": "a document declares a criterion against a requirement name its own requirement list does not hold a task entry naming that requirement is created"
+    },
+    {
+      "given": "",
+      "key": "ac76",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "no task is created for that entry, as before the approval is not refused",
+      "when": "a declared task names only requirements that existing work already serves the document declares criteria against those requirements the document is approved"
+    },
+    {
+      "given": "",
+      "key": "ac77",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "the created task carries only the criteria of the requirement it names",
+      "when": "a document declares a task naming one requirement the document declares criteria against that requirement and against a different one the document is approved"
+    },
+    {
+      "given": "",
+      "key": "ac78",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "the created task carries the criteria of every requirement it names",
+      "when": "a declared task names more than one requirement each has at least one acceptance criterion the document is approved"
+    },
+    {
+      "given": "",
+      "key": "ac79",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "the created task is created with no acceptance criteria the approval is not refused",
+      "when": "a document declares a task that names no requirement the document is approved"
+    },
+    {
+      "given": "",
+      "key": "ac80",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "the created task carries no criteria from that requirement the approval is not refused",
+      "when": "a declared task names a requirement that has no acceptance criterion the document is approved"
+    },
+    {
+      "given": "",
+      "key": "ac81",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "each criterion is rendered to a reader as text, in the same place a task's acceptance criteria were already shown no reader of that field has to interpret a new shape to display it",
+      "when": "a task created from a document carries acceptance criteria"
+    },
+    {
+      "given": "",
+      "key": "ac82",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "all three are present in what the task carries the outcome is not discarded in favour of the event alone",
+      "when": "a criterion declared with a starting state, an event and an observable outcome is attached to a task"
+    },
+    {
+      "given": "",
+      "key": "ac83",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "each attached criterion carries the handle the document gave it the two are distinguishable from one another without re-reading the document",
+      "when": "a document declares two criteria against the same requirement, each with its own handle a task naming that requirement is created"
+    },
+    {
+      "given": "",
+      "key": "ac84",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "the criterion is attached with its starting state, event and outcome nothing in what the task carries presents a handle the document did not declare",
+      "when": "a document declares a criterion with a starting state, an event and an outcome but no handle a task naming its requirement is created"
+    },
+    {
+      "given": "",
+      "key": "ac85",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "that criterion is not among the task's criteria the task is still created",
+      "when": "a document declares a criterion against a requirement with no starting state, no event and no outcome a task naming that requirement is created"
+    },
+    {
+      "given": "",
+      "key": "ac86",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "all of those tasks are still created those tasks carry no criteria",
+      "when": "a document declares several tasks that would otherwise all be created its acceptance criteria cannot be read"
+    },
+    {
+      "given": "",
+      "key": "ac87",
+      "requirement": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "then": "each creates the same number of tasks, with the same titles and the same declared keys the tasks differ only in the criteria they carry",
+      "when": "two documents declare the same tasks against the same requirements, and one declares acceptance criteria while the other declares none both are approved"
+    },
+    {
+      "given": "a payload whose tasks carry `files`, one with an absolute path",
+      "key": "f509-files-accepted",
+      "requirement": "a-task-may-declare-the-files-it-will-edit",
+      "then": "the valid lists are stored as given; the absolute path is refused naming its task",
+      "when": "it is validated"
+    },
+    {
+      "given": "two tasks both declaring `hub/hub/mcp_server.py`, with and then without depends_on",
+      "key": "f509-overlap-warned",
+      "requirement": "unordered-tasks-sharing-a-file-are-warned",
+      "then": "unordered: a warning names both keys and the path; ordered: no warning",
+      "when": "the document is submitted"
+    },
+    {
+      "given": "three local tasks, one declaring `files`",
+      "key": "f509-undeclared-warned",
+      "requirement": "a-multi-task-document-without-files-is-warned",
+      "then": "one warning names the two without `files`; `ready_to_propose` is unchanged",
+      "when": "the document is submitted"
+    },
+    {
+      "given": "a task whose files are only tests, and a second task that depends on it",
+      "key": "n9-c1",
+      "requirement": "n9",
+      "then": "a test_only_task warning names the first task and its dependant, and ready_to_propose is unchanged",
+      "when": "the document is submitted"
+    },
+    {
+      "given": "a change document being explored",
+      "key": "ac149",
+      "requirement": "the-operator-can-write-a-document-s-content",
+      "then": "the content is written",
+      "when": "the operator submits a valid payload for it"
+    },
+    {
+      "given": "",
+      "key": "ac151",
+      "requirement": "the-operator-can-write-a-document-s-content",
+      "then": "it is refused with an error identifying the field the document on disk is unchanged",
+      "when": "the operator submits a payload that omits a required field or violates a constraint"
+    },
+    {
+      "given": "",
+      "key": "ac152",
+      "requirement": "the-operator-can-write-a-document-s-content",
+      "then": "it is refused the document's recorded kind is unchanged",
+      "when": "the operator submits a payload whose kind differs from the document's recorded kind"
+    },
+    {
+      "given": "a document at a rigor that gates edits behind an accepted proposal",
+      "key": "ac154",
+      "requirement": "the-operator-can-write-a-document-s-content",
+      "then": "a pending proposal is recorded rather than the document being written",
+      "when": "the operator submits content for it"
+    },
+    {
+      "given": "a capability document",
+      "key": "a-finished-change-is-folded-into-its-capability-lock",
+      "requirement": "a-finished-change-is-folded-into-its-capability-write-via-merge",
+      "then": "the PUT is refused naming the merge route; the merge writes it and records an edit",
+      "when": "the operator PUTs its content, and then merges the same payload naming no change"
+    },
+    {
+      "given": "",
+      "key": "ac150",
+      "requirement": "a-finished-change-is-folded-into-its-capability-write-via-merge",
+      "then": "it is refused the document's content is unchanged",
+      "when": "an agent submits content against a capability document"
+    },
+    {
+      "given": "",
+      "key": "ac138",
+      "requirement": "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-",
+      "then": "the capability document's content becomes what was submitted a merge record links the two documents, attributed to the operator",
+      "when": "the operator merges a change document into a capability document"
+    },
+    {
+      "given": "",
+      "key": "ac139",
+      "requirement": "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-",
+      "then": "it is refused",
+      "when": "a merge names a target document that is not a capability document"
+    },
+    {
+      "given": "",
+      "key": "ac140",
+      "requirement": "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-",
+      "then": "it is refused",
+      "when": "a merge names a source document that is `exploring` or `proposed`"
+    },
+    {
+      "given": "",
+      "key": "ac141",
+      "requirement": "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-",
+      "then": "the merge is accepted and recorded against that change",
+      "when": "an archived change document is named as the source of a merge"
+    },
+    {
+      "given": "",
+      "key": "ac142",
+      "requirement": "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-",
+      "then": "the merge is retrievable by querying either document",
+      "when": "a change document has been merged into a capability document"
+    },
+    {
+      "given": "an approved change with two requirements and three criteria, and a capability already holding one of the draft keys",
+      "key": "a-finished-change-is-folded-into-its-capability-draft-shape",
+      "requirement": "a-finished-change-is-folded-into-its-capability-draft",
+      "then": "the payload appends both requirements and all three criteria under prefixed keys at most 64 characters long, and the existing key is listed as a collision with the capability's text untouched",
+      "when": "the draft is requested"
+    },
+    {
+      "given": "a capability with requirements and criteria",
+      "key": "a-fold-can-retire-what-the-change-supersedes-lists",
+      "requirement": "a-fold-can-retire-what-the-change-supersedes-draft-lists",
+      "then": "it lists every requirement with its statement and every criterion with its requirement, in the capability's order",
+      "when": "the draft is requested"
+    },
+    {
+      "given": "an approved change whose tasks are all approved",
+      "key": "a-finished-change-is-folded-into-its-capability-fold-writes",
+      "requirement": "a-finished-change-is-folded-into-its-capability-fold",
+      "then": "the capability holds the edited statement and the replaced requirement's new text under its old key, one merge row and one merged event exist, and the change is archived",
+      "when": "it is folded with one requirement's statement edited and another replacing an existing capability key"
+    },
+    {
+      "given": "a proposed change; an approved change with a task in_progress; an unknown requirement key; an unhandled collision; a replaces naming no capability key; a change-spec as target",
+      "key": "a-finished-change-is-folded-into-its-capability-fold-refusals",
+      "requirement": "a-finished-change-is-folded-into-its-capability-fold",
+      "then": "each is refused with its own code and nothing is written: no merge row, the capability's content digest unchanged, the change still approved",
+      "when": "each is folded"
+    },
+    {
+      "given": "a capability with two requirements, one with two criteria",
+      "key": "a-fold-can-retire-what-the-change-supersedes-retire-writes",
+      "requirement": "a-fold-can-retire-what-the-change-supersedes-retire",
+      "then": "the retired requirement and its criteria are gone, the other criterion stays, one merge row names the change",
+      "when": "a fold retires one requirement and one criterion of the other"
+    },
+    {
+      "given": "an unknown requirement key, an unknown criterion key, a requirement both replaced and retired",
+      "key": "a-fold-can-retire-what-the-change-supersedes-retire-refusals",
+      "requirement": "a-fold-can-retire-what-the-change-supersedes-retire",
+      "then": "each is refused with its own code and the capability's digest is unchanged",
+      "when": "each is folded"
+    },
+    {
+      "given": "approved changes with an open task, with every task approved, and folded",
+      "key": "a-finished-change-is-folded-into-its-capability-state",
+      "requirement": "a-finished-change-is-folded-into-its-capability-app",
+      "then": "fold_state is tasks_open, ready, and folded naming the capability path",
+      "when": "each document is read"
+    },
+    {
+      "given": "the trial Hub on :8010, a fresh project with a capability document and an approved change whose one task is approved",
+      "key": "a-finished-change-is-folded-into-its-capability-drive",
+      "requirement": "a-finished-change-is-folded-into-its-capability-app",
+      "then": "the capability's file carries the change's requirement under <slug>-<key>, one merge row names the change, and the change is archived",
+      "when": "the operator, in Chromium on the served bundle, opens the change, presses Fold into capability, picks the capability and confirms (scripts/drive/d1008_fold_change_drive.py)"
+    },
+    {
+      "given": "the trial Hub on :8010, a capability holding old-rule and widgets-exist with criterion widgets-exist-c, and an approved change whose task is approved",
+      "key": "a-fold-can-retire-what-the-change-supersedes-drive",
+      "requirement": "a-fold-can-retire-what-the-change-supersedes-app",
+      "then": "the capability's file holds the folded requirement and widgets-exist, and neither old-rule nor widgets-exist-c",
+      "when": "the operator folds it in Chromium, retiring old-rule and widgets-exist-c (scripts/drive/d1008_fold_retire_drive.py)"
+    },
+    {
+      "given": "an approved change with requirements, evidence, an approved task and a stopped flow",
+      "key": "the-operator-can-delete-a-document-a-task-or-an-document-cascade",
+      "requirement": "the-operator-can-delete-a-document-a-task-or-an-archive-document",
+      "then": "no row of the project names it or its requirements or tasks, the file is gone and spec/index.json no longer lists it",
+      "when": "it is deleted"
+    },
+    {
+      "given": "a capability, an archived change, a folded change, a change with a running flow, a change with a run active on its task",
+      "key": "the-operator-can-delete-a-document-a-task-or-a-document-refusals",
+      "requirement": "the-operator-can-delete-a-document-a-task-or-an-archive-document",
+      "then": "each is refused with its own code and nothing changes",
+      "when": "each is deleted"
+    },
+    {
+      "given": "the trial Hub on :8010, a fresh project with an approved change and its task, a standalone task, and an archived agent bound to its own runner",
+      "key": "the-operator-can-delete-a-document-a-task-or-an-archived-a-drive",
+      "requirement": "the-operator-can-delete-a-document-a-task-or-an-archived-age-app",
+      "then": "the task and the change, with its file and its tasks, are gone; the runner deletes and the archived agent remains with no runner",
+      "when": "the operator deletes the task and the change in Chromium (scripts/drive/d1008_delete_drive.py), then the runner through the API"
+    },
+    {
+      "given": "the trial Hub on :8010, a fresh testbed project with capabilities old (2 requirements) and new",
+      "key": "a-capability-can-be-retired-drive",
+      "requirement": "a-capability-can-be-retired-app",
+      "then": "old is archived with its 2 requirements retired, the phase event names the reason and new, a merge into old is refused, a reindex leaves them retired, and spec/index.json lists old as archived",
+      "when": "the operator opens old in Chromium, presses Retire, gives a reason and picks new as absorbing it (scripts/drive/d1008_retire_capability_drive.py)"
+    },
+    {
+      "given": "a current capability",
+      "key": "a-capability-can-be-retired-refusals",
+      "requirement": "a-capability-can-be-retired-retire",
+      "then": "each is refused with its own code and nothing changes",
+      "when": "retiring it is asked with no reason, with itself or a change document as the absorber, by an agent, or while an open task links one of its requirements"
+    },
+    {
+      "given": "an archived capability whose file still lists its requirements",
+      "key": "a-capability-can-be-retired-retired-stay",
+      "requirement": "a-capability-can-be-retired-requirements-retire",
+      "then": "every one of its requirements is still retired and coverage does not report it unserved",
+      "when": "the project is reindexed"
+    },
+    {
+      "given": "an archived capability",
+      "key": "a-capability-can-be-retired-merge-refused",
+      "requirement": "a-capability-can-be-retired-frozen",
+      "then": "the Hub answers 409 and the file is unchanged",
+      "when": "a merge or a fold names it"
+    },
+    {
+      "given": "a capability retired with a reason and an absorbing capability",
+      "key": "a-capability-can-be-retired-event",
+      "requirement": "a-capability-can-be-retired-recorded",
+      "then": "a phase event from current to archived carries both, the file shows archived, and the index lists it as archived",
+      "when": "its history and the index are read"
+    },
+    {
+      "given": "",
+      "key": "tlg-ac120",
+      "requirement": "approval-creates-the-work-its-document-declares",
+      "then": "a task is created for each, linked to its requirements and unassigned",
+      "when": "a document declaring tasks is approved"
+    },
+    {
+      "given": "",
+      "key": "ac121",
+      "requirement": "approval-creates-the-work-its-document-declares",
+      "then": "existing tasks are not duplicated and newly declared ones are created",
+      "when": "the document is revised and approved again"
+    },
+    {
+      "given": "",
+      "key": "tlg-ac123",
+      "requirement": "approval-creates-the-work-its-document-declares",
+      "then": "no tasks are created and the approval succeeds",
+      "when": "a document declaring no tasks is approved"
+    },
+    {
+      "given": "a proposed document whose tasks cannot be created",
+      "key": "ac271",
+      "requirement": "approval-reports-what-it-created-and-what-it-could-not",
+      "then": "it is approved, its report says the board failed and why, and none of the partially created tasks remain",
+      "when": "the operator approves it"
+    },
+    {
+      "given": "an approved document with a task depending on a key no task carries",
+      "key": "ac272",
+      "requirement": "approval-reports-what-it-created-and-what-it-could-not",
+      "then": "the report names the task, the dependency and why it was not honoured",
+      "when": "the operator reads it"
+    },
+    {
+      "given": "an approved change document whose report says no flow was created, and no flow declares it",
+      "key": "ac273",
+      "requirement": "approval-reports-what-it-created-and-what-it-could-not",
+      "then": "the report points to the document's one start-flow control and carries none of its own",
+      "when": "the operator reads it"
+    },
+    {
+      "given": "a document approved twice with both reports at the same instant",
+      "key": "ac275",
+      "requirement": "approval-reports-what-it-created-and-what-it-could-not",
+      "then": "the report returned is the one recorded second",
+      "when": "the operator reads it"
+    },
+    {
+      "given": "an open declared task assigned to an agent, linked to a requirement of another document",
+      "key": "re-approving-an-amended-document-refreshes-its-open-refresh-open",
+      "requirement": "re-approving-an-amended-document-refreshes-its-open-task-refresh",
+      "then": "title, description, criteria and same-document links follow the document; status, assignee, priority and the other document's link are unchanged",
+      "when": "its document is amended and approved again"
+    },
+    {
+      "given": "an approved task and a rejected task whose entries changed",
+      "key": "re-approving-an-amended-document-refreshes-its-closed-unchanged",
+      "requirement": "re-approving-an-amended-document-refreshes-its-open-task-refresh",
+      "then": "neither task's title, description, criteria or links change",
+      "when": "the document is approved again"
+    },
+    {
+      "given": "a declared task moved out of its entry status",
+      "key": "tlg-ac122",
+      "requirement": "re-approving-an-amended-document-refreshes-its-open-task-refresh",
+      "then": "its status and assignee are unchanged",
+      "when": "the document is approved again"
+    },
+    {
+      "given": "a re-approval that refreshes one task, leaves a closed task linking a retired requirement, and no longer declares a third",
+      "key": "re-approving-an-amended-document-refreshes-its-open-report-lists",
+      "requirement": "re-approving-an-amended-document-refreshes-its-open-tasks-report",
+      "then": "the outcome lists refreshed (fields, linked, unlinked), closed_linking_retired and no_longer_declared; an unchanged open task is not listed as refreshed",
+      "when": "approval answers"
+    },
+    {
+      "given": "an approved change with requirements a and b and tasks t1 (a, open), t2 (a, approved) and t3 (b, open)",
+      "key": "re-approving-an-amended-document-refreshes-its-open-tasks-drive",
+      "requirement": "re-approving-an-amended-document-refreshes-its-open-tasks-app",
+      "then": "t1 keeps its id and status with the new title and links to b and c only; t2 and t3 are unchanged; no task is created; the app's report shows t1 refreshed, t2 linking retired a, and t3 no longer declared",
+      "when": "the operator reopens it, retires a, adds c, retitles t1 and points it at b and c, drops t3, and approves again (scripts/drive/d1008_reapproval_refresh_drive.py)"
+    },
+    {
+      "given": "an approved document exists in the project directory",
+      "key": "cr45",
+      "requirement": "an-agent-can-read-a-specification-document",
+      "then": "it receives the structured requirements with their minted identifiers and the document's phase",
+      "when": "an agent reads it by path or by its `spdoc-` id"
+    },
+    {
+      "given": "a document is `exploring`",
+      "key": "cr46",
+      "requirement": "an-agent-can-read-a-specification-document",
+      "then": "the read succeeds",
+      "when": "an agent reads it"
+    },
+    {
+      "given": "a new change document",
+      "key": "a-spec-is-written-one-step-at-a-time-new-doc-intake",
+      "requirement": "a-spec-is-written-one-step-at-a-time-step-recorded",
+      "then": "its step is intake and its size is none",
+      "when": "it is created"
+    },
+    {
+      "given": "a document of each size",
+      "key": "a-spec-is-written-one-step-at-a-time-journeys",
+      "requirement": "a-spec-is-written-one-step-at-a-time-default-journey",
+      "then": "it is exactly the steps listed for that size, in order",
+      "when": "its journey is read"
+    },
+    {
+      "given": "a document at requirements with no requirements written",
+      "key": "a-spec-is-written-one-step-at-a-time-move-recorded",
+      "requirement": "a-spec-is-written-one-step-at-a-time-advance-tool",
+      "then": "the move succeeds, is recorded with the run, and the answer names the missing requirements",
+      "when": "the agent's run moves it to the next step"
+    },
+    {
+      "given": "a payload whose criteria have how_to_check and checked_by, and one without",
+      "key": "a-spec-is-written-one-step-at-a-time-fields-optional",
+      "requirement": "a-spec-is-written-one-step-at-a-time-criterion-check-fields",
+      "then": "both are valid and the fields survive a round trip; checked_by other than agent or operator is refused naming the field",
+      "when": "each is submitted and rendered"
+    },
+    {
+      "given": "a document at acceptance, size small, open in Chromium",
+      "key": "a-spec-is-written-one-step-at-a-time-bar",
+      "requirement": "a-spec-is-written-one-step-at-a-time-operator-moves-journey",
+      "then": "the bar shows the large journey with intake current, and the next briefing is intake's",
+      "when": "the operator moves it back to intake and changes the size to large"
+    },
+    {
+      "given": "a complete exploring change document never marked complete",
+      "key": "a-spec-is-written-one-step-at-a-time-no-close",
+      "requirement": "a-spec-is-written-one-step-at-a-time-propose-without-close",
+      "then": "it moves to proposed; the bar offers no Exploration is complete control",
+      "when": "the operator proposes it"
+    },
+    {
+      "given": "a copy of the trial database with exploring documents with and without requirements, an approved change and a roadmap",
+      "key": "a-spec-is-written-one-step-at-a-time-migrated",
+      "requirement": "a-spec-is-written-one-step-at-a-time-existing-documents",
+      "then": "the empty document is at intake, the other at requirements, the approved change and roadmap have no step; the downgrade leaves the schema as before",
+      "when": "the migration runs, then its downgrade"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Phase transitions",
+      "steps": [
+        "A new document starts in exploring; a capability document starts in current and never moves.",
+        "exploring to proposed: operator only, exploration closed, no blocking finding.",
+        "proposed to approved: operator only, no blocking finding (stale imports and delivery excepted).",
+        "proposed to exploring and approved to exploring: the operator reopens; exploration must be closed again.",
+        "approved to archived: operator only; for a change-spec, every task approved or rejected and a merge or a stated no_capability_change.",
+        "exploring or proposed to archived: operator only, and only while the document has no requirements and no tasks.",
+        "archived: no transition out."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-100": "e365b04d0fe26c8f2f4f9e23e5beb8c365c67579590dc4a8c386b37e88705f98",
+      "FR-101": "304def36088d99e7aabff893af9868ebcf9fac663f8aba832958b516e534cd30",
+      "FR-102": "165f9c4c5ff4210cc8822dd467514ac924d8e8a8ea0c6bfb0814c47aa750d1bc",
+      "FR-103": "0c33e3b7bebdda723195fc5ee61b08ea69e4c5b208349f14fa5ff3ddcfb82be9",
+      "FR-104": "772a4826f07d03184cda661a87d5ec79db6404d5ac6da15cdfc727ddef4d4fae",
+      "FR-105": "62d498802f8b350d51d6785fe01ce9a82e2ebf031ae30c14af276630d704896c",
+      "FR-106": "7d18ee97a7fcc568c3bbf26cf62b2a01d78568d2a8ffc5a425f33a12ddd8622f",
+      "FR-107": "190cfe47d84a5bad2b8fc6ce6a2a7ba243d6da5f19c838182c01e17286e0db07",
+      "FR-108": "60b058b2d74d2d88bff62652c7c263eed30070cfc51f3a822a21d2acf9c05e77",
+      "FR-109": "7d22e76b0e02a5857390169250b8db55fadcb08caeac8b41c7ad1b0080386c89",
+      "FR-110": "448d2d938ef09ce76aae3ed04d53a684f36aec788d8da3a4b3471211017c445c",
+      "FR-111": "a3dd34ffe2d9ccf03efdfee1dd0bf20bfe4cc3c817c5e84a2b3a5e6d87a1a7ec",
+      "FR-112": "ae5873c9ec6e89543f57cecb7c01806b12314072fa36a8b5d0c9b12adf113187",
+      "FR-113": "a9f535d71eb13c57a46fa704551fa2a88a0d9368873e2935daac3076e8765539",
+      "FR-114": "bda825480300c7d3025b6e66b16fcc150ea3fa77abde2636f94af26f959f5e06",
+      "FR-115": "7ed652e11e3cb4fe8a51022ad5b77cd5ed1ae4e6e39de16e1b07a6ff2d5372fd",
+      "FR-116": "134c1f937c9b9f7dfa3f023f65506e9e4288b6b2eef4c543a3c0b5141d14e916",
+      "FR-117": "5dd8a2c5609a64b5acc10bb5ea63b119ec1116ee774abfc454cd59ba601f4d96",
+      "FR-118": "2fe0c18d32daa018583022f2f6424f39e972b7cf1eb48550d26f559f04b2bd54",
+      "FR-119": "a49906021942daa28f0b979ceb62d4bd9e8ab288bfe41a79cfe0f87ab5d90c4f",
+      "FR-120": "39fc9bd28eeb41bef7b4165925278c54f8c711bc202a35be1e6290dfee1e8365",
+      "FR-121": "e1b647a8713092f01611967bb97a86385f93d960e93dd1556b9082b0bad8a8a7",
+      "FR-122": "572046e9d6711fac75dd4998ab66837062d710775d68f75b129d81290c00d807",
+      "FR-123": "469639a2c833388117ac6a6126e31e19f49fe3d82b831b5348b4a1bc0190ed29",
+      "FR-124": "9485f010dba39492f70d0d697c904f3cc0886c8596a1749d06a798776f152141",
+      "FR-125": "0f8dbde966753d9277c52cff148cc424870271ebd5e7c1adbefe4d319bb9fb3c",
+      "FR-126": "df04c0c26feb0c10d2f170192cf8e100bcbaa35f19a434797a9dc3fc1623bca1",
+      "FR-127": "e166bbe3996872e963b668b5967f168d29b33be682d8e516bade6d405827863a",
+      "FR-128": "963ba0fff0de7b694a64215da19621c2696a90ea8c3afcbf3a0f0e469b036246",
+      "FR-129": "b5313d07f17b3d4b099d6820692730d8060655aaa1222dc1d22f418958a3d0a7",
+      "FR-130": "13e67eac4f2173f883c4bd40be6f5c8a48c1758dcedb555a98ad7f394fa3f53b",
+      "FR-131": "d3f730102892c55da148d56d393997c8d129dfcd9e55c344d88c1bdaeccb6cde",
+      "FR-132": "c5a1fac12b5a350dcbf7e7f2505e66bb487fc8ebcdc3664fae5542e2a7ffa13f",
+      "FR-133": "b996538298b2d50ad055cf321ae26dc476123ff378b21b9e1e8504e5fb3ea996",
+      "FR-134": "b8b6cd4aa6e96c8cfaa68e7bef2d2a0de786b3844e6147683e974ff3e93f6d51",
+      "FR-135": "47e41801be1e0485586cb93a728fe495fd27c8aadb3453615b14f5ee2c69cca3",
+      "FR-136": "ef1e050964b6b24292dc0848fe5f97d75c2a00ff2f212eb4d1fb190162b4ef21",
+      "FR-137": "9f81e25709139624aed074c1eb3400156b13ba992fabd3fdf65503410652aaa9",
+      "FR-138": "b7f4fbf5e260b9465c58358fbc09e9d57b933f5908272419646cea31497365ca",
+      "FR-139": "1a066b1b3d161548bf214c6390b61bab2a6df5478d212c6631cae4ca55de9ed4",
+      "FR-140": "b759383ecf720558381d4977d8efa820501f1a8ba058bed7bcb6f4718456f0ae",
+      "FR-141": "e29c57f9a0d35a137a2a4cda177ede8ca9b8e9d317b7cb30323b2bc492c28fe5",
+      "FR-142": "7fad02f06ce5fc7ce6108e9f21d9ab23bb05ed2a678b9d28866ec9ae8dd0bf21",
+      "FR-143": "edb76eaa4ed828f9fb763600f549dfd703ba1f355c927dbf0391a1423b45b0af",
+      "FR-144": "07fda0c9db071e21f3b11a73d865d81cc247477ce12ba82c93eb5acae13809ee",
+      "FR-145": "c88100155cd81c1322ea684690c0b08fb0fff3b02942e5d895082ab9cad6a692",
+      "FR-146": "1716b4ace0ff3fa3cbcb20a2445a3d2c717fc04985033944257b11422b120d52",
+      "FR-147": "a217a886a090a7f543b3077771d77bdaba93b1afc22babcc86966acfd6afbbba",
+      "FR-148": "43f68d8794db50294a215b9a1b2f3046241fa3ea2726a082cc004229850a0c72",
+      "FR-149": "dafad943fff3c83339176fceab4d70c7f91cfcb1e5d58396a2f67492f5b6164f",
+      "FR-150": "b537f2993aba1069864f097afd95f01c1b68c3beb91d1dd61a6bc04331fce0f4",
+      "FR-39": "bbd4e97f468c77548f230f318d682f8d061e41f6cd8ddffd2863264e6715039b",
+      "FR-40": "77600ef42b7181d6b33c20ea6a1a12f814e8d6dce4e32d030f372a46c4f58dce",
+      "FR-41": "936b6c50917eaa5d2816907e84de1a332baf568b8313a5c9ef2594e7667a2b0a",
+      "FR-42": "de7788e3c8b89139b17816b4bb6e5c37777868370aaa66055d76fd7fc37ea3b6",
+      "FR-43": "38a10be366ee37ff5e771e17f2c3a4d3533de44bdbbe4c7291eddf01afd0446c",
+      "FR-44": "dc1444baf4c613d7f033b7cece72b52bc0926474b3db20685891f4112e951912",
+      "FR-45": "e063133897f2a4016c6430e9cb93d22ab5fbbdef0e9a95f6e2e8eba3a8e172f7",
+      "FR-46": "f829a72297984a044a5f34bf3ca8ca3b0a6b0004afaf89182c3164211986d3fb",
+      "FR-47": "199e787228af604f6a1111adca0e73b28544273c8e5dfe01a75e249413900231",
+      "FR-48": "1a509ac6c82e4b68859813b84b34d173a583b403f39c1d5f11c2089ff84497dd",
+      "FR-49": "9728f82ef31d86e8138b5a2506e4136cb3ebeb9de89e433da5b89cfecafa54fd",
+      "FR-50": "4243507e12466cbe58f3d77dcadc707469e3f7ca2590c8d9663bec14f64547f6",
+      "FR-51": "1f44877ae63dae3fb3acac4a4e03b3ded82beff5960cac92848487a6bd1af81d",
+      "FR-52": "5f265eaa64f2156dd11710a1440a95e499675dfc60423e1960a92500924b99fe",
+      "FR-53": "16160645f3ea16fddd0b6a9e3fe7d96c7318858609ea9f042b10e2c7e774f9ab",
+      "FR-54": "b6eb46cbb2ea7be594f815f01a0332d83aa219324832374951095512791aa832",
+      "FR-55": "620b70084198ffe55294ecbfacb4d8c8ad86784f4d334d4b63ec0630182ce56b",
+      "FR-56": "9371c370bae967e20011547df6945755263e4fb92261dce4c899885cf2ca80ec",
+      "FR-57": "02a3506afe765d823e0626dbf08e6960c2b4a9f2eb9010674db39b51352c5d37",
+      "FR-58": "eac333b622fee796acab4681c104ceb5349ba330643dffd5410f7cbf7032d002",
+      "FR-59": "310a619a57a4821783a8b9d0069f06baee9e2600f8cd048e5640a6b96a368559",
+      "FR-60": "73ec5c755dca04d7f763aa116b191292cae2ab86466bcea54e7bc285a6caf567",
+      "FR-61": "f3bb30bb59cca7ea17c52e2b3fbff0084183a6f64c557efc5daa06621867aeff",
+      "FR-62": "eec11aef699415671fe836e086d933b9a1e2b4aebe3938956f4fb044c25ed754",
+      "FR-63": "8458b43f3794efa2f7eece2ef25f982b64d7e44160ffbc5573c7105946a7ef74",
+      "FR-64": "fa1745c65bb4e58c29dcbcfaaddd85c22b904d406ba692f1581464dc5f9d5741",
+      "FR-65": "d2343f902c348eeffd094f1cb610fd5d39fe15b41a10e138b3756c479f59d24c",
+      "FR-66": "c553e806bd3087531d6cb1cfb9cb68962649ca52864559008fa2640147229947",
+      "FR-67": "a5d60bfc5b410fc4ad51f80b303386ba6ffa6d62a6aabfb4ef5cb5a68abe9b4f",
+      "FR-68": "05d6d78163774ae105038535e50cffa2516ea715847b7efe65f0130457817684",
+      "FR-69": "9ac03218393973d4754bef59191949038935d9a3d0af2476e1273df854a09ca6",
+      "FR-70": "705bea4db55b7a6ef3255a030ce3dc19057d98099b7313aba0455b1d08a4461c",
+      "FR-71": "9591f5fe34f5e855932e5c2b888d7745d52535a48d4f8b86f0755633fdb37f36",
+      "FR-72": "cf32fd3254e7ac5cf09b5cabeea27e9e07b424640f2bc1aaad478b81c4f69dfa",
+      "FR-73": "9a7f61be368bb90613645ea5d215c2c9e0ac8e5d3334c07b85ced5770ffa0df2",
+      "FR-74": "2a51b65a7d64731ec1304b39e8e4edade3bee7d8e88555635c527744dbb32405",
+      "FR-75": "657ef8783046eab8dd7ee5fe161f528ee8abcb880932a44a0383ccf71c7ceb46",
+      "FR-76": "db1936d0543c81d190f1268f38b83a2e5bb802c9086ce7056b83e00f9b3c4ac3",
+      "FR-77": "a84b3ad983b1b0290fda0382645e9595d63372812b05efc428de640139e0eeb5",
+      "FR-78": "e85ba060abb4d715234b577c00ed35348841004a326dec62f62bcedb6131518a",
+      "FR-79": "d39a19dd2ea81e53599ac2460728b9dfb962804b80f2fdad285d557e048666e0",
+      "FR-80": "12e7c7dd0b1e358e4da81fc5a56e6a4503466837b55b52dbfdff59e0ea276039",
+      "FR-81": "9bfe24681628fbf22dee1b97d49329c41278d112f2d12bca7627e3bd59fca56b",
+      "FR-82": "7f5fdfc2dadbc6f932b13155703cf247f5110c77816dc817f8deb0d09139d137",
+      "FR-83": "23eadbc89251c5a146a6bd95038136c2bba0c83d1b1d0260bb90a1c3d3a1f69c",
+      "FR-84": "a97d581f5ae8003a28c402b92a13ffcfa1320e0957f3ff527929f2fe94fc9c36",
+      "FR-85": "ce955f46820ddc6d377a5c919a2f7bf55fb6eb2fcb746310e9cbe2b4042a2350",
+      "FR-86": "91971fd538698f17c7a700785189ef4408151826091ec55c39b3b062e88867f0",
+      "FR-87": "3be9bb4ba93972143f5996b5a03a92ab2fc943a77bea6552d174cd47b6ba7e43",
+      "FR-88": "7d70cf9c40815bfbcd784a97a5e70dfd70f698870edcffe29211ab9061e470b8",
+      "FR-89": "272c36b5ae43bc27bed69ed6343f8f79d04ca07e1fc4d44532ed823165a9bd86",
+      "FR-90": "6fcc4331b4746ce10d4b888fad5e1c3e541522444781af5c2864eeefb3410f49",
+      "FR-91": "dd7f9434b1a32f8a12c0e4cda76107903f9698fdef09b3412bb2d000fedc5c44",
+      "FR-92": "71b4eadb4ee2f81605ed08873f33f06b2e2c174a02b64bd29cbc6686c9fe63c4",
+      "FR-93": "fab10f92c70311cee22e85b4339f8b80b9255a1d2a6d6c123a8a86b6828f2449",
+      "FR-94": "e8f712ddd3720f1c07f2f8c1945a39eaa746144b679d713d4e650794e445e575",
+      "FR-95": "4a0872cc657fdc78633d08382117f56a6ba571d6c60f7a6e0d7159b5b6a0e2b7",
+      "FR-96": "4692c568c7056cb570ab30bb42f2f70161b35609a9e1357725f50fe0b06d4f08",
+      "FR-97": "c753d3d645ff28bc4212b24a681c020e2321373832fdd09b6f16d63b0b129b74",
+      "FR-98": "d60b4096b6e56a0ff6f7d32a686d005a80f72f0f5b082afe029f554d73291a76",
+      "FR-99": "e7bbabeed4bb05de59733e94a0b7512c30c5784ba4fa62152dce7263fb048d91"
+    },
+    "high_water": 150,
+    "requirements": {
+      "a-capability-can-be-retired-app": "FR-137",
+      "a-capability-can-be-retired-frozen": "FR-135",
+      "a-capability-can-be-retired-recorded": "FR-136",
+      "a-capability-can-be-retired-requirements-retire": "FR-134",
+      "a-capability-can-be-retired-retire": "FR-133",
+      "a-capability-document-sits-outside-the-phase-machine": "FR-74",
+      "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-": "FR-75",
+      "a-declared-task-can-state-the-name-the-board-shows": "FR-58",
+      "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o": "FR-67",
+      "a-document-declares-how-strictly-it-is-enforced": "FR-64",
+      "a-document-has-a-phase-and-the-hub-owns-its-transitions": "FR-44",
+      "a-document-is-renamed-once-its-subject-is-established": "FR-62",
+      "a-document-s-digest-is-stored-on-write-and-divergence-is-rep": "FR-48",
+      "a-document-s-path-is-fixed-once-it-has-ever-been-approved": "FR-94",
+      "a-document-s-rigor-history-is-on-its-screen-and-the-app-reco": "FR-102",
+      "a-document-that-produced-nothing-can-be-archived": "FR-97",
+      "a-finished-change-is-archived-by-the-operator": "FR-73",
+      "a-finished-change-is-folded-into-its-capability-app": "FR-115",
+      "a-finished-change-is-folded-into-its-capability-archive-guard": "FR-113",
+      "a-finished-change-is-folded-into-its-capability-draft": "FR-111",
+      "a-finished-change-is-folded-into-its-capability-fold": "FR-112",
+      "a-finished-change-is-folded-into-its-capability-write-via-merge": "FR-114",
+      "a-fold-can-retire-what-the-change-supersedes-app": "FR-118",
+      "a-fold-can-retire-what-the-change-supersedes-draft-lists": "FR-117",
+      "a-fold-can-retire-what-the-change-supersedes-retire": "FR-116",
+      "a-materialised-task-carries-the-criteria-of-the-requirements": "FR-59",
+      "a-multi-task-document-without-files-is-warned": "FR-110",
+      "a-new-document-is-given-a-name-that-means-nothing": "FR-61",
+      "a-pending-proposal-is-discoverable-in-position-and-is-indivi": "FR-68",
+      "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r": "FR-103",
+      "a-proposal-that-no-longer-matches-the-document-s-current-con": "FR-71",
+      "a-read-too-large-for-one-result-is-written-into-the-agent-s-": "FR-105",
+      "a-renamed-document-carries-its-new-subject": "FR-57",
+      "a-rendered-document-is-ordered-and-complete-for-a-reader": "FR-63",
+      "a-spec-is-written-one-step-at-a-time-advance-tool": "FR-146",
+      "a-spec-is-written-one-step-at-a-time-criterion-check-fields": "FR-147",
+      "a-spec-is-written-one-step-at-a-time-default-journey": "FR-145",
+      "a-spec-is-written-one-step-at-a-time-existing-documents": "FR-150",
+      "a-spec-is-written-one-step-at-a-time-operator-moves-journey": "FR-148",
+      "a-spec-is-written-one-step-at-a-time-propose-without-close": "FR-149",
+      "a-spec-is-written-one-step-at-a-time-step-recorded": "FR-144",
+      "a-specification-document-is-a-file-in-the-project-working-di": "FR-40",
+      "a-specification-document-is-readable-by-the-id-tasks-carry": "FR-106",
+      "a-task-may-declare-the-files-it-will-edit": "FR-107",
+      "accepting-or-rejecting-a-proposal-is-reserved-to-the-operato": "FR-70",
+      "an-accepted-proposal-is-attributed-to-both-its-proposer-and-": "FR-69",
+      "an-agent-can-read-a-specification-document": "FR-143",
+      "an-agent-can-read-a-specification-document-in-results-that-f": "FR-104",
+      "approval-creates-the-work-its-document-declares": "FR-138",
+      "approval-is-the-operator-s-decision-and-no-agent-can-express": "FR-45",
+      "approval-reports-what-it-created-and-what-it-could-not": "FR-139",
+      "authorship-is-attributed-to-whoever-performed-it": "FR-80",
+      "divergence-is-reported-when-a-document-is-read-not-only-when": "FR-96",
+      "document-state-changes-refresh-subscribers": "FR-53",
+      "document-validity-is-checked-by-the-hub-not-asserted-by-its-": "FR-46",
+      "every-change-to-a-document-is-recorded-as-an-attributed-even": "FR-47",
+      "n1": "FR-121",
+      "n2": "FR-122",
+      "n3": "FR-123",
+      "n4": "FR-124",
+      "n5": "FR-125",
+      "n6": "FR-126",
+      "n7": "FR-127",
+      "n8": "FR-128",
+      "n9": "FR-129",
+      "only-the-operator-changes-rigor": "FR-65",
+      "re-approving-an-amended-document-refreshes-its-open-task-refresh": "FR-140",
+      "re-approving-an-amended-document-refreshes-its-open-tasks-app": "FR-142",
+      "re-approving-an-amended-document-refreshes-its-open-tasks-report": "FR-141",
+      "rigor-is-only-raised-on-a-document-that-can-be-enforced": "FR-66",
+      "the-agent-submits-a-structured-payload-and-the-hub-renders-t": "FR-41",
+      "the-hub-mints-requirement-identifiers-and-they-are-stable": "FR-43",
+      "the-operator-can-delete-a-document-a-task-or-an-archive-document": "FR-119",
+      "the-operator-can-delete-a-document-a-task-or-an-archived-age-app": "FR-120",
+      "the-operator-can-write-a-document-s-content": "FR-79",
+      "the-payload-contract-is-versioned-and-forward-compatible": "FR-42",
+      "the-rendered-document-shares-the-hub-s-theme-not-a-colour-sc": "FR-76",
+      "the-rendered-document-visually-distinguishes-requirement-str": "FR-77",
+      "unordered-tasks-sharing-a-file-are-warned": "FR-108"
+    },
+    "retired": {
+      "a-change-document-declares-how-it-will-be-built-before-it-is": "FR-99",
+      "a-declared-task-s-requirement-span-is-capped-and-the-hub-enf": "FR-39",
+      "a-document-may-declare-a-dependency-on-another-document-s-wo": "FR-95",
+      "a-document-may-enter-hub-tracking-without-being-created-thro": "FR-87",
+      "a-document-s-delivery-is-checked-against-the-roster-when-it-": "FR-101",
+      "a-failure-to-write-the-index-does-not-abandon-the-requiremen": "FR-85",
+      "a-hub-initiated-regeneration-is-not-an-authored-change": "FR-93",
+      "a-rendered-document-states-where-it-sits-not-only-what-it-sa": "FR-92",
+      "a-specification-turn-is-announced-with-the-turn-not-only-bef": "FR-60",
+      "adoption-reports-rather-than-resolves": "FR-89",
+      "an-unreadable-or-absent-index-degrades-visibly": "FR-52",
+      "approval-remains-the-operator-s-regardless-of-who-authored-t": "FR-91",
+      "authoring-assistance-is-scoped-away-from-performing-discover": "FR-72",
+      "both-index-implementations-agree-on-the-vocabulary": "FR-86",
+      "coverage-distinguishes-rejected-evidence-from-work-that-has-": "FR-78",
+      "document-discovery-covers-every-safe-document": "FR-50",
+      "drift-is-assessed-against-the-line-of-work-a-footprint-names": "FR-56",
+      "evidence-is-footprinted-against-the-work-it-describes": "FR-54",
+      "home-document-selection-is-explicit-and-resilient": "FR-51",
+      "n10": "FR-130",
+      "n11": "FR-131",
+      "n12": "FR-132",
+      "rebuilding-the-index-preserves-what-the-operator-arranged": "FR-83",
+      "the-exploring-interview-asks-how-the-change-will-be-built": "FR-100",
+      "the-file-is-authoritative-at-the-point-of-adoption": "FR-88",
+      "the-hub-can-write-the-document-index-it-reads": "FR-81",
+      "the-index-describes-documents-in-the-same-vocabulary-the-hub": "FR-82",
+      "the-operator-can-name-the-home-the-hub-refuses-to-guess": "FR-84",
+      "the-planner-is-taught-files-and-ordering": "FR-109",
+      "the-turn-context-states-the-phase-and-holds-without-a-charte": "FR-49",
+      "whether-work-has-reached-the-main-line-is-re-answered": "FR-55",
+      "who-may-start-a-document-is-determined-by-its-kind-not-by-th": "FR-90",
+      "within-one-line-of-work-the-later-commit-is-the-one-merged": "FR-98"
+    }
+  },
+  "design": "D1 Phase and rigor live on the database row; the file carries a rendered copy. Editing the file can never approve, gate or ungate a document.\n\nD2 Operator-only acts (approve, archive, rigor, proposal decisions, closing exploration) are refused in the service function that performs them, not only at the route, and the agent surface has no field that expresses them.\n\nD3 Completeness is computed by the Hub inside the transition and reported whole; a save with findings is still written, because a document under discussion is incomplete by definition.\n\nD4 Identity is key-correlated and Hub-minted, kept in an `aw_identity` block the Hub overwrites on every write, with a persisted high-water mark so identifiers are never reused.\n\nD5 At contract or gate rigor a submission becomes per-unit proposals compared by key and guarded by the content digest; decisions use a conditional update so exactly one wins.\n\nD6 A capability is written only through a merge, and a fold is a merge the Hub drafts and then archives the change; archiving an approved change requires its tasks decided and a fold or a stated reason. Deletion is for documents that never shipped and that no merge cites.\n\nD7 Reads are bounded by the Hub, and an oversized read goes to a file in the run's workspace.",
+  "evidence": {
+    "checked": [
+      "hub/tests/test_spec_documents_api.py, test_spec.py: creation, propose (proposed field), phase route",
+      "hub/tests/test_spec_completeness.py, test_a_capability_is_not_held_to_change_rules.py: blocking findings",
+      "hub/tests/test_spec_capability_kind.py, test_spec_archive.py, test_spec_merge.py: capability, archive, merge",
+      "hub/tests/test_a_finished_change_is_folded_into_its_capability.py, test_a_fold_can_retire_what_the_change_supersedes.py",
+      "hub/tests/test_the_operator_can_delete_a_document_a_task_or_an_archived_agent.py",
+      "hub/tests/test_spec_edit_proposals.py, test_spec_rename.py, test_spec_naming.py, test_divergence_on_read.py",
+      "hub/tests/test_read_spec_document.py, test_spec_read_budget.py, test_a_read_document_resubmits_without_loss.py",
+      "hub/tests/test_spec_turn_notice.py, test_spec_procedure_precedence.py, test_spec_authoring_restriction.py",
+      "hub/tests/test_spec_manifest_roundtrip.py (Hub and CLI index validators agree)",
+      "hub/ui/src/__tests__/specFold.test.tsx, specPhaseBar.test.tsx, specProposalsPanel.test.tsx"
+    ],
+    "limits": [
+      "The specification turn's file-edit restriction removes edit tools but not shell tools on the Claude runner (runner_commands.py:187-208)."
+    ]
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059 (restructured by theme, bundled requirements split, appended fold/delete requirements integrated).",
+  "open_questions": [],
+  "problem": "A specification is only authoritative if nobody can forge its approval, quietly rewrite what was approved, or change the record of current behaviour without saying where the change came from. An agent can write any file in its checkout, so every one of those guarantees has to be held by the Hub, not asked of the author.",
+  "requirements": [
+    {
+      "key": "a-specification-document-is-a-file-in-the-project-working-di",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The file is the document. The Hub keeps no second copy of its content and has no route by which a client pushes one, so there is nothing to reconcile.",
+      "statement": "Specification documents SHALL be files beneath the project's working directory, read from disk on every request, with every path resolved through the project workspace, which refuses absolute paths, traversal segments, control characters and symlink escapes."
+    },
+    {
+      "key": "the-agent-submits-a-structured-payload-and-the-hub-renders-t",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A schema the agent cannot violate replaces a markup contract it is merely asked to honour.",
+      "statement": "An agent SHALL author a specification only by submitting a structured payload; the Hub SHALL validate it, render the document's markup itself and write it, and SHALL refuse an invalid payload with an error naming the offending field, writing nothing."
+    },
+    {
+      "key": "the-payload-contract-is-versioned-and-forward-compatible",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A rewrite must lose nothing the current schema cannot name. Keeping a field is not reading it: see the unknown_field finding.",
+      "statement": "Every payload SHALL declare `schema_version`; a missing or unsupported version SHALL be refused by name, and a field a part does not define SHALL be kept unchanged across a read and a rewrite of the document."
+    },
+    {
+      "key": "n1",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Agents edit by reading a document and resubmitting it. Resubmitted as read, the nested criteria were kept as unknown fields and the top-level list was empty, so every criterion was deleted (F452).",
+      "statement": "A payload in the shape `read_spec_document` returns SHALL be accepted as a submission without loss: criteria nested under a requirement join the top-level list under that requirement's key, the read-only `identifier`, `state` and `anchor` fields are dropped and a retired requirement is left out; a requirement from a truncated read, or a nested criterion that conflicts with a top-level one, SHALL be refused."
+    },
+    {
+      "key": "the-hub-mints-requirement-identifiers-and-they-are-stable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Tasks and evidence point at identifiers. Correlating by position would renumber every requirement after an insertion and silently re-target what points at them.",
+      "statement": "The Hub SHALL assign each requirement its identifier (`FR-<n>`), correlated across submissions by the requirement's key; an identifier SHALL stay with its key whatever the text, position or schema version, SHALL never be reused after its requirement is removed, and an identifier or identity block supplied in a submission SHALL be ignored."
+    },
+    {
+      "key": "a-document-s-digest-is-stored-on-write-and-divergence-is-rep",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Choosing between a hand edit and the recorded version is the operator's decision; the Hub surfaces both digests and waits.",
+      "statement": "The Hub SHALL store a content digest for every document it writes and a digest for each requirement's text, and SHALL never resolve a file that differs from its recorded digest on its own initiative: a write submitted over a diverged file replaces it and reports the divergence in its answer."
+    },
+    {
+      "key": "divergence-is-reported-when-a-document-is-read-not-only-when",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The phase is read from a row, but the content is served from the file; unmarked, approval would attach to a path rather than to the bytes anyone reads. Editing on the way to a new revision is legitimate, so the read is marked, not refused.",
+      "statement": "Serving a document whose file no longer matches the digest the Hub recorded SHALL mark it as diverged, with both digests, in the operator's document read, in the document listing and in an agent's read, without refusing the read."
+    },
+    {
+      "key": "every-change-to-a-document-is-recorded-as-an-attributed-even",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The history is the record of who did what to a document; an editable record is not one.",
+      "statement": "The Hub SHALL append an event for every change to a document's content, phase, path, rendering or merge record, naming the actor, its origin (operator control, agent submission, or Hub lifecycle) and the run where there is one; events SHALL never be edited or deleted."
+    },
+    {
+      "key": "authorship-is-attributed-to-whoever-performed-it",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An operator's write must be distinguishable from an agent's, so a corpus written by hand is never mistaken for one an agent authored, and an actor a caller can state is an actor a caller can invent.",
+      "statement": "Every content write SHALL record its actor as established from the caller's credential (the operator for a project credential, the agent and its run for a run credential) and never from anything in the request body."
+    },
+    {
+      "key": "a-document-has-a-phase-and-the-hub-owns-its-transitions",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The status line in the file is a copy for its reader. Reading phase from a row the Hub alone writes is what makes approval impossible to forge by editing the file.",
+      "statement": "A document's phase SHALL be one of `exploring`, `proposed`, `approved`, `archived` or `current`, read from the Hub's database row and never from the file, and SHALL change only along exploring to proposed, proposed to approved, proposed to exploring, approved to exploring, approved to archived, exploring to archived and proposed to archived; any other move, a move to the phase the document already holds, and any move to or from `current` SHALL be refused naming why."
+    },
+    {
+      "key": "approval-is-the-operator-s-decision-and-no-agent-can-express",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A rule checked at one surface survives only until a second caller is added.",
+      "statement": "Approving and archiving a document SHALL be refused to any actor but the operator, enforced in the Hub's phase-transition function itself so every caller of it is bound."
+    },
+    {
+      "key": "n2",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Whether an exploration is complete and whether a document is agreed are the operator's judgements. An agent writes and reads; it cannot move its own document forward.",
+      "statement": "Proposing, approving, reopening and archiving a document, and declaring its exploration closed, SHALL be reachable only through operator routes; an agent's tool surface SHALL offer no field or route that expresses any of them, and closing exploration SHALL also be refused to a non-operator actor in the service."
+    },
+    {
+      "key": "n3",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "\"Not yet\" is a normal answer, and a 200 alone cannot say whether the document moved (F528).",
+      "statement": "Proposing a document SHALL answer with a `proposed` field that is true only when the document moved to `proposed`; a document that cannot move yet SHALL be answered with `proposed: false` and every blocker, not with an error status."
+    },
+    {
+      "key": "document-validity-is-checked-by-the-hub-not-asserted-by-its-",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A check the author reports passing is not a check. A proposed document can still be edited, and a document can be adopted at proposed, so having been proposed does not prove completeness at approval.",
+      "statement": "The Hub SHALL evaluate a document's completeness itself whenever it is moved to `proposed` or `approved`, inside the phase-transition function, and SHALL refuse the move listing every blocker in one answer (for `proposed`, including that exploration has not been closed); a move the phase map or the actor forbids SHALL be refused as such, not reported as incompleteness."
+    },
+    {
+      "key": "n4",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One list, so an author learns everything a proposal would refuse in one answer. A capability states shipped behaviour; the changes folded into it carry the tasks and non-goals (F534).",
+      "statement": "The blocking findings SHALL be: no requirements (for a roadmap, no slices); a requirement no acceptance criterion names; a requirement neither a declared task nor a board task serves; a task naming no requirement; empty non-goals; an unresolved open question; a clarification marker; a `depends_on` naming no task; a dependency cycle; an import from a document that is not approved; an unknown field; a slice whose `done` states no outcome; a slice document whose roadmap is not approved or lacks the slice; and, on a change document, an absent or incomplete delivery. A capability document SHALL NOT be asked for tasks or non-goals."
+    },
+    {
+      "key": "n5",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A document proposed in good faith should not be held hostage by another document being reopened, nor by a delivery answer that only decides whether a flow is started.",
+      "statement": "At approval the Hub SHALL NOT block on an import naming a document that is no longer approved, nor on an absent or incomplete delivery: the import is kept and reported, and the delivery is treated as no flow."
+    },
+    {
+      "key": "n6",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The payload keeps unknown fields so a rewrite loses nothing, so a field written in the wrong place is stored and never read; an agent nested its criteria and was then told there were none (F502).",
+      "statement": "A field that a requirement, acceptance criterion, task or slice does not define SHALL be reported as a blocking `unknown_field` finding naming the field and saying nothing reads it, and, for acceptance criteria nested under a requirement, saying where they belong."
+    },
+    {
+      "key": "n7",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A document under discussion is incomplete by definition, so findings do not refuse a save; but a saved document is not a ready one, and an agent read a bare success as \"ready\" (F502).",
+      "statement": "The answer to a submission SHALL carry its `blocking` findings and `ready_to_propose`, false while any blocking finding remains; a submission with findings is still written."
+    },
+    {
+      "key": "n8",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Silently rewriting what the operator approved would make the approval meaningless; reopening is the recorded way to change it.",
+      "statement": "A content submission to an `approved` document SHALL be refused, from any actor, until the operator reopens the document."
+    },
+    {
+      "key": "a-finished-change-is-archived-by-the-operator",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Archived is history: it records what shipped, and nothing should be able to walk it back.",
+      "statement": "Archiving SHALL change only the document's phase, keeping its requirements, digests, events and tasks, and an `archived` document SHALL have no further phase transition."
+    },
+    {
+      "key": "a-document-that-produced-nothing-can-be-archived",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A document created by mistake must be retirable through the phase machine, but archiving must never become a way to bury work that exists.",
+      "statement": "A document in `exploring` or `proposed` SHALL be archivable by the operator only while it has no requirements and no tasks; otherwise the move SHALL be refused naming that work exists."
+    },
+    {
+      "key": "a-finished-change-is-folded-into-its-capability-archive-guard",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Archived has no way back; a shipped change whose requirements live in no capability must not quietly become history.",
+      "statement": "Archiving an approved change-spec MUST be refused, naming what is missing, unless every task the document declared is approved or rejected and either a merge names the change or the operator states `no_capability_change` with a non-empty reason."
+    },
+    {
+      "key": "a-document-s-path-is-fixed-once-it-has-ever-been-approved",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Once other documents and tasks refer to a document by path, the path is a promise; archive-then-rename must not break it.",
+      "statement": "The Hub SHALL refuse to rename a document that has ever been approved, recorded durably at first approval and never cleared by archiving or reopening."
+    },
+    {
+      "key": "a-capability-document-sits-outside-the-phase-machine",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A capability describes current shipped behaviour; it has no exploration to close and nothing to propose.",
+      "statement": "A document created with kind `capability` SHALL start in `current` and SHALL refuse every phase transition; its content SHALL be written only by the operator; and every document's `kind` SHALL be fixed at creation, so a submission whose `kind` differs SHALL be refused without reclassifying the document."
+    },
+    {
+      "key": "a-new-document-is-given-a-name-that-means-nothing",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A document explores because its subject is not yet known; a name that is obviously arbitrary cannot be misread as a considered one.",
+      "statement": "A document created without a path SHALL be given a minted `spec/changes/<colour>-<mythic animal>/spec.html` path, drawn at random and derived from nothing about the document, free of every recorded document and existing file, found by a bounded search, and returned to the caller."
+    },
+    {
+      "key": "a-document-is-renamed-once-its-subject-is-established",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Deriving the slug makes a traversal, a hidden segment or another filename unexpressible rather than merely rejected; the index is the operator's file, and an entry naming the moved document reports as missing.",
+      "statement": "The Hub SHALL rename a document from a prose subject, deriving `spec/changes/<slug>/spec.html` and never accepting a path, moving the file, updating the recorded path and every undelivered queue entry naming it, recording a `renamed` event with both paths, and leaving its identity, identifiers, content, digests, past events and the index file unchanged; it SHALL refuse, before moving anything, a document ever approved, a subject that yields no slug, and a path another document or file occupies."
+    },
+    {
+      "key": "a-renamed-document-carries-its-new-subject",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A document is renamed because its subject became clear; keeping the placeholder title would contradict its own path on every list.",
+      "statement": "A rename SHALL make the subject the document's title."
+    },
+    {
+      "key": "an-agent-can-read-a-specification-document-in-results-that-f",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A result larger than the harness accepts is no answer at all, and the agent falls back to a paraphrase, which the read exists to prevent.",
+      "statement": "An agent's read of a document SHALL fit a fixed bound the Hub enforces (25,000 characters): requirements are returned in identifier order up to the bound, with the identifiers (or keys) and sections left out named and how to read them; the first requested item is always returned, cut if alone too large; an agent MAY read named requirements only, which omits the preamble, or an outline without rationale or criteria; an unknown identifier is reported, not failed."
+    },
+    {
+      "key": "a-read-too-large-for-one-result-is-written-into-the-agent-s-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A shell tool spills above 30,000 characters, so a run without MCP needs the read as a file it can page through.",
+      "statement": "A read that does not fit the bound SHALL be written into the reading run's own workspace under `.agentweave/reads/`, as text a file tool shows line by line, and answered with that file's path and the requirements it holds; where the run has no workspace or the place is not a plain directory, the bounded read SHALL be returned instead, and the file SHALL be kept out of every commit."
+    },
+    {
+      "key": "a-specification-document-is-readable-by-the-id-tasks-carry",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Tasks carry the document's id, so that is what an agent holding a task reaches for.",
+      "statement": "An agent's read SHALL accept a document's `spdoc-` id wherever it accepts a path, resolving it only within the agent's own project, where an id from another project reads exactly like an unknown one."
+    },
+    {
+      "key": "a-rendered-document-is-ordered-and-complete-for-a-reader",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reader scans the criteria table by requirement; and an absent section cannot be told apart from questions asked and resolved.",
+      "statement": "The rendered document SHALL list acceptance criteria grouped in requirement order, keeping the submitted order within a requirement, and SHALL state \"None outstanding\" when there are no open questions."
+    },
+    {
+      "key": "the-rendered-document-shares-the-hub-s-theme-not-a-colour-sc",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A second, independently named set of neutrals is one the shell's theming cannot reach; the document must still open correctly on its own.",
+      "statement": "The rendered document SHALL take its neutral colours from the same inherited CSS custom properties (`--bg`, `--fg`, `--muted`, `--border`, `--surface`, `--surface-2`) the embedding shell sets for the Hub's theme, keeping its own semantic hues, with no external resource reference."
+    },
+    {
+      "key": "the-rendered-document-visually-distinguishes-requirement-str",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reader should tell requirement strength by scanning, not by reading every word.",
+      "statement": "A rendered requirement SHALL show its modal obligation with a treatment distinct for each obligation and consistent across requirements sharing it."
+    },
+    {
+      "key": "a-document-declares-how-strictly-it-is-enforced",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Rigor is not phase: phase asks whether the operator agreed to the document, rigor what happens to work that does not satisfy it. `gate` refuses approval of work while a requirement it serves is unverified.",
+      "statement": "A document SHALL have a rigor of `sketch`, `contract` or `gate`, held by the Hub on the document's row, `sketch` by default and shown in the rendered document; each change SHALL be written against the document's current content digest and recorded append-only with the previous and new level, actor, reason and digest."
+    },
+    {
+      "key": "only-the-operator-changes-rigor",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A gate the blocked party can lower is not a gate; an operator who needs past one has a visible, recorded way through.",
+      "statement": "Only the operator SHALL change a document's rigor, enforced in the rigor function itself; an agent SHALL have no argument, tool or route that expresses a promotion or demotion, and the operator's demotion SHALL be recorded and attributed."
+    },
+    {
+      "key": "rigor-is-only-raised-on-a-document-that-can-be-enforced",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Rigor is a claim about enforceability; a demotion that destroyed the record would launder unverified work.",
+      "statement": "Promotion to `contract` or `gate` SHALL be refused while the document has unresolved identifiers, duplicate references or content that does not parse; demotion SHALL NOT be so conditioned and SHALL change enforcement only, keeping links, revisions, evidence and reviews."
+    },
+    {
+      "key": "a-document-s-rigor-history-is-on-its-screen-and-the-app-reco",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A demotion is legitimate because it is recorded; a record nobody can read, or whose reason is always blank, is the unrecorded override in another form.",
+      "statement": "The document's view SHALL list every rigor change (levels, actor, reason, time, newest first), and the app SHALL ask for a reason whenever it changes rigor and SHALL NOT submit a demotion without one."
+    },
+    {
+      "key": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Whether an edit applies or waits is the document's property, never the caller's choice; one tool and one payload shape serve both.",
+      "statement": "At `contract` or `gate` rigor a submission SHALL NOT change the live document; the Hub SHALL diff it against the stored payload and record one pending proposal per added, modified or removed requirement (matched by key) and one for all non-requirement content, recording nothing for an unchanged submission; at `sketch` a submission applies immediately."
+    },
+    {
+      "key": "a-pending-proposal-is-discoverable-in-position-and-is-indivi",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A pending change must be discoverable without leaving the document, yet kept apart from the live text so a proposed statement is not mistaken for the document's own.",
+      "statement": "Pending proposals SHALL be shown on the document's own view, one row per requirement key plus one for the summary and other non-requirement content, and deciding one SHALL NOT change the status of any other."
+    },
+    {
+      "key": "an-accepted-proposal-is-attributed-to-both-its-proposer-and-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The content event names who wrote the file; the proposal row keeps who proposed it, so neither identity is lost.",
+      "statement": "An accepted proposal's record SHALL name its proposer (actor and run) and the operator who accepted it in separate fields."
+    },
+    {
+      "key": "accepting-or-rejecting-a-proposal-is-reserved-to-the-operato",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The same construction as approval: an agent cannot accept its own edit into a gated document.",
+      "statement": "Accepting, rejecting or withdrawing a proposal SHALL be refused to any actor but the operator, enforced in the functions that perform them."
+    },
+    {
+      "key": "a-proposal-that-no-longer-matches-the-document-s-current-con",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A proposal must never be applied to content it was not compared against.",
+      "statement": "Accepting a proposal SHALL be refused, and the proposal marked `stale`, when the document's content digest has changed since the proposal was recorded, or since the digest the operator supplies."
+    },
+    {
+      "key": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Retries and revisions are ordinary; without this the list fills with twins only a false rejection could clear. Different proposers' proposals are alternatives and never supersede each other.",
+      "statement": "A repeated identical submission from the same proposer SHALL record no new proposal and name the pending one; a proposer's newest submission SHALL supersede its own earlier pending proposal for any unit it now changes differently or leaves as stored; the operator MAY withdraw a pending proposal without judging it; a proposal SHALL leave `pending` at most once, and each decision SHALL be broadcast to the project's open views."
+    },
+    {
+      "key": "document-state-changes-refresh-subscribers",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An open view should reflect the change without a manual refresh.",
+      "statement": "Every change to a document's content, phase, path, placement, proposals or the index SHALL be broadcast to the project's subscribers as `spec_updated`."
+    },
+    {
+      "key": "a-declared-task-can-state-the-name-the-board-shows",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A board shows names, and a whole sentence of intent is not one.",
+      "statement": "A declared task MAY state its `title`, used when the task is created; otherwise the title SHALL be derived from the description's first sentence, kept to 80 characters and ending on a whole word, with a description already that short used unchanged."
+    },
+    {
+      "key": "a-materialised-task-carries-the-criteria-of-the-requirements",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The turn composed for a task shows its criteria to the builder and the reviewer as the standard; a task without them is judged against the code instead.",
+      "statement": "A task created or refreshed from a declared entry SHALL carry, as text lines, the acceptance criteria of exactly the requirements the entry names (by name, resolved or not), grouped in the document's requirement order and keeping each criterion's handle; a criterion with no given, when or then SHALL be left out, and criteria that cannot be read SHALL never stop a task being created."
+    },
+    {
+      "key": "a-task-may-declare-the-files-it-will-edit",
+      "modal": "MAY",
+      "party": null,
+      "rationale": "The planner's way to say which tasks touch the same file.",
+      "statement": "A declared task MAY carry a `files` list of repo-relative paths it expects to edit, where a directory covers every path beneath it; an empty or absolute path SHALL be refused naming the task."
+    },
+    {
+      "key": "unordered-tasks-sharing-a-file-are-warned",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Parallel tasks editing one file conflicted at merge (F509).",
+      "statement": "When two local tasks of one document declare overlapping `files` and neither reaches the other through `depends_on`, the submission's answer MUST carry an advisory `unordered_file_overlap` warning naming both keys and a shared path, without affecting `ready_to_propose`."
+    },
+    {
+      "key": "a-multi-task-document-without-files-is-warned",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A planner that declares no files defeats the overlap warning silently (F509).",
+      "statement": "When a document declares two or more local tasks and at least one declares no `files`, the submission's answer MUST carry one advisory `undeclared_task_files` warning naming each such task, without affecting `ready_to_propose`."
+    },
+    {
+      "key": "n9",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "A test written red for a later task to turn green fails the project's checks at approval and lands only by override (F512).",
+      "statement": "When a local task's `files` are all tests and another local task depends on it, the submission's answer SHOULD carry an advisory `test_only_task` warning saying to put the failing test and its fix in one task."
+    },
+    {
+      "key": "the-operator-can-write-a-document-s-content",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator's own authority over a document needs a route, not an in-process call.",
+      "statement": "The operator SHALL be able to write the content of any document other than a capability directly, under the same payload contract, validation and refusals as an agent's submission, with a `contract` or `gate` document recording pending proposals instead."
+    },
+    {
+      "key": "a-finished-change-is-folded-into-its-capability-write-via-merge",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Every capability change then has a history entry saying which change it came from, or that it was an edit.",
+      "statement": "A capability document's content MUST change only through a merge: a direct content write to one SHALL be refused naming the merge route, and a merge naming no change SHALL be accepted as an operator edit and recorded as one."
+    },
+    {
+      "key": "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A merge cites finished work, attributed to the operator.",
+      "statement": "The operator SHALL be able to merge a payload into a capability document naming the approved or archived change documents it absorbs, recording one merge row per change and a `merged` event, and the merge SHALL be retrievable from either document; a target that is not a capability, or a source that is not approved or archived, SHALL be refused before anything is written."
+    },
+    {
+      "key": "a-finished-change-is-folded-into-its-capability-draft",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator reviews drafted text instead of writing it; most close-outs copy the change's statements unchanged.",
+      "statement": "For an approved change and a named capability, the Hub MUST return a fold draft without writing: the capability's payload with each change requirement appended under `<change-slug>-<key>` (at most 64 characters), its criteria re-pointed at the new key, and every draft key the capability already holds reported as a collision rather than overwritten."
+    },
+    {
+      "key": "a-fold-can-retire-what-the-change-supersedes-draft-lists",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator retires by key, so the keys must be in front of them.",
+      "statement": "The fold draft MUST list the capability's current requirements (key and statement) and criteria (key, requirement and then), in the capability's order."
+    },
+    {
+      "key": "a-finished-change-is-folded-into-its-capability-fold",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One audited operator action replaces per-change reconcile scripts; a change touching two capabilities is folded twice, archiving on the second.",
+      "statement": "The operator MUST be able to fold an approved change into a capability in one request, choosing which requirements to fold (default all), each optionally with an edited key, statement or modal or replacing a named capability requirement; the fold writes through the merge and, unless told not to, archives the change in the same transaction; it MUST be refused before anything is written when the change is not approved, a task of it is open, a named requirement is not the change's, a key collides without naming what it replaces, a replaced key is not the capability's, or the target is not a capability."
+    },
+    {
+      "key": "a-fold-can-retire-what-the-change-supersedes-retire",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A change that narrows or supersedes behaviour must say so in the corpus through the same audited step.",
+      "statement": "A fold MUST accept capability requirement keys and criterion keys to retire, writing the capability without them in the same merge (a retired requirement takes its criteria), and MUST be refused before writing when a key is not the capability's or a requirement is both replaced and retired."
+    },
+    {
+      "key": "a-finished-change-is-folded-into-its-capability-app",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The close-out is something the operator does where they already look.",
+      "statement": "The read of an approved or archived change MUST carry `fold_state` (`tasks_open`, `ready`, or `folded` with the capabilities it went into), and the app's phase bar MUST show a ready change as shipped but not yet in a capability, offering Fold into capability (capability picker, the draft's requirements with editable key and statement, archive on by default, confirm) and Archive without a capability change, which asks for a reason."
+    },
+    {
+      "key": "a-fold-can-retire-what-the-change-supersedes-app",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Retiring stays something the operator does in the app.",
+      "statement": "The fold dialog MUST offer the capability's requirements and criteria for retirement, filterable by text, and send the chosen keys with the fold."
+    },
+    {
+      "key": "the-operator-can-delete-a-document-a-task-or-an-archive-document",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Drive residue and abandoned drafts otherwise stay on the board and in coverage forever; what shipped, or what the corpus cites, is kept.",
+      "statement": "The operator MUST be able to delete a document that is not a capability, not archived and named by no merge, removing its file, its index entry, its requirements with their revisions, evidence and links, its events, its tasks as a task delete does, and its stopped flows; it MUST be refused, writing nothing, for a capability, an archived or folded document, a document with a run active on one of its tasks, or one whose flow is still running."
+    },
+    {
+      "key": "the-operator-can-delete-a-document-a-task-or-an-archived-age-app",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Cleanup should never need a database script.",
+      "statement": "The app MUST offer Delete for a deletable document on its phase bar, behind a confirm naming what goes with it, and show the Hub's refusal when there is one."
+    },
+    {
+      "key": "a-capability-can-be-retired-retire",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A corpus that cannot lose a capability keeps describing features that do not exist. Open work against it must be decided first, or that work would serve requirements nobody holds any more.",
+      "statement": "The operator MUST be able to move a capability from current to archived, stating a reason and optionally naming the current capability that absorbed it; the move MUST be refused without a reason, when the named capability is not another current capability, when the actor is not the operator, and while a task that is neither approved nor rejected links one of its active requirements."
+    },
+    {
+      "key": "a-capability-can-be-retired-requirements-retire",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Coverage, linking and evidence all read the requirement index; a retired capability's requirements must leave all three at once, and a reindex from the unchanged file must not bring them back.",
+      "statement": "Every requirement of an archived capability MUST be retired when it is archived and MUST stay retired whenever the document is indexed again."
+    },
+    {
+      "key": "a-capability-can-be-retired-frozen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The file is the record of what the capability said when it was retired.",
+      "statement": "A merge or fold into an archived capability MUST be refused, writing nothing."
+    },
+    {
+      "key": "a-capability-can-be-retired-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Why a capability left, and where its behaviour went, must be readable later from the document's own history.",
+      "statement": "Retiring MUST record a phase event carrying the reason and the absorbing capability, re-render the file with its archived status, and keep the document in spec/index.json with status archived."
+    },
+    {
+      "key": "a-capability-can-be-retired-app",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Retiring is an operator decision made where the operator reads the capability.",
+      "statement": "A current capability's view in the app MUST offer Retire, asking for the reason and optionally the absorbing capability, and MUST show the Hub's refusal when one is returned."
+    },
+    {
+      "key": "approval-creates-the-work-its-document-declares",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A document that declares its own decomposition and produces nothing leaves the operator to re-describe it by hand. Who performs the work is not the document's decision.",
+      "statement": "Approving a document SHALL create the tasks it declares that do not exist yet, each unassigned, in the entry status and linked to the requirements it names, idempotently per document and declared key; a declared task naming a requirement the document does not resolve SHALL still be created with the reference kept as unresolved, and a document declaring no tasks SHALL create none without error."
+    },
+    {
+      "key": "approval-reports-what-it-created-and-what-it-could-not",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "What approval did to the board must be visible where the operator decided it, and a half-built board the report does not list is worse than none.",
+      "statement": "Every approval of a document MUST record with it a report of what approval did: tasks created; declared tasks not created because existing work already serves their requirements; dependencies not honoured and why; whether creating the board failed and why (distinct from declaring no tasks); and whether a flow was created, naming it, or why not (for a non-change document, that only a change document declares how it is built). The report MUST be returned and shown on the document, the last one recorded winning; where no flow was created it MUST point to the document's single start-flow control while no unarchived flow declares the document. A board failure MUST NOT undo the approval and MUST leave none of the tasks it created."
+    },
+    {
+      "key": "re-approving-an-amended-document-refreshes-its-open-task-refresh",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A revision that changes what is asked must reach the open work, or coverage shows a new requirement unserved while a task claims a retired one; progress and assignment stay the board's, and a closed task records what was asked when it was decided.",
+      "statement": "When a document is approved again, a task it created earlier that is still declared under the same key and is neither `approved` nor `rejected` MUST take the entry's current title, description and acceptance criteria and link to exactly the requirements of this document the entry names; its status, assignee, priority and links to other documents' requirements MUST NOT change. An `approved` or `rejected` task MUST NOT be changed by a later approval."
+    },
+    {
+      "key": "re-approving-an-amended-document-refreshes-its-open-tasks-report",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Anything a re-approval changed or chose not to change must be visible where the operator decided it.",
+      "statement": "The approval report MUST list each refreshed task with the fields that changed and the requirement links added and removed, each closed task that links a requirement this document has retired, and each task this document created whose key it no longer declares; none of the latter two MUST be changed."
+    },
+    {
+      "key": "re-approving-an-amended-document-refreshes-its-open-tasks-app",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The report is where the operator sees what approval did to the board.",
+      "statement": "The app's approval report MUST show refreshed tasks, closed tasks linking a retired requirement, and tasks no longer declared."
+    },
+    {
+      "key": "an-agent-can-read-a-specification-document",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An agent's isolated checkout predates the document, so without this it implements from someone else's paraphrase.",
+      "statement": "The agent API SHALL let an agent read a specification document of its project, by path or by document id, in every phase, as structured content rather than rendered markup, and the operation SHALL be in the surface the agent is told it has."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-step-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The document, not the conversation, carries where the work is.",
+      "statement": "A change document MUST record its current journey step and its size (fix, small, large, or none yet); a new change document MUST start at intake with no size."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-default-journey",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Ceremony scales with the work; acceptance is never dropped except for a fix, whose one task carries its failing check.",
+      "statement": "The journey MUST follow the size: none or large gives intake, requirements, acceptance, approach, tasks, delivery; small gives intake, requirements-and-acceptance (one step), tasks, delivery; fix gives intake, tasks, delivery."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-advance-tool",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Warn, never gate; what was skipped is on record for the approval warnings.",
+      "statement": "The agent MUST be able to move its document to the next step, or to a named step, through a tool that records the move with its run and answers with the outputs the left step still lacks; it MUST NOT refuse a move for a missing output."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-criterion-check-fields",
+      "modal": "MAY",
+      "party": null,
+      "rationale": "Additive, so every existing document reads unchanged.",
+      "statement": "An acceptance criterion MAY carry how_to_check (text) and checked_by (agent or operator); a document without them MUST stay valid."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-operator-moves-journey",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Steps are revisitable and the size is the operator's to override.",
+      "statement": "The document's phase bar MUST show the journey's steps, the current one and the size, and MUST let the operator move to any step, back or forward, and change the size, each change taking effect from the next turn."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-propose-without-close",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The step pointer replaces the boolean; one fewer operator click.",
+      "statement": "Proposing a change document MUST NOT require the operator to have marked exploration complete; the Exploration is complete control and the explore_not_closed refusal MUST be removed."
+    },
+    {
+      "key": "a-spec-is-written-one-step-at-a-time-existing-documents",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "No document loses its place, and the operator's live data on :8000 migrates safely.",
+      "statement": "The migration MUST place every exploring change document at intake when it has no requirements and at requirements otherwise, and leave other phases and roadmaps with no step; a document with no size MUST be briefed as large."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The document file, its structured payload, requirement identity, digests and divergence",
+      "The attributed event history of every change, and the `spec_updated` broadcast",
+      "Phase and its transitions, completeness checks, approval and archive authority",
+      "Rigor and the proposals a contract or gate document records instead of applying edits",
+      "Naming, renaming, reading (by operator and agent, bounded) and rendering a document",
+      "Declared tasks: title, files and the submission's advisory warnings about them",
+      "Creating and refreshing declared tasks at approval, and the approval report",
+      "Writing capability documents through merges and folds; retiring a capability; deleting a document"
+    ],
+    "non_goals": [
+      "Discovery, `spec/index.json` and the corpus map (spec-corpus-map); adopting untracked files (spec-document-adoption)",
+      "Which documents an agent may start (agent-document-creation)",
+      "What a turn with a document open is told and which tools it gets (spec-chat-session)",
+      "A document's flow delivery (agent-flows) and cross-document task imports and dependency edges (task-dependencies)",
+      "Task status transitions once a task exists (task-lifecycle-governance)",
+      "Evidence, footprints, coverage and drift (requirement-traceability); roadmaps and their slices (spec-roadmaps)"
+    ]
+  },
+  "summary": "Where a specification document lives, who may write it, how its requirements are identified, what phase and rigor it is in, and who may move it. The document is a file in the project; an agent submits a structured payload and the Hub renders it, so the format is a schema rather than a request, and phase and rigor are held by the Hub and changed only by the operator. Approving a document creates the tasks it declares and reports what it did; a finished change reaches the capability corpus through an audited merge (a fold), and a document can be archived, retired or, if it never shipped, deleted.",
+  "tasks": [],
+  "title": "Spec document authority"
+}

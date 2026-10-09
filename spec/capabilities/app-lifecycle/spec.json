@@ -1,0 +1,437 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "No running instance",
+      "key": "ac1",
+      "requirement": "bare-invocation-is-the-only-entry-point",
+      "then": "The instance starts, the directory is registered, and the app opens at that project.",
+      "when": "A user runs `agentweave` in a project directory"
+    },
+    {
+      "given": "A running instance and a registered directory",
+      "key": "ac2",
+      "requirement": "bare-invocation-is-the-only-entry-point",
+      "then": "The existing project is selected and no second instance starts.",
+      "when": "`agentweave` is run there"
+    },
+    {
+      "given": "A running instance",
+      "key": "ac3",
+      "requirement": "bare-invocation-is-the-only-entry-point",
+      "then": "That directory becomes a second project in the same instance and the app opens on it.",
+      "when": "`agentweave` is run from a second directory"
+    },
+    {
+      "given": "The installed CLI",
+      "key": "ac4",
+      "requirement": "bare-invocation-is-the-only-entry-point",
+      "then": "Only `doctor`, `status`, `stop` and `reset` exist.",
+      "when": "Its subcommands are listed"
+    },
+    {
+      "given": "No `DATABASE_URL` in the environment",
+      "key": "ac9",
+      "requirement": "n1-every-launcher-that-chooses-a-database-chooses-the-same-one",
+      "then": "Both resolve to the same absolute database path.",
+      "when": "Bare `agentweave` is run from two different directories"
+    },
+    {
+      "given": "The Hub's compose file",
+      "key": "ac11",
+      "requirement": "n1-every-launcher-that-chooses-a-database-chooses-the-same-one",
+      "then": "Both use the same Compose project and `hub-data` volume.",
+      "when": "`docker compose up` is run from two host directories"
+    },
+    {
+      "given": "No `DATABASE_URL` in the environment or `.env`",
+      "key": "ac5",
+      "requirement": "n2-a-hub-not-told-which-database-refuses-to-start",
+      "then": "It fails before touching any database file, naming the declined path, `DATABASE_URL`, and bare `agentweave`.",
+      "when": "`uvicorn hub.main:app` is started"
+    },
+    {
+      "given": "`DATABASE_URL` naming the default path",
+      "key": "ac8",
+      "requirement": "n2-a-hub-not-told-which-database-refuses-to-start",
+      "then": "It opens that database without refusing.",
+      "when": "The Hub starts"
+    },
+    {
+      "given": "A Hub started with a `DATABASE_URL`",
+      "key": "ac6",
+      "requirement": "n3-the-hub-states-which-database-it-opened",
+      "then": "Its default log shows the absolute path and whether the file existed, before it is opened.",
+      "when": "It starts"
+    },
+    {
+      "given": "An instance serving several projects",
+      "key": "ac14",
+      "requirement": "status-stop-and-reset-act-on-the-local-instance",
+      "then": "It prints the URL, runtime, project count and most recently opened project.",
+      "when": "`agentweave status` runs"
+    },
+    {
+      "given": "A running native instance",
+      "key": "ac15",
+      "requirement": "status-stop-and-reset-act-on-the-local-instance",
+      "then": "The instance shuts down through its normal shutdown and its PID file is removed.",
+      "when": "`agentweave stop` runs"
+    },
+    {
+      "given": "A default instance with registered projects",
+      "key": "ac16",
+      "requirement": "n4-reset-is-confirmed-and-bounded-to-one-profile",
+      "then": "The default profile's data directory is removed and no project directory is touched.",
+      "when": "The operator confirms `agentweave reset`"
+    },
+    {
+      "given": "Profiles `a` and `b` with data",
+      "key": "ac27",
+      "requirement": "n4-reset-is-confirmed-and-bounded-to-one-profile",
+      "then": "Only `a`'s data is deleted.",
+      "when": "`agentweave reset --profile a` is confirmed"
+    },
+    {
+      "given": "The installed CLI",
+      "key": "ac17",
+      "requirement": "no-cli-command-manipulates-collaboration-state",
+      "then": "None sends a message, changes a task, or manages agents or jobs.",
+      "when": "Its commands are inspected"
+    },
+    {
+      "given": "`pywebview` installed and working",
+      "key": "ac18",
+      "requirement": "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv",
+      "then": "One chromeless window titled AgentWeave opens and the command returns only when it is closed.",
+      "when": "Bare `agentweave` runs"
+    },
+    {
+      "given": "`pywebview` installed and working",
+      "key": "ac19",
+      "requirement": "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv",
+      "then": "The same window opens as for a native launch.",
+      "when": "`agentweave --docker` runs"
+    },
+    {
+      "given": "No webview backend",
+      "key": "ac20",
+      "requirement": "n5-without-a-webview-the-app-opens-in-a-browser",
+      "then": "The app opens in a chromeless browser window or default browser and the command returns.",
+      "when": "Bare `agentweave` runs"
+    },
+    {
+      "given": "A webview backend that raises while creating its window",
+      "key": "ac21",
+      "requirement": "n5-without-a-webview-the-app-opens-in-a-browser",
+      "then": "The failure is reported and the browser fallback is used.",
+      "when": "Bare `agentweave` runs"
+    },
+    {
+      "given": "An app window opened by a detached launch",
+      "key": "ac22",
+      "requirement": "n6-closing-the-window-leaves-the-hub-running",
+      "then": "The Hub is still reachable.",
+      "when": "The operator closes it"
+    },
+    {
+      "given": "`pywebview` installed",
+      "key": "ac23",
+      "requirement": "n7-a-foreground-start-opens-no-native-window",
+      "then": "The browser behaviour is used and the server stays attached until Ctrl+C.",
+      "when": "`agentweave --no-detach` runs"
+    },
+    {
+      "given": "A Windows install that has started before but never offered a shortcut",
+      "key": "ac40",
+      "requirement": "n8-a-desktop-shortcut-is-offered-once",
+      "then": "A shortcut is created once and the marker is written; later launches do not recreate a deleted one.",
+      "when": "`agentweave` runs"
+    },
+    {
+      "given": "Profiles `a` on 8010 and `b` on 8011 running",
+      "key": "ac24",
+      "requirement": "a-named-profile-selects-a-separate-deliberate-instance",
+      "then": "Only `a` stops; each had its own database and PID file.",
+      "when": "`agentweave --profile a --port 8010 stop` runs"
+    },
+    {
+      "given": "No `--profile`",
+      "key": "ac25",
+      "requirement": "a-named-profile-selects-a-separate-deliberate-instance",
+      "then": "It uses the default profile's existing database path.",
+      "when": "`agentweave` runs"
+    },
+    {
+      "given": "`DATABASE_URL` set",
+      "key": "ac26",
+      "requirement": "a-named-profile-selects-a-separate-deliberate-instance",
+      "then": "The `DATABASE_URL` value is used.",
+      "when": "`agentweave --profile a --port 8010` runs"
+    },
+    {
+      "given": "No `--port`",
+      "key": "ac28",
+      "requirement": "n9-a-named-profile-needs-an-explicit-port",
+      "then": "It exits with an error naming `--profile` and `--port` and starts nothing.",
+      "when": "`agentweave --profile dev` runs"
+    },
+    {
+      "given": "A background run task in flight",
+      "key": "ac29",
+      "requirement": "a-shutting-down-instance-shall-release-its-database-connecti",
+      "then": "The task is settled and every connection released before the loop closes, with no driver-thread error.",
+      "when": "The instance shuts down"
+    },
+    {
+      "given": "A scheduled job in flight",
+      "key": "ac30",
+      "requirement": "a-shutting-down-instance-shall-release-its-database-connecti",
+      "then": "The scheduler stops admitting work before runs are settled, and any run the job started is settled too.",
+      "when": "The instance shuts down"
+    },
+    {
+      "given": "Run tasks still being registered after the last settle pass",
+      "key": "ac32",
+      "requirement": "a-shutting-down-instance-shall-release-its-database-connecti",
+      "then": "The count left is logged and shutdown completes.",
+      "when": "Shutdown continues"
+    },
+    {
+      "given": "A pooled connection whose worker thread has ended",
+      "key": "ac34",
+      "requirement": "a-database-connection-whose-driver-worker-is-gone-shall-be-r",
+      "then": "It is discarded without a statement being issued and the request is served by a fresh connection.",
+      "when": "It is next checked out"
+    },
+    {
+      "given": "Such a connection that was never handed out",
+      "key": "ac36",
+      "requirement": "a-database-connection-whose-driver-worker-is-gone-shall-be-r",
+      "then": "Disposal completes without waiting on the ended thread.",
+      "when": "The engine is disposed"
+    },
+    {
+      "given": "A pooled connection whose worker is alive",
+      "key": "ac38",
+      "requirement": "a-database-connection-whose-driver-worker-is-gone-shall-be-r",
+      "then": "It is used as is.",
+      "when": "It is checked out"
+    },
+    {
+      "given": "A Hub serving on port 8010",
+      "key": "ac39",
+      "requirement": "the-documented-command-form-is-the-one-that-works",
+      "then": "It reports the Hub running.",
+      "when": "The operator runs `agentweave --port 8010 status`"
+    },
+    {
+      "given": "`--port` given before and after the subcommand",
+      "key": "rd-ac40",
+      "requirement": "the-documented-command-form-is-the-one-that-works",
+      "then": "The value after the subcommand is used.",
+      "when": "The command runs"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-10": "9e0ea53558c8db5aff8fc6fe354f4310c838e6e1d2a61a91b7ebce9cd0010290",
+      "FR-11": "248a38c4e0533de3e1170f79a51e75d3f26494d4fa815a162cd339119984bdbc",
+      "FR-12": "57bd8268f6eb29fa733cc240c3c14bee398af9d91d3d09a16e402213b5465afc",
+      "FR-13": "f9de614439f45e7212f85aa9c94842893756968917bdb13854824c71c310ab9d",
+      "FR-14": "54b120a60538e643ff4d9011e2219800c8ef5f374967ea665fce89dd67f82628",
+      "FR-15": "e80c6e9baf903908af47ce9faa54617bc660a44f06ffccbbe2e614546323758c",
+      "FR-16": "82d14dfdf8349f44c74c530e74be25b32a0fd884db2302bf9ef86357a6b9bda0",
+      "FR-17": "3d971edb84a4d37427958e0b22372aa6ae12f30bdb4bfbdeb3b679d0ec9671ab",
+      "FR-18": "464ae2b889edb3efef23be933e1782a32d7cabfb805249423067cd325d0b85f4",
+      "FR-19": "24498e69742ae3865ca721383ec5ec5fca0976025853fe06d6d1bdc7c9c15566",
+      "FR-20": "8f3a80816f7edaf234720ea26ca9ecaef0192890229f43af8b06dcab40cf7483",
+      "FR-21": "7e77eb661b751eb0d98d6c049a91f86641203b23b0fdf3a06460d7ab861deb52",
+      "FR-22": "0089559972bdf9401ad79f4fbe97d0320d8210be21ee124ac1694591b0f37457",
+      "FR-23": "96599a51c28af924597d959d3662aa9f84d5d4b1d4e6f4b3968e42a7215277ef",
+      "FR-24": "191f9439ee86acd840eb8c74fa3c2ed873486aaba5a312a9c5f215634ba12cff",
+      "FR-7": "3f2ee0cfed53a41bb5fe5db3316c246e0e75f5355c8b1005ac00c7e17eddb7f0",
+      "FR-8": "1aafcabc0a666698a0116772c159eaa48a18477e73367e0953894dd23dc2d334",
+      "FR-9": "9396b4fb2a8b86de3c5cbdc3cb9acdd48f80b62c58698d737a4445b09d44ef48"
+    },
+    "high_water": 24,
+    "requirements": {
+      "a-database-connection-whose-driver-worker-is-gone-shall-be-r": "FR-14",
+      "a-named-profile-selects-a-separate-deliberate-instance": "FR-12",
+      "a-shutting-down-instance-shall-release-its-database-connecti": "FR-13",
+      "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv": "FR-11",
+      "bare-invocation-is-the-only-entry-point": "FR-7",
+      "n1-every-launcher-that-chooses-a-database-chooses-the-same-one": "FR-15",
+      "n2-a-hub-not-told-which-database-refuses-to-start": "FR-16",
+      "n3-the-hub-states-which-database-it-opened": "FR-17",
+      "n4-reset-is-confirmed-and-bounded-to-one-profile": "FR-18",
+      "n5-without-a-webview-the-app-opens-in-a-browser": "FR-19",
+      "n6-closing-the-window-leaves-the-hub-running": "FR-20",
+      "n7-a-foreground-start-opens-no-native-window": "FR-21",
+      "n8-a-desktop-shortcut-is-offered-once": "FR-22",
+      "n9-a-named-profile-needs-an-explicit-port": "FR-23",
+      "no-cli-command-manipulates-collaboration-state": "FR-10",
+      "status-stop-and-reset-act-on-the-local-instance": "FR-9",
+      "the-documented-command-form-is-the-one-that-works": "FR-24"
+    },
+    "retired": {
+      "environment-readiness-is-diagnosable-without-starting-the-ap": "FR-8"
+    }
+  },
+  "design": "D1 No guessing a database. `hub/hub/config.py` makes `database_url` a required setting whose default factory raises `HubNotToldWhichDatabase`; the CLI is what computes the default path and passes it, so only a launcher that chose a database reaches one.\n\nD2 Profiles are separate data directories and PID files; named profiles require `--port`, and `reset` takes exactly one profile.\n\nD3 The app window is `pywebview` when available, else a chromeless browser; the detached Hub is independent of the window.\n\nD4 Shutdown order (`hub/hub/main.py` lifespan): stop scheduler, terminate run processes, settle background run tasks (max 5 passes), then `engine.dispose()`. A `checkout` listener in `hub/hub/db/engine.py` invalidates connections whose aiosqlite worker thread is dead, and they are closed without waiting on that thread.",
+  "evidence": {
+    "checked": [
+      "tests/test_cli.py, tests/test_hub_commands.py, tests/test_hub_graceful_stop.py, tests/test_cli_port_and_runtime.py",
+      "hub/tests/test_config.py (database refusal), hub/tests/test_lifespan_shutdown.py, hub/tests/test_shutdown_settles_background_runs.py, hub/tests/test_dead_worker_connection.py"
+    ],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Imported from openspec 2026-10-07; overhauled 2026-10-08 against the code at e25e059.",
+  "open_questions": [],
+  "problem": "An operator with a real instance and trial instances on one machine must never have a launch silently attach to the wrong database, and a stopping instance must neither hang nor strand work.",
+  "requirements": [
+    {
+      "key": "bare-invocation-is-the-only-entry-point",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One entry point means one path to test and one thing to tell a new operator.",
+      "statement": "Running `agentweave` with no subcommand SHALL launch or reuse the local instance, open or register the invocation directory as a project through it, and open the app at that project; the CLI SHALL offer no other way to begin (no `init`, `activate`, `quick` or `start`)."
+    },
+    {
+      "key": "n1-every-launcher-that-chooses-a-database-chooses-the-same-one",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Only the project should vary with the launch directory, never the instance; an explicit `DATABASE_URL` is the operator's instruction.",
+      "statement": "Bare `agentweave` (native, `--docker` or `--local`) and `docker compose up` against the Hub's compose file SHALL resolve to the same database for a given profile whatever directory they are run from, and a `DATABASE_URL` already in the environment SHALL be passed through unchanged."
+    },
+    {
+      "key": "n2-a-hub-not-told-which-database-refuses-to-start",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The default path is where the operator's real work lives; a process reaching it by accident would migrate and write it exactly as one that meant to.",
+      "statement": "A Hub process started without `DATABASE_URL` in its environment or in a `.env` in its working directory (direct `uvicorn hub.main:app`, `agentweave-hub`) MUST refuse to start before opening, creating or migrating any database, naming the default path it declined and both ways to choose one."
+    },
+    {
+      "key": "n3-the-hub-states-which-database-it-opened",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An unintended attachment should be readable at the moment it happens.",
+      "statement": "A Hub told which database to open SHALL log, at a level its default logging shows and before it first opens the file, the absolute path it resolved and whether the file already existed; a relative path it was given SHALL be resolved against its working directory as written."
+    },
+    {
+      "key": "status-stop-and-reset-act-on-the-local-instance",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator manages one instance per profile, not per project.",
+      "statement": "`agentweave status` SHALL report whether the instance is running, its URL and runtime, how many projects are registered and which was opened most recently; `agentweave stop` SHALL stop that one instance."
+    },
+    {
+      "key": "n4-reset-is-confirmed-and-bounded-to-one-profile",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Reset is irreversible; its blast radius must be exactly one profile and never the operator's code.",
+      "statement": "`agentweave reset` SHALL delete Hub state only after the operator types `yes`, SHALL target only the default profile's data or only the one named with `--profile`, and MUST NOT delete any registered project directory or source."
+    },
+    {
+      "key": "no-cli-command-manipulates-collaboration-state",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The Hub owns execution; a second writer of collaboration state is a second runtime.",
+      "statement": "The CLI SHALL provide no command that sends a message, creates or updates a task, asks or answers a question, manages agents, or manages jobs; those SHALL be reachable only through the app (operator) or the agent capability plane (agents)."
+    },
+    {
+      "key": "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "App mode is the default for every normal launch, so it should look like an app, not a browser tab.",
+      "statement": "Every app-mode launch, native or Docker, SHALL open the app in a dedicated chromeless desktop window titled AgentWeave when `pywebview` is installed and can create one, and the invoking command SHALL stay running until that window is closed."
+    },
+    {
+      "key": "n5-without-a-webview-the-app-opens-in-a-browser",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The webview is an optional extra; its absence must never block reaching the app.",
+      "statement": "When no webview backend is installed or it fails to create a window, the launch SHALL report what failed and fall back to a chromeless browser window or the default browser without crashing, and SHALL return without waiting for that window."
+    },
+    {
+      "key": "n6-closing-the-window-leaves-the-hub-running",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents keep working when the operator closes the window.",
+      "statement": "Closing the app window MUST NOT stop the detached Hub process."
+    },
+    {
+      "key": "n7-a-foreground-start-opens-no-native-window",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A native webview needs the main thread, which a foreground server already occupies.",
+      "statement": "A `--no-detach` start SHALL use the browser behaviour even when a webview is installed, keeping the server in the foreground until interrupted."
+    },
+    {
+      "key": "n8-a-desktop-shortcut-is-offered-once",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A deleted shortcut is a decision; one that reappears every start is worse than none.",
+      "statement": "On Windows, a launch SHALL offer to create an `AgentWeave.lnk` Desktop shortcut once per install, recorded by a marker whether or not creation succeeded, SHALL never overwrite an existing shortcut, and `--desktop-shortcut` SHALL ask again."
+    },
+    {
+      "key": "a-named-profile-selects-a-separate-deliberate-instance",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Trial instances must be unable to touch the real one by construction.",
+      "statement": "`agentweave`, `status`, `stop`, `doctor` and `reset` SHALL accept `--profile <name>` (default `default`); a named profile SHALL resolve to its own database beneath `~/.agentweave/hub/profiles/<name>/` and its own PID file, the default profile SHALL keep its existing path, and an explicit `DATABASE_URL` SHALL override either."
+    },
+    {
+      "key": "n9-a-named-profile-needs-an-explicit-port",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The default port is where the default profile normally runs.",
+      "statement": "A `--profile` other than `default` without `--port` SHALL exit with an error naming both flags and SHALL NOT start or address the default port."
+    },
+    {
+      "key": "a-shutting-down-instance-shall-release-its-database-connecti",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Releasing connections first strands runs that still need them; settling before the scheduler stops settles a set that can refill. An instance asked to stop must stop.",
+      "statement": "On shutdown the instance SHALL, while its event loop still runs, stop admitting scheduled work, then settle the background run tasks it started (including successors they schedule, up to a bounded number of passes, logging any left), and only then release every database connection."
+    },
+    {
+      "key": "a-database-connection-whose-driver-worker-is-gone-shall-be-r",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Such a connection accepts work, never answers, and cannot be closed; anything that waits on it waits forever.",
+      "statement": "The instance SHALL NOT hand out a pooled SQLite connection whose driver worker thread has ended, SHALL transparently replace it with a new connection, and SHALL NOT wait on such a connection when closing it on any path, including shutdown and abandoned checkouts."
+    },
+    {
+      "key": "the-documented-command-form-is-the-one-that-works",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The documented form once reported a running Hub as stopped with no error.",
+      "statement": "`--port` and `--profile` given before the subcommand SHALL take effect for `status`, `stop`, `doctor` and `reset`; given in both places, the value nearer the subcommand SHALL win; no accepted option MAY be silently ignored."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Bare `agentweave` and its `--port`, `--profile`, `--docker`, `--local`, `--no-detach`, `--desktop-shortcut` options",
+      "`status`, `stop`, `reset`, and where `--port` and `--profile` may be given relative to a subcommand",
+      "Database selection and the refusal to guess",
+      "The app window (native webview or browser fallback)",
+      "Shutdown ordering and dead database connections"
+    ],
+    "non_goals": [
+      "What `doctor` checks, including environment readiness: runtime-diagnostics",
+      "Project registration rules: local-project-workspace"
+    ]
+  },
+  "summary": "The one supported way to start and manage a local AgentWeave instance: bare `agentweave` launches or reuses the instance, registers the invocation directory as a project and opens the app; `status`, `stop` and `reset` manage it, honouring global options wherever the documented command form places them; named profiles give separate instances; the Hub refuses to guess which database to open; and shutdown releases what it holds in a safe order.",
+  "tasks": [],
+  "title": "App lifecycle"
+}

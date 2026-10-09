@@ -1,0 +1,485 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "",
+      "key": "ac12",
+      "requirement": "an-agent-conversation-is-reached-directly-without-an-interme",
+      "then": "that agent's conversation opens directly, in the same state as if opened from the rail",
+      "when": "the operator activates an agent in the project overview's roster"
+    },
+    {
+      "given": "",
+      "key": "ac13",
+      "requirement": "an-agent-conversation-is-reached-directly-without-an-interme",
+      "then": "the agent's name appears in exactly one header region no second header or status strip repeating it is present",
+      "when": "an agent conversation is open"
+    },
+    {
+      "given": "",
+      "key": "acn1",
+      "requirement": "an-agent-conversation-is-reached-directly-without-an-interme",
+      "then": "that agent's conversation opens; no agent list, filter tab bar or \"select an agent\" placeholder is shown",
+      "when": "the operator activates an agent in navigation"
+    },
+    {
+      "given": "",
+      "key": "ac14",
+      "requirement": "navigation-lists-the-project-and-its-agents-as-a-tree",
+      "then": "the agent list collapses the active destination is unchanged",
+      "when": "the operator activates the project's expander"
+    },
+    {
+      "given": "",
+      "key": "ac15",
+      "requirement": "navigation-lists-the-project-and-its-agents-as-a-tree",
+      "then": "the project overview opens",
+      "when": "the operator activates the project's name"
+    },
+    {
+      "given": "",
+      "key": "ac16",
+      "requirement": "navigation-lists-the-project-and-its-agents-as-a-tree",
+      "then": "each entry shows that agent's assigned colour together with its name in text the colour matches the one used for that agent in the conversation timeline",
+      "when": "the rail lists a project's agents"
+    },
+    {
+      "given": "",
+      "key": "ac17",
+      "requirement": "navigation-lists-the-project-and-its-agents-as-a-tree",
+      "then": "that agent's conversation list toggles the active destination is unchanged",
+      "when": "the operator activates an agent's expander"
+    },
+    {
+      "given": "",
+      "key": "ac18",
+      "requirement": "the-containing-project-is-reachable-from-a-conversation",
+      "then": "the project overview opens no intermediate destination is passed through",
+      "when": "the operator activates the back-to-project control from a conversation"
+    },
+    {
+      "given": "",
+      "key": "ac19",
+      "requirement": "agents-and-messages-are-removed-as-navigation-destinations",
+      "then": "navigation offers no *Agents* destination and no *Messages* destination",
+      "when": "the Hub is loaded"
+    },
+    {
+      "given": "",
+      "key": "ac20",
+      "requirement": "agents-and-messages-are-removed-as-navigation-destinations",
+      "then": "every test passes unmodified",
+      "when": "the messages and agents endpoints are exercised by their existing tests"
+    },
+    {
+      "given": "",
+      "key": "ac53",
+      "requirement": "navigation-reads-from-the-registered-project-collection",
+      "then": "the adapter returns both projects with their agents the unchanged collection rail renders both",
+      "when": "the local instance has two registered projects"
+    },
+    {
+      "given": "",
+      "key": "ac54",
+      "requirement": "navigation-reads-from-the-registered-project-collection",
+      "then": "distinct actions to open an existing directory and create a new directory are available",
+      "when": "the operator inspects the project collection controls"
+    },
+    {
+      "given": "",
+      "key": "ac55",
+      "requirement": "navigation-reads-from-the-registered-project-collection",
+      "then": "the first project's state continues under its identity none of it is rendered as belonging to the selected project",
+      "when": "the operator switches projects while a request or agent run remains active in the first project"
+    },
+    {
+      "given": "",
+      "key": "ac56",
+      "requirement": "conversation-navigation-is-url-backed-and-project-scoped",
+      "then": "the same project, agent, and AgentWeave conversation are restored",
+      "when": "the operator reloads an agent conversation in one project"
+    },
+    {
+      "given": "",
+      "key": "ac57",
+      "requirement": "conversation-navigation-is-url-backed-and-project-scoped",
+      "then": "project A and its prior destination are restored without changing credentials",
+      "when": "the operator visits project A, then project B, then activates Back"
+    },
+    {
+      "given": "",
+      "key": "ac81",
+      "requirement": "an-agent-s-conversations-are-listed-beneath-it-in-navigation",
+      "then": "that agent's open conversations are listed beneath it, newest activity first the active destination is unchanged",
+      "when": "the operator activates an agent's expander"
+    },
+    {
+      "given": "",
+      "key": "ac82",
+      "requirement": "an-agent-s-conversations-are-listed-beneath-it-in-navigation",
+      "then": "that agent's most recent conversation opens",
+      "when": "the operator activates an agent's name"
+    },
+    {
+      "given": "",
+      "key": "ac83",
+      "requirement": "an-agent-s-conversations-are-listed-beneath-it-in-navigation",
+      "then": "that conversation opens in the content area the destination records the project, agent, and conversation",
+      "when": "the operator activates a conversation in navigation"
+    },
+    {
+      "given": "",
+      "key": "ac84",
+      "requirement": "an-agent-s-conversations-are-listed-beneath-it-in-navigation",
+      "then": "an expander states how many further conversations exist activating it lists them",
+      "when": "an agent has more conversations than the display limit"
+    },
+    {
+      "given": "",
+      "key": "ac85",
+      "requirement": "an-agent-s-conversations-are-listed-beneath-it-in-navigation",
+      "then": "it appears in that agent's conversation list its origin is distinguishable from a conversation the operator started",
+      "when": "a conversation was created because a peer agent addressed this agent"
+    },
+    {
+      "given": "",
+      "key": "ac86",
+      "requirement": "navigation-offers-a-recency-view-across-agents",
+      "then": "navigation shows the agent tree",
+      "when": "the operator loads the Hub having never chosen a view"
+    },
+    {
+      "given": "",
+      "key": "ac87",
+      "requirement": "navigation-offers-a-recency-view-across-agents",
+      "then": "conversations from every agent in the project are listed together, most recent activity first",
+      "when": "the operator switches to the recency view"
+    },
+    {
+      "given": "",
+      "key": "ac88",
+      "requirement": "navigation-offers-a-recency-view-across-agents",
+      "then": "each conversation carries its agent's identity colour without requiring hover that colour is the same one the agent carries in the tree and the timeline",
+      "when": "the recency view is shown"
+    },
+    {
+      "given": "",
+      "key": "ac89",
+      "requirement": "navigation-offers-a-recency-view-across-agents",
+      "then": "archived conversations are not listed among the open ones a control states how many archived conversations the project has activating it lists them",
+      "when": "the recency view is shown"
+    },
+    {
+      "given": "",
+      "key": "ac90",
+      "requirement": "navigation-offers-a-recency-view-across-agents",
+      "then": "an expander states how many further conversations exist activating it lists them a control returns the list to its capped length",
+      "when": "a project has more conversations than the recency view's display limit"
+    },
+    {
+      "given": "",
+      "key": "ac91",
+      "requirement": "navigation-offers-a-recency-view-across-agents",
+      "then": "the chosen view is still shown",
+      "when": "the operator switches view and reloads"
+    },
+    {
+      "given": "",
+      "key": "ac92",
+      "requirement": "a-conversation-s-attention-state-is-visible-in-navigation",
+      "then": "navigation shows that conversation as waiting on the operator",
+      "when": "a run in one conversation opens a question and blocks the operator is looking at a different conversation"
+    },
+    {
+      "given": "",
+      "key": "ac93",
+      "requirement": "a-conversation-s-attention-state-is-visible-in-navigation",
+      "then": "navigation presents the two states differently",
+      "when": "one conversation is running and another is waiting on the operator"
+    },
+    {
+      "given": "",
+      "key": "ac94",
+      "requirement": "a-conversation-s-attention-state-is-visible-in-navigation",
+      "then": "navigation no longer shows that conversation as waiting",
+      "when": "the operator answers the outstanding question"
+    },
+    {
+      "given": "a conversation shown as waiting on the operator",
+      "key": "ac95",
+      "requirement": "a-conversation-s-attention-state-is-visible-in-navigation",
+      "then": "navigation no longer shows that conversation as waiting on the operator",
+      "when": "the run's wait for that question ends without an answer and the run carries on"
+    },
+    {
+      "given": "",
+      "key": "ac96",
+      "requirement": "a-conversation-s-attention-state-is-visible-in-navigation",
+      "then": "navigation shows that conversation as waiting on the operator",
+      "when": "a run opens a permission request and blocks"
+    },
+    {
+      "given": "",
+      "key": "ac97",
+      "requirement": "navigation-rows-expose-their-actions-through-a-visible-menu",
+      "then": "rename and archive are offered",
+      "when": "the operator opens a conversation row's menu"
+    },
+    {
+      "given": "",
+      "key": "ac98",
+      "requirement": "navigation-rows-expose-their-actions-through-a-visible-menu",
+      "then": "new conversation, agent settings, and the archived listing are offered",
+      "when": "the operator opens an agent row's menu"
+    },
+    {
+      "given": "",
+      "key": "ac99",
+      "requirement": "navigation-rows-expose-their-actions-through-a-visible-menu",
+      "then": "every action in the menu is reachable and activatable by keyboard dismissing the menu returns focus to its trigger",
+      "when": "the operator reaches a row's menu control by keyboard and opens it"
+    },
+    {
+      "given": "",
+      "key": "ac100",
+      "requirement": "navigation-rows-expose-their-actions-through-a-visible-menu",
+      "then": "the agent's configuration destination opens no dialog is presented",
+      "when": "the operator opens agent settings from an agent row's menu"
+    },
+    {
+      "given": "",
+      "key": "ac101",
+      "requirement": "navigation-rows-expose-their-actions-through-a-visible-menu",
+      "then": "the agent's most recent conversation opens its history is unchanged",
+      "when": "the operator opens agent settings and then activates the back control"
+    },
+    {
+      "given": "",
+      "key": "ac102",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "then": "the new-conversation surface opens with that agent already selected no agent choice is required",
+      "when": "the operator starts a conversation from an agent's row menu"
+    },
+    {
+      "given": "",
+      "key": "ac103",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "then": "the surface retargets to the agent they chose the first message goes to that agent anything already typed is kept",
+      "when": "the operator started from one agent's row menu and then chooses a different agent"
+    },
+    {
+      "given": "",
+      "key": "ac104",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "then": "its leading question names that agent",
+      "when": "the new-conversation surface opens bound to an agent"
+    },
+    {
+      "given": "",
+      "key": "ac105",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "then": "its leading question asks which agent should take the work choosing one changes the question to name that agent",
+      "when": "the new-conversation surface opens with no agent bound"
+    },
+    {
+      "given": "",
+      "key": "ac106",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "then": "the new-conversation surface requires an agent to be chosen the message cannot be sent until one is",
+      "when": "the operator starts a conversation from the recency view"
+    },
+    {
+      "given": "",
+      "key": "ac107",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "then": "no conversation record exists navigation lists no additional conversation",
+      "when": "the operator opens the new-conversation surface and navigates away without sending"
+    },
+    {
+      "given": "",
+      "key": "ac108",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "then": "a conversation is created, titled, and listed in navigation the destination moves to it",
+      "when": "the operator sends the first message from the new-conversation surface"
+    },
+    {
+      "given": "an agent with several consecutive conversations from one loop's firings",
+      "key": "acn18",
+      "requirement": "consecutive-loop-firings-are-grouped-in-navigation",
+      "then": "those conversations appear as one expandable group, counted as a unit by the display cap",
+      "when": "the agent is expanded in navigation"
+    },
+    {
+      "given": "an archived agent that still owns open conversations",
+      "key": "acn19",
+      "requirement": "an-archived-agent-s-open-conversations-stay-reachable",
+      "then": "those conversations are listed in a marked group of their own",
+      "when": "the project is expanded in navigation"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "22151d5e994c70eb2c5ccb50182712d4bc8932c531fa7ce118dc8751a19b2989",
+      "FR-10": "cb781bfe046b3695672910a4c36b18ac6a059bb4f98c94cbce333b68e1bddde8",
+      "FR-11": "c2ef9932613b60b4039f18c6d1d1a31b8f404782d86c0dd9cabe0392cf46ab62",
+      "FR-12": "e843a258b7bb48c9a99df3402d427ad3ae1f80f59947d85d70c89701d8cc40fe",
+      "FR-13": "d74ff830f5714942960badf6ee66b628947e3941cea0c1d50d9f0da23e232556",
+      "FR-2": "1344fa60209646d73cd613501ee7df1673fe93706b8189b1f429cdf6a90b4f20",
+      "FR-3": "243a1e78bc8424871b3df3b612cd41cb3a8d61748e0ab5cfb2d10154b592c91d",
+      "FR-4": "aea34be801211ffb6ac183addcb234ca3dde604fa86df85acc1b44eff714a751",
+      "FR-5": "be57d0d50a5a0fddcd459fd4ca2e666a6ca1d3984df800812d43dae596879467",
+      "FR-6": "d498e75ac512f31dbafbf182c44e70be112567913a52286722698f56886794ad",
+      "FR-7": "74bdf3c7fdeba521e259da1703494981e120c6c4c9dd3cc67855c8a2f2efdecb",
+      "FR-8": "839abd3dedc682695e318c7928174acb6e0106410c2028a85e18f9c1bc69dac1",
+      "FR-9": "73983507f08ec6c8574ca538e991f8a334cf116fd773f0768f65a7baea45e5d3"
+    },
+    "high_water": 13,
+    "requirements": {
+      "a-conversation-s-attention-state-is-visible-in-navigation": "FR-9",
+      "agents-and-messages-are-removed-as-navigation-destinations": "FR-4",
+      "an-agent-conversation-is-reached-directly-without-an-interme": "FR-1",
+      "an-agent-s-conversations-are-listed-beneath-it-in-navigation": "FR-7",
+      "an-archived-agent-s-open-conversations-stay-reachable": "FR-13",
+      "consecutive-loop-firings-are-grouped-in-navigation": "FR-12",
+      "conversation-navigation-is-url-backed-and-project-scoped": "FR-6",
+      "navigation-lists-the-project-and-its-agents-as-a-tree": "FR-2",
+      "navigation-offers-a-recency-view-across-agents": "FR-8",
+      "navigation-reads-from-the-registered-project-collection": "FR-5",
+      "navigation-rows-expose-their-actions-through-a-visible-menu": "FR-10",
+      "starting-a-conversation-is-a-navigation-action-with-a-dedica": "FR-11",
+      "the-containing-project-is-reachable-from-a-conversation": "FR-3"
+    },
+    "retired": {}
+  },
+  "design": "D1. Navigation owns selection and starting. Conversation switching, new conversation and agent settings live in navigation (row menus, URL-backed destinations); the conversation header keeps only turn-level controls. There is no overflow menu.\n\nD2. Destinations are named by AgentWeave ids (project id, conversation id), never by a provider session id, so a reload or back/forward restores the same place whatever the provider does.\n\nD3. Rail chrome stays in hub-workspace-shell; this capability owns what the navigation lists and how a conversation is reached from it.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "Split out of agent-conversation-workspace in the 2026-10-08 spec overhaul.",
+  "open_questions": [],
+  "problem": "An operator running several agents across several projects needs to see at a glance which conversation is working or waiting on them, and reach it in one action, without one project's conversations or drafts leaking into another's view.",
+  "requirements": [
+    {
+      "key": "an-agent-conversation-is-reached-directly-without-an-interme",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Reading the conversation is the reason for selecting the agent; any intermediate step is a click that carries no information.",
+      "statement": "Selecting an agent from navigation or from the project overview's agent roster SHALL open that agent's conversation directly, with no intermediate agent list, filter tab bar or selection placeholder."
+    },
+    {
+      "key": "navigation-lists-the-project-and-its-agents-as-a-tree",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Expanding to look and opening to go are different intents, and one control cannot express both.",
+      "statement": "Navigation SHALL list every registered project as a named entry whose children are its agents, and each agent as an entry whose children are its conversations; a project's or agent's name and its expander SHALL be separately activatable, the name navigating and the expander toggling without navigating."
+    },
+    {
+      "key": "the-containing-project-is-reachable-from-a-conversation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The conversation header carries a back-to-project control so the operator never has to find the project in navigation to leave a conversation.",
+      "statement": "From an open agent conversation, the containing project's overview SHALL be reachable in a single action."
+    },
+    {
+      "key": "agents-and-messages-are-removed-as-navigation-destinations",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents are listed in the tree and peer traffic is merged into each conversation's timeline, so separate destinations would only duplicate them.",
+      "statement": "Navigation MUST NOT offer an *Agents* destination or a *Messages* destination; the agent and message records and their APIs remain unchanged."
+    },
+    {
+      "key": "navigation-reads-from-the-registered-project-collection",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "One local Hub owns many projects; every piece of client state is keyed by project id.",
+      "statement": "Navigation SHALL read its project and agent tree from the collection of every registered project, SHALL let the operator open an existing directory, create a new project and switch projects without changing credentials, and MUST NOT leak conversations, drafts, cached server state or in-flight results across projects."
+    },
+    {
+      "key": "conversation-navigation-is-url-backed-and-project-scoped",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A destination the operator cannot reload or link to is not a place they can return to.",
+      "statement": "Project, agent, conversation and settings navigation SHALL be represented in the browser URL using project id and AgentWeave conversation id, and reload and back/forward SHALL restore the represented destination; provider session identifiers MUST NOT be used as URL identity."
+    },
+    {
+      "key": "an-agent-s-conversations-are-listed-beneath-it-in-navigation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A silent cut-off reads as data loss; an unbounded list buries the agent rows below it.",
+      "statement": "Navigation SHALL list an agent's open conversations beneath it, most recent activity first, each labelled by its title and marked when a peer started it; activating the agent's name SHALL open its most recent conversation, and beyond 7 conversations the rest SHALL sit behind an expander that states how many are hidden."
+    },
+    {
+      "key": "navigation-offers-a-recency-view-across-agents",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The tree costs a level of hierarchy; the recency view recovers the flat scan without losing which agent owns each thread.",
+      "statement": "Navigation SHALL offer a recency view listing the project's open conversations across all agents, most recent first, each with its agent's identity colour as a leading edge; the agent tree SHALL be the default, the chosen view SHALL persist across reloads, archived conversations SHALL be reachable through a control stating their count, and beyond 15 conversations the rest SHALL sit behind an expander stating how many are hidden."
+    },
+    {
+      "key": "a-conversation-s-attention-state-is-visible-in-navigation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A waiting run consumes its timeout while the operator is unaware; once the wait has ended there is nothing left to surface.",
+      "statement": "Navigation SHALL show, for each listed conversation, whether it is running, waiting on the operator, or idle — waiting meaning it holds an unanswered question still being waited on or a pending permission request — with waiting distinguishable from and outranking running, and a collapsed agent SHALL show when any of its conversations is waiting."
+    },
+    {
+      "key": "navigation-rows-expose-their-actions-through-a-visible-menu",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agent settings is a linkable destination with a fixed way back to the agent's most recent conversation, not a dialog.",
+      "statement": "Every agent row and conversation row in navigation SHALL expose its actions through a menu opened from a control on the row, reachable by keyboard, shown at rest on the active row and revealed on hover or focus elsewhere; a conversation row SHALL offer rename and archive (unarchive when archived), and an agent row SHALL offer new conversation, agent settings and the archived-conversation listing, with an unavailable item shown disabled with its reason."
+    },
+    {
+      "key": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An abandoned start leaves nothing behind, and a pre-selected agent is a default, not a binding.",
+      "statement": "Starting a new conversation SHALL be initiated from navigation and SHALL open a surface whose composer is the primary element, led by a question naming the bound agent (or asking which agent should take the work); the operator SHALL be able to retarget to any project agent, the recency view's start SHALL require choosing an agent before sending, and no conversation record SHALL be created until the first message is sent."
+    },
+    {
+      "key": "consecutive-loop-firings-are-grouped-in-navigation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A loop firing every few minutes would otherwise fill an agent's list with near-identical rows.",
+      "statement": "Navigation SHALL group an agent's consecutive conversations from the same loop's firings into one expandable row, and the display cap SHALL never split such a group."
+    },
+    {
+      "key": "an-archived-agent-s-open-conversations-stay-reachable",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The tree iterates the open roster, so these conversations otherwise vanished while the recency view still listed them.",
+      "statement": "Open conversations belonging to an archived agent SHALL be listed in navigation in a marked group of their own, and opening one SHALL offer to unarchive the agent."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The project / agent / conversation tree and what each level lists and opens",
+      "Reaching an agent's conversation directly, and the project overview from a conversation",
+      "The recency view across agents and the persisted choice of view",
+      "Per-row attention state (running, waiting on the operator, idle)",
+      "Row action menus on agent and conversation rows",
+      "URL-backed, project-scoped navigation and isolation of state across projects",
+      "Starting a new conversation from navigation",
+      "Grouping consecutive loop firings and listing an archived agent's open conversations"
+    ],
+    "non_goals": [
+      "What an open conversation shows: agent-conversation-workspace",
+      "The composer, including the new-conversation surface's composer controls: agent-composer",
+      "Renaming, archiving and titling conversations: conversation-lifecycle",
+      "The rail's chrome, collapse, width, Add project and Configure controls: hub-workspace-shell",
+      "Project registration and identity: local-project-workspace"
+    ]
+  },
+  "summary": "How the operator finds and opens conversations: the rail's project, agent and conversation tree, the recency view across agents, each row's attention state and action menu, URL-backed project-scoped destinations, and the surface for starting a new conversation.",
+  "tasks": [],
+  "title": "Conversation navigation"
+}

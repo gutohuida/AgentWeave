@@ -1,7 +1,7 @@
 """Author a change document on the trial Hub, as the operator, and propose it.
 
 The payload is a JSON file (the `submit_spec_document` shape); the document lands at
-`spec/changes/<name>/spec.html`. Re-runnable: a 409 on create means the document exists, and its
+`spec/changes/<name>/spec.json`. Re-runnable: a 409 on create means the document exists, and its
 content is rewritten. Refuses to propose when the content is refused (F528).
 
 Usage (Git Bash):
@@ -21,7 +21,7 @@ from aw import P, api  # noqa: E402
 def main(name, payload_file):
     payload = json.loads(pathlib.Path(payload_file).read_text(encoding="utf-8"))
     base = f"/projects/{P}/project"
-    path = f"spec/changes/{name}/spec.html"
+    path = f"spec/changes/{name}/spec.json"
     code, doc = api("POST", f"{base}/documents", {"title": payload["title"], "kind": "change-spec", "path": path})
     print("create", code, str(doc.get("id") or doc.get("detail") if isinstance(doc, dict) else doc)[:200])
     code, res = api("PUT", f"{base}/documents/{path}/content", {"document": payload})
