@@ -2291,3 +2291,26 @@ disappears is indistinguishable from one that was forgotten.
   a real-agent drive shows this; unit tests on the duty text cannot.
 - **Haiku answered through `aw-tool` (the shim: Bash plus Write), not the MCP tools,** in the d1009 drives. So the
   shim and HTTP renderings of the tool surface are what it reads.
+
+### 2026-10-09 (morning session, handoff 0184)
+
+- **A drive script that imports Hub modules (`hub.db.models`, `hub.agent_auth`) must set `DATABASE_URL` first.**
+  Importing them loads `hub.config.Settings`, which raises `HubNotToldWhichDatabase` without it. Point it at the
+  drive's scratch db, never a default. (d1013's synthetic tester run; confirmed 2026-10-09.)
+- **`ruff check --fix` rewrites `Optional[Union[A, B]]` to `Optional[A | B]`; black then re-wraps that line and CI's
+  black check fails.** Run black *after* any `ruff --fix`, then `black --check`. Three red CI pushes on 2026-10-09
+  (`hub/hub/spec_payload.py`).
+- **`review_turn` holds its own `from .project_workspace import resolve_project_workspace`; the test `app` fixture
+  patches only the module attribute.** A test reaching `review_turn._declared_reviewer_name` or `test_duty_lines` must
+  also `monkeypatch.setattr(review_turn, "resolve_project_workspace", project_workspace.resolve_project_workspace)`,
+  or the read fails silently and returns nothing.
+- **The app has no `?doc=` URL parameter.** A drive opening a specific spec document in Chromium must click
+  `[data-testid="spec-tree-document-<path>"]` after expanding `spec-tree-directory-*` (d1010's recipe); `?doc=` opens
+  the first document.
+- **A Haiku builder told "change nothing else" still fixed a planted bug in a file its task did not name.** A drive
+  that needs a defect to survive the build does the build step itself (commit + operator evidence, as d1008/d1013 do).
+- **A flow needs a stop condition or approval starts none** ("The delivery sets no stop condition"); a drive's
+  delivery needs `stop_when_queue_empties: true` or a `stop_at`.
+- **Python-in-heredoc patches can turn a literal `\n` into a real newline** in the patched file (broke d1013 once),
+  and a Bash heredoc containing an unbalanced quote fails to parse outright. For multi-line text use the Write/Edit
+  tools.
