@@ -30,12 +30,16 @@ import { runnerOptionLabel } from '@/lib/runnerLabel'
 export function ManagerPanel() {
   const jobs = useManagerJobs()
   const activity = useManagerActivity()
-  const { data: runners = [] } = useRunners()
-  const { data: catalog } = useModelCatalog()
+  const { data: runners = [], error: runnersError } = useRunners()
+  const { data: catalog, error: catalogError } = useModelCatalog()
   const update = useUpdateManagerJob()
 
   const noManager = isNoManager(jobs.error) || isNoManager(activity.error)
   const save = (key: string, input: ManagerJobInput) => update.mutate({ key, input })
+  // Without the runners a select cannot show the stored runner and falls back to its first option,
+  // "The agent's own runner" -- a false statement of what the job uses. Without the catalog the
+  // model choices are missing. Either way the controls are withheld rather than shown wrong.
+  const choicesError = runnersError ?? catalogError
 
   return (
     <SettingsSection
@@ -54,9 +58,20 @@ export function ManagerPanel() {
         <div aria-label="Loading background jobs" className="skeleton my-3 h-[58px] w-full" />
       ) : (
         <>
-          {jobs.data.map((job) => (
-            <JobRow key={job.key} job={job} runners={runners} catalog={catalog} onSave={save} />
-          ))}
+          {choicesError ? (
+            <p className="py-4 text-xs" style={{ color: 'var(--amber)' }} role="alert">
+              {readableApiError(
+                choicesError,
+                runnersError
+                  ? "Could not read this project's runners, so the jobs' choices cannot be shown."
+                  : "Could not read the model catalog, so the jobs' choices cannot be shown.",
+              )}
+            </p>
+          ) : (
+            jobs.data.map((job) => (
+              <JobRow key={job.key} job={job} runners={runners} catalog={catalog} onSave={save} />
+            ))
+          )}
           {update.error && (
             <p className="py-2 text-xs" style={{ color: 'var(--amber)' }} role="alert">
               {readableApiError(update.error, 'Could not save that change.')}

@@ -142,6 +142,18 @@ describe('Environment > Manager', () => {
     expect(patches[1].body).toEqual({ model: null })
   })
 
+  it('withholds the job controls when the runners cannot be read, rather than misstate the runner', async () => {
+    manager = (url) => {
+      if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [JOB] } }
+      if (url.includes('/manager/activity')) return { status: 200, body: { firings: [] } }
+      if (url.endsWith('/runners')) return { status: 500, body: { detail: 'boom' } }
+      return undefined
+    }
+    render(<ManagerPanel />, { wrapper })
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.queryByTestId('manager-job-conversation-titles-runner')).toBeNull()
+  })
+
   it('says when nothing has fired yet', async () => {
     manager = (url) => {
       if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [{ ...JOB, enabled: false }] } }
