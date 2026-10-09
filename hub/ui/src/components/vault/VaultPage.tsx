@@ -37,6 +37,8 @@ import { hubDate } from '@/lib/hubTime'
  */
 const WATCH_MS = 3 * 60 * 1000
 const WATCH_EVERY_MS = 3000
+// A cited line, and the fact it is cited for: the same tint, so the eye pairs them.
+const CITED = 'color-mix(in srgb, var(--blue) 16%, transparent)'
 
 export function VaultPage() {
   const [watching, setWatching] = useState(0)
@@ -296,7 +298,7 @@ function FactList({
             data-testid={`vault-fact-${fact.id}`}
             className="flex items-start justify-between gap-3 rounded-md px-3 py-2 text-sm"
             style={{
-              background: fact.id === citing ? 'var(--row-selected)' : 'var(--surface-2)',
+              background: fact.id === citing ? CITED : 'var(--surface-2)',
               border: '1px solid var(--border)',
             }}
           >
@@ -314,7 +316,7 @@ function FactList({
                 type="button"
                 data-testid={`vault-fact-link-${fact.id}`}
                 className="shrink-0 text-xs underline"
-                style={{ color: 'var(--accent)' }}
+                style={{ color: 'var(--blue)' }}
                 onClick={() => onCite(fact.id)}
               >
                 Where it says so
@@ -355,7 +357,7 @@ function SourceText({ text, ranges }: { text: string; ranges: ReadonlyArray<read
             className="px-4"
             style={
               lit
-                ? { background: 'var(--row-selected)', boxShadow: 'inset 3px 0 0 var(--accent)' }
+                ? { background: CITED, boxShadow: 'inset 3px 0 0 var(--blue)' }
                 : undefined
             }
           >
