@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "project-steps-drive",
-    "next_action": "project-steps-drive: the slice is built and d1011 passes 13/13 (iteration 12, artefacts testbed/drive1011-project-steps/051402). Close it out: (1) d1011 covers FR-1 only at check 1 and has no broken-file case, so add two checks to scripts/drive/d1011_project_steps.py (or a short d1011b script) and run them green on a scratch Hub (own port, fresh db, haiku only, no agent turn needed): a project with no spec/journey.json answers the seven built-ins with no diagnostics and its briefing preview is the built-in duty (FR-1); a spec/journey.json that is not JSON gives a journey_file_invalid diagnostic on GET and the built-in duty in the preview (FR-7). (2) append the METRICS row to spec-queue/METRICS.md for project-steps (tier 1; spec iteration 7, build iterations 8-12, drive; which stage caught each defect: F561 and the d1011 model-dependence by driving, the surface-ceiling ratchet and the request-strictness guard by the Hub suite). (3) Hub tasks task-09f97da0049e, task-847b1c1b7810, task-2800a1609906, task-80a919c0cc4c stay open (do not close them). (4) log the evidence and mark the queue item done. Then next_action is approval-warnings-spec.",
+    "current": "approval-warnings-spec",
+    "next_action": "approval-warnings-spec: author the approval-warnings slice change document on trial Hub :8010 (proj-d85a82bf4216) per APPROVALS 2026-10-09 authorisation 1; model on spdoc-06fd85087a9f and on spec/changes/a-project-orders-its-own-spec-steps/; slice 'approval-warnings' from roadmap a-spec-is-written-one-step-at-a-time-roadmap; propose+approve; commit the file. Hub tasks of project-steps stay open.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -81,9 +81,9 @@
         },
         {
             "id": "project-steps-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive project-steps on a scratch Hub; log evidence + METRICS row",
-            "detail": "Own port, fresh db, haiku turns only."
+            "detail": "done 2026-10-09 iteration 13: d1011 13/13, d1011b fallback (FR-1, FR-7) 4/4 on scratch :8099; METRICS row added."
         },
         {
             "id": "approval-warnings-spec",
