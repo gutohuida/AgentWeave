@@ -2314,3 +2314,34 @@ disappears is indistinguishable from one that was forgotten.
 - **Python-in-heredoc patches can turn a literal `\n` into a real newline** in the patched file (broke d1013 once),
   and a Bash heredoc containing an unbalanced quote fails to parse outright. For multi-line text use the Write/Edit
   tools.
+
+### 2026-10-09 (midday session, handoff 0185)
+
+- **A second APPROVALS section on the same date is a trap for the night's compose.** Compose reads the
+  newest `## <date>` section only, and only if its date is the date the window armed. A window armed by hand
+  after midnight (00:30 on 10-09) and the next automatic one (22:55 on 10-09) share a date, so the old
+  section's `ORDER:` would be re-queued. Fix used: put the new section on top, and relabel the old heading
+  `## 2026-10-09 (early) -- ...; history`. `backlog_page.newest_section` takes the first section, so the
+  label is harmless to it. (Confirmed 2026-10-09.)
+- **`arm-cycle.ps1` reuses a merged cycle branch of the same date at its old tip.** It names the branch
+  `autonomous/<today>-daily`. If that branch exists (even merged), it checks it out as-is, so the night
+  starts behind master. After a same-day merge, fast-forward it first:
+  `git branch -f autonomous/<date>-daily master && git push origin autonomous/<date>-daily`. Check with
+  `arm-cycle.ps1 -Window night -DryRun`. (Confirmed 2026-10-09.)
+- **The fold route's `into` is a capability *path*** (`spec/capabilities/<name>/spec.json`), not its name. A
+  name gets `400 path must begin with 'spec/'` and writes nothing. `close_change.py --fold-change` now maps
+  names to paths.
+- **`GET /project/spec?path=` answers JSON `{"path", "content"}`**, not the page. Compare `content`.
+- **The embedded payload's script type is `application/agentweave-spec+json`.** In a regex, escape the `+`.
+- **`POST /project/spec/evidence` refuses a second piece for the same requirement + task + commit (409,
+  duplicate).** A close-out table with two tuples for one requirement on one task keeps only the first.
+  Re-running `close_change.py` on a closed change is harmless: everything 409s.
+- **A capability cannot be written outside a fold** (`write_document_content` refuses it). A spec-only edit
+  to a capability is a small change document with `replaces`, approved, then folded.
+- **`POST /projects/create` takes a full path, and `create_new` creates exactly one new directory** under an
+  existing canonical parent (`project_lifecycle.py:144-157`). Before calling a name rule "UI-only", read the
+  route's service.
+- **The PowerShell `Start-Process` launch of `:8010` from `hub/`** (with `$env:DATABASE_URL` set first) logged
+  the trial database path and pid. Stopping the old instance meant killing both the `py.exe` launcher and its
+  `python.exe` child. The old instance's background launcher then reported "failed" in this session (exit
+  127). That is expected, not a problem.
