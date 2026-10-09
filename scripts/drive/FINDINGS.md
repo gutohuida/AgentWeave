@@ -35218,3 +35218,57 @@ the `explore_closed` view field together with those calls (a mechanical sweep), 
 **Status:** open 2026-10-09. Found by driving (tester-amends d1013 run 2, artefacts `testbed/drive1013-tester-amends/093412`).
 
 A Haiku test turn in a flow (tess, reviewing task `usage`) tried `update_task` to give its verdict and got 409 (the builder's evidence was still `awaiting`; tess has no `can_accept_evidence`). It then called `ask_user` and polled `GET /questions/{id}` for about five minutes until the turn ended; the task stayed `under_review` with no verdict, and the flow had nothing else to do. Hub log lines 165-183 of that run. The review briefing names the evidence gate (`review_turn.verdict_evidence_sentence`) but a reviewer that cannot decide the evidence has no way to end its turn usefully besides a question nobody in a flow is watching. Not caused by tester-amends; the drive avoids it by accepting the evidence as the operator. Worth deciding: should a flow review that cannot pass the gate set `revision_needed`/leave a note and end, rather than ask?
+
+## F564 (C) -- deleting a task deletes its divergence records, which the model says are never deleted
+
+**Status:** open 2026-10-09. Found by reading code (overhaul decision `overhaul-task-delete-divergence`, operator 2026-10-09).
+
+`hub/hub/deletion.py:63` cascades `("run_divergences", "task_id", DELETE)`, while `RunDivergence`'s own docstring (`hub/hub/db/models.py:878-890`) says nothing is deleted, so "how often does this agent drop its work?" can still be asked. Runs survive a task delete with the pointer cleared. **Decided:** keep divergence rows on task delete with `task_id` cleared, as runs are; the deletion guard test's column list changes with it.
+
+## F565 (C) -- the Hub's half of the single-segment project-name rule is untested
+
+**Status:** open 2026-10-09. Found by reading code (overhaul decision `overhaul-create-name-check`, operator 2026-10-09); the overhaul's "UI-only" was imprecise.
+
+The Create project dialog refuses a name that is empty, holds a path separator or is a traversal segment (`local-project-workspace` FR-43, `projectNameProblem`). `POST /projects/create` (operator credential only) takes the joined path, and `ProjectLifecycleService.create_new` (`hub/hub/project_lifecycle.py:144-157`) already refuses a relative path or an existing target, canonicalises an existing parent and creates exactly one directory with a non-recursive `mkdir`, so a nested or traversing name cannot create more than one level. Nothing tests that from the route. **Decided (as enforce on the Hub):** pin it with route tests (a `..` final segment, a missing parent, a nested `a/b`), each refused with the parent left unchanged; change code only if one of them is not refused.
+
+## F566 (C) -- the rule that a refusal fits every surface that records it was dropped with no test
+
+**Status:** open 2026-10-09. Found by reading the overhaul (decision `overhaul-refusal-length`, operator 2026-10-09).
+
+`task-lifecycle-governance` dropped "the refusal SHALL keep its remedy whole wherever it is recorded, so it SHALL fit the shortest surface that records it at the longest task identifier and agent name the Hub accepts" (from `a-refusal-names-a-remedy-that-works`, 2026-09-16; frozen text at `openspec/specs/task-lifecycle-governance/spec.md:366-367`) because no test named it. **Decided:** restore it, with a test that builds the review-reassignment refusal at the maximum task id (64) and agent name (32) and checks every surface that records it (each stored column or event payload and its length limit) holds the remedy whole.
+
+## F567 (C) -- a failed link of a shared dependency directory into an agent's checkout is only logged
+
+**Status:** open 2026-10-09. Found by reading the overhaul (decision `overhaul-symlink-failure`, operator 2026-10-09; `workspace-isolation` limits line).
+
+Expensive shared dependency directories (`node_modules`, a venv) are linked into an agent's worktree rather than rebuilt (`workspace-isolation` FR-6). When the link fails the Hub logs it and goes on, so the agent works in a checkout without its dependencies and its builds and tests fail as if by its own fault. **Decided:** show it to the operator on the run and the agent, with the reason and the remedy.
+
+## F568 (C) -- two context routes have no caller
+
+**Status:** open 2026-10-09. Found by reading code (overhaul decision `overhaul-unused-context-routes`, operator 2026-10-09).
+
+`GET /agents/context?charter=` (`hub/hub/api/v1/agents.py:3145`, superseded by `get_agent_context`, which its own hint names) and `POST /agents/{name}/context-usage` (`:3390`; the Hub records usage itself at `api/v1/agent_trigger.py:2958` and `:3903`) have no in-repo callers. **Decided:** retire both routes and their tests; `record_context_usage` stays.
+
+## F569 (C) -- `checkpoint_access.participants()` is called only from tests
+
+**Status:** open 2026-10-09. Found by reading code (overhaul decision `overhaul-participants`, operator 2026-10-09).
+
+`hub/hub/checkpoint_access.py:242` derives which agents touched a conversation's work; nothing in the product calls it since the peer-checkpoint restriction it served was removed (migration 0111). **Decided:** delete it and its tests.
+
+## F570 (C) -- a loop's history does not record its creation or what was added to its queue
+
+**Status:** open 2026-10-09. Found by the spec overhaul (decision `overhaul-loop-history`, operator 2026-10-09).
+
+A loop's own history records edits, control changes, stops, archiving, adoption and stalls, but not its creation (who made it, when) nor queue additions (who added which task). **Decided:** record both; ordinary firings stay in the job's run history only. Tier 1 (a short change: what each entry carries, where it shows).
+
+## F571 (C) -- a hand-made task's dependencies can be declared only through a REST route
+
+**Status:** open 2026-10-09. Found by the spec overhaul (decision `overhaul-dependency-ui`, operator 2026-10-09; the hint half is F552).
+
+Since F36 a hand-made task can carry dependencies, but only `POST` on the task-dependency route sets them: no control in the app and no MCP tool field. **Decided:** a "depends on" picker in the task drawer, and a `depends_on` field on `create_task` (both agent renderings). Tier 1.
+
+## F572 (C) -- the conversation has no collapsing thinking section and no way to hide diagnostics
+
+**Status:** open 2026-10-09. Found by the spec overhaul (decision `overhaul-thinking-ui`, operator 2026-10-09).
+
+Specified earlier and never built (the specs now say so): a live thinking section that is open while the agent reasons and collapses when its answer arrives, and a control that hides diagnostic lines in the conversation. **Decided:** build both, as one small UI change in `AgentTimeline` (not the deleted `SharedStreamRenderer`). Tier 1.

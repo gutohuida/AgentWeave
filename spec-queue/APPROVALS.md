@@ -19,6 +19,118 @@ Newest day first. Days below the newest are history and are not read.
 
 ## 2026-10-09
 
+**For the night window armed 2026-10-09 22:55 (23:00-07:00).** Written ~12:30 in an interactive
+session. The section below this one, also dated 2026-10-09, was the 00:30 hand-armed window: all of
+it is built, merged to master and closed (`c420b0a`). It is history; do not re-queue it.
+
+Operator (12:25): "Let's leave those fixes to the night window... prepare the fixes to run at
+night", and on scope: "build the most that it can, include everything, if something doesn't fit it
+will be done in the next window." The work is the 26 decisions recorded DECIDED 2026-10-09 in
+`spec-queue/DECISIONS.md` (section "Spec overhaul 2026-10-08", plus `F557-agent-budget`). Each item
+below names its decision; read the decision row before building, it is the spec for a Tier 0 item.
+
+APPROVED-FIXES: F552, F553, F568, F569, F558, F564, F565, F566, F543, F556, F541, F540, F567
+
+ORDER: f552-impl, f553-impl, f568-impl, f569-impl, f558-impl, f564-impl, f565-impl, f566-impl, f543-impl, f556-impl, f541-impl, f540-impl, f567-impl, header-rules-spec, codex-label-spec, loop-history-spec, loop-history-impl, loop-history-drive, task-depends-on-spec, task-depends-on-impl, task-depends-on-drive, exploring-prose-spec, exploring-prose-impl, exploring-prose-drive, route-shadow-names-spec, route-shadow-names-impl, route-shadow-names-drive, thinking-ui-spec, thinking-ui-impl, thinking-ui-drive, run-cap-spec, run-cap-drive-first, run-cap-impl, run-cap-drive
+
+Give `exploring-prose-impl` and `run-cap-impl` `"model": "opus"`. Split an `-impl` by the change's
+own tasks when one firing cannot finish it (`<id>-t<n>-impl`). Whatever is not reached carries to
+the next window: stop at a green commit with the queue position recorded.
+
+**What each item is** (decision id in brackets):
+
+- `f552-impl` (overhaul-dependency-ui, hint half): correct every stale sentence F552 lists, including
+  the dependency board's "can never have a dependency".
+- `f553-impl` (overhaul-dead-renderers, overhaul-model-command): delete `SharedStreamRenderer.tsx`,
+  `streamModel.ts`, `AgentActivityTab.tsx` and their tests; make `/model` open the composer's existing
+  model picker. F553's other items (`parse_opencode_line`, `panelTabsStore.reconcile`) were not
+  decided: leave them and say so in F553's status.
+- `f568-impl`, `f569-impl`: retire the two context routes; delete `participants()`. Tests with them.
+- `f558-impl` (overhaul-evidence-retention): remove the route, the request schema, every read and
+  write and the policy constant. **Leave the `projects.evidence_retention` column in place with a
+  comment saying it is unused**: dropping it is a migration, and a migration is not Tier 0.
+- `f564-impl`: task delete keeps `run_divergences` rows with `task_id` cleared; update the deletion
+  reference-coverage guard.
+- `f565-impl`: route tests only, unless one fails (F565 says what).
+- `f566-impl`: restore the refusal-fits rule as a test (F566 says how), and as a requirement through
+  a fold (authorisation 2 below) once the test is green.
+- `f543-impl`: move the loop/flow rules out of `mcp_server.py` into the shared route so
+  `POST /agent-actions/jobs` refuses the same; one test per rule over the HTTP path.
+- `f556-impl`: "creator" means the agent the job names in the outstanding-request check
+  (`scheduler.py:487-493`); a test with an operator-created loop.
+- `f541-impl`: an agent's threshold is checked against its own model's window; a project threshold
+  that cannot fire for some agent is a warning on the settings response, not a refusal.
+- `f540-impl`, `f567-impl`: show the failure where the decision says, with a vitest and a drive step.
+- `header-rules-spec` (overhaul-header-rules, F554): keep the CSS; change `hub-workspace-shell`'s
+  `the-project-header-is-not-a-box` and `the-project-view-switcher-is-separated-by-its-plane-alone`
+  to describe the faint rule. Close F554.
+- `codex-label-spec` (overhaul-codex-spec): add "not driven since 2026-08-29 (Codex plan
+  cancelled)" to the rationale of each Codex requirement (sandbox postures, catalog, seeded runner).
+  No code change.
+- `loop-history-*` (F570), `task-depends-on-*` (F571: drawer picker plus `create_task.depends_on` in
+  both tool renderings), `thinking-ui-*` (F572, in `AgentTimeline`): Tier 1.
+- `exploring-prose-*` (overhaul-exploring-interview, F545), Tier 1: an exploring spec turn
+  interviews in prose in its reply and stops. Remove the contradiction at its source: the "reaches
+  nobody / not a way to finish" rule (`api/v1/agents.py`, near line 2358) and any step duty or tool
+  text that tells an exploring-phase step to ask through `ask_user` must not reach an exploring turn;
+  outside exploring nothing changes. Grep the whole tool surface for the opposite instruction
+  (DEAD-ENDS 2026-10-08: a step duty is not the only instruction an agent reads). The drive is a real
+  Haiku exploring turn that asks in prose and ends without calling `ask_user`.
+- `route-shadow-names-*` (overhaul-route-shadow-names, F248), Tier 1: re-author
+  `openspec/changes/a-name-a-caller-chooses-reaches-its-own-resource` as a short app change (its
+  decided shape: a Hub-only refusal at creation of `conflicts`, `settings`, `sessions` for agent names
+  and `board`, `boards` for task ids; **not** added to the shared `RESERVED_AGENT_NAMES`), then archive
+  the openspec copy with `openspec archive a-name-a-caller-chooses-reaches-its-own-resource
+  --skip-specs --yes` and a note naming its successor (CLAUDE.md: moved across, not finished there).
+- `run-cap-*` (F557-agent-budget), **Tier 2. Hazard: a migration that `:8000` runs on its real data
+  at the operator's next restart.** The agent budget becomes a cap on concurrent runs per project:
+  the scheduler starts at most N runs at once, further runs wait in the queue, and the
+  `request_agent` agent-count check is removed. Off (null) for existing projects, 3 for new ones: a
+  migration makes `projects.agent_budget` nullable and sets every existing row to NULL, with a
+  downgrade that restores NOT NULL default 8; the new-project default is 3. Name the migration and
+  its rollback in the spec's `design`, and follow the migration checklist in `.claude/rules/`. Write
+  `run-cap-drive-first` and record it **failing** before `run-cap-impl`: on a scratch Hub, a project
+  with budget 1 and two agents fired at once shows one run, the second queued, and the second starts
+  when the first ends. The Settings label and help text change with it.
+
+**Operator authorisations for tonight (the same exceptions as the 00:30 window):**
+
+1. **The window writes and approves the `-spec` items** on the trial Hub `:8010`
+   (`proj-d85a82bf4216`), through the operator routes (`scripts/drive/aw.py`, or
+   `scripts/drive/author_change.py`): create `spec/changes/<slug>/spec.json`, PUT the payload, set
+   size and `delivery: {"mode": "none"}`, propose, approve (approve-anyway is fine for gaps; record
+   which were overridden). Model each on `spdoc-61efd5e5f6a4`: Tier in `design`, short decision
+   records, the acceptance drive as task 1, `how_to_check` and `checked_by` on every criterion.
+   Commit the file.
+2. **Spec-only edits to a capability** (`header-rules-spec`, `codex-label-spec`, F566's requirement)
+   are made by a small change document whose requirements carry `replaces` (or are plain additions),
+   approved, then folded (`scripts/drive/close_change.py --fold-change` after adding its entry, or
+   `POST .../documents/{path}/fold`). A capability cannot be written outside a fold. These folds are
+   allowed tonight because they carry no code.
+3. **Design choices with two defensible answers: pick the cleanest and record it** as a decision
+   record in the change's `design` and an `OPEN night-1010-<n>` row in `spec-queue/DECISIONS.md`
+   ("Taken by the night: <choice>; rejected <alt>. Confirm or reverse."), ids in `decisions_for_user`.
+
+**Fences:**
+
+- `:8010` runs master's code as of 2026-10-09 10:33 (pid 4792), and this repo's `spec/` is now
+  spec.json. Use it only to author, approve and (spec-only) fold documents. **Do not restart or
+  migrate it.** Every drive starts its own scratch Hub on its own port and fresh database.
+- Do not close or fold the code-carrying changes' Hub tasks: their commits are not on master until
+  the operator merges. Record evidence in the night log and `spec-queue/METRICS.md`.
+- Tier 0 items follow `day-window.md` D-6: a test that fails at the finding's seam first, the fix,
+  CI's lint set, a drive where the finding names a behaviour, then `**Status:** fixed <sha>`.
+- Real agent turns in drives bind `claude-haiku-4-5`. Never leave a job enabled.
+- Hub suite with `-n auto`. Run `black` after any `ruff --fix` (DEAD-ENDS 2026-10-09).
+- `hub/ui` changes: commit `hub/ui/src` and `hub/hub/static/ui` together
+  (`scripts/refresh_ui_bundle.py`) and run
+  `py -3.11 -m pytest hub/tests/test_surface_ceilings.py hub/tests/test_ui_build_stamp.py -q`
+  before pushing.
+
+---
+
+## 2026-10-09 (early) -- the 00:30 hand-armed window; built, merged and closed; history
+
 Written ~00:20 in an interactive session; the operator is asleep and armed this window by hand at
 00:30 (stop 07:00). Operator: "build this night run to finish both of these or at least most of the
 work possible. The spec for this work is approved." Scope chosen (AskUserQuestion, 00:15): **the
