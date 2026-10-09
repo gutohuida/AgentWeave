@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "specjson-drive",
-    "next_action": "Do queue item specjson-drive: on a scratch Hub (own port, fresh db), run scripts/drive/d1010_spec_json.py once more as the record, then convert a COPY of this repo's spec/ (pre-change .html corpus, rowless in a fresh db) to json and back in a throwaway git project: every file converts, no skipped, GET /spec renders, reverse restores the .html set. Never convert this repo's spec/ or :8010. Log evidence and append a spec-queue/METRICS.md row (Tier 2, spec/build/drive time, which stage caught each defect; see night log iterations 2-5). Do not close Hub tasks.",
+    "current": "project-steps-spec",
+    "next_action": "Author the slice change document on trial Hub :8010 (proj-d85a82bf4216) per APPROVALS 2026-10-09 authorisation 1; model on spdoc-06fd85087a9f; propose+approve; commit the file. Slice 'project-steps' from roadmap a-spec-is-written-one-step-at-a-time-roadmap.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -44,9 +44,9 @@
         },
         {
             "id": "specjson-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive spec-storage green on a scratch Hub; log evidence + METRICS row",
-            "detail": "Do NOT run corpus task, do NOT convert :8010 or this repo's spec/. Do not close Hub tasks."
+            "detail": "done 2026-10-09 iteration 6: d1010 11/11, d1010b real-corpus copy 7/7 (78/78 byte-identical round trip)."
         },
         {
             "id": "project-steps-spec",
