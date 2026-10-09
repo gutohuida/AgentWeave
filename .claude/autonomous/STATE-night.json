@@ -167,15 +167,33 @@
         },
         {
             "id": "reconcile-and-measure-spec",
-            "status": "open",
+            "status": "done",
             "title": "Author reconcile-and-measure slice change document",
-            "detail": "Author the slice change document on trial Hub :8010 (proj-d85a82bf4216) per APPROVALS 2026-10-09 authorisation 1; model on spdoc-06fd85087a9f; propose+approve; commit the file. Slice 'reconcile-and-measure' from roadmap a-spec-is-written-one-step-at-a-time-roadmap."
+            "detail": "done 2026-10-09 morning: spec/changes/a-change-is-reconciled-with-its-code-before-it-is-folded/spec.html (spdoc-61efd5e5f6a4, approved on :8010); 6 FR, 10 criteria, 4 tasks; decisions morning-1009-7..9 OPEN."
         },
         {
-            "id": "reconcile-and-measure-impl",
+            "id": "reconcile-and-measure-t1-impl",
             "status": "open",
-            "title": "Build reconcile-and-measure slice against spec.json storage",
-            "detail": "Only if its -spec is approved. Split by the change's tasks (<id>-t<n>-impl) if one firing cannot finish."
+            "title": "reconcile drive-first: scripts/drive/d1014_reconcile.py on :8103, recorded FAILING",
+            "detail": ""
+        },
+        {
+            "id": "reconcile-and-measure-t2-impl",
+            "status": "open",
+            "title": "reconcile-and-measure reconcile: tool, ask route, fold_state.reconcile",
+            "detail": "Failing tests first."
+        },
+        {
+            "id": "reconcile-and-measure-t3-impl",
+            "status": "open",
+            "title": "reconcile-and-measure defects: derived list, operator record, report",
+            "detail": "Failing tests first."
+        },
+        {
+            "id": "reconcile-and-measure-t4-impl",
+            "status": "open",
+            "title": "reconcile-and-measure page: fold dialog reconcile section, defects report, bundle",
+            "detail": "Failing tests first."
         },
         {
             "id": "reconcile-and-measure-drive",
@@ -198,7 +216,10 @@
         "morning-1009-3",
         "morning-1009-4",
         "morning-1009-5",
-        "morning-1009-6"
+        "morning-1009-6",
+        "morning-1009-7",
+        "morning-1009-8",
+        "morning-1009-9"
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",

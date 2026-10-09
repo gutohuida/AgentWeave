@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A change is reconciled with its code before it is folded, and each defect names the step that caught it</title>
+<meta name="aw-spec-kind" content="change-spec">
+<meta name="aw-spec-status" content="approved">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>A change is reconciled with its code before it is folded, and each defect names the step that caught it</h1>
+<p class="aw-meta"><span class="aw-chip">change-spec</span><span class="aw-chip aw-chip-phase-done">approved</span><span class="aw-chip">sketch</span></p>
+<p class="aw-slice-of">Slice <code>reconcile-and-measure</code> (A change is reconciled with its code before it is folded, and each defect names the step that caught it) of the roadmap <em>A spec is written one step at a time, and a tester keeps it true</em> (<code>spec/changes/a-spec-is-written-one-step-at-a-time-roadmap/spec.html</code>)</p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">6</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">6</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">10</span> criteria<span class="aw-summary-sep">·</span><span class="aw-count">4</span> tasks</p>
+<section id="summary"><h2>Summary</h2><p>Before a finished change is folded, an agent reconciles it with the code and records each gap as missing, partial, contradicts or unrequested; the fold shows that result. Every defect the Hub already knows about (a tester&#x27;s added task or cannot-satisfy, a review that sent a task back, a reconcile gap, or one the operator records) names the step that caught it, and the project reports them per change, so the journey can be tuned from data. Roadmap slice reconcile-and-measure.</p></section><section id="problem"><h2>Problem</h2><p>Fold copies a change&#x27;s requirements into a capability with no comparison against the code (spec_service.fold, hub/hub/spec_service.py:997-1051; fold_state is computed per read, api/v1/spec.py:497-513), so a capability can state behaviour that was never built, and code nobody asked for is never named. The Hub holds no defect record and nothing says which step caught a problem: a review&#x27;s send-back reason is free text in Task.notes (db/models.py:705), and the only ledger of where defects were caught is a hand-kept spec-queue/METRICS.md. The research behind the roadmap finds no tool that measures this, and Spec Kit&#x27;s converge classifies code-vs-spec gaps as missing, partial, contradicts or unrequested (testbed/research/reports/Spec driven development with agents.md).</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>An agent tool to record a reconcile result for an approved change: its gaps, each classed missing, partial, contradicts or unrequested, with a place and a summary</li><li>An operator route and button that ask an agent to reconcile a change, with the Hub&#x27;s reconcile brief</li><li>The fold dialog shows the latest reconcile result, or says the change was not reconciled</li><li>A per-change defect list derived from what the Hub already records, each naming the step that caught it, plus defects the operator records by hand</li><li>A project report of defects per change by step, on the spec page</li></ul><h3>Non-goals</h3><ul><li>Refusing a fold that was not reconciled: approvals and folds are the operator&#x27;s, warn do not gate (operator, 2026-10-08)</li><li>The Hub comparing code with the spec itself: an agent reads both and records what it found</li><li>Fixing the gaps a reconcile finds: they are recorded; the operator decides</li><li>Moving METRICS.md into the Hub: the report reads the Hub&#x27;s own records</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 6</span><p><span class="aw-modal aw-modal-must">MUST</span> An agent run MUST be able to record a reconcile result for an approved change document: a summary and a list of gaps, each with a class of missing, partial, contradicts or unrequested, a place and a summary, naming one of the document&#x27;s requirements unless it is unrequested; the result MUST be recorded with its author and run, and a result with no gaps MUST be accepted.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Spec Kit&#x27;s converge classes (research); an empty result says the change was reconciled and nothing was found.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 6</span><p><span class="aw-modal aw-modal-must">MUST</span> The operator MUST be able to ask a named agent to reconcile an approved change; the Hub MUST start that agent&#x27;s turn with a brief that says to read the document and the code, class each gap, record the result with record_reconcile and change nothing.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 6</span><p><span class="aw-modal aw-modal-must">MUST</span> The document&#x27;s fold state MUST carry its latest reconcile result (author, when, the count of each class and the gaps), or say it was not reconciled, and the fold dialog MUST show it; a fold MUST NOT be refused for an absent or non-empty result.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Warn, do not gate (operator, 2026-10-08).</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 6</span><p><span class="aw-modal aw-modal-must">MUST</span> A change&#x27;s defects MUST be listed from what the Hub records, each with the step that caught it: a tester&#x27;s add_task amendment (test), a cannot_satisfy report (build when the reporting run was working a task, else test), a transition of one of its tasks to revision_needed (review), a missing, partial or contradicts gap in its latest reconcile result (reconcile), and a defect the operator records with a step of their choosing.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Each defect records which step caught it, so the journey can be tuned from data (roadmap slice).</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 6</span><p><span class="aw-modal aw-modal-must">MUST</span> The project MUST report its defects per change document, each change with its defects and a count per step, through a route and a section on the spec page.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 6</span><p><span class="aw-modal aw-modal-must">MUST</span> The operator MUST be able to record a defect against a change with a summary and the step that caught it: a step of the project&#x27;s journey, or build, review, test, reconcile or after-fold.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A defect found after fold, or by the operator, is otherwise invisible to the report.</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>an approved change and a running agent run</td><td>it records gaps with an unknown class, a missing gap naming no requirement, and then a valid result with no gaps</td><td>the first two are refused with 422 naming the field and the third is recorded with the run&#x27;s agent and id</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>an exploring change</td><td>a run records a reconcile result</td><td>it is refused with 409</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a scratch Hub on :8103 with a fresh database, a project whose app.py serves /ping but not /health and also serves an unrequested /debug route, one Haiku agent, and an approved change document with requirements for /ping and /health whose one task is approved (scripts/drive/d1014_reconcile.py)</td><td>the operator asks the agent to reconcile the change, the drive records a review send-back on a second task and an operator defect, and in Chromium the fold dialog is opened and the spec page&#x27;s defects section read</td><td>the turn records a reconcile result whose gaps include missing for the /health requirement and unrequested naming /debug; GET /spec&#x27;s fold_state carries it; the defects report lists the change with a reconcile defect, a review defect and the operator&#x27;s defect, each under its step; the fold dialog shows the result and the spec page shows the counts. Fails on today&#x27;s Hub at the first check (no reconcile route).</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>an approved change</td><td>the operator asks agent a to reconcile it</td><td>a turn for a is queued whose message names the document, the four classes and record_reconcile</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>an approved change with two reconcile results recorded</td><td>GET /spec is read, and then the change is folded</td><td>fold_state.reconcile is the second result with its counts, and the fold succeeds; a change never reconciled reads reconcile state none</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a fold dialog for a reconciled change, and one for a change not reconciled</td><td>each renders</td><td>the first shows the counts per class and the gaps; the second says it was not reconciled and offers Ask to reconcile</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>a change with a tester add_task amendment, a builder&#x27;s cannot_satisfy, a task sent back to revision_needed and a reconcile result with one missing and one unrequested gap</td><td>its defects are listed</td><td>they are test, build, review and reconcile, one each, and the unrequested gap is not a defect</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>two changes with defects</td><td>GET /project/spec/defects is read</td><td>each change is listed with its defects and its count per step</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>the operator&#x27;s own project after a few changes</td><td>they read the defects section</td><td>they can tell which step catches most defects per change</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td>a change</td><td>the operator records a defect caught after-fold, and one with an unknown step</td><td>the first is listed under after-fold and the second is refused with 422 naming the step</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>Tier 1: two agent/operator routes, one tool, a derived report and two UI sections. No migration: a reconcile result and an operator defect are spec-document events (kind free, detail JSON, hub/hub/db/models.py:2128-2167); everything else in the report is read from records the Hub already keeps. No Hub-restart hazard.</p><p>D1. The reconcile result is an agent&#x27;s record, made by a turn the operator asks for; the Hub does not compare code with the spec itself. Rejected: a Hub-side comparison (drift detection fingerprints files, it cannot read meaning) and a turn the flow starts on its own when every task is decided (a scheduler change for a step the operator triggers once per change). (morning-1009-7)
+D2. Defects are derived from existing records rather than stored as rows: an add_task amendment, a cannot_satisfy, a send-back to revision_needed, and a missing/partial/contradicts reconcile gap each already are one; only the operator&#x27;s own defect is a new event. Rejected: a defect table written at each source (a migration plus four writers that could disagree with their source). (morning-1009-8)
+D3. An unrequested gap is reported in the reconcile result but is not a defect: code nobody asked for is a question for the operator (fold it, or remove it), not a failure of a step. (morning-1009-9)
+D4. Steps a defect can be caught at: the project&#x27;s journey steps, then build, review, test, reconcile and after-fold. A review send-back counts once per transition to revision_needed.
+D5. Fold is never refused for reconcile; the dialog says Not reconciled and offers to ask.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/hub/spec_service.py:866-1051: fold_draft and fold; no comparison with the code</li><li>hub/hub/api/v1/spec.py:497-513: _fold_state per read; :372-374 attached to GET /spec</li><li>hub/ui/src/components/spec/FoldIntoCapabilityDialog.tsx: shows requirements and collisions, nothing about the code</li><li>hub/hub/db/models.py:795-875: TaskTransition append-only with to_status; Task.notes holds the reason as free text</li><li>hub/hub/spec_amendments.py: amendment events (add_task, cannot_satisfy) with author and run</li><li>hub/hub/api/v1/agent_trigger.py:1800: POST /agents/trigger starts a turn with a message and spec_document</li><li>hub/hub/spec_journey.py:29-58: the authoring steps; no post-approval step is named anywhere</li></ul><h3 class="aw-limits">Limits</h3><ul><li>How well a Haiku turn classes gaps is model-dependent; the drive checks the two gaps planted to be unambiguous</li></ul></section><section id="tasks"><h2>Tasks</h2><ul class="aw-task-list"><li class="aw-task"><strong>Acceptance drive, failing on today&#x27;s Hub</strong> — scripts/drive/d1014_reconcile.py: scratch Hub on :8103, fresh database, one Haiku reconcile turn, Chromium for the fold dialog and the spec page. The &#x27;drive&#x27; criterion. Must fail at the first check before any build task.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-2">FR-2</a></span></li><li class="aw-task"><strong>Reconcile: the tool, the ask, the fold state</strong> — spec_reconcile: record_reconcile agent route + MCP tool storing a reconcile event; POST /documents/{path}/reconcile starting the agent&#x27;s turn with the Hub&#x27;s brief; fold_state.reconcile. Failing Hub tests first.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-2">FR-2</a><a class="aw-chip-ref" href="#FR-3">FR-3</a></span></li><li class="aw-task"><strong>Defects by step: derived list, operator record, project report</strong> — spec_defects derives a change&#x27;s defects from amendments, task transitions and the latest reconcile; POST /documents/{path}/defects records the operator&#x27;s; GET /project/spec/defects reports per change. Failing Hub tests first.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-4">FR-4</a><a class="aw-chip-ref" href="#FR-5">FR-5</a><a class="aw-chip-ref" href="#FR-6">FR-6</a></span></li><li class="aw-task"><strong>The fold dialog&#x27;s reconcile section and the spec page&#x27;s defects section</strong> — FoldIntoCapabilityDialog shows the reconcile result or Not reconciled with Ask to reconcile; SpecDefectsReport on the spec page. Bundle refreshed with the source.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-3">FR-3</a><a class="aw-chip-ref" href="#FR-5">FR-5</a></span></li></ul></section><section id="delivery"><h2>Delivery</h2><p>No flow. The tasks go on the board and are started by hand.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "change-spec",
+  "title": "A change is reconciled with its code before it is folded, and each defect names the step that caught it",
+  "summary": "Before a finished change is folded, an agent reconciles it with the code and records each gap as missing, partial, contradicts or unrequested; the fold shows that result. Every defect the Hub already knows about (a tester's added task or cannot-satisfy, a review that sent a task back, a reconcile gap, or one the operator records) names the step that caught it, and the project reports them per change, so the journey can be tuned from data. Roadmap slice reconcile-and-measure.",
+  "problem": "Fold copies a change's requirements into a capability with no comparison against the code (spec_service.fold, hub/hub/spec_service.py:997-1051; fold_state is computed per read, api/v1/spec.py:497-513), so a capability can state behaviour that was never built, and code nobody asked for is never named. The Hub holds no defect record and nothing says which step caught a problem: a review's send-back reason is free text in Task.notes (db/models.py:705), and the only ledger of where defects were caught is a hand-kept spec-queue/METRICS.md. The research behind the roadmap finds no tool that measures this, and Spec Kit's converge classifies code-vs-spec gaps as missing, partial, contradicts or unrequested (testbed/research/reports/Spec driven development with agents.md).",
+  "scope": {
+    "in_scope": [
+      "An agent tool to record a reconcile result for an approved change: its gaps, each classed missing, partial, contradicts or unrequested, with a place and a summary",
+      "An operator route and button that ask an agent to reconcile a change, with the Hub's reconcile brief",
+      "The fold dialog shows the latest reconcile result, or says the change was not reconciled",
+      "A per-change defect list derived from what the Hub already records, each naming the step that caught it, plus defects the operator records by hand",
+      "A project report of defects per change by step, on the spec page"
+    ],
+    "non_goals": [
+      "Refusing a fold that was not reconciled: approvals and folds are the operator's, warn do not gate (operator, 2026-10-08)",
+      "The Hub comparing code with the spec itself: an agent reads both and records what it found",
+      "Fixing the gaps a reconcile finds: they are recorded; the operator decides",
+      "Moving METRICS.md into the Hub: the report reads the Hub's own records"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "reconcile-record",
+      "statement": "An agent run MUST be able to record a reconcile result for an approved change document: a summary and a list of gaps, each with a class of missing, partial, contradicts or unrequested, a place and a summary, naming one of the document's requirements unless it is unrequested; the result MUST be recorded with its author and run, and a result with no gaps MUST be accepted.",
+      "modal": "MUST",
+      "rationale": "Spec Kit's converge classes (research); an empty result says the change was reconciled and nothing was found.",
+      "party": null
+    },
+    {
+      "key": "reconcile-ask",
+      "statement": "The operator MUST be able to ask a named agent to reconcile an approved change; the Hub MUST start that agent's turn with a brief that says to read the document and the code, class each gap, record the result with record_reconcile and change nothing.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "fold-shows",
+      "statement": "The document's fold state MUST carry its latest reconcile result (author, when, the count of each class and the gaps), or say it was not reconciled, and the fold dialog MUST show it; a fold MUST NOT be refused for an absent or non-empty result.",
+      "modal": "MUST",
+      "rationale": "Warn, do not gate (operator, 2026-10-08).",
+      "party": null
+    },
+    {
+      "key": "defects-derived",
+      "statement": "A change's defects MUST be listed from what the Hub records, each with the step that caught it: a tester's add_task amendment (test), a cannot_satisfy report (build when the reporting run was working a task, else test), a transition of one of its tasks to revision_needed (review), a missing, partial or contradicts gap in its latest reconcile result (reconcile), and a defect the operator records with a step of their choosing.",
+      "modal": "MUST",
+      "rationale": "Each defect records which step caught it, so the journey can be tuned from data (roadmap slice).",
+      "party": null
+    },
+    {
+      "key": "defects-report",
+      "statement": "The project MUST report its defects per change document, each change with its defects and a count per step, through a route and a section on the spec page.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "operator-defect",
+      "statement": "The operator MUST be able to record a defect against a change with a summary and the step that caught it: a step of the project's journey, or build, review, test, reconcile or after-fold.",
+      "modal": "MUST",
+      "rationale": "A defect found after fold, or by the operator, is otherwise invisible to the report.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "drive",
+      "requirement": "reconcile-ask",
+      "given": "a scratch Hub on :8103 with a fresh database, a project whose app.py serves /ping but not /health and also serves an unrequested /debug route, one Haiku agent, and an approved change document with requirements for /ping and /health whose one task is approved (scripts/drive/d1014_reconcile.py)",
+      "when": "the operator asks the agent to reconcile the change, the drive records a review send-back on a second task and an operator defect, and in Chromium the fold dialog is opened and the spec page's defects section read",
+      "then": "the turn records a reconcile result whose gaps include missing for the /health requirement and unrequested naming /debug; GET /spec's fold_state carries it; the defects report lists the change with a reconcile defect, a review defect and the operator's defect, each under its step; the fold dialog shows the result and the spec page shows the counts. Fails on today's Hub at the first check (no reconcile route).",
+      "how_to_check": "py -3.11 scripts/drive/d1014_reconcile.py",
+      "checked_by": "agent"
+    },
+    {
+      "key": "record-shape",
+      "requirement": "reconcile-record",
+      "given": "an approved change and a running agent run",
+      "when": "it records gaps with an unknown class, a missing gap naming no requirement, and then a valid result with no gaps",
+      "then": "the first two are refused with 422 naming the field and the third is recorded with the run's agent and id",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "not-approved",
+      "requirement": "reconcile-record",
+      "given": "an exploring change",
+      "when": "a run records a reconcile result",
+      "then": "it is refused with 409",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "brief",
+      "requirement": "reconcile-ask",
+      "given": "an approved change",
+      "when": "the operator asks agent a to reconcile it",
+      "then": "a turn for a is queued whose message names the document, the four classes and record_reconcile",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "fold-state",
+      "requirement": "fold-shows",
+      "given": "an approved change with two reconcile results recorded",
+      "when": "GET /spec is read, and then the change is folded",
+      "then": "fold_state.reconcile is the second result with its counts, and the fold succeeds; a change never reconciled reads reconcile state none",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "derived",
+      "requirement": "defects-derived",
+      "given": "a change with a tester add_task amendment, a builder's cannot_satisfy, a task sent back to revision_needed and a reconcile result with one missing and one unrequested gap",
+      "when": "its defects are listed",
+      "then": "they are test, build, review and reconcile, one each, and the unrequested gap is not a defect",
+      "how_to_check": "Hub unit test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "operator-records",
+      "requirement": "operator-defect",
+      "given": "a change",
+      "when": "the operator records a defect caught after-fold, and one with an unknown step",
+      "then": "the first is listed under after-fold and the second is refused with 422 naming the step",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "report",
+      "requirement": "defects-report",
+      "given": "two changes with defects",
+      "when": "GET /project/spec/defects is read",
+      "then": "each change is listed with its defects and its count per step",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "page",
+      "requirement": "fold-shows",
+      "given": "a fold dialog for a reconciled change, and one for a change not reconciled",
+      "when": "each renders",
+      "then": "the first shows the counts per class and the gaps; the second says it was not reconciled and offers Ask to reconcile",
+      "how_to_check": "vitest",
+      "checked_by": "agent"
+    },
+    {
+      "key": "reads-well",
+      "requirement": "defects-report",
+      "given": "the operator's own project after a few changes",
+      "when": "they read the defects section",
+      "then": "they can tell which step catches most defects per change",
+      "how_to_check": "operator reads the spec page",
+      "checked_by": "operator"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "drive-first",
+      "title": "Acceptance drive, failing on today's Hub",
+      "description": "scripts/drive/d1014_reconcile.py: scratch Hub on :8103, fresh database, one Haiku reconcile turn, Chromium for the fold dialog and the spec page. The 'drive' criterion. Must fail at the first check before any build task.",
+      "requirements": [
+        "reconcile-ask"
+      ],
+      "depends_on": [],
+      "files": [
+        "scripts/drive/d1014_reconcile.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "reconcile",
+      "title": "Reconcile: the tool, the ask, the fold state",
+      "description": "spec_reconcile: record_reconcile agent route + MCP tool storing a reconcile event; POST /documents/{path}/reconcile starting the agent's turn with the Hub's brief; fold_state.reconcile. Failing Hub tests first.",
+      "requirements": [
+        "reconcile-record",
+        "reconcile-ask",
+        "fold-shows"
+      ],
+      "depends_on": [
+        "drive-first"
+      ],
+      "files": [
+        "hub/hub/spec_reconcile.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/mcp_server.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "defects",
+      "title": "Defects by step: derived list, operator record, project report",
+      "description": "spec_defects derives a change's defects from amendments, task transitions and the latest reconcile; POST /documents/{path}/defects records the operator's; GET /project/spec/defects reports per change. Failing Hub tests first.",
+      "requirements": [
+        "defects-derived",
+        "defects-report",
+        "operator-defect"
+      ],
+      "depends_on": [
+        "drive-first"
+      ],
+      "files": [
+        "hub/hub/spec_defects.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "page",
+      "title": "The fold dialog's reconcile section and the spec page's defects section",
+      "description": "FoldIntoCapabilityDialog shows the reconcile result or Not reconciled with Ask to reconcile; SpecDefectsReport on the spec page. Bundle refreshed with the source.",
+      "requirements": [
+        "fold-shows",
+        "defects-report"
+      ],
+      "depends_on": [
+        "drive-first"
+      ],
+      "files": [
+        "hub/ui/src/components/spec",
+        "hub/ui/src/api/spec.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "reviewer": null
+    }
+  ],
+  "algorithms": [],
+  "design": "Tier 1: two agent/operator routes, one tool, a derived report and two UI sections. No migration: a reconcile result and an operator defect are spec-document events (kind free, detail JSON, hub/hub/db/models.py:2128-2167); everything else in the report is read from records the Hub already keeps. No Hub-restart hazard.\n\nD1. The reconcile result is an agent's record, made by a turn the operator asks for; the Hub does not compare code with the spec itself. Rejected: a Hub-side comparison (drift detection fingerprints files, it cannot read meaning) and a turn the flow starts on its own when every task is decided (a scheduler change for a step the operator triggers once per change). (morning-1009-7)\nD2. Defects are derived from existing records rather than stored as rows: an add_task amendment, a cannot_satisfy, a send-back to revision_needed, and a missing/partial/contradicts reconcile gap each already are one; only the operator's own defect is a new event. Rejected: a defect table written at each source (a migration plus four writers that could disagree with their source). (morning-1009-8)\nD3. An unrequested gap is reported in the reconcile result but is not a defect: code nobody asked for is a question for the operator (fold it, or remove it), not a failure of a step. (morning-1009-9)\nD4. Steps a defect can be caught at: the project's journey steps, then build, review, test, reconcile and after-fold. A review send-back counts once per transition to revision_needed.\nD5. Fold is never refused for reconcile; the dialog says Not reconciled and offers to ask.",
+  "evidence": {
+    "checked": [
+      "hub/hub/spec_service.py:866-1051: fold_draft and fold; no comparison with the code",
+      "hub/hub/api/v1/spec.py:497-513: _fold_state per read; :372-374 attached to GET /spec",
+      "hub/ui/src/components/spec/FoldIntoCapabilityDialog.tsx: shows requirements and collisions, nothing about the code",
+      "hub/hub/db/models.py:795-875: TaskTransition append-only with to_status; Task.notes holds the reason as free text",
+      "hub/hub/spec_amendments.py: amendment events (add_task, cannot_satisfy) with author and run",
+      "hub/hub/api/v1/agent_trigger.py:1800: POST /agents/trigger starts a turn with a message and spec_document",
+      "hub/hub/spec_journey.py:29-58: the authoring steps; no post-approval step is named anywhere"
+    ],
+    "limits": [
+      "How well a Haiku turn classes gaps is model-dependent; the drive checks the two gaps planted to be unambiguous"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "delivery": {
+    "mode": "none",
+    "agent": null,
+    "reviewer": null,
+    "stop_when_queue_empties": false,
+    "stop_at": null,
+    "cron": "*/5 * * * *"
+  },
+  "roadmap": {
+    "document": "spec/changes/a-spec-is-written-one-step-at-a-time-roadmap/spec.html",
+    "slice": "reconcile-and-measure"
+  },
+  "aw_identity": {
+    "requirements": {
+      "reconcile-record": "FR-1",
+      "reconcile-ask": "FR-2",
+      "fold-shows": "FR-3",
+      "defects-derived": "FR-4",
+      "defects-report": "FR-5",
+      "operator-defect": "FR-6"
+    },
+    "high_water": 6,
+    "retired": {},
+    "digests": {
+      "FR-1": "195ecccf3fc5fa0b810bd31bfa909dbdaceddc483104430fe040454436c3704f",
+      "FR-2": "813e9ba7b7f154fe46540f71e52aded18298709dd2f8f7c89411d6feca6da7d1",
+      "FR-3": "1025555acbcff09fc6ac5cfafdc7fbeb1a383aa3268fddccab0087818cd74fbb",
+      "FR-4": "323877dbceab2c6de70f60964ab2dda5f0942e6941b7be852280d3a834f52491",
+      "FR-5": "80aef5022cd7a3254a0c5ba9d6080a28afa838c5b86bb27fc46a778d68f8ed8c",
+      "FR-6": "7d414dcfe64404c7a0656efd7c503af07fad5fccfe8c0658c6be400d3b5b13fa"
+    }
+  }
+}
+</script>
+</body>
+</html>

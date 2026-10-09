@@ -38,6 +38,9 @@ Recorded as decision records D1-D4 in `spec/changes/a-project-orders-its-own-spe
 - OPEN      morning-1009-4  Taken in the morning session (tester-amends): testing is on by default with no stored field: absent/null tester makes every flow review a test turn, staffed by the reviewer ladder; a name goes before delivery.reviewer; false turns it off; rejected a separate test turn per task and a required field. Confirm or reverse.
 - OPEN      morning-1009-5  Taken in the morning session (tester-amends): amendments name only existing requirements and criteria (no new requirement by amendment; that is a reopen); side findings go to a task outside the flow. Confirm or reverse.
 - OPEN      morning-1009-6  Taken in the morning session (tester-amends): cannot_satisfy is its own tool and an amendment kind that blocks the requirement's verification and the builder's task in progress; rejected using ask_user. Confirm or reverse.
+- OPEN      morning-1009-7  Taken in the morning session (reconcile-and-measure): the reconcile result is an agent's record from a turn the operator asks for (a button on the fold area); rejected a Hub-side code comparison and a reconcile turn the flow starts on its own. Confirm or reverse.
+- OPEN      morning-1009-8  Taken in the morning session (reconcile-and-measure): defects are derived from records the Hub already keeps (add_task amendments, cannot_satisfy, send-backs to revision_needed, reconcile gaps) plus operator-recorded defect events; rejected a defect table with a writer at each source. Confirm or reverse.
+- OPEN      morning-1009-9  Taken in the morning session (reconcile-and-measure): an unrequested gap is reported in the reconcile result but is not a defect (a question for the operator, not a step's failure). Confirm or reverse.
 
 ### Spec overhaul 2026-10-08: product questions the audit could not settle from the code -- interactive
 
