@@ -116,12 +116,110 @@
       "requirement": "a-vault-the-operator-fills-with-text-and-agents-can-map-in-turn",
       "then": "the agent calls vault_map, then vault_read with the transcript's id, and answers 437",
       "when": "drive d1015 asks the agent what refund limit the meeting agreed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8099 with a fresh database, a scratch git repository registered as the project, and a Haiku runner (scripts/drive/d1016_distillation.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1016_distillation.py",
+      "key": "the-manager-distils-vault-sources-into-cited-facts-drive",
+      "requirement": "the-manager-distils-vault-sources-into-cited-facts-fact-cited",
+      "then": "Within three minutes the transcript has at least two facts under knowledge/facts: one about the 30-day return window citing the line that says it, one about the 437-euro refund limit citing the line that says it. The map lists them as kind fact with the transcript in sources. The activity log has a written vault-distillation firing on Haiku. The private note's facts are at the private location only, and their stubs in the repository hold none of the note's text. The third source has no facts and no firing until Distil, and facts after it. The Vault tab shows the transcript's facts, and following the refund fact's link highlights the line with 437. The drive fails on today's Hub at its first check (no vault-distillation job).",
+      "when": "the drive enables vault-distillation on the Haiku runner, uploads a tracked transcript that states two business rules among small talk, then a private rules note, then disables the job, uploads a third source, re-enables it and presses Distil on the third source in the Vault tab"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with no manager rows, and one whose job has a model set and one whose job has none",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_distillation.py",
+      "key": "the-manager-distils-vault-sources-into-cited-facts-job-listed",
+      "requirement": "the-manager-distils-vault-sources-into-cited-fa-distillation-job",
+      "then": "vault-distillation is listed disabled with nothing chosen; the job's model is used when set and the runner's otherwise; with no runner nothing is spawned or recorded",
+      "when": "a test lists the jobs and distils with a fake worker"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a source whose quoted sentence spans two lines, a fake worker answering three facts: one quoting exactly, one quoting with different whitespace, one quoting text not in the source",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_distillation.py",
+      "key": "the-manager-distils-vault-sources-into-cited-fact-quotes-located",
+      "requirement": "the-manager-distils-vault-sources-into-cited-facts-fact-cited",
+      "then": "two fact files are written with the right 1-based line spans, the third is dropped, and the firing's detail says 2 stored, 1 dropped",
+      "when": "the source is distilled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a source of 120,000 characters and a fake worker",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_distillation.py",
+      "key": "the-manager-distils-vault-sources-into-cited-facts-pieces",
+      "requirement": "the-manager-distils-vault-sources-into-cited-pieces-and-firings",
+      "then": "three spawns, each piece at most 50,000 characters and cut at a line break, three firings; the failing spawn is recorded failed and the others written",
+      "when": "the source is distilled, once with every spawn answering, once with the second spawn failing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub test client, the job enabled and then disabled, a fake worker",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_distillation.py",
+      "key": "the-manager-distils-vault-sources-into-cited-f-upload-background",
+      "requirement": "the-manager-distils-vault-sources-into-cited-fa-distil-on-upload",
+      "then": "enabled: 201 and facts after the background task; disabled: 201, no spawn, no firing",
+      "when": "a source is uploaded in each state"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake worker, an unknown id, a disabled job, a job with no runner, a foreign private stub, and a source distilled twice where the second run stores nothing, then a third that stores one fact",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_distillation.py",
+      "key": "the-manager-distils-vault-sources-into-cited-fact-route-refusals",
+      "requirement": "the-manager-distils-vault-sources-into-cited-facts-distil-route",
+      "then": "404, 409, 409, 409 with reasons; the empty second run keeps the first run's facts; the third replaces them",
+      "when": "the distil route is called for each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a private source carrying a canary string, a fake worker quoting it",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_distillation.py",
+      "key": "the-manager-distils-vault-sources-into-cited-facts-private-stub",
+      "requirement": "the-manager-distils-vault-sources-into-cited-facts-private-facts",
+      "then": "the fact record is at the private location; knowledge/facts holds only its stub; no file in the project contains the canary",
+      "when": "it is distilled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a distilled source and a hand-written stub of a foreign private fact",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_vault_distillation.py",
+      "key": "the-manager-distils-vault-sources-into-cited-facts-map-and-read",
+      "requirement": "the-manager-distils-vault-sources-into-cited-facts-facts-in-map",
+      "then": "entries carry kind; the fact lists its source and its claim as opening; the stub is available false with opening null; the read answers the claim and citations",
+      "when": "a test reads the map, the fact through the operator route and through the agent-actions route"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Vault tab rendered against a map with a source and two facts, and a distil route answering 409",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/vaultTab.test.tsx",
+      "key": "the-manager-distils-vault-sources-into-cited-facts-tab-facts",
+      "requirement": "the-manager-distils-vault-sources-into-cited-facts-facts-in-wiki",
+      "then": "both facts are listed under the source; the cited lines are marked highlighted; the 409 reason is shown",
+      "when": "a vitest opens the source, follows a fact's link, and presses Distil"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the drive's screenshots of the Vault tab",
+      "how_to_check": "open testbed/drive1016-distillation/<stamp>/shot_*.png",
+      "key": "the-manager-distils-vault-sources-into-cited-facts-tab-look",
+      "requirement": "the-manager-distils-vault-sources-into-cited-facts-facts-in-wiki",
+      "then": "a source's facts read clearly beside it, and the highlighted lines are easy to find",
+      "when": "the operator looks at them"
     }
   ],
   "algorithms": [],
   "aw_identity": {
     "digests": {
       "FR-1": "8e77cc5af44755559235be747d1bc7e8c2177c9f9414e9c88c93b142bd2c199d",
+      "FR-10": "e479d875b0020d0eb97bb8bdbc47f600a42f4ac997e61f01278863f04d7acfa0",
+      "FR-11": "fab9e6a51d9dac9b9334ae4875e0f4c33117eb771db657f0728080fdf3d206b1",
+      "FR-12": "fe58905bd91f978bf948bc5cb02b844c73752f13fe27b2cc962d63fca70e8e3e",
+      "FR-13": "a3fd47bd17cdb1aea843bf2c4579b90d011d4cba26b64afdde20c56550d37dae",
+      "FR-14": "c4ac641caa69f1c642cb180a507d45a097c6c387849aca2ac129efa7eb1232de",
+      "FR-15": "8273a111fc932d78ac862b477e5b3c5f3006c985c238b90a65e04d87f90bcbda",
+      "FR-16": "b0e68d2de4b66f7944126534bd7bf80229c8de7d030e455bdc6a2c49505c07cc",
+      "FR-17": "c73b406f93319daba165899b256344d480c037ea6adb5d6c2035a7ba7e5169f4",
       "FR-2": "5f32f495c5fedaa3a114574a4d1d226c274061b0ffacbfa2139eedfa57d5b348",
       "FR-3": "e0274a6966c4036d541882b9c664729d8370d1d94cbe147947251de1b927b184",
       "FR-4": "6a4e8d01ffa6b483dc15e52f42bb16db7376dd3dc1c08ea01f5f3f3599cae3d6",
@@ -131,7 +229,7 @@
       "FR-8": "c8aab6cb4927a911090490cc9d2c8c268539b152640846216c4adafd492f317b",
       "FR-9": "dcd141a4a6ed7104aad675231554a940069eb75a84c77422a6b3212cffd4d26e"
     },
-    "high_water": 9,
+    "high_water": 17,
     "requirements": {
       "a-vault-the-operator-fills-with-text-and-a-one-storage-interface": "FR-7",
       "a-vault-the-operator-fills-with-text-and-agen-settings-migration": "FR-8",
@@ -141,7 +239,15 @@
       "a-vault-the-operator-fills-with-text-and-agents-can-r-entry-read": "FR-4",
       "a-vault-the-operator-fills-with-text-and-agents-can-r-map-listed": "FR-3",
       "a-vault-the-operator-fills-with-text-and-agents-can-r-vault-view": "FR-9",
-      "a-vault-the-operator-fills-with-text-and-agents-source-uploaded": "FR-2"
+      "a-vault-the-operator-fills-with-text-and-agents-source-uploaded": "FR-2",
+      "the-manager-distils-vault-sources-into-cited-fa-distil-on-upload": "FR-11",
+      "the-manager-distils-vault-sources-into-cited-fa-distillation-job": "FR-10",
+      "the-manager-distils-vault-sources-into-cited-facts-distil-route": "FR-12",
+      "the-manager-distils-vault-sources-into-cited-facts-fact-cited": "FR-13",
+      "the-manager-distils-vault-sources-into-cited-facts-facts-in-map": "FR-16",
+      "the-manager-distils-vault-sources-into-cited-facts-facts-in-wiki": "FR-17",
+      "the-manager-distils-vault-sources-into-cited-facts-private-facts": "FR-15",
+      "the-manager-distils-vault-sources-into-cited-pieces-and-firings": "FR-14"
     },
     "retired": {}
   },
@@ -223,6 +329,62 @@
       "party": null,
       "rationale": "A committed bundle reaches :8000's app on its next reload, possibly before its server restarts (the same hazard as the manager section).",
       "statement": "The app's project view MUST have a Vault tab. It lists the map's entries, opens an entry's text, uploads a source (name, type, visibility starting at the project default, the text pasted or read from a chosen text file), and shows and changes the two settings, showing the Hub's 400 message when the Hub refuses a setting. Where the Hub answers 404 for the vault routes, the tab MUST say that this Hub has no vault yet, instead of failing."
+    },
+    {
+      "key": "the-manager-distils-vault-sources-into-cited-fa-distillation-job",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D7: each manager job names its runner and model, and a new job is a new registry entry, not a migration (manager.py:44). Unlike titles there is no conversation, so there is no agent whose runner could be borrowed: a job with no runner does not spawn.",
+      "statement": "The manager's job registry MUST include vault-distillation (trigger source_uploaded), listed by GET /manager/jobs and disabled with nothing chosen until the operator enables it. A firing MUST use the job's runner, and the job's model when one is set, else the runner's model. With no runner chosen, or a runner that no longer belongs to the project, the job MUST NOT spawn."
+    },
+    {
+      "key": "the-manager-distils-vault-sources-into-cited-fa-distil-on-upload",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-09: background plus a Distil button. Roadmap D5: the source is in the map the moment it is uploaded; the model only adds to that floor.",
+      "statement": "When POST /vault/sources answers 201 and vault-distillation is enabled with a runner, the Hub MUST distil the new source in the background; the upload's answer MUST NOT wait for any model. When the job is disabled, the upload MUST store the source and spawn nothing."
+    },
+    {
+      "key": "the-manager-distils-vault-sources-into-cited-facts-distil-route",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The Distil button catches up a source uploaded while the job was off, after a failed firing, or when a restart interrupted one (operator, 2026-10-09).",
+      "statement": "POST /api/v1/projects/{id}/vault/sources/{source_id}/distil MUST answer 202 and distil the source in the background. It MUST answer 404 for an unknown source, and 409 with a reason naming what to do when the job is disabled, has no runner, or the source's text is not on this machine. A distillation that stores at least one fact MUST replace the facts previously distilled from that source; one that stores none MUST leave them as they were."
+    },
+    {
+      "key": "the-manager-distils-vault-sources-into-cited-facts-fact-cited",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-09: the model gives the quote and the Hub finds the lines, so a citation is checked against the source rather than trusted. Roadmap D1 and D2: one record per fact, rendered for people and for agents.",
+      "statement": "Each fact MUST be stored as facts/<id>.json (id fct- followed by 12 hex characters) holding id, claim, citations, visibility, created_at and made_by (job and model). Each citation MUST hold source, quote, line_start and line_end. The model MUST supply the quotes; the Hub MUST locate each quote in the source text, exactly or else with runs of whitespace treated as one space, and record the 1-based lines it spans. A fact any of whose quotes is not found MUST NOT be stored."
+    },
+    {
+      "key": "the-manager-distils-vault-sources-into-cited-pieces-and-firings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-09: pieces of 50,000 characters keep a call well inside any model's context (about 12k tokens). Manager D4 and D5: every spawn is one recorded firing, written, empty or failed.",
+      "statement": "A source MUST be read in pieces of at most 50,000 characters, split at line boundaries, one spawn per piece. Each spawn MUST be recorded as one manager_job_fired event with job vault-distillation, subject {\"source\": <id>}, the runner, the model, its outcome (written when it stored at least one fact, empty when it stored none, failed when the spawn failed or its answer did not parse), a detail naming the facts stored and the facts dropped for an unfound quote, and its usage."
+    },
+    {
+      "key": "the-manager-distils-vault-sources-into-cited-facts-private-facts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D3: a tracked fact never cites a private source, and a private entry is listed as a stub naming its holder.",
+      "statement": "A fact distilled from a private source MUST be private: its record written at the effective private location, and only a stub (id, kind, visibility, holder, created_at, sources) written as knowledge/facts/<id>.json, holding no claim and no quote. A tracked fact MUST NOT cite a private source."
+    },
+    {
+      "key": "the-manager-distils-vault-sources-into-cited-facts-facts-in-map",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap D8: agents find entries through the map. The map is built from the files on every read (knowledge-vault), so a new fact is in it with no regeneration step.",
+      "statement": "Every map entry MUST carry kind, source or fact. A fact entry MUST carry sources (the ids it cites), and its opening MUST be its claim, or null when the fact is a stub whose record is not on this machine. GET /vault/entries/<fact id> and vault_read MUST answer the fact with its claim and each citation's source, quote and lines as its content."
+    },
+    {
+      "key": "the-manager-distils-vault-sources-into-cited-facts-facts-in-wiki",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The slice's done criterion: facts show in the wiki beside their sources, each linking to the right place in the transcript.",
+      "statement": "The Vault tab MUST show, on a source, the facts distilled from it, each with its claim and a link to its citation; following the link MUST show the source's text with the cited lines highlighted. A source MUST offer a Distil button, which calls the distil route and shows its refusal reason when it answers 409."
     }
   ],
   "schema_version": 1,

@@ -683,6 +683,14 @@
       "order": 830
     },
     {
+      "path": "spec/changes/the-manager-distils-vault-sources-into-cited-facts/spec.json",
+      "title": "The manager distils vault sources into cited facts",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 880
+    },
+    {
       "path": "spec/changes/the-operator-can-delete-a-document-a-task-or-an-archived-agent/spec.json",
       "title": "The operator can delete a document or a task, and a runner only archived agents hold",
       "kind": "change-spec",
