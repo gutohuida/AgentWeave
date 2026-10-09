@@ -3,17 +3,20 @@
 `a-vault-the-operator-fills-with-text-and-agents-can-read`: the two settings, uploading a text
 source, the map, and reading one entry. The records are files (`hub/hub/vault.py`); agents read the
 same map and entries through `agent_actions.py`, and nothing an agent can call writes here.
+
+`the-manager-distils-vault-sources-into-cited-facts`: an upload is distilled into facts after it
+is answered, when the job is on, and the distil route runs that again for one source.
 """
 
 import asyncio
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import project_workspace, vault
+from ... import distillation, project_workspace, vault
 from ...auth import get_project
 from ...db.engine import get_session
 
@@ -107,6 +110,7 @@ async def put_vault_settings(
 @router.post("/sources", status_code=status.HTTP_201_CREATED)
 async def upload_vault_source(
     body: SourceUpload,
+    background: BackgroundTasks,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
@@ -116,7 +120,7 @@ async def upload_vault_source(
     if visibility is None:
         visibility = (await vault.get_settings(session, project_id))["default_visibility"]
     try:
-        return await asyncio.to_thread(
+        entry = await asyncio.to_thread(
             vault.add_source,
             root,
             private,
@@ -127,6 +131,37 @@ async def upload_vault_source(
         )
     except vault.VaultError as exc:
         raise _refused(exc) from exc
+    # After the answer is sent; a no-op when the job is off or has no runner.
+    background.add_task(
+        distillation.distil_in_background,
+        project_id,
+        entry["id"],
+        trigger=distillation.UPLOADED,
+    )
+    return entry
+
+
+@router.post("/sources/{source_id}/distil", status_code=status.HTTP_202_ACCEPTED)
+async def distil_vault_source(
+    source_id: str,
+    background: BackgroundTasks,
+    project: Tuple[str, str] = Depends(get_project),
+) -> dict:
+    """Distil one source again, in the background: 404 for an unknown source, 409 naming what to
+    do when the job is off, has no runner, or the source's text is on another machine."""
+    try:
+        plan = await distillation.prepare(project[0], source_id)
+    except distillation.CannotDistilError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.reason) from exc
+    background.add_task(_distil_quietly, plan)
+    return {"source": source_id, "queued": True}
+
+
+async def _distil_quietly(plan: distillation.Plan) -> None:
+    try:
+        await distillation.distil(plan, trigger=distillation.REQUESTED)
+    except Exception:  # noqa: BLE001 -- the answer has been sent; nothing can raise into it
+        distillation.logger.warning("vault distillation failed", exc_info=True)
 
 
 @router.get("/map")

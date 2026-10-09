@@ -31,6 +31,7 @@ FIRED_EVENT = "manager_job_fired"
 OUTCOMES = ("written", "empty", "failed")
 
 TITLES = "conversation-titles"
+DISTILLATION = "vault-distillation"
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,15 @@ JOBS = (
             "message. Off: conversations keep the truncated title."
         ),
         trigger="turn_completed",
+    ),
+    JobSpec(
+        key=DISTILLATION,
+        title="Vault distillation",
+        description=(
+            "Reads each new vault source and writes the facts it states, each citing the lines "
+            "it rests on. Needs a runner. Off: sources stay in the vault without facts."
+        ),
+        trigger="source_uploaded",
     ),
 )
 
