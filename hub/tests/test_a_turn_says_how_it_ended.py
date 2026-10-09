@@ -586,9 +586,9 @@ async def test_a_completed_codex_run_gains_its_first_settled_signal(app, auth_he
 # see `timelineRunFacts.test.tsx` for where it went. What did **not** move is the route's own
 # ordering, and these two tests are the assertion that it is what the client is entitled to expect.
 #
-# What the ordering still buys, measured rather than assumed: the only surviving reader of
-# `timeline.events` is `AgentActivityTab`, and it **re-sorts** — ascending, merged with the output
-# lines (`AgentActivityTab.tsx:52`). So reversing the sort would not visibly reorder anything.
+# What the ordering still buys, measured rather than assumed: the last reader that showed
+# `timeline.events` as a list (`AgentActivityTab`, deleted by F553) **re-sorted** it — ascending,
+# merged with the output lines. So reversing the sort would not visibly reorder anything.
 # It would change *which* events come back at all: the merge of three per-source queries is
 # truncated to 50 **after** the sort, so descending is what makes those 50 the newest 50. And
 # because `runs` is looked up from the ids the returned events name, the newest runs would drop

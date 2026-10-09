@@ -7,9 +7,10 @@ import {
   acceptTriggerResult,
   detectComposerTrigger,
   formatMention,
+  replaceTextRange,
   type ComposerTriggerMatch,
 } from '@/lib/composerTrigger'
-import { resolveTriggerResults } from '@/lib/composerTriggerSources'
+import { MODEL_COMMAND, resolveTriggerResults } from '@/lib/composerTriggerSources'
 import { ComposerTriggerMenu, type ComposerTriggerMenuItem } from './ComposerTriggerMenu'
 import { ComposerModelControls } from './ComposerModelControls'
 import { ComposerSpecControl } from './ComposerSpecControl'
@@ -114,6 +115,7 @@ export function Composer({
   const [submitting, setSubmitting] = useState(false)
   const [trigger, setTrigger] = useState<ComposerTriggerMatch | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
+  const [modelPickerRequest, setModelPickerRequest] = useState(0)
   const textRef = useRef(text)
   textRef.current = text
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -141,6 +143,15 @@ export function Composer({
   const acceptActiveResult = () => {
     if (!trigger || menuItems.length === 0) return
     const item = menuItems[Math.min(activeIndex, menuItems.length - 1)]
+    // `/model` is an action, not text: it opens the model picker and leaves nothing in the box.
+    if (trigger.kind === 'slash-command' && item.value === MODEL_COMMAND) {
+      const result = replaceTextRange(text, trigger.rangeStart, trigger.rangeEnd, '')
+      pendingCursorRef.current = result.cursor
+      setText(result.text)
+      setTrigger(null)
+      setModelPickerRequest((n) => n + 1)
+      return
+    }
     const result = acceptTriggerResult(text, trigger, item.value)
     pendingCursorRef.current = result.cursor
     setText(result.text)
@@ -335,6 +346,7 @@ export function Composer({
             runner={runner}
             effectiveModel={modelIsRunners ? effectiveModel : (pendingOverrides.model ?? effectiveModel)}
             modelIsRunners={modelIsRunners}
+            modelPickerRequest={modelPickerRequest}
             effectiveControls={{ ...effectiveControls, ...pendingOverrides }}
             onChangeModel={(modelId) =>
               onPendingOverridesChange({ ...pendingOverrides, model: modelId })

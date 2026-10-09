@@ -31,6 +31,8 @@ interface ComposerModelControlsProps {
    * design D7): every run uses the runner's model, `effectiveModel`, and a run cannot choose
    * another, so it is shown and not offered. Its other controls are the CLI's and stay offered. */
   modelIsRunners?: boolean
+  /** Bumped by the composer when the operator accepts `/model`; opens the model picker. */
+  modelPickerRequest?: number
 }
 
 /** A compact "Label: Value ▾" trigger + popover listbox — the one interaction shape every
@@ -193,6 +195,7 @@ export function ComposerModelControls({
   onChangeModel,
   onChangeControl,
   modelIsRunners = false,
+  modelPickerRequest = 0,
 }: ComposerModelControlsProps) {
   const { data: catalog } = useModelCatalog()
   const providerId = providerForRunner(runner)
@@ -204,7 +207,12 @@ export function ComposerModelControls({
       {modelIsRunners ? (
         <RunnerModel model={effectiveModel} label={providerRunnerModelLabel(catalog, effectiveModel)} />
       ) : (
-        <ModelPicker provider={provider} effectiveModel={effectiveModel} onChangeModel={onChangeModel} />
+        <ModelPicker
+          provider={provider}
+          effectiveModel={effectiveModel}
+          onChangeModel={onChangeModel}
+          openRequest={modelPickerRequest}
+        />
       )}
       {provider.controls
         .filter((control) => control.kind === 'enum')

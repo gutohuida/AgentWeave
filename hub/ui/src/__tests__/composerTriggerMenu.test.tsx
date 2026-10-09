@@ -93,11 +93,11 @@ describe('Composer — trigger menu', () => {
 
   it('Tab accepts the active result without moving focus out of the composer', async () => {
     const { textarea } = renderComposer()
-    await userEvent.type(textarea, '/mod')
+    await userEvent.type(textarea, '@src')
 
     await userEvent.keyboard('{Tab}')
 
-    expect(textarea.value).toBe('/model')
+    expect(textarea.value).toBe('@src/index.ts')
     expect(screen.queryByRole('listbox')).toBeNull()
     expect(document.activeElement).toBe(textarea)
   })

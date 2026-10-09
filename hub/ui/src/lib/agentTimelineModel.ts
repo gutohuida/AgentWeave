@@ -74,8 +74,8 @@ export function groupIntoTurns(entries: TimelineEntry[]): GroupedTimeline {
 }
 
 /** Pairs a tool_use entry with its tool_result (matching call_id within the
- * same turn), mirroring SharedStreamRenderer's pairing so both renderers
- * agree on "completed" vs "failed" vs "awaiting result". */
+ * same turn), so every renderer agrees on "completed" vs "failed" vs
+ * "awaiting result". */
 export function findPairedResult(
   turnEntries: TimelineEntry[],
   useEntry: TimelineEntry,

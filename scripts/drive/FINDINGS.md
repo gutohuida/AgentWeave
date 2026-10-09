@@ -35127,7 +35127,7 @@ is never cleared; requirement identifiers sort as text (`FR-10` before `FR-2`).
 
 ## F553 (C) -- dead UI and parser code, and a built-in command that does nothing
 
-**Status:** open. Filed 2026-10-08 (spec overhaul audit, reading code).
+**Status:** partly fixed 2026-10-09 (Tier 0, night iteration 4; decisions overhaul-dead-renderers, overhaul-model-command). Deleted `SharedStreamRenderer.tsx`, `streamModel.ts`, `AgentActivityTab.tsx` and their tests (`streamRenderer.test.tsx`, the AgentActivityTab case in `timelineEnvelopeUnwrap.test.tsx`; two n11 CLASSIFIED rows for the deleted file). Accepting `/model` in the composer now clears the typed command and opens the composer's model picker (`composerModelCommand.test.tsx`, 3 cases, all failed before). **Left alone, undecided:** `parse_opencode_line` and `panelTabsStore.reconcile` -- the operator did not decide them. Not driven in a browser; rendered vitest covers the real Composer and ModelPicker. Filed 2026-10-08 (spec overhaul audit, reading code).
 `SharedStreamRenderer.tsx`, `streamModel.ts` and `AgentActivityTab.tsx` are mounted nowhere (only tests import them);
 `parse_opencode_line` (`runner_parsing.py:644`) parses for a runner nothing launches; `panelTabsStore.reconcile` has no
 production caller, so dangling file and document tabs are never dropped on load; the composer's only built-in command

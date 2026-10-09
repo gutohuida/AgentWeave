@@ -12,9 +12,12 @@ function skillNameFromPath(path: string): string {
     : relative.replace(/\.md$/, '')
 }
 
+/** Accepting this command opens the composer's model picker instead of inserting text (F553). */
+export const MODEL_COMMAND = 'model'
+
 // The commands the composer itself supports — no backend registry exists (or is
 // needed) for this fixed, code-defined list (design.md Decision 3).
-export const COMPOSER_BUILT_IN_COMMANDS: ComposerTriggerMenuItem[] = [{ value: 'model', label: '/model' }]
+export const COMPOSER_BUILT_IN_COMMANDS: ComposerTriggerMenuItem[] = [{ value: MODEL_COMMAND, label: '/model' }]
 
 /**
  * Resolve a trigger's menu results from the one workspace path listing already

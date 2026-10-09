@@ -42,9 +42,12 @@ interface ModelPickerProps {
   provider: ProviderDescriptor
   effectiveModel: string | null
   onChangeModel: (modelId: string) => void
+  /** A counter the composer bumps each time the operator accepts `/model`: every new value
+   * opens the picker, and zero (the initial value) leaves it closed. */
+  openRequest?: number
 }
 
-export function ModelPicker({ provider, effectiveModel, onChangeModel }: ModelPickerProps) {
+export function ModelPicker({ provider, effectiveModel, onChangeModel, openRequest = 0 }: ModelPickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlighted, setHighlighted] = useState(0)
@@ -56,6 +59,10 @@ export function ModelPicker({ provider, effectiveModel, onChangeModel }: ModelPi
     resolveCatalogModel(provider, effectiveModel) ?? provider.models.find((m) => m.default)
   const currentLabel =
     current && effectiveModel ? catalogModelLabel(current, effectiveModel) : current?.label
+
+  useEffect(() => {
+    if (openRequest > 0) setOpen(true)
+  }, [openRequest])
 
   useEffect(() => {
     if (!open) return

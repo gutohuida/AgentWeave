@@ -2,7 +2,6 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentRunFacts, AgentSummary, AgentTimelineEvent } from '@/api/agents'
 import type { AgentConversation, ChatHistoryResponse } from '@/api/agentChat'
-import { AgentActivityTab } from '@/components/agents/AgentActivityTab'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
 import { useConfigStore } from '@/store/configStore'
 
@@ -161,14 +160,6 @@ describe('the timeline envelope is unwrapped by the two consumers that hold the 
       isConfigured: true,
       bootstrapState: 'ready',
     })
-  })
-
-  it('AgentActivityTab lists an event out of the envelope, not out of the envelope object', () => {
-    // Reading `data` as the array — the shape this route returned until this change — would put
-    // the envelope object itself through `.map` and throw, or list nothing.
-    render(<AgentActivityTab agent={agent} />)
-    expect(screen.getByText('Run stopped by the operator')).toBeInTheDocument()
-    expect(screen.queryByText('No activity yet')).not.toBeInTheDocument()
   })
 
   it("AgentOutputPanel hands the timeline the CHAT response's run facts, not the timeline route's", async () => {

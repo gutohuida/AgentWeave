@@ -110,8 +110,6 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/accounting/AccountingPanel.tsx', 'useAccounting', 1, 'BLANK', '', '`if (!data) return null` (:16)'),
     ('components/accounting/AccountingPanel.tsx', 'useAccounting', 2, 'MISREPORT', '', "`if (isLoading || !data)` returns the Budgets skeleton (:34-42); `isLoading` is false after an error, so the skeleton is terminal — F197's shape exactly"),
     ('components/activity/ActivityLog.tsx', 'useAgents', 1, 'BLANK', '', 'agents only build a colour map (:62)'),
-    ('components/agents/AgentActivityTab.tsx', 'useAgentOutput', 1, 'MISREPORT', '', "the merged feed renders 'No activity yet' (:112); this hook also hides its own error from every caller"),
-    ('components/agents/AgentActivityTab.tsx', 'useAgentTimeline', 1, 'MISREPORT', '', 'same feed, same sentence (:112)'),
     ('components/agents/AgentCreateDialog.tsx', 'useModelCatalog', 1, 'MISREPORT', 'PICKER', '`providers = catalog?.providers ?? []` (:168) — the create dialog offers no provider'),
     ('components/agents/AgentCreateDialog.tsx', 'useProviderLaunchability', 1, 'SUPPRESSED', '', '`launchability?.[…]` (:84, :171) only decides whether a warning verdict is shown'),
     ('components/agents/AgentCreateDialog.tsx', 'useCharters', 1, 'MISREPORT', 'PICKER', '`charters.map` into `<option>` (:231)'),
