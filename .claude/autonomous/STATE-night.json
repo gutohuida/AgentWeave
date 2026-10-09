@@ -1,236 +1,40 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-10-09-daily",
-    "parent_branch": "master",
-    "parent_sha": "0695572",
-    "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 17,
-    "log_file": ".claude/autonomous/2026-10-09-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "specjson-t1-impl",
-            "status": "done",
-            "title": "spec-storage task drive-first: write scripts/drive/d1010_spec_json.py, record it FAILING on today's Hub",
-            "detail": "done 2026-10-09: scripts/drive/d1010_spec_json.py recorded failing at check 1 (405, no route)."
-        },
-        {
-            "id": "specjson-t2-impl",
-            "status": "done",
-            "title": "spec-storage task storage, part a: the read seam (parse_stored/read_payload), every reader on it, CLI twin deleted",
-            "detail": "done 2026-10-09 iteration 3: seam + FR-4 guard test; no format change; suites green.",
-            "model": "opus"
-        },
-        {
-            "id": "specjson-t2b-impl",
-            "status": "done",
-            "title": "spec-storage task storage, part b: flip to spec.json (writes, paths, discovery, GET /spec renders, journey hub block)",
-            "detail": "done 2026-10-09 iteration 4: spec.json storage, render on read, json paths, legacy diag, journey hub block; suites green.",
-            "model": "opus"
-        },
-        {
-            "id": "specjson-t3-impl",
-            "status": "done",
-            "title": "spec-storage task convert: POST /project/spec/convert?to=json|html, 409 while busy",
-            "detail": "done 2026-10-09 iteration 5: POST /project/spec/convert?to=json|html (spec_conversion.py), 6 tests, d1010 restructured and 11/11 PASS on scratch :8097.",
-            "model": "opus"
-        },
-        {
-            "id": "specjson-drive",
-            "status": "done",
-            "title": "Drive spec-storage green on a scratch Hub; log evidence + METRICS row",
-            "detail": "done 2026-10-09 iteration 6: d1010 11/11, d1010b real-corpus copy 7/7 (78/78 byte-identical round trip)."
-        },
-        {
-            "id": "project-steps-spec",
-            "status": "done",
-            "title": "Author project-steps slice change document",
-            "detail": "done 2026-10-09 iteration 7: spec/changes/a-project-orders-its-own-spec-steps/spec.html (spdoc-3759e366caf1, approved on :8010; Hub tasks task-09f97da0049e, task-847b1c1b7810, task-2800a1609906, task-80a919c0cc4c -- do not close them); 9 FR, 12 criteria, 4 tasks; decisions night-1009-1..4 OPEN."
-        },
-        {
-            "id": "project-steps-t1-impl",
-            "status": "done",
-            "title": "project-steps task drive-first: write scripts/drive/d1011_project_steps.py, record it FAILING",
-            "detail": "done 2026-10-09 iteration 8: scripts/drive/d1011_project_steps.py recorded failing at check 1 (404, no /project/journey). Wire shape and page testids it fixes are in the iteration 8 log entry."
-        },
-        {
-            "id": "project-steps-t2-impl",
-            "status": "done",
-            "title": "project-steps task journey: spec/journey.json read+validated in spec_journey; briefing, advance, operator move, documents view use it",
-            "detail": "done 2026-10-09 iteration 10: spec_journey reads spec/journey.json (parse/load/ProjectSteps); briefing, advance, operator move, documents view use it; 22 tests, scratch drive 9/9.",
-            "model": "opus"
-        },
-        {
-            "id": "project-steps-t3-impl",
-            "status": "done",
-            "title": "project-steps task routes: GET/PUT /project/journey, deterministic write, 2,000-char cap",
-            "detail": "done 2026-10-09 iteration 11: GET/PUT /project/journey (typed JourneyBody), spec_journey.dump/save/Step.to_entry, journey_updated broadcast; 34 tests; d1011 passes checks 1-5, stops at 6."
-        },
-        {
-            "id": "project-steps-t4-impl",
-            "status": "done",
-            "title": "project-steps task page: Spec steps section on the project page, bundle refreshed",
-            "detail": "done 2026-10-09 iteration 12: SpecStepsSection on the project page, useProjectJourney/useSaveProjectJourney, journey_updated in useSSE, bundle refreshed; F561 (journey.json discovered as a document) fixed; d1011 13/13 on scratch :8099; Hub suite 7356 passed."
-        },
-        {
-            "id": "project-steps-drive",
-            "status": "done",
-            "title": "Drive project-steps on a scratch Hub; log evidence + METRICS row",
-            "detail": "done 2026-10-09 iteration 13: d1011 13/13, d1011b fallback (FR-1, FR-7) 4/4 on scratch :8099; METRICS row added."
-        },
-        {
-            "id": "approval-warnings-spec",
-            "status": "done",
-            "title": "Author approval-warnings slice change document",
-            "detail": "done 2026-10-09 iteration 14: spec/changes/approve-lists-what-is-missing-and-can-approve-anyway/spec.html (spdoc-9a9d313a4894, approved on :8010; Hub tasks task-c63101dbca2d drive-first, task-8888aa20b760 gaps, task-810c13a6c629 approve, task-7740673542f3 page -- do not close them); 7 FR, 11 criteria, 4 tasks; decisions night-1009-5..8 OPEN."
-        },
-        {
-            "id": "approval-warnings-t1-impl",
-            "status": "done",
-            "title": "approval-warnings task drive-first: write scripts/drive/d1012_approval_warnings.py, record it FAILING",
-            "detail": "done 2026-10-09 iteration 15: scripts/drive/d1012_approval_warnings.py recorded failing at check 1 (propose answers blocking requirement_without_criterion). Wire contract in the iteration 15 log entry."
-        },
-        {
-            "id": "approval-warnings-t2-impl",
-            "status": "done",
-            "title": "approval-warnings task gaps: classify findings gap vs refusal; MUST-only criterion gap; criterion_without_check, no_acceptance_drive, steps_skipped",
-            "detail": "done 2026-10-09 iteration 16: spec_completeness REFUSAL_CODES/split/approval_gaps (criterion_without_check, no_acceptance_drive), MUST-only criterion rule, spec_journey.skipped, spec_service.phase_findings -> PhaseFindings(refusals, gaps) with steps_skipped; 11 tests; F562 filed (drive-first criterion contradicts D3).",
-            "model": "opus"
-        },
-        {
-            "id": "approval-warnings-t3-impl",
-            "status": "done",
-            "title": "approval-warnings task approve: propose warns, 409 approval_warnings, approve_anyway, warnings_overridden record + document view field",
-            "detail": "done 2026-10-09 iteration 17: transition/phase_findings, approve_anyway, 409 approval_warnings, warnings_overridden, documents view field; 10 route tests; 13 test files updated to approve_anyway; d1012 checks 1-4 PASS on :8101.",
-            "model": "opus"
-        },
-        {
-            "id": "approval-warnings-t4-impl",
-            "status": "done",
-            "title": "approval-warnings task page: SpecPhaseBar groups gaps by code with Approve anyway, shows propose warnings and overridden gaps; bundle refreshed",
-            "detail": "done 2026-10-09 interactive session: SpecPhaseBar gap list grouped by code (count + 3 places), Approve anyway resend, propose warnings, approval-overridden block; specApprovalWarnings.test.tsx 7 (4 failed first); bundle refreshed; vitest 1978 passed."
-        },
-        {
-            "id": "approval-warnings-drive",
-            "status": "done",
-            "title": "Drive approval-warnings on a scratch Hub; log evidence + METRICS row",
-            "detail": "done 2026-10-09 interactive session: d1012 7/7 on scratch :8101 (drive now opens the document from the tree: the app has no doc URL parameter); METRICS row."
-        },
-        {
-            "id": "tester-amends-spec",
-            "status": "done",
-            "title": "Author tester-amends slice change document",
-            "detail": "done 2026-10-09 morning session: spec/changes/a-tester-drives-the-built-product-and-keeps-the-spec-true/spec.html (spdoc-622cf1b3b011, approved on :8010; Hub tasks task-36601c1e6a66 drive-first, task-86c06ee69d17 amend, task-9bcf48c030b9 review, task-9b392e629ebb tester, task-2a8589108daf page -- do not close them); 9 FR, 11 criteria, 5 tasks; decisions morning-1009-1..6 OPEN."
-        },
-        {
-            "id": "tester-amends-t1-impl",
-            "status": "done",
-            "title": "tester-amends drive-first: scripts/drive/d1013_tester_amends.py on :8102, recorded FAILING",
-            "detail": "done 2026-10-09 morning: scripts/drive/d1013_tester_amends.py recorded failing at check 1 (405, no amend route); artefacts testbed/drive1013-tester-amends/091616."
-        },
-        {
-            "id": "tester-amends-t2-impl",
-            "status": "done",
-            "title": "tester-amends amend: spec_amendments, agent route + MCP amend_spec_document/report_cannot_satisfy, testing-run rule, add_task materialised",
-            "detail": "done 2026-10-09 morning: built with t2-t5 together; hub/tests/test_tester_amendments.py 17 (11 of the first 12 failed on the pre-change source), specAmendmentsPanel.test.tsx 5 (failed first: no component)."
-        },
-        {
-            "id": "tester-amends-t3-impl",
-            "status": "done",
-            "title": "tester-amends review: operator list/mark-reviewed routes, coverage amendment_unreviewed, gap amendments_unreviewed",
-            "detail": "done 2026-10-09 morning: built with t2-t5 together; hub/tests/test_tester_amendments.py 17 (11 of the first 12 failed on the pre-change source), specAmendmentsPanel.test.tsx 5 (failed first: no component)."
-        },
-        {
-            "id": "tester-amends-t4-impl",
-            "status": "done",
-            "title": "tester-amends tester: delivery.tester staffing and the test briefing",
-            "detail": "done 2026-10-09 morning: built with t2-t5 together; hub/tests/test_tester_amendments.py 17 (11 of the first 12 failed on the pre-change source), specAmendmentsPanel.test.tsx 5 (failed first: no component)."
-        },
-        {
-            "id": "tester-amends-t5-impl",
-            "status": "done",
-            "title": "tester-amends page: SpecAmendmentsPanel, bundle refreshed",
-            "detail": "done 2026-10-09 morning: built with t2-t5 together; hub/tests/test_tester_amendments.py 17 (11 of the first 12 failed on the pre-change source), specAmendmentsPanel.test.tsx 5 (failed first: no component)."
-        },
-        {
-            "id": "tester-amends-drive",
-            "status": "done",
-            "title": "Drive tester-amends on a scratch Hub; log evidence + METRICS row",
-            "detail": "done 2026-10-09 morning: d1013 9/9 on :8102 (testbed/drive1013-tester-amends/094607); METRICS row."
-        },
-        {
-            "id": "reconcile-and-measure-spec",
-            "status": "done",
-            "title": "Author reconcile-and-measure slice change document",
-            "detail": "done 2026-10-09 morning: spec/changes/a-change-is-reconciled-with-its-code-before-it-is-folded/spec.html (spdoc-61efd5e5f6a4, approved on :8010); 6 FR, 10 criteria, 4 tasks; decisions morning-1009-7..9 OPEN."
-        },
-        {
-            "id": "reconcile-and-measure-t1-impl",
-            "status": "done",
-            "title": "reconcile drive-first: scripts/drive/d1014_reconcile.py on :8103, recorded FAILING",
-            "detail": "done 2026-10-09 morning: scripts/drive/d1014_reconcile.py recorded failing at check 1 (405); artefacts testbed/drive1014-reconcile/093656."
-        },
-        {
-            "id": "reconcile-and-measure-t2-impl",
-            "status": "done",
-            "title": "reconcile-and-measure reconcile: tool, ask route, fold_state.reconcile",
-            "detail": "done 2026-10-09 morning: built t2-t4 together; d1014 4/4 on :8103 (testbed/drive1014-reconcile/094842); METRICS row."
-        },
-        {
-            "id": "reconcile-and-measure-t3-impl",
-            "status": "done",
-            "title": "reconcile-and-measure defects: derived list, operator record, report",
-            "detail": "done 2026-10-09 morning: built t2-t4 together; d1014 4/4 on :8103 (testbed/drive1014-reconcile/094842); METRICS row."
-        },
-        {
-            "id": "reconcile-and-measure-t4-impl",
-            "status": "done",
-            "title": "reconcile-and-measure page: fold dialog reconcile section, defects report, bundle",
-            "detail": "done 2026-10-09 morning: built t2-t4 together; d1014 4/4 on :8103 (testbed/drive1014-reconcile/094842); METRICS row."
-        },
-        {
-            "id": "reconcile-and-measure-drive",
-            "status": "done",
-            "title": "Drive reconcile-and-measure on a scratch Hub; log evidence + METRICS row",
-            "detail": "done 2026-10-09 morning: built t2-t4 together; d1014 4/4 on :8103 (testbed/drive1014-reconcile/094842); METRICS row."
-        }
-    ],
-    "decisions_for_user": [
-        "night-1009-1",
-        "night-1009-2",
-        "night-1009-3",
-        "night-1009-4",
-        "night-1009-5",
-        "night-1009-6",
-        "night-1009-7",
-        "night-1009-8",
-        "morning-1009-1",
-        "morning-1009-2",
-        "morning-1009-3",
-        "morning-1009-4",
-        "morning-1009-5",
-        "morning-1009-6",
-        "morning-1009-7",
-        "morning-1009-8",
-        "morning-1009-9"
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows and APPROVED-FIXES findings. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-10-09-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "ceca911",
+    "stop_at":  "2026-10-10T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-10-09-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
