@@ -35288,3 +35288,16 @@ A roadmap's slices are specified later, one at a time, in their own change docum
 The operator wrote that change document in one PUT. It had every section filled: requirements, acceptance criteria with how-to-check, tasks, design and delivery. Approval still answered 409 `approval_warnings` with `steps_skipped`: "the document is at step 'intake' ... goes on to requirements, acceptance, approach, tasks, delivery, which it never reached". The step-skipped warning judges the document by its recorded step, not by what it contains. So every document authored outside a stepwise conversation gets the warning, including `scripts/drive/author_change.py` documents and imported ones. A warning that fires on every complete document trains the operator to click "approve anyway". Approved anyway here.
 
 **Fix shape (not decided):** compute the warning from the content each skipped step produces (requirements present, criteria with `how_to_check`, tasks), or advance the step on a content write that fills the later steps. Tier 0 or 1.
+
+## F575 (C) -- the Claude runner's model catalog does not offer Sonnet 5.5
+
+**Status:** open 2026-10-09. Noticed in sessions 0186 and 0187 while choosing a model for the manager's title job; filed at the operator's request.
+
+The Claude provider in `hub/hub/model_catalog.py:234-267` offers Opus 5.5, Sonnet 5, Haiku 4.5, Fable 5.1, Opus 5 and Fable 5. It does not offer `claude-sonnet-5-5`. Copilot's list in the same file has `claude-sonnet-5.5` (line 218). So a Claude runner, a Manager job or a composer turn cannot select the current Sonnet. The only way to reach it is the `sonnet` alias, and only if the CLI has moved that alias to Sonnet 5.5, which is unverified. This catalog's rule is that each id and window is live-verified (docstring, lines 10-18), so the fix first checks `claude --help` and a real `modelUsage.contextWindow`.
+
+**Fix shape:**
+- Verify the id and its window on this machine's CLI.
+- Add a `ModelDescriptor`, and decide whether the `sonnet` alias and `default=True` move to it.
+- Re-run `scripts/check_model_catalog.py`.
+
+Tier 0.
