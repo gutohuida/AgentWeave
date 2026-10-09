@@ -69,7 +69,6 @@ HAND_RESOLVED = {
     # agents.ts:193 -- `${archived ? 'archive' : 'unarchive'}`, so exactly these two and no more
     ("POST", "/api/v1/projects/{project_id}/agents/{name}/archive"): True,
     ("POST", "/api/v1/projects/{project_id}/agents/{name}/unarchive"): True,
-    ("POST", "/api/v1/projects/{project_id}/agents/{name}/context-usage"): False,
     ("POST", "/api/v1/projects/{project_id}/agents/{name}/heartbeat"): False,
     (
         "POST",

@@ -35245,7 +35245,7 @@ Expensive shared dependency directories (`node_modules`, a venv) are linked into
 
 ## F568 (C) -- two context routes have no caller
 
-**Status:** open 2026-10-09. Found by reading code (overhaul decision `overhaul-unused-context-routes`, operator 2026-10-09).
+**Status:** fixed 2026-10-10 (Tier 0). Found by reading code (overhaul decision `overhaul-unused-context-routes`, operator 2026-10-09). Both routes removed from `agents.py`; `record_context_usage` kept. `test_retired_context_routes.py` (route table and HTTP) failed before. The tests that used the POST to seed readings now call `record_context_usage` through `hub/tests/_usage_ingest.py` (still validating via `ContextUsageCreate`); the charter-lookup tests and the HTTP-only rolling-upgrade test were deleted; `docs/reference/hub-api.md` rows removed; `CLIENTLESS_ROUTE_CEILING` 22 -> 21. **Left, not decided:** `ContextUsageCreate` is now used only by tests; `HttpTransport.post_context_usage` in the CLI posts to the retired route (no caller, one test); `scripts/drive/` sweeps d1002 and t_sweep_row3/row4 still call the routes; capability `agent-context-usage` still names `POST /agents/{name}/context-usage` (needs a fold on the trial Hub, not a file edit). No browser/live-Hub drive: checked through the real app over ASGI only.
 
 `GET /agents/context?charter=` (`hub/hub/api/v1/agents.py:3145`, superseded by `get_agent_context`, which its own hint names) and `POST /agents/{name}/context-usage` (`:3390`; the Hub records usage itself at `api/v1/agent_trigger.py:2958` and `:3903`) have no in-repo callers. **Decided:** retire both routes and their tests; `record_context_usage` stays.
 

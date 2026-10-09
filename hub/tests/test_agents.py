@@ -6,17 +6,6 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_get_charter_context_rejects_path_traversal_identifier(app, auth_headers):
-    # Charter lookup is DB-backed; path-shaped identifiers must never read files.
-    resp = await app.get(
-        "/api/v1/projects/proj-test/agents/context?charter=../../../../README",
-        headers=auth_headers,
-    )
-    assert resp.status_code in (400, 404)
-    assert "charter" in resp.text.lower() or "invalid" in resp.text.lower()
-
-
-@pytest.mark.asyncio
 async def test_agent_trigger_rejects_work_dir_with_parent_traversal(app, auth_headers):
     resp = await app.post(
         "/api/v1/projects/proj-test/agent/trigger",
@@ -255,37 +244,6 @@ async def test_list_agents_shows_running_for_active_direct_spawn_run(app, auth_h
 # Moved from the deleted `test_agents_self_registered.py` (`agents-no-longer-register-themselves`,
 # task 2.7): what they test is the charter/agent context routes, the roster summary and PATCH, not
 # registration. The agents they need are inserted with `add_agent`.
-
-
-@pytest.mark.asyncio
-async def test_get_context_returns_charter_content(app, auth_headers):
-    """The direct compatibility lookup resolves a stable charter ID.
-
-    Any seeded charter exercises this path, so take the first one the project has rather
-    than naming one. Hardcoding a display name made this test fail when the starter set
-    changed (`2026-08-11-charter-set-reshape`), for a reason unrelated to what it checks.
-    """
-    charters = (await app.get("/api/v1/projects/proj-test/charters", headers=auth_headers)).json()
-    assert charters, "no seeded charters, so this test would be vacuous"
-    charter = charters[0]
-    resp = await app.get(
-        f"/api/v1/projects/proj-test/agents/context?charter={charter['id']}",
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "content" in data
-    assert "get_agent_context" in data["hint"]
-
-
-@pytest.mark.asyncio
-async def test_get_context_unknown_charter(app, auth_headers):
-    """Unknown charter identifiers return 404."""
-    resp = await app.get(
-        "/api/v1/projects/proj-test/agents/context?charter=charter-nonexistent",
-        headers=auth_headers,
-    )
-    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio

@@ -140,34 +140,6 @@ def test_a_declared_field_survives_the_legacy_path():
     assert sample.breakdown == {"input_tokens": 10}
 
 
-@pytest.mark.asyncio
-async def test_a_rolling_upgrade_pair_survives_the_real_route(app, auth_headers):
-    """The rows above are model-level. This one goes through HTTP, because the ordering
-    they depend on -- before-validator first, `forbid` second -- is a property of the
-    route's own validation, and a model that validates in isolation has not proved it."""
-    synced = await app.post(
-        "/api/v1/projects/proj-test/session/sync",
-        json={"data": {"agents": {"rolling": {}}}},
-        headers=auth_headers,
-    )
-    assert synced.status_code == 200, synced.text
-
-    accepted = await app.post(
-        "/api/v1/projects/proj-test/agents/rolling/context-usage",
-        json={"tokens_used": 1200, "input_tokens": 1200, "tokens_limit": 200000},
-        headers=auth_headers,
-    )
-    assert accepted.status_code in (200, 201), accepted.text
-
-    refused = await app.post(
-        "/api/v1/projects/proj-test/agents/rolling/context-usage",
-        json={"tokens_used": 1200, "tokens_limit": 200000, "wat": 1},
-        headers=auth_headers,
-    )
-    assert refused.status_code == 422, refused.text
-    assert "wat" in refused.text
-
-
 # --- TaskCreate / TaskUpdate -------------------------------------------------------
 
 

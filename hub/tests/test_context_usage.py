@@ -3,8 +3,11 @@
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from hub.sse import sse_manager
+
+from ._usage_ingest import record_usage
 
 
 async def _configure(app, auth_headers, agent: str) -> str:
@@ -35,12 +38,7 @@ async def test_canonical_context_round_trip_summary_and_sse(app, auth_headers):
         "breakdown": {"input_tokens": 200, "reasoning_tokens": 50},
     }
     try:
-        response = await app.post(
-            f"/api/v1/projects/proj-test/agents/{agent}/context-usage",
-            json=body,
-            headers=auth_headers,
-        )
-        assert response.status_code == 201
+        assert await record_usage(agent, body) == "ok"
         event = queue.get_nowait()
         assert event.event == "context_warning"
         projected = json.loads(event.data)
@@ -85,12 +83,7 @@ async def test_context_states_and_legacy_normalization(app, auth_headers):
     ]
     for agent, body, expected in cases:
         await _configure(app, auth_headers, agent)
-        response = await app.post(
-            f"/api/v1/projects/proj-test/agents/{agent}/context-usage",
-            json=body,
-            headers=auth_headers,
-        )
-        assert response.status_code == 201, response.text
+        assert await record_usage(agent, body) == "ok"
         summaries = (
             await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
         ).json()
@@ -119,19 +112,14 @@ async def test_context_ingress_rejects_invalid_samples(app, auth_headers):
         },
     ]
     for body in invalid:
-        response = await app.post(
-            "/api/v1/projects/proj-test/agents/context-invalid/context-usage",
-            json=body,
-            headers=auth_headers,
-        )
-        assert response.status_code == 422
+        with pytest.raises(ValidationError):
+            await record_usage("context-invalid", body)
 
 
 @pytest.mark.asyncio
 async def test_stale_or_old_session_context_cannot_replace_latest(app, auth_headers):
     agent = "context-order"
     await _configure(app, auth_headers, agent)
-    endpoint = f"/api/v1/projects/proj-test/agents/{agent}/context-usage"
     newest = {
         "status": "measured",
         "source": "collector",
@@ -141,10 +129,8 @@ async def test_stale_or_old_session_context_cannot_replace_latest(app, auth_head
         "observed_at": 200,
     }
     stale = {**newest, "context_tokens": 10, "session_id": "old-session", "observed_at": 100}
-    assert (await app.post(endpoint, json=newest, headers=auth_headers)).status_code == 201
-    response = await app.post(endpoint, json=stale, headers=auth_headers)
-    assert response.status_code == 201
-    assert response.json()["status"] == "ignored"
+    assert await record_usage(agent, newest) == "ok"
+    assert await record_usage(agent, stale) == "ignored"
     summaries = (await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)).json()
     sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
     assert sample["session_id"] == "new-session"
@@ -161,7 +147,6 @@ async def test_repeated_unchanged_reading_does_not_duplicate_the_activity_log(ap
     """
     agent = "context-repeat"
     await _configure(app, auth_headers, agent)
-    endpoint = f"/api/v1/projects/proj-test/agents/{agent}/context-usage"
     reading = {
         "status": "measured",
         "source": "collector",
@@ -172,20 +157,14 @@ async def test_repeated_unchanged_reading_does_not_duplicate_the_activity_log(ap
         "observed_at": 1000,
     }
 
-    first = await app.post(endpoint, json=reading, headers=auth_headers)
-    assert first.status_code == 201
-    assert first.json()["status"] == "ok"
+    assert await record_usage(agent, reading) == "ok"
 
     for i in range(1, 4):
         repeat = {**reading, "observed_at": 1000 + i}
-        response = await app.post(endpoint, json=repeat, headers=auth_headers)
-        assert response.status_code == 201
-        assert response.json() == {"status": "ignored", "agent": agent, "reason": "unchanged"}
+        assert await record_usage(agent, repeat) == "unchanged"
 
     changed = {**reading, "context_tokens": 47665, "observed_at": 2000}
-    response = await app.post(endpoint, json=changed, headers=auth_headers)
-    assert response.status_code == 201
-    assert response.json()["status"] == "ok"
+    assert await record_usage(agent, changed) == "ok"
 
     history = (
         await app.get("/api/v1/projects/proj-test/events/history", headers=auth_headers)
@@ -217,10 +196,7 @@ async def test_legacy_zero_percent_reset_becomes_unavailable(app, auth_headers):
         "critical": False,
         "updated_at": "2026-07-29T10:00:00+00:00",
     }
-    response = await app.post(
-        f"/api/v1/projects/proj-test/agents/{agent}/context-usage", json=body, headers=auth_headers
-    )
-    assert response.status_code == 201
+    assert await record_usage(agent, body) == "ok"
     summaries = (await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)).json()
     sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
     assert sample["status"] == "unavailable"
@@ -233,12 +209,7 @@ async def test_legacy_payloads_without_usable_operands_degrade_not_reject(app, a
     """A legacy payload carrying only a denominator is unusable, not invalid."""
     agent = "context-legacy-limit-only"
     await _configure(app, auth_headers, agent)
-    response = await app.post(
-        f"/api/v1/projects/proj-test/agents/{agent}/context-usage",
-        json={"agent": agent, "tokens_limit": 200000},
-        headers=auth_headers,
-    )
-    assert response.status_code == 201
+    assert await record_usage(agent, {"agent": agent, "tokens_limit": 200000}) == "ok"
     summaries = (await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)).json()
     sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
     assert sample["status"] == "unavailable"
@@ -250,12 +221,8 @@ async def test_legacy_positive_percent_is_still_measured(app, auth_headers):
     """The zero guard must not swallow a genuine legacy percentage."""
     agent = "context-legacy-percent"
     await _configure(app, auth_headers, agent)
-    response = await app.post(
-        f"/api/v1/projects/proj-test/agents/{agent}/context-usage",
-        json={"agent": agent, "percent": 75, "updated_at": "2026-07-29T10:00:00+00:00"},
-        headers=auth_headers,
-    )
-    assert response.status_code == 201
+    body = {"agent": agent, "percent": 75, "updated_at": "2026-07-29T10:00:00+00:00"}
+    assert await record_usage(agent, body) == "ok"
     summaries = (await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)).json()
     sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
     assert sample["status"] == "measured"

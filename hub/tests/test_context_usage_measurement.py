@@ -15,6 +15,8 @@ from hub.model_catalog import context_window_for_model
 from hub.output_recording import resolve_usage_limit
 from hub.runner_parsing import parse_claude_line
 
+from ._usage_ingest import record_usage
+
 HAIKU = "claude-haiku-4-5-20251001"
 
 
@@ -123,9 +125,9 @@ async def test_a_claude_agent_reports_a_percentage_end_to_end(app, auth_headers)
     )
     assert sync.status_code == 200
 
-    resp = await app.post(
-        "/api/v1/projects/proj-test/agents/ctx-claude/context-usage",
-        json={
+    result = await record_usage(
+        "ctx-claude",
+        {
             "status": "measured",
             "source": "claude",
             "basis": "latest_request_input",
@@ -134,9 +136,8 @@ async def test_a_claude_agent_reports_a_percentage_end_to_end(app, auth_headers)
             "session_id": "sess-a",
             "observed_at": 1000,
         },
-        headers=auth_headers,
     )
-    assert resp.status_code == 201
+    assert result == "ok"
 
     resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
     row = next(item for item in resp.json() if item["name"] == "ctx-claude")
@@ -155,9 +156,9 @@ async def test_a_later_limit_only_row_does_not_hide_the_complete_one(app, auth_h
     )
     assert sync.status_code == 200
 
-    complete = await app.post(
-        "/api/v1/projects/proj-test/agents/ctx-order/context-usage",
-        json={
+    complete = await record_usage(
+        "ctx-order",
+        {
             "status": "measured",
             "source": "claude",
             "basis": "latest_request_input",
@@ -166,22 +167,20 @@ async def test_a_later_limit_only_row_does_not_hide_the_complete_one(app, auth_h
             "session_id": "sess-a",
             "observed_at": 1000,
         },
-        headers=auth_headers,
     )
-    assert complete.status_code == 201
+    assert complete == "ok"
 
     # The end-of-turn report: a window, no tokens, same session, strictly newer.
-    unusable = await app.post(
-        "/api/v1/projects/proj-test/agents/ctx-order/context-usage",
-        json={
+    unusable = await record_usage(
+        "ctx-order",
+        {
             "status": "unavailable",
             "source": "claude",
             "session_id": "sess-a",
             "observed_at": 2000,
         },
-        headers=auth_headers,
     )
-    assert unusable.status_code == 201
+    assert unusable == "ok"
 
     resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
     row = next(item for item in resp.json() if item["name"] == "ctx-order")
@@ -200,9 +199,9 @@ async def test_a_reset_is_not_papered_over_with_the_previous_sessions_reading(ap
     )
     assert sync.status_code == 200
 
-    await app.post(
-        "/api/v1/projects/proj-test/agents/ctx-reset/context-usage",
-        json={
+    await record_usage(
+        "ctx-reset",
+        {
             "status": "measured",
             "source": "claude",
             "basis": "latest_request_input",
@@ -211,17 +210,15 @@ async def test_a_reset_is_not_papered_over_with_the_previous_sessions_reading(ap
             "session_id": "sess-old",
             "observed_at": 1000,
         },
-        headers=auth_headers,
     )
-    await app.post(
-        "/api/v1/projects/proj-test/agents/ctx-reset/context-usage",
-        json={
+    await record_usage(
+        "ctx-reset",
+        {
             "status": "unavailable",
             "source": "claude",
             "session_id": "sess-new",
             "observed_at": 2000,
         },
-        headers=auth_headers,
     )
 
     resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)

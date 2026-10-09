@@ -10,6 +10,8 @@ import pytest_asyncio
 from hub.db.engine import async_session_factory
 from hub.db.models import AgentOutput, Conversation, EventLog, Project, Run
 
+from ._usage_ingest import record_usage
+
 
 @pytest_asyncio.fixture
 async def project_a(app, auth_headers):
@@ -128,12 +130,12 @@ async def project_a_resources(app, project_a, add_agent):
     assert out_resp.status_code == 201
 
     # Context usage event
-    ctx_resp = await app.post(
-        f"{base}/agents/alice/context-usage",
-        json={"percent": 50, "warning": False},
-        headers=auth_headers,
+    assert (
+        await record_usage(
+            "alice", {"percent": 50, "warning": False}, project_id=project_a["project_id"]
+        )
+        == "ok"
     )
-    assert ctx_resp.status_code == 201
 
     # Log event
     log_resp = await app.post(

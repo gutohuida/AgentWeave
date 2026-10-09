@@ -60,7 +60,7 @@ from ...model_catalog import (
     permission_mode_values,
     undeclared_model_reason,
 )
-from ...output_recording import record_agent_output, record_context_usage
+from ...output_recording import record_agent_output
 from ...review_turn import ReviewContext, verdict_evidence_sentence
 from ...runner_adapters import get_adapter, resolve_access_axes
 from ...runner_provider import runner_probe_config
@@ -71,7 +71,6 @@ from ...schemas.agents import (
     AgentSummary,
     AgentTimeline,
     AgentTimelineEvent,
-    ContextUsageCreate,
     RunFacts,
     fit_run_error,
 )
@@ -3193,30 +3192,6 @@ async def patch_agent(
     }
 
 
-@router.get("/context")
-async def get_charter_context(
-    charter: str = Query(..., min_length=1, max_length=64),
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Get one charter's authored content by stable identifier."""
-    project_id, _ = project
-    charter_row = await session.get(Charter, charter)
-    if charter_row is None or charter_row.project_id != project_id:
-        raise HTTPException(status_code=404, detail=f"Charter '{charter}' not found")
-    instructions_result = await session.execute(
-        select(ProjectInstructions).where(ProjectInstructions.project_id == project_id)
-    )
-    instructions_row = instructions_result.scalars().first()
-    content = charter_row.content
-    if instructions_row and instructions_row.content:
-        content = instructions_row.content + "\n\n---\n\n" + content
-    return {
-        "content": content,
-        "hint": "Use get_agent_context(agent) for full project and onboarding context.",
-    }
-
-
 @router.get("/agent-context")
 async def get_agent_runtime_context(
     agent: str = Query(..., min_length=1, max_length=32),
@@ -3436,24 +3411,6 @@ async def post_agent_output(
         sequence=body.sequence,
     )
     return {"id": row.id}
-
-
-@router.post("/{name}/context-usage", status_code=status.HTTP_201_CREATED)
-async def post_context_usage(
-    name: str,
-    body: ContextUsageCreate,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Store and project the latest canonical context snapshot for an agent."""
-    project_id, _ = project
-    payload = body.model_dump(exclude_none=True)
-    result = await record_context_usage(session, project_id, name, payload)
-    if result == "ignored":
-        return {"status": "ignored", "agent": name, "reason": "stale"}
-    if result == "unchanged":
-        return {"status": "ignored", "agent": name, "reason": "unchanged"}
-    return {"status": "ok", "agent": name}
 
 
 @router.post("/{name}/compact", status_code=status.HTTP_201_CREATED)

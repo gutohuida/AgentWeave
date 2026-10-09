@@ -77,33 +77,6 @@ async def test_agent_without_charter_gets_instructions_and_notice(app, auth_head
 
 
 @pytest.mark.asyncio
-async def test_direct_charter_lookup_returns_content_and_richer_context_hint(app, auth_headers):
-    charter = (
-        await app.post(
-            "/api/v1/projects/proj-test/charters",
-            json={"name": "Lookup", "content": "Direct charter content"},
-            headers=auth_headers,
-        )
-    ).json()
-
-    response = await app.get(
-        f"/api/v1/projects/proj-test/agents/context?charter={charter['id']}", headers=auth_headers
-    )
-    assert response.status_code == 200
-    assert response.json()["content"] == "Direct charter content"
-    assert "get_agent_context" in response.json()["hint"]
-
-
-@pytest.mark.asyncio
-async def test_direct_charter_lookup_rejects_unknown_id(app, auth_headers):
-    response = await app.get(
-        "/api/v1/projects/proj-test/agents/context?charter=charter-does-not-exist",
-        headers=auth_headers,
-    )
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
 async def test_bind_agent_to_unknown_charter_is_refused(app, auth_headers, add_agent):
     await add_agent("unknown-charter")
     response = await app.patch(
