@@ -28,6 +28,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .project_workspace import ProjectPathError, ProjectWorkspace
 from .spec_manifest import (
     INDEX_PATH,
+    JOURNEY_PATH,
     LEGACY_SUFFIX,
     MANIFEST_MAX_BYTES,
     Manifest,
@@ -126,7 +127,7 @@ def discover(workspace: ProjectWorkspace) -> Tuple[List[str], List[Dict[str, Any
                 relative = absolute.relative_to(workspace.root).as_posix()
             except ValueError:  # pragma: no cover - walk stays under root
                 continue
-            if relative == INDEX_RELATIVE:
+            if relative in (INDEX_RELATIVE, JOURNEY_PATH):
                 continue
             if lowered.endswith(LEGACY_SUFFIX):
                 diagnostics.append(

@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import project_workspace
 from .db.models import SpecDocument
 from .spec_lifecycle import INTAKE_STEP, Actor, record_event
+from .spec_manifest import JOURNEY_PATH
 
 INTAKE = INTAKE_STEP
 REQUIREMENTS = "requirements"
@@ -71,7 +72,7 @@ class JourneyError(ValueError):
 # (D2). A broken file is reported and the built-in table is used meanwhile (D4): no turn is refused.
 # ---------------------------------------------------------------------------------------------
 
-JOURNEY_FILE = "spec/journey.json"
+JOURNEY_FILE = JOURNEY_PATH
 #: Per instruction text, above today's longest duty (1,805 characters with its advance protocol).
 TEXT_CAP = 2000
 #: The document's step column is String(48).

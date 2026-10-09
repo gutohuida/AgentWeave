@@ -256,6 +256,33 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'settings'] })
   })
 
+  it('refetches the project steps and every phase bar when the journey is saved', async () => {
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+
+    // `PUT /project/journey` broadcasts the saved keys; the stream stamps the project id.
+    fetchSpy.mockResolvedValue(makeSSEResponse([
+      'event: journey_updated\ndata: {"project_id":"proj-1","steps":["intake"]}\n\n',
+    ]))
+
+    function Probe() {
+      useSSE()
+      return null
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'specJourney'] })
+    )
+    // The phase bar reads the journey off the documents view.
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'specDocuments'] })
+  })
+
   it('refetches the worktrees panel when a run or a task moves a checkout (F250)', async () => {
     const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })

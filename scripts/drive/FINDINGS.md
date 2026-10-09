@@ -35200,3 +35200,9 @@ Proposing no longer needs exploration closed, and the app no longer offers the c
 call the route as setup before proposing. It decides nothing now and has no client. Remove the route, the function and
 the `explore_closed` view field together with those calls (a mechanical sweep), or keep it as a no-op deliberately.
 `explore_closed_at` stays either way, for rollback.
+
+## F561 (C) -- the project's `spec/journey.json` was discovered as a specification document
+
+**Status:** fixed 2026-10-09 (Tier 0), in the project-steps build (`a-project-orders-its-own-spec-steps`, t4). Found by driving: d1011 check 6 opened the spec page and the app auto-selected `journey.json` as the first document ("no specification document at spec/journey.json", the phase bar empty); no Hub test or review had listed the tree with the file present.
+
+`spec_documents.discover` skipped only `spec/index.json`, and `validate_spec_path` refused only that path, so the file t3 writes was listed in the spec tree and a document could have been created over it. Both now refuse `spec/journey.json` (`spec_manifest.JOURNEY_PATH`, which `spec_journey.JOURNEY_FILE` uses); `test_the_journey_file_is_not_a_spec_document` failed before the fix. The same drive also showed that d1011's own turn handling was model-dependent (a Haiku turn sometimes asks the advance question the drive stops on, sometimes runs past the step, sometimes ends at requirements); check 4 now asserts the agent's recorded advance and spends up to three turns.

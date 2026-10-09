@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, deleteJson, getJson, postJson } from './client'
+import { ApiError, deleteJson, getJson, postJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
 
@@ -531,6 +531,48 @@ export function useSetSpecJourney() {
         body,
       ),
   )
+}
+
+/** One step of the project's own journey (`a-project-orders-its-own-spec-steps`). A built-in step is
+ *  its `key` alone, plus an optional `append`; a custom one also carries `title`, `instructions`
+ *  (the pasted Markdown) and the `sizes` whose journey it joins. */
+export interface JourneyStep {
+  key: string
+  title?: string
+  instructions?: string
+  sizes?: SpecSize[]
+  append?: string
+}
+
+/** `GET /project/journey`: the steps in file order, and what the Hub found wrong with the file
+ *  (it briefs with the built-in steps while `diagnostics` is non-empty). */
+export interface ProjectJourney {
+  steps: JourneyStep[]
+  diagnostics: { code: string; message: string }[]
+}
+
+export function useProjectJourney() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<ProjectJourney>({
+    queryKey: ['project', projectId, 'specJourney'],
+    queryFn: () => getJson<ProjectJourney>(`/api/v1/projects/${projectId}/project/journey`),
+    enabled: isConfigured && !!projectId,
+  })
+}
+
+/** Replace the project's steps. The Hub validates every rule (and the 2,000-character cap) before
+ *  it writes `spec/journey.json`; a refusal names the step. */
+export function useSaveProjectJourney() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ steps }: { steps: JourneyStep[] }) =>
+      putJson<ProjectJourney>(`/api/v1/projects/${projectId}/project/journey`, { steps }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specJourney'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
+    },
+  })
 }
 
 export function useProposeSpecDocument() {

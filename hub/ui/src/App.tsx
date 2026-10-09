@@ -12,6 +12,7 @@ import { JobsPage } from '@/components/jobs/JobsPage'
 import { LogsView } from '@/components/logs/LogsView'
 import { DiagnosticsPanel } from '@/components/environment/DiagnosticsPanel'
 import { ProjectSettingsPanel } from '@/components/environment/ProjectSettingsPanel'
+import { SpecStepsSection } from '@/components/environment/SpecStepsSection'
 import { WorktreesPanel } from '@/components/environment/WorktreesPanel'
 import { PaneResizer } from '@/components/layout/PaneResizer'
 import { ProjectHeader } from '@/components/layout/ProjectHeader'
@@ -513,7 +514,12 @@ export default function App() {
         worktrees: <WorktreesPanel />,
         diagnostics: <DiagnosticsPanel />,
         budgets: <AccountingPanel />,
-        settings: <ProjectSettingsPanel onNavigate={navigate} />,
+        settings: (
+          <>
+            <ProjectSettingsPanel onNavigate={navigate} />
+            <SpecStepsSection />
+          </>
+        ),
       }
       projectContent = <div className="min-w-0 h-full overflow-auto">{environmentPages[section]}</div>
     }

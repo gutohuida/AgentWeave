@@ -35,6 +35,7 @@ const SSE_EVENT_TYPES = [
   'log_event',
   'context_warning',
   'spec_updated',
+  'journey_updated',
   'job_created',
   'job_updated',
   'job_deleted',
@@ -607,6 +608,14 @@ export function useSSE(onEvent?: SSEListener) {
           // unarchiving broadcasts this, not `spec_updated`, so the `spec/<path>` query would
           // otherwise stay stale until something else invalidated it.
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'spec'] })
+          break
+        case 'journey_updated':
+          // The project's spec steps (`spec/journey.json`) were saved: the project page's list and
+          // every document's journey (the phase bar reads it from the documents view) follow.
+          // `useSpecEvents` is mounted only on the spec and conversation pages, so this cannot
+          // live there: the page that edits the steps is neither.
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'specJourney'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'specDocuments'] })
           break
         case 'project_settings_updated':
           // `PUT /settings` also writes `token_budget`, the field the accounting routes read, and

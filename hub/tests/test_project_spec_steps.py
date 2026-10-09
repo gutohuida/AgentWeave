@@ -413,3 +413,23 @@ async def test_put_announces_journey_updated_and_the_saved_steps_reach_the_next_
     listed = await app.get(f"{BASE}/documents", headers=auth_headers)
     (view,) = [d for d in listed.json()["documents"] if d["path"] == PATH]
     assert view["journey"] == LARGE
+
+
+# journey-file-is-not-a-document: the drive found the project's steps listed in the spec tree
+# (and opened as the first document, "no specification document at spec/journey.json").
+def test_the_journey_file_is_not_a_spec_document(tmp_path):
+    from hub import spec_documents
+    from hub.spec_manifest import SpecPathError, validate_spec_path
+
+    _write(tmp_path, _steps())
+    other = tmp_path / "spec" / "changes" / "x" / "spec.json"
+    other.parent.mkdir(parents=True)
+    other.write_text("{}", encoding="utf-8")
+
+    found, _ = spec_documents.discover(
+        ProjectWorkspace(project_id="p", root=tmp_path, path_key="p")
+    )
+
+    assert found == ["spec/changes/x/spec.json"]
+    with pytest.raises(SpecPathError):
+        validate_spec_path("spec/journey.json")

@@ -184,10 +184,12 @@ def answer_for(question):
     """The operator's side: continue here and advance, else the first option."""
     text = (question.get("question") or "").lower()
     labels = [o.get("label", "") for o in question.get("options") or []]
-    # The ask-to-advance after the custom step is written: stop there, so the drive reads the
-    # document where the turn left it (the advance onto the custom step already happened).
+    # The ask-to-advance once the document is ON the custom step: stop there, so the drive reads
+    # it where the turn left it. The ask to advance ONTO the step also names it ("proceed to the
+    # next step (threat-model)"), so the text cannot tell them apart; the document's own step can.
     stop = next((label for label in labels if "stop" in label.lower()), None)
-    if stop and "threat" in text and any("continue" in label.lower() for label in labels):
+    on_custom = ro("select count(*) from spec_documents where step='threat-model'")[0][0] == 1
+    if stop and on_custom and any("continue" in label.lower() for label in labels):
         return stop, [stop]
     for wanted in ("here", "advance", "next", "continue", "yes"):
         hit = next((label for label in labels if wanted in label.lower()), None)
@@ -292,12 +294,33 @@ def drive():
             check("3b the requirements preview holds neither the sentinel nor threat-model's marker",
                   SENTINEL not in text and "[step: threat-model]" not in text)
 
-    # 4: a real turn at requirements advances onto the custom step.
-    run_turn(base, "Carry on with this document. When requirements are written, advance to the "
-                   "next step in this conversation.")
-    row = document(base)
-    check("4 the turn's advance landed on the custom step", row.get("step") == "threat-model",
-          f"step={row.get('step')!r}")
+    # 4: a real turn at requirements advances onto the custom step. A Haiku turn does not always
+    # get that far (it may end on an ask the operator answered, or run on past the step), so up to
+    # three turns are spent; what is checked is that the agent's advance onto the step was
+    # recorded, which is the product's part.
+    def advance_events(document_id):
+        return ro("select count(*) from spec_document_events where document_id=? and kind='journey' "
+                  "and actor=? and detail like ?",
+                  (document_id, AGENT, '%"from": "requirements", "to": "threat-model"%'))[0][0]
+
+    message = ("Carry on with this document. When requirements are written, advance to the next "
+               "step in this conversation.")
+    for attempt in range(1, 4):
+        run_turn(base, message, minutes=12)
+        row = document(base)
+        moved = advance_events(row.get("id"))
+        if moved or row.get("step") not in ("requirements", None):
+            break
+        print(f"  attempt {attempt} ended at {row.get('step')!r} without the advance", flush=True)
+        message = ("The requirements are written and agreed. Advance this document to the next "
+                   "step now and continue there.")
+    check("4 the turn's advance landed on the custom step", moved == 1,
+          f"advance events={moved} final step={row.get('step')!r}")
+    if row.get("step") != "threat-model":
+        print(f"  the turn ran on to {row.get('step')!r}; the operator moves it back to threat-model",
+              flush=True)
+        api("POST", f"{base}/project/documents/journey?path={urllib.parse.quote(DOC)}",
+            {"step": "threat-model"})
 
     # 5: the custom step's briefing, and the documents view's journey.
     text = preview(base)

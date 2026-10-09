@@ -58,6 +58,8 @@ DOCUMENT_SUFFIX = ".json"
 LEGACY_SUFFIX = ".html"
 #: `spec/index.json` is the corpus index, never a document.
 INDEX_PATH = "spec/index.json"
+#: `spec/journey.json` holds the project's spec steps, never a document.
+JOURNEY_PATH = "spec/journey.json"
 
 
 def validate_spec_path(path: str) -> str:
@@ -85,6 +87,8 @@ def validate_spec_path(path: str) -> str:
         raise SpecPathError(f"path must end with '.json': {path!r}")
     if path == INDEX_PATH:
         raise SpecPathError(f"{INDEX_PATH!r} is the corpus index, not a document")
+    if path == JOURNEY_PATH:
+        raise SpecPathError(f"{JOURNEY_PATH!r} holds the project's spec steps, not a document")
     for segment in path.split("/"):
         if not segment or segment in (".", ".."):
             raise SpecPathError(f"path has an empty or dot segment: {path!r}")
