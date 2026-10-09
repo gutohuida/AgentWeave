@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approve lists what is missing and lets the operator approve anyway</title>
+<meta name="aw-spec-kind" content="change-spec">
+<meta name="aw-spec-status" content="approved">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Approve lists what is missing and lets the operator approve anyway</h1>
+<p class="aw-meta"><span class="aw-chip">change-spec</span><span class="aw-chip aw-chip-phase-done">approved</span><span class="aw-chip">sketch</span></p>
+<p class="aw-slice-of">Slice <code>approval-warnings</code> (Approve lists what is missing and lets the operator approve anyway) of the roadmap <em>A spec is written one step at a time, and a tester keeps it true</em> (<code>spec/changes/a-spec-is-written-one-step-at-a-time-roadmap/spec.html</code>)</p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">7</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">7</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">11</span> criteria<span class="aw-summary-sep">·</span><span class="aw-count">4</span> tasks</p>
+<section id="summary"><h2>Summary</h2><p>Approving a document no longer refuses it for being incomplete. The Hub lists the gaps it finds (a MUST with no criterion, a criterion with no check, no acceptance drive first, a requirement with no task, open questions, skipped steps); the operator approves anyway, and the overridden gaps stay recorded on the document. Defects that would make approval&#x27;s own work wrong still refuse. Roadmap slice approval-warnings.</p></section><section id="problem"><h2>Problem</h2><p>Proposal and approval both refuse a document while spec_completeness.check finds anything (hub/hub/spec_service.py:1213-1266, raised by spec_lifecycle.transition at hub/hub/spec_lifecycle.py:381-391 as 409 document_incomplete). A requirement without a criterion, an unresolved question or an empty non-goals list therefore stops the operator from approving work they have judged ready, and approvals are a scarce resource (operator, 2026-10-08: warn, do not gate). The check also misses gaps that matter: a criterion with no how_to_check or checked_by, a change whose first task is not the acceptance drive, and journey steps the document never reached (spec_journey.missing() reports per step but nothing reads it at approval). A SHOULD or MAY requirement with no criterion is refused today although the roadmap makes criteria mandatory only for MUST.</p></section><section id="scope"><h2>Scope</h2><h3>In scope</h3><ul><li>Gaps are warnings at proposal and approval; approve answers 409 approval_warnings with the list, and approve_anyway approves</li><li>Three new gaps: criterion_without_check, no_acceptance_drive, steps_skipped (from the project&#x27;s journey for the document&#x27;s size); requirement_without_criterion only for MUST/SHALL</li><li>Defects that make approval&#x27;s own work wrong stay refusals, approve_anyway notwithstanding</li><li>The overridden gaps recorded on the approval&#x27;s phase event and shown on the document view while it stays approved</li><li>The phase bar: Approve shows the gaps grouped by code with an Approve anyway button; an approved document shows what was overridden</li></ul><h3>Non-goals</h3><ul><li>Unreviewed amendments as a gap: slice tester-amends adds that gap with the amendments themselves</li><li>Changing an agent&#x27;s save result: it still lists every finding under blocking and ready_to_propose, so the agent keeps closing gaps</li><li>A per-gap acknowledgement or a separate preview route</li><li>Approving straight from exploring: propose stays the step before approve</li><li>Archive, retire and fold guards: they are close-out rules, not completeness</li></ul></section><section id="requirements"><h2>Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span><a class="aw-anchor-copy" href="#FR-1" aria-label="Link to FR-1" title="Link to #FR-1">#</a> <span class="aw-position">Requirement 1 of 7</span><p><span class="aw-modal aw-modal-must">MUST</span> Approving a proposed document in which the Hub finds gaps MUST answer 409 with code approval_warnings and the list of gaps (code, where, message) and leave the document proposed; the same request with approve_anyway set to true MUST approve it.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Approvals are scarce: say what is missing, never refuse the operator&#x27;s judgement (operator, 2026-10-08).</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span><a class="aw-anchor-copy" href="#FR-2" aria-label="Link to FR-2" title="Link to #FR-2">#</a> <span class="aw-position">Requirement 2 of 7</span><p><span class="aw-modal aw-modal-must">MUST</span> The gaps MUST be: a MUST or SHALL requirement with no criterion (requirement_without_criterion), a criterion with no how_to_check or no checked_by (criterion_without_check), a change-spec of two or more tasks whose first task depends on another or is not a direct or transitive dependency of every other task (no_acceptance_drive), a requirement with no task, a task with no requirement, an unresolved question, a clarification marker, empty non-goals, no requirements, a roadmap slice with no done, and, for a change document with a step, the steps of its project&#x27;s journey for its size after its recorded step (steps_skipped, naming them); a SHOULD or MAY requirement with no criterion MUST NOT be a gap.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The roadmap slice&#x27;s list, minus unreviewed amendments (tester-amends).</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span><a class="aw-anchor-copy" href="#FR-3" aria-label="Link to FR-3" title="Link to #FR-3">#</a> <span class="aw-position">Requirement 3 of 7</span><p><span class="aw-modal aw-modal-must">MUST</span> Proposal and approval MUST still be refused, with approve_anyway or without, for an unresolved or cyclic task dependency, a field a part does not define, a slice whose roadmap is not approved or does not hold the slice, a roadmap with no slices, and a payload that is missing or invalid.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>Each makes approval&#x27;s own work wrong: the board cannot be materialised, the writer is broken, or the roadmap link is false.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span><a class="aw-anchor-copy" href="#FR-4" aria-label="Link to FR-4" title="Link to #FR-4">#</a> <span class="aw-position">Requirement 4 of 7</span><p><span class="aw-modal aw-modal-must">MUST</span> Proposing MUST NOT be refused for a gap; propose&#x27;s response MUST list the gaps under warnings and only refusals under blocking.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>A gap that refused proposal could never reach the approval that warns about it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span><a class="aw-anchor-copy" href="#FR-5" aria-label="Link to FR-5" title="Link to #FR-5">#</a> <span class="aw-position">Requirement 5 of 7</span><p><span class="aw-modal aw-modal-must">MUST</span> An approval MUST record the gaps it overrode in its phase event&#x27;s detail as warnings_overridden (an empty list when there were none), and the documents view MUST carry the latest approval&#x27;s list as approval_warnings_overridden while the document is approved, and none once it is reopened.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span><a class="aw-anchor-copy" href="#FR-6" aria-label="Link to FR-6" title="Link to #FR-6">#</a> <span class="aw-position">Requirement 6 of 7</span><p><span class="aw-modal aw-modal-must">MUST</span> A phase request carrying approve_anyway with any to other than approved MUST be refused with 400 before anything moves.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The route&#x27;s rule for delivery_agent: honour a field or name it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span><a class="aw-anchor-copy" href="#FR-7" aria-label="Link to FR-7" title="Link to #FR-7">#</a> <span class="aw-position">Requirement 7 of 7</span><p><span class="aw-modal aw-modal-must">MUST</span> In the app, Approve on a document with gaps MUST show them grouped by code (one line per code with its count and up to three places) and an Approve anyway button that approves; an approved document MUST show the gaps its approval overrode beside its phase.</p><p class="aw-rationale"><span class="aw-rationale-label">Why</span>The list is kept short so it is read before approving (roadmap slice intent).</p></div></section><section id="acceptance"><h2>Acceptance criteria</h2><table><colgroup><col style="width:13%"><col style="width:12%"><col style="width:32%"><col style="width:43%"></colgroup><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr data-first="true" data-group="even"><td><a href="#FR-1">FR-1</a></td><td>a scratch Hub on :8101 with a fresh database, a project and two change documents, each with a MUST requirement that has no criterion and left at step intake (scripts/drive/d1012_approval_warnings.py)</td><td>the drive proposes the first, approves it without approve_anyway, then with it, and reads GET /project/documents; then in Chromium proposes the second, clicks Approve and then Approve anyway</td><td>propose answers 200 proposed with requirement_without_criterion under warnings; the first approve answers 409 approval_warnings naming that requirement and steps_skipped, and the document is still proposed; the second answers 200 approved; the view&#x27;s approval_warnings_overridden holds both; in Chromium the gap list shows, Approve anyway approves, and the phase bar shows the overridden gaps. Fails on today&#x27;s Hub at the first check (propose answers blocking requirement_without_criterion).</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a document whose only requirement without a criterion is a SHOULD</td><td>its gaps are computed</td><td>requirement_without_criterion is not among them</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a criterion with how_to_check and no checked_by, and one with neither</td><td>the gaps are computed</td><td>each is a criterion_without_check gap naming the criterion</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a change-spec with tasks build then drive (drive depends on build), one with drive then build (build depends on drive), and one with a single task</td><td>the gaps are computed</td><td>only the first has no_acceptance_drive</td></tr><tr data-first="false" data-group="odd"><td><a href="#FR-2">FR-2</a></td><td>a large change document at step requirements in a project whose spec/journey.json puts custom step threat-model after requirements</td><td>approval is requested</td><td>steps_skipped names threat-model, acceptance, approach, tasks and delivery; the same document at delivery has no steps_skipped</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-3">FR-3</a></td><td>a proposed document whose tasks depend on each other in a cycle</td><td>the operator approves it with approve_anyway</td><td>the route answers 409 document_incomplete naming dependency_cycle and the document is still proposed</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-4">FR-4</a></td><td>an exploring document with an unresolved question and an unknown field in one part</td><td>it is proposed, then the unknown field is removed and it is proposed again</td><td>the first answer is not proposed with the unknown field under blocking and the question under warnings; the second is proposed with the question under warnings</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-5">FR-5</a></td><td>a document with no gaps, and one approved anyway with gaps</td><td>the first is approved without approve_anyway and the second is reopened</td><td>the first approves with warnings_overridden empty on its event; the second&#x27;s view carries no approval_warnings_overridden after reopening</td></tr><tr data-first="true" data-group="odd"><td><a href="#FR-6">FR-6</a></td><td>an approved document</td><td>the operator reopens it with approve_anyway true</td><td>the route answers 400 naming approve_anyway and the document is still approved</td></tr><tr data-first="true" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>an approval refused with five requirement_without_criterion gaps and one steps_skipped</td><td>the phase bar renders the refusal</td><td>it shows two lines, the first with count 5 and three places, and an Approve anyway button that resends with approve_anyway</td></tr><tr data-first="false" data-group="even"><td><a href="#FR-7">FR-7</a></td><td>the operator&#x27;s own project and a document they consider ready</td><td>they click Approve</td><td>the list is short enough to read before deciding, and what they overrode is visible on the document afterwards</td></tr></tbody></table></section><section id="design"><h2>Design</h2><p>Tier 1: a change to the propose and approve guards, one route field and the phase bar. No migration (the record is phase-event detail JSON). No Hub-restart hazard. It loosens a gate, but only on the operator-credential route (spec_lifecycle.transition still refuses an agent&#x27;s approval), and only by an explicit approve_anyway.</p><p>D1. Proposal passes gaps and lists them as warnings. Rejected: keeping proposal gated, under which a gap could never reach the approval that warns about it; and an exploring-to-approved edge, which drops the proposal record. (night-1009-5)
+D2. A finding is a refusal only when it makes approval&#x27;s own work wrong: an unresolved or cyclic dependency (the board cannot be materialised), an undefined field (a broken writer), a false roadmap link, a roadmap with no slices. Everything describing completeness is a gap. Rejected: every finding a gap, which lets approval create a board it cannot build. (night-1009-6)
+D3. no_acceptance_drive is structural: the first task depends on nothing and every other task depends on it, directly or transitively. Rejected: a new acceptance_drive flag on a task (a schema change in every writer for one warning) and matching words like &#x27;drive&#x27; (a guess). (night-1009-7)
+D4. The overridden gaps live on the approval&#x27;s phase event and are read into the document view; they are not written into the payload. Rejected: a payload field, which agents write and could erase, while the record is the operator&#x27;s act. (night-1009-8)
+D5. One route: approve answers 409 approval_warnings and the client resends with approve_anyway, so the list the operator saw is the one computed by the call that approves. No separate preview route.
+D6. &#x27;An operator-only check with no owner&#x27; (roadmap) is criterion_without_check: checked_by is the owner. No owner field is added.</p></section><section id="evidence"><h2>Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/hub/spec_service.py:1213-1266: phase_blockers runs spec_completeness.check for proposed and approved, excluding only import and delivery findings at approval</li><li>hub/hub/spec_lifecycle.py:381-391: transition raises 409 document_incomplete with blocking</li><li>hub/hub/spec_completeness.py:112-310: check(); requirement_without_criterion fires for every modal</li><li>hub/hub/spec_journey.py:498: missing() reports per-step gaps, read only by advance (agent_actions.py:1890)</li><li>hub/hub/api/v1/spec.py:2241-2420: set_phase, PhaseRequest&#x27;s delivery_agent refused off approve</li><li>hub/ui/src/components/spec/SpecPhaseBar.tsx:64-71, 185-203, 725: Approve and the blocking list</li><li>hub/hub/api/v1/agent_actions.py:1977: propose and approve are the operator&#x27;s</li></ul><h3 class="aw-limits">Limits</h3><ul><li>No source measures whether a warning list is read before approving; the operator&#x27;s reads-well criterion is the check</li></ul></section><section id="tasks"><h2>Tasks</h2><ul class="aw-task-list"><li class="aw-task"><strong>Acceptance drive, failing on today&#x27;s Hub</strong> — scripts/drive/d1012_approval_warnings.py: scratch Hub on :8101 and a fresh database, no agent turn, Chromium for the phase bar. The &#x27;drive&#x27; criterion. Must fail at the first check before any build task.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a></span></li><li class="aw-task"><strong>Gaps and refusals: classify the findings, the three new gaps</strong> — spec_completeness separates gaps from refusals, limits requirement_without_criterion to MUST/SHALL and adds criterion_without_check and no_acceptance_drive; spec_service computes steps_skipped from the project&#x27;s journey and returns refusals and gaps apart. Failing Hub tests first.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-2">FR-2</a><a class="aw-chip-ref" href="#FR-3">FR-3</a></span></li><li class="aw-task"><strong>Propose warns, approve answers approval_warnings, approve_anyway, the record</strong> — transition takes approve_anyway; propose and the phase route return warnings; 409 approval_warnings; PhaseRequest.approve_anyway refused off approve; warnings_overridden on the phase event and approval_warnings_overridden on the document view. Failing Hub tests first.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-1">FR-1</a><a class="aw-chip-ref" href="#FR-4">FR-4</a><a class="aw-chip-ref" href="#FR-5">FR-5</a><a class="aw-chip-ref" href="#FR-6">FR-6</a><a class="aw-chip-ref" href="#FR-3">FR-3</a></span></li><li class="aw-task"><strong>The phase bar lists the gaps and offers Approve anyway</strong> — SpecPhaseBar groups an approval_warnings refusal by code with an Approve anyway button, shows propose&#x27;s warnings, and shows an approved document&#x27;s overridden gaps. Bundle refreshed and committed with the source.<span class="aw-refs"><span class="aw-refs-label">satisfies</span><a class="aw-chip-ref" href="#FR-7">FR-7</a></span></li></ul></section><section id="delivery"><h2>Delivery</h2><p>No flow. The tasks go on the board and are started by hand.</p></section><section id="open-questions"><h2>Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "change-spec",
+  "title": "Approve lists what is missing and lets the operator approve anyway",
+  "summary": "Approving a document no longer refuses it for being incomplete. The Hub lists the gaps it finds (a MUST with no criterion, a criterion with no check, no acceptance drive first, a requirement with no task, open questions, skipped steps); the operator approves anyway, and the overridden gaps stay recorded on the document. Defects that would make approval's own work wrong still refuse. Roadmap slice approval-warnings.",
+  "problem": "Proposal and approval both refuse a document while spec_completeness.check finds anything (hub/hub/spec_service.py:1213-1266, raised by spec_lifecycle.transition at hub/hub/spec_lifecycle.py:381-391 as 409 document_incomplete). A requirement without a criterion, an unresolved question or an empty non-goals list therefore stops the operator from approving work they have judged ready, and approvals are a scarce resource (operator, 2026-10-08: warn, do not gate). The check also misses gaps that matter: a criterion with no how_to_check or checked_by, a change whose first task is not the acceptance drive, and journey steps the document never reached (spec_journey.missing() reports per step but nothing reads it at approval). A SHOULD or MAY requirement with no criterion is refused today although the roadmap makes criteria mandatory only for MUST.",
+  "scope": {
+    "in_scope": [
+      "Gaps are warnings at proposal and approval; approve answers 409 approval_warnings with the list, and approve_anyway approves",
+      "Three new gaps: criterion_without_check, no_acceptance_drive, steps_skipped (from the project's journey for the document's size); requirement_without_criterion only for MUST/SHALL",
+      "Defects that make approval's own work wrong stay refusals, approve_anyway notwithstanding",
+      "The overridden gaps recorded on the approval's phase event and shown on the document view while it stays approved",
+      "The phase bar: Approve shows the gaps grouped by code with an Approve anyway button; an approved document shows what was overridden"
+    ],
+    "non_goals": [
+      "Unreviewed amendments as a gap: slice tester-amends adds that gap with the amendments themselves",
+      "Changing an agent's save result: it still lists every finding under blocking and ready_to_propose, so the agent keeps closing gaps",
+      "A per-gap acknowledgement or a separate preview route",
+      "Approving straight from exploring: propose stays the step before approve",
+      "Archive, retire and fold guards: they are close-out rules, not completeness"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "approve-warns",
+      "statement": "Approving a proposed document in which the Hub finds gaps MUST answer 409 with code approval_warnings and the list of gaps (code, where, message) and leave the document proposed; the same request with approve_anyway set to true MUST approve it.",
+      "modal": "MUST",
+      "rationale": "Approvals are scarce: say what is missing, never refuse the operator's judgement (operator, 2026-10-08).",
+      "party": null
+    },
+    {
+      "key": "gap-set",
+      "statement": "The gaps MUST be: a MUST or SHALL requirement with no criterion (requirement_without_criterion), a criterion with no how_to_check or no checked_by (criterion_without_check), a change-spec of two or more tasks whose first task depends on another or is not a direct or transitive dependency of every other task (no_acceptance_drive), a requirement with no task, a task with no requirement, an unresolved question, a clarification marker, empty non-goals, no requirements, a roadmap slice with no done, and, for a change document with a step, the steps of its project's journey for its size after its recorded step (steps_skipped, naming them); a SHOULD or MAY requirement with no criterion MUST NOT be a gap.",
+      "modal": "MUST",
+      "rationale": "The roadmap slice's list, minus unreviewed amendments (tester-amends).",
+      "party": null
+    },
+    {
+      "key": "refusals-stay",
+      "statement": "Proposal and approval MUST still be refused, with approve_anyway or without, for an unresolved or cyclic task dependency, a field a part does not define, a slice whose roadmap is not approved or does not hold the slice, a roadmap with no slices, and a payload that is missing or invalid.",
+      "modal": "MUST",
+      "rationale": "Each makes approval's own work wrong: the board cannot be materialised, the writer is broken, or the roadmap link is false.",
+      "party": null
+    },
+    {
+      "key": "propose-passes-gaps",
+      "statement": "Proposing MUST NOT be refused for a gap; propose's response MUST list the gaps under warnings and only refusals under blocking.",
+      "modal": "MUST",
+      "rationale": "A gap that refused proposal could never reach the approval that warns about it.",
+      "party": null
+    },
+    {
+      "key": "overrides-recorded",
+      "statement": "An approval MUST record the gaps it overrode in its phase event's detail as warnings_overridden (an empty list when there were none), and the documents view MUST carry the latest approval's list as approval_warnings_overridden while the document is approved, and none once it is reopened.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "anyway-only-at-approve",
+      "statement": "A phase request carrying approve_anyway with any to other than approved MUST be refused with 400 before anything moves.",
+      "modal": "MUST",
+      "rationale": "The route's rule for delivery_agent: honour a field or name it.",
+      "party": null
+    },
+    {
+      "key": "page-shows",
+      "statement": "In the app, Approve on a document with gaps MUST show them grouped by code (one line per code with its count and up to three places) and an Approve anyway button that approves; an approved document MUST show the gaps its approval overrode beside its phase.",
+      "modal": "MUST",
+      "rationale": "The list is kept short so it is read before approving (roadmap slice intent).",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "drive",
+      "requirement": "approve-warns",
+      "given": "a scratch Hub on :8101 with a fresh database, a project and two change documents, each with a MUST requirement that has no criterion and left at step intake (scripts/drive/d1012_approval_warnings.py)",
+      "when": "the drive proposes the first, approves it without approve_anyway, then with it, and reads GET /project/documents; then in Chromium proposes the second, clicks Approve and then Approve anyway",
+      "then": "propose answers 200 proposed with requirement_without_criterion under warnings; the first approve answers 409 approval_warnings naming that requirement and steps_skipped, and the document is still proposed; the second answers 200 approved; the view's approval_warnings_overridden holds both; in Chromium the gap list shows, Approve anyway approves, and the phase bar shows the overridden gaps. Fails on today's Hub at the first check (propose answers blocking requirement_without_criterion).",
+      "how_to_check": "py -3.11 scripts/drive/d1012_approval_warnings.py",
+      "checked_by": "agent"
+    },
+    {
+      "key": "should-not-gap",
+      "requirement": "gap-set",
+      "given": "a document whose only requirement without a criterion is a SHOULD",
+      "when": "its gaps are computed",
+      "then": "requirement_without_criterion is not among them",
+      "how_to_check": "Hub unit test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "criterion-check",
+      "requirement": "gap-set",
+      "given": "a criterion with how_to_check and no checked_by, and one with neither",
+      "when": "the gaps are computed",
+      "then": "each is a criterion_without_check gap naming the criterion",
+      "how_to_check": "Hub unit test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "drive-first",
+      "requirement": "gap-set",
+      "given": "a change-spec with tasks build then drive (drive depends on build), one with drive then build (build depends on drive), and one with a single task",
+      "when": "the gaps are computed",
+      "then": "only the first has no_acceptance_drive",
+      "how_to_check": "Hub unit test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "skipped",
+      "requirement": "gap-set",
+      "given": "a large change document at step requirements in a project whose spec/journey.json puts custom step threat-model after requirements",
+      "when": "approval is requested",
+      "then": "steps_skipped names threat-model, acceptance, approach, tasks and delivery; the same document at delivery has no steps_skipped",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "refusal-holds",
+      "requirement": "refusals-stay",
+      "given": "a proposed document whose tasks depend on each other in a cycle",
+      "when": "the operator approves it with approve_anyway",
+      "then": "the route answers 409 document_incomplete naming dependency_cycle and the document is still proposed",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "propose-lists",
+      "requirement": "propose-passes-gaps",
+      "given": "an exploring document with an unresolved question and an unknown field in one part",
+      "when": "it is proposed, then the unknown field is removed and it is proposed again",
+      "then": "the first answer is not proposed with the unknown field under blocking and the question under warnings; the second is proposed with the question under warnings",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "clean-and-reopen",
+      "requirement": "overrides-recorded",
+      "given": "a document with no gaps, and one approved anyway with gaps",
+      "when": "the first is approved without approve_anyway and the second is reopened",
+      "then": "the first approves with warnings_overridden empty on its event; the second's view carries no approval_warnings_overridden after reopening",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "anyway-400",
+      "requirement": "anyway-only-at-approve",
+      "given": "an approved document",
+      "when": "the operator reopens it with approve_anyway true",
+      "then": "the route answers 400 naming approve_anyway and the document is still approved",
+      "how_to_check": "Hub route test",
+      "checked_by": "agent"
+    },
+    {
+      "key": "page-groups",
+      "requirement": "page-shows",
+      "given": "an approval refused with five requirement_without_criterion gaps and one steps_skipped",
+      "when": "the phase bar renders the refusal",
+      "then": "it shows two lines, the first with count 5 and three places, and an Approve anyway button that resends with approve_anyway",
+      "how_to_check": "vitest",
+      "checked_by": "agent"
+    },
+    {
+      "key": "reads-well",
+      "requirement": "page-shows",
+      "given": "the operator's own project and a document they consider ready",
+      "when": "they click Approve",
+      "then": "the list is short enough to read before deciding, and what they overrode is visible on the document afterwards",
+      "how_to_check": "operator, in the app",
+      "checked_by": "operator"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "drive-first",
+      "title": "Acceptance drive, failing on today's Hub",
+      "description": "scripts/drive/d1012_approval_warnings.py: scratch Hub on :8101 and a fresh database, no agent turn, Chromium for the phase bar. The 'drive' criterion. Must fail at the first check before any build task.",
+      "requirements": [
+        "approve-warns"
+      ],
+      "depends_on": [],
+      "files": [
+        "scripts/drive/d1012_approval_warnings.py"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "gaps",
+      "title": "Gaps and refusals: classify the findings, the three new gaps",
+      "description": "spec_completeness separates gaps from refusals, limits requirement_without_criterion to MUST/SHALL and adds criterion_without_check and no_acceptance_drive; spec_service computes steps_skipped from the project's journey and returns refusals and gaps apart. Failing Hub tests first.",
+      "requirements": [
+        "gap-set",
+        "refusals-stay"
+      ],
+      "depends_on": [
+        "drive-first"
+      ],
+      "files": [
+        "hub/hub/spec_completeness.py",
+        "hub/hub/spec_service.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "approve",
+      "title": "Propose warns, approve answers approval_warnings, approve_anyway, the record",
+      "description": "transition takes approve_anyway; propose and the phase route return warnings; 409 approval_warnings; PhaseRequest.approve_anyway refused off approve; warnings_overridden on the phase event and approval_warnings_overridden on the document view. Failing Hub tests first.",
+      "requirements": [
+        "approve-warns",
+        "propose-passes-gaps",
+        "overrides-recorded",
+        "anyway-only-at-approve",
+        "refusals-stay"
+      ],
+      "depends_on": [
+        "gaps"
+      ],
+      "files": [
+        "hub/hub/spec_lifecycle.py",
+        "hub/hub/spec_service.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "reviewer": null
+    },
+    {
+      "key": "page",
+      "title": "The phase bar lists the gaps and offers Approve anyway",
+      "description": "SpecPhaseBar groups an approval_warnings refusal by code with an Approve anyway button, shows propose's warnings, and shows an approved document's overridden gaps. Bundle refreshed and committed with the source.",
+      "requirements": [
+        "page-shows"
+      ],
+      "depends_on": [
+        "approve"
+      ],
+      "files": [
+        "hub/ui/src/components/spec/SpecPhaseBar.tsx",
+        "hub/ui/src/api/spec.ts",
+        "hub/ui/src/__tests__",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "reviewer": null
+    }
+  ],
+  "algorithms": [],
+  "design": "Tier 1: a change to the propose and approve guards, one route field and the phase bar. No migration (the record is phase-event detail JSON). No Hub-restart hazard. It loosens a gate, but only on the operator-credential route (spec_lifecycle.transition still refuses an agent's approval), and only by an explicit approve_anyway.\n\nD1. Proposal passes gaps and lists them as warnings. Rejected: keeping proposal gated, under which a gap could never reach the approval that warns about it; and an exploring-to-approved edge, which drops the proposal record. (night-1009-5)\nD2. A finding is a refusal only when it makes approval's own work wrong: an unresolved or cyclic dependency (the board cannot be materialised), an undefined field (a broken writer), a false roadmap link, a roadmap with no slices. Everything describing completeness is a gap. Rejected: every finding a gap, which lets approval create a board it cannot build. (night-1009-6)\nD3. no_acceptance_drive is structural: the first task depends on nothing and every other task depends on it, directly or transitively. Rejected: a new acceptance_drive flag on a task (a schema change in every writer for one warning) and matching words like 'drive' (a guess). (night-1009-7)\nD4. The overridden gaps live on the approval's phase event and are read into the document view; they are not written into the payload. Rejected: a payload field, which agents write and could erase, while the record is the operator's act. (night-1009-8)\nD5. One route: approve answers 409 approval_warnings and the client resends with approve_anyway, so the list the operator saw is the one computed by the call that approves. No separate preview route.\nD6. 'An operator-only check with no owner' (roadmap) is criterion_without_check: checked_by is the owner. No owner field is added.",
+  "evidence": {
+    "checked": [
+      "hub/hub/spec_service.py:1213-1266: phase_blockers runs spec_completeness.check for proposed and approved, excluding only import and delivery findings at approval",
+      "hub/hub/spec_lifecycle.py:381-391: transition raises 409 document_incomplete with blocking",
+      "hub/hub/spec_completeness.py:112-310: check(); requirement_without_criterion fires for every modal",
+      "hub/hub/spec_journey.py:498: missing() reports per-step gaps, read only by advance (agent_actions.py:1890)",
+      "hub/hub/api/v1/spec.py:2241-2420: set_phase, PhaseRequest's delivery_agent refused off approve",
+      "hub/ui/src/components/spec/SpecPhaseBar.tsx:64-71, 185-203, 725: Approve and the blocking list",
+      "hub/hub/api/v1/agent_actions.py:1977: propose and approve are the operator's"
+    ],
+    "limits": [
+      "No source measures whether a warning list is read before approving; the operator's reads-well criterion is the check"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "delivery": {
+    "mode": "none",
+    "agent": null,
+    "reviewer": null,
+    "stop_when_queue_empties": false,
+    "stop_at": null,
+    "cron": "*/5 * * * *"
+  },
+  "roadmap": {
+    "document": "spec/changes/a-spec-is-written-one-step-at-a-time-roadmap/spec.html",
+    "slice": "approval-warnings"
+  },
+  "aw_identity": {
+    "requirements": {
+      "approve-warns": "FR-1",
+      "gap-set": "FR-2",
+      "refusals-stay": "FR-3",
+      "propose-passes-gaps": "FR-4",
+      "overrides-recorded": "FR-5",
+      "anyway-only-at-approve": "FR-6",
+      "page-shows": "FR-7"
+    },
+    "high_water": 7,
+    "retired": {},
+    "digests": {
+      "FR-1": "c00583462d384bcf0d2512162a048cb539b1ffb6cf07673c9ee80ed49f97b375",
+      "FR-2": "8a5350dcb9e6338e7bd7b08068d07d4b4cbb0b57855b18fbfd57e34a39fff638",
+      "FR-3": "354d4827ef750d63b281c69a2550482410d84a97927bec6c54f4281c4335f428",
+      "FR-4": "0665d2edd7f6f2441b97c007095f776945ae7bc96804dd96013427a855864d26",
+      "FR-5": "89ef921afc2a88a24ac1703934b948763a970c2fd920a3fe0409f31ce7a475e9",
+      "FR-6": "11c523c82104ee66fdc4022f2db749c75546f89daeac2e09f156be5b404b49c4",
+      "FR-7": "c7f8855b401250feed04714c276431902aec35a6e649493dba6d30078bfc66fb"
+    }
+  }
+}
+</script>
+</body>
+</html>

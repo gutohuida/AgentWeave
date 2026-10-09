@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0695572",
     "stop_at": "2026-10-09T07:00:00+01:00",
-    "iteration": 13,
+    "iteration": 14,
     "log_file": ".claude/autonomous/2026-10-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "approval-warnings-spec",
-    "next_action": "approval-warnings-spec: author the approval-warnings slice change document on trial Hub :8010 (proj-d85a82bf4216) per APPROVALS 2026-10-09 authorisation 1; model on spdoc-06fd85087a9f and on spec/changes/a-project-orders-its-own-spec-steps/; slice 'approval-warnings' from roadmap a-spec-is-written-one-step-at-a-time-roadmap; propose+approve; commit the file. Hub tasks of project-steps stay open.",
+    "current": "approval-warnings-t1-impl",
+    "next_action": "approval-warnings-t1-impl: write scripts/drive/d1012_approval_warnings.py (scratch Hub :8101, fresh db, no agent turn, Chromium for the phase bar) per the 'drive' criterion of spec/changes/approve-lists-what-is-missing-and-can-approve-anyway (spdoc-9a9d313a4894, read its payload with hub.spec_payload.extract_payload); record it FAILING at the first check (propose answers blocking requirement_without_criterion). Hub tasks of approval-warnings stay open.",
     "queue": [
         {
             "id": "specjson-t1-impl",
@@ -87,15 +87,34 @@
         },
         {
             "id": "approval-warnings-spec",
-            "status": "open",
+            "status": "done",
             "title": "Author approval-warnings slice change document",
-            "detail": "Author the slice change document on trial Hub :8010 (proj-d85a82bf4216) per APPROVALS 2026-10-09 authorisation 1; model on spdoc-06fd85087a9f; propose+approve; commit the file. Slice 'approval-warnings' from roadmap a-spec-is-written-one-step-at-a-time-roadmap."
+            "detail": "done 2026-10-09 iteration 14: spec/changes/approve-lists-what-is-missing-and-can-approve-anyway/spec.html (spdoc-9a9d313a4894, approved on :8010; Hub tasks task-c63101dbca2d drive-first, task-8888aa20b760 gaps, task-810c13a6c629 approve, task-7740673542f3 page -- do not close them); 7 FR, 11 criteria, 4 tasks; decisions night-1009-5..8 OPEN."
         },
         {
-            "id": "approval-warnings-impl",
+            "id": "approval-warnings-t1-impl",
             "status": "open",
-            "title": "Build approval-warnings slice against spec.json storage",
-            "detail": "Only if its -spec is approved. Split by the change's tasks (<id>-t<n>-impl) if one firing cannot finish."
+            "title": "approval-warnings task drive-first: write scripts/drive/d1012_approval_warnings.py, record it FAILING",
+            "detail": "Scratch Hub :8101, fresh db, no agent turn; Chromium for the phase bar. Must fail at the first check (propose refuses requirement_without_criterion)."
+        },
+        {
+            "id": "approval-warnings-t2-impl",
+            "status": "open",
+            "title": "approval-warnings task gaps: classify findings gap vs refusal; MUST-only criterion gap; criterion_without_check, no_acceptance_drive, steps_skipped",
+            "detail": "spec_completeness + spec_service; failing Hub tests first. FR-2, FR-3.",
+            "model": "opus"
+        },
+        {
+            "id": "approval-warnings-t3-impl",
+            "status": "open",
+            "title": "approval-warnings task approve: propose warns, 409 approval_warnings, approve_anyway, warnings_overridden record + document view field",
+            "detail": "spec_lifecycle, spec_service, api/v1/spec.py; failing Hub tests first. FR-1, FR-3..6. Existing tests that expect propose to refuse a gap will need updating."
+        },
+        {
+            "id": "approval-warnings-t4-impl",
+            "status": "open",
+            "title": "approval-warnings task page: SpecPhaseBar groups gaps by code with Approve anyway, shows propose warnings and overridden gaps; bundle refreshed",
+            "detail": "FR-7; vitest page-groups criterion; commit hub/ui/src and hub/hub/static/ui together; run test_surface_ceilings.py."
         },
         {
             "id": "approval-warnings-drive",
@@ -145,7 +164,11 @@
         "night-1009-1",
         "night-1009-2",
         "night-1009-3",
-        "night-1009-4"
+        "night-1009-4",
+        "night-1009-5",
+        "night-1009-6",
+        "night-1009-7",
+        "night-1009-8"
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
